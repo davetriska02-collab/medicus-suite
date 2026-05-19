@@ -1,0 +1,355 @@
+{
+  "lastUpdated": "2026-05-12",
+  "schemaVersion": 2,
+  "specVersion": "Sentinel drug rules - May 2026 review",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at May 2026. Includes 13 rules from previous version plus 6 additions (leflunomide, hydroxychloroquine, SGLT2 inhibitors, carbimazole/propylthiouracil, mirabegron, GLP-1 receptor agonists). Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
+  "rules": [
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "methotrexate-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": ["methotrexate"],
+        "snomed": ["387381009"],
+        "exclude": ["methotrexate 50mg/2ml", "methotrexate injection"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
+      ],
+      "source": "BNF / BSR DMARD shared care guideline (2024 update)",
+      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR 2024 guideline now permits 6-monthly monitoring after 12 months of stable treatment with normal results — Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "leflunomide-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": ["leflunomide"],
+        "snomed": ["386982008"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 84, "dueSoonDays": 14 }
+      ],
+      "source": "BNF / BSR leflunomide shared care",
+      "notes": "Monthly FBC/U&E/LFT/BP/weight for first 6 months on initiation, then 12-weekly when stable. Hypertension is a recognised adverse effect. Long half-life (washout with cholestyramine if severe toxicity).",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "hydroxychloroquine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": ["hydroxychloroquine", "chloroquine"],
+        "snomed": ["387397007"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / BSR shared care / RCOphth retinopathy screening guidelines (2020, reviewed 2024)",
+      "notes": "Annual FBC/LFT/U&E plus annual review. RCOphth recommends baseline ophthalmology assessment within 6-12 months of starting and annual screening from 5 years cumulative use, or earlier if dose >5 mg/kg/day, eGFR <60, concurrent tamoxifen, or pre-existing retinal disease. Eye check is not a blood test so not enforced here.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "azathioprine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": ["azathioprine"],
+        "snomed": ["372574004"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 }
+      ],
+      "source": "BNF / BSR shared care",
+      "notes": "TPMT activity should be checked before initiation. Intensive monitoring in first 8 weeks.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sulfasalazine-maintenance",
+      "drugClass": "DMARD",
+      "drug": {
+        "match": ["sulfasalazine", "sulphasalazine"],
+        "snomed": ["387308006"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
+      ],
+      "source": "BNF / BSR shared care",
+      "notes": "Monitoring may be discontinued after 12 months of stable treatment per some shared care protocols. Check local guidance.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "lithium-maintenance",
+      "drugClass": "Mood stabiliser",
+      "drug": {
+        "match": ["lithium"],
+        "snomed": ["73572009"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Lithium level", "match": ["lithium level", "serum lithium"], "snomed": ["166833002"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 180, "dueSoonDays": 21 },
+        { "name": "TFT", "match": ["tft", "thyroid function"], "snomed": ["166842003"], "intervalDays": 180, "dueSoonDays": 21 },
+        { "name": "Calcium", "match": ["calcium", "ca2+", "corrected calcium"], "snomed": ["390967006"], "intervalDays": 180, "dueSoonDays": 21 }
+      ],
+      "source": "BNF / NICE CG185 / shared care",
+      "notes": "Level should be 12 hours post-dose. Take sample before next dose if compliance unclear.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "amiodarone-maintenance",
+      "drugClass": "Antiarrhythmic",
+      "drug": {
+        "match": ["amiodarone"],
+        "snomed": ["372813003"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "TFT", "match": ["tft", "thyroid function"], "snomed": ["166842003"], "intervalDays": 180, "dueSoonDays": 21 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 180, "dueSoonDays": 21 },
+        { "name": "CXR", "match": ["chest x-ray", "cxr", "chest xray"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / MHRA Drug Safety Update",
+      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "carbimazole-propylthiouracil",
+      "drugClass": "Antithyroid",
+      "drug": {
+        "match": ["carbimazole", "propylthiouracil"],
+        "snomed": ["387534003"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "TFT", "match": ["tft", "thyroid function", "tsh", "free t4"], "snomed": ["166842003"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / MHRA Drug Safety Update / British Thyroid Association",
+      "notes": "Agranulocytosis is a rare but life-threatening adverse effect — counsel patient to report sore throat, fever, mouth ulcers urgently. PTU carries hepatotoxicity risk. TFT every 4-6 weeks during titration, then 3-monthly when stable.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "ace-arb",
+      "drugClass": "RAAS blocker",
+      "drug": {
+        "match": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "fosinopril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "olmesartan", "azilsartan", "sacubitril", "entresto"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG136 / BNF",
+      "notes": "U&E within 1-2 weeks of initiation or dose change. Annual review thereafter unless eGFR <60. Sacubitril/valsartan (Entresto) added to match list for HFrEF use.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "spironolactone",
+      "drugClass": "Aldosterone antagonist",
+      "drug": {
+        "match": ["spironolactone", "eplerenone"],
+        "snomed": ["387078006"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 120, "dueSoonDays": 21 }
+      ],
+      "source": "BNF / NICE NG106 heart failure",
+      "notes": "Hyperkalaemia is the principal monitoring concern. Staged monitoring schedule (1 week, 4 weeks, 8 weeks, 12 weeks, then 4-monthly) for new starts. Now part of HF four-pillar therapy (QOF HF009).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "sglt2-inhibitor",
+      "drugClass": "SGLT2 inhibitor",
+      "drug": {
+        "match": ["dapagliflozin", "empagliflozin", "canagliflozin", "ertugliflozin"],
+        "snomed": ["703674001"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG28 (T2DM), NG203 (CKD), NG106 (HF) / BNF / MHRA Drug Safety Updates 2020-2024",
+      "notes": "Baseline and annual eGFR. Increased risk of DKA (including euglycaemic DKA) — counsel patient on sick-day rules and to stop before major surgery/illness. Increased risk of Fournier's gangrene and lower-limb amputation (canagliflozin). Volume depletion risk in elderly or on diuretics.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "glp1-receptor-agonist",
+      "drugClass": "GLP-1 receptor agonist",
+      "drug": {
+        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "lixisenatide", "exenatide"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Annual review", "match": ["glp-1 review", "weight management review", "diabetes annual review", "obesity review"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024",
+      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "doac",
+      "drugClass": "DOAC",
+      "drug": {
+        "match": ["apixaban", "rivaroxaban", "edoxaban", "dabigatran"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / NICE NG196 / EHRA guideline (2024 update)",
+      "notes": "Annual monitoring is the baseline. Increase to 6-monthly if eGFR <60, age >75, frailty, or extremes of weight; 3-monthly if eGFR <30. Dabigatran is renally cleared (contraindicated <30); edoxaban dose-adjusted at <50; apixaban and rivaroxaban have less strict renal cutoffs. Sentinel uses annual baseline — clinician must intensify monitoring per renal function and age.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "statin",
+      "drugClass": "Statin",
+      "drug": {
+        "match": ["atorvastatin", "simvastatin", "rosuvastatin", "pravastatin", "fluvastatin", "pitavastatin"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG181 (Lipids) / BNF",
+      "notes": "NICE NG181: LFT baseline, at 3 months, and at 12 months only. Routine ongoing monitoring not required after 12 months on stable dose; do not check unless clinically indicated. CK only if muscle symptoms. Rule retained as a one-off prompt for new starts; consider disabling in Options once initial monitoring is complete on a given patient.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "allopurinol",
+      "drugClass": "Xanthine oxidase inhibitor",
+      "drug": {
+        "match": ["allopurinol", "febuxostat"],
+        "snomed": ["387481004"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "Urate", "match": ["urate", "uric acid", "serum urate"], "snomed": ["302393005"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG219 (Gout, 2022) / BSR guideline",
+      "notes": "Target serum urate <360 micromol/L (or <300 micromol/L in tophaceous gout, chronic arthropathy, or frequent flares). Annual review once stable. Febuxostat added to match list; carries cardiovascular warning per MHRA — use with caution in established CVD.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "antipsychotic",
+      "drugClass": "Antipsychotic",
+      "drug": {
+        "match": ["olanzapine", "risperidone", "quetiapine", "aripiprazole", "haloperidol", "chlorpromazine", "amisulpride", "paliperidone", "lurasidone", "asenapine", "cariprazine"],
+        "exclude": ["clozapine"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "HbA1c", "match": ["hba1c", "haemoglobin a1c", "glycated"], "snomed": ["43396009"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "Lipids", "match": ["lipid profile", "cholesterol", "lipids"], "snomed": ["166830004"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "ECG", "match": ["ecg", "electrocardiogram"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE CG178 / Maudsley Prescribing Guidelines 14th ed / QOF MH002-MH012",
+      "notes": "Metabolic syndrome screening. ECG recommended at baseline and annually if cardiovascular risk factors or QTc-prolonging concomitant drugs. Clozapine EXCLUDED here — monitored under separate national protocol (CPMS/ZTAS) with weekly FBC for 18 weeks, then 2-weekly to 1 year, then 4-weekly indefinitely; mandatorily clozapine-clinic led, not amenable to primary-care rule firing.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "mirabegron",
+      "drugClass": "Beta-3 agonist",
+      "drug": {
+        "match": ["mirabegron"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / MHRA Drug Safety Update 2015 (severe hypertension warning) / SPC",
+      "notes": "Causes hypertension — measure BP before starting and periodically during treatment, particularly in patients with pre-existing hypertension. Contraindicated in severe uncontrolled hypertension (≥180/110). BP rise typically modest (mean 1-3 mmHg) but case reports of severe hypertension and hypertensive crisis. Annual BP is a reasonable baseline for stable patients.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "levothyroxine",
+      "drugClass": "Thyroid hormone",
+      "drug": {
+        "match": ["levothyroxine", "liothyronine"],
+        "snomed": ["10049011000001109"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "TFT", "match": ["tft", "thyroid function", "tsh"], "snomed": ["166842003"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG145 / BTA guidance",
+      "notes": "Annual TFT once stable. More frequent during dose titration or in pregnancy.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "hrt-systemic",
+      "drugClass": "HRT",
+      "drug": {
+        "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve"],
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
+      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have different monitoring (no systemic effects).",
+      "sharedCare": false
+    }
+  ]
+}

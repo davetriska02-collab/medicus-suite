@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build artefacts (the GitHub Actions workflow creates these)
+*.zip
+!medicus-suite-baseline.zip
+
+# Local dev scratch
+node_modules/
+*.log
+
+# Cowork skill staging — for the medicus-suite-deploy skill, copied to
+# /mnt/skills/user/ during repo setup. Not part of the repo itself.
+_skill/

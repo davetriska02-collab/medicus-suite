@@ -1,0 +1,248 @@
+/* Medicus Suite — Slot Counter module styles */
+
+.slots-module { font-family: var(--sans); }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-input {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 4px 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+.date-input:focus { border-color: var(--accent); }
+
+.date-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.preset-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 10px;
+  transition: all 0.1s;
+}
+
+.preset-btn:hover { border-color: var(--border-hi); color: var(--text-3); }
+.preset-btn.active {
+  background: var(--accent-dim);
+  border-color: rgba(74,127,184,0.3);
+  color: var(--text-2);
+}
+
+.slots-section { margin-bottom: 16px; }
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-hint {
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.slot-list { display: flex; flex-direction: column; gap: 1px; }
+
+.slot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.slot-row:hover { background: var(--bg-hover); }
+.slot-row.row-hidden { opacity: 0.4; }
+
+.slot-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-label input[type=checkbox] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.slot-type {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-count {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  min-width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.slot-count.zero { color: var(--text-5); }
+
+.row-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.staff-list { display: flex; flex-direction: column; gap: 2px; }
+
+.staff-row { border-radius: 6px; overflow: hidden; }
+
+.staff-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.staff-toggle:hover { background: var(--bg-hover); color: var(--text-2); }
+
+.staff-chevron { font-size: 9px; color: var(--text-5); flex-shrink: 0; }
+.staff-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staff-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); flex-shrink: 0; }
+
+.staff-detail {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 4px 8px 6px 22px;
+}
+
+.staff-type-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-4);
+  padding: 2px 0;
+}
+
+.staff-type-row span:last-child {
+  font-family: var(--mono);
+  color: var(--text-3);
+}
+
+.skeleton-list { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+
+.skel-row {
+  height: 30px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-4);
+  font-size: 12px;
+  padding: 32px 16px;
+}
+
+.foot {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 0.06em;
+  text-align: right;
+  margin-top: 12px;
+}
+
+.excluded-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  cursor: pointer;
+  border-radius: 6px;
+  margin-top: 2px;
+  transition: color 0.1s, background 0.1s;
+}
+
+.excluded-toggle:hover { color: var(--text-3); background: var(--bg-elev); }
+
+.excluded-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+}
+
+/* Prominent remaining count */
+.slots-count-hero {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1;
+  margin: 4px 0 2px;
+  font-family: var(--mono);
+  letter-spacing: -0.02em;
+}
+.slots-count-label {
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+}
+.slots-count-label.zero { color: var(--text-4); }

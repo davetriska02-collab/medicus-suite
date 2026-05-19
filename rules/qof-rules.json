@@ -1,0 +1,778 @@
+{
+  "schemaVersion": 2,
+  "lastUpdated": "2026-05-12",
+  "specVersion": "QOF 2026/27",
+  "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Some 26/27 indicators (DM037 multi-observation bundle, HF009 multi-drug AND logic) require rules-engine extensions and are shipped disabled with placeholder definitions. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes.",
+  "rules": [
+
+    {
+      "id": "qof-reg-dm",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "DM",
+      "registerName": "Diabetes",
+      "problemMatch": ["type 1 diabetes", "type 2 diabetes", "diabetes mellitus", "diabetic"],
+      "problemExclude": ["pre-diabetes", "pre diabetes", "gestational diabetes", "no diabetes", "diabetes insipidus"],
+      "source": "QOF 26/27 DM register (DM_COD refset approximation)"
+    },
+    {
+      "id": "qof-reg-hyp",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "HYP",
+      "registerName": "Hypertension",
+      "problemMatch": ["hypertension", "essential hypertension", "hypertensive"],
+      "problemExclude": ["pulmonary hypertension", "portal hypertension", "ocular hypertension", "white coat", "borderline"],
+      "source": "QOF 26/27 HYP register"
+    },
+    {
+      "id": "qof-reg-af",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "AF",
+      "registerName": "Atrial Fibrillation",
+      "problemMatch": ["atrial fibrillation", "atrial flutter"],
+      "problemExclude": [],
+      "source": "QOF 26/27 AF register"
+    },
+    {
+      "id": "qof-reg-chd",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "CHD",
+      "registerName": "Coronary Heart Disease",
+      "problemMatch": ["coronary artery", "coronary heart disease", "ischaemic heart disease", "ischemic heart disease", "myocardial infarction", "angina"],
+      "problemExclude": [],
+      "source": "QOF 26/27 CHD register"
+    },
+    {
+      "id": "qof-reg-hf",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "HF",
+      "registerName": "Heart Failure",
+      "problemMatch": ["heart failure", "cardiomyopathy", "left ventricular dysfunction", "lv dysfunction"],
+      "problemExclude": [],
+      "source": "QOF 26/27 HF register"
+    },
+    {
+      "id": "qof-reg-stia",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "STIA",
+      "registerName": "Stroke / TIA",
+      "problemMatch": ["stroke", "cerebrovascular accident", "cerebral infarction", "transient ischaemic attack", "transient ischemic attack", " tia "],
+      "problemExclude": ["heat stroke", "sun stroke", "no stroke"],
+      "source": "QOF 26/27 STIA register"
+    },
+    {
+      "id": "qof-reg-ckd",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "CKD",
+      "registerName": "Chronic Kidney Disease",
+      "problemMatch": ["chronic kidney disease", "ckd stage 3", "ckd stage 4", "ckd stage 5"],
+      "problemExclude": ["ckd stage 1", "ckd stage 2"],
+      "source": "QOF 26/27 CKD register (stages 3-5 only)"
+    },
+    {
+      "id": "qof-reg-pad",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "PAD",
+      "registerName": "Peripheral Arterial Disease",
+      "problemMatch": ["peripheral arterial disease", "peripheral vascular disease", "intermittent claudication"],
+      "problemExclude": [],
+      "source": "QOF 26/27 PAD register"
+    },
+    {
+      "id": "qof-reg-asthma",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "ASTHMA",
+      "registerName": "Asthma",
+      "problemMatch": ["asthma"],
+      "problemExclude": ["resolved asthma", "no asthma"],
+      "source": "QOF 26/27 AST register. Underlying business rules amended for 26/27 to include patients from age 5 (was 6); Sentinel's substring match is age-agnostic so this change has no functional effect here."
+    },
+    {
+      "id": "qof-reg-copd",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "COPD",
+      "registerName": "COPD",
+      "problemMatch": ["chronic obstructive pulmonary disease", "copd", "chronic bronchitis", "emphysema"],
+      "problemExclude": [],
+      "source": "QOF 26/27 COPD register. Underlying business rules amended for 26/27 to address potential under/over-recording; the SNOMED refset has been refined but Sentinel's substring match is unchanged."
+    },
+
+    {
+      "id": "qof-hyp008",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "HYP008",
+      "indicatorName": "[RETIRED 25/26] BP <=140/90 in HYP <80",
+      "requiresRegister": "HYP",
+      "ageRange": { "max": 79 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 85 },
+      "points": 38,
+      "source": "QOF 25/26 HYP008 (retired)",
+      "notes": "Retired in 26/27. Replaced by HYP010, which excludes patients with moderate or severe frailty."
+    },
+    {
+      "id": "qof-hyp009",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "HYP009",
+      "indicatorName": "[RETIRED 25/26] BP <=150/90 in HYP >=80",
+      "requiresRegister": "HYP",
+      "ageRange": { "min": 80 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 85 },
+      "points": 14,
+      "source": "QOF 25/26 HYP009 (retired)",
+      "notes": "Retired in 26/27. Replaced by HYP011, which excludes patients with moderate or severe frailty."
+    },
+    {
+      "id": "qof-chd015",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "CHD015",
+      "indicatorName": "[RETIRED 25/26] BP <=140/90 in CHD <80",
+      "requiresRegister": "CHD",
+      "ageRange": { "max": 79 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 33,
+      "source": "QOF 25/26 CHD015 (retired)",
+      "notes": "Retired in 26/27. CHD and STIA BP indicators combined into CD001 (under 80, no frailty)."
+    },
+    {
+      "id": "qof-chd016",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "CHD016",
+      "indicatorName": "[RETIRED 25/26] BP <=150/90 in CHD >=80",
+      "requiresRegister": "CHD",
+      "ageRange": { "min": 80 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 46, "upper": 90 },
+      "points": 14,
+      "source": "QOF 25/26 CHD016 (retired)",
+      "notes": "Retired in 26/27. Replaced by CD002 (combined CHD/STIA, ≥80, no frailty)."
+    },
+    {
+      "id": "qof-stia014",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "STIA014",
+      "indicatorName": "[RETIRED 25/26] BP <=140/90 in STIA <80",
+      "requiresRegister": "STIA",
+      "ageRange": { "max": 79 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 8,
+      "source": "QOF 25/26 STIA014 (retired)",
+      "notes": "Retired in 26/27. Replaced by CD001 (combined CHD/STIA)."
+    },
+    {
+      "id": "qof-stia015",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "STIA015",
+      "indicatorName": "[RETIRED 25/26] BP <=150/90 in STIA >=80",
+      "requiresRegister": "STIA",
+      "ageRange": { "min": 80 },
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 46, "upper": 90 },
+      "points": 6,
+      "source": "QOF 25/26 STIA015 (retired)",
+      "notes": "Retired in 26/27. Replaced by CD002 (combined CHD/STIA)."
+    },
+    {
+      "id": "qof-dm007",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "DM007",
+      "indicatorName": "[RETIRED 25/26] HbA1c <=64 mmol/mol in DM",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["hba1c", "haemoglobin a1c"],
+        "operator": "<=",
+        "threshold": 64,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 52, "upper": 72 },
+      "points": 8,
+      "source": "QOF 25/26 DM007 (retired)",
+      "notes": "Retired in 26/27. Replaced by frailty-stratified DM020 (HbA1c ≤58, non-frail) and DM021 (HbA1c ≤75, frail)."
+    },
+    {
+      "id": "qof-dm008",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "DM008",
+      "indicatorName": "[RETIRED 25/26] HbA1c <=75 mmol/mol in DM",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["hba1c", "haemoglobin a1c"],
+        "operator": "<=",
+        "threshold": 75,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 60, "upper": 90 },
+      "points": 10,
+      "source": "QOF 25/26 DM008 (retired)",
+      "notes": "Retired in 26/27. The HbA1c ≤75 cohort is now DM021 (restricted to patients with moderate/severe frailty only)."
+    },
+
+    {
+      "id": "qof-cd001-chd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CD001",
+      "indicatorName": "BP <=140/90 in CHD/Stroke/TIA <80 (no frailty)",
+      "requiresRegister": "CHD",
+      "ageRange": { "max": 79 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 41,
+      "source": "QOF 26/27 CD001 (NICE IND241/IND243)",
+      "notes": "New combined CHD/STIA BP indicator (41 points). Sentinel splits this into two register-specific rules (qof-cd001-chd and qof-cd001-stia) so the chip fires for patients on either register. Patients on both registers will see two chips, which is a known cosmetic limitation. HBPM equivalent target is 135/85."
+    },
+    {
+      "id": "qof-cd001-stia",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CD001",
+      "indicatorName": "BP <=140/90 in CHD/Stroke/TIA <80 (no frailty)",
+      "requiresRegister": "STIA",
+      "ageRange": { "max": 79 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 41,
+      "source": "QOF 26/27 CD001 (NICE IND241/IND243)",
+      "notes": "STIA-register half of the combined CD001 indicator. Points value (41) is the total indicator allocation; do not double-count if patient sees both chips."
+    },
+    {
+      "id": "qof-cd002-chd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CD002",
+      "indicatorName": "BP <=150/90 in CHD/Stroke/TIA >=80 (no frailty)",
+      "requiresRegister": "CHD",
+      "ageRange": { "min": 80 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 46, "upper": 90 },
+      "points": 20,
+      "source": "QOF 26/27 CD002 (NICE IND242/IND244)",
+      "notes": "New combined CHD/STIA BP indicator for ≥80 (20 points). HBPM equivalent target is 145/85."
+    },
+    {
+      "id": "qof-cd002-stia",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CD002",
+      "indicatorName": "BP <=150/90 in CHD/Stroke/TIA >=80 (no frailty)",
+      "requiresRegister": "STIA",
+      "ageRange": { "min": 80 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 46, "upper": 90 },
+      "points": 20,
+      "source": "QOF 26/27 CD002 (NICE IND242/IND244)",
+      "notes": "STIA-register half of the combined CD002 indicator."
+    },
+    {
+      "id": "qof-hyp010",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "HYP010",
+      "indicatorName": "BP <=140/90 in HYP <80 (no frailty)",
+      "requiresRegister": "HYP",
+      "ageRange": { "max": 79 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 85 },
+      "points": 38,
+      "source": "QOF 26/27 HYP010 (NICE IND239)",
+      "notes": "Replaces HYP008. Excludes moderate/severe frailty. HBPM equivalent 135/85."
+    },
+    {
+      "id": "qof-hyp011",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "HYP011",
+      "indicatorName": "BP <=150/90 in HYP >=80 (no frailty)",
+      "requiresRegister": "HYP",
+      "ageRange": { "min": 80 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 150,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 85 },
+      "points": 14,
+      "source": "QOF 26/27 HYP011 (NICE IND240)",
+      "notes": "Replaces HYP009. Excludes moderate/severe frailty. HBPM equivalent 145/85."
+    },
+    {
+      "id": "qof-chd005",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHD005",
+      "indicatorName": "Antiplatelet or anticoagulant in CHD",
+      "requiresRegister": "CHD",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["aspirin", "clopidogrel", "ticagrelor", "prasugrel", "dipyridamole", "warfarin", "apixaban", "rivaroxaban", "edoxaban", "dabigatran"]
+      },
+      "thresholds": { "lower": 56, "upper": 96 },
+      "points": 7,
+      "source": "QOF 26/27 CHD005 (NICE IND132)",
+      "notes": "Secondary prevention. Aspirin, alternative antiplatelet (clopidogrel/ticagrelor/prasugrel) or anticoagulant all count."
+    },
+    {
+      "id": "qof-stia007",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "STIA007",
+      "indicatorName": "Antiplatelet or anticoagulant in Stroke/TIA",
+      "requiresRegister": "STIA",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["aspirin", "clopidogrel", "ticagrelor", "prasugrel", "dipyridamole", "warfarin", "apixaban", "rivaroxaban", "edoxaban", "dabigatran"]
+      },
+      "thresholds": { "lower": 57, "upper": 97 },
+      "points": 4,
+      "source": "QOF 26/27 STIA007",
+      "notes": "Ticagrelor newly added to the antiplatelet list for 26/27. For non-haemorrhagic stroke or history of TIA."
+    },
+
+    {
+      "id": "qof-chol003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL003",
+      "indicatorName": "Statin (or alternative LLT) in CVD/CKD register patients",
+      "requiresRegister": "CHD",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["statin", "atorvastatin", "simvastatin", "rosuvastatin", "pravastatin", "fluvastatin", "pitavastatin", "ezetimibe", "inclisiran", "bempedoic", "alirocumab", "evolocumab"]
+      },
+      "thresholds": { "lower": 70, "upper": 95 },
+      "points": 20,
+      "source": "QOF 26/27 CHOL003 (NICE IND230)",
+      "notes": "Points reduced from 38 to 20 for 26/27 (consistency with other lipid indicators). Full QOF rule covers CHD, PAD, STIA, CKD registers; Sentinel approximates with CHD only until rules engine supports multi-register OR logic."
+    },
+    {
+      "id": "qof-chol004",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "CHOL004",
+      "indicatorName": "Cholesterol target: LDL <=2.0 or non-HDL <=2.6 in CVD register",
+      "requiresRegister": "CHD",
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["non-hdl", "non hdl", "ldl", "ldl cholesterol"],
+        "operator": "<=",
+        "threshold": 2.6,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 20, "upper": 50 },
+      "points": 44,
+      "source": "QOF 26/27 CHOL004 (NICE IND278)",
+      "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned."
+    },
+
+    {
+      "id": "qof-af006",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "AF006",
+      "indicatorName": "CHA2DS2-VASc score recorded in preceding 12 months",
+      "requiresRegister": "AF",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["cha2ds2-vasc", "cha2ds2 vasc", "chads2-vasc", "stroke risk score"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 95 },
+      "points": 12,
+      "source": "QOF 26/27 AF006 (NICE IND127)",
+      "notes": "CORRECTED for 26/27: the previous Sentinel rule labelled AF006 was actually checking for DOAC/warfarin presence, which is QOF AF008. This rule now correctly checks for a recorded CHA2DS2-VASc score. Upper threshold raised from 90 to 95 for 26/27. Excludes patients with any previous score ≥2."
+    },
+    {
+      "id": "qof-af008",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "AF008",
+      "indicatorName": "DOAC (or VKA if DOAC declined/unsuitable) in AF with CHA2DS2-VASc >=2",
+      "requiresRegister": "AF",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["apixaban", "rivaroxaban", "dabigatran", "edoxaban", "warfarin"]
+      },
+      "thresholds": { "lower": 70, "upper": 95 },
+      "points": 12,
+      "source": "QOF 26/27 AF008 (NICE IND247)",
+      "notes": "Renamed from previous Sentinel id qof-af006. NG196 prefers DOAC as first-line; warfarin counts where DOAC declined or clinically unsuitable. Sentinel cannot calculate CHA2DS2-VASc itself, so this rule fires for all AF patients on anticoagulant; clinician must confirm CHA2DS2-VASc ≥2 applies."
+    },
+
+    {
+      "id": "qof-dm006",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM006",
+      "indicatorName": "ACE-I or ARB in diabetes with nephropathy/microalbuminuria",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "fosinopril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "olmesartan", "azilsartan"]
+      },
+      "thresholds": { "lower": 57, "upper": 97 },
+      "points": 3,
+      "source": "QOF 26/27 DM006",
+      "notes": "REPURPOSED for 26/27. The DM006 ID was reused: in 25/26 it meant 'HbA1c ≤58'; in 26/27 it now means 'ACE-I/ARB in diabetic nephropathy'. The old HbA1c ≤58 indicator is now DM020. Sentinel approximates by checking ACE-I/ARB presence in all DM patients; ideally should restrict to those with nephropathy/microalbuminuria codes on problem list — not currently expressible in the schema."
+    },
+    {
+      "id": "qof-dm014",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM014",
+      "indicatorName": "Structured education within 9 months of new DM diagnosis",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["diabetes structured education", "structured education programme", "diabetes education", "desmond", "dafne", "x-pert"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 11,
+      "source": "QOF 26/27 DM014",
+      "notes": "Applies to newly diagnosed DM in the QOF year. Sentinel cannot determine 'newly diagnosed' without diagnosis date, so this rule fires for all DM patients with a recent structured education code. Programme matches include DESMOND/DAFNE/X-PERT brand names commonly coded by primary care."
+    },
+    {
+      "id": "qof-dm020",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM020",
+      "indicatorName": "HbA1c <=58 mmol/mol in DM (non-frail)",
+      "requiresRegister": "DM",
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["hba1c", "haemoglobin a1c"],
+        "operator": "<=",
+        "threshold": 58,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 35, "upper": 75 },
+      "points": 17,
+      "source": "QOF 26/27 DM020",
+      "notes": "Replaces DM006 (25/26 meaning). Excludes patients with moderate or severe frailty. Threshold range widened to 35-75 (was 35-50)."
+    },
+    {
+      "id": "qof-dm021",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM021",
+      "indicatorName": "HbA1c <=75 mmol/mol in DM with moderate/severe frailty",
+      "requiresRegister": "DM",
+      "requiresProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["hba1c", "haemoglobin a1c"],
+        "operator": "<=",
+        "threshold": 75,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 52, "upper": 92 },
+      "points": 10,
+      "source": "QOF 26/27 DM021",
+      "notes": "Frailty-stratified replacement for DM008. Fires ONLY for patients on the DM register WITH moderate or severe frailty coded. Uses a new requiresProblem field — needs rules-engine support to inverse-of excludeIfProblem. If engine doesn't yet support requiresProblem, this rule will fire for all DM patients (over-trigger) until engine is updated."
+    },
+    {
+      "id": "qof-dm034",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM034",
+      "indicatorName": "Statin primary prevention in DM >=40 (no CVD, no frailty)",
+      "requiresRegister": "DM",
+      "ageRange": { "min": 40 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty", "coronary heart disease", "ischaemic heart disease", "myocardial infarction", "angina", "stroke", "transient ischaemic attack", "peripheral arterial disease"],
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["atorvastatin", "simvastatin", "rosuvastatin", "pravastatin", "fluvastatin", "pitavastatin", "ezetimibe", "inclisiran", "bempedoic", "alirocumab", "evolocumab"]
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 8,
+      "source": "QOF 26/27 DM034",
+      "notes": "Primary prevention statin in DM patients ≥40 without CVD and without moderate/severe frailty. QOF rule additionally excludes T2DM with CVD risk score <10% in preceding 3 years; this nuance is not expressed here and may cause over-flagging in low-risk T2DM patients."
+    },
+    {
+      "id": "qof-dm035",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM035",
+      "indicatorName": "Statin secondary prevention in DM with CVD history",
+      "requiresRegister": "DM",
+      "requiresAnyProblem": ["coronary heart disease", "ischaemic heart disease", "myocardial infarction", "angina", "stroke", "transient ischaemic attack", "peripheral arterial disease"],
+      "excludeIfProblem": ["haemorrhagic stroke"],
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["atorvastatin", "simvastatin", "rosuvastatin", "pravastatin", "fluvastatin", "pitavastatin", "ezetimibe", "inclisiran", "bempedoic", "alirocumab", "evolocumab"]
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 8,
+      "source": "QOF 26/27 DM035",
+      "notes": "Secondary prevention. Uses requiresAnyProblem (new schema field) — fires only if DM register patient has at least one CVD problem coded. Excludes haemorrhagic stroke. Until rules engine supports requiresAnyProblem the rule will fire for all DM patients."
+    },
+    {
+      "id": "qof-dm036",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "DM036",
+      "indicatorName": "BP <=140/90 in DM <=70 (no frailty)",
+      "requiresRegister": "DM",
+      "ageRange": { "max": 70 },
+      "excludeIfProblem": ["moderate frailty", "severe frailty"],
+      "check": {
+        "kind": "observation-threshold",
+        "observation": ["blood pressure", "bp"],
+        "thresholdSystolic": 140,
+        "thresholdDiastolic": 90,
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 38, "upper": 90 },
+      "points": 27,
+      "source": "QOF 26/27 DM036",
+      "notes": "Age threshold tightened for 26/27: was <80, now ≤70. Frailty exclusion retained."
+    },
+    {
+      "id": "qof-dm037",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "DM037",
+      "indicatorName": "Eight diabetes care processes in preceding 12 months",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-bundle",
+        "observations": [
+          ["bmi", "body mass index"],
+          ["blood pressure", "bp"],
+          ["hba1c", "haemoglobin a1c"],
+          ["cholesterol", "lipid profile"],
+          ["smoking status", "tobacco use"],
+          ["foot examination", "diabetic foot"],
+          ["acr", "albumin creatinine ratio", "albumin:creatinine"],
+          ["egfr", "estimated glomerular filtration rate", "creatinine"]
+        ],
+        "withinDays": 365,
+        "requireAll": true
+      },
+      "thresholds": { "lower": 35, "upper": 75 },
+      "points": 10,
+      "source": "QOF 26/27 DM037",
+      "notes": "NEW 26/27 indicator. Requires all 8 care processes in preceding 12 months: BMI, BP, HbA1c, cholesterol, smoking status, foot exam, ACR, eGFR/creatinine. DISABLED pending rules engine support for observation-bundle / requireAll check kind. High-value indicator (10 pts) — worth prioritising for engine update."
+    },
+
+    {
+      "id": "qof-hf007",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "HF007",
+      "indicatorName": "HF review in preceding 12 months",
+      "requiresRegister": "HF",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["heart failure review", "hf review", "heart failure annual review"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 7,
+      "source": "QOF 26/27 HF007 (NICE IND195)",
+      "notes": "Includes assessment of functional capacity and medication review. Encounter-coded entry; relies on Sentinel's journal endpoint fetch (added in v0.3.6)."
+    },
+    {
+      "id": "qof-hf008",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "HF008",
+      "indicatorName": "HF diagnosis confirmed by echo or specialist assessment",
+      "requiresRegister": "HF",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["echocardiogram", "echocardiography", "transthoracic echo", "tte", "heart failure specialist assessment"],
+        "withinDays": 99999
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 6,
+      "source": "QOF 26/27 HF008 (NICE IND192)",
+      "notes": "For HF diagnosed on or after 1 April 2023, confirmation by echo or specialist within 6 months of diagnosis (or registration). Sentinel cannot verify the timing window against diagnosis date, so this rule fires on presence of any echo/specialist code in record. Clinician must verify the timing rule."
+    },
+    {
+      "id": "qof-hf009",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "HF009",
+      "indicatorName": "Four-pillar therapy in HFrEF (ACE-I/ARB/ARNI + BB + MRA + SGLT2i)",
+      "requiresRegister": "HF",
+      "requiresProblem": ["heart failure with reduced ejection fraction", "hfref", "lvef <40", "reduced ejection fraction"],
+      "check": {
+        "kind": "medication-all-of",
+        "groups": [
+          {
+            "name": "RAAS",
+            "match": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "sacubitril", "entresto"]
+          },
+          {
+            "name": "Beta-blocker",
+            "match": ["bisoprolol", "carvedilol", "nebivolol", "metoprolol"]
+          },
+          {
+            "name": "MRA",
+            "match": ["spironolactone", "eplerenone"]
+          },
+          {
+            "name": "SGLT2i",
+            "match": ["dapagliflozin", "empagliflozin", "canagliflozin", "ertugliflozin"]
+          }
+        ]
+      },
+      "thresholds": { "lower": 20, "upper": 50 },
+      "points": 12,
+      "source": "QOF 26/27 HF009 (NICE IND317, NG106 Sep 2025 update)",
+      "notes": "NEW 26/27 indicator. Replaces HF003 and HF006. Requires concurrent prescription from all 4 drug classes in HFrEF. DISABLED pending rules engine support for medication-all-of (AND-across-groups) check kind, and for requiresProblem to identify HFrEF subtype (the HF register doesn't distinguish reduced/preserved EF). Worth prioritising — 12 pts and clinically major change."
+    },
+
+    {
+      "id": "qof-ast007",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "AST007",
+      "indicatorName": "Asthma review with 4 components in preceding 12 months",
+      "requiresRegister": "ASTHMA",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["asthma review", "asthma annual review"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 45, "upper": 70 },
+      "points": 20,
+      "source": "QOF 26/27 AST007",
+      "notes": "Threshold tightened for 26/27 from 50-75 to 45-70. The full QOF rule now requires the review to include FOUR components: (1) assessment of asthma control, (2) recording of number of exacerbations, (3) assessment of inhaler technique, (4) written personalised action plan. Sentinel cannot verify all four components are present; presence of an asthma-review code is the closest approximation. Clinician must verify the written action plan and other elements."
+    },
+    {
+      "id": "qof-ast012",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "AST012",
+      "indicatorName": "Objective test within 3 months of new asthma diagnosis (post-Apr 2025)",
+      "requiresRegister": "ASTHMA",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["spirometry", "fev1", "feno", "fractional exhaled nitric oxide", "peak flow variability", "bronchodilator reversibility"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 45, "upper": 80 },
+      "points": 15,
+      "source": "QOF 26/27 AST012",
+      "notes": "NEW 26/27 indicator. Applies to patients newly diagnosed with asthma on or after 1 April 2025, with an objective test (spirometry with BDR, FeNO, or peak flow variability) within 3 months either side of diagnosis. Sentinel cannot determine diagnosis date or 3-month window without rules-engine extension — this rule fires for all asthma-register patients with any objective test in the last year. Useful as a prompt, not a claim verifier."
+    },
+
+    {
+      "id": "qof-copd010",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "COPD010",
+      "indicatorName": "COPD review in preceding 12 months with MRC dyspnoea",
+      "requiresRegister": "COPD",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["copd review", "copd annual review", "mrc dyspnoea", "medical research council dyspnoea"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 9,
+      "source": "QOF 26/27 COPD010",
+      "notes": "Includes record of number of exacerbations and MRC dyspnoea scale. Encounter-coded; relies on Sentinel's journal endpoint fetch."
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Triage Lens — Settings</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+<header class="tl-head">
+  <div class="tl-head-row">
+    <h1>Triage Lens <span class="tl-ver" id="tlVersion"></span></h1>
+    <div class="tl-head-actions">
+      <span class="tl-status" id="tlStatus"></span>
+    </div>
+  </div>
+  <nav class="tl-tabs" id="tlTabs">
+    <button class="tl-tab tl-tab-active" data-tab="rules">Rules</button>
+    <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
+    <button class="tl-tab" data-tab="thresholds">Thresholds</button>
+    <button class="tl-tab" data-tab="prefs">Preferences</button>
+    <button class="tl-tab" data-tab="preview">Live preview</button>
+    <button class="tl-tab" data-tab="backup">Backup &amp; restore</button>
+    <button class="tl-tab" data-tab="about">About</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ============================ RULES TAB ============================ -->
+  <section class="tl-pane tl-pane-active" id="paneRules">
+    <div class="tl-toolbar">
+      <button class="tl-btn tl-btn-primary" id="btnAddRule">+ New rule</button>
+      <input type="search" id="ruleSearch" placeholder="Search rules…" class="tl-search">
+      <span class="tl-spacer"></span>
+      <select id="filterKind" class="tl-select">
+        <option value="">All severities</option>
+        <option value="red">Red</option>
+        <option value="amber">Amber</option>
+        <option value="green">Green</option>
+        <option value="info">Info</option>
+      </select>
+    </div>
+    <div class="tl-rule-list" id="ruleList"></div>
+    <div class="tl-empty" id="ruleListEmpty" style="display:none">No rules match.</div>
+  </section>
+
+  <!-- ============================ EDITOR ============================ -->
+  <section class="tl-pane" id="paneEdit">
+    <div class="tl-edit-header">
+      <button class="tl-btn tl-btn-ghost" id="btnBackToRules">← Back to rules</button>
+      <h2 id="editTitle">Edit rule</h2>
+      <span class="tl-spacer"></span>
+      <button class="tl-btn tl-btn-danger" id="btnDeleteRule">Delete rule</button>
+    </div>
+
+    <div class="tl-edit-grid">
+      <div class="tl-edit-col">
+        <label class="tl-field">
+          <span>Label <small>(shown on the chip)</small></span>
+          <input type="text" id="fLabel" maxlength="40">
+        </label>
+
+        <label class="tl-field">
+          <span>Severity</span>
+          <select id="fKind">
+            <option value="red">Red</option>
+            <option value="amber">Amber</option>
+            <option value="green">Green</option>
+            <option value="info">Info</option>
+          </select>
+        </label>
+
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" id="fEnabled">
+          <span>Enabled</span>
+        </label>
+
+        <label class="tl-field">
+          <span>Patterns <small>(one per line)</small></span>
+          <textarea id="fPatterns" rows="6" placeholder="UTI&#10;dysuria&#10;burning passing water"></textarea>
+        </label>
+
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" id="fRegex">
+          <span>Treat patterns as regex</span>
+        </label>
+
+        <label class="tl-field">
+          <span>Bumps tile <small>(when matched on a record/detail page)</small></span>
+          <select id="fBumpsTile">
+            <option value="">Don't bump any tile</option>
+            <option value="risk">Risk</option>
+            <option value="monitoring">Monitoring</option>
+            <option value="meds">Meds</option>
+            <option value="openLoops">Open loops</option>
+            <option value="carePlan">Care plan</option>
+            <option value="safeguarding">Safeguarding</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="tl-edit-col">
+        <fieldset class="tl-field">
+          <legend>Fields to scan</legend>
+          <div class="tl-checks" id="fFields"></div>
+        </fieldset>
+
+        <fieldset class="tl-field">
+          <legend>Pages where this rule fires</legend>
+          <div class="tl-checks" id="fPages"></div>
+        </fieldset>
+
+        <fieldset class="tl-field">
+          <legend>Actions <small>(click-to-fire from the chip)</small></legend>
+          <div id="actionList"></div>
+          <button class="tl-btn tl-btn-secondary" id="btnAddAction">+ Add action</button>
+        </fieldset>
+
+        <label class="tl-field">
+          <span>Notes (your own reference, not shown anywhere)</span>
+          <textarea id="fNotes" rows="2"></textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="tl-edit-footer">
+      <button class="tl-btn" id="btnCancelEdit">Cancel</button>
+      <button class="tl-btn tl-btn-primary" id="btnSaveEdit">Save rule</button>
+    </div>
+  </section>
+
+  <!-- ============================ SYSTEM CHIPS TAB ============================ -->
+  <section class="tl-pane" id="paneSystemChips">
+    <div class="tl-help">Baseline chips that fire on built-in conditions (age extremes, task age, status, frailty, polypharmacy, etc.). Edit the label, severity, or attach actions — same machinery as user rules. Variables in <code>{braces}</code> are substituted with live values when the chip renders.</div>
+    <div class="tl-rule-list" id="systemChipList"></div>
+  </section>
+
+  <!-- System chip editor pane (mirrors the rule editor) -->
+  <section class="tl-pane" id="paneSystemEdit">
+    <div class="tl-edit-header">
+      <button class="tl-btn tl-btn-ghost" id="btnBackToSystem">← Back to baseline chips</button>
+      <h2 id="systemEditTitle">Edit baseline chip</h2>
+      <span class="tl-spacer"></span>
+      <button class="tl-btn" id="btnResetSystemChip" title="Reset this chip to its shipped default">Reset to default</button>
+    </div>
+    <div class="tl-edit-grid">
+      <div class="tl-edit-col">
+        <label class="tl-field">
+          <span>Label <small id="systemVarHelp">(use {variable} for live values)</small></span>
+          <input type="text" id="sysLabel" maxlength="60">
+        </label>
+        <label class="tl-field">
+          <span>Severity</span>
+          <select id="sysKind">
+            <option value="red">Red</option>
+            <option value="amber">Amber</option>
+            <option value="green">Green</option>
+            <option value="info">Info</option>
+          </select>
+        </label>
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" id="sysEnabled">
+          <span>Enabled</span>
+        </label>
+        <div class="tl-help" id="sysIdHelp" style="margin-top:8px"></div>
+      </div>
+      <div class="tl-edit-col">
+        <fieldset class="tl-field">
+          <legend>Actions <small>(click-to-fire from the chip)</small></legend>
+          <div id="sysActionList"></div>
+          <button class="tl-btn tl-btn-secondary" id="btnAddSysAction">+ Add action</button>
+        </fieldset>
+      </div>
+    </div>
+    <div class="tl-edit-footer">
+      <button class="tl-btn" id="btnCancelSystemEdit">Cancel</button>
+      <button class="tl-btn tl-btn-primary" id="btnSaveSystemEdit">Save</button>
+    </div>
+  </section>
+
+  <!-- ============================ THRESHOLDS TAB ============================ -->
+  <section class="tl-pane" id="paneThresholds">
+    <div class="tl-help">Adjust the numbers that drive the built-in tiles and queue chips. Changes apply on save.</div>
+
+    <h3>Patient record / detail tiles</h3>
+    <div class="tl-grid-2">
+      <label class="tl-field"><span>Polypharmacy red threshold (repeat count)</span><input type="number" min="0" max="100" data-th="polypharmacyRed"></label>
+      <label class="tl-field"><span>Polypharmacy amber threshold</span><input type="number" min="0" max="100" data-th="polypharmacyAmber"></label>
+      <label class="tl-field"><span>BP age limit, with LTC (months)</span><input type="number" min="0" max="120" data-th="bpAgeMonthsLtc"></label>
+      <label class="tl-field"><span>BP age limit, no LTC (months)</span><input type="number" min="0" max="120" data-th="bpAgeMonthsNoLtc"></label>
+      <label class="tl-field"><span>Weight age limit (months)</span><input type="number" min="0" max="120" data-th="weightAgeMonths"></label>
+      <label class="tl-field"><span>Frailty hits → red</span><input type="number" min="1" max="20" data-th="frailtyHitsRed"></label>
+      <label class="tl-field"><span>Frailty hits → amber</span><input type="number" min="1" max="20" data-th="frailtyHitsAmber"></label>
+      <label class="tl-field"><span>Last clinician contact (months)</span><input type="number" min="1" max="60" data-th="lastContactMonths"></label>
+      <label class="tl-field"><span>Recent discharge → red (days)</span><input type="number" min="1" max="180" data-th="recentDischargeRed"></label>
+      <label class="tl-field"><span>Recent discharge → amber (days)</span><input type="number" min="1" max="365" data-th="recentDischargeAmber"></label>
+      <label class="tl-field"><span>Anticholinergic burden → amber (≥)</span><input type="number" min="1" max="15" data-th="anticholinergicAmber"></label>
+      <label class="tl-field"><span>QOF overdue → red (count)</span><input type="number" min="1" max="20" data-th="qofOverdueRed"></label>
+      <label class="tl-field"><span>Recent referral window (days)</span><input type="number" min="1" max="365" data-th="recentReferralDays"></label>
+    </div>
+
+    <h3>Queue row chips</h3>
+    <div class="tl-grid-2">
+      <label class="tl-field"><span>Task age → amber (days)</span><input type="number" min="1" max="60" data-th="taskAgeAmber"></label>
+      <label class="tl-field"><span>Task age → red (days)</span><input type="number" min="1" max="120" data-th="taskAgeRed"></label>
+      <label class="tl-field"><span>"Elder" age threshold</span><input type="number" min="50" max="120" data-th="elderAge"></label>
+      <label class="tl-field"><span>"Child" age threshold</span><input type="number" min="0" max="20" data-th="childAge"></label>
+    </div>
+
+    <div class="tl-edit-footer">
+      <button class="tl-btn" id="btnResetThresholds">Reset to defaults</button>
+      <button class="tl-btn tl-btn-primary" id="btnSaveThresholds">Save thresholds</button>
+    </div>
+  </section>
+
+  <!-- ============================ PREFS TAB ============================ -->
+  <section class="tl-pane" id="panePrefs">
+    <div class="tl-help">Display preferences. These don't affect what's matched, just what's shown.</div>
+    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showAgeChip"><span>Show patient age chip in HUD header</span></label>
+    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showFootStats"><span>Show footer stats (registers · problems · repeats · docs)</span></label>
+    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showRequestSnippet"><span>Show request body snippet on detail page</span></label>
+    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showBuiltInTiles"><span>Show built-in 6 tiles (Risk / Monitoring / Meds / Open loops / Care plan / Safeguarding)</span></label>
+    <label class="tl-field"><span>Snippet max characters</span><input type="number" min="50" max="2000" data-pref="snippetMaxChars"></label>
+    <div class="tl-edit-footer">
+      <button class="tl-btn tl-btn-primary" id="btnSavePrefs">Save preferences</button>
+    </div>
+  </section>
+
+  <!-- ============================ LIVE PREVIEW TAB ============================ -->
+  <section class="tl-pane" id="panePreview">
+    <div class="tl-help">Paste sample text below — see which rules fire and which actions they offer. Useful for testing patterns before saving.</div>
+    <label class="tl-field"><span>Sample text (e.g. a request body or a problem name)</span>
+      <textarea id="previewInput" rows="6" placeholder="Patient has burning when peeing for 2 days, no fever, no flank pain"></textarea>
+    </label>
+    <div class="tl-help">Page context (which page-scope to test against):</div>
+    <div class="tl-checks">
+      <label><input type="radio" name="previewPage" value="queue"> Queue</label>
+      <label><input type="radio" name="previewPage" value="detail" checked> Detail</label>
+      <label><input type="radio" name="previewPage" value="record"> Record</label>
+    </div>
+    <h3>Matching rules</h3>
+    <div id="previewMatches" class="tl-preview-matches"></div>
+  </section>
+
+  <!-- ============================ BACKUP TAB ============================ -->
+  <section class="tl-pane" id="paneBackup">
+    <div class="tl-help">Your config is JSON. Export to share or back up; import to restore. Reset wipes all customisations and reloads the shipped defaults.</div>
+    <div class="tl-backup-actions">
+      <button class="tl-btn tl-btn-primary" id="btnExport">⬇ Export to file</button>
+      <button class="tl-btn" id="btnImport">⬆ Import from file</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+      <button class="tl-btn tl-btn-danger" id="btnReset">Reset to defaults</button>
+    </div>
+    <details>
+      <summary>Or paste / view JSON directly</summary>
+      <textarea id="rawJson" rows="20" spellcheck="false"></textarea>
+      <div class="tl-edit-footer">
+        <button class="tl-btn" id="btnReloadJson">Reload from storage</button>
+        <button class="tl-btn tl-btn-primary" id="btnSaveJson">Save pasted JSON</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============================ ABOUT TAB ============================ -->
+  <section class="tl-pane" id="paneAbout">
+    <h2>About Triage Lens</h2>
+    <p>Triage Lens is a personal-use overlay for Medicus. It surfaces clinical signals on patient records, classifies and decorates triage queue rows, and adds a request-context panel on task detail pages. All processing is local — no data leaves the browser.</p>
+    <h3>How rules work</h3>
+    <p>Each <strong>rule</strong> has a label, a severity colour, one or more text patterns, and zero or more actions. When a rule's pattern matches the configured fields on a configured page, the chip appears on the HUD or queue row. If the chip has actions, click it to expand a menu of click-to-fire shortcuts.</p>
+    <ul>
+      <li><strong>Link</strong> — opens a URL in a new tab (NICE guidelines, questionnaires, local SOPs).</li>
+      <li><strong>Snippet</strong> — copies a text template to the clipboard (history-taking, examination, safety-net wording).</li>
+      <li><strong>Note</strong> — shows informational text in a popover (monitoring reminders, red-flag checklists).</li>
+    </ul>
+    <h3>Safety</h3>
+    <p>This is display-only. It surfaces existing record entries with provenance — no synthesis, no inference of unrecorded clinical states, no recommendations. Actions never auto-fire — every action is click-to-confirm.</p>
+    <h3>Authoring tips</h3>
+    <ul>
+      <li>If your patterns are simple words or phrases, leave <em>regex</em> off — Triage Lens will escape special characters and match whole-word.</li>
+      <li>For phrases with optional parts (e.g. <code>self.?harm</code> matching "self-harm" / "self harm"), enable <em>regex</em>.</li>
+      <li>Queue page only has <em>request</em> text available. Other fields are only on detail / record pages.</li>
+      <li>Use the live preview tab to test patterns before saving.</li>
+    </ul>
+  </section>
+</main>
+
+<script src="options.js"></script>
+</body>
+</html>

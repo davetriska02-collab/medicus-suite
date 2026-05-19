@@ -1,0 +1,249 @@
+/* Medicus Suite — Sentinel module styles */
+
+.sent-module { font-family: var(--sans); }
+.sent-header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
+
+/* Patient banner */
+.sent-patient-banner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.sent-patient-name { font-weight: 600; font-size: 13px; color: var(--text-1); margin-bottom: 3px; }
+.sent-patient-meta { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.03em; }
+
+/* Filter bar */
+.sent-filter-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.sent-filter-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 5px 4px;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.sent-filter-btn:hover { color: var(--text-2); }
+.sent-filter-btn.active { background: var(--bg-mid); color: var(--text-2); border: 1px solid var(--border-hi); }
+.sent-filter-btn.active.action { color: var(--amber); border-color: rgba(251,191,36,0.3); }
+.sent-filter-btn.active.clear  { color: var(--green); border-color: rgba(74,222,128,0.3); }
+
+/* Groups */
+.sent-group { margin-bottom: 14px; }
+.sent-group-label {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-4); margin-bottom: 5px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.sent-chip-list { display: flex; flex-direction: column; gap: 3px; }
+
+/* Chips — Medicus sidebar style: left colour bar + right status badge */
+.sent-chip {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  padding: 7px 10px;
+  border-left-width: 3px;
+  position: relative;
+}
+
+.sent-chip-red    { border-left-color: var(--red);   background: rgba(248,113,113,0.06); }
+.sent-chip-amber  { border-left-color: var(--amber); background: rgba(251,191,36,0.06); }
+.sent-chip-green  { border-left-color: var(--green); background: rgba(74,222,128,0.04); }
+.sent-chip-neutral { border-left-color: var(--border-hi); }
+
+.sent-chip-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sent-chip-name { font-size: 12px; font-weight: 600; color: var(--text-1); flex: 1; min-width: 0; }
+.sent-chip-cat { font-size: 10px; color: var(--text-4); font-family: var(--mono); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+.sent-chip-obs { font-size: 11px; color: var(--text-3); margin-top: 4px; font-family: var(--mono); }
+
+/* Status badge — the "flash" on the right */
+.sent-chip-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.sent-badge-red    { background: rgba(248,113,113,0.2); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.sent-badge-amber  { background: rgba(251,191,36,0.15); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+.sent-badge-green  { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.25); }
+.sent-badge-neutral { background: var(--bg-mid); color: var(--text-5); border: 1px solid var(--border); }
+
+/* Test rows */
+.sent-test-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.05); }
+.sent-test-row { display: flex; justify-content: space-between; align-items: center; }
+.sent-test-name { font-size: 11px; color: var(--text-3); font-weight: 500; }
+.sent-test-status { font-family: var(--mono); font-size: 10px; color: var(--text-4); text-align: right; margin-left: 8px; flex-shrink: 0; }
+.sent-test-red    { color: var(--red) !important; }
+.sent-test-amber  { color: var(--amber) !important; }
+.sent-test-green  { color: var(--green) !important; }
+.sent-test-neutral { color: var(--text-4); }
+
+/* Registers dim */
+.sent-group-dim { opacity: 0.55; }
+.sent-group-dim .sent-chip { border-style: dashed; background: transparent; }
+
+/* Skeleton */
+.sent-skeleton { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.sent-skel-chip { height: 52px; border-radius: 6px; background: var(--bg-elev); border: 1px solid var(--border); animation: pulse 1.4s ease-in-out infinite; }
+
+/* Footer */
+.sent-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sent-ts { font-family: var(--mono); font-size: 9px; color: var(--text-5); letter-spacing: 0.06em; }
+.sent-empty { font-size: 12px; color: var(--text-4); text-align: center; padding: 20px 0; }
+
+/* ── Waiting Room pinned block ───────────────────────────────────────────────── */
+
+.wr-pinned {
+  border-radius: 7px;
+  border: 1px solid var(--border-hi);
+  padding: 0;
+  margin-bottom: 12px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.wr-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+}
+
+.wr-pin-icon { font-size: 13px; flex-shrink: 0; }
+
+.wr-pin-label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.wr-pin-label strong { color: var(--text-1); font-weight: 700; }
+
+.wr-pin-ts {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-5);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* States */
+.wr-loading  { background: var(--bg-elev); opacity: 0.6; }
+.wr-error    { background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.2); }
+.wr-error .wr-pin-label { color: var(--red); }
+
+.wr-clear {
+  background: rgba(74,222,128,0.04);
+  border-color: rgba(74,222,128,0.18);
+}
+.wr-clear .wr-pin-label { color: var(--green); }
+
+.wr-waiting {
+  background: rgba(251,191,36,0.05);
+  border-color: rgba(251,191,36,0.25);
+  border-left: 3px solid var(--amber);
+}
+
+.wr-pin-head { padding-bottom: 5px; border-bottom: 1px solid rgba(251,191,36,0.15); }
+
+/* Patient rows */
+.wr-rows { padding: 4px 0 3px; }
+
+.wr-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.wr-row:hover { background: rgba(255,255,255,0.03); }
+
+.wr-row-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  min-width: 30px;
+  flex-shrink: 0;
+}
+
+.wr-row-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wr-row-wait {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+/* Wait duration colour escalation */
+.wr-row-amber .wr-row-wait { color: var(--amber); }
+.wr-row-amber .wr-row-name  { color: var(--text-1); }
+.wr-row-red   .wr-row-wait  { color: var(--red); }
+.wr-row-red   .wr-row-name  { color: var(--text-1); font-weight: 600; }
+
+/* QOF year label on indicator chips */
+.sent-qof-year {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+/* Custom rule tag on drug-monitoring chips */
+.sent-custom-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #a78bfa;
+  background: rgba(167,139,250,0.12);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}

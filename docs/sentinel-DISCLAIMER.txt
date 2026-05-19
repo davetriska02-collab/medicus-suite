@@ -1,0 +1,359 @@
+================================================================================
+                           SENTINEL - DISCLAIMER
+================================================================================
+
+This document is the formal regulatory, professional and liability statement
+governing the use of the Sentinel browser extension. It is binding on any
+person who installs, uses, configures, modifies or distributes the software.
+Installation or use of Sentinel constitutes acknowledgement that the user has
+read this disclaimer and accepts its terms in full.
+
+Version:  0.3.1
+Status:   Personal pilot; single-clinician; not distributed; not certified.
+Date:     2026-05
+
+
+--------------------------------------------------------------------------------
+ 1. NATURE OF THE SOFTWARE
+--------------------------------------------------------------------------------
+
+Sentinel is a passive, read-only memory aid that re-displays, in a sidebar
+inside the user's own browser, values already present in the Medicus
+electronic patient record for the patient the user is already viewing.
+
+Sentinel:
+
+  - performs no clinical reasoning;
+  - produces no clinical recommendation;
+  - performs no triage, prioritisation, ranking or scoring of patients;
+  - performs no calculation that changes the meaning of any clinical value;
+  - performs no action on any patient record or any external system;
+  - writes nothing, sends nothing, submits nothing, modifies nothing;
+  - transmits no data outside the user's local browser;
+  - stores no patient data persistently;
+  - operates only while the user is authenticated to Medicus in their own
+    browser session.
+
+The frozen intended-purpose statement is reproduced at section 3 below. Any
+feature or use case beyond that statement is outside the scope of Sentinel and
+the disclaimers in this document do not apply to such use.
+
+
+--------------------------------------------------------------------------------
+ 2. NOT A MEDICAL DEVICE
+--------------------------------------------------------------------------------
+
+The author asserts, based on a good-faith reading of the MHRA guidance on
+software as a medical device current at the date of this document, that
+Sentinel falls outside the scope of the UK medical devices regulations. This
+assertion rests on the following facts:
+
+  - Sentinel produces no output that constitutes a diagnosis, a treatment
+    recommendation, a prognosis, a triage decision, or any clinical
+    interpretation of patient data.
+  - Sentinel re-displays values already visible to the clinician in the
+    source record. It does not transform those values into new clinical
+    information.
+  - Sentinel produces no calculation whose output is intended to drive a
+    clinical decision. Threshold comparisons (e.g. "BP 138/82 is at or below
+    140/90") are arithmetic, not clinical interpretation.
+  - Sentinel does not automate any step of clinical care.
+
+No CE mark, no UKCA mark, no MDR conformity, no FDA clearance, no other
+regulatory clearance is claimed for Sentinel. The user must not represent
+Sentinel as certified or as having any regulatory status.
+
+
+--------------------------------------------------------------------------------
+ 3. INTENDED PURPOSE (FROZEN STATEMENT)
+--------------------------------------------------------------------------------
+
+  Software that displays, against the patient's active medication list, active
+  problem list, and recent observations as already recorded in the Medicus
+  electronic patient record, the most recent recorded values relevant to
+  published drug-monitoring guidance and to QOF 2025/26 indicator criteria,
+  and indicates whether those values fall within the recommended interval or
+  whether the relevant QOF indicator is achieved.
+
+  The software does not recommend clinical actions, does not order
+  investigations, does not write to the patient record, does not modify QOF
+  claims data, does not transmit any data outside the user's browser, does
+  not analyse images, does not generate synthetic data, and does not
+  constitute clinical decision support.
+
+  It is a passive display tool for use by the clinician as a memory aid. All
+  clinical decisions, including verification of any displayed value against
+  the source record, remain the responsibility of the clinician.
+
+Any use of Sentinel for any purpose outside the above statement is at the
+user's sole risk and is not covered by the protections of this disclaimer.
+
+
+--------------------------------------------------------------------------------
+ 4. NOT CLINICAL DECISION SUPPORT
+--------------------------------------------------------------------------------
+
+Sentinel is not clinical decision support software (CDS). It does not meet
+the definition of CDS under MHRA, NICE, FDA, IMDRF or other relevant
+authority. The user must not treat Sentinel as CDS, must not rely on Sentinel
+in lieu of clinical judgement, and must not represent Sentinel as CDS to any
+third party including but not limited to colleagues, patients, employers,
+regulators, insurers or commissioners.
+
+
+--------------------------------------------------------------------------------
+ 5. CLINICAL RESPONSIBILITY REMAINS WITH THE CLINICIAN
+--------------------------------------------------------------------------------
+
+The clinician using Sentinel retains full, undivided and non-delegable
+responsibility for every clinical decision they make about every patient.
+Sentinel does not transfer, reduce, qualify or share that responsibility.
+
+The clinician must verify every value displayed by Sentinel against the
+source Medicus record before taking any clinical action that depends on the
+value. The presence, absence, or status colour of any chip displayed by
+Sentinel must not be relied upon as a sole basis for any clinical decision.
+
+The clinician's professional duty to the patient is governed by the
+General Medical Council (GMC), the Nursing and Midwifery Council (NMC), or
+the equivalent professional regulator. Nothing in this disclaimer or in the
+software supersedes that duty.
+
+
+--------------------------------------------------------------------------------
+ 6. KNOWN LIMITATIONS
+--------------------------------------------------------------------------------
+
+The user acknowledges that Sentinel has the following known limitations,
+each of which may cause Sentinel to display information that is incomplete,
+inaccurate, out of date or misleading:
+
+  (a) QOF register membership is determined by substring matching on
+      problem labels, not by SNOMED refset membership. False positives and
+      false negatives are inherent to substring matching.
+
+  (b) QOF indicator coverage is a curated subset of the full QOF 2025/26
+      specification. Indicators not in the curated set will never appear.
+      Indicators in the set may not reflect every nuance of the official
+      business rules including exception coding.
+
+  (c) The investigation dashboard endpoint does not contain every coded
+      entry in the patient record. Encounter-coded entries (e.g. annual
+      review codes, smoking status, mental health questionnaires) may not
+      appear and indicators relying on them may report "no data".
+
+  (d) Annual QOF specification changes are not automatically detected.
+      The user must review the rule files at each contract refresh.
+
+  (e) User edits to thresholds and intervals override the defaults and
+      may cause Sentinel to display different statuses than the published
+      guidance would indicate.
+
+  (f) Medicus may change the shape of its API endpoints at any time
+      without notice, in which case Sentinel may display incomplete or no
+      data until the normalisers are updated.
+
+  (g) Sentinel does not validate the correctness of the Medicus record.
+      If the source data is wrong, the displayed evaluation will be wrong.
+
+  (h) Sentinel only operates within the Medicus EHR. It produces no
+      useful output on other EHRs or on any non-Medicus web page.
+
+The user must read the README.md document in full before installing and
+using Sentinel, and must accept these limitations as conditions of use.
+
+
+--------------------------------------------------------------------------------
+ 7. DATA HANDLING
+--------------------------------------------------------------------------------
+
+  - No patient data is transmitted to any external service.
+  - No patient data is written to any external storage.
+  - No telemetry. No analytics. No remote logging. No error reporting.
+  - The in-memory cache is volatile and patient-UUID-keyed.
+  - Settings stored in chrome.storage.local contain no patient data.
+  - Sentinel does not request, store, or transmit any credentials.
+  - Sentinel accesses only data the user is already authorised to see via
+    their own authenticated Medicus session.
+
+Sentinel acts as neither a data controller nor a data processor under UK
+GDPR or the Data Protection Act 2018 in respect of patient data, because
+no personal data is moved outside the rendering of the existing Medicus
+session inside the same browser tab.
+
+
+--------------------------------------------------------------------------------
+ 8. NO WARRANTY
+--------------------------------------------------------------------------------
+
+SENTINEL IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY
+KIND, WHETHER EXPRESS, IMPLIED, STATUTORY OR OTHERWISE. THE AUTHOR
+EXPRESSLY DISCLAIMS ALL WARRANTIES INCLUDING BUT NOT LIMITED TO IMPLIED
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY,
+COMPLETENESS, CURRENCY, NON-INFRINGEMENT, TITLE, QUIET ENJOYMENT, AND ANY
+WARRANTY ARISING FROM COURSE OF DEALING OR USAGE OF TRADE.
+
+The author does not warrant that Sentinel will be uninterrupted, error-free,
+free from security vulnerabilities, or capable of meeting any particular
+requirement.
+
+
+--------------------------------------------------------------------------------
+ 9. LIMITATION OF LIABILITY
+--------------------------------------------------------------------------------
+
+TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, PUNITIVE
+OR EXEMPLARY DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL,
+QOF INCOME, PROFESSIONAL STANDING, OR CLINICAL OUTCOME, ARISING OUT OF OR
+RELATING TO THE USE OF OR INABILITY TO USE SENTINEL, WHETHER BASED ON
+WARRANTY, CONTRACT, TORT (INCLUDING NEGLIGENCE), STATUTE OR ANY OTHER LEGAL
+THEORY, AND WHETHER OR NOT THE AUTHOR HAS BEEN ADVISED OF THE POSSIBILITY
+OF SUCH DAMAGES.
+
+Nothing in this disclaimer purports to exclude or limit any liability that
+cannot lawfully be excluded or limited, including but not limited to
+liability for death or personal injury caused by negligence, or for fraud or
+fraudulent misrepresentation.
+
+
+--------------------------------------------------------------------------------
+10. PERMITTED USE
+--------------------------------------------------------------------------------
+
+Sentinel is licensed to the named user, for personal use on their own
+workstation, while logged in as themselves to the Medicus EHR they are
+contractually authorised to access, for the purpose described in the
+intended-purpose statement at section 3 above.
+
+The user may not, without the prior written permission of the author:
+
+  - install Sentinel on a workstation not personally used by the named user;
+  - install Sentinel under any user account other than the named user's own;
+  - share, copy, redistribute, fork, sublicense, lend, lease, sell, or
+    transfer Sentinel or any part of it;
+  - modify, decompile, reverse-engineer, or create derivative works of
+    Sentinel except for the user's own private configuration;
+  - represent Sentinel as a product, service or tool provided by any
+    organisation other than the author;
+  - represent Sentinel as endorsed by Medicus, by NHS England, by any
+    Integrated Care Board, by any Primary Care Network, by any practice,
+    or by any other body.
+
+Any modification of Sentinel creates a derivative work for which the
+modifier is the manufacturer and bears the full regulatory, clinical safety
+and liability responsibilities of a manufacturer. The author bears no
+responsibility for any derivative work.
+
+
+--------------------------------------------------------------------------------
+11. THIRD-PARTY RELATIONSHIPS
+--------------------------------------------------------------------------------
+
+Sentinel is not affiliated with, endorsed by, sponsored by, or in any
+contractual relationship with Medicus Health Limited, NHS England, the
+Department of Health and Social Care, the MHRA, the GMC, any Integrated
+Care Board, any Primary Care Network, any practice, or any other body. All
+trade marks, service marks and product names referenced in the codebase or
+this document are the property of their respective owners.
+
+The author has not sought, nor obtained, formal endorsement from Medicus
+Health Limited for Sentinel's consumption of the Medicus REST API. The user
+acknowledges that Medicus may at any time, at its sole discretion, change
+its API, withdraw access, raise objection, or require cessation of API
+consumption. The user agrees to cease use of Sentinel immediately on
+receipt of any such request from Medicus or from any authority with
+standing to make such a request.
+
+
+--------------------------------------------------------------------------------
+12. INDEMNITY
+--------------------------------------------------------------------------------
+
+The user agrees to indemnify, defend and hold harmless the author from and
+against any and all claims, liabilities, damages, losses, costs and
+expenses (including reasonable legal fees) arising out of or relating to:
+
+  (a) the user's use of Sentinel outside the intended purpose at section 3;
+  (b) the user's failure to verify Sentinel output against the source
+      record before taking clinical action;
+  (c) any modification of Sentinel by the user or by any third party;
+  (d) any representation of Sentinel as certified, endorsed or as
+      possessing any regulatory status it does not possess;
+  (e) any breach by the user of section 10 (Permitted Use) above.
+
+Nothing in this section purports to exclude or limit any liability that
+cannot lawfully be excluded or limited.
+
+
+--------------------------------------------------------------------------------
+13. CESSATION OF USE
+--------------------------------------------------------------------------------
+
+The user agrees to cease use of Sentinel and to delete the extension from
+their browser immediately upon:
+
+  - receipt of any request to do so from Medicus Health Limited, the
+    user's employer, the relevant Integrated Care Board, the MHRA, the
+    Information Commissioner's Office, the General Medical Council, or
+    any other body with standing to make such a request;
+  - any discovery that Sentinel is producing incorrect output that the
+    user is not able to verify and correct;
+  - any change in the user's authorisation to access the Medicus EHR;
+  - any change in this disclaimer that the user does not accept.
+
+Cessation of use does not relieve the user of any obligation accrued
+before cessation.
+
+
+--------------------------------------------------------------------------------
+14. GOVERNING LAW
+--------------------------------------------------------------------------------
+
+This disclaimer is governed by the laws of England and Wales. Any dispute
+arising out of or in connection with this disclaimer is subject to the
+exclusive jurisdiction of the courts of England and Wales.
+
+
+--------------------------------------------------------------------------------
+15. ACKNOWLEDGEMENT
+--------------------------------------------------------------------------------
+
+By installing or using Sentinel, the user confirms that:
+
+  1. they have read this disclaimer in full;
+  2. they understand its terms;
+  3. they accept its terms as conditions of their use of Sentinel;
+  4. they have read the README.md document in full;
+  5. they accept the hazard register in the README as a fair
+     representation of the risks of using Sentinel;
+  6. they will verify every value Sentinel displays against the source
+     Medicus record before taking any clinical action;
+  7. they retain full clinical responsibility for every decision they
+     make about every patient;
+  8. they will cease use of Sentinel under the conditions in section 13.
+
+
+================================================================================
+End of disclaimer.
+================================================================================
+
+
+--- v1.1.0 addendum ---
+
+Custom drug-monitoring rules authored through the built-in form builder remain within the stated intended purpose of this software. Custom rules use the same passive threshold-based display engine as the bundled rules: they re-display values already present in the patient record, indicate whether those values fall within the user-configured interval, and produce no clinical recommendation. The form builder does not expose arbitrary clinical decision logic. All constraints documented in the intended-purpose statement above apply without modification to custom-authored rules.
+
+Backup and restore functionality moves the user's own configuration data within the user's own browser storage. No patient data is included in any backup file. No data leaves the user's browser except by the user's own deliberate file-download action.
+
+The migration of the Triage Lens storage key from config to triagelens.config is an internal namespace change with no effect on clinical function or data handling.
+
+As with the bundled rule set, user-authored custom rules may become out of date as clinical guidance changes. The user retains full responsibility for reviewing custom rules at appropriate intervals and for verifying every displayed value against the source patient record before taking any clinical action.
+
+
+--- v1.2.0 addendum ---
+
+Custom clinical indicators authored through the form builder remain within the stated intended purpose of this software. They are passive threshold checks against values already recorded in Medicus. They produce no clinical recommendation, no record write, and no data egress. The form constrains the user to three engine-supported check shapes (observation-threshold, medication-present, observation-recent) and to the bundled QOF register set.
+
+Custom indicators are not QOF indicators. They do not constitute QOF achievement and must not be relied upon for QOF income claims. They are labelled visually as Custom and their points field (if set) is metadata only; it does not contribute to any QOF total in the UI. User-authored thresholds may diverge from any published guideline. The clinician retains responsibility for verifying the threshold and for verifying every displayed value against the source patient record before taking any clinical action.
+
+The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.

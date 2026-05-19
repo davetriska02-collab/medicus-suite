@@ -1,0 +1,931 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "mh-crisis",
+      "enabled": true,
+      "label": "MH crisis",
+      "kind": "red",
+      "patterns": [
+        "suicid\\w*",
+        "self.?harm\\w*",
+        "kill myself",
+        "end my life",
+        "want to die",
+        "don.?t want to be here",
+        "harm myself"
+      ],
+      "regex": true,
+      "fields": [
+        "request",
+        "banner"
+      ],
+      "pages": [
+        "queue",
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "safeguarding",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "Samaritans",
+          "url": "https://www.samaritans.org/"
+        },
+        {
+          "type": "link",
+          "label": "NHS 111 mental health",
+          "url": "https://111.nhs.uk/"
+        },
+        {
+          "type": "snippet",
+          "label": "Risk assessment",
+          "text": "MH risk assessment:\n- Current intent / plan / means:\n- Recent triggers:\n- Protective factors:\n- Past attempts / hospital admissions:\n- Substance use:\n- MH services involvement:\n- Capacity:\n\nAction:\n- Same-day F2F vs phone vs crisis team\n- Safety plan documented\n- Safeguarding referral if children in household\n- Follow-up timeframe agreed"
+        },
+        {
+          "type": "note",
+          "label": "Safeguarding check",
+          "text": "Always consider:\n• Children / dependents in household → safeguarding referral threshold\n• Mental Capacity Assessment\n• Document risk assessment in full\n• Crisis team contact readily available\n• Clear follow-up plan with named clinician"
+        }
+      ]
+    },
+    {
+      "id": "safeguarding",
+      "enabled": true,
+      "label": "Safeguarding",
+      "kind": "red",
+      "patterns": [
+        "safeguarding",
+        "abuse",
+        "neglect",
+        "domestic violence",
+        "coercive control",
+        "hit me",
+        "afraid at home"
+      ],
+      "regex": false,
+      "fields": [
+        "request",
+        "banner",
+        "problems"
+      ],
+      "pages": [
+        "queue",
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "safeguarding",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "Local safeguarding (replace URL)",
+          "url": "https://www.gov.uk/government/publications/safeguarding-adults"
+        },
+        {
+          "type": "note",
+          "label": "Documentation",
+          "text": "Safeguarding considerations:\n• Notify practice safeguarding lead\n• MARAC / DASH risk assessment if DV suspected\n• Code in record (Safeguarding adult / child concern)\n• Document concerns verbatim\n• Information sharing per local policy\n• Children in household — separate referral if at risk"
+        }
+      ]
+    },
+    {
+      "id": "chest-pain",
+      "enabled": true,
+      "label": "Chest pain",
+      "kind": "red",
+      "patterns": [
+        "chest pain",
+        "chest tightness",
+        "crushing",
+        "central chest"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Acute pathway",
+          "text": "If acute / ongoing pain → 999.\n\nIf resolved:\n• Onset, duration, character, radiation, exertion-related?\n• Cardiac risk factors: age, smoker, FH, DM, lipids, BP, prior CVD\n• Associated: SOB, sweating, N&V, syncope\n• Differential: ACS, PE, dissection, pericarditis, GORD, MSK, anxiety\n\nThresholds:\n• HEART score for risk stratification\n• Same-day clinical assessment if any concerning features"
+        },
+        {
+          "type": "snippet",
+          "label": "HEART score template",
+          "text": "HEART score:\n- History (suspicious 0/1/2):\n- ECG (normal / non-spec / abnormal 0/1/2):\n- Age (<45 / 45-64 / >65 = 0/1/2):\n- Risk factors (count: 0 / 1-2 / 3+ or known CVD = 0/1/2):\n- Troponin (norm / 1-3x / >3x ULN = 0/1/2):\n\nTotal: __\n0-3 = low risk · 4-6 = moderate · 7-10 = high"
+        }
+      ]
+    },
+    {
+      "id": "cauda-equina",
+      "enabled": true,
+      "label": "Cauda equina",
+      "kind": "red",
+      "patterns": [
+        "saddle.?(numb|anaesthe|paresth)",
+        "bladder retention",
+        "urinary retention",
+        "bowel incontinence",
+        "perineal numb"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Emergency MRI",
+          "text": "Suspected cauda equina = same-day emergency MRI.\n\nRed flags (any):\n• Bilateral sciatica\n• Saddle anaesthesia / paraesthesia\n• Bladder dysfunction (retention / overflow)\n• Bowel incontinence / loss of anal tone\n• Sexual dysfunction\n\nAction:\n• Discuss with on-call neurosurgery / spinal team\n• Direct ED referral if no urgent MRI access\n• Document neuro exam including PR if appropriate"
+        }
+      ]
+    },
+    {
+      "id": "thunderclap",
+      "enabled": true,
+      "label": "Thunderclap headache",
+      "kind": "red",
+      "patterns": [
+        "worst headache",
+        "thunderclap",
+        "sudden severe headache",
+        "sudden onset headache"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "SAH pathway",
+          "text": "Thunderclap headache → consider SAH.\n\n• Maximum intensity within seconds-minutes\n• Same-day CT head (CT >95% sensitive within 6h)\n• If CT negative & onset <6h, may exclude\n• If onset >6h or symptoms ongoing, LP at 12h\n\nOther differentials: cervical artery dissection, RCVS, pituitary apoplexy, venous sinus thrombosis.\n\nAction: same-day ED referral."
+        }
+      ]
+    },
+    {
+      "id": "gi-bleed",
+      "enabled": true,
+      "label": "GI bleed",
+      "kind": "red",
+      "patterns": [
+        "melaena",
+        "haematemesis",
+        "vomiting blood",
+        "coffee.?ground",
+        "fresh blood per rectum",
+        "haematochezia"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Acute pathway",
+          "text": "Suspected upper / lower GI bleed.\n\n• Haemodynamics: HR, BP, lying/standing\n• Anticoagulants / antiplatelets / NSAIDs\n• Liver disease / known varices\n• Glasgow-Blatchford for upper GI bleed\n\nAction:\n• Acute / unstable → 999\n• Stable + suspicious → same-day medical admission\n• Painless rectal bleeding > 50y → 2WW colorectal"
+        },
+        {
+          "type": "snippet",
+          "label": "Glasgow-Blatchford template",
+          "text": "Glasgow-Blatchford:\n- Urea (mmol/L):\n- Hb (g/L):\n- Systolic BP:\n- Pulse ≥100:\n- Melaena:\n- Syncope:\n- Hepatic disease:\n- Cardiac failure:\n\nScore: __\n0 = consider outpatient · ≥1 = admit"
+        }
+      ]
+    },
+    {
+      "id": "methotrexate",
+      "enabled": true,
+      "label": "Methotrexate",
+      "kind": "amber",
+      "patterns": [
+        "methotrexate"
+      ],
+      "regex": false,
+      "fields": [
+        "meds",
+        "request",
+        "problems"
+      ],
+      "pages": [
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "meds",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "DMARD monitoring",
+          "text": "Methotrexate monitoring (NICE / BSR):\n\n• FBC + U&E + LFT every 12 weeks (or 4-weekly if dose change / new abnormalities)\n• Annual chest X-ray if respiratory symptoms\n• Pneumococcal + annual flu vaccine\n• Folic acid 5mg weekly (≥24h after MTX)\n\nWarnings:\n• Teratogenic — 6mo washout F, 3mo M before conception\n• Hepatotoxic — alcohol limits\n• Pulmonary toxicity — investigate any new SOB / dry cough\n• Drug interactions — esp. trimethoprim, NSAIDs (caution)"
+        },
+        {
+          "type": "snippet",
+          "label": "Bloods reminder",
+          "text": "Methotrexate monitoring bloods:\n- FBC + film:\n- U&E:\n- LFTs:\n- Date of last MTX dose:\n- Current dose:\n- Folic acid:\n- Symptoms? (SOB, mouth ulcers, infection):\n\nNext review due:"
+        }
+      ]
+    },
+    {
+      "id": "lithium",
+      "enabled": true,
+      "label": "Lithium",
+      "kind": "amber",
+      "patterns": [
+        "lithium"
+      ],
+      "regex": false,
+      "fields": [
+        "meds",
+        "request",
+        "problems"
+      ],
+      "pages": [
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "meds",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Lithium monitoring",
+          "text": "Lithium monitoring (NICE):\n\n• Level 12h post-dose, 3-monthly (more often if dose change, illness, drug interaction)\n• U&E + TFT + Ca every 6 months\n• Target range typically 0.6-0.8 mmol/L (0.4-1.0 acceptable)\n• Toxicity above 1.5 mmol/L\n\nCommon traps:\n• Dehydration / D&V → toxicity\n• NSAIDs, ACEi, thiazides ↑ levels\n• Pregnancy considerations — specialist advice\n• Hypothyroidism long-term"
+        }
+      ]
+    },
+    {
+      "id": "anticoag",
+      "enabled": true,
+      "label": "Anticoagulant",
+      "kind": "amber",
+      "patterns": [
+        "warfarin",
+        "apixaban",
+        "rivaroxaban",
+        "edoxaban",
+        "dabigatran"
+      ],
+      "regex": false,
+      "fields": [
+        "meds"
+      ],
+      "pages": [
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "meds",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Anticoag review",
+          "text": "Annual anticoagulant review:\n\n• Indication still valid?\n• Renal function — dose adjustment for DOACs\n• Bleeding risk reassessment (HAS-BLED, ORBIT)\n• CHA₂DS₂-VASc for AF (consider stopping if low risk)\n• Patient knows what to do if a dose is missed\n• Has Yellow Book / DOAC alert card\n• Interacting meds review (esp. NSAIDs, antibiotics, antifungals)\n• Bleeding episodes — frequency, severity, source\n• Falls risk if elderly"
+        }
+      ]
+    },
+    {
+      "id": "uti",
+      "enabled": true,
+      "label": "UTI",
+      "kind": "amber",
+      "patterns": [
+        "UTI",
+        "urinary tract infection",
+        "burning passing water",
+        "burning when peeing",
+        "burning when i pee",
+        "dysuria",
+        "cystitis"
+      ],
+      "regex": false,
+      "fields": [
+        "request",
+        "problems"
+      ],
+      "pages": [
+        "queue",
+        "detail",
+        "record"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE CKS UTI (women)",
+          "url": "https://cks.nice.org.uk/topics/urinary-tract-infection-lower-women/"
+        },
+        {
+          "type": "link",
+          "label": "NICE CKS UTI (men)",
+          "url": "https://cks.nice.org.uk/topics/urinary-tract-infection-lower-men/"
+        },
+        {
+          "type": "snippet",
+          "label": "UTI history & exam",
+          "text": "UTI history:\n- Dysuria / frequency / urgency:\n- Suprapubic pain / loin pain:\n- Duration of symptoms:\n- Fever / rigors / vomiting:\n- Vaginal discharge:\n- Sexually active / new partner:\n- Pregnancy possible:\n- Catheter / structural abnormality:\n- Recent abx / hospitalisation:\n- Recurrence (≥3 in 12mo or ≥2 in 6mo):\n- Diabetes / immunosuppression:\n\nO/E:\n- Vitals (sepsis screen):\n- Abdominal exam:\n- Loin tenderness:\n- (Dipstick: not for ≥65y or catheterised):\n\nPlan:\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\n- 2nd line: pivmecillinam / fosfomycin\n- Pyelonephritis features → admit / IV abx"
+        }
+      ]
+    },
+    {
+      "id": "sore-throat",
+      "enabled": true,
+      "label": "Sore throat",
+      "kind": "amber",
+      "patterns": [
+        "sore throat",
+        "tonsillitis",
+        "throat pain",
+        "pharyngitis"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE CKS sore throat",
+          "url": "https://cks.nice.org.uk/topics/sore-throat-acute/"
+        },
+        {
+          "type": "snippet",
+          "label": "FeverPAIN scoring",
+          "text": "FeverPAIN score (1 point each):\n- Fever in last 24h:\n- Purulence (tonsils):\n- Attended within 3 days of onset:\n- Inflamed tonsils (severe):\n- No cough or coryza:\n\nTotal: __\n0-1: 13-18% strep — no abx, self-care\n2-3: 34-40% strep — delayed abx (3d) or no abx\n4-5: 62-65% strep — immediate abx\n\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"
+        }
+      ]
+    },
+    {
+      "id": "otitis",
+      "enabled": true,
+      "label": "Otitis media",
+      "kind": "amber",
+      "patterns": [
+        "otitis",
+        "earache",
+        "ear infection",
+        "ear pain",
+        "ear hurts"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE CKS OM",
+          "url": "https://cks.nice.org.uk/topics/otitis-media-acute/"
+        },
+        {
+          "type": "snippet",
+          "label": "OM history & exam",
+          "text": "Otitis media history:\n- Onset / duration:\n- Fever / unwell:\n- Otalgia laterality:\n- Discharge / hearing loss:\n- Recent URTI:\n- Recurrent OM (≥3 in 6mo or ≥4/yr):\n- Eardrum perforation history:\n- Grommets:\n\nO/E:\n- TM appearance: bulging / erythematous / dull / perforated / effusion\n- Mastoid tenderness:\n- General — temp, fluid intake:\n\nPlan:\n- Most resolve in 3 days, paracetamol / ibuprofen\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"
+        }
+      ]
+    },
+    {
+      "id": "back-pain",
+      "enabled": true,
+      "label": "Back pain",
+      "kind": "amber",
+      "patterns": [
+        "back pain",
+        "lower back",
+        "lumbar pain",
+        "sciatica"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE LBP & sciatica",
+          "url": "https://www.nice.org.uk/guidance/ng59"
+        },
+        {
+          "type": "snippet",
+          "label": "Back pain assessment",
+          "text": "Back pain — red flags (refer urgently):\n- Cauda equina (saddle anaesthesia, bladder/bowel)\n- Significant trauma\n- Age <20 or >55 new onset\n- Progressive neurological deficit\n- Fever / weight loss / night pain (cancer/infection)\n- IVDU / immunosuppression\n- History of malignancy\n- Severe progressive limb weakness\n\nYellow flags (psychosocial):\n- Belief pain is harmful\n- Avoidance behaviour\n- Low mood / withdrawal\n- Job dissatisfaction\n- Compensation/legal issues\n\nManagement (no red flags):\n- Stay active, return to normal activities\n- Analgesia: NSAIDs first-line (with PPI cover if indicated)\n- Avoid opioids and gabapentinoids for non-specific LBP\n- Refer to physio / MSK if not improving in 4-6 weeks"
+        }
+      ]
+    },
+    {
+      "id": "cough-resp",
+      "enabled": true,
+      "label": "Cough/SOB",
+      "kind": "amber",
+      "patterns": [
+        "cough",
+        "shortness of breath",
+        "breathless",
+        "wheez",
+        "chest infection",
+        "phlegm"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Resp red flags",
+          "text": "Cough / breathlessness — concerning features:\n• Haemoptysis\n• Weight loss / night sweats\n• Smoker / ex-smoker, esp. age >40\n• Persistent cough >3 weeks\n• Hoarseness >3 weeks\n• Acute onset breathlessness (PE / pneumothorax)\n• Tachypnoea, hypoxia, accessory muscle use\n• Single-lobe / focal signs\n• Failure to respond to abx\n\nThresholds:\n• Same-day F2F if any red flag, hypoxia, or systemic unwellness\n• 2WW chest if haemoptysis + age >40, or persistent cough + smoker"
+        },
+        {
+          "type": "snippet",
+          "label": "Resp assessment",
+          "text": "Respiratory presentation:\n- Onset / duration:\n- Cough: dry / productive (colour, consistency):\n- Haemoptysis:\n- Breathlessness — exertional / rest, MRC grade:\n- Wheeze:\n- Fever, night sweats, weight loss:\n- Chest pain — pleuritic / cardiac:\n- PE risk: travel, immobility, surgery, OCP, malignancy, leg swelling:\n- Smoking pack-years:\n- Asthma / COPD:\n\nO/E:\n- Vitals: HR, BP, RR, sats, temp:\n- WOB / accessory muscles:\n- Chest exam:\n- PEFR (if asthma):\n\nPlan:"
+        }
+      ]
+    },
+    {
+      "id": "skin-2ww",
+      "enabled": true,
+      "label": "Skin lesion",
+      "kind": "amber",
+      "patterns": [
+        "mole",
+        "skin lesion",
+        "skin changes",
+        "changing mole",
+        "dark spot",
+        "growing lesion",
+        "non.?healing",
+        "ulcerated"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE 2WW skin",
+          "url": "https://www.nice.org.uk/guidance/ng12/chapter/Recommendations-organised-by-site-of-cancer#skin-cancers"
+        },
+        {
+          "type": "snippet",
+          "label": "7-point checklist",
+          "text": "Weighted 7-point checklist for pigmented lesion (refer 2WW if score ≥3 OR any major):\n\nMajor (2 points each):\n- Change in size:\n- Irregular shape:\n- Irregular colour:\n\nMinor (1 point each):\n- Largest diameter ≥7mm:\n- Inflammation:\n- Oozing / bleeding:\n- Change in sensation (itch):\n\nTotal: __\n\nLesion description:\n- Site:\n- Diameter:\n- Colour:\n- Border:\n- Evolution (timeline):\n- Symptoms:\n- ABCDE: Asymmetry / Border / Colour / Diameter / Evolving:\n\nPhoto on record? Y/N"
+        }
+      ]
+    },
+    {
+      "id": "mh-general",
+      "enabled": true,
+      "label": "Mental health",
+      "kind": "amber",
+      "patterns": [
+        "anxiety",
+        "depress",
+        "low mood",
+        "panic attack",
+        "stressed",
+        "insomnia",
+        "mental health",
+        "therapy",
+        "counselling",
+        "feeling down"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "PHQ-9",
+          "url": "https://patient.info/doctor/patient-health-questionnaire-phq-9"
+        },
+        {
+          "type": "link",
+          "label": "GAD-7",
+          "url": "https://patient.info/doctor/generalised-anxiety-disorder-assessment-gad-7"
+        },
+        {
+          "type": "link",
+          "label": "Local IAPT / Talking Therapies (replace)",
+          "url": "https://www.nhs.uk/mental-health/talking-therapies-medicine-treatments/talking-therapies-and-counselling/nhs-talking-therapies/"
+        },
+        {
+          "type": "snippet",
+          "label": "MH consultation",
+          "text": "MH presentation:\n- Onset / duration / triggers:\n- Symptoms (mood, anhedonia, sleep, appetite, energy, concentration):\n- Anxiety symptoms / panic:\n- Functional impact (work, relationships, self-care):\n- Risk: thoughts of self-harm / suicide / harm to others:\n- Substance use:\n- Past MH history / family history:\n- Social context: housing, finances, support network:\n- Recent losses / life events:\n- PHQ-9: __ / GAD-7: __\n\nPlan:\n- Self-help / IAPT / counselling\n- SSRI if moderate-severe (caution under 25 — review 2 weekly):\n- Safety net + follow-up:"
+        }
+      ]
+    },
+    {
+      "id": "post-discharge",
+      "enabled": true,
+      "label": "Post-discharge",
+      "kind": "amber",
+      "patterns": [
+        "discharge",
+        "discharged",
+        "just home from hospital",
+        "out of hospital",
+        "recently in hospital"
+      ],
+      "regex": false,
+      "fields": [
+        "request",
+        "docs"
+      ],
+      "pages": [
+        "queue",
+        "detail",
+        "record"
+      ],
+      "bumpsTile": "openLoops",
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Post-discharge checklist",
+          "text": "After hospital discharge — review:\n\n• Medication reconciliation (new / changed / stopped)\n• Follow-up appointments booked?\n• Outstanding investigations / results pending?\n• Self-monitoring / safety-net advice given?\n• District nurse / community support arranged?\n• Social: home situation, carer, equipment\n• Code recent admission in record\n• Update problem list and registers (e.g. HF, COPD, AF post-MI)\n• Consider proactive care plan if frail / multimorbid"
+        },
+        {
+          "type": "snippet",
+          "label": "Post-discharge review",
+          "text": "Post-discharge review:\n\nAdmission:\n- Dates:\n- Diagnoses:\n- Procedures:\n- Discharge medications (new/changed):\n- Follow-up planned:\n\nReview today:\n- Recovery progress:\n- Symptoms — concerning / improving:\n- Pain control:\n- Mobility / ADLs:\n- Med compliance / side effects:\n- Outstanding actions chased:\n- Safety net advice:"
+        }
+      ]
+    },
+    {
+      "id": "repeat-meds",
+      "enabled": true,
+      "label": "Repeat meds",
+      "kind": "info",
+      "patterns": [
+        "repeat prescription",
+        "repeat medication",
+        "ran out",
+        "running out",
+        "reorder",
+        "top.?up",
+        "more of my"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "snippet",
+          "label": "SMR template",
+          "text": "Structured Medication Review (SMR):\n\nPatient understanding:\n- Knows why each med is prescribed:\n- Adherence / compliance:\n- Side effects experienced:\n- Self-monitoring (BP, BG, peak flow):\n\nFor each medication:\n- Indication still valid?\n- Dose appropriate (renal/hepatic adjustment)?\n- Duplications / interactions / cascades?\n- Anticholinergic burden / falls risk?\n- Recent monitoring done?\n\nDeprescribe candidates:\n- PPI > 8 weeks without indication\n- Long-term benzo / Z-drug\n- Statin in extreme frailty / limited life expectancy\n- Anti-hypertensives if postural hypotension\n- Aspirin without clear secondary prevention indication\n\nAgreed plan:"
+        }
+      ]
+    },
+    {
+      "id": "fit-note",
+      "enabled": true,
+      "label": "Fit note",
+      "kind": "info",
+      "patterns": [
+        "fit note",
+        "sick note",
+        "med ?3",
+        "fitness for work",
+        "off work"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "GOV.UK Med3 guidance",
+          "url": "https://www.gov.uk/government/publications/fit-note-guidance-for-healthcare-professionals"
+        },
+        {
+          "type": "snippet",
+          "label": "Fit note template",
+          "text": "Med3 considerations:\n\n- Diagnosis (the condition affecting work):\n- Functional limitations (what can / can't do):\n- Duration: <3mo (any duration) / >3mo (max 3mo):\n- 'Not fit' or 'May be fit' (consider phased return / amended duties / altered hours / workplace adaptations):\n- Assessment date and end date:\n- Comments / advice to employer:\n\nFor mental health:\n- Avoid jargon — concrete functional language\n- Consider OH referral / IAPT signposting\n\nFor MSK:\n- Active management plan\n- Avoid bed rest > 1-2 days"
+        }
+      ]
+    },
+    {
+      "id": "menopause",
+      "enabled": true,
+      "label": "Menopause/HRT",
+      "kind": "info",
+      "patterns": [
+        "menopaus",
+        "hot flush",
+        "perimenopaus",
+        "HRT",
+        "hormone replacement"
+      ],
+      "regex": false,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NICE menopause (NG23)",
+          "url": "https://www.nice.org.uk/guidance/ng23"
+        },
+        {
+          "type": "link",
+          "label": "British Menopause Society",
+          "url": "https://thebms.org.uk/"
+        },
+        {
+          "type": "snippet",
+          "label": "HRT consultation",
+          "text": "Menopause / HRT consultation:\n\nSymptoms:\n- Vasomotor (flushes, sweats, night sweats):\n- Mood, sleep, cognition:\n- GU: vaginal dryness, dyspareunia, urinary:\n- Joint / muscle pain:\n- Libido:\n- Functional impact:\n\nHistory:\n- LMP / cycle changes:\n- Contraception still needed?\n- Migraine with aura?\n- VTE / clotting history (personal / family):\n- Breast / endometrial / ovarian cancer history:\n- BMI / smoking / alcohol:\n- Cardiovascular risk:\n- Liver disease:\n- Current meds:\n\nDiscussion:\n- Risk / benefit balance\n- Options: sequential vs continuous combined; oestrogen-only if hysterectomy; transdermal preferred if VTE / migraine / hepatic / >60\n- Vaginal oestrogen for GU symptoms (no extra systemic risk)\n- Testosterone for low libido (off-label)\n- Lifestyle, CBT for vasomotor\n\nPlan / review timeframe:"
+        }
+      ]
+    }
+  ],
+  "thresholds": {
+    "polypharmacyRed": 15,
+    "polypharmacyAmber": 10,
+    "bpAgeMonthsLtc": 9,
+    "bpAgeMonthsNoLtc": 24,
+    "weightAgeMonths": 24,
+    "frailtyHitsRed": 3,
+    "frailtyHitsAmber": 1,
+    "lastContactMonths": 12,
+    "recentDischargeRed": 14,
+    "recentDischargeAmber": 90,
+    "anticholinergicAmber": 3,
+    "qofOverdueRed": 2,
+    "recentReferralDays": 60,
+    "taskAgeAmber": 3,
+    "taskAgeRed": 7,
+    "elderAge": 80,
+    "childAge": 16
+  },
+  "prefs": {
+    "showAgeChip": true,
+    "showFootStats": true,
+    "showRequestSnippet": true,
+    "snippetMaxChars": 240,
+    "showBuiltInTiles": true
+  },
+  "systemChips": {
+    "queue.child": {
+      "enabled": true,
+      "label": "Child ({age})",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.elder": {
+      "enabled": true,
+      "label": "Elder ({age})",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.taskAgeAmber": {
+      "enabled": true,
+      "label": "{days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.taskAgeRed": {
+      "enabled": true,
+      "label": "{days}d",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.priority": {
+      "enabled": true,
+      "label": "{priority}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.readTime2m": {
+      "enabled": true,
+      "label": "2m read",
+      "kind": "info",
+      "actions": []
+    },
+    "queue.readTime5m": {
+      "enabled": true,
+      "label": "5m read",
+      "kind": "info",
+      "actions": []
+    },
+    "queue.readTime10m": {
+      "enabled": true,
+      "label": "10m+ read",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.statusAwaiting": {
+      "enabled": true,
+      "label": "{status}",
+      "kind": "amber",
+      "actions": []
+    },
+    "detail.statusReplyReceived": {
+      "enabled": true,
+      "label": "{status}",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.statusClosed": {
+      "enabled": true,
+      "label": "{status}",
+      "kind": "green",
+      "actions": []
+    },
+    "detail.statusOther": {
+      "enabled": true,
+      "label": "{status}",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.priority": {
+      "enabled": true,
+      "label": "{priority}",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.daysOpenInfo": {
+      "enabled": true,
+      "label": "{days}d open",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.daysOpenAmber": {
+      "enabled": true,
+      "label": "{days}d open",
+      "kind": "amber",
+      "actions": []
+    },
+    "detail.daysOpenRed": {
+      "enabled": true,
+      "label": "{days}d open",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.today": {
+      "enabled": true,
+      "label": "today",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.proxy": {
+      "enabled": true,
+      "label": "via {relationship}",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.attachments": {
+      "enabled": true,
+      "label": "{count} attach",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.readTime": {
+      "enabled": true,
+      "label": "{label}",
+      "kind": "info",
+      "actions": []
+    },
+    "record.age": {
+      "enabled": true,
+      "label": "{age}y",
+      "kind": "info",
+      "actions": []
+    },
+    "record.palliative": {
+      "enabled": true,
+      "label": "Palliative",
+      "kind": "red",
+      "actions": []
+    },
+    "record.riskToSelf": {
+      "enabled": true,
+      "label": "Risk to self",
+      "kind": "red",
+      "actions": []
+    },
+    "record.frailtyRed": {
+      "enabled": true,
+      "label": "Frailty x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "record.frailtyAmber": {
+      "enabled": true,
+      "label": "Frailty x{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "record.recentAdmissionRed": {
+      "enabled": true,
+      "label": "Admit {days}d",
+      "kind": "red",
+      "actions": []
+    },
+    "record.recentAdmissionAmber": {
+      "enabled": true,
+      "label": "Admit {days}d",
+      "kind": "amber",
+      "actions": []
+    },
+    "record.polypharmacyRed": {
+      "enabled": true,
+      "label": "Meds x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "record.polypharmacyAmber": {
+      "enabled": true,
+      "label": "Meds x{count}",
+      "kind": "amber",
+      "actions": []
+    }
+  }
+}

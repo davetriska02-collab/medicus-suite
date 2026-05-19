@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Derive version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify manifest version matches tag
+        run: |
+          MANIFEST_VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build extension zip
+        run: |
+          mkdir -p _build/medicus-suite-v${{ steps.version.outputs.version }}
+          rsync -av \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitignore' \
+            --exclude='README.md' \
+            --exclude='LICENSE' \
+            --exclude='_build/' \
+            --exclude='test-*.js' \
+            --exclude='*.zip' \
+            --exclude='.DS_Store' \
+            ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
+          cd _build
+          zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Medicus Suite ${{ github.ref_name }}
+          body: |
+            Medicus Suite ${{ github.ref_name }}.
+
+            Download `medicus-suite-v${{ steps.version.outputs.version }}.zip` below.
+            Installation steps are in the [README](https://github.com/davetriska02-collab/medicus-suite/blob/main/README.md).
+          files: medicus-suite-v${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
