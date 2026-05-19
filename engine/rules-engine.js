@@ -57,8 +57,8 @@
   //      20 Apr 2026  → 1 Apr 2026  (26/27 year has just started)
   function qofYearStart(nowIso) {
     const d = new Date(nowIso);
-    const year = d.getFullYear();
-    const month = d.getMonth(); // 0-indexed; April = 3
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth(); // 0-indexed; April = 3
     const qofYear = month < 3 ? year - 1 : year;
     return new Date(Date.UTC(qofYear, 3, 1)); // 1 Apr, midnight UTC
   }

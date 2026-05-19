@@ -15,6 +15,7 @@ const MODULES = {
   submissions: { js: () => import('./modules/submissions/submissions.js'), css: './modules/submissions/submissions.css' },
   triage:      { js: () => import('./modules/triage/triage.js'),         css: './modules/triage/triage.css' },
   sentinel:    { js: () => import('./modules/sentinel/sentinel.js'),      css: './modules/sentinel/sentinel.css' },
+  activity:    { js: () => import('./modules/activity/activity.js'),     css: './modules/activity/activity.css' },
   about:       null,
 };
 
@@ -174,6 +175,18 @@ function renderAbout() {
           record, remain the responsibility of the clinician.
         </div>
         <a class="disclaimer-link" href="../docs/sentinel-DISCLAIMER.txt" target="_blank">View DISCLAIMER ↗</a>
+      </div>
+
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Activity Report</span>
+          <span class="module-card-version">v1.0</span>
+        </div>
+        <div class="module-card-desc">
+          Practice activity per staff member across a configurable date range. Shows period totals
+          and a stacked horizontal bar chart broken down by consultations, prescription requests,
+          medication reviews, document tasks, and investigation results. API-based.
+        </div>
       </div>
 
       <h2>Suite</h2>
