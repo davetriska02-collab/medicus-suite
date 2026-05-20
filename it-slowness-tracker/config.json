@@ -1,0 +1,23 @@
+{
+  "appVersion": "0.1.0",
+  "storageMode": "worker",
+  "workerUrl": "https://it-slowness-proxy.CHANGEME.workers.dev/submit",
+  "fallbackRepo": "davetriska02-collab/medicus-suite",
+  "sites": [
+    { "id": "site1", "label": "Site 1 (edit config.json)" },
+    { "id": "site2", "label": "Site 2 (edit config.json)" }
+  ],
+  "roles": [
+    { "id": "gp",          "label": "GP" },
+    { "id": "nurse",       "label": "Nurse" },
+    { "id": "hca",         "label": "HCA" },
+    { "id": "receptionist","label": "Receptionist" },
+    { "id": "admin",       "label": "Admin" },
+    { "id": "other",       "label": "Other" }
+  ],
+  "sessionTypes": [
+    { "id": "duty",   "label": "Duty" },
+    { "id": "normal", "label": "Normal Work" },
+    { "id": "admin",  "label": "Admin" }
+  ]
+}

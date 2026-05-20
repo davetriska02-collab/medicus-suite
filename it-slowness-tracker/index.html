@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Slowness Tracker</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://*.workers.dev https://api.github.com; script-src 'self';">
+  <meta name="app-version" content="">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js" defer></script>
+</head>
+<body data-screen="setup">
+
+  <div id="error-banner" class="error-banner" hidden></div>
+  <div id="recovery-banner" class="recovery-banner" hidden>Recovered session from previous page load.</div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: SETUP
+  ════════════════════════════════════════════ -->
+  <section id="screen-setup" class="screen">
+    <div class="screen-inner">
+      <header class="setup-header">
+        <h1>IT Slowness Tracker</h1>
+        <p class="subheading">Log your IT session</p>
+      </header>
+
+      <form id="form-setup" class="setup-form" novalidate>
+        <div class="field-group">
+          <label for="sel-site">Site</label>
+          <select id="sel-site" required>
+            <option value="">— Select site —</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="sel-role">Role</label>
+          <select id="sel-role" required>
+            <option value="">— Select role —</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label for="sel-session-type">Session type</label>
+          <select id="sel-session-type" required>
+            <option value="">— Select session type —</option>
+          </select>
+        </div>
+
+        <button type="submit" id="btn-start-session" class="btn btn-primary btn-large">
+          Start Session
+        </button>
+      </form>
+
+      <footer class="setup-footer">
+        <span id="version-display" class="version-label"></span>
+        <a href="./admin/" class="admin-link">Admin →</a>
+      </footer>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: ACTIVE
+  ════════════════════════════════════════════ -->
+  <section id="screen-active" class="screen">
+    <div class="screen-inner">
+
+      <div class="active-topbar">
+        <span id="info-chip" class="info-chip"></span>
+        <button id="btn-edit-session" class="btn btn-ghost btn-small">Edit</button>
+      </div>
+
+      <div class="stats-row">
+        <span id="stat-incidents" class="stat">0 incidents</span>
+        <span class="stat-sep">·</span>
+        <span id="stat-total-lost" class="stat">0s lost</span>
+      </div>
+
+      <div class="timer-area">
+        <button id="btn-toggle-timer" class="idle" type="button">
+          <span class="timer-idle-label">▶&nbsp;&nbsp;Press SPACE to start the clock</span>
+          <span class="timer-running-label">
+            <span id="display-elapsed">00:00.0</span>
+            <span class="timer-hint-running">Press SPACE to stop</span>
+          </span>
+        </button>
+        <p class="shortcut-hint">or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></p>
+      </div>
+
+      <ol id="incident-list" class="incident-list"></ol>
+
+      <div class="end-session-area">
+        <button id="btn-end-session" class="btn btn-warning" type="button" data-hold="true">
+          End Session
+        </button>
+        <p class="hold-hint">Hold for 2 seconds to end</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: SUBMIT
+  ════════════════════════════════════════════ -->
+  <section id="screen-submit" class="screen">
+    <div class="screen-inner">
+
+      <h2 id="submit-heading" class="submit-heading"></h2>
+
+      <div class="table-wrap">
+        <table id="incident-table" class="incident-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Time</th>
+              <th>Duration</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody id="incident-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="field-group">
+        <label for="session-narrative">Additional notes</label>
+        <textarea
+          id="session-narrative"
+          rows="4"
+          maxlength="2000"
+          placeholder="Optional: anything else? e.g. EMIS labs slow all morning"
+        ></textarea>
+      </div>
+
+      <button id="btn-submit" class="btn btn-primary btn-large" type="button">
+        Submit to central log
+      </button>
+
+      <div id="submit-status" class="submit-status" hidden></div>
+
+      <div class="submit-escape-hatch" hidden id="escape-hatch">
+        <button id="btn-download-json" class="btn btn-ghost" type="button">
+          Download session JSON
+        </button>
+      </div>
+
+      <button id="btn-new-session" class="btn btn-ghost btn-large" type="button" hidden>
+        Start another session
+      </button>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       NOTE DIALOG
+  ════════════════════════════════════════════ -->
+  <dialog id="note-dialog" class="note-dialog">
+    <form method="dialog" class="note-dialog-inner">
+      <h3 class="dialog-title">Add note to incident</h3>
+      <textarea
+        id="note-input"
+        rows="3"
+        maxlength="500"
+        placeholder="e.g. EMIS froze on patient summary screen"
+      ></textarea>
+      <div class="dialog-actions">
+        <button type="button" id="btn-note-confirm" class="btn btn-primary">Save note</button>
+        <button type="button" id="btn-note-cancel" class="btn btn-ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+</body>
+</html>
