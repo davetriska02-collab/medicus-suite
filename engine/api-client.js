@@ -136,35 +136,24 @@
 
   function safeFetch(url, timeoutMs) {
     timeoutMs = timeoutMs || 8000;
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        reject(new Error('timeout'));
-      }, timeoutMs);
-      fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } })
-        .then(async r => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          if (!r.ok) {
-            reject(new Error(`HTTP ${r.status}`));
-            return;
-          }
-          try {
-            resolve(await r.json());
-          } catch (e) {
-            reject(new Error('JSON parse: ' + e.message));
-          }
-        })
-        .catch(e => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          reject(e);
-        });
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    })
+      .then(async r => {
+        clearTimeout(timer);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        try { return await r.json(); }
+        catch (e) { throw new Error('JSON parse: ' + e.message); }
+      })
+      .catch(e => {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') throw new Error('timeout');
+        throw e;
+      });
   }
 
   // ---- Endpoint methods ----

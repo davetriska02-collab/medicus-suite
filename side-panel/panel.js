@@ -34,7 +34,7 @@ function updateNavOverflow() {
 }
 
 navTabsEl?.addEventListener('scroll', updateNavOverflow);
-new ResizeObserver(updateNavOverflow).observe(navTabsEl);
+if (navTabsEl) new ResizeObserver(updateNavOverflow).observe(navTabsEl);
 updateNavOverflow();
 
 // Click-to-scroll on indicator (makes overflow discoverable)

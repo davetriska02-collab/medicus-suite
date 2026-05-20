@@ -66,23 +66,30 @@ function broadcastToSidePanel(payload) {
 // Fires when no Medicus tab is open (Pusher relay won't be active).
 // When a Medicus tab IS open the relay fires immediately on appointment changes,
 // so this just keeps the panel fresh if the user only has the panel open.
+//
+// Uses chrome.alarms rather than setInterval so polling survives MV3 service
+// worker termination and restart cycles.
 
-let pollTimer = null;
+const SLOTS_ALARM = 'slots-poll';
 
-function startPolling() {
-  if (pollTimer) return;
-  pollTimer = setInterval(async () => {
+async function startPolling() {
+  const existing = await chrome.alarms.get(SLOTS_ALARM);
+  if (existing) return;
+  await chrome.alarms.create(SLOTS_ALARM, { periodInMinutes: 1 });
+}
+
+async function stopPolling() {
+  await chrome.alarms.clear(SLOTS_ALARM);
+}
+
+chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === SLOTS_ALARM) {
     const medicusTabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     if (medicusTabs.length === 0) {
-      // No Medicus tab — poll to refresh panel if it's showing slots
       broadcastToSidePanel({ type: 'slots:refresh' });
     }
-  }, 60000);
-}
-
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
+  }
+});
 
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
