@@ -2,10 +2,10 @@
   "appVersion": "0.1.0",
   "storageMode": "worker",
   "workerUrl": "https://it-slowness-proxy.CHANGEME.workers.dev/submit",
-  "fallbackRepo": "davetriska02-collab/medicus-suite",
+  "fallbackRepo": "davetriska02-collab/circle-of-death-tracker",
   "sites": [
-    { "id": "site1", "label": "Site 1 (edit config.json)" },
-    { "id": "site2", "label": "Site 2 (edit config.json)" }
+    { "id": "cranleigh", "label": "Cranleigh Surgery" },
+    { "id": "guildowns", "label": "Guildowns Group Practice" }
   ],
   "roles": [
     { "id": "gp",          "label": "GP" },

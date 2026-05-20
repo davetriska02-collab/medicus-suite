@@ -1,5 +1,5 @@
 const ALLOWED_ORIGIN = 'https://davetriska02-collab.github.io';
-const GITHUB_REPO = 'davetriska02-collab/medicus-suite';
+const GITHUB_REPO = 'davetriska02-collab/circle-of-death-tracker';
 const GITHUB_API = 'https://api.github.com';
 const MAX_BODY_BYTES = 32768;
 const MAX_INCIDENTS = 50;
