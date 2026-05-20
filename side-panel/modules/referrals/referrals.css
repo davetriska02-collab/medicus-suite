@@ -1,0 +1,241 @@
+/* Medicus Suite — Referrals module (v0.1 · Discovery phase) */
+
+.ref-module { font-family: var(--sans); }
+
+/* ── Waiting prompt ───────────────────────────────────────────────────────── */
+
+.ref-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 24px 32px;
+  gap: 10px;
+}
+
+.ref-prompt-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--t4);
+  margin-bottom: 6px;
+  opacity: 0.5;
+}
+
+.ref-prompt-head {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t2);
+  margin: 0;
+}
+
+.ref-prompt-body {
+  font-size: 12px;
+  color: var(--t4);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 240px;
+}
+
+.ref-prompt-path {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--t4);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 12px;
+}
+
+/* ── Config found (probing data endpoint) ────────────────────────────────── */
+
+.ref-status-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ref-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ref-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: ref-pulse 1.4s ease-in-out infinite;
+}
+.ref-dot-amber { background: #f59e0b; }
+@keyframes ref-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.ref-status-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t2);
+}
+
+.ref-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+.ref-config-row {
+  display: flex;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.ref-config-key {
+  color: var(--t4);
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.ref-config-val {
+  color: var(--t2);
+}
+
+.ref-status-hint {
+  font-size: 11px;
+  color: var(--t4);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Discovery found ──────────────────────────────────────────────────────── */
+
+.ref-found {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ref-found-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 5px;
+  padding: 4px 10px;
+  margin-bottom: 6px;
+  align-self: flex-start;
+}
+
+.ref-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t4);
+  margin-bottom: 4px;
+}
+
+.ref-url-box {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.ref-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ref-key-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t3);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.ref-json {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t3);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.5;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.ref-found-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ref-ts {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t4);
+}
+
+.ref-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ref-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 4px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.ref-btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--t3);
+}
+.ref-btn-secondary:hover { background: rgba(255, 255, 255, 0.08); color: var(--t1); }
+
+.ref-btn-primary {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+.ref-btn-primary:hover { background: rgba(59, 130, 246, 0.25); color: #bfdbfe; }
