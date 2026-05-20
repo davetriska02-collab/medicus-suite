@@ -1,10 +1,17 @@
 // Medicus Suite — Referrals Discovery
 //
-// Runs on all Medicus pages but activates only on the referrals clinical-audit-
-// report page. Watches outbound fetch/XHR calls via PerformanceObserver, re-
-// fetches the first matching referrals API URL with the page's own credentials,
-// and stores the full response in chrome.storage.local['referrals.discovery']
-// so the side-panel Referrals module can read it.
+// Runs on all Medicus pages but activates only on the referrals
+// clinical-audit-report page.
+//
+// Strategy:
+//   1. Watch PerformanceObserver for the page's own API calls.
+//   2. If the first call returns config/options (has priorityOptions), store
+//      it as referrals.config and use it to auto-build and fire the data call
+//      with all priorities + statuses selected and the default date range.
+//   3. If any call returns actual referral rows (array/object with row data),
+//      store as referrals.discovery and notify the side panel.
+//   4. Also watch for the page's own user-triggered data call (e.g. after
+//      the user clicks Generate) and capture that too.
 
 (function() {
   'use strict';
@@ -13,55 +20,129 @@
   if (window.__referralsDiscoveryMounted) return;
   window.__referralsDiscoveryMounted = true;
 
-  const STORAGE_KEY = 'referrals.discovery';
-  const API_PATTERN = /\.api\.england\.medicus\.health.*referral/i;
-  let captured = false;
+  const DISCOVERY_KEY  = 'referrals.discovery';
+  const CONFIG_KEY     = 'referrals.config';
+  const API_PATTERN    = /\.api\.england\.medicus\.health.*referral/i;
 
-  async function capture(url) {
-    if (captured) return;
-    captured = true;
+  let configCaptured = false;
+  let dataCaptured   = false;
 
+  // ── Config detection ────────────────────────────────────────────────────────
+
+  function isConfigResponse(data) {
+    return data && typeof data === 'object' && Array.isArray(data.priorityOptions);
+  }
+
+  function isDataResponse(data) {
+    if (!data || typeof data !== 'object') return false;
+    // Referral list responses typically carry an array of records under a
+    // well-known key, or are themselves an array.
+    if (Array.isArray(data)) return data.length >= 0;
+    const keys = Object.keys(data);
+    return keys.some(k => Array.isArray(data[k]) && !['priorityOptions','statusOptions'].includes(k));
+  }
+
+  // ── Proactive data fetch using config values ────────────────────────────────
+  // Once we have the config endpoint URL and the default date range, try a
+  // small set of plausible data endpoint patterns. The first one that returns
+  // a non-config JSON response wins.
+
+  async function tryDataEndpoints(configUrl, config) {
+    const start = config.defaultReferralStartDate;
+    const end   = config.defaultReferralEndDate;
+
+    const priorities = (config.priorityOptions || []).map(o => o.value);
+    const statuses   = (config.statusOptions   || []).map(o => o.value);
+
+    // Build query string with all filters open so we get the full dataset
+    const params = new URLSearchParams();
+    params.append('referralStartDate', start);
+    params.append('referralEndDate', end);
+    priorities.forEach(p => params.append('priorities[]', p));
+    statuses.forEach(s => params.append('statuses[]', s));
+    const qs = params.toString();
+
+    // Strip any existing query string from the config URL to get the base
+    const base = configUrl.split('?')[0];
+
+    // Candidates: same base URL with params, then common suffix variations
+    const candidates = [
+      `${base}?${qs}`,
+      `${base}/report?${qs}`,
+      `${base}/results?${qs}`,
+      `${base}/list?${qs}`,
+      `${base}/rows?${qs}`,
+    ];
+
+    for (const url of candidates) {
+      if (dataCaptured) return;
+      try {
+        const r = await fetch(url, { credentials: 'include' });
+        if (!r.ok) continue;
+        const data = await r.json();
+        if (isConfigResponse(data)) continue;     // same config endpoint, skip
+        await storeDataDiscovery(url, data);
+        return;
+      } catch (_) {
+        // try next candidate
+      }
+    }
+  }
+
+  // ── Store helpers ───────────────────────────────────────────────────────────
+
+  async function storeConfig(url, data) {
+    if (configCaptured) return;
+    configCaptured = true;
+    await chrome.storage.local.set({ [CONFIG_KEY]: { url, discoveredAt: new Date().toISOString(), data } });
+    chrome.runtime.sendMessage({ action: 'referrals:configDiscovered' }).catch(() => {});
+    // Immediately try to fetch the actual data using the config values
+    tryDataEndpoints(url, data);
+  }
+
+  async function storeDataDiscovery(url, data) {
+    if (dataCaptured) return;
+    dataCaptured = true;
+    const discovery = { url, discoveredAt: new Date().toISOString(), sample: data };
+    await chrome.storage.local.set({ [DISCOVERY_KEY]: discovery });
+    chrome.runtime.sendMessage({ action: 'referrals:discovered' }).catch(() => {});
+  }
+
+  // ── Capture from a seen URL ─────────────────────────────────────────────────
+
+  async function captureUrl(url) {
     try {
       const r = await fetch(url, { credentials: 'include' });
-      if (!r.ok) { captured = false; return; }
+      if (!r.ok) return;
       const data = await r.json();
-      const discovery = {
-        url,
-        discoveredAt: new Date().toISOString(),
-        sample: data,
-      };
-      await chrome.storage.local.set({ [STORAGE_KEY]: discovery });
-      chrome.runtime.sendMessage({ action: 'referrals:discovered' }).catch(() => {});
+      if (isConfigResponse(data)) {
+        await storeConfig(url, data);
+      } else if (isDataResponse(data)) {
+        await storeDataDiscovery(url, data);
+      }
     } catch (e) {
-      captured = false;
-      console.warn('[Referrals Discovery] fetch failed:', e.message);
+      console.warn('[Referrals Discovery] fetch failed:', url, e.message);
     }
   }
 
-  // Check entries that already exist (page may have loaded before this script ran)
-  function scanExisting() {
-    const entries = performance.getEntriesByType('resource');
+  // ── PerformanceObserver ─────────────────────────────────────────────────────
+
+  function scanEntries(entries) {
     for (const e of entries) {
-      if ((e.initiatorType === 'fetch' || e.initiatorType === 'xmlhttprequest') && API_PATTERN.test(e.name)) {
-        capture(e.name);
-        return true;
-      }
+      if (e.initiatorType !== 'fetch' && e.initiatorType !== 'xmlhttprequest') continue;
+      if (!API_PATTERN.test(e.name)) continue;
+      // Only capture data endpoint after config is done; config URL often
+      // omits query params so exact matching isn't reliable — use heuristic.
+      if (dataCaptured) continue;
+      captureUrl(e.name);
     }
-    return false;
   }
 
-  // Watch for future entries (SPA navigation, lazy load)
-  const observer = new PerformanceObserver(list => {
-    for (const entry of list.getEntries()) {
-      if ((entry.initiatorType === 'fetch' || entry.initiatorType === 'xmlhttprequest') && API_PATTERN.test(entry.name)) {
-        capture(entry.name);
-        break;
-      }
-    }
-  });
+  const observer = new PerformanceObserver(list => scanEntries(list.getEntries()));
   observer.observe({ type: 'resource', buffered: true });
 
-  // Immediate scan + retry cadence in case the page renders data asynchronously
-  const delays = [1000, 2500, 5000];
-  delays.forEach(ms => setTimeout(() => { if (!captured) scanExisting(); }, ms));
+  // Retry scan at intervals in case the page loads data late
+  [1000, 2500, 5000, 10000].forEach(ms =>
+    setTimeout(() => { if (!dataCaptured) scanEntries(performance.getEntriesByType('resource')); }, ms)
+  );
 })();

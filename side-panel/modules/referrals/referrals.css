@@ -48,6 +48,76 @@
   padding: 5px 12px;
 }
 
+/* ── Config found (probing data endpoint) ────────────────────────────────── */
+
+.ref-status-panel {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ref-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ref-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: ref-pulse 1.4s ease-in-out infinite;
+}
+.ref-dot-amber { background: #f59e0b; }
+@keyframes ref-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.ref-status-text {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t2);
+}
+
+.ref-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+.ref-config-row {
+  display: flex;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.ref-config-key {
+  color: var(--t4);
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.ref-config-val {
+  color: var(--t2);
+}
+
+.ref-status-hint {
+  font-size: 11px;
+  color: var(--t4);
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* ── Discovery found ──────────────────────────────────────────────────────── */
 
 .ref-found {
