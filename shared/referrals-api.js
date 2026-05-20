@@ -287,6 +287,7 @@
     extractBaseUrl,
     fetchReferrals,
     parseReferralService,
+    normalisePriority,
     aggregate,
     preset,
     formatDate,
