@@ -15,16 +15,18 @@ const CONFIG_KEY       = 'referrals.config';
 
 let container = null;
 let state = {
-  discoveredBaseUrl: null,  // extracted from referrals.config / referrals.discovery storage
-  startDate:         null,
-  endDate:           null,
-  rawReferrals:      null,
-  totalCount:        0,
-  aggregated:        null,
-  loading:           false,
-  error:             null,
-  chartView:         'clinician',  // 'clinician' | 'specialty' | 'hospital'
-  lastFetched:       null,
+  discoveredBaseUrl:  null,  // extracted from referrals.config / referrals.discovery storage
+  configPriorities:   [],    // actual priority values from config.data.priorityOptions[*].value
+  configStatuses:     [],    // actual status values from config.data.statusOptions[*].value
+  startDate:          null,
+  endDate:            null,
+  rawReferrals:       null,
+  totalCount:         0,
+  aggregated:         null,
+  loading:            false,
+  error:              null,
+  chartView:          'clinician',  // 'clinician' | 'specialty' | 'hospital'
+  lastFetched:        null,
 };
 
 function resolveBaseUrl(stored) {
@@ -36,6 +38,14 @@ function resolveBaseUrl(stored) {
   return raw ? api.extractBaseUrl(raw) : null;
 }
 
+function resolveConfigParams(stored) {
+  const data = stored[CONFIG_KEY]?.data || {};
+  return {
+    priorities: (data.priorityOptions || []).map(o => o.value).filter(Boolean),
+    statuses:   (data.statusOptions   || []).map(o => o.value).filter(Boolean),
+  };
+}
+
 export async function init(el) {
   container = el;
 
@@ -45,9 +55,12 @@ export async function init(el) {
     if (range) { state.startDate = range[0]; state.endDate = range[1]; }
   }
 
-  // Load discovered URL from storage (written by referrals-discovery content script)
+  // Load discovered URL + config params from storage (written by referrals-discovery content script)
   const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
   state.discoveredBaseUrl = resolveBaseUrl(stored);
+  const cfg = resolveConfigParams(stored);
+  state.configPriorities = cfg.priorities;
+  state.configStatuses   = cfg.statuses;
 
   render();
   if (state.discoveredBaseUrl) fetchAndRender();
@@ -58,11 +71,16 @@ export async function init(el) {
       return;
     }
     if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
-      // Discovery just ran — refresh stored URL and fetch
+      // Discovery just ran — refresh stored URL and config params, then fetch
       chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]).then(s => {
         const url = resolveBaseUrl(s);
+        const cfg = resolveConfigParams(s);
+        state.configPriorities = cfg.priorities;
+        state.configStatuses   = cfg.statuses;
         if (url && url !== state.discoveredBaseUrl) {
           state.discoveredBaseUrl = url;
+          fetchAndRender();
+        } else if (url && !state.aggregated && !state.loading) {
           fetchAndRender();
         }
       });
@@ -101,7 +119,9 @@ async function fetchAndRender() {
 
   try {
     const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
-      baseUrl: state.discoveredBaseUrl,
+      baseUrl:    state.discoveredBaseUrl,
+      priorities: state.configPriorities.length ? state.configPriorities : undefined,
+      statuses:   state.configStatuses.length   ? state.configStatuses   : undefined,
       fetch: (url, init) => window.ApiDiag.fetch({
         module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
       }),

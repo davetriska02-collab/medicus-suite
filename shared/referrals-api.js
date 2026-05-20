@@ -39,9 +39,10 @@
     const params = new URLSearchParams();
     params.append('referralStartDate', startDate);
     params.append('referralEndDate',   endDate);
-    (priorities || ALL_PRIORITIES).forEach(p => params.append('priorities[]', p));
-    (statuses   || ALL_STATUSES).forEach(s => params.append('statuses[]',   s));
-    params.append('limit', '2000');
+    // Use only the values provided — these must come from the stored config's
+    // priorityOptions/statusOptions so the API accepts them.
+    (priorities || []).forEach(p => params.append('priorities[]', p));
+    (statuses   || []).forEach(s => params.append('statuses[]',   s));
     return `${baseUrl}?${params.toString()}`;
   }
 
