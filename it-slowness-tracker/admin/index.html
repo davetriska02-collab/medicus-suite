@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IT Slowness Tracker — Admin</title>
+  <style>
+    :root {
+      --bg: #0f1117; --bg-elev: #161b24; --bg-mid: #1e2530;
+      --border: rgba(255,255,255,0.07); --border-hi: rgba(255,255,255,0.13);
+      --text-1: #f0f4f8; --text-2: #c8d3dd; --text-3: #8a9bb0; --text-4: #5a6a7e;
+      --accent: #3b82f6; --red: #f87171; --amber: #fbbf24; --green: #4ade80;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 16px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: var(--sans);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 0 0 4rem;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      background: var(--bg-elev);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .back-link {
+      color: var(--text-3);
+      text-decoration: none;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      transition: color 0.15s;
+    }
+    .back-link:hover { color: var(--text-1); }
+
+    .site-header h1 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    /* ── Main layout ── */
+    .page-content {
+      max-width: 740px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    /* ── Section card ── */
+    .card {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 1rem 1.25rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h2 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-1);
+      letter-spacing: 0.01em;
+    }
+
+    .card-body {
+      padding: 1.25rem;
+    }
+
+    /* ── Config block ── */
+    .config-pre {
+      background: var(--bg-mid);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      color: var(--text-2);
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.55;
+    }
+
+    .config-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .meta-item {
+      background: var(--bg-mid);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.625rem 0.875rem;
+    }
+
+    .meta-label {
+      font-size: 0.6875rem;
+      color: var(--text-4);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.2rem;
+    }
+
+    .meta-value {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-1);
+      font-family: var(--mono);
+    }
+
+    .config-raw-toggle {
+      margin-top: 0.75rem;
+    }
+
+    .toggle-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 0.8125rem;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .toggle-btn:hover { color: var(--text-1); }
+
+    .config-loading {
+      color: var(--text-3);
+      font-size: 0.875rem;
+    }
+
+    .config-error {
+      color: var(--red);
+      font-size: 0.875rem;
+    }
+
+    /* ── Warning banner ── */
+    .warning-banner {
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      color: var(--red);
+      font-size: 0.875rem;
+      line-height: 1.5;
+      margin-bottom: 1.25rem;
+    }
+
+    .warning-banner strong { font-weight: 600; }
+
+    /* ── PAT section ── */
+    .pat-status {
+      background: rgba(74, 222, 128, 0.08);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+      border-radius: 6px;
+      padding: 0.625rem 0.875rem;
+      color: var(--green);
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .pat-status.visible { display: block; }
+
+    .pat-row {
+      display: flex;
+      gap: 0.625rem;
+      align-items: stretch;
+    }
+
+    .pat-input {
+      flex: 1;
+      background: var(--bg-mid);
+      border: 1px solid var(--border-hi);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      color: var(--text-1);
+      font-size: 0.9375rem;
+      font-family: var(--mono);
+      outline: none;
+      transition: border-color 0.15s;
+      min-width: 0;
+    }
+    .pat-input::placeholder { color: var(--text-4); }
+    .pat-input:focus { border-color: var(--accent); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.5rem 1rem;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s, opacity 0.15s;
+      font-family: var(--sans);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2563eb; }
+
+    .btn-danger {
+      background: rgba(248, 113, 113, 0.15);
+      color: var(--red);
+      border: 1px solid rgba(248, 113, 113, 0.25);
+    }
+    .btn-danger:hover { background: rgba(248, 113, 113, 0.25); }
+
+    .pat-actions {
+      display: flex;
+      gap: 0.625rem;
+      margin-top: 0.875rem;
+      flex-wrap: wrap;
+    }
+
+    /* ── Feedback label ── */
+    .feedback {
+      font-size: 0.8125rem;
+      padding: 0.25rem 0;
+      transition: opacity 0.3s;
+    }
+    .feedback.ok { color: var(--green); }
+    .feedback.err { color: var(--red); }
+    .feedback[hidden] { display: none; }
+
+    /* ── Storage mode section ── */
+    .prose {
+      font-size: 0.9rem;
+      color: var(--text-2);
+      line-height: 1.65;
+    }
+
+    .prose p + p { margin-top: 0.75rem; }
+
+    .prose a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .prose a:hover { color: var(--text-1); }
+
+    .prose code {
+      background: var(--bg-mid);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      color: var(--amber);
+    }
+
+    /* ── Footer ── */
+    .site-footer {
+      text-align: center;
+      color: var(--text-4);
+      font-size: 0.8125rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="site-header">
+    <a href="../" class="back-link">&#8592; Back to app</a>
+    <h1>IT Slowness Tracker &mdash; Admin</h1>
+  </header>
+
+  <main class="page-content">
+
+    <!-- ═══════════════════════════════════════
+         Section: Current Configuration
+    ════════════════════════════════════════ -->
+    <section class="card" id="section-config">
+      <div class="card-header">
+        <h2>Current Configuration</h2>
+      </div>
+      <div class="card-body">
+        <div id="config-loading" class="config-loading">Loading config.json&hellip;</div>
+        <div id="config-error" class="config-error" hidden></div>
+        <div id="config-content" hidden>
+          <div class="config-meta" id="config-meta"></div>
+          <div class="config-raw-toggle">
+            <button class="toggle-btn" id="btn-toggle-raw" type="button">Show raw JSON</button>
+          </div>
+          <div id="config-raw-wrap" hidden>
+            <pre class="config-pre" id="config-pre"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         Section: Fallback PAT Mode
+    ════════════════════════════════════════ -->
+    <section class="card" id="section-pat">
+      <div class="card-header">
+        <h2>Fallback PAT Mode</h2>
+      </div>
+      <div class="card-body">
+
+        <div class="warning-banner">
+          <strong>Warning:</strong> Only use this if the Worker is not configured.
+          The PAT is stored only on this device in <code>localStorage</code>.
+          Rotate it quarterly.
+        </div>
+
+        <div class="pat-status" id="pat-status">
+          A PAT is currently saved on this device.
+        </div>
+
+        <label for="pat-input" style="display:block; font-size:0.875rem; color:var(--text-3); margin-bottom:0.5rem;">
+          Personal Access Token
+        </label>
+        <div class="pat-row">
+          <input
+            type="password"
+            id="pat-input"
+            class="pat-input"
+            placeholder="ghp_&hellip;"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <div class="pat-actions">
+          <button type="button" class="btn btn-primary" id="btn-save-pat">Save to this device</button>
+          <button type="button" class="btn btn-danger" id="btn-clear-pat">Clear saved PAT</button>
+        </div>
+        <div class="feedback" id="pat-feedback" hidden></div>
+
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         Section: Storage Mode Switch
+    ════════════════════════════════════════ -->
+    <section class="card" id="section-storage">
+      <div class="card-header">
+        <h2>Storage Mode Switch</h2>
+      </div>
+      <div class="card-body">
+        <div class="prose">
+          <p>
+            The <code>storageMode</code> key in <code>config.json</code> controls how sessions are
+            submitted. Two modes are supported:
+          </p>
+          <p>
+            <code>"worker"</code> &mdash; Sessions are POSTed to the Cloudflare Worker URL specified
+            in <code>workerUrl</code>. The Worker holds the GitHub PAT as a secret and creates the
+            Issue on behalf of the user. This is the recommended mode for production because no
+            secrets are stored on the client device.
+          </p>
+          <p>
+            <code>"pat"</code> &mdash; The app reads a PAT from <code>localStorage</code> (set via
+            the Fallback PAT Mode section above) and calls the GitHub API directly from the browser.
+            Use this only for testing or when a Worker is not available.
+          </p>
+          <p>
+            Changing <code>storageMode</code> requires editing <code>config.json</code> and
+            committing it to the repository. See the Worker setup guide for deployment instructions:
+            <a href="../worker/README.md">../worker/README.md</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer" id="site-footer">
+    &mdash;
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const PAT_KEY = 'itslowness.pat';
+
+      // ── DOM refs ──────────────────────────────────────────
+      const configLoading  = document.getElementById('config-loading');
+      const configError    = document.getElementById('config-error');
+      const configContent  = document.getElementById('config-content');
+      const configMeta     = document.getElementById('config-meta');
+      const configPre      = document.getElementById('config-pre');
+      const configRawWrap  = document.getElementById('config-raw-wrap');
+      const btnToggleRaw   = document.getElementById('btn-toggle-raw');
+
+      const patStatus      = document.getElementById('pat-status');
+      const patInput       = document.getElementById('pat-input');
+      const btnSavePat     = document.getElementById('btn-save-pat');
+      const btnClearPat    = document.getElementById('btn-clear-pat');
+      const patFeedback    = document.getElementById('pat-feedback');
+
+      const siteFooter     = document.getElementById('site-footer');
+
+      // ── Config loading ─────────────────────────────────────
+      function showMeta(cfg) {
+        const items = [
+          { label: 'App Version',   value: cfg.appVersion   || '—' },
+          { label: 'Storage Mode',  value: cfg.storageMode  || '—' },
+          { label: 'Worker URL',    value: cfg.workerUrl    || '—' },
+          { label: 'Sites',         value: Array.isArray(cfg.sites)        ? cfg.sites.length        : '—' },
+          { label: 'Roles',         value: Array.isArray(cfg.roles)        ? cfg.roles.length        : '—' },
+          { label: 'Session Types', value: Array.isArray(cfg.sessionTypes) ? cfg.sessionTypes.length : '—' },
+        ];
+
+        configMeta.innerHTML = items.map(function (item) {
+          return (
+            '<div class="meta-item">' +
+              '<div class="meta-label">' + escHtml(item.label) + '</div>' +
+              '<div class="meta-value">' + escHtml(String(item.value)) + '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      function loadConfig() {
+        fetch('../config.json', { cache: 'no-cache' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+            return res.json();
+          })
+          .then(function (cfg) {
+            configLoading.hidden = true;
+            configContent.hidden = false;
+
+            showMeta(cfg);
+            configPre.textContent = JSON.stringify(cfg, null, 2);
+
+            // Footer version
+            if (cfg.appVersion) {
+              siteFooter.textContent = 'IT Slowness Tracker v' + cfg.appVersion;
+            }
+          })
+          .catch(function (err) {
+            configLoading.hidden = true;
+            configError.hidden = false;
+            configError.textContent = 'Could not load config.json: ' + err.message;
+          });
+      }
+
+      btnToggleRaw.addEventListener('click', function () {
+        var hidden = configRawWrap.hidden;
+        configRawWrap.hidden = !hidden;
+        btnToggleRaw.textContent = hidden ? 'Hide raw JSON' : 'Show raw JSON';
+      });
+
+      // ── PAT management ─────────────────────────────────────
+      function refreshPatUi() {
+        var saved = localStorage.getItem(PAT_KEY);
+        if (saved) {
+          patStatus.classList.add('visible');
+        } else {
+          patStatus.classList.remove('visible');
+        }
+      }
+
+      function showFeedback(msg, type, durationMs) {
+        patFeedback.textContent = msg;
+        patFeedback.className = 'feedback ' + type;
+        patFeedback.hidden = false;
+        if (durationMs) {
+          setTimeout(function () {
+            patFeedback.hidden = true;
+          }, durationMs);
+        }
+      }
+
+      btnSavePat.addEventListener('click', function () {
+        var val = patInput.value.trim();
+        if (!val) {
+          showFeedback('Please enter a PAT before saving.', 'err', 4000);
+          patInput.focus();
+          return;
+        }
+        try {
+          localStorage.setItem(PAT_KEY, val);
+          patInput.value = '';
+          refreshPatUi();
+          showFeedback('Saved.', 'ok', 4000);
+        } catch (e) {
+          showFeedback('Could not save: ' + e.message, 'err', 6000);
+        }
+      });
+
+      btnClearPat.addEventListener('click', function () {
+        localStorage.removeItem(PAT_KEY);
+        refreshPatUi();
+        showFeedback('Cleared.', 'ok', 4000);
+      });
+
+      // ── Helpers ────────────────────────────────────────────
+      function escHtml(str) {
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      // ── Init ───────────────────────────────────────────────
+      refreshPatUi();
+      loadConfig();
+    }());
+  </script>
+
+</body>
+</html>
