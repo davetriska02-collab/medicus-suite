@@ -15,9 +15,12 @@ const CONFIG_KEY       = 'referrals.config';
 
 let container = null;
 let state = {
-  discoveredBaseUrl:  null,  // extracted from referrals.config / referrals.discovery storage
-  configPriorities:   [],    // actual priority values from config.data.priorityOptions[*].value
-  configStatuses:     [],    // actual status values from config.data.statusOptions[*].value
+  // Full raw URL captured by the discovery content script (with all original params).
+  // Used as a template — only the date params are rewritten for new requests.
+  discoveryUrl:       null,
+  configUrl:          null,
+  configPriorities:   [],
+  configStatuses:     [],
   startDate:          null,
   endDate:            null,
   rawReferrals:       null,
@@ -27,22 +30,17 @@ let state = {
   error:              null,
   chartView:          'clinician',  // 'clinician' | 'specialty' | 'hospital'
   lastFetched:        null,
+  lastAttemptedUrl:   null,
+  showDiagnostics:    false,
 };
 
-function resolveBaseUrl(stored) {
-  const api = ApiNs();
-  if (!api) return null;
-  // Prefer the discovery data URL (already confirmed to return referral rows),
-  // fall back to the config URL (same endpoint, different params).
-  const raw = stored[DISCOVERY_KEY]?.url || stored[CONFIG_KEY]?.url || null;
-  return raw ? api.extractBaseUrl(raw) : null;
-}
-
-function resolveConfigParams(stored) {
-  const data = stored[CONFIG_KEY]?.data || {};
+function resolveStored(stored) {
+  const cfgData = stored[CONFIG_KEY]?.data || {};
   return {
-    priorities: (data.priorityOptions || []).map(o => o.value).filter(Boolean),
-    statuses:   (data.statusOptions   || []).map(o => o.value).filter(Boolean),
+    discoveryUrl: stored[DISCOVERY_KEY]?.url || null,
+    configUrl:    stored[CONFIG_KEY]?.url    || null,
+    priorities:   (cfgData.priorityOptions || []).map(o => o.value).filter(Boolean),
+    statuses:     (cfgData.statusOptions   || []).map(o => o.value).filter(Boolean),
   };
 }
 
@@ -57,13 +55,14 @@ export async function init(el) {
 
   // Load discovered URL + config params from storage (written by referrals-discovery content script)
   const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
-  state.discoveredBaseUrl = resolveBaseUrl(stored);
-  const cfg = resolveConfigParams(stored);
-  state.configPriorities = cfg.priorities;
-  state.configStatuses   = cfg.statuses;
+  const r = resolveStored(stored);
+  state.discoveryUrl     = r.discoveryUrl;
+  state.configUrl        = r.configUrl;
+  state.configPriorities = r.priorities;
+  state.configStatuses   = r.statuses;
 
   render();
-  if (state.discoveredBaseUrl) fetchAndRender();
+  if (state.discoveryUrl || state.configUrl) fetchAndRender();
 
   const onChange = ch => {
     if (ch['suite.practiceCode']) {
@@ -71,18 +70,14 @@ export async function init(el) {
       return;
     }
     if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
-      // Discovery just ran — refresh stored URL and config params, then fetch
       chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]).then(s => {
-        const url = resolveBaseUrl(s);
-        const cfg = resolveConfigParams(s);
-        state.configPriorities = cfg.priorities;
-        state.configStatuses   = cfg.statuses;
-        if (url && url !== state.discoveredBaseUrl) {
-          state.discoveredBaseUrl = url;
-          fetchAndRender();
-        } else if (url && !state.aggregated && !state.loading) {
-          fetchAndRender();
-        }
+        const r = resolveStored(s);
+        const changed = r.discoveryUrl !== state.discoveryUrl || r.configUrl !== state.configUrl;
+        state.discoveryUrl     = r.discoveryUrl;
+        state.configUrl        = r.configUrl;
+        state.configPriorities = r.priorities;
+        state.configStatuses   = r.statuses;
+        if (changed || (!state.aggregated && !state.loading)) fetchAndRender();
       });
     }
   };
@@ -105,8 +100,7 @@ async function fetchAndRender() {
     return;
   }
 
-  if (!state.discoveredBaseUrl) {
-    // No URL yet — show the discovery prompt rather than erroring
+  if (!state.discoveryUrl && !state.configUrl) {
     render();
     return;
   }
@@ -115,17 +109,31 @@ async function fetchAndRender() {
 
   state.loading = true;
   state.error = null;
+  state.lastAttemptedUrl = null;
   render();
 
+  // Prefer the discovery URL as a verbatim template (it already worked once).
+  // Fall back to config URL + config-derived priorities/statuses.
+  const fetchOpts = {
+    fetch: (url, init) => window.ApiDiag.fetch({
+      module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
+    }),
+  };
+  if (state.discoveryUrl) {
+    fetchOpts.templateUrl = state.discoveryUrl;
+  } else {
+    fetchOpts.baseUrl    = api.extractBaseUrl(state.configUrl);
+    fetchOpts.priorities = state.configPriorities;
+    fetchOpts.statuses   = state.configStatuses;
+  }
+
+  // Compute the URL we're about to attempt so we can show it in diagnostics
+  state.lastAttemptedUrl = state.discoveryUrl
+    ? api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate)
+    : api.buildApiUrl(api.extractBaseUrl(state.configUrl), state.startDate, state.endDate, state.configPriorities, state.configStatuses);
+
   try {
-    const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
-      baseUrl:    state.discoveredBaseUrl,
-      priorities: state.configPriorities.length ? state.configPriorities : undefined,
-      statuses:   state.configStatuses.length   ? state.configStatuses   : undefined,
-      fetch: (url, init) => window.ApiDiag.fetch({
-        module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
-      }),
-    });
+    const result = await api.fetchReferrals(code, state.startDate, state.endDate, fetchOpts);
     state.rawReferrals = result.referrals;
     state.totalCount   = result.totalCount;
     state.aggregated   = api.aggregate(result.referrals);
@@ -133,6 +141,7 @@ async function fetchAndRender() {
     state.error        = null;
   } catch (e) {
     state.error = e.message || String(e);
+    if (e.url) state.lastAttemptedUrl = e.url;
   } finally {
     state.loading = false;
     render();
@@ -155,8 +164,9 @@ function render() {
       ${renderControls()}
       ${state.loading        ? renderSkeleton()  :
         state.error          ? renderError()     :
-        !state.discoveredBaseUrl ? renderDiscoveryPrompt() :
+        (!state.discoveryUrl && !state.configUrl) ? renderDiscoveryPrompt() :
         state.aggregated     ? renderData()      : ''}
+      ${renderDiagnostics()}
     </div>
   `;
   wireControls();
@@ -217,7 +227,31 @@ function renderDiscoveryPrompt() {
 }
 
 function renderError() {
-  return `<div class="ref-error">${escHtml(state.error)}</div>`;
+  return `
+    <div class="ref-error">
+      <div class="ref-error-msg">${escHtml(state.error)}</div>
+      ${state.lastAttemptedUrl ? `<div class="ref-error-url"><span class="ref-error-url-label">URL:</span> ${escHtml(state.lastAttemptedUrl)}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderDiagnostics() {
+  const o = state.showDiagnostics;
+  const lines = [];
+  lines.push(`Discovery URL: ${state.discoveryUrl || '(none)'}`);
+  lines.push(`Config URL:    ${state.configUrl    || '(none)'}`);
+  lines.push(`Priorities (from config.priorityOptions[*].value): ${state.configPriorities.length ? state.configPriorities.join(', ') : '(none)'}`);
+  lines.push(`Statuses   (from config.statusOptions[*].value):  ${state.configStatuses.length   ? state.configStatuses.join(', ')   : '(none)'}`);
+  lines.push(`Last attempted URL: ${state.lastAttemptedUrl || '(none yet)'}`);
+  return `
+    <div class="ref-diag">
+      <button class="ref-diag-toggle" id="refDiagToggle">${o ? '▾' : '▸'} Diagnostics</button>
+      ${o ? `<pre class="ref-diag-body">${escHtml(lines.join('\n'))}</pre>
+            <div class="ref-diag-actions">
+              <button class="ref-btn-secondary" id="refDiagClear">Clear stored discovery</button>
+            </div>` : ''}
+    </div>
+  `;
 }
 
 function renderData() {
@@ -400,6 +434,23 @@ function wireControls() {
       state.chartView = btn.dataset.view;
       render();
     });
+  });
+
+  container.querySelector('#refDiagToggle')?.addEventListener('click', () => {
+    state.showDiagnostics = !state.showDiagnostics;
+    render();
+  });
+
+  container.querySelector('#refDiagClear')?.addEventListener('click', async () => {
+    await chrome.storage.local.remove([DISCOVERY_KEY, CONFIG_KEY]);
+    state.discoveryUrl     = null;
+    state.configUrl        = null;
+    state.configPriorities = [];
+    state.configStatuses   = [];
+    state.aggregated       = null;
+    state.error            = null;
+    state.lastAttemptedUrl = null;
+    render();
   });
 }
 

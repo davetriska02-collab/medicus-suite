@@ -39,8 +39,6 @@
     const params = new URLSearchParams();
     params.append('referralStartDate', startDate);
     params.append('referralEndDate',   endDate);
-    // Use only the values provided — these must come from the stored config's
-    // priorityOptions/statusOptions so the API accepts them.
     (priorities || []).forEach(p => params.append('priorities[]', p));
     (statuses   || []).forEach(s => params.append('statuses[]',   s));
     return `${baseUrl}?${params.toString()}`;
@@ -52,31 +50,66 @@
     return discoveredUrl.split('?')[0];
   }
 
+  // Build the request URL using a captured template URL as the basis.
+  // Preserves every query parameter the page itself sent, replacing only
+  // the date params with the user's selection. Falls back to constructing
+  // from priorities/statuses arrays if no template is provided.
+  function buildUrlFromTemplate(templateUrl, startDate, endDate) {
+    try {
+      const u = new URL(templateUrl);
+      u.searchParams.set('referralStartDate', startDate);
+      u.searchParams.set('referralEndDate',   endDate);
+      return u.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function fetchReferrals(practiceCode, startDate, endDate, opts) {
     opts = opts || {};
     const fetchImpl = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
     if (!fetchImpl) throw new Error('No fetch impl');
     if (!startDate || !endDate) throw new Error('Date range required');
 
-    // Prefer a base URL discovered by the content script over the constructed one.
-    // The referrals endpoint path varies and may not follow the standard pattern.
-    const base = opts.baseUrl ||
-      (practiceCode
-        ? `https://${practiceCode}.api.england.medicus.health/referrals/clinical-audit-report`
-        : null);
-    if (!base) throw new Error('No API base URL — navigate to Referrals → Clinical Audit Report first.');
-
-    const url = buildApiUrl(base, startDate, endDate, opts.priorities, opts.statuses);
-    const r = await fetchImpl(url, { credentials: 'include' });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
-
-    // If we got config instead of data (shouldn't happen with filter params, but guard it)
-    if (data && Array.isArray(data.priorityOptions)) {
-      throw new Error('Got config response instead of referral data — check API URL');
+    // Resolve the URL to fetch — preferring:
+    //   1. opts.templateUrl (full discovered URL with original query params)
+    //   2. opts.baseUrl + opts.priorities/statuses
+    //   3. constructed from practiceCode
+    let url = null;
+    if (opts.templateUrl) {
+      url = buildUrlFromTemplate(opts.templateUrl, startDate, endDate);
+    }
+    if (!url) {
+      const base = opts.baseUrl ||
+        (practiceCode ? `https://${practiceCode}.api.england.medicus.health/referrals/clinical-audit-report` : null);
+      if (!base) throw new Error('No API base URL — navigate to Referrals → Clinical Audit Report first.');
+      url = buildApiUrl(base, startDate, endDate, opts.priorities, opts.statuses);
     }
 
-    return { referrals: data.referrals || [], totalCount: data.totalCount || 0 };
+    const r = await fetchImpl(url, { credentials: 'include' });
+    if (!r.ok) {
+      // Try to capture the response body for diagnostics
+      let body = '';
+      try { body = (await r.text()).slice(0, 400); } catch (_) {}
+      const err = new Error(`HTTP ${r.status}${body ? ` — ${body}` : ''}`);
+      err.status = r.status;
+      err.url    = url;
+      err.body   = body;
+      throw err;
+    }
+    const data = await r.json();
+
+    if (data && Array.isArray(data.priorityOptions)) {
+      const err = new Error('Got config response instead of referral data — check API URL');
+      err.url = url;
+      throw err;
+    }
+
+    return {
+      referrals:  data.referrals || [],
+      totalCount: data.totalCount || 0,
+      url,
+    };
   }
 
   // Parse the referralService field which uses ` – ` (em-dash) or ` - ` separators.
@@ -209,6 +242,7 @@
     ALL_PRIORITIES,
     ALL_STATUSES,
     buildApiUrl,
+    buildUrlFromTemplate,
     extractBaseUrl,
     fetchReferrals,
     parseReferralService,
