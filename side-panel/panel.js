@@ -75,6 +75,10 @@ function ensureModuleCss(cssPath) {
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const mod = tab.dataset.module;
+    if (mod === 'visualiser') {
+      chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
+      return;
+    }
     if (mod === activeModule) return;
     switchModule(mod);
   });
@@ -82,10 +86,6 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 
 settingsBtn.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
-});
-
-document.getElementById('visualiserBtn').addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
 });
 
 async function switchModule(name) {
@@ -197,16 +197,48 @@ function renderAbout() {
       <div class="module-card">
         <div class="module-card-header">
           <span class="module-card-name">Medicus Suite</span>
-          <span class="module-card-version">v1.0.0</span>
+          <span class="module-card-version">v${chrome.runtime.getManifest().version}</span>
         </div>
         <div class="module-card-desc">
           This extension is a runtime container. It provides a side panel and shared infrastructure.
           Each module above retains its own purpose, scope, and regulatory positioning.
           The suite itself makes no clinical claims and provides no decision support.
         </div>
+        <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <button id="checkUpdateBtn" style="font-size:11px; font-family:var(--mono); font-weight:600; color:var(--accent); background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25); border-radius:5px; padding:4px 10px; cursor:pointer;">Check for updates</button>
+          <span id="updateStatus" style="font-size:11px; font-family:var(--mono); color:var(--text-3);"></span>
+        </div>
       </div>
     </div>
   `;
+
+  document.getElementById('checkUpdateBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('checkUpdateBtn');
+    const status = document.getElementById('updateStatus');
+    if (!btn || !status) return;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    status.textContent = '';
+    try {
+      const result = await window.UpdateChecker.checkForUpdate({ force: true });
+      const installed = window.UpdateChecker.getInstalledVersion();
+      if (!result.ok) {
+        status.style.color = 'var(--red)';
+        status.textContent = result.error || 'Check failed';
+      } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
+        status.style.color = 'var(--amber)';
+        status.innerHTML = `v${result.latestVersion} available — <a href="${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
+      } else {
+        status.style.color = 'var(--green)';
+        status.textContent = `v${installed} is up to date`;
+      }
+    } catch (e) {
+      status.style.color = 'var(--red)';
+      status.textContent = e.message || 'Unknown error';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Check for updates';
+  });
 }
 
 // ── Service worker messages ────────────────────────────────────────────────────
@@ -388,52 +420,4 @@ function renderRmStrip(result, practiceCode, assigneeId) {
   const pills = buckets.map(b => {
     const data = result.buckets?.[b.key];
     const count = data?.count ?? 0;
-    const isReply = b.status === 'reply-received';
-    const cls = [
-      'rm-pill',
-      isReply ? 'rm-pill-reply' : 'rm-pill-new',
-      count > 0 ? 'rm-pill-active' : '',
-    ].filter(Boolean).join(' ');
-    const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
-    return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
-      <span class="rm-pill-label">${escStrip(b.short)}</span>
-      <span class="rm-pill-count">${count}</span>
-    </span>`;
-  }).join('');
-
-  const errorBlock = result.error
-    ? `<span class="rm-strip-error">${escStrip(result.error)}</span>`
-    : '';
-
-  rmStripEl.className = 'rm-strip';
-  rmStripEl.innerHTML = `
-    <span class="rm-strip-icon">📋</span>
-    <span class="rm-strip-label">Triage:</span>
-    ${pills}
-    ${errorBlock}
-  `;
-
-  // Wire click handlers
-  rmStripEl.querySelectorAll('.rm-pill[data-rm-url]').forEach(el => {
-    el.addEventListener('click', () => {
-      const url = el.dataset.rmUrl;
-      if (url) chrome.tabs.create({ url });
-    });
-  });
-}
-
-// React to config changes — re-render immediately
-chrome.storage.onChanged.addListener(changes => {
-  if (Object.keys(changes).some(k => k.startsWith('suite.requestMonitor.'))) {
-    fetchAndRenderRmStrip();
-  }
-});
-
-// Boot the rm strip
-fetchAndRenderRmStrip();
-// Initial poll interval — will adjust to cfg.pollSeconds on first fetch
-rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
-
-switchModule('slots');
+    const 
