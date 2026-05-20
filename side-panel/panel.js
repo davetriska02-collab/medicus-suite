@@ -16,6 +16,7 @@ const MODULES = {
   triage:      { js: () => import('./modules/triage/triage.js'),         css: './modules/triage/triage.css' },
   sentinel:    { js: () => import('./modules/sentinel/sentinel.js'),      css: './modules/sentinel/sentinel.css' },
   activity:    { js: () => import('./modules/activity/activity.js'),     css: './modules/activity/activity.css' },
+  referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
   about:       null,
 };
 
