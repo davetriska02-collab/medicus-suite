@@ -35,25 +35,37 @@
   const ALL_PRIORITIES = ['Routine', 'Urgent', 'TwoWeekWait'];
   const ALL_STATUSES   = ['Completed', 'Incomplete', 'Cancelled'];
 
-  function buildApiUrl(practiceCode, startDate, endDate, priorities, statuses) {
-    const base = `https://${practiceCode}.api.england.medicus.health/referrals/clinical-audit-report`;
+  function buildApiUrl(baseUrl, startDate, endDate, priorities, statuses) {
     const params = new URLSearchParams();
     params.append('referralStartDate', startDate);
     params.append('referralEndDate',   endDate);
     (priorities || ALL_PRIORITIES).forEach(p => params.append('priorities[]', p));
     (statuses   || ALL_STATUSES).forEach(s => params.append('statuses[]',   s));
     params.append('limit', '2000');
-    return `${base}?${params.toString()}`;
+    return `${baseUrl}?${params.toString()}`;
+  }
+
+  // Extract the base URL (no query string) from a discovered config/data URL.
+  function extractBaseUrl(discoveredUrl) {
+    if (!discoveredUrl) return null;
+    return discoveredUrl.split('?')[0];
   }
 
   async function fetchReferrals(practiceCode, startDate, endDate, opts) {
     opts = opts || {};
     const fetchImpl = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
     if (!fetchImpl) throw new Error('No fetch impl');
-    if (!practiceCode) throw new Error('No practice code');
     if (!startDate || !endDate) throw new Error('Date range required');
 
-    const url = buildApiUrl(practiceCode, startDate, endDate, opts.priorities, opts.statuses);
+    // Prefer a base URL discovered by the content script over the constructed one.
+    // The referrals endpoint path varies and may not follow the standard pattern.
+    const base = opts.baseUrl ||
+      (practiceCode
+        ? `https://${practiceCode}.api.england.medicus.health/referrals/clinical-audit-report`
+        : null);
+    if (!base) throw new Error('No API base URL — navigate to Referrals → Clinical Audit Report first.');
+
+    const url = buildApiUrl(base, startDate, endDate, opts.priorities, opts.statuses);
     const r = await fetchImpl(url, { credentials: 'include' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
@@ -196,6 +208,7 @@
     ALL_PRIORITIES,
     ALL_STATUSES,
     buildApiUrl,
+    extractBaseUrl,
     fetchReferrals,
     parseReferralService,
     aggregate,

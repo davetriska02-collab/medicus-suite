@@ -8,21 +8,33 @@
 
 function ApiNs() { return (typeof window !== 'undefined') ? window.ReferralsApi : null; }
 
-const DEFAULT_PRESET = 'last12m';
-const TOP_N = 15;  // max bars to show in each chart
+const DEFAULT_PRESET   = 'last12m';
+const TOP_N            = 15;
+const DISCOVERY_KEY    = 'referrals.discovery';
+const CONFIG_KEY       = 'referrals.config';
 
 let container = null;
 let state = {
-  startDate:    null,
-  endDate:      null,
-  rawReferrals: null,
-  totalCount:   0,
-  aggregated:   null,
-  loading:      false,
-  error:        null,
-  chartView:    'clinician',  // 'clinician' | 'specialty' | 'hospital'
-  lastFetched:  null,
+  discoveredBaseUrl: null,  // extracted from referrals.config / referrals.discovery storage
+  startDate:         null,
+  endDate:           null,
+  rawReferrals:      null,
+  totalCount:        0,
+  aggregated:        null,
+  loading:           false,
+  error:             null,
+  chartView:         'clinician',  // 'clinician' | 'specialty' | 'hospital'
+  lastFetched:       null,
 };
+
+function resolveBaseUrl(stored) {
+  const api = ApiNs();
+  if (!api) return null;
+  // Prefer the discovery data URL (already confirmed to return referral rows),
+  // fall back to the config URL (same endpoint, different params).
+  const raw = stored[DISCOVERY_KEY]?.url || stored[CONFIG_KEY]?.url || null;
+  return raw ? api.extractBaseUrl(raw) : null;
+}
 
 export async function init(el) {
   container = el;
@@ -33,11 +45,28 @@ export async function init(el) {
     if (range) { state.startDate = range[0]; state.endDate = range[1]; }
   }
 
+  // Load discovered URL from storage (written by referrals-discovery content script)
+  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
+  state.discoveredBaseUrl = resolveBaseUrl(stored);
+
   render();
-  fetchAndRender();
+  if (state.discoveredBaseUrl) fetchAndRender();
 
   const onChange = ch => {
-    if (ch['suite.practiceCode']) fetchAndRender();
+    if (ch['suite.practiceCode']) {
+      fetchAndRender();
+      return;
+    }
+    if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
+      // Discovery just ran — refresh stored URL and fetch
+      chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]).then(s => {
+        const url = resolveBaseUrl(s);
+        if (url && url !== state.discoveredBaseUrl) {
+          state.discoveredBaseUrl = url;
+          fetchAndRender();
+        }
+      });
+    }
   };
   chrome.storage.onChanged.addListener(onChange);
 
@@ -58,13 +87,13 @@ async function fetchAndRender() {
     return;
   }
 
-  const { code, source } = await window.PracticeCode.resolve();
-  if (!code) {
-    state.error = 'No practice code — open a Medicus tab or set it in Options.';
-    state.loading = false;
+  if (!state.discoveredBaseUrl) {
+    // No URL yet — show the discovery prompt rather than erroring
     render();
     return;
   }
+
+  const { code, source } = await window.PracticeCode.resolve();
 
   state.loading = true;
   state.error = null;
@@ -72,8 +101,9 @@ async function fetchAndRender() {
 
   try {
     const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
+      baseUrl: state.discoveredBaseUrl,
       fetch: (url, init) => window.ApiDiag.fetch({
-        module: 'referrals', url, code, codeSource: source, init,
+        module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
       }),
     });
     state.rawReferrals = result.referrals;
@@ -103,9 +133,10 @@ function render() {
         <div class="module-subtitle">Referral audit data from Medicus</div>
       </div>
       ${renderControls()}
-      ${state.loading   ? renderSkeleton() :
-        state.error     ? renderError()    :
-        state.aggregated ? renderData()    : ''}
+      ${state.loading        ? renderSkeleton()  :
+        state.error          ? renderError()     :
+        !state.discoveredBaseUrl ? renderDiscoveryPrompt() :
+        state.aggregated     ? renderData()      : ''}
     </div>
   `;
   wireControls();
@@ -145,6 +176,22 @@ function renderSkeleton() {
       <div class="ref-skel-line ref-skel-w70"></div>
       <div class="ref-skel-line ref-skel-w50"></div>
       <div class="ref-skel-line ref-skel-w65"></div>
+    </div>
+  `;
+}
+
+function renderDiscoveryPrompt() {
+  return `
+    <div class="ref-discovery-prompt">
+      <svg class="ref-discovery-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <p class="ref-discovery-head">Navigate to the referrals page</p>
+      <p class="ref-discovery-body">
+        Open <strong>Referrals → Clinical Audit Report</strong> in any Medicus tab.
+        The extension will detect the API endpoint automatically and load the charts here.
+      </p>
+      <div class="ref-discovery-path">Referrals → Clinical Audit Report</div>
     </div>
   `;
 }
