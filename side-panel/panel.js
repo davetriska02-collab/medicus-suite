@@ -84,6 +84,10 @@ settingsBtn.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
+document.getElementById('visualiserBtn').addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
+});
+
 async function switchModule(name) {
   // Cleanup previous module
   if (moduleCleanup) { try { moduleCleanup(); } catch (e) {} moduleCleanup = null; }
