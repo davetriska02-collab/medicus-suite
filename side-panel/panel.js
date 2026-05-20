@@ -227,7 +227,7 @@ function renderAbout() {
         status.textContent = result.error || 'Check failed';
       } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
         status.style.color = 'var(--amber)';
-        status.innerHTML = `v${result.latestVersion} available — <a href="${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
+        status.innerHTML = `v${result.latestVersion} available — <a href="\${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
       } else {
         status.style.color = 'var(--green)';
         status.textContent = `v${installed} is up to date`;
@@ -420,4 +420,52 @@ function renderRmStrip(result, practiceCode, assigneeId) {
   const pills = buckets.map(b => {
     const data = result.buckets?.[b.key];
     const count = data?.count ?? 0;
-    const 
+    const isReply = b.status === 'reply-received';
+    const cls = [
+      'rm-pill',
+      isReply ? 'rm-pill-reply' : 'rm-pill-new',
+      count > 0 ? 'rm-pill-active' : '',
+    ].filter(Boolean).join(' ');
+    const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
+    return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
+      <span class="rm-pill-label">${escStrip(b.short)}</span>
+      <span class="rm-pill-count">${count}</span>
+    </span>`;
+  }).join('');
+
+  const errorBlock = result.error
+    ? `<span class="rm-strip-error">${escStrip(result.error)}</span>`
+    : '';
+
+  rmStripEl.className = 'rm-strip';
+  rmStripEl.innerHTML = `
+    <span class="rm-strip-icon">📋</span>
+    <span class="rm-strip-label">Triage:</span>
+    ${pills}
+    ${errorBlock}
+  `;
+
+  // Wire click handlers
+  rmStripEl.querySelectorAll('.rm-pill[data-rm-url]').forEach(el => {
+    el.addEventListener('click', () => {
+      const url = el.dataset.rmUrl;
+      if (url) chrome.tabs.create({ url });
+    });
+  });
+}
+
+// React to config changes — re-render immediately
+chrome.storage.onChanged.addListener(changes => {
+  if (Object.keys(changes).some(k => k.startsWith('suite.requestMonitor.'))) {
+    fetchAndRenderRmStrip();
+  }
+});
+
+// Boot the rm strip
+fetchAndRenderRmStrip();
+// Initial poll interval — will adjust to cfg.pollSeconds on first fetch
+rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+switchModule('slots');
