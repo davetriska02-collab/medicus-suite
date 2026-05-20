@@ -9,7 +9,7 @@ Installation or use of Sentinel constitutes acknowledgement that the user has
 read this disclaimer and accepts its terms in full.
 
 Version:  0.3.1
-Status:   Personal pilot; single-clinician; not distributed; not certified.
+Status:   Limited distribution — named GP users only; not certified; see INTENDED-PURPOSE.md and HAZARD-LOG.md.
 Date:     2026-05
 
 
