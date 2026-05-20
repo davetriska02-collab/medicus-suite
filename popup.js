@@ -12,6 +12,7 @@ const body      = document.getElementById('wrBody');
 const ts        = document.getElementById('wrTs');
 const refreshBtn = document.getElementById('refreshBtn');
 const openSuiteBtn = document.getElementById('openSuiteBtn');
+const visualiserBtn = document.getElementById('visualiserBtn');
 
 let pollTimer   = null;
 let lastFetchAt = null;
@@ -31,6 +32,11 @@ refreshBtn.addEventListener('click', () => {
   refresh().finally(() => {
     setTimeout(() => refreshBtn.classList.remove('spinning'), 400);
   });
+});
+
+visualiserBtn.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
+  window.close();
 });
 
 openSuiteBtn.addEventListener('click', async () => {

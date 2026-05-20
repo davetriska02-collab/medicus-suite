@@ -87,6 +87,21 @@
     }
     .wr-open-btn:hover { background: rgba(59,130,246,0.22); }
 
+    .wr-viz-btn {
+      font-size: 10px;
+      font-family: var(--mono);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--green);
+      background: rgba(74,222,128,0.10);
+      border: 1px solid rgba(74,222,128,0.22);
+      border-radius: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .wr-viz-btn:hover { background: rgba(74,222,128,0.20); }
+
     .wr-body { padding: 0; }
 
     /* Empty / error state */
@@ -211,6 +226,7 @@
     <span class="wr-title">Waiting Room</span>
     <div class="wr-actions">
       <button class="wr-refresh-btn" id="refreshBtn" title="Refresh">↻</button>
+      <button class="wr-viz-btn" id="visualiserBtn">Visualiser</button>
       <button class="wr-open-btn" id="openSuiteBtn">Open Suite</button>
     </div>
   </div>
