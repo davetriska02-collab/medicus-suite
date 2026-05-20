@@ -100,7 +100,9 @@ async function fetchAndRender() {
     return;
   }
 
-  if (!state.discoveryUrl && !state.configUrl) {
+  if (!state.discoveryUrl) {
+    // Without a discovered URL we can't reliably hit the data endpoint.
+    // The config URL points to a different endpoint (filter options).
     render();
     return;
   }
@@ -109,41 +111,33 @@ async function fetchAndRender() {
 
   state.loading = true;
   state.error = null;
-  state.lastAttemptedUrl = null;
+  state.loadingProgress = null;
+  state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
   render();
 
-  // Prefer the discovery URL as a verbatim template (it already worked once).
-  // Fall back to config URL + config-derived priorities/statuses.
-  const fetchOpts = {
-    fetch: (url, init) => window.ApiDiag.fetch({
-      module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
-    }),
-  };
-  if (state.discoveryUrl) {
-    fetchOpts.templateUrl = state.discoveryUrl;
-  } else {
-    fetchOpts.baseUrl    = api.extractBaseUrl(state.configUrl);
-    fetchOpts.priorities = state.configPriorities;
-    fetchOpts.statuses   = state.configStatuses;
-  }
-
-  // Compute the URL we're about to attempt so we can show it in diagnostics
-  state.lastAttemptedUrl = state.discoveryUrl
-    ? api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate)
-    : api.buildApiUrl(api.extractBaseUrl(state.configUrl), state.startDate, state.endDate, state.configPriorities, state.configStatuses);
-
   try {
-    const result = await api.fetchReferrals(code, state.startDate, state.endDate, fetchOpts);
+    const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
+      templateUrl: state.discoveryUrl,
+      onProgress: (loaded, total) => {
+        state.loadingProgress = { loaded, total };
+        render();
+      },
+      fetch: (url, init) => window.ApiDiag.fetch({
+        module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
+      }),
+    });
     state.rawReferrals = result.referrals;
     state.totalCount   = result.totalCount;
     state.aggregated   = api.aggregate(result.referrals);
     state.lastFetched  = new Date();
     state.error        = null;
+    if (result.url) state.lastAttemptedUrl = result.url;
   } catch (e) {
     state.error = e.message || String(e);
     if (e.url) state.lastAttemptedUrl = e.url;
   } finally {
     state.loading = false;
+    state.loadingProgress = null;
     render();
   }
 }
@@ -164,7 +158,7 @@ function render() {
       ${renderControls()}
       ${state.loading        ? renderSkeleton()  :
         state.error          ? renderError()     :
-        (!state.discoveryUrl && !state.configUrl) ? renderDiscoveryPrompt() :
+        !state.discoveryUrl  ? renderDiscoveryPrompt() :
         state.aggregated     ? renderData()      : ''}
       ${renderDiagnostics()}
     </div>
@@ -199,7 +193,12 @@ function renderControls() {
 }
 
 function renderSkeleton() {
+  const p = state.loadingProgress;
+  const progressLine = p && p.total
+    ? `<div class="ref-progress">Loaded ${p.loaded.toLocaleString('en-GB')} of ${p.total.toLocaleString('en-GB')} referrals…</div>`
+    : '';
   return `
+    ${progressLine}
     <div class="ref-skeleton">
       <div class="ref-skel-line ref-skel-w80"></div>
       <div class="ref-skel-line ref-skel-w60"></div>
@@ -308,7 +307,7 @@ function renderPageNotice(shown, total) {
   return `
     <div class="ref-page-notice">
       Showing ${shown.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} referrals
-      (API page limit). Adjust the date range to narrow results.
+      — hit max page count. Narrow the date range to see the remainder.
     </div>
   `;
 }

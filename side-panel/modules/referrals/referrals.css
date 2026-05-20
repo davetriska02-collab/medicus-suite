@@ -397,6 +397,17 @@
   font-style: italic;
 }
 
+.ref-progress {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t3);
+  padding: 8px 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
 .ref-skeleton { padding: 8px 0; }
 .ref-skel-line {
   height: 14px;

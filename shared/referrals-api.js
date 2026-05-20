@@ -52,18 +52,36 @@
 
   // Build the request URL using a captured template URL as the basis.
   // Preserves every query parameter the page itself sent, replacing only
-  // the date params with the user's selection. Falls back to constructing
-  // from priorities/statuses arrays if no template is provided.
-  function buildUrlFromTemplate(templateUrl, startDate, endDate) {
+  // the date params (using whichever naming convention the template uses)
+  // and optionally the pagination params.
+  function buildUrlFromTemplate(templateUrl, startDate, endDate, startRow, endRow) {
     try {
       const u = new URL(templateUrl);
-      u.searchParams.set('referralStartDate', startDate);
-      u.searchParams.set('referralEndDate',   endDate);
+
+      // Detect which date-param naming convention this endpoint uses
+      if (u.searchParams.has('referralStartDate')) {
+        u.searchParams.set('referralStartDate', startDate);
+        u.searchParams.set('referralEndDate',   endDate);
+      } else if (u.searchParams.has('startDate')) {
+        u.searchParams.set('startDate', startDate);
+        u.searchParams.set('endDate',   endDate);
+      }
+
+      if (typeof startRow === 'number' && u.searchParams.has('startRow')) {
+        u.searchParams.set('startRow', String(startRow));
+      }
+      if (typeof endRow === 'number' && u.searchParams.has('endRow')) {
+        u.searchParams.set('endRow', String(endRow));
+      }
+
       return u.toString();
     } catch (_) {
       return null;
     }
   }
+
+  const PAGE_SIZE = 2000;
+  const MAX_PAGES = 10;  // hard cap (20k records) to avoid runaway loops
 
   async function fetchReferrals(practiceCode, startDate, endDate, opts) {
     opts = opts || {};
@@ -71,44 +89,55 @@
     if (!fetchImpl) throw new Error('No fetch impl');
     if (!startDate || !endDate) throw new Error('Date range required');
 
-    // Resolve the URL to fetch — preferring:
-    //   1. opts.templateUrl (full discovered URL with original query params)
-    //   2. opts.baseUrl + opts.priorities/statuses
-    //   3. constructed from practiceCode
-    let url = null;
-    if (opts.templateUrl) {
-      url = buildUrlFromTemplate(opts.templateUrl, startDate, endDate);
-    }
-    if (!url) {
-      const base = opts.baseUrl ||
-        (practiceCode ? `https://${practiceCode}.api.england.medicus.health/referrals/clinical-audit-report` : null);
-      if (!base) throw new Error('No API base URL — navigate to Referrals → Clinical Audit Report first.');
-      url = buildApiUrl(base, startDate, endDate, opts.priorities, opts.statuses);
+    if (!opts.templateUrl) {
+      // Without a captured URL we cannot reliably hit the correct endpoint
+      // (param names and pagination differ by deployment).
+      throw new Error('No discovered URL — navigate to Referrals → Clinical Audit Report first.');
     }
 
-    const r = await fetchImpl(url, { credentials: 'include' });
-    if (!r.ok) {
-      // Try to capture the response body for diagnostics
-      let body = '';
-      try { body = (await r.text()).slice(0, 400); } catch (_) {}
-      const err = new Error(`HTTP ${r.status}${body ? ` — ${body}` : ''}`);
-      err.status = r.status;
-      err.url    = url;
-      err.body   = body;
-      throw err;
-    }
-    const data = await r.json();
+    const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
 
-    if (data && Array.isArray(data.priorityOptions)) {
-      const err = new Error('Got config response instead of referral data — check API URL');
-      err.url = url;
-      throw err;
+    let allReferrals = [];
+    let totalCount   = 0;
+    let lastUrl      = null;
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const start = page * PAGE_SIZE;
+      const end   = start + PAGE_SIZE;
+      const url   = buildUrlFromTemplate(opts.templateUrl, startDate, endDate, start, end);
+      lastUrl = url;
+
+      const r = await fetchImpl(url, { credentials: 'include' });
+      if (!r.ok) {
+        let body = '';
+        try { body = (await r.text()).slice(0, 400); } catch (_) {}
+        const err = new Error(`HTTP ${r.status}${body ? ` — ${body}` : ''}`);
+        err.status = r.status;
+        err.url    = url;
+        err.body   = body;
+        throw err;
+      }
+      const data = await r.json();
+
+      if (data && Array.isArray(data.priorityOptions)) {
+        const err = new Error('Got config response instead of referral data — check API URL');
+        err.url = url;
+        throw err;
+      }
+
+      const pageRows = data.referrals || [];
+      allReferrals = allReferrals.concat(pageRows);
+      totalCount   = data.totalCount || allReferrals.length;
+      onProgress(allReferrals.length, totalCount);
+
+      if (pageRows.length < PAGE_SIZE) break;     // last page
+      if (allReferrals.length >= totalCount) break;
     }
 
     return {
-      referrals:  data.referrals || [],
-      totalCount: data.totalCount || 0,
-      url,
+      referrals:  allReferrals,
+      totalCount,
+      url:        lastUrl,
     };
   }
 
