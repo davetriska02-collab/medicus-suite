@@ -227,7 +227,7 @@ function renderAbout() {
         status.textContent = result.error || 'Check failed';
       } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
         status.style.color = 'var(--amber)';
-        status.innerHTML = `v${result.latestVersion} available — <a href="\${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
+        status.innerHTML = `v${result.latestVersion} available — <a href="${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
       } else {
         status.style.color = 'var(--green)';
         status.textContent = `v${installed} is up to date`;
