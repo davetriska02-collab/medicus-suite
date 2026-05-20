@@ -56,10 +56,13 @@
   // e.g. 15 Jan 2026  → 1 Apr 2025  (still in 25/26 year)
   //      20 Apr 2026  → 1 Apr 2026  (26/27 year has just started)
   function qofYearStart(nowIso) {
-    const d = new Date(nowIso);
-    const year = d.getUTCFullYear();
-    const month = d.getUTCMonth(); // 0-indexed; April = 3
-    const qofYear = month < 3 ? year - 1 : year;
+    // Parse date component directly from ISO string to avoid UTC vs local ambiguity.
+    // QOF year is a UK local-time concept (1 Apr – 31 Mar); using UTC month on a
+    // near-midnight local timestamp can misclassify the year boundary by one day.
+    const datePart = String(nowIso).slice(0, 10); // "YYYY-MM-DD"
+    const month = parseInt(datePart.slice(5, 7), 10); // 1-indexed
+    const year  = parseInt(datePart.slice(0, 4), 10);
+    const qofYear = month < 4 ? year - 1 : year; // before April → previous QOF year
     return new Date(Date.UTC(qofYear, 3, 1)); // 1 Apr, midnight UTC
   }
 
@@ -75,7 +78,7 @@
     if (!Array.isArray(observations)) return null;
     const matches = observations.filter(obs => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
-      if (obs.name && testSpec.match) {
+      if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
         return testSpec.match.some(m => obsLower.includes(String(m).toLowerCase()));
       }
@@ -142,9 +145,9 @@
 
       // Recently-initiated: if drug start date is within smallest interval, suppress no_data
       let suppressedNoData = false;
-      if (med.startDate) {
+      if (med.startDate && rule.tests && rule.tests.length > 0) {
         const daysSinceStart = daysBetween(med.startDate, now);
-        const minInterval = Math.min(...(rule.tests || []).map(t => t.intervalDays || 365));
+        const minInterval = Math.min(...rule.tests.map(t => t.intervalDays || 365));
         if (daysSinceStart != null && daysSinceStart < minInterval / 2) {
           testEvaluations.forEach(te => { if (te.status === 'no_data') { te.status = 'recently_initiated'; suppressedNoData = true; } });
         }

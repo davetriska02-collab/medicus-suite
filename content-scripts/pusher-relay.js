@@ -56,7 +56,7 @@
         setTimeout(tryBind, 500);
       }
     });
-    observer.observe(document.body, { childList: true, subtree: false });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   // Start polling once DOM is ready

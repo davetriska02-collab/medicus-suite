@@ -704,7 +704,7 @@
     list.innerHTML = `
       <div class="discovery-output">
         <h3>Discovery findings</h3>
-        <p>${findings.headings?.length || 0} headings, ${findings.lists?.length || 0} lists, ${findings.definitionLists?.length || 0} dl, ${Object.keys(findings.sectionHtml || {}).length} sections captured</p>
+        <p>${findings.headings?.length || 0} headings, ${findings.definitionLists?.length || 0} definition lists, ${findings.apiCallsObserved?.length || 0} API calls observed</p>
         <button class="copy-findings">Copy findings JSON</button>
       </div>
     `;
@@ -862,7 +862,7 @@
     try {
       const fetcher = window.SentinelDataFetcher;
       if (!fetcher) return;
-      const result = fetcher.fetchPatientData ? fetcher.fetchPatientData({ mode: 'live' }) : null;
+      const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
       Promise.resolve(result).then(data => {
         if (!data || !window.SentinelRules) return;
         // This call triggers the patched evaluatePatient below, which stores the snapshot.
