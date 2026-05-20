@@ -164,7 +164,7 @@
     const key = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (key === 'routine')                    return 'Routine';
     if (key === 'urgent')                     return 'Urgent';
-    if (key === 'twoweekwait' || key === '2ww') return 'TwoWeekWait';
+    if (key.startsWith('twoweek') || key === '2ww') return 'TwoWeekWait';
     return raw;
   }
 

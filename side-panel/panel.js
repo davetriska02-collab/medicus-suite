@@ -25,26 +25,30 @@ const MODULES = {
 
 const navEl = document.querySelector('.suite-nav');
 const navTabsEl = document.querySelector('.nav-tabs');
-const navIndicator = document.querySelector('.nav-scroll-indicator');
+const navIndicatorRight = document.querySelector('.nav-scroll-right');
+const navIndicatorLeft  = document.querySelector('.nav-scroll-left');
 
 function updateNavOverflow() {
   if (!navTabsEl) return;
-  const hasOverflow = navTabsEl.scrollWidth > navTabsEl.clientWidth + 4
-                   && (navTabsEl.scrollLeft + navTabsEl.clientWidth) < (navTabsEl.scrollWidth - 4);
-  navEl.classList.toggle('has-overflow', hasOverflow);
+  const sl = navTabsEl.scrollLeft;
+  const hasRight = navTabsEl.scrollWidth > navTabsEl.clientWidth + 4
+                && (sl + navTabsEl.clientWidth) < (navTabsEl.scrollWidth - 4);
+  const hasLeft  = sl > 4;
+  navEl.classList.toggle('has-overflow-right', hasRight);
+  navEl.classList.toggle('has-overflow-left',  hasLeft);
 }
 
 navTabsEl?.addEventListener('scroll', updateNavOverflow);
 if (navTabsEl) new ResizeObserver(updateNavOverflow).observe(navTabsEl);
 updateNavOverflow();
 
-// Click-to-scroll on indicator (makes overflow discoverable)
-navIndicator?.style.setProperty('pointer-events', 'auto');
-navIndicator?.style.setProperty('cursor', 'pointer');
-navIndicator?.addEventListener('click', () => {
-  if (!navTabsEl) return;
-  navTabsEl.scrollBy({ left: 120, behavior: 'smooth' });
+[navIndicatorRight, navIndicatorLeft].forEach(el => {
+  if (!el) return;
+  el.style.setProperty('pointer-events', 'auto');
+  el.style.setProperty('cursor', 'pointer');
 });
+navIndicatorRight?.addEventListener('click', () => navTabsEl?.scrollBy({ left:  120, behavior: 'smooth' }));
+navIndicatorLeft?.addEventListener('click',  () => navTabsEl?.scrollBy({ left: -120, behavior: 'smooth' }));
 
 // ── Slots nav badge ───────────────────────────────────────────────────────────
 document.addEventListener('suite:slots:count', e => {
