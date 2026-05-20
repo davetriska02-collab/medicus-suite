@@ -1,37 +1,92 @@
-// Medicus Suite — Referrals Tracker (v0.2 · Discovery phase)
+// Medicus Suite — Referrals Tracker v1.0
 //
-// Reads what the referrals-discovery content script captured from the live
-// referrals/clinical-audit-report page and displays it for schema inspection.
+// Fetches referral audit data from the Medicus clinical-audit-report endpoint
+// and renders charts: by clinician, by specialty, by hospital, with priority
+// and status breakdowns.
 
 'use strict';
 
-const DISCOVERY_KEY = 'referrals.discovery';
-const CONFIG_KEY    = 'referrals.config';
+function ApiNs() { return (typeof window !== 'undefined') ? window.ReferralsApi : null; }
+
+const DEFAULT_PRESET = 'last12m';
+const TOP_N = 15;  // max bars to show in each chart
 
 let container = null;
 let state = {
-  discovery: null,
-  config:    null,
+  startDate:    null,
+  endDate:      null,
+  rawReferrals: null,
+  totalCount:   0,
+  aggregated:   null,
+  loading:      false,
+  error:        null,
+  chartView:    'clinician',  // 'clinician' | 'specialty' | 'hospital'
+  lastFetched:  null,
 };
 
 export async function init(el) {
   container = el;
 
-  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
-  state.discovery = stored[DISCOVERY_KEY] || null;
-  state.config    = stored[CONFIG_KEY]    || null;
-  render();
+  const api = ApiNs();
+  if (api) {
+    const range = api.preset(DEFAULT_PRESET);
+    if (range) { state.startDate = range[0]; state.endDate = range[1]; }
+  }
 
-  const onStorageChange = changes => {
-    if (changes[DISCOVERY_KEY]) { state.discovery = changes[DISCOVERY_KEY].newValue || null; render(); }
-    if (changes[CONFIG_KEY])    { state.config    = changes[CONFIG_KEY].newValue    || null; render(); }
+  render();
+  fetchAndRender();
+
+  const onChange = ch => {
+    if (ch['suite.practiceCode']) fetchAndRender();
   };
-  chrome.storage.onChanged.addListener(onStorageChange);
+  chrome.storage.onChanged.addListener(onChange);
 
   return () => {
-    chrome.storage.onChanged.removeListener(onStorageChange);
+    chrome.storage.onChanged.removeListener(onChange);
     container = null;
   };
+}
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
+
+async function fetchAndRender() {
+  if (!container) return;
+  const api = ApiNs();
+  if (!api) {
+    state.error = 'Referrals API module not loaded';
+    render();
+    return;
+  }
+
+  const { code, source } = await window.PracticeCode.resolve();
+  if (!code) {
+    state.error = 'No practice code — open a Medicus tab or set it in Options.';
+    state.loading = false;
+    render();
+    return;
+  }
+
+  state.loading = true;
+  state.error = null;
+  render();
+
+  try {
+    const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
+      fetch: (url, init) => window.ApiDiag.fetch({
+        module: 'referrals', url, code, codeSource: source, init,
+      }),
+    });
+    state.rawReferrals = result.referrals;
+    state.totalCount   = result.totalCount;
+    state.aggregated   = api.aggregate(result.referrals);
+    state.lastFetched  = new Date();
+    state.error        = null;
+  } catch (e) {
+    state.error = e.message || String(e);
+  } finally {
+    state.loading = false;
+    render();
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -39,143 +94,263 @@ export async function init(el) {
 function render() {
   if (!container) return;
   container.innerHTML = `
-    <div class="ref-module module-wrap">
+    <div class="ref-v1-module module-wrap">
       <div class="module-header">
         <div class="module-title-row">
           <h2 class="module-title">Referrals</h2>
-          <span class="module-ver">v0.2</span>
+          <span class="module-ver">v1.0</span>
         </div>
         <div class="module-subtitle">Referral audit data from Medicus</div>
       </div>
-      ${renderBody()}
+      ${renderControls()}
+      ${state.loading   ? renderSkeleton() :
+        state.error     ? renderError()    :
+        state.aggregated ? renderData()    : ''}
     </div>
   `;
-  bindEvents();
+  wireControls();
 }
 
-function renderBody() {
-  if (state.discovery) return renderDataFound();
-  if (state.config)    return renderConfigFound();
-  return renderPrompt();
-}
-
-function renderPrompt() {
+function renderControls() {
+  const api = ApiNs();
   return `
-    <div class="ref-prompt">
-      <svg class="ref-prompt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <p class="ref-prompt-head">Waiting for referrals page</p>
-      <p class="ref-prompt-body">
-        Navigate to <strong>Referrals → Clinical Audit Report</strong> in any
-        Medicus tab. This panel will pick up the data automatically.
-      </p>
-      <div class="ref-prompt-path">referrals / clinical-audit-report</div>
+    <div class="ref-controls">
+      <div class="ref-date-row">
+        <label class="ref-label">From</label>
+        <input type="date" id="refStart" class="ref-date-input" value="${state.startDate || ''}" max="${todayISO()}" />
+        <label class="ref-label">To</label>
+        <input type="date" id="refEnd" class="ref-date-input" value="${state.endDate || ''}" max="${todayISO()}" />
+      </div>
+      <div class="ref-preset-row">
+        <button class="ref-preset" data-preset="last7">7d</button>
+        <button class="ref-preset" data-preset="last30">30d</button>
+        <button class="ref-preset" data-preset="last90">90d</button>
+        <button class="ref-preset" data-preset="thisMonth">Month</button>
+        <button class="ref-preset" data-preset="last3m">3m</button>
+        <button class="ref-preset" data-preset="last6m">6m</button>
+        <button class="ref-preset" data-preset="last12m">12m</button>
+        <span class="ref-spacer"></span>
+        <button class="ref-refresh" id="refRefresh">Refresh</button>
+      </div>
+      ${state.lastFetched ? `<div class="ref-ts">Updated ${state.lastFetched.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</div>` : ''}
     </div>
   `;
 }
 
-function renderConfigFound() {
-  const cfg = state.config?.data || {};
-  const priorities = (cfg.priorityOptions || []).map(o => o.label).join(', ');
-  const statuses   = (cfg.statusOptions   || []).map(o => o.label).join(', ');
+function renderSkeleton() {
   return `
-    <div class="ref-status-panel">
-      <div class="ref-status-row">
-        <div class="ref-status-dot ref-dot-amber"></div>
-        <span class="ref-status-text">Filters discovered — probing data endpoint…</span>
-      </div>
-      <div class="ref-config-grid">
-        <div class="ref-config-row">
-          <span class="ref-config-key">Date range</span>
-          <span class="ref-config-val">${escHtml(cfg.defaultReferralStartDate)} → ${escHtml(cfg.defaultReferralEndDate)}</span>
-        </div>
-        <div class="ref-config-row">
-          <span class="ref-config-key">Priorities</span>
-          <span class="ref-config-val">${escHtml(priorities)}</span>
-        </div>
-        <div class="ref-config-row">
-          <span class="ref-config-key">Statuses</span>
-          <span class="ref-config-val">${escHtml(statuses)}</span>
-        </div>
-      </div>
-      <p class="ref-status-hint">
-        The discovery script is trying several data endpoint patterns in the
-        background. If nothing appears in ~10 s, click <strong>Generate Report</strong>
-        on the referrals page to trigger the data call manually.
-      </p>
-      <button class="ref-btn ref-btn-secondary" id="refClearAll" style="margin-top:8px">Reset</button>
+    <div class="ref-skeleton">
+      <div class="ref-skel-line ref-skel-w80"></div>
+      <div class="ref-skel-line ref-skel-w60"></div>
+      <div class="ref-skel-line ref-skel-w70"></div>
+      <div class="ref-skel-line ref-skel-w50"></div>
+      <div class="ref-skel-line ref-skel-w65"></div>
     </div>
   `;
 }
 
-function renderDataFound() {
-  const { url, discoveredAt, sample } = state.discovery;
-  const json    = JSON.stringify(sample, null, 2);
-  const preview = json.length > 4000 ? json.slice(0, 4000) + '\n\n… (truncated — Copy for full data)' : json;
-  const keys    = topLevelKeys(sample);
-  const ts      = new Date(discoveredAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' });
+function renderError() {
+  return `<div class="ref-error">${escHtml(state.error)}</div>`;
+}
+
+function renderData() {
+  const a = state.aggregated;
+  if (!a || a.total === 0) {
+    return `<div class="ref-empty">No referrals in this date range.</div>`;
+  }
+
+  const api      = ApiNs();
+  const total    = a.total;
+  const shown    = total;
+  const dbTotal  = state.totalCount;
+
+  const periodLabel = state.startDate === state.endDate
+    ? formatDateLabel(state.startDate)
+    : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
 
   return `
-    <div class="ref-found">
-      <div class="ref-found-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
-        Data endpoint captured
+    ${dbTotal > shown ? renderPageNotice(shown, dbTotal) : ''}
+
+    <div class="ref-summary-card">
+      <div class="ref-summary-head">
+        <div class="ref-summary-label">Total referrals</div>
+        <div class="ref-summary-period">${escHtml(periodLabel)}</div>
       </div>
-
-      <div class="ref-section-label">Endpoint</div>
-      <div class="ref-url-box">${escHtml(url)}</div>
-
-      <div class="ref-section-label" style="margin-top:12px">Response structure</div>
-      <div class="ref-keys">
-        ${keys.map(k => `<span class="ref-key-pill">${escHtml(k)}</span>`).join('')}
+      <div class="ref-summary-number">${shown.toLocaleString('en-GB')}</div>
+      <div class="ref-breakdown-grid">
+        ${renderPriorityTiles(a.byPriority, total)}
       </div>
+    </div>
 
-      <div class="ref-section-label" style="margin-top:12px">Raw JSON</div>
-      <pre class="ref-json">${escHtml(preview)}</pre>
+    <div class="ref-status-card">
+      <div class="ref-card-label">Status breakdown</div>
+      <div class="ref-status-tiles">
+        ${renderStatusTiles(a.byStatus, total)}
+      </div>
+    </div>
 
-      <div class="ref-found-foot">
-        <span class="ref-ts">Captured ${ts}</span>
-        <div class="ref-actions">
-          <button class="ref-btn ref-btn-secondary" id="refClearAll">Reset</button>
-          <button class="ref-btn ref-btn-primary" id="refCopy">Copy JSON</button>
+    <div class="ref-chart-card">
+      <div class="ref-chart-head">
+        <div class="ref-card-label">Breakdown</div>
+        <div class="ref-chart-tabs">
+          <button class="ref-chart-tab ${state.chartView === 'clinician' ? 'active' : ''}" data-view="clinician">By clinician</button>
+          <button class="ref-chart-tab ${state.chartView === 'specialty' ? 'active' : ''}" data-view="specialty">By specialty</button>
+          <button class="ref-chart-tab ${state.chartView === 'hospital'  ? 'active' : ''}" data-view="hospital">By hospital</button>
         </div>
       </div>
+      <div class="ref-bars">${renderBars()}</div>
     </div>
   `;
 }
 
-function bindEvents() {
-  container.querySelector('#refCopy')?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(state.discovery?.sample, null, 2));
-      const btn = container.querySelector('#refCopy');
-      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy JSON'; }, 2000); }
-    } catch (_) {}
+function renderPageNotice(shown, total) {
+  return `
+    <div class="ref-page-notice">
+      Showing ${shown.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} referrals
+      (API page limit). Adjust the date range to narrow results.
+    </div>
+  `;
+}
+
+function renderPriorityTiles(byPriority, total) {
+  const api = ApiNs();
+  const priorities = [
+    { key: 'Routine',     label: 'Routine',  colour: api.PRIORITY_COLOURS['Routine'] },
+    { key: 'Urgent',      label: 'Urgent',   colour: api.PRIORITY_COLOURS['Urgent'] },
+    { key: 'TwoWeekWait', label: '2WW',      colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
+  ];
+  return priorities.map(p => {
+    const n   = byPriority[p.key] || 0;
+    const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+    return `
+      <div class="ref-priority-tile">
+        <div class="ref-priority-swatch" style="background:${p.colour}"></div>
+        <div class="ref-priority-info">
+          <div class="ref-priority-label">${escHtml(p.label)}</div>
+          <div class="ref-priority-count">${n.toLocaleString('en-GB')}</div>
+          <div class="ref-priority-pct">${pct}%</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderStatusTiles(byStatus, total) {
+  const api = ApiNs();
+  return Object.entries(byStatus).map(([key, n]) => {
+    const colour = api.STATUS_COLOURS[key] || '#94a3b8';
+    const pct    = total > 0 ? Math.round((n / total) * 100) : 0;
+    return `
+      <div class="ref-status-tile">
+        <div class="ref-status-dot" style="background:${colour}"></div>
+        <div class="ref-status-info">
+          <div class="ref-status-lbl">${escHtml(key)}</div>
+          <div class="ref-status-cnt">${n.toLocaleString('en-GB')} <span class="ref-status-pct">${pct}%</span></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderBars() {
+  const a   = state.aggregated;
+  const api = ApiNs();
+
+  let rows;
+  if (state.chartView === 'clinician') {
+    rows = a.byClinician.slice(0, TOP_N);
+  } else if (state.chartView === 'specialty') {
+    rows = a.bySpecialty.slice(0, TOP_N);
+  } else {
+    rows = a.byHospital.slice(0, TOP_N);
+  }
+
+  if (rows.length === 0) return '<div class="ref-empty">No data.</div>';
+
+  const maxCount = rows[0].count;
+
+  if (state.chartView === 'clinician') {
+    // Stacked bars showing priority breakdown per clinician
+    return rows.map(r => {
+      const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
+      const segs = [
+        { key: 'Routine',     colour: api.PRIORITY_COLOURS['Routine'] },
+        { key: 'Urgent',      colour: api.PRIORITY_COLOURS['Urgent'] },
+        { key: 'TwoWeekWait', colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
+      ].map(p => {
+        const v = r.priorities[p.key] || 0;
+        if (v === 0) return '';
+        const segPct = r.count > 0 ? (v / r.count) * barPct : 0;
+        return `<div class="ref-bar-seg" style="width:${segPct.toFixed(2)}%;background:${p.colour}" title="${escAttr(p.key)}: ${v}"></div>`;
+      }).join('');
+      return `
+        <div class="ref-bar-row">
+          <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
+          <div class="ref-bar-track">${segs}</div>
+          <div class="ref-bar-total">${r.count.toLocaleString('en-GB')}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Simple single-colour bars for specialty / hospital
+  const colour = state.chartView === 'specialty' ? '#3b82f6' : '#a78bfa';
+  return rows.map(r => {
+    const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
+    return `
+      <div class="ref-bar-row">
+        <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
+        <div class="ref-bar-track">
+          <div class="ref-bar-seg" style="width:${barPct.toFixed(2)}%;background:${colour}" title="${escAttr(r.name)}: ${r.count}"></div>
+        </div>
+        <div class="ref-bar-total">${r.count.toLocaleString('en-GB')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Wiring ────────────────────────────────────────────────────────────────────
+
+function wireControls() {
+  const startEl = container.querySelector('#refStart');
+  const endEl   = container.querySelector('#refEnd');
+  if (startEl) startEl.addEventListener('change', () => { state.startDate = startEl.value; fetchAndRender(); });
+  if (endEl)   endEl.addEventListener('change',   () => { state.endDate   = endEl.value;   fetchAndRender(); });
+
+  container.querySelectorAll('.ref-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const api = ApiNs();
+      if (!api) return;
+      const range = api.preset(btn.dataset.preset);
+      if (range) { state.startDate = range[0]; state.endDate = range[1]; fetchAndRender(); }
+    });
   });
-  container.querySelector('#refClearAll')?.addEventListener('click', async () => {
-    await chrome.storage.local.remove([DISCOVERY_KEY, CONFIG_KEY]);
-    state.discovery = null;
-    state.config    = null;
-    render();
+
+  container.querySelector('#refRefresh')?.addEventListener('click', fetchAndRender);
+
+  container.querySelectorAll('.ref-chart-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.chartView = btn.dataset.view;
+      render();
+    });
   });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function topLevelKeys(obj) {
-  if (!obj || typeof obj !== 'object') return [];
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return ['(empty array)'];
-    return topLevelKeys(obj[0]).map(k => `[0].${k}`);
-  }
-  return Object.keys(obj).map(k => {
-    const v = obj[k];
-    const type = Array.isArray(v) ? `array[${v.length}]` : typeof v;
-    return `${k}: ${type}`;
-  });
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatDateLabel(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return new Date(Number(y), Number(m) - 1, Number(d))
+    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }

@@ -194,6 +194,19 @@ function renderAbout() {
         </div>
       </div>
 
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Referrals Tracker</span>
+          <span class="module-card-version">v1.0</span>
+        </div>
+        <div class="module-card-desc">
+          Referral audit data across a configurable date range. Shows total referral count with
+          priority (Routine / Urgent / 2WW) and status breakdowns, plus horizontal bar charts
+          by referring clinician, specialty, and hospital. Fetches from the Medicus
+          clinical-audit-report endpoint. API-based.
+        </div>
+      </div>
+
       <h2>Suite</h2>
       <div class="module-card">
         <div class="module-card-header">
