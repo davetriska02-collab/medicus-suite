@@ -15,6 +15,11 @@
 node_modules/
 *.log
 
+# Patient / sensitive data — NEVER commit
+data/sars/
+uploads/
+output/
+
 # Cowork skill staging — for the medicus-suite-deploy skill, copied to
 # /mnt/skills/user/ during repo setup. Not part of the repo itself.
 _skill/
