@@ -156,6 +156,18 @@
     };
   }
 
+  // Normalise a raw priority string from the API response to a canonical key.
+  // Handles: 'Routine', 'routine', 'Urgent', 'urgent', 'TwoWeekWait',
+  //          'Two Week Wait', 'two-week-wait', '2WW', etc.
+  function normalisePriority(raw) {
+    if (!raw) return '';
+    const key = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (key === 'routine')                    return 'Routine';
+    if (key === 'urgent')                     return 'Urgent';
+    if (key === 'twoweekwait' || key === '2ww') return 'TwoWeekWait';
+    return raw;
+  }
+
   // Aggregate raw referrals array into chart-ready shapes.
   //
   // Returns:
@@ -179,7 +191,7 @@
     for (const row of rows) {
       const clinician = row.referringClinician || '(unknown)';
       const { specialty, hospital } = parseReferralService(row.referralService);
-      const priority = row.priority || '';
+      const priority = normalisePriority(row.priority || '');
       const status   = row.displayStatus || '';
 
       // Clinician map — also track priority breakdown per clinician
