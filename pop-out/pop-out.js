@@ -13,7 +13,6 @@ const MODULES = {
   slots:       { js: () => import('../side-panel/modules/slots/slots.js'),           css: '../side-panel/modules/slots/slots.css' },
   capacity:    { js: () => import('../side-panel/modules/capacity/capacity.js'),      css: '../side-panel/modules/capacity/capacity.css' },
   submissions: { js: () => import('../side-panel/modules/submissions/submissions.js'), css: '../side-panel/modules/submissions/submissions.css' },
-  triage:      { js: () => import('../side-panel/modules/triage/triage.js'),         css: '../side-panel/modules/triage/triage.css' },
   sentinel:    { js: () => import('../side-panel/modules/sentinel/sentinel.js'),      css: '../side-panel/modules/sentinel/sentinel.css' },
   activity:    { js: () => import('../side-panel/modules/activity/activity.js'),     css: '../side-panel/modules/activity/activity.css' },
   referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
