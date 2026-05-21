@@ -13,7 +13,6 @@ const MODULES = {
   slots:       { js: () => import('./modules/slots/slots.js'),           css: './modules/slots/slots.css' },
   capacity:    { js: () => import('./modules/capacity/capacity.js'),      css: './modules/capacity/capacity.css' },
   submissions: { js: () => import('./modules/submissions/submissions.js'), css: './modules/submissions/submissions.css' },
-  triage:      { js: () => import('./modules/triage/triage.js'),         css: './modules/triage/triage.css' },
   sentinel:    { js: () => import('./modules/sentinel/sentinel.js'),      css: './modules/sentinel/sentinel.css' },
   activity:    { js: () => import('./modules/activity/activity.js'),     css: './modules/activity/activity.css' },
   referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
