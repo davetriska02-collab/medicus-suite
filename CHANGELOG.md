@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.5.2] — 2026-05-21
+### Added
+- Submissions: configurable RAG thresholds for medical and admin request tiles — amber/red background tint + coloured dot when today's cumulative total reaches a configured level; red alert strip above tiles when any red threshold is crossed; Options → Submissions → Workload thresholds to configure per-type amber/red counts and enable/disable
+
 ## [v1.5.1] — 2026-05-21
 ### Added
 - Referrals: "Rate" chart tab — referrals as a proportion of consultations per clinician (referrals ÷ consultations, shown as %) sorted by rate descending; cyan bar colour, tooltip shows raw ref/consult counts; clinician search applies; show-all toggle works

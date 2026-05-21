@@ -830,6 +830,60 @@ rmSaveBtn?.addEventListener('click', async () => {
   }
 })();
 
+// ── Submission thresholds ─────────────────────────────────────────────────────
+
+(async function initSubmissionThresholds() {
+  try {
+    const DEFAULT_THRESHOLDS = {
+      medical: { amber: 30, red: 60, enabled: false },
+      admin:   { amber: 20, red: 40, enabled: false },
+    };
+    const LABELS = { medical: 'Medical requests', admin: 'Admin requests' };
+
+    const grid    = document.getElementById('submissionThresholds');
+    const saveBtn = document.getElementById('saveSubmissionThresholds');
+    const status  = document.getElementById('submissionThresholdSaved');
+    if (!grid || !saveBtn) return;
+
+    const stored = await chrome.storage.local.get('submissions.thresholds');
+    const thresholds = { ...DEFAULT_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
+
+    grid.innerHTML = Object.entries(LABELS).map(([key, label]) => {
+      const t = { ...DEFAULT_THRESHOLDS[key], ...(thresholds[key] || {}) };
+      return `
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-2);min-width:110px">${label}</span>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-3)">
+            <input type="checkbox" data-key="${key}" data-field="enabled" ${t.enabled ? 'checked' : ''}> Enabled
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-3)">
+            Amber ≥ <input type="number" min="1" max="999" data-key="${key}" data-field="amber" value="${t.amber}"
+              style="width:54px;background:var(--bg-elev);border:1px solid var(--border-hi);color:var(--text-2);font-family:var(--mono);font-size:10px;border-radius:5px;padding:2px 5px">
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-3)">
+            Red ≥ <input type="number" min="1" max="999" data-key="${key}" data-field="red" value="${t.red}"
+              style="width:54px;background:var(--bg-elev);border:1px solid var(--border-hi);color:var(--text-2);font-family:var(--mono);font-size:10px;border-radius:5px;padding:2px 5px">
+          </label>
+        </div>`;
+    }).join('');
+
+    saveBtn.addEventListener('click', async () => {
+      const out = {};
+      for (const key of Object.keys(LABELS)) {
+        out[key] = {
+          enabled: grid.querySelector(`[data-key="${key}"][data-field="enabled"]`)?.checked ?? false,
+          amber:   parseInt(grid.querySelector(`[data-key="${key}"][data-field="amber"]`)?.value) || DEFAULT_THRESHOLDS[key].amber,
+          red:     parseInt(grid.querySelector(`[data-key="${key}"][data-field="red"]`)?.value)   || DEFAULT_THRESHOLDS[key].red,
+        };
+      }
+      await chrome.storage.local.set({ 'submissions.thresholds': out });
+      if (status) { status.style.display = ''; setTimeout(() => { status.style.display = 'none'; }, 2000); }
+    });
+  } catch (e) {
+    console.warn('[Submission thresholds init]', e.message);
+  }
+})();
+
 // ── Update banner (v1.3.1) ────────────────────────────────────────────────────
 
 (async function initUpdateBanner() {

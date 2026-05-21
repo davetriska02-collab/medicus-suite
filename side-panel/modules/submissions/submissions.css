@@ -209,3 +209,45 @@
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1; }
 }
+
+/* ── RAG threshold tiles ─────────────────────────────── */
+
+.sub-metric--alerted {
+  position: relative;
+}
+
+.sub-metric[data-rag="amber"] {
+  background: rgba(245, 158, 11, 0.06);
+}
+.sub-metric[data-rag="red"] {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.sub-metric-rag-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.sub-metric-rag-dot--amber { background: #f59e0b; }
+.sub-metric-rag-dot--red   { background: #ef4444; }
+
+/* ── Alert strip ─────────────────────────────────────── */
+
+.sub-alert-strip {
+  margin: 4px 0 6px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.sub-alert-strip.hidden { display: none; }
+.sub-alert-strip--red {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}

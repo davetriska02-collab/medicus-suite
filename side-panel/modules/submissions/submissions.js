@@ -15,6 +15,11 @@ const TASK_TYPES = [
 
 const DEFAULTS = { practiceCode: '' };
 
+const DEFAULT_THRESHOLDS = {
+  medical: { amber: 30, red: 60, enabled: false },
+  admin:   { amber: 20, red: 40, enabled: false },
+};
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let state = {
@@ -28,19 +33,30 @@ let state = {
   config:       { ...DEFAULTS },
   hiddenSeries: new Set(),
   lastFetched:  null,
+  thresholds:   {},
 };
 
-let container = null;
+let container    = null;
 let pollInterval = null;
+let _lastMetricItems = null;
+
+function getRagLevel(key, value, thresholds) {
+  const t = thresholds[key];
+  if (!t || !t.enabled) return null;
+  if (value >= (t.red   || Infinity)) return 'red';
+  if (value >= (t.amber || Infinity)) return 'amber';
+  return null;
+}
 
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
 export async function init(el) {
   container = el;
 
-  const stored = await chrome.storage.local.get(['submissions.config', 'suite.practiceCode']);
+  const stored = await chrome.storage.local.get(['submissions.config', 'suite.practiceCode', 'submissions.thresholds']);
   const practiceCode = stored['suite.practiceCode'] || stored['submissions.config']?.practiceCode || '';
-  state.config = { ...DEFAULTS, ...(stored['submissions.config'] || {}), practiceCode };
+  state.config     = { ...DEFAULTS, ...(stored['submissions.config'] || {}), practiceCode };
+  state.thresholds = { ...DEFAULT_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
 
   renderShell();
   await fetchAndRender();
@@ -48,6 +64,13 @@ export async function init(el) {
   pollInterval = setInterval(() => {
     if (state.mode === 'today' && document.visibilityState === 'visible') fetchAndRender(false);
   }, 60000);
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes['submissions.thresholds'] && container) {
+      state.thresholds = { ...DEFAULT_THRESHOLDS, ...(changes['submissions.thresholds'].newValue || {}) };
+      renderAll();
+    }
+  });
 
   return () => {
     clearInterval(pollInterval);
@@ -85,6 +108,7 @@ function renderShell() {
 
       <div id="modeControls" class="mode-controls-row"></div>
       <div id="subBanner" class="banner hidden"></div>
+      <div id="subAlertStrip" class="sub-alert-strip hidden"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
 
@@ -304,6 +328,7 @@ function renderToday() {
   renderLegend('legend1', TASK_TYPES.map(tt => ({ key: tt.key, label: tt.shortLabel, color: tt.color })), { toggleable: true });
   const t2 = container.querySelector('#chart2Title'); if (t2) t2.textContent = 'Total by category';
   MWChart.bar({ container: container.querySelector('#chart2'), bars: TASK_TYPES.map(tt => ({ key: tt.key, label: tt.label, value: series[tt.key].total, color: tt.color })) });
+  renderAlertStrip();
 }
 
 function renderCompare() {
@@ -321,6 +346,7 @@ function renderCompare() {
   renderLegend('legend1', TASK_TYPES.map(tt => ({ key: tt.key, label: tt.shortLabel, color: tt.color })), { toggleable: true, extraNote: 'Solid = A · Dashed = B' });
   const t2 = container.querySelector('#chart2Title'); if (t2) t2.textContent = `Totals · ${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
   MWChart.bar({ container: container.querySelector('#chart2'), bars: TASK_TYPES.map(tt => ({ key: tt.key, label: tt.label, value: sA[tt.key].total, compareValue: sB[tt.key].total, color: tt.color })) });
+  renderAlertStrip();
 }
 
 function renderRange() {
@@ -334,18 +360,40 @@ function renderRange() {
   renderLegend('legend1', TASK_TYPES.map(tt => ({ key: tt.key, label: tt.shortLabel, color: tt.color })), { toggleable: true });
   const t2 = container.querySelector('#chart2Title'); if (t2) t2.textContent = `Totals over ${days.length} days`;
   MWChart.bar({ container: container.querySelector('#chart2'), bars: TASK_TYPES.map(tt => ({ key: tt.key, label: tt.label, value: totals[tt.key], color: tt.color })) });
+  renderAlertStrip();
 }
 
 // ── Metric tiles ──────────────────────────────────────────────────────────────
 
 function renderMetrics(items) {
+  _lastMetricItems = items;
   const ctr = container?.querySelector('#subMetrics'); if (!ctr) return;
-  ctr.innerHTML = items.map(m => `
-    <div class="sub-metric" style="border-top: 2px solid ${m.color}">
+  ctr.innerHTML = items.map(m => {
+    const rag = getRagLevel(m.key, m.value, state.thresholds);
+    const borderColor = rag === 'red' ? '#ef4444' : rag === 'amber' ? '#f59e0b' : m.color;
+    return `
+    <div class="sub-metric${rag ? ' sub-metric--alerted' : ''}" style="border-top: 2px solid ${borderColor}"${rag ? ` data-rag="${rag}"` : ''}>
+      ${rag ? `<div class="sub-metric-rag-dot sub-metric-rag-dot--${rag}"></div>` : ''}
       <div class="metric-label">${m.label}</div>
       <div class="metric-num${m.value===0?' zero':''}">${m.value}</div>
       ${m.compareValue != null ? renderDelta(m.value, m.compareValue) : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function renderAlertStrip() {
+  const strip = container?.querySelector('#subAlertStrip'); if (!strip) return;
+  const redItems = [];
+  for (const tt of TASK_TYPES) {
+    const total = _lastMetricItems?.find(m => m.key === tt.key)?.value ?? 0;
+    if (getRagLevel(tt.key, total, state.thresholds) === 'red') {
+      const t = state.thresholds[tt.key];
+      redItems.push(`${tt.label}: ${total} (red ≥ ${t.red})`);
+    }
+  }
+  if (redItems.length === 0) { strip.className = 'sub-alert-strip hidden'; strip.textContent = ''; return; }
+  strip.className = 'sub-alert-strip sub-alert-strip--red';
+  strip.textContent = `⚠ ${redItems.join(' · ')}`;
 }
 
 function renderDelta(a, b) {

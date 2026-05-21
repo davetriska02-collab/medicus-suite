@@ -401,6 +401,13 @@
           <label class="field-label">Colours and series</label>
           <p class="field-help">Series visibility is toggled directly in the Submissions panel by clicking the legend. Colours are fixed per task type in v0.1.</p>
         </div>
+        <div class="field">
+          <label class="field-label">Workload thresholds</label>
+          <p class="field-help">Amber and red thresholds for medical and admin requests. When today's cumulative total reaches a threshold the tile tints accordingly. Disabled by default.</p>
+          <div id="submissionThresholds" style="display:flex; flex-direction:column; gap:8px; margin:10px 0;"></div>
+          <button class="ghost" id="saveSubmissionThresholds">Save thresholds</button>
+          <span class="saved" id="submissionThresholdSaved" style="display:none">Saved ✓</span>
+        </div>
       </section>
 
       <!-- Capacity Forecast section -->
