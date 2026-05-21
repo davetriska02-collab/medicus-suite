@@ -1,212 +1,370 @@
-# Medicus Suite — Hazard Log
+# Medicus Suite — Clinical Safety Hazard Log
 
-**Version:** 1.4.16  
-**Date:** May 2026  
+**Document reference:** MS-CSO-HL-001  
+**Software product:** Medicus Suite (Chrome extension)  
+**Product version:** 1.4.16  
+**Document version:** 2.0  
+**Date issued:** 2026-05-20  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
-**Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
-**Status:** Live — reviewed at each release
+**Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
+**Status:** Live — reviewed at each minor or major release  
+**Applicable standards:** Drafted in the style of DCB0129 (Manufacturer) with consideration of DCB0160 (Deploying Organisation) responsibilities, noting that Medicus Suite is not a Health IT system under the formal scope of those standards but is voluntarily managed against them by the author.
 
 ---
 
-## Risk scoring
+## 1. Purpose
 
-**Likelihood:** 1 = Rare / 2 = Unlikely / 3 = Possible / 4 = Likely / 5 = Almost certain  
-**Severity:** 1 = Negligible / 2 = Minor / 3 = Moderate / 4 = Major / 5 = Catastrophic  
-**Risk score:** Likelihood × Severity. Scores ≥12 require additional control before distribution.
+This hazard log records the clinical safety hazards identified for Medicus Suite, the controls in place to mitigate them, and the residual risk borne by users of the software. It is maintained by the Clinical Safety Officer (CSO) and reviewed at every release.
 
----
+The log is intended to be read alongside:
 
-## Hazards
+- `docs/CLINICAL-SAFETY-NOTICE.md` — the user-facing safety notice
+- `docs/sentinel-DISCLAIMER.txt` — the binding terms of use
 
-### H-001: Rules engine produces false-negative clinical alert
+## 2. Scope
 
-**Description:** A drug-monitoring interval or QOF indicator that should be flagged as overdue is not displayed, or is displayed as current, when it should not be.
+This hazard log applies to all functional modules of Medicus Suite v1.4.16, namely:
 
-**Cause:** QOF business rule implemented incorrectly; threshold value set incorrectly; API data extraction failure; Medicus API response shape change; user-edited threshold diverges from guidance; QOF specification updated but rule file not refreshed.
+- **Sentinel** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
+- **Slot Counter** — display of appointment slot availability
+- **Capacity Forecast** — display of historical session/slot usage
+- **Submissions Tracker** — display of daily task volume counts
+- **Triage Lens** — overlay HUD on Medicus triage pages
+- **Activity Module** — display of staff activity counts
+- **Referrals Tracker** — display of referral audit data drawn from Medicus
 
-**Effect:** Clinician does not see an alert that would have prompted action. Patient may miss monitoring review or QOF-required intervention.
+It covers hazards arising from the technical operation of the extension, from the human factors of its use by trained GP practice staff, and from foreseeable failure modes of the surrounding environment (browser, network, Medicus platform).
 
-**Likelihood:** 2 — Unlikely. Rules are tested in CI; known limitations are documented; drug-monitoring intervals are stable.  
-**Severity:** 3 — Moderate. Clinician retains independent responsibility for reviewing the record; Medicus itself surfaces overdue items through its own workflows.  
-**Risk score:** 6 — Acceptable with controls.
+It does **not** cover:
 
-**Mitigating controls:**
-- Automated test suite (228+ tests) runs on every commit covering QOF year logic, threshold comparisons, and coordinate accuracy
-- Sentinel displays only what it finds — absence of a chip means no data retrieved, not necessarily a clear result; this is documented in the disclaimer
-- QOF 2025/26 specification reference is pinned in rules files; annual review required
-- Known limitation H-001(d) (incomplete indicator set) is disclosed in sentinel-DISCLAIMER.txt section 6
-- User retains full clinical responsibility for reviewing the source record — not Sentinel — before acting
+- Hazards arising from the underlying Medicus EPR itself — the responsibility of Medicus Health Ltd
+- Hazards arising from the practice's own clinical processes — the responsibility of the deploying GP practice
+- Hazards arising from use of the extension outside its frozen intended-purpose statement — explicitly out of scope per the disclaimer
 
-**Residual risk:** 6 — Acceptable
+## 3. Hazard identification methodology
 
----
+Hazards were identified using the following techniques, applied iteratively across development sprints:
 
-### H-002: Rules engine produces false-positive clinical alert
+1. **Functional decomposition** — each module was decomposed into its data sources, transformations, and display outputs; each step was examined for foreseeable failure.
+2. **HAZOP-style "what if" prompts** — applied to each data flow ("what if the patient changes mid-fetch?", "what if the API returns an empty array?", "what if a rule is misconfigured?").
+3. **Human factors review** — consideration of automation bias, alert fatigue, misinterpretation, and out-of-context display.
+4. **Code review and security review** — examination of network calls, storage, permissions, and supply chain.
+5. **Incident learning** — any reported anomaly or near-miss is reviewed and the log updated.
 
-**Description:** A drug-monitoring interval or QOF indicator is flagged as overdue when it should not be.
+Hazards are recorded against the frozen intended-purpose statement. Hazards arising from out-of-purpose use are noted but not assigned residual scores, as such use is excluded by the disclaimer.
 
-**Cause:** QOF register membership incorrectly matched (substring, not SNOMED refset); threshold misconfigured; date logic error; data from incorrect patient loaded into cache.
+## 4. Risk scoring matrix
 
-**Effect:** Clinician may take unnecessary action (e.g. repeating a test already done, or querying a QOF claim that was correctly made). Administrative burden, potential patient inconvenience. No direct patient harm anticipated — over-investigation is possible but clinician judgement would normally intercept.
+Risk is scored as **Severity × Likelihood** on the matrices below.
 
-**Likelihood:** 3 — Possible. Register matching by substring is an acknowledged limitation.  
-**Severity:** 2 — Minor. Clinical verification of source record before action is required by the disclaimer.  
-**Risk score:** 6 — Acceptable with controls.
+### Severity (1–5)
 
-**Mitigating controls:**
-- Substring register matching limitation explicitly disclosed in sentinel-DISCLAIMER.txt section 6(a)
-- User must verify against source record before acting — required by disclaimer
-- QOF register matching is conservative (problem label must contain the expected substring) rather than expansive
+| Score | Label | Definition (patient safety) |
+|-------|-------|------------------------------|
+| 1 | Negligible | No clinical impact; user inconvenience only |
+| 2 | Minor | Brief delay or unnecessary effort; no harm to patient |
+| 3 | Moderate | Possible unnecessary investigation, missed administrative deadline, or short-lived clinical inconvenience; no lasting harm |
+| 4 | Major | Plausible delayed diagnosis, missed monitoring, or wrong-patient action that would normally be intercepted by other controls |
+| 5 | Catastrophic | Severe or permanent harm to a patient, or major information governance breach |
 
-**Residual risk:** 6 — Acceptable
+### Likelihood (1–5)
 
----
+| Score | Label | Definition |
+|-------|-------|------------|
+| 1 | Rare | Not expected during the lifetime of the product |
+| 2 | Unlikely | Could occur but would be unusual |
+| 3 | Possible | Could occur from time to time |
+| 4 | Likely | Will probably occur in normal use |
+| 5 | Almost certain | Will occur frequently |
 
-### H-003: Data extraction failure — stale or wrong patient data displayed
+### Risk acceptability
 
-**Description:** Sentinel displays cached data from a previous patient while the clinician has navigated to a different patient's record.
+| Risk score | Acceptability |
+|------------|---------------|
+| 1–4 | Broadly acceptable |
+| 5–9 | Acceptable with documented controls (ALARP) |
+| 10–14 | Tolerable only with additional controls; CSO sign-off required |
+| 15–25 | Unacceptable — distribution must be suspended until mitigated |
 
-**Cause:** Patient navigation event not detected by the extension; browser caching; race condition between navigation and data fetch; Medicus URL structure change.
-
-**Effect:** Clinician sees clinical data for a different patient without realising it. Risk of wrong-patient clinical action.
-
-**Likelihood:** 2 — Unlikely. Patient UUID is used as cache key; navigation detection is implemented via URL monitoring.  
-**Severity:** 4 — Major. Wrong-patient data is a significant patient safety event.  
-**Risk score:** 8 — Acceptable with controls, but monitored closely.
-
-**Mitigating controls:**
-- Cache is keyed by patient UUID, not session — a new patient UUID clears the cache
-- URL change detection triggers data refresh
-- Patient name is displayed in the Medicus UI header at all times; clinician can cross-check
-- Sentinel side panel is visually distinct from the Medicus record — clinician must actively look at it
-- The disclaimer requires the clinician to verify all values against the source record
-
-**Residual risk:** 8 — Acceptable. Any report of wrong-patient display should be treated as a significant event and reported to the author immediately.
-
----
-
-### H-004: Extension interferes with Medicus UI or workflow
-
-**Description:** The extension modifies, obscures, or disrupts the Medicus interface in a way that causes a clinician error in the source record.
-
-**Cause:** CSS injection affecting Medicus layout; JavaScript event handling conflict; extension consuming excessive browser resources causing slowdown; side panel blocking part of the record.
-
-**Effect:** Clinician makes an error in the Medicus record (wrong field edited, submission missed) attributable to UI disruption caused by the extension.
-
-**Likelihood:** 2 — Unlikely. The extension uses Shadow DOM for UI isolation; it does not inject CSS globally into Medicus pages.  
-**Severity:** 3 — Moderate.  
-**Risk score:** 6 — Acceptable with controls.
-
-**Mitigating controls:**
-- Side panel is rendered in an isolated DOM context (Chrome side panel API) — does not overlay or modify the Medicus page DOM
-- Content scripts use Shadow DOM to avoid CSS leakage
-- Extension performs read-only API calls — no write path exists
-- User can close the side panel entirely if it causes any distraction
-
-**Residual risk:** 6 — Acceptable
+A residual score of 12 or above blocks release. A residual score of 10 or 11 requires explicit written CSO acceptance recorded against the hazard.
 
 ---
 
-### H-005: Update introduces regression in clinical rule logic
+## 5. Hazard register
 
-**Description:** A software update changes the behaviour of a clinical rule in a way that produces incorrect output.
+### H-001 — Stale or wrong-patient data displayed
 
-**Cause:** Code change introduces bug in rules engine; threshold default changed incorrectly; QOF year date logic regressed; API normaliser broken by endpoint change.
-
-**Effect:** Any of H-001, H-002, or H-003 effects, arising from a code change rather than a design limitation.
-
-**Likelihood:** 2 — Unlikely. Automated tests cover rules logic; CI runs on every commit.  
-**Severity:** 3 — Moderate.  
-**Risk score:** 6 — Acceptable with controls.
-
-**Mitigating controls:**
-- 228+ automated tests must all pass before a release tag is pushed (enforced in CI)
-- GitHub Actions release workflow fails if tests fail
-- Version number is surfaced in the extension UI and in the update notification banner — users can verify they are on a known version
-- Release notes (CHANGELOG.md) document every change to rules logic
-- Users should report any unexpected change in extension behaviour after an update
-
-**Residual risk:** 6 — Acceptable
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-001 |
+| **Description** | Sentinel, Triage Lens, or Referrals Tracker displays clinical data belonging to a previously-viewed patient while the clinician has navigated to a different patient's record. |
+| **Potential causes** | Patient-change navigation event not detected (Medicus uses client-side routing); race condition between URL change and asynchronous API fetch; in-memory cache not invalidated; Medicus URL pattern changes after a release; tab restored from browser session with prior state. |
+| **Affected users / components** | Clinicians and any user viewing patient-specific data. Components: `content-scripts/sentinel.js`, `engine/data-fetcher.js`, `engine/extractors/patient-context.js`. |
+| **Initial severity** | 4 (Major — wrong-patient clinical action) |
+| **Initial likelihood** | 3 (Possible without controls) |
+| **Initial risk** | 12 |
+| **Controls / mitigations** | (a) Cache keyed by patient UUID extracted from URL — a UUID change clears prior state. (b) URL-change watcher triggers re-fetch and clears prior chips. (c) Patient name remains visible in the native Medicus header at all times; clinician can cross-check. (d) Side panel is visually distinct from the Medicus record and not mistakable for it. (e) Disclaimer mandates verification of every displayed value against the source record before any clinical action. (f) Loading state is rendered before chips appear so a clinician cannot see stale chips superimposed on a new patient. |
+| **Residual severity** | 4 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 8 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Any report of wrong-patient display is treated as a significant safety event and triggers immediate CSO review and a hot-fix release. |
 
 ---
 
-### H-006: Clinician overtrusts the extension and does not verify source record
+### H-002 — False-negative clinical indicator (missing alert)
 
-**Description:** Clinician treats a Sentinel chip or panel value as the definitive clinical record rather than as a display aid, and takes clinical action without verifying against the source Medicus record.
-
-**Cause:** Human factors — normalisation of automation bias; time pressure; complacency after repeated correct outputs.
-
-**Effect:** Clinical action taken on the basis of a displayed value that is incorrect (for any reason listed in H-001 to H-005).
-
-**Likelihood:** 3 — Possible. Automation bias is a well-documented human factors risk.  
-**Severity:** 3 — Moderate.  
-**Risk score:** 9 — Acceptable with controls, but the most important human-factors risk in this system.
-
-**Mitigating controls:**
-- Disclaimer is mandatory reading; installation constitutes acceptance
-- The extension is visually presented as an overlay — not as the primary record
-- The "not the record" principle is stated in the sentinel-DISCLAIMER.txt and README
-- User training: the CLINICAL-SAFETY-NOTICE.md distributed with the extension explicitly addresses this risk
-- No chip or indicator produced by the extension claims to be the patient record
-
-**Residual risk:** 9 — Acceptable. This is the primary residual risk in the system and should be the focus of any future safety review.
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-002 |
+| **Description** | A drug-monitoring interval that is overdue, or a QOF indicator that is unachieved, is not surfaced by Sentinel when it should be. |
+| **Potential causes** | QOF register membership not matched (substring miss); rule omitted from curated rule set; Medicus API response shape change breaks normaliser; encounter-coded entry not present on the investigation dashboard endpoint; rule disabled by practice configuration; user-edited threshold diverges from current guidance. |
+| **Affected users / components** | Clinicians using Sentinel for monitoring or QOF review. Components: `engine/rules-engine.js`, `engine/normalisers.js`, `rules/*`. |
+| **Initial severity** | 3 (Moderate — missed monitoring, eventually caught by Medicus's own workflows) |
+| **Initial likelihood** | 3 (Possible — curated rule set is intentionally a subset) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) Sentinel is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 228+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. The clinician remains responsible for reviewing the Medicus record. |
 
 ---
 
-### H-007: Data egress — patient data transmitted outside the browser
+### H-003 — False-positive clinical indicator (spurious alert)
 
-**Description:** Patient data is transmitted to an external server without the clinician's knowledge or consent.
-
-**Cause:** Code vulnerability; malicious code injection via supply chain; extension update containing malicious payload.
-
-**Effect:** Potential UK GDPR data breach; ICO notification obligation; reputational harm to the practice.
-
-**Likelihood:** 1 — Rare. No network calls to non-Medicus endpoints are made with patient data; update checker transmits version string only.  
-**Severity:** 5 — Catastrophic (from an IG perspective).  
-**Risk score:** 5 — Acceptable with controls.
-
-**Mitigating controls:**
-- Extension makes no outbound calls containing patient data — verified by code review
-- The update checker (shared/update-checker.js) transmits only the version string to api.github.com — no patient or practice identifiers
-- UPDATE_CHECK_ENABLED can be set to 0 to disable all outbound calls entirely
-- All API calls go to Medicus endpoints under the user's own authenticated session — no third-party endpoints
-- SECURITY.md documents all network behaviour
-- GitHub repository is private; only named collaborators can access source
-
-**Residual risk:** 5 — Acceptable
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-003 |
+| **Description** | A drug-monitoring interval or QOF indicator is shown as overdue or unachieved when it has in fact been completed or is not applicable to the patient. |
+| **Potential causes** | Substring register match catches an unintended problem label; date arithmetic error around year boundaries; user-misconfigured rule; threshold edited locally and not reverted; coded entry present but on a different endpoint than the rule queries. |
+| **Affected users / components** | Clinicians and QOF leads. Components: `engine/rules-engine.js`, `rules/*`, `sentinel-options/*`. |
+| **Initial severity** | 2 (Minor — repeat test or unnecessary clinical attention) |
+| **Initial likelihood** | 3 (Possible) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) Substring matching limitation explicitly disclosed. (b) Verification against source record required by disclaimer before any action. (c) Register match logic is intentionally conservative (label must contain the expected substring). (d) Test suite includes false-positive regression cases (`test-custom-rules.js`, `test-qof-year.js`). (e) Practice-authored custom rules are constrained to three supported check shapes via the form builder — arbitrary logic is not exposed. |
+| **Residual severity** | 2 |
+| **Residual likelihood** | 3 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Over-investigation risk exists but is intercepted by clinician verification of the source record. |
 
 ---
 
-## Hazard summary
+### H-004 — Practice-authored rule is clinically incorrect
 
-| ID | Hazard | Initial score | Residual score | Status |
-|----|--------|--------------|----------------|--------|
-| H-001 | False-negative alert | 6 | 6 | Acceptable |
-| H-002 | False-positive alert | 6 | 6 | Acceptable |
-| H-003 | Wrong-patient data | 8 | 8 | Acceptable — monitor |
-| H-004 | UI interference | 6 | 6 | Acceptable |
-| H-005 | Update regression | 6 | 6 | Acceptable |
-| H-006 | Automation bias | 9 | 9 | Acceptable — primary residual risk |
-| H-007 | Data egress | 5 | 5 | Acceptable |
-
-No hazard exceeds a risk score of 12. No hazard has a residual score requiring additional control before this distribution.
-
----
-
-## Review and reporting
-
-This log must be reviewed:
-- At each major or minor release
-- On any user report of unexpected clinical output
-- On any change to the QOF specification
-- On any Medicus API change that affects data extraction
-
-Any user who observes unexpected or potentially incorrect clinical output must report it to the author (dave@graysbrook.co.uk) immediately and cease use of the affected module until the issue is investigated. Any event meeting the definition of a patient safety incident under the practice's significant event analysis process must be handled through that process, with notification to the author.
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-004 |
+| **Description** | A rule authored by the practice (in the Sentinel form builder or via custom-indicator import) produces clinically incorrect output because the rule itself is wrong, not because the extension malfunctioned. |
+| **Potential causes** | Author misreads current guidance; threshold value mis-typed; register substring is too broad or too narrow; rule not reviewed when guidance changes; rule copied from another practice without review; multiple rule revisions cause stale rule to be active. |
+| **Affected users / components** | Clinicians relying on practice-authored rules. Components: `sentinel-options/*`, `shared/io/*`, rule import/export. |
+| **Initial severity** | 3 (Moderate) |
+| **Initial likelihood** | 3 (Possible — depends on practice rule-authoring discipline) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) The deploying practice is responsible for clinical validity of its own rules — stated in `CLINICAL-SAFETY-NOTICE.md` and in the disclaimer. (b) The form builder constrains rule logic to three engine-supported shapes (observation-threshold, medication-present, observation-recent) — arbitrary decision logic is not exposed. (c) Custom rules are visually labelled "Custom" in the UI. (d) Custom rules are explicitly not QOF rules; their points field is metadata only. (e) Backup/restore of rule sets allows the practice to review historical configurations. (f) The CSO recommends practices nominate a rules owner who reviews custom rules at each guidance update. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP), with explicit deploying-organisation duty |
+| **Acceptability** | Accepted, subject to the practice fulfilling its DCB0160-style duties as described in `CLINICAL-SAFETY-NOTICE.md`. |
 
 ---
 
-## Version history
+### H-005 — Silent failure of the extension
 
-| Date | Version | Change |
-|------|---------|--------|
-| May 2026 | 1.0 | Initial hazard log — produced for limited distribution to named GP users |
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-005 |
+| **Description** | The extension fails to load, or one of its modules stops functioning, without producing a visible error — leading users to assume the absence of chips or alerts means an "all clear" result. |
+| **Potential causes** | Chrome update breaks the extension; manifest permission revoked; content script failed to inject; Medicus DOM changes such that selectors no longer match; uncaught exception in the rules engine; service worker terminated and not revived; user disabled the extension in `chrome://extensions` without realising. |
+| **Affected users / components** | All users. Components: `service-worker.js`, `manifest.json`, all content scripts. |
+| **Initial severity** | 3 (Moderate — false reassurance leads to missed action) |
+| **Initial likelihood** | 3 (Possible — browser and Medicus both evolve) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) The user-facing safety notice states explicitly that absence of a chip is not equivalent to "all clear". (b) The extension icon in the toolbar is the primary "alive" indicator; the popup shows version and status. (c) The Options page version banner identifies the running version and the latest available version. (d) Logging of fetch failures and rule-engine exceptions is available via the developer console. (e) Medicus surfaces overdue items independently of the extension — Sentinel is not the only line of defence. (f) Users are instructed to stop relying on the extension and verify the source record if a module appears blank or behaves unexpectedly. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Independent Medicus workflows remain the primary safety net. |
+
+---
+
+### H-006 — Update introduces a regression in clinical logic
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-006 |
+| **Description** | A new release of Medicus Suite changes the behaviour of a clinical rule or data extractor in a way that produces incorrect output that was not present in the prior release. |
+| **Potential causes** | Bug introduced in rule engine; default threshold inadvertently changed; date logic regressed at year boundary; normaliser broken by refactor; supply-chain change in a dependency. |
+| **Affected users / components** | All users on the affected version. Components: any code path under `engine/`, `content-scripts/`, `rules/`. |
+| **Initial severity** | 3 (Moderate) |
+| **Initial likelihood** | 2 (Unlikely — CI gates) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) The full automated test suite (228+ tests at v1.4.16) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. |
+
+---
+
+### H-007 — Clinician automation bias (over-trust of displayed values)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-007 |
+| **Description** | A clinician treats a Sentinel chip, a Triage Lens summary, or a Referrals Tracker row as the definitive clinical record and takes clinical action without verifying the underlying Medicus record. |
+| **Potential causes** | Time pressure; complacency after repeated correct outputs; visual prominence of chips; pattern of "green = done"; alert fatigue causing inverse trust ("if it's not red I won't check"); junior staff assuming the extension is authoritative. |
+| **Affected users / components** | All clinical users. Components: any display module. |
+| **Initial severity** | 3 (Moderate — clinical action based on incorrect display) |
+| **Initial likelihood** | 4 (Likely — automation bias is a well-documented human factors phenomenon) |
+| **Initial risk** | 12 |
+| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 3 |
+| **Residual risk** | 9 — Acceptable (ALARP); identified as the **primary residual risk** in the system |
+| **Acceptability** | Accepted. This is the most important residual risk and is the focus of safety messaging. Any future safety review must revisit this hazard. |
+
+---
+
+### H-008 — Patient identification error in the Referrals Tracker
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-008 |
+| **Description** | The Referrals Tracker displays a row attributing a referral to the wrong patient, clinician, specialty, or hospital, leading a user to investigate the wrong record or act on the wrong information. |
+| **Potential causes** | Column mis-mapping after a Medicus clinical-audit-report API change; sort/filter applied to one column but rendered against another; pagination boundary error; identically-named patients confused on display. |
+| **Affected users / components** | Practice managers, QOF/referral leads, clinicians reviewing referrals. Components: `side-panel/modules/referrals/*`, `content-scripts/referrals-discovery.js`. |
+| **Initial severity** | 3 (Moderate — admin re-work, very low probability of clinical action without further verification) |
+| **Initial likelihood** | 2 (Unlikely) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) Referral records are not stored persistently — each refresh re-fetches from Medicus. (b) The tracker is positioned as an admin/audit tool; clicking into a record returns the user to Medicus. (c) Patient name is shown alongside referral metadata so the user can cross-check. (d) Column mappings are derived from the Medicus API response keys, not from positional indexing. (e) Any reported mis-attribution triggers immediate CSO review. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. |
+
+---
+
+### H-009 — Patient data egress (data leaves the browser)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-009 |
+| **Description** | Patient-identifiable data is transmitted to a server outside the user's authenticated Medicus session, contrary to the intended-purpose statement. |
+| **Potential causes** | Code defect creates an unintended outbound request; supply-chain compromise; hostile extension update; user installs a forked or modified copy from an unofficial source; copy-paste error placing patient data in an outbound update-check request. |
+| **Affected users / components** | All users and their patients. Information governance impact for the deploying practice. Components: `service-worker.js`, `shared/update-checker.js`, `engine/api-client.js`. |
+| **Initial severity** | 5 (Catastrophic from an IG perspective; reportable to ICO) |
+| **Initial likelihood** | 2 (Unlikely) |
+| **Initial risk** | 10 |
+| **Controls / mitigations** | (a) The manifest's `host_permissions` are restricted to `*.medicus.health/*`, `*.api.england.medicus.health/*`, and `api.github.com/*` — outbound calls to any other host require a manifest change and a new release. (b) The update checker transmits only the version string to the GitHub releases API — no patient or practice identifiers. (c) Update checks can be disabled entirely via the Options page. (d) All Medicus API calls reuse the user's existing session cookies — no separate credentials are stored. (e) Code review and CI inspect `manifest.json` and outbound fetch calls at every release. (f) The repository is private; releases are built via the GitHub Actions release workflow. (g) Users are instructed never to install from an unofficial source. |
+| **Residual severity** | 5 |
+| **Residual likelihood** | 1 |
+| **Residual risk** | 5 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Any suspicion of egress triggers immediate suspension of distribution and CSO investigation. |
+
+---
+
+### H-010 — Data displayed out of context (misinterpretation)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-010 |
+| **Description** | A correctly-extracted value is displayed without the contextual qualifiers that change its clinical meaning (e.g. an HbA1c result from before a diagnostic change of treatment; a BP recorded under unusual conditions; a referral whose "open" status reflects an administrative backlog rather than clinical reality). |
+| **Potential causes** | Sentinel chips show single most-recent values without surrounding history; the API response does not include qualifiers; referrals appear "open" when actually awaiting administrative closure; waiting-room times reflect login state, not clinical urgency. |
+| **Affected users / components** | All users. Components: all display modules. |
+| **Initial severity** | 3 (Moderate) |
+| **Initial likelihood** | 3 (Possible) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) Sentinel chips link back to the Medicus record where full context is visible. (b) The Clinical Safety Notice states explicitly that the extension reorganises data already in Medicus — it does not interpret it. (c) Threshold checks are described in the disclaimer as arithmetic, not clinical. (d) No chip applies clinical language that asserts meaning beyond the threshold check. (e) The deploying practice's induction is asked to cover the "in-context vs out-of-context" distinction. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. |
+
+---
+
+### H-011 — Browser or platform compatibility failure
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-011 |
+| **Description** | The extension behaves incorrectly on an unsupported browser, browser version, operating system, or screen configuration — for example silently dropping a module, mis-rendering a chip, or producing layout overlap with Medicus. |
+| **Potential causes** | User installs on a Chromium-derivative (Edge, Brave) rather than supported Chrome; Manifest V3 API behaviour differs between Chrome channels; high-DPI scaling; very small viewport; OS-level accessibility settings; corporate group policy disables side panel API. |
+| **Affected users / components** | Users on non-standard browsers or screen configurations. Components: all UI surfaces, `manifest.json`. |
+| **Initial severity** | 2 (Minor — usability impact) |
+| **Initial likelihood** | 3 (Possible) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) Supported browser stated as Google Chrome stable channel (README). (b) Manifest V3 conformant; side panel API used in the recommended way. (c) Shadow DOM isolates extension CSS from Medicus CSS. (d) If a layout overlap is reported, user can close the side panel without losing Medicus state. (e) Practice IT is asked to confirm Chrome is the standard browser before deployment. |
+| **Residual severity** | 2 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 4 — Broadly acceptable |
+| **Acceptability** | Accepted. |
+
+---
+
+### H-012 — Alert fatigue and inhibition of independent verification
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-012 |
+| **Description** | Repeated low-value or false-positive alerts cause users to dismiss Sentinel or Triage Lens chips without due attention, including dismissing alerts that on a given occasion are genuinely meaningful — or cause users to bypass their normal verification step because "the extension would have flagged it". |
+| **Potential causes** | Practice-authored rule set is too broad; bundled rule set produces excessive chips for some patient cohorts; chips persist across sessions; visual prominence too aggressive; no way to dismiss-with-reason. |
+| **Affected users / components** | All clinical users. Components: Sentinel display logic, Triage Lens HUD, `sentinel-options/*`. |
+| **Initial severity** | 3 (Moderate) |
+| **Initial likelihood** | 3 (Possible) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) The deploying practice is asked to curate its rule set rather than enabling everything by default. (b) Custom rules can be disabled individually via the Options page. (c) Chips are colour-coded so that the user's eye is drawn to the most clinically relevant. (d) The Clinical Safety Notice frames the extension as a memory aid, not a workflow gate. (e) The CSO recommends that practices monitor for "alert fatigue" anecdotally and adjust rule sets accordingly. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted, with deploying-organisation duty to curate rule sets. |
+
+---
+
+## 6. Hazard summary
+
+| ID | Hazard | Initial S×L | Initial risk | Residual S×L | Residual risk | Status |
+|----|--------|-------------|-------------|--------------|---------------|--------|
+| H-001 | Wrong-patient data | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
+| H-002 | False-negative indicator | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-003 | False-positive indicator | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
+| H-004 | Practice-authored rule incorrect | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-005 | Silent failure | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-006 | Update regression | 3×2 | 6 | 3×2 | 6 | Accepted (ALARP) |
+| H-007 | Automation bias | 3×4 | 12 | 3×3 | 9 | Accepted (ALARP) — **primary residual risk** |
+| H-008 | Referral mis-attribution | 3×2 | 6 | 3×2 | 6 | Accepted (ALARP) |
+| H-009 | Patient data egress | 5×2 | 10 | 5×1 | 5 | Accepted (ALARP) |
+| H-010 | Out-of-context display | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-011 | Browser/platform compatibility | 2×3 | 6 | 2×2 | 4 | Broadly acceptable |
+| H-012 | Alert fatigue | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v1.4.16 is approved by the Clinical Safety Officer on the basis of this hazard log.
+
+## 7. Review and reporting
+
+This log is reviewed:
+
+- At every minor or major release of Medicus Suite
+- On any reported safety incident, near-miss or anomalous output
+- On any annual QOF specification refresh
+- On any change to Medicus's APIs that affects data extraction
+- On any change to UK regulatory guidance on software as a medical device
+
+Reports of suspected hazardous behaviour must be sent to the CSO at **dave@graysbrook.co.uk** with sufficient detail to investigate (date, time, version, module, observed output, expected output). Patient-identifiable data must not be sent by email — use the practice's own information governance channels.
+
+If an incident meeting the threshold of a patient safety incident is identified, it must be managed under the practice's own significant event analysis (SEA) process and reported to the CSO in parallel.
+
+## 8. Version history
+
+| Date | Version | Author | Change |
+|------|---------|--------|--------|
+| 2026-05 | 1.0 | DT | Initial hazard log — limited distribution to named GP users |
+| 2026-05-20 | 2.0 | DT | Reformatted to DCB0129 style; expanded to 12 hazards; added severity/likelihood matrix; added explicit acceptability thresholds; aligned with `CLINICAL-SAFETY-NOTICE.md` v2.0 |
+
+## 9. Clinical Safety Officer sign-off
+
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v1.4.16, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+
+**Dr Dave Triska, GMC 7534932**  
+**Clinical Safety Officer, Medicus Suite**  
+**Graysbrook Ltd**  
+**Date:** 2026-05-20
