@@ -1,5 +1,5 @@
-// Medicus Suite — Service Worker v1.0.0
-// Handles: Sentinel sidebar toggle, options page, Pusher relay, slot polling, storage migration.
+// Medicus Suite — Service Worker v1.1.0
+// Handles: Sentinel sidebar toggle, options page, Pusher relay, slot polling, storage migration, popout window.
 
 'use strict';
 
@@ -9,6 +9,7 @@
 try {
   importScripts('shared/request-monitor.js');
   importScripts('shared/update-checker.js');
+  importScripts('shared/popout-manager.js');
 } catch (e) {
   console.warn('[Service Worker] importScripts failed:', e.message);
 }
@@ -105,6 +106,24 @@ chrome.runtime.onStartup.addListener(() => {
   startPolling();
   initialiseRequestMonitor();
   initialiseUpdateChecker();
+  // Clear stale popout window ID on browser restart
+  chrome.storage.local.remove('popout.windowId');
+});
+
+// ── Popout window lifecycle ───────────────────────────────────────────────────
+
+chrome.windows?.onRemoved.addListener(async (windowId) => {
+  if (self.PopoutManager) {
+    await self.PopoutManager.onWindowRemoved(windowId);
+  }
+});
+
+chrome.windows?.onBoundsChanged?.addListener(async (win) => {
+  if (!self.PopoutManager) return;
+  const stored = await chrome.storage.local.get('popout.windowId');
+  if (stored['popout.windowId'] === win.id) {
+    await self.PopoutManager.saveWindowBounds(win.id);
+  }
 });
 
 // ── Triage Lens config initialisation ────────────────────────────────────────

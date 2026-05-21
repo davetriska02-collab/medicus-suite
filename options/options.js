@@ -720,6 +720,116 @@ rmSaveBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── Triage capacity alerts ────────────────────────────────────────────────────
+
+(async function initTriageAlerts() {
+  try {
+    if (!window.TriageAlertIO) return;
+    const container = document.getElementById('triageAlertRules');
+    if (!container) return;
+
+    let rules = await window.TriageAlertIO.getRules();
+
+    function renderRules() {
+      container.innerHTML = rules.map((rule, i) => `
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; min-width:120px;">
+            <input type="checkbox" class="ta-enabled" data-i="${i}" ${rule.enabled ? 'checked' : ''} />
+            <span style="font-size:12px; color:var(--text-2);">${escHtml(rule.label)}</span>
+          </label>
+          <span style="font-size:11px; color:var(--text-4);">Alert when ≥</span>
+          <input type="number" class="ta-threshold" data-i="${i}" value="${rule.threshold}" min="1" max="500"
+            style="width:64px; background:var(--bg-elev); border:1px solid var(--border-hi); color:var(--text-2);
+                   font-family:var(--mono); font-size:11px; border-radius:5px; padding:3px 6px;" />
+          <span style="font-size:11px; color:var(--text-4);">tasks</span>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.ta-enabled').forEach(cb => {
+        cb.addEventListener('change', () => {
+          rules[+cb.dataset.i].enabled = cb.checked;
+        });
+      });
+      container.querySelectorAll('.ta-threshold').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const v = parseInt(inp.value, 10);
+          if (!isNaN(v) && v >= 1) rules[+inp.dataset.i].threshold = v;
+        });
+      });
+    }
+
+    renderRules();
+
+    document.getElementById('saveTriageAlerts')?.addEventListener('click', async () => {
+      await window.TriageAlertIO.setRules(rules);
+      const tag = document.getElementById('triageAlertSaved');
+      if (tag) { tag.classList.add('show'); setTimeout(() => tag.classList.remove('show'), 2000); }
+    });
+  } catch (e) {
+    console.warn('[Triage alerts init]', e.message);
+  }
+})();
+
+// ── Slot alert rules ──────────────────────────────────────────────────────────
+
+(async function initSlotAlerts() {
+  try {
+    const container  = document.getElementById('slotAlertRules');
+    const addBtn     = document.getElementById('addSlotAlertRule');
+    const savedTag   = document.getElementById('slotAlertSaved');
+    if (!container || !addBtn) return;
+
+    const r = await chrome.storage.local.get('slots.alertRules');
+    let rules = r['slots.alertRules'] ?? [];
+
+    function save() {
+      chrome.storage.local.set({ 'slots.alertRules': rules });
+      if (savedTag) { savedTag.classList.add('show'); setTimeout(() => savedTag.classList.remove('show'), 2000); }
+    }
+
+    function renderRules() {
+      container.innerHTML = '';
+      rules.forEach((rule, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap;';
+        row.innerHTML = `
+          <input type="checkbox" class="sar-enabled" ${rule.enabled ? 'checked' : ''} title="Enable this rule" />
+          <input type="text" class="sar-type" value="${escAttr(rule.typeName)}" placeholder="Slot type name (exact)"
+            style="flex:1; min-width:140px; background:var(--bg-elev); border:1px solid var(--border-hi);
+                   color:var(--text-2); font-family:var(--mono); font-size:11px; border-radius:5px; padding:4px 8px;" />
+          <span style="font-size:11px; color:var(--text-4);">≤</span>
+          <input type="number" class="sar-threshold" value="${rule.threshold}" min="0" max="100"
+            style="width:60px; background:var(--bg-elev); border:1px solid var(--border-hi); color:var(--text-2);
+                   font-family:var(--mono); font-size:11px; border-radius:5px; padding:4px 6px;" />
+          <span style="font-size:11px; color:var(--text-4);">slots</span>
+          <button class="sar-delete ghost" style="padding:2px 8px; font-size:11px;" title="Remove rule">✕</button>
+        `;
+        row.querySelector('.sar-enabled').addEventListener('change', e => { rules[i].enabled = e.target.checked; save(); });
+        row.querySelector('.sar-type').addEventListener('change', e => { rules[i].typeName = e.target.value.trim(); save(); });
+        row.querySelector('.sar-threshold').addEventListener('change', e => {
+          const v = parseInt(e.target.value, 10);
+          if (!isNaN(v) && v >= 0) { rules[i].threshold = v; save(); }
+        });
+        row.querySelector('.sar-delete').addEventListener('click', () => {
+          rules.splice(i, 1);
+          save();
+          renderRules();
+        });
+        container.appendChild(row);
+      });
+    }
+
+    renderRules();
+
+    addBtn.addEventListener('click', () => {
+      rules.push({ id: Date.now().toString(36), typeName: '', threshold: 0, enabled: true });
+      renderRules();
+    });
+  } catch (e) {
+    console.warn('[Slot alerts init]', e.message);
+  }
+})();
+
 // ── Update banner (v1.3.1) ────────────────────────────────────────────────────
 
 (async function initUpdateBanner() {

@@ -21,6 +21,7 @@ let state = {
   expanded: new Set(),
   showExcluded: false,
   lastFetched: null,
+  alertRules: [],
 };
 
 let container = null;
@@ -30,9 +31,10 @@ let container = null;
 export async function init(el) {
   container = el;
 
-  // Load persisted hidden types and practice code
-  const stored = await chrome.storage.local.get(['slots.hiddenTypes', 'suite.practiceCode']);
+  // Load persisted hidden types, alert rules, and practice code
+  const stored = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'suite.practiceCode']);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
+  if (stored['slots.alertRules'])  state.alertRules = stored['slots.alertRules'];
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
@@ -63,6 +65,10 @@ function onRefresh() {
 function onStorageChange(changes) {
   if (changes['slots.hiddenTypes']) {
     state.hiddenTypes = new Set(changes['slots.hiddenTypes'].newValue || []);
+    render();
+  }
+  if (changes['slots.alertRules']) {
+    state.alertRules = changes['slots.alertRules'].newValue || [];
     render();
   }
   if (changes['suite.practiceCode']) {
@@ -206,6 +212,7 @@ function render() {
       <div id="slotsBanner" class="banner${state.error ? '' : ' hidden'}">
         ${escHtml(state.error || '')}
       </div>
+      ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
       ${state.loading ? renderSkeleton() : (d ? renderData(d, visible) : '')}
       <div class="foot">${state.lastFetched ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
     </div>
@@ -234,6 +241,33 @@ function renderHeader(visible) {
     <div class="date-presets">
       <button class="preset-btn${state.date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
       <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
+    </div>
+  `;
+}
+
+function renderAlertRibbon(byType) {
+  if (!state.alertRules || state.alertRules.length === 0) return '';
+  const triggered = [];
+  for (const rule of state.alertRules) {
+    if (!rule.enabled) continue;
+    const count = byType[rule.typeName] ?? 0;
+    if (count <= rule.threshold) {
+      triggered.push({ ...rule, count, level: count === 0 ? 'red' : 'amber' });
+    }
+  }
+  if (triggered.length === 0) return '';
+  const topLevel = triggered.some(t => t.level === 'red') ? 'red' : 'amber';
+  const icon = topLevel === 'red' ? '⛔' : '⚠';
+  const items = triggered.map(t => {
+    const msg = t.count === 0
+      ? `No ${escHtml(t.typeName)} slots`
+      : `${escHtml(t.typeName)}: ${t.count} remaining`;
+    return `<div class="slots-alert-item">${msg}</div>`;
+  }).join('');
+  return `
+    <div class="slots-alert-ribbon slots-alert-ribbon-${topLevel}">
+      <span class="slots-alert-icon">${icon}</span>
+      <div class="slots-alert-items">${items}</div>
     </div>
   `;
 }

@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.5.0] — 2026-05-21
+### Added
+- Slots: alert ribbon — configurable per-type thresholds; amber/red ribbon when count ≤ threshold; Options → Slot Counter to manage rules
+- Slots: alert rules included in backup/restore export
+- Pop-out window — ⊞ button in panel nav opens a free-floating popup window; position/size persisted; `chrome.windows` permission added
+- Triage alerts — `engine/triage-alert-engine.js` evaluates request monitor bucket counts against user-defined thresholds; rm-strip highlights amber/red; desktop notification on threshold crossing (once per session per bucket); Options → Suite → Triage capacity alerts
+- `shared/io/triage-alert-io.js`, `shared/popout-manager.js`, `shared/io/popout-io.js`
+
 ## [v1.4.16] — 2026-05-20
 ### Added
 - Referrals: "Show all N clinicians/specialties/hospitals" toggle below each chart (expands past top-15 cap)

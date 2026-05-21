@@ -93,6 +93,29 @@ settingsBtn.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
+// ── Popout button ─────────────────────────────────────────────────────────────
+
+const popoutBtn = document.getElementById('popoutBtn');
+
+async function updatePopoutBtn() {
+  if (!popoutBtn || !window.PopoutManager) return;
+  const isOpen = await window.PopoutManager.isOpen();
+  popoutBtn.title = isOpen ? 'Focus floating window' : 'Pop out to floating window';
+  popoutBtn.classList.toggle('active', isOpen);
+}
+
+popoutBtn?.addEventListener('click', async () => {
+  if (!window.PopoutManager) return;
+  await window.PopoutManager.open();
+  await updatePopoutBtn();
+});
+
+chrome.runtime.onMessage.addListener(msg => {
+  if (msg?.type === 'popout:closed') updatePopoutBtn();
+});
+
+updatePopoutBtn();
+
 async function switchModule(name) {
   // Cleanup previous module
   if (moduleCleanup) { try { moduleCleanup(); } catch (e) {} moduleCleanup = null; }
@@ -430,6 +453,7 @@ async function fetchAndRenderRmStrip() {
   }
 
   renderRmStrip(result, code, cfg.assigneeId);
+  applyTriageAlerts(result.buckets);
 }
 
 function renderRmStrip(result, practiceCode, assigneeId) {
@@ -472,9 +496,47 @@ function renderRmStrip(result, practiceCode, assigneeId) {
   });
 }
 
+// ── Triage capacity alerts ────────────────────────────────────────────────────
+
+const _triageAlertedBuckets = new Map(); // key → last alerted count (session memory)
+
+async function applyTriageAlerts(buckets) {
+  if (!rmStripEl || !window.TriageAlertEngine || !window.TriageAlertIO) return;
+  const rules = await window.TriageAlertIO.getRules();
+  const { triggered, maxLevel } = window.TriageAlertEngine.evaluate(buckets, rules);
+
+  // Update strip class
+  rmStripEl.classList.remove('rm-strip-alerted-amber', 'rm-strip-alerted-red');
+  if (maxLevel) rmStripEl.classList.add(`rm-strip-alerted-${maxLevel}`);
+
+  // Desktop notifications — once per threshold crossing per session
+  for (const t of triggered) {
+    const prev = _triageAlertedBuckets.get(t.key);
+    const crossed = prev === undefined || (prev < t.threshold && t.count >= t.threshold);
+    if (crossed) {
+      _triageAlertedBuckets.set(t.key, t.count);
+      if (Notification.permission === 'granted') {
+        new Notification('Medicus Suite — Triage alert', {
+          body: `${t.label}: ${t.count} tasks (threshold ${t.threshold})`,
+          silent: true,
+        });
+      }
+    } else {
+      _triageAlertedBuckets.set(t.key, t.count);
+    }
+  }
+  // Clear alerted state for buckets that dropped back below threshold
+  for (const [key, _] of _triageAlertedBuckets) {
+    if (!triggered.find(t => t.key === key)) _triageAlertedBuckets.delete(key);
+  }
+}
+
 // React to config changes — re-render immediately
 chrome.storage.onChanged.addListener(changes => {
   if (Object.keys(changes).some(k => k.startsWith('suite.requestMonitor.'))) {
+    fetchAndRenderRmStrip();
+  }
+  if (Object.keys(changes).some(k => k.startsWith('suite.triageAlert.'))) {
     fetchAndRenderRmStrip();
   }
 });

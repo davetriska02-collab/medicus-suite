@@ -353,11 +353,25 @@
           </div>
         </div>
 
+        <!-- Triage capacity alerts ─────────────────────────────────────────── -->
+        <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
+          <h2 style="font-size:13px; margin:0 0 4px;">Triage capacity alerts</h2>
+          <p class="section-desc" style="margin-bottom:14px;">
+            Highlights the triage strip and fires a desktop notification when a task bucket
+            exceeds its threshold. Requires the monitor above to be enabled.
+          </p>
+          <div id="triageAlertRules" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;"></div>
+          <div class="actions" style="margin-top:4px;">
+            <button class="primary" id="saveTriageAlerts">Save alert thresholds</button>
+            <span class="saved" id="triageAlertSaved">Saved ✓</span>
+          </div>
+        </div>
+
       </section>
 
       <!-- Slots section -->
       <section class="opt-section" id="sect-slots">
-        <h1>Slot Counter <span class="module-badge">v2.2</span></h1>
+        <h1>Slot Counter <span class="module-badge">v2.3</span></h1>
         <p class="section-desc">
           The practice code is shared with the Submissions Tracker; set it in the Suite tab.<br>
           Slot type visibility is managed directly in the Slots panel by ticking/unticking rows.
@@ -365,6 +379,17 @@
         <div class="field">
           <label class="field-label">Slot type filters</label>
           <p class="field-help">Open the side panel → Slots tab and tick/untick slot types to include or exclude them from the total count. Your choices are saved automatically.</p>
+        </div>
+
+        <div style="margin-top:28px; padding-top:20px; border-top:1px solid var(--border);">
+          <h2 style="font-size:13px; margin:0 0 4px;">Slot alert rules</h2>
+          <p class="section-desc" style="margin-bottom:14px;">
+            Show a coloured ribbon in the Slots panel when a slot type drops to or below a threshold.
+            Set threshold to 0 to alert only when that type is completely gone.
+          </p>
+          <div id="slotAlertRules" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;"></div>
+          <button class="ghost" id="addSlotAlertRule">+ Add rule</button>
+          <span class="saved" id="slotAlertSaved">Saved ✓</span>
         </div>
       </section>
 
@@ -549,6 +574,8 @@
   <script src="../shared/practice-code.js"></script>
   <script src="../shared/api-diag.js"></script>
   <script src="../shared/request-monitor.js"></script>
+  <script src="../engine/triage-alert-engine.js"></script>
+  <script src="../shared/io/triage-alert-io.js"></script>
   <script src="../shared/update-checker.js"></script>
   <script src="options.js"></script>
 </body>

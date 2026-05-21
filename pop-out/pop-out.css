@@ -1,0 +1,53 @@
+/* Medicus Suite — Pop-out window overrides */
+
+.popout-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.popout-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 6px 0 10px;
+  height: 38px;
+  flex-shrink: 0;
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.popout-titlebar .nav-brand {
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.popout-tabs {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
+}
+.popout-tabs::-webkit-scrollbar { display: none; }
+
+.popout-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+/* Pop-out content fills remaining height */
+.popout-shell .suite-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Slightly wider default content padding for popup windows */
+.popout-shell .module-wrap {
+  padding: 14px 16px;
+}
