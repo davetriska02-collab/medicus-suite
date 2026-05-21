@@ -4,7 +4,8 @@ All notable changes to Medicus Suite are documented here.
 
 ## [v1.5.2] — 2026-05-21
 ### Added
-- Submissions: configurable RAG thresholds for medical and admin request tiles — amber/red background tint + coloured dot when today's cumulative total reaches a configured level; red alert strip above tiles when any red threshold is crossed; Options → Submissions → Workload thresholds to configure per-type amber/red counts and enable/disable
+- Submissions: configurable RAG thresholds for medical and admin request tiles — amber/red tint + coloured dot on tile when today's total reaches threshold; Options → Submissions → Workload thresholds
+- Global demand strip (visible on every panel tab, polls every 60s) — shows amber/red pill for medical/admin when threshold crossed; "Submissions →" button navigates to the module
 
 ## [v1.5.1] — 2026-05-21
 ### Added

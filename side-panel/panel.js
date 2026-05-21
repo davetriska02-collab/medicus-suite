@@ -539,12 +539,103 @@ chrome.storage.onChanged.addListener(changes => {
   if (Object.keys(changes).some(k => k.startsWith('suite.triageAlert.'))) {
     fetchAndRenderRmStrip();
   }
+  if (changes['submissions.thresholds']) {
+    fetchAndRenderSubRagStrip();
+  }
 });
 
 // Boot the rm strip
 fetchAndRenderRmStrip();
 // Initial poll interval — will adjust to cfg.pollSeconds on first fetch
 rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
+
+// ── Submissions demand strip (global — visible on every module) ───────────────
+// Shows amber/red when medical or admin request counts hit configured thresholds.
+// Polls every 60s, but only makes API calls when at least one threshold is enabled.
+
+const subRagStripEl    = document.getElementById('subRagStrip');
+const SUB_RAG_POLL_MS  = 60 * 1000;
+
+const SUB_RAG_TYPES = [
+  { key: 'medical', label: 'Medical', apiType: 'medical_patient_request_task' },
+  { key: 'admin',   label: 'Admin',   apiType: 'admin_patient_request_task'   },
+];
+
+const DEFAULT_SUB_THRESHOLDS = {
+  medical: { amber: 30, red: 60, enabled: false },
+  admin:   { amber: 20, red: 40, enabled: false },
+};
+
+function _subRagLevel(key, value, thresholds) {
+  const t = { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) };
+  if (!t.enabled) return null;
+  if (value >= (t.red   || Infinity)) return 'red';
+  if (value >= (t.amber || Infinity)) return 'amber';
+  return null;
+}
+
+async function fetchAndRenderSubRagStrip() {
+  if (!subRagStripEl) return;
+
+  const stored = await chrome.storage.local.get('submissions.thresholds');
+  const thresholds = { ...DEFAULT_SUB_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
+
+  const anyEnabled = SUB_RAG_TYPES.some(t => thresholds[t.key]?.enabled);
+  if (!anyEnabled) {
+    subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
+    subRagStripEl.innerHTML = '';
+    return;
+  }
+
+  const { code } = await window.PracticeCode.resolve();
+  if (!code) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const results = await Promise.allSettled(
+    SUB_RAG_TYPES.map(async tt => {
+      const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
+      const r = await fetch(url, { credentials: 'include' });
+      if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
+      const d = await r.json();
+      return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
+    })
+  );
+
+  const triggered = [];
+  let maxLevel = null;
+  for (let i = 0; i < SUB_RAG_TYPES.length; i++) {
+    const res = results[i];
+    if (res.status !== 'fulfilled') continue;
+    const { key, label, count } = res.value;
+    const level = _subRagLevel(key, count, thresholds);
+    if (!level) continue;
+    triggered.push({ label, count, level });
+    if (level === 'red' || maxLevel === null) maxLevel = level;
+    else if (level === 'amber' && maxLevel !== 'red') maxLevel = level;
+  }
+
+  if (triggered.length === 0) {
+    subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
+    subRagStripEl.innerHTML = '';
+    return;
+  }
+
+  const pills = triggered.map(t =>
+    `<span class="sub-rag-pill sub-rag-pill--${t.level}">${t.label}: ${t.count}</span>`
+  ).join('');
+
+  subRagStripEl.className = `sub-rag-strip sub-rag-strip--${maxLevel}`;
+  subRagStripEl.innerHTML = `
+    <span class="sub-rag-icon">📊</span>
+    <span class="sub-rag-label">Demand:</span>
+    ${pills}
+    <button class="sub-rag-goto" title="Go to Submissions">Submissions →</button>
+  `;
+  subRagStripEl.querySelector('.sub-rag-goto')?.addEventListener('click', () => switchModule('submissions'));
+}
+
+fetchAndRenderSubRagStrip();
+setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
