@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.5.1] — 2026-05-21
+### Added
+- Referrals: "Rate" chart tab — referrals as a proportion of consultations per clinician (referrals ÷ consultations, shown as %) sorted by rate descending; cyan bar colour, tooltip shows raw ref/consult counts; clinician search applies; show-all toggle works
+- Referrals: parallel-fetches `window.ActivityApi.fetchActivityReport` alongside referral data; activity fetch failure is isolated (amber notice in Rate tab only, other tabs unaffected)
+
 ## [v1.5.0] — 2026-05-21
 ### Added
 - Slots: alert ribbon — configurable per-type thresholds; amber/red ribbon when count ≤ threshold; Options → Slot Counter to manage rules

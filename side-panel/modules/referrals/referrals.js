@@ -34,6 +34,9 @@ let state = {
   lastFetched:      null,
   lastAttemptedUrl: null,
   showDiagnostics:  false,
+  activityData:     null,
+  activityError:    null,
+  activityLoading:  false,
 };
 
 function resolveStored(stored) {
@@ -60,6 +63,34 @@ function getFilteredAggregated() {
     state.activeStatuses.has(r.displayStatus || '')
   );
   return api.aggregate(filtered);
+}
+
+// Builds rate rows: referrals ÷ consultations per clinician.
+// Returns sorted array of { name, referrals, consultations, rate } or null.
+function buildRateRows() {
+  if (!state.activityData || !state.aggregated) return null;
+
+  const consultMap = new Map();
+  for (const row of state.activityData) {
+    const key = (row.name || '').toLowerCase().trim();
+    consultMap.set(key, (consultMap.get(key) || 0) + (Number(row.consultations) || 0));
+  }
+
+  const a = getFilteredAggregated() || state.aggregated;
+  let rows = [];
+  for (const c of a.byClinician) {
+    const key          = c.name.toLowerCase().trim();
+    const consultations = consultMap.get(key);
+    if (consultations == null || consultations === 0) continue;
+    rows.push({ name: c.name, referrals: c.count, consultations, rate: c.count / consultations });
+  }
+
+  if (state.clinicianSearch) {
+    const q = state.clinicianSearch.toLowerCase();
+    rows = rows.filter(r => r.name.toLowerCase().includes(q));
+  }
+
+  return rows.sort((a, b) => b.rate - a.rate);
 }
 
 export async function init(el) {
@@ -122,34 +153,58 @@ async function fetchAndRender() {
 
   const { code, source } = await window.PracticeCode.resolve();
 
-  state.loading = true;
-  state.error   = null;
+  state.loading        = true;
+  state.error          = null;
   state.loadingProgress  = null;
+  state.activityLoading  = true;
+  state.activityError    = null;
   state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
   render();
 
-  try {
-    const result = await api.fetchReferrals(code, state.startDate, state.endDate, {
+  const actFetch = window.ActivityApi
+    ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
+        fetch: (url, init) => window.ApiDiag.fetch({
+          module: 'referrals-rate', url, code: code || '(auto)', codeSource: source || 'tab', init,
+        }),
+      })
+    : Promise.reject(new Error('Activity module not loaded'));
+
+  const [refResult, actResult] = await Promise.allSettled([
+    api.fetchReferrals(code, state.startDate, state.endDate, {
       templateUrl: state.discoveryUrl,
       onProgress: (loaded, total) => { state.loadingProgress = { loaded, total }; render(); },
       fetch: (url, init) => window.ApiDiag.fetch({
         module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
       }),
-    });
+    }),
+    actFetch,
+  ]);
+
+  if (refResult.status === 'fulfilled') {
+    const result = refResult.value;
     state.rawReferrals = result.referrals;
     state.totalCount   = result.totalCount;
     state.aggregated   = api.aggregate(result.referrals);
     state.lastFetched  = new Date();
     state.error        = null;
     if (result.url) state.lastAttemptedUrl = result.url;
-  } catch (e) {
-    state.error = e.message || String(e);
-    if (e.url) state.lastAttemptedUrl = e.url;
-  } finally {
-    state.loading = false;
-    state.loadingProgress = null;
-    render();
+  } else {
+    state.error = refResult.reason?.message || String(refResult.reason);
+    if (refResult.reason?.url) state.lastAttemptedUrl = refResult.reason.url;
   }
+
+  if (actResult.status === 'fulfilled') {
+    state.activityData  = actResult.value?.rowData || [];
+    state.activityError = null;
+  } else {
+    state.activityData  = null;
+    state.activityError = actResult.reason?.message || String(actResult.reason);
+  }
+
+  state.loading         = false;
+  state.loadingProgress = null;
+  state.activityLoading = false;
+  render();
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -312,10 +367,11 @@ function renderData() {
           <button class="ref-chart-tab ${state.chartView === 'clinician' ? 'active' : ''}" data-view="clinician">By clinician</button>
           <button class="ref-chart-tab ${state.chartView === 'specialty' ? 'active' : ''}" data-view="specialty">By specialty</button>
           <button class="ref-chart-tab ${state.chartView === 'hospital'  ? 'active' : ''}" data-view="hospital">By hospital</button>
+          <button class="ref-chart-tab ${state.chartView === 'rate'      ? 'active' : ''}" data-view="rate">Rate</button>
         </div>
       </div>
-      ${state.chartView === 'clinician' ? renderClinicianSearch() : ''}
-      <div class="ref-bars">${renderBars(a)}</div>
+      ${(state.chartView === 'clinician' || state.chartView === 'rate') ? renderClinicianSearch() : ''}
+      <div class="ref-bars">${state.chartView === 'rate' ? renderRateChart() : renderBars(a)}</div>
     </div>
   `;
 }
@@ -478,6 +534,65 @@ function renderBars(a) {
     </button>` : '';
 
   return barsHtml + showAllBtn;
+}
+
+function renderRateChart() {
+  if (state.activityLoading) {
+    return '<div class="ref-rate-loading">Loading activity data…</div>';
+  }
+  if (state.activityError) {
+    return `
+      <div class="ref-rate-unavailable">
+        <div class="ref-rate-unavail-head">Activity data unavailable</div>
+        <div class="ref-rate-unavail-body">Check that you are signed in to Medicus and the Activity module has been used in this session.</div>
+        <div class="ref-rate-unavail-detail">${escHtml(state.activityError)}</div>
+      </div>`;
+  }
+  if (!state.activityData || !state.aggregated) {
+    return '<div class="ref-empty">No data for rate calculation.</div>';
+  }
+
+  const allRows = buildRateRows();
+  if (!allRows || allRows.length === 0) {
+    return '<div class="ref-empty">No clinicians with matching activity data for this period.</div>';
+  }
+
+  // Count clinicians excluded due to missing activity data
+  const a        = getFilteredAggregated() || state.aggregated;
+  const actNames = new Set(state.activityData.map(r => (r.name || '').toLowerCase().trim()));
+  const excluded = a.byClinician.filter(c => !actNames.has(c.name.toLowerCase().trim())).length;
+
+  const totalRows = allRows.length;
+  const rows      = state.chartExpanded ? allRows : allRows.slice(0, TOP_N);
+  const maxRate   = rows[0].rate || 1;
+
+  const barsHtml = rows.map(r => {
+    const barPct  = (r.rate / maxRate) * 100;
+    const pctDisp = (r.rate * 100).toFixed(1);
+    return `
+      <div class="ref-bar-row ref-bar-row--rate">
+        <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
+        <div class="ref-bar-track">
+          <div class="ref-bar-seg" style="width:${barPct.toFixed(2)}%;background:#22d3ee"
+               title="${escAttr(r.name)}: ${pctDisp}% (${r.referrals} ref / ${r.consultations} consult)"></div>
+        </div>
+        <div class="ref-bar-rate-label">
+          <span class="ref-rate-pct">${pctDisp}%</span>
+          <span class="ref-rate-counts">${r.referrals}/${r.consultations}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  const missingNote = excluded > 0
+    ? `<div class="ref-rate-missing-note">${excluded} clinician${excluded > 1 ? 's' : ''} excluded — no matching activity data</div>`
+    : '';
+
+  const showAllBtn = totalRows > TOP_N ? `
+    <button class="ref-show-all" id="refShowAll">
+      ${state.chartExpanded ? `▴ Show top ${TOP_N}` : `▾ Show all ${totalRows} clinicians`}
+    </button>` : '';
+
+  return missingNote + barsHtml + showAllBtn;
 }
 
 // ── Wiring ────────────────────────────────────────────────────────────────────
