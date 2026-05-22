@@ -3,19 +3,32 @@
 // Single envelope format for all per-module and suite-wide backups:
 //   format: "medicus-suite-backup"
 //   formatVersion: 1
-//   scope: "suite" | "sentinel" | "capacity" | "triage" | "slots" | "submissions"
+//   scope: "suite" | "sentinel" | "capacity" | "triage" | "triageAlerts" |
+//           "slots" | "submissions" | "popout"
 //   modules: { [scope]: { ...module data } }
 //
 // A scoped export (e.g. just Capacity) includes only that module's key under
 // modules and sets scope to the module name.
+//
+// IMPORTANT — when adding new chrome.storage.local keys to a module:
+//   1. Update shared/io/<module>-io.js — add the key to *Export() and *Import()
+//   2. That's all: doFullExport() in options.js delegates to those functions,
+//      so the new key is captured automatically.
+// When adding a brand-new module:
+//   1. Create shared/io/<module>-io.js with *Export()/*Import()
+//   2. Add the scope name to VALID_SCOPES below
+//   3. Wire it into doFullExport/applyEnvelope in options/options.js
+//   4. Add a preview line in previewEnvelope() below
+//   5. Load the script in options/options.html
+//   6. Add a per-module export card in options/options.html
 
 'use strict';
 
 const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
-const EXTENSION_VERSION = '1.1.0';
+const EXTENSION_VERSION = '1.6.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'slots', 'submissions'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -100,11 +113,20 @@ function previewEnvelope(envelope) {
     lines.push(`Triage Lens: ${ruleCount} rule(s)`);
   }
   if (mods.slots) {
-    const hiddenCount = (mods.slots.hiddenTypes || []).length;
-    lines.push(`Slot Counter: ${hiddenCount} hidden type(s)`);
+    const hiddenCount  = (mods.slots.hiddenTypes || []).length;
+    const alertCount   = (mods.slots.alertRules  || []).length;
+    lines.push(`Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s)`);
   }
   if (mods.submissions) {
-    lines.push('Submissions Tracker: config included');
+    const hasThresholds = mods.submissions.thresholds != null;
+    lines.push(`Submissions Tracker: config included${hasThresholds ? ', thresholds included' : ''}`);
+  }
+  if (mods.triageAlerts) {
+    const ruleCount = (mods.triageAlerts.rules || []).length;
+    lines.push(`Triage capacity alerts: ${ruleCount} rule(s)`);
+  }
+  if (mods.popout) {
+    lines.push('Pop-out: window state included');
   }
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
