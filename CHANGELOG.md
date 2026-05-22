@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.5.4] — 2026-05-22
+### Fixed
+- Patient Record Viewer: removed `visualiser-core.html` from `manifest.json` `sandbox.pages` — the manifest sandbox gave the page an opaque (null) origin, causing `URL.createObjectURL` to produce `blob:null/…` URLs that Chrome refuses to load as Web Worker scripts; removing the sandbox restores extension origin so the pdf.js worker initialises correctly
+
 ## [v1.5.3] — 2026-05-21
 ### Changed
 - Nav: removed redundant "Alerts" tab (`data-module="triage"`) from side panel and pop-out — triage capacity alerts remain active via the rm-strip; triage lens overlay unaffected
