@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.8.1] — 2026-05-22
+### Changed
+- Monitoring tab moved to second position in nav (immediately after Slots) in both side panel and pop-out
+
 ## [v1.8.0] — 2026-05-22
 ### Added — Visualiser Tier 2 & Tier 3 (filters, swim-lane, eFI, drugs, PINCER, QOF review)
 Substantial follow-up to v1.7.0. Continuity view scroll/filter problem fixed by giving every tab a single shared filter model; Timeline replaced with a true D3 swim-lane; engine-layer features added for frailty, polypharmacy, prescribing safety and review compliance.
