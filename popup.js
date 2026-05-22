@@ -35,7 +35,7 @@ refreshBtn.addEventListener('click', () => {
 });
 
 visualiserBtn.addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
   window.close();
 });
 

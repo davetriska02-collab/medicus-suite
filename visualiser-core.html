@@ -469,14 +469,17 @@ function parseAll(pageTexts) {
 // ══ PDF LOAD ═══════════════════════════════════════════════════════════════
 
 async function loadPDF(file) {
+  console.log('[Visualiser] loadPDF start —', file.name, file.size, 'bytes');
   setProgress(true, 2, 'Loading PDF…');
   const _stage = { s: 'loading PDF' };
   try {
     _stage.s = 'reading file';
     const ab = await file.arrayBuffer();
+    console.log('[Visualiser] read', ab.byteLength, 'bytes');
     _stage.s = 'extracting text';
     const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
     const total = pdf.numPages;
+    console.log('[Visualiser] PDF opened,', total, 'pages');
     const pageTexts = [];
     for (let p = 1; p <= total; p++) {
       setProgress(true, 5 + (p/total)*60, `Extracting page ${p} of ${total}…`);
@@ -489,6 +492,9 @@ async function loadPDF(file) {
     await delay(10);
     _stage.s = 'parsing entries';
     const result = parseAll(pageTexts);
+    console.log('[Visualiser] parsed:', result.entries.length, 'entries,',
+      result.activeProblems.length, 'active problems,',
+      result.pastProblems.length, 'past problems');
     _s.demographics   = result.demographics;
     _s.activeProblems = result.activeProblems;
     _s.pastProblems   = result.pastProblems;
@@ -498,6 +504,7 @@ async function loadPDF(file) {
     _stage.s = 'building views';
     buildApp();
     setProgress(false, 100, 'Done');
+    console.log('[Visualiser] done');
   } catch(err) {
     setProgress(false, 0, '');
     console.error('[Visualiser] failed at stage:', _stage.s, err);
@@ -1072,7 +1079,11 @@ function setupDrop() {
   const box  = document.getElementById('drop-box');
   const fi   = document.getElementById('file-input');
 
-  fi.addEventListener('change', e => { if (e.target.files[0]) loadPDF(e.target.files[0]); });
+  fi.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    console.log('[Visualiser] change event fired, file =', f && f.name);
+    if (f) loadPDF(f);
+  });
 
   zone.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('drag-over'); });
   zone.addEventListener('dragleave', () => box.classList.remove('drag-over'));
@@ -1080,11 +1091,13 @@ function setupDrop() {
     e.preventDefault();
     box.classList.remove('drag-over');
     const f = e.dataTransfer.files[0];
-    if (f && f.name.endsWith('.pdf')) loadPDF(f);
+    console.log('[Visualiser] drop event fired, file =', f && f.name);
+    if (f && f.name.toLowerCase().endsWith('.pdf')) loadPDF(f);
   });
 }
 
 setupDrop();
+console.log('[Visualiser] ready');
 </script>
 </body>
 </html>

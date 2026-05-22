@@ -80,7 +80,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const mod = tab.dataset.module;
     if (mod === 'visualiser') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('visualiser.html') });
+      chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
       return;
     }
     if (mod === activeModule) return;
