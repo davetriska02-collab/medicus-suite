@@ -1,9 +1,14 @@
 'use strict';
 
 // ══ PDF.JS WORKER ══════════════════════════════════════════════════════════
-// Worker is shipped as a same-origin extension resource so it loads under the
-// default extension CSP (script-src 'self'). No blob URLs, no eval.
-pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
+// Worker is shipped as a same-origin extension resource. Use chrome.runtime
+// .getURL so pdf.js loads it as a real Worker (not the slow main-thread "fake
+// worker" fallback). Falls back to a relative URL if chrome.runtime isn't
+// available (e.g. when serving the file outside the extension during dev).
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL)
+    ? chrome.runtime.getURL('vendor/pdf.worker.min.js')
+    : './vendor/pdf.worker.min.js';
 
 // ══ CONSTANTS ══════════════════════════════════════════════════════════════
 
