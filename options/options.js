@@ -302,79 +302,51 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 // Uses SuiteEnvelope from shared/io/suite-envelope.js (loaded as a script tag).
 // IO functions are inlined here to avoid ES module issues in options pages.
 
-// --- Low-level storage helpers (mirrors shared/io/*.js without chrome.storage calls
-//     needing to be module-level async; these are called from event handlers) ---
+// --- Backup helpers — delegate to per-module IO files (loaded in options.html).
+//     See shared/io/suite-envelope.js for the convention: when you add a new
+//     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const r = await chrome.storage.local.get([
-    'sentinel.config', 'sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules',
-    'capacity.presets', 'capacity.activePresetId', 'capacity.viewMode', 'capacity.showWeekends',
-    'triagelens.config', 'config',
-    'slots.hiddenTypes',
-    'submissions.config',
-    'suite.practiceCode',
+  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout] = await Promise.all([
+    sentinelExport(),
+    capacityExport(),
+    triageExport(),
+    TriageAlertIO.exportData(),
+    slotCounterExport(),
+    submissionsExport(),
+    popoutExport(),
   ]);
-  const modules = {
-    sentinel: {
-      config:      r['sentinel.config']      || {},
-      rules:       r['sentinel.rules']       || {},
-      orgRules:    r['sentinel.orgRules']    || null,
-      customRules: r['sentinel.customRules'] || [],
-    },
-    capacity: {
-      presets:        r['capacity.presets']        || [],
-      activePresetId: r['capacity.activePresetId'] || null,
-      viewMode:       r['capacity.viewMode']       || 'week',
-      showWeekends:   r['capacity.showWeekends']   || false,
-    },
-    triage:  { config: r['triagelens.config'] || r['config'] || {} },
-    slots:   { hiddenTypes: r['slots.hiddenTypes'] || [] },
-    submissions: { config: r['submissions.config'] || {}, practiceCode: r['suite.practiceCode'] || null },
-    suite:   { practiceCode: r['suite.practiceCode'] || null },
-  };
-  return window.SuiteEnvelope.wrap('suite', modules);
+  const pc = submissions.practiceCode ?? null;
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, suite: { practiceCode: pc } });
 }
 
 async function doModuleExport(scope) {
-  const r = await chrome.storage.local.get([
-    'sentinel.config', 'sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules',
-    'capacity.presets', 'capacity.activePresetId', 'capacity.viewMode', 'capacity.showWeekends',
-    'triagelens.config', 'config',
-    'slots.hiddenTypes',
-    'submissions.config',
-    'suite.practiceCode',
-  ]);
-  let modules = {};
-  if (scope === 'sentinel') modules.sentinel = { config: r['sentinel.config']||{}, rules: r['sentinel.rules']||{}, orgRules: r['sentinel.orgRules']||null, customRules: r['sentinel.customRules']||[] };
-  if (scope === 'capacity') modules.capacity = { presets: r['capacity.presets']||[], activePresetId: r['capacity.activePresetId']||null, viewMode: r['capacity.viewMode']||'week', showWeekends: r['capacity.showWeekends']||false };
-  if (scope === 'triage')   modules.triage = { config: r['triagelens.config'] || r['config'] || {} };
-  if (scope === 'slots')    modules.slots = { hiddenTypes: r['slots.hiddenTypes']||[] };
-  if (scope === 'submissions') modules.submissions = { config: r['submissions.config']||{}, practiceCode: r['suite.practiceCode']||null };
-  return window.SuiteEnvelope.wrap(scope, modules);
+  const exporters = {
+    sentinel:     () => sentinelExport(),
+    capacity:     () => capacityExport(),
+    triage:       () => triageExport(),
+    triageAlerts: () => TriageAlertIO.exportData(),
+    slots:        () => slotCounterExport(),
+    submissions:  () => submissionsExport(),
+    popout:       () => popoutExport(),
+  };
+  if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
+  const data = await exporters[scope]();
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
 }
 
 async function applyEnvelope(envelope) {
-  const toSet = {};
   const mods = envelope.modules || {};
-  if (mods.sentinel) {
-    if (mods.sentinel.config)      toSet['sentinel.config']      = mods.sentinel.config;
-    if (mods.sentinel.rules)       toSet['sentinel.rules']       = mods.sentinel.rules;
-    if (mods.sentinel.orgRules !== undefined) toSet['sentinel.orgRules'] = mods.sentinel.orgRules;
-    if (mods.sentinel.customRules) toSet['sentinel.customRules'] = mods.sentinel.customRules;
-  }
-  if (mods.capacity) {
-    if (mods.capacity.presets !== undefined)        toSet['capacity.presets']        = mods.capacity.presets;
-    if (mods.capacity.activePresetId !== undefined) toSet['capacity.activePresetId'] = mods.capacity.activePresetId;
-    if (mods.capacity.viewMode)                     toSet['capacity.viewMode']       = mods.capacity.viewMode;
-    if (mods.capacity.showWeekends !== undefined)   toSet['capacity.showWeekends']   = mods.capacity.showWeekends;
-  }
-  if (mods.triage?.config)       toSet['triagelens.config']  = mods.triage.config;
-  if (mods.slots?.hiddenTypes)   toSet['slots.hiddenTypes']  = mods.slots.hiddenTypes;
-  if (mods.submissions?.config)  toSet['submissions.config'] = mods.submissions.config;
-  if (mods.suite?.practiceCode || mods.submissions?.practiceCode) {
-    toSet['suite.practiceCode'] = mods.suite?.practiceCode || mods.submissions?.practiceCode;
-  }
-  if (Object.keys(toSet).length > 0) await chrome.storage.local.set(toSet);
+  await Promise.all([
+    mods.sentinel     && sentinelImport(mods.sentinel),
+    mods.capacity     && capacityImport(mods.capacity),
+    mods.triage       && triageImport(mods.triage),
+    mods.triageAlerts && TriageAlertIO.importData(mods.triageAlerts),
+    mods.slots        && slotCounterImport(mods.slots),
+    mods.submissions  && submissionsImport(mods.submissions),
+    mods.popout       && popoutImport(mods.popout),
+    mods.suite?.practiceCode && chrome.storage.local.set({ 'suite.practiceCode': mods.suite.practiceCode }),
+  ].filter(Boolean));
 }
 
 function downloadJson(obj, filename) {

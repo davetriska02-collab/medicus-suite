@@ -3,10 +3,11 @@
 'use strict';
 
 async function submissionsExport() {
-  const r = await chrome.storage.local.get(['submissions.config', 'suite.practiceCode']);
+  const r = await chrome.storage.local.get(['submissions.config', 'submissions.thresholds', 'suite.practiceCode']);
   return {
-    config: r['submissions.config'] ?? {},
-    practiceCode: r['suite.practiceCode'] ?? null,
+    config:       r['submissions.config']     ?? {},
+    thresholds:   r['submissions.thresholds'] ?? null,
+    practiceCode: r['suite.practiceCode']     ?? null,
   };
 }
 
@@ -19,7 +20,13 @@ async function submissionsImport(data, _opts = {}) {
     }
     toSet['submissions.config'] = data.config;
   }
-  if (data.practiceCode !== undefined && data.practiceCode !== null) {
+  if (data.thresholds != null) {
+    if (typeof data.thresholds !== 'object' || Array.isArray(data.thresholds)) {
+      throw new Error('submissions.thresholds must be an object.');
+    }
+    toSet['submissions.thresholds'] = data.thresholds;
+  }
+  if (data.practiceCode != null) {
     if (typeof data.practiceCode !== 'string') throw new Error('practiceCode must be a string.');
     toSet['suite.practiceCode'] = data.practiceCode;
   }
