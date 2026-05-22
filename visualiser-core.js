@@ -34,6 +34,57 @@ const BUCKET_COLOUR = {
   referral:     '#d4351c',
 };
 
+// Reference Change Values — fractional change between successive results that
+// is clinically significant. Source: published RCVs (PMC10197470 et al).
+// Match by lower-cased substring on the analyte name. Longest key wins.
+const RCV_TABLE = {
+  'sodium': 0.013, 'potassium': 0.05, 'chloride': 0.025, 'bicarbonate': 0.10,
+  'urea': 0.16, 'creatinine': 0.14, 'egfr': 0.14,
+  'calcium': 0.04, 'phosphate': 0.13, 'magnesium': 0.07,
+  'albumin': 0.045, 'total protein': 0.04, 'bilirubin': 0.35,
+  'alt': 0.35, 'ast': 0.20, 'alkaline phosphatase': 0.10, 'alp': 0.10, 'ggt': 0.30,
+  'haemoglobin': 0.08, 'hgb': 0.08, ' hb ': 0.08,
+  'white cell count': 0.20, 'wbc': 0.20, 'platelet': 0.15,
+  'mcv': 0.025, 'mch': 0.025,
+  'hba1c': 0.12, 'glucose': 0.15,
+  'tsh': 0.45, 'free t4': 0.10, 't4': 0.10,
+  'total cholesterol': 0.13, 'cholesterol': 0.13, 'hdl': 0.13, 'ldl': 0.20, 'triglyceride': 0.30,
+  'ferritin': 0.30, 'crp': 0.40, 'b12': 0.20, 'folate': 0.30, 'vitamin d': 0.30,
+  'psa': 0.30,
+};
+
+// Clinical zones — staged reference bands drawn behind the trend chart.
+// Each zone: { from, to, colour, label }. Order: any (rendered all-overlapping).
+// Source: KDIGO 2024 (eGFR), NICE NG28 / QOF (HbA1c), NICE NG136 (BP).
+const CLINICAL_ZONES = {
+  egfr: [
+    { from: 90, to: 250, colour: 'rgba(0,127,59,0.10)',   label: 'G1 (≥90)' },
+    { from: 60, to: 90,  colour: 'rgba(120,194,72,0.12)', label: 'G2 (60–89)' },
+    { from: 45, to: 60,  colour: 'rgba(255,235,59,0.18)', label: 'G3a (45–59)' },
+    { from: 30, to: 45,  colour: 'rgba(244,119,56,0.20)', label: 'G3b (30–44)' },
+    { from: 15, to: 30,  colour: 'rgba(212,53,28,0.22)',  label: 'G4 (15–29)' },
+    { from: 0,  to: 15,  colour: 'rgba(95,17,9,0.28)',    label: 'G5 (<15)' },
+  ],
+  hba1c: [
+    { from: 0,  to: 42,  colour: 'rgba(0,127,59,0.10)',   label: 'Normal (<42)' },
+    { from: 42, to: 48,  colour: 'rgba(255,235,59,0.15)', label: 'Pre-diabetes (42–47)' },
+    { from: 48, to: 58,  colour: 'rgba(120,194,72,0.18)', label: 'On-target (48–57)' },
+    { from: 58, to: 75,  colour: 'rgba(244,119,56,0.18)', label: 'Suboptimal (58–74)' },
+    { from: 75, to: 250, colour: 'rgba(212,53,28,0.22)',  label: 'Poor control (≥75)' },
+  ],
+  'systolic blood pressure': [
+    { from: 0,   to: 120, colour: 'rgba(0,127,59,0.10)',   label: 'Optimal' },
+    { from: 120, to: 140, colour: 'rgba(255,235,59,0.10)', label: 'Pre-HTN' },
+    { from: 140, to: 160, colour: 'rgba(244,119,56,0.15)', label: 'Stage 1 HTN' },
+    { from: 160, to: 300, colour: 'rgba(212,53,28,0.18)',  label: 'Stage 2 HTN' },
+  ],
+};
+
+const PRACTITIONER_PALETTE = [
+  '#005eb8','#41b3e0','#f47738','#007f3b','#d4351c','#912b88',
+  '#330072','#8a1538','#00a499','#cd5c5c','#4c6272','#ae7e1c',
+];
+
 const QOF_REGISTERS = [
   { id:'hf',    label:'Heart Failure',          terms:['heart failure'] },
   { id:'af',    label:'Atrial Fibrillation',     terms:['atrial fibrillation','persistent atrial','paroxysmal atrial'] },
@@ -99,6 +150,103 @@ function bucketForType(rawType) {
     if (terms.some(term => t.includes(term))) return bucket;
   }
   return 'note';
+}
+
+// Find the RCV for an analyte by longest-substring match (so "Plasma sodium"
+// matches "sodium", "MCH" matches "mch" not "mcv"). Returns null if none.
+function rcvFor(analyteName) {
+  const n = ' ' + analyteName.toLowerCase() + ' ';
+  const keys = Object.keys(RCV_TABLE).sort((a,b) => b.length - a.length);
+  for (const k of keys) {
+    if (n.includes(k)) return RCV_TABLE[k];
+  }
+  return null;
+}
+
+// Find clinical zones for an analyte (eGFR, HbA1c, systolic BP, ...).
+function zonesFor(analyteName) {
+  const n = analyteName.toLowerCase();
+  const keys = Object.keys(CLINICAL_ZONES).sort((a,b) => b.length - a.length);
+  for (const k of keys) {
+    if (n.includes(k)) return CLINICAL_ZONES[k];
+  }
+  return null;
+}
+
+// Δ-from-prior badge. Doubles the arrow and goes red when the change
+// exceeds the literature RCV for this analyte.
+function deltaArrow(prev, curr, name) {
+  if (!prev || prev.value == null || isNaN(prev.value) || isNaN(curr.value)) return '';
+  const absChange = curr.value - prev.value;
+  if (!isFinite(absChange) || absChange === 0) return '<span style="color:#b1b4b6;font-size:11px">—</span>';
+  const pct = prev.value !== 0 ? absChange / Math.abs(prev.value) : 0;
+  const rcv = rcvFor(name);
+  const sig = rcv != null && Math.abs(pct) >= rcv;
+  const arrow = absChange > 0 ? '↑' : '↓';
+  const glyph = sig ? arrow + arrow : arrow;
+  const colour = sig ? '#d4351c' : '#768692';
+  const pctStr = Math.abs(pct * 100).toFixed(0);
+  const sign = absChange > 0 ? '+' : '−';
+  const title = `Previous: ${prev.value} ${prev.unit||''}\nDelta: ${sign}${Math.abs(absChange).toFixed(2)} (${sign}${pctStr}%)${sig ? ' — exceeds RCV' : ''}`;
+  return `<span style="color:${colour};font-weight:${sig?700:400};font-size:11px" title="${esc(title)}">${glyph} ${pctStr}%</span>`;
+}
+
+// Inline SVG sparkline of an analyte's series. Reference range (if any) is
+// painted as a translucent green band; the last point is dotted in red if
+// outside reference, blue otherwise.
+function renderSparkline(points, refLow, refHigh) {
+  if (!points || points.length < 2) return '<span style="color:#b1b4b6;font-size:11px">—</span>';
+  const w = 70, h = 20, pad = 2;
+  const vals = points.map(p => p.value).filter(v => !isNaN(v));
+  if (!vals.length) return '<span style="color:#b1b4b6;font-size:11px">—</span>';
+  let min = Math.min(...vals), max = Math.max(...vals);
+  if (refLow != null && !isNaN(refLow)) min = Math.min(min, refLow);
+  if (refHigh != null && !isNaN(refHigh)) max = Math.max(max, refHigh);
+  const range = (max - min) || 1;
+  const xStep = (w - pad*2) / Math.max(points.length - 1, 1);
+  const xs = points.map((_, i) => pad + i * xStep);
+  const ys = points.map(p => h - pad - ((p.value - min) / range) * (h - pad*2));
+  const polyline = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const last = points[points.length - 1];
+  let dotColour = '#005eb8';
+  if (last.low != null && last.value < last.low) dotColour = '#d4351c';
+  else if (last.high != null && last.value > last.high) dotColour = '#d4351c';
+  let band = '';
+  if (refLow != null && refHigh != null && !isNaN(refLow) && !isNaN(refHigh)) {
+    const yLow  = h - pad - ((refLow  - min) / range) * (h - pad*2);
+    const yHigh = h - pad - ((refHigh - min) / range) * (h - pad*2);
+    const yTop = Math.min(yLow, yHigh), bandH = Math.abs(yHigh - yLow);
+    band = `<rect x="0" y="${yTop.toFixed(1)}" width="${w}" height="${bandH.toFixed(1)}" fill="#007f3b" opacity="0.10"/>`;
+  }
+  return `<svg width="${w}" height="${h}" style="display:inline-block;vertical-align:middle">
+    ${band}<polyline points="${polyline}" stroke="#005eb8" stroke-width="1.4" fill="none"/>
+    <circle cx="${xs[xs.length-1].toFixed(1)}" cy="${ys[ys.length-1].toFixed(1)}" r="2.2" fill="${dotColour}"/>
+  </svg>`;
+}
+
+// Assign each practitioner a stable colour from the palette.
+function practitionerColourMap(practitioners) {
+  const m = {};
+  practitioners.forEach((p, i) => { m[p] = PRACTITIONER_PALETTE[i % PRACTITIONER_PALETTE.length]; });
+  return m;
+}
+
+// "What's new since last consultation": find the most recent face-to-face
+// consultation and return everything dated strictly after it. If today is the
+// last consultation, fall back to the previous one so the panel still tells a
+// story.
+function computeWhatsNew(entries) {
+  const consults = entries
+    .filter(e => e.bucket === 'consultation' && e.date)
+    .sort((a,b) => b.date - a.date);
+  if (!consults.length) return null;
+  let pivot = consults[0];
+  let items = entries.filter(e => e.date && e.date > pivot.date);
+  if (items.length === 0 && consults.length >= 2) {
+    pivot = consults[1];
+    items = entries.filter(e => e.date && e.date > pivot.date);
+  }
+  return { pivot, items: items.sort((a,b) => b.date - a.date) };
 }
 
 function normaliseClinician(raw) {
@@ -466,6 +614,55 @@ function buildSnapshot(d, entries, recalls) {
   const lastEntry = entries.filter(e=>e.date).sort((a,b)=>b.date-a.date)[0];
   const openRecalls = recalls.open;
 
+  const whatsNew = computeWhatsNew(entries);
+  let whatsNewHtml = '';
+  if (whatsNew && whatsNew.items.length) {
+    const pivotStr = whatsNew.pivot.date.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const pivotWho = whatsNew.pivot.practitioner ? ' — ' + esc(whatsNew.pivot.practitioner) : '';
+    // Group items by bucket for a tidy summary
+    const grouped = {};
+    for (const it of whatsNew.items) {
+      const b = it.bucket;
+      if (!grouped[b]) grouped[b] = [];
+      grouped[b].push(it);
+    }
+    let rows = '';
+    for (const it of whatsNew.items.slice(0, 12)) {
+      const dt = it.date.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+      // Flag abnormals in investigation entries
+      let abn = '';
+      if (it.bucket === 'investigation' && it.results) {
+        const flags = [];
+        for (const r of it.results) for (const item of r.items) {
+          const v = parseFloat(item.value);
+          if (!isNaN(v) && item.low != null && v < parseFloat(item.low)) flags.push(`${item.name} low`);
+          else if (!isNaN(v) && item.high != null && v > parseFloat(item.high)) flags.push(`${item.name} high`);
+        }
+        if (flags.length) abn = ` <span class="badge badge-red">${flags.length} abnormal</span>`;
+      }
+      const title = it.code || it.type;
+      const who = it.practitioner ? ' · ' + esc(it.practitioner) : '';
+      rows += `<tr>
+        <td style="white-space:nowrap;width:90px;font-size:12px">${dt}</td>
+        <td><span class="badge badge-grey" style="background:${BUCKET_COLOUR[it.bucket]}20;color:${BUCKET_COLOUR[it.bucket]}">${esc(it.bucket)}</span></td>
+        <td style="font-size:13px">${esc(title)}${abn}<span style="color:#768692">${who}</span></td>
+      </tr>`;
+    }
+    const moreNote = whatsNew.items.length > 12 ? `<div style="font-size:11px;color:#768692;margin-top:6px">+ ${whatsNew.items.length - 12} more event(s) since last consultation.</div>` : '';
+    const summaryChips = Object.entries(grouped).map(([b, arr]) =>
+      `<span class="badge badge-grey" style="background:${BUCKET_COLOUR[b]}20;color:${BUCKET_COLOUR[b]};margin-right:6px">${arr.length} ${esc(b)}</span>`).join('');
+    whatsNewHtml = `<div class="card" style="border-left:4px solid var(--nhs-blue)">
+      <div class="card-title">What's new since last consultation</div>
+      <div style="font-size:12px;color:#4c6272;margin-bottom:8px">
+        Last consultation: <strong>${pivotStr}</strong>${pivotWho}.
+        ${whatsNew.items.length} event(s) since.
+      </div>
+      <div style="margin-bottom:8px">${summaryChips}</div>
+      <table class="data-table"><tbody>${rows}</tbody></table>
+      ${moreNote}
+    </div>`;
+  }
+
   let html = `
   <div class="grid-4" style="margin-bottom:14px">
     <div class="stat-tile"><div class="stat-num">${entries.length}</div><div class="stat-lbl">Total entries</div></div>
@@ -473,6 +670,8 @@ function buildSnapshot(d, entries, recalls) {
     <div class="stat-tile"><div class="stat-num">${ap.length}</div><div class="stat-lbl">Active problems</div></div>
     <div class="stat-tile"><div class="stat-num">${openRecalls.length}</div><div class="stat-lbl">Open recalls</div></div>
   </div>
+
+  ${whatsNewHtml}
 
   <div class="grid-2">
     <div>
@@ -580,6 +779,41 @@ function buildContinuity(clinicians, entries, upc, bice, contactableEntries) {
     </tr>`;
   }
 
+  // ── Practitioner ribbon: cells coloured by clinician (left = older), with
+  //    a gap-strip beneath showing days since previous consult (capped 90d).
+  const consults = entries
+    .filter(e => e.bucket === 'consultation' && e.practitioner && e.date)
+    .sort((a,b) => a.date - b.date);
+  let ribbonHtml = '';
+  if (consults.length >= 2) {
+    const practitioners = [...new Set(consults.map(c => c.practitioner))];
+    const cmap = practitionerColourMap(practitioners);
+    const cellWidth = Math.max(4, Math.min(14, Math.floor(900 / consults.length)));
+    const maxGap = 90;
+    let cells = '', gaps = '';
+    let prev = null;
+    for (const c of consults) {
+      const gap = prev ? daysBetween(prev, c.date) : 0;
+      const dateStr = c.date.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      const tip = `${dateStr} — ${c.practitioner}${prev ? ` (${gap}d since previous)` : ''}`;
+      cells += `<div title="${esc(tip)}" style="background:${cmap[c.practitioner]};width:${cellWidth}px;height:20px;flex-shrink:0;border-right:1px solid #fff"></div>`;
+      const gh = Math.min(gap, maxGap) / maxGap * 28;
+      gaps  += `<div title="${gap}d gap" style="background:#b1b4b6;width:${cellWidth}px;height:${gh.toFixed(1)}px;flex-shrink:0;border-right:1px solid #fff;margin-top:auto"></div>`;
+      prev = c.date;
+    }
+    const legendHtml = practitioners.slice(0, 16).map(p =>
+      `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#4c6272;margin:0 10px 4px 0">
+        <span style="width:11px;height:11px;background:${cmap[p]};border-radius:2px;display:inline-block"></span>${esc(p)}
+      </span>`).join('');
+    ribbonHtml = `<div class="card">
+      <div class="card-title">Practitioner ribbon — ${consults.length} consultations</div>
+      <div style="display:flex;overflow-x:auto;border-radius:3px">${cells}</div>
+      <div style="display:flex;overflow-x:auto;align-items:flex-end;height:30px;margin-top:2px;border-bottom:1px solid #f0f0f0;padding-bottom:2px">${gaps}</div>
+      <div style="font-size:10px;color:#768692;margin-top:6px">Top: clinician (older ← → newer). Bottom: days since previous consult (taller = bigger gap, capped 90d).</div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap">${legendHtml}</div>
+    </div>`;
+  }
+
   const html = `
   <div class="grid-2" style="margin-bottom:14px">
     <div class="card idx-card">
@@ -591,6 +825,7 @@ function buildContinuity(clinicians, entries, upc, bice, contactableEntries) {
       <div class="idx-lbl">Bice-Boxerman Index<br>Concentration of care across all clinicians</div>
     </div>
   </div>
+  ${ribbonHtml}
   <div class="card">
     <div class="card-title">Contacts by clinician (top 15 of ${clinicians.length})</div>
     <div class="bar-chart">${bars}</div>
@@ -686,20 +921,27 @@ function buildInvestigations(invData) {
   const selectOpts = analyteNames.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
 
   let latestRows = '';
-  for (const an of analyteNames.slice(0,30)) {
+  for (const an of analyteNames.slice(0,40)) {
     const pts = analytes[an];
     if (!pts.length) continue;
     const last = pts[pts.length-1];
+    const prev = pts.length >= 2 ? pts[pts.length-2] : null;
     let flag = '';
     if (last.low !== null && last.value < last.low) flag = `<span class="badge badge-red">Low</span>`;
     else if (last.high !== null && last.value > last.high) flag = `<span class="badge badge-red">High</span>`;
     else if (last.low !== null) flag = `<span class="badge badge-green">Normal</span>`;
     const ref = (last.low !== null && last.high !== null) ? `${last.low} – ${last.high}` : '—';
+    const refLow  = last.low  != null ? parseFloat(last.low)  : null;
+    const refHigh = last.high != null ? parseFloat(last.high) : null;
+    const sparkline = renderSparkline(pts, refLow, refHigh);
+    const delta = deltaArrow(prev, last, an);
     latestRows += `<tr>
       <td>${esc(an)}</td>
       <td>${last.value} ${esc(last.unit)}</td>
       <td>${ref}</td>
       <td>${flag}</td>
+      <td>${delta}</td>
+      <td>${sparkline}</td>
       <td>${last.date ? last.date.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
     </tr>`;
   }
@@ -721,8 +963,9 @@ function buildInvestigations(invData) {
   </div>
   <div class="card">
     <div class="card-title">Latest values</div>
-    <table class="data-table"><thead><tr><th>Analyte</th><th>Value</th><th>Reference</th><th>Flag</th><th>Date</th></tr></thead>
+    <table class="data-table"><thead><tr><th>Analyte</th><th>Value</th><th>Reference</th><th>Flag</th><th>Δ vs prior</th><th>Trend</th><th>Date</th></tr></thead>
     <tbody>${latestRows}</tbody></table>
+    <div style="font-size:10px;color:#768692;margin-top:6px">Δ doubles and turns red when the change exceeds the analyte's published Reference Change Value (RCV).</div>
   </div>`;
 
   document.getElementById('tab-investigations').innerHTML = html;
@@ -739,27 +982,77 @@ function renderAnalyteTrend(analytes, name) {
   const pts = analytes[name];
   const labels = pts.map(p => p.date ? p.date.toLocaleDateString('en-GB',{month:'short',year:'numeric'}) : '?');
   const vals   = pts.map(p => p.value);
-  const low    = pts[0]?.low;
-  const high   = pts[0]?.high;
+  const low    = pts[0]?.low  != null ? parseFloat(pts[0].low)  : null;
+  const high   = pts[0]?.high != null ? parseFloat(pts[0].high) : null;
+
+  const zones = zonesFor(name);
+
+  // Custom plugin: draws clinical zone bands (or a single reference band) as
+  // filled rects behind the line, before the datasets are drawn.
+  const zoneBandsPlugin = {
+    id: 'zoneBands',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right }, scales: { y: ys } } = chart;
+      ctx.save();
+      if (zones && zones.length) {
+        for (const z of zones) {
+          const yTop = ys.getPixelForValue(z.to);
+          const yBot = ys.getPixelForValue(z.from);
+          ctx.fillStyle = z.colour;
+          ctx.fillRect(left, yTop, right - left, yBot - yTop);
+        }
+      } else if (low != null && high != null && !isNaN(low) && !isNaN(high)) {
+        const yTop = ys.getPixelForValue(high);
+        const yBot = ys.getPixelForValue(low);
+        ctx.fillStyle = 'rgba(0,127,59,0.08)';
+        ctx.fillRect(left, yTop, right - left, yBot - yTop);
+      }
+      ctx.restore();
+    }
+  };
+
+  // Y-axis must include the reference range (so abnormals visually escape it,
+  // per the labs-research anti-pattern note).
+  const vMin = Math.min(...vals, low ?? Infinity);
+  const vMax = Math.max(...vals, high ?? -Infinity);
+  const padding = (vMax - vMin) * 0.1 || 1;
 
   _s.invChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: name, data: vals, borderColor:'#005eb8', backgroundColor:'rgba(0,94,184,.08)', borderWidth:2, pointRadius:4, tension:.2 },
-        ...(low  !== null ? [{ label:'Lower ref', data:pts.map(()=>low),  borderColor:'#d4351c', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false }] : []),
-        ...(high !== null ? [{ label:'Upper ref', data:pts.map(()=>high), borderColor:'#d4351c', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false }] : []),
+        { label: name, data: vals, borderColor:'#005eb8', backgroundColor:'rgba(0,94,184,.08)', borderWidth:2, pointRadius:4, tension:.2,
+          pointBackgroundColor: pts.map(p => {
+            if (p.low != null && p.value < parseFloat(p.low)) return '#d4351c';
+            if (p.high != null && p.value > parseFloat(p.high)) return '#d4351c';
+            return '#005eb8';
+          })
+        },
+        ...((!zones && low  != null) ? [{ label:'Lower ref', data:pts.map(()=>low),  borderColor:'#d4351c', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false }] : []),
+        ...((!zones && high != null) ? [{ label:'Upper ref', data:pts.map(()=>high), borderColor:'#d4351c', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false }] : []),
       ]
     },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ font:{size:11}, boxWidth:12 } } },
+      plugins:{
+        legend:{ labels:{ font:{size:11}, boxWidth:12 } },
+        tooltip:{ callbacks:{
+          afterLabel: (ctx) => {
+            if (!zones) return '';
+            const v = ctx.parsed.y;
+            const z = zones.find(z => v >= z.from && v < z.to);
+            return z ? `Zone: ${z.label}` : '';
+          }
+        }}
+      },
       scales:{
         x:{ ticks:{ font:{size:11} }, grid:{ display:false } },
-        y:{ ticks:{ font:{size:11} }, beginAtZero:false }
+        y:{ ticks:{ font:{size:11} }, beginAtZero:false,
+            suggestedMin: vMin - padding, suggestedMax: vMax + padding }
       }
-    }
+    },
+    plugins: [zoneBandsPlugin]
   });
 }
 
