@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 1.4.16  
-**Document version:** 2.0  
-**Date issued:** 2026-05-20  
+**Product version:** 1.8.1  
+**Document version:** 3.0  
+**Date issued:** 2026-05-22  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -18,6 +18,7 @@ This Clinical Safety Notice summarises the clinical safety information that ever
 
 - `docs/HAZARD-LOG.md` — the full hazard register and residual risk assessment
 - `docs/sentinel-DISCLAIMER.txt` — the full disclaimer and legal terms
+- `docs/INTENDED-PURPOSE.md` — the frozen intended-purpose statement
 
 In the event of any conflict between this notice and the disclaimer, the disclaimer prevails.
 
@@ -25,13 +26,15 @@ In the event of any conflict between this notice and the disclaimer, the disclai
 
 Medicus Suite is a passive, read-only Google Chrome extension that operates alongside the Medicus electronic patient record (EPR). It reads data already present in the clinician's authenticated Medicus session and re-displays a reorganised, summarised view in a side panel and on configurable on-page overlays. It applies arithmetic threshold checks (for example: "the most recent HbA1c was recorded 114 days ago; the configured monitoring interval is 90 days; the indicator is therefore overdue") and surfaces the result as a colour-coded indicator.
 
+From v1.6 onwards, the extension additionally includes the **Patient Record Visualiser** — a full-page dashboard that processes a locally-held Medicus EPR export PDF to produce summary analytics. These include continuity-of-care indices, investigation trend charts with clinical zone bands, high-risk drug monitoring compliance, a computed Electronic Frailty Index (eFI), PINCER-style prescribing safety prompts, and QOF register review status. All Visualiser processing occurs locally in the user's browser; no patient data is transmitted externally at any stage.
+
 ## 3. Intended users
 
 Medicus Suite is intended for use by trained personnel working within a GP practice that uses the Medicus clinical system, namely:
 
 - **General Practitioners (GPs)** — for clinical memory-aid use during patient consultations
 - **Practice Nurses and Advanced Practitioners** — for clinical memory-aid use within their scope of practice
-- **Practice Managers and Administrators** — for capacity, slot, submissions and activity views (non-clinical workflows)
+- **Practice Managers and Administrators** — for capacity, slot, submissions, activity, and referrals views (non-clinical workflows)
 - **QOF leads / clinical coding leads** — for QOF status review (verified against Medicus)
 - **Referral coordinators** — for the Referrals Tracker (verified against Medicus)
 
@@ -55,6 +58,8 @@ The author asserts, on a good-faith reading of MHRA guidance on Software as a Me
 - The software does not perform any calculation whose output is intended to drive a clinical decision. Threshold comparisons are arithmetic, not clinical interpretation.
 - The software does not automate any step of clinical care.
 - The clinical rules executed by the software are authored either by the manufacturer (a curated subset of QOF and drug-monitoring rules, configurable by the practice) or by the practice itself — the software is a rules runner and display layer, not a clinical knowledge base.
+- The Patient Record Visualiser's eFI score is an arithmetic count of matched problem-list terms against a published 36-deficit reference list — it is not a validated clinical assessment instrument as implemented in GP clinical systems.
+- The Patient Record Visualiser's PINCER flags are a subset of the published PINCER prescribing safety criteria, surfaced as prompts to verify against the source record — they are supplementary to Medicus's own prescribing safety systems and do not replace them.
 
 Consistent with this position:
 
@@ -75,7 +80,8 @@ In summary, Medicus Suite:
 2. **Reorganises and summarises** that data in a side panel and on configurable HUD overlays
 3. **Applies arithmetic threshold checks** to monitoring intervals and QOF indicator criteria
 4. **Displays** the result as colour-coded indicators (chips), aggregate counts, and tabular summaries
-5. **Checks the GitHub releases API** once a day for new versions of itself (no patient data is transmitted in this check)
+5. **Analyses a locally-held EPR export PDF** (Patient Record Visualiser only) to produce a multi-tab clinical dashboard including: continuity indices, investigation trends, drug monitoring compliance, eFI score, PINCER-style prescribing prompts, and QOF register review status — all computed locally in the browser, with no external transmission
+6. **Checks the GitHub releases API** once a day for new versions of itself (no patient data is transmitted in this check)
 
 That is the entirety of the software's behaviour.
 
@@ -90,14 +96,18 @@ Medicus Suite does **not**:
 5. **Make clinical decisions.** It does not diagnose, triage, prioritise, rank, or interpret patient data.
 6. **Replace reading the source record.** Every value it displays must be verified against the Medicus record before any clinical action.
 7. **Provide clinical decision support.** It is not CDS. It must not be represented as CDS.
-8. **Store patient data persistently.** `chrome.storage.local` is used only for configuration, discovered API URLs, aggregate counts, and the user's own rule definitions. The in-memory cache is volatile and keyed by patient UUID; it is discarded when the tab closes or the patient changes.
+8. **Store patient data persistently.** `chrome.storage.local` is used only for configuration, discovered API URLs, aggregate counts, and the user's own rule definitions. The in-memory cache is volatile and keyed by patient UUID; it is discarded when the tab closes or the patient changes. The Visualiser's PDF analysis is entirely in-memory and is discarded when the tab closes.
 9. **Store credentials.** It uses the user's existing Medicus session cookies; it does not request, store, or transmit a separate username or password.
 10. **Operate outside Medicus.** It produces no useful output on any other EPR or non-Medicus web page.
 11. **Act as a regulated medical device** of any class.
+12. **Guarantee completeness of PDF parsing.** The Visualiser processes text-based PDF exports; entries rendered as images, tables, or using non-standard fonts may not be extracted.
+13. **Reflect the live record in the Visualiser.** The Patient Record Visualiser operates on a point-in-time PDF export; it does not reflect changes made to the patient record after the export was generated.
 
 ## 7. Known limitations
 
 The user and the deploying practice must understand and accept the following known limitations. A fuller account is in `docs/sentinel-DISCLAIMER.txt` and in `docs/HAZARD-LOG.md`.
+
+### Side panel and Monitoring module
 
 1. **QOF register membership is approximated.** Register matching is by substring of problem labels, not by SNOMED refset. Both false positives and false negatives occur.
 2. **QOF coverage is a curated subset.** Not all QOF 2025/26 indicators are implemented. A blank panel does not mean all indicators are achieved — it may mean the indicator is not in the implemented set.
@@ -106,17 +116,27 @@ The user and the deploying practice must understand and accept the following kno
 5. **User-edited thresholds override the defaults.** If the practice edits a threshold, the practice is responsible for confirming it against current published guidance.
 6. **Medicus API changes are not auto-detected.** If Medicus changes the shape of its API, the extension may show incomplete or no data until updated.
 7. **The extension does not validate the correctness of the Medicus record.** If the source data is wrong, the displayed evaluation will be wrong.
-8. **The extension only works in Medicus** on Google Chrome. It produces nothing useful on any other EPR or browser.
-9. **Practice-authored rules are the practice's responsibility.** Custom rules built via the form builder are passive threshold checks; the clinical validity of the rule itself is the responsibility of the practice author.
-10. **Custom indicators are not QOF indicators** and do not contribute to any QOF income claim. They are visually labelled "Custom".
+8. **Practice-authored rules are the practice's responsibility.** Custom rules built via the form builder are passive threshold checks; the clinical validity of the rule itself is the responsibility of the practice author.
+9. **Custom indicators are not QOF indicators** and do not contribute to any QOF income claim. They are visually labelled "Custom".
+
+### Patient Record Visualiser
+
+10. **The Visualiser operates on a PDF snapshot, not the live record.** Clinical information may have changed since the PDF was exported. The export date is displayed; users must ensure they are working from a current export.
+11. **PDF parsing completeness is not guaranteed.** Entries rendered as images, in certain font types, or in non-standard Medicus export layouts may not be extracted. Entry counts are displayed so users can detect implausibly low figures.
+12. **The eFI score is an approximation.** It is computed by matching problem-list text against a 36-deficit reference list using substring matching. It is not equivalent to the eFI as calculated by GP clinical systems from SNOMED-coded data. Both under- and over-estimation of frailty are possible. It is a screening aid only.
+13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E at v1.8.1). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
+14. **Drug detection is regex-based.** High-risk drug and PINCER drug detection works by text-matching PDF content. Brand names or abbreviated entries not in the implemented regex may be missed.
+15. **High-risk drug monitoring intervals are defaults from NICE/BNF guidance.** They do not account for patient-specific monitoring plans, clinician-directed variation, or local protocol modifications.
+16. **RCV delta flags are based on published reference change values.** They indicate statistically significant analytical change, not clinical significance in any individual patient's context.
+17. **Clinical zone bands (eGFR, HbA1c, BP) are based on current published guidance.** They reflect KDIGO, NICE QOF, and NICE hypertension thresholds at the time of release; they do not account for patient-specific targets.
 
 ## 8. The single most important safety rule
 
 > **Do not take a clinical action — ordering a test, making a referral, adjusting a medication, coding a QOF indicator, modifying a treatment plan — on the basis of what the extension shows without first checking the underlying Medicus record.**
 
-This is a binding condition of use, and it is the primary patient safety control for this software. It is not optional. It applies to every user, in every session, on every patient.
+This is a binding condition of use, and it is the primary patient safety control for this software. It is not optional. It applies to every user, in every session, on every patient, and to all outputs of the Patient Record Visualiser as well as the live side panel.
 
-The source of clinical truth is the Medicus record. The extension is a memory aid that sits next to it.
+The source of clinical truth is the live Medicus record. The extension is a memory aid and analytical tool that sits next to it.
 
 ## 9. Responsibilities of the deploying GP practice
 
@@ -130,8 +150,9 @@ In the spirit of DCB0160, the deploying organisation (the practice) accepts the 
    - the intended purpose of the extension
    - the "single most important safety rule" in section 8 above
    - the known limitations in section 7
+   - the additional limitations of the Patient Record Visualiser (sections 7.10–7.17)
    - the practice's incident-reporting route (see 9.3)
-4. **Nominate a rules owner.** A named clinician should own the practice's Sentinel rule set, including any custom rules, and review it at every QOF contract refresh and after any significant change to clinical guidance affecting bundled rules.
+4. **Nominate a rules owner.** A named clinician should own the practice's Monitoring rule set, including any custom rules, and review it at every QOF contract refresh and after any significant change to clinical guidance affecting bundled rules.
 5. **Review browser environment.** Confirm Google Chrome stable channel is the practice's standard browser, that the Chrome side panel API is not blocked by group policy, and that workstations are managed under the practice's normal IT security policy.
 
 ### 9.2 During use
@@ -140,6 +161,7 @@ In the spirit of DCB0160, the deploying organisation (the practice) accepts the 
 2. **Verify source records.** Reinforce in induction and ongoing training that every value must be verified against Medicus before any clinical action.
 3. **Monitor for anomalies.** Encourage users to report unexpected chips, missing chips, or wrong-patient display promptly.
 4. **Keep the extension up to date.** When a new version banner appears, the rules owner should review the changelog before updating, then update at a quiet time.
+5. **Ensure fresh PDFs for the Visualiser.** When using the Patient Record Visualiser, confirm that the PDF being analysed is a current export. Reuse of old PDFs is a documented clinical hazard (H-013).
 
 ### 9.3 If an incident occurs
 
@@ -162,7 +184,7 @@ The following classes of report should be escalated to the CSO:
 | Class | Examples | Response time target |
 |-------|----------|----------------------|
 | **Critical** | Suspected wrong-patient display; suspected data egress; suspected malicious code | Same working day |
-| **High** | Reproducible false-positive or false-negative clinical indicator that may have led to a clinical action | Within 3 working days |
+| **High** | Reproducible false-positive or false-negative clinical indicator that may have led to a clinical action; missed PINCER flag that was clinically significant | Within 3 working days |
 | **Medium** | Reproducible display, layout or rule-engine bug not directly affecting clinical safety | Within 10 working days |
 | **Low** | Cosmetic, feature request, documentation correction | Best effort |
 
@@ -181,7 +203,7 @@ The CSO will:
 | Item | Mechanism |
 |------|-----------|
 | **Versioning** | Semantic versioning (`MAJOR.MINOR.PATCH`) recorded in `manifest.json` and surfaced in the Options page, popup and side panel. |
-| **Release gating** | GitHub Actions release workflow runs the full automated test suite (228+ tests at v1.4.16) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
+| **Release gating** | GitHub Actions release workflow runs the full automated test suite (213+ tests at v1.8.1) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
 | **Changelog** | Every release is documented in `CHANGELOG.md` including any safety-relevant change. |
 | **Auto-update notification** | The extension checks `api.github.com` once a day and surfaces a banner in the Options page when a newer version exists. The user controls when to install the update. |
 | **Hazard log review** | Reviewed at every minor or major release; recorded in `docs/HAZARD-LOG.md` section 8. |
@@ -226,12 +248,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v1.4.16; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v1.8.1; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-20
+**Date:** 2026-05-22
 
 ---
 
@@ -241,6 +263,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 |------|---------|--------|--------|
 | 2026-05 | 1.0 | DT | Initial Clinical Safety Notice — limited distribution |
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129/0160-style structure; added intended user roles; added explicit DOES / DOES NOT sections; added deploying-organisation responsibilities; added incident classification table; added sign-off forms; aligned with `HAZARD-LOG.md` v2.0 |
+| 2026-05-22 | 3.0 | DT | Updated to v1.8.1; added Patient Record Visualiser to intended purpose, DOES, DOES NOT, and known limitations; added Visualiser-specific safety conditions; expanded known limitations to 17 items; updated test count; aligned with `HAZARD-LOG.md` v3.0 |
 
 ---
 

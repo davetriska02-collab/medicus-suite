@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 1.4.16  
-**Document version:** 2.0  
-**Date issued:** 2026-05-20  
+**Product version:** 1.8.1  
+**Document version:** 3.0  
+**Date issued:** 2026-05-22  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
 **Status:** Live — reviewed at each minor or major release  
@@ -20,18 +20,21 @@ The log is intended to be read alongside:
 
 - `docs/CLINICAL-SAFETY-NOTICE.md` — the user-facing safety notice
 - `docs/sentinel-DISCLAIMER.txt` — the binding terms of use
+- `docs/INTENDED-PURPOSE.md` — the frozen intended-purpose statement
 
 ## 2. Scope
 
-This hazard log applies to all functional modules of Medicus Suite v1.4.16, namely:
+This hazard log applies to all functional modules of Medicus Suite v1.8.1, namely:
 
-- **Sentinel** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
+- **Monitoring (Sentinel)** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
 - **Slot Counter** — display of appointment slot availability
 - **Capacity Forecast** — display of historical session/slot usage
 - **Submissions Tracker** — display of daily task volume counts
 - **Triage Lens** — overlay HUD on Medicus triage pages
 - **Activity Module** — display of staff activity counts
 - **Referrals Tracker** — display of referral audit data drawn from Medicus
+- **Waiting Room / Request Monitor** — live demand display with configurable thresholds
+- **Patient Record Visualiser** — offline PDF-based multi-tab clinical dashboard, including: continuity-of-care indices, investigation trends with clinical zone bands, high-risk drug monitoring compliance, Electronic Frailty Index (eFI), PINCER-style prescribing safety flags, QOF register review status, swim-lane event timeline
 
 It covers hazards arising from the technical operation of the extension, from the human factors of its use by trained GP practice staff, and from foreseeable failure modes of the surrounding environment (browser, network, Medicus platform).
 
@@ -46,8 +49,8 @@ It does **not** cover:
 Hazards were identified using the following techniques, applied iteratively across development sprints:
 
 1. **Functional decomposition** — each module was decomposed into its data sources, transformations, and display outputs; each step was examined for foreseeable failure.
-2. **HAZOP-style "what if" prompts** — applied to each data flow ("what if the patient changes mid-fetch?", "what if the API returns an empty array?", "what if a rule is misconfigured?").
-3. **Human factors review** — consideration of automation bias, alert fatigue, misinterpretation, and out-of-context display.
+2. **HAZOP-style "what if" prompts** — applied to each data flow ("what if the patient changes mid-fetch?", "what if the API returns an empty array?", "what if a rule is misconfigured?", "what if the PDF is six months old?", "what if a drug appears under a brand name?").
+3. **Human factors review** — consideration of automation bias, alert fatigue, misinterpretation, out-of-context display, and point-in-time data reuse.
 4. **Code review and security review** — examination of network calls, storage, permissions, and supply chain.
 5. **Incident learning** — any reported anomaly or near-miss is reviewed and the log updated.
 
@@ -97,7 +100,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-001 |
-| **Description** | Sentinel, Triage Lens, or Referrals Tracker displays clinical data belonging to a previously-viewed patient while the clinician has navigated to a different patient's record. |
+| **Description** | Monitoring (Sentinel), Triage Lens, or Referrals Tracker displays clinical data belonging to a previously-viewed patient while the clinician has navigated to a different patient's record. |
 | **Potential causes** | Patient-change navigation event not detected (Medicus uses client-side routing); race condition between URL change and asynchronous API fetch; in-memory cache not invalidated; Medicus URL pattern changes after a release; tab restored from browser session with prior state. |
 | **Affected users / components** | Clinicians and any user viewing patient-specific data. Components: `content-scripts/sentinel.js`, `engine/data-fetcher.js`, `engine/extractors/patient-context.js`. |
 | **Initial severity** | 4 (Major — wrong-patient clinical action) |
@@ -116,13 +119,13 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-002 |
-| **Description** | A drug-monitoring interval that is overdue, or a QOF indicator that is unachieved, is not surfaced by Sentinel when it should be. |
+| **Description** | A drug-monitoring interval that is overdue, or a QOF indicator that is unachieved, is not surfaced by Monitoring when it should be. |
 | **Potential causes** | QOF register membership not matched (substring miss); rule omitted from curated rule set; Medicus API response shape change breaks normaliser; encounter-coded entry not present on the investigation dashboard endpoint; rule disabled by practice configuration; user-edited threshold diverges from current guidance. |
-| **Affected users / components** | Clinicians using Sentinel for monitoring or QOF review. Components: `engine/rules-engine.js`, `engine/normalisers.js`, `rules/*`. |
+| **Affected users / components** | Clinicians using Monitoring for monitoring or QOF review. Components: `engine/rules-engine.js`, `engine/normalisers.js`, `rules/*`. |
 | **Initial severity** | 3 (Moderate — missed monitoring, eventually caught by Medicus's own workflows) |
 | **Initial likelihood** | 3 (Possible — curated rule set is intentionally a subset) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) Sentinel is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 228+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
+| **Controls / mitigations** | (a) Monitoring is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 213+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -154,7 +157,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-004 |
-| **Description** | A rule authored by the practice (in the Sentinel form builder or via custom-indicator import) produces clinically incorrect output because the rule itself is wrong, not because the extension malfunctioned. |
+| **Description** | A rule authored by the practice (in the Monitoring form builder or via custom-indicator import) produces clinically incorrect output because the rule itself is wrong, not because the extension malfunctioned. |
 | **Potential causes** | Author misreads current guidance; threshold value mis-typed; register substring is too broad or too narrow; rule not reviewed when guidance changes; rule copied from another practice without review; multiple rule revisions cause stale rule to be active. |
 | **Affected users / components** | Clinicians relying on practice-authored rules. Components: `sentinel-options/*`, `shared/io/*`, rule import/export. |
 | **Initial severity** | 3 (Moderate) |
@@ -179,7 +182,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate — false reassurance leads to missed action) |
 | **Initial likelihood** | 3 (Possible — browser and Medicus both evolve) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) The user-facing safety notice states explicitly that absence of a chip is not equivalent to "all clear". (b) The extension icon in the toolbar is the primary "alive" indicator; the popup shows version and status. (c) The Options page version banner identifies the running version and the latest available version. (d) Logging of fetch failures and rule-engine exceptions is available via the developer console. (e) Medicus surfaces overdue items independently of the extension — Sentinel is not the only line of defence. (f) Users are instructed to stop relying on the extension and verify the source record if a module appears blank or behaves unexpectedly. |
+| **Controls / mitigations** | (a) The user-facing safety notice states explicitly that absence of a chip is not equivalent to "all clear". (b) The extension icon in the toolbar is the primary "alive" indicator; the popup shows version and status. (c) The Options page version banner identifies the running version and the latest available version. (d) Logging of fetch failures and rule-engine exceptions is available via the developer console. (e) Medicus surfaces overdue items independently of the extension — Monitoring is not the only line of defence. (f) Users are instructed to stop relying on the extension and verify the source record if a module appears blank or behaves unexpectedly. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -198,7 +201,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 2 (Unlikely — CI gates) |
 | **Initial risk** | 6 |
-| **Controls / mitigations** | (a) The full automated test suite (228+ tests at v1.4.16) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
+| **Controls / mitigations** | (a) The full automated test suite (213+ tests at v1.8.1) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -211,13 +214,13 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-007 |
-| **Description** | A clinician treats a Sentinel chip, a Triage Lens summary, or a Referrals Tracker row as the definitive clinical record and takes clinical action without verifying the underlying Medicus record. |
-| **Potential causes** | Time pressure; complacency after repeated correct outputs; visual prominence of chips; pattern of "green = done"; alert fatigue causing inverse trust ("if it's not red I won't check"); junior staff assuming the extension is authoritative. |
+| **Description** | A clinician treats a Monitoring chip, a Triage Lens summary, a Referrals Tracker row, or a Patient Record Visualiser output as the definitive clinical record and takes clinical action without verifying the underlying Medicus record. |
+| **Potential causes** | Time pressure; complacency after repeated correct outputs; visual prominence of chips; pattern of "green = done"; alert fatigue causing inverse trust ("if it's not red I won't check"); junior staff assuming the extension is authoritative; Visualiser eFI or PINCER output treated as a clinical assessment rather than a prompt to review. |
 | **Affected users / components** | All clinical users. Components: any display module. |
 | **Initial severity** | 3 (Moderate — clinical action based on incorrect display) |
 | **Initial likelihood** | 4 (Likely — automation bias is a well-documented human factors phenomenon) |
 | **Initial risk** | 12 |
-| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". |
+| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". (h) Visualiser eFI and PINCER outputs are explicitly labelled as supplementary screening aids with disclosed limitations. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 3 |
 | **Residual risk** | 9 — Acceptable (ALARP); identified as the **primary residual risk** in the system |
@@ -255,7 +258,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 5 (Catastrophic from an IG perspective; reportable to ICO) |
 | **Initial likelihood** | 2 (Unlikely) |
 | **Initial risk** | 10 |
-| **Controls / mitigations** | (a) The manifest's `host_permissions` are restricted to `*.medicus.health/*`, `*.api.england.medicus.health/*`, and `api.github.com/*` — outbound calls to any other host require a manifest change and a new release. (b) The update checker transmits only the version string to the GitHub releases API — no patient or practice identifiers. (c) Update checks can be disabled entirely via the Options page. (d) All Medicus API calls reuse the user's existing session cookies — no separate credentials are stored. (e) Code review and CI inspect `manifest.json` and outbound fetch calls at every release. (f) The repository is private; releases are built via the GitHub Actions release workflow. (g) Users are instructed never to install from an unofficial source. |
+| **Controls / mitigations** | (a) The manifest's `host_permissions` are restricted to `*.medicus.health/*`, `*.api.england.medicus.health/*`, and `api.github.com/*` — outbound calls to any other host require a manifest change and a new release. (b) The update checker transmits only the version string to the GitHub releases API — no patient or practice identifiers. (c) Update checks can be disabled entirely via the Options page. (d) All Medicus API calls reuse the user's existing session cookies — no separate credentials are stored. (e) Code review and CI inspect `manifest.json` and outbound fetch calls at every release. (f) The repository is private; releases are built via the GitHub Actions release workflow. (g) Users are instructed never to install from an unofficial source. (h) The Visualiser processes PDFs entirely in-memory; no PDF content is transmitted externally. |
 | **Residual severity** | 5 |
 | **Residual likelihood** | 1 |
 | **Residual risk** | 5 — Acceptable (ALARP) |
@@ -269,12 +272,12 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 |-------|-------|
 | **Hazard ID** | H-010 |
 | **Description** | A correctly-extracted value is displayed without the contextual qualifiers that change its clinical meaning (e.g. an HbA1c result from before a diagnostic change of treatment; a BP recorded under unusual conditions; a referral whose "open" status reflects an administrative backlog rather than clinical reality). |
-| **Potential causes** | Sentinel chips show single most-recent values without surrounding history; the API response does not include qualifiers; referrals appear "open" when actually awaiting administrative closure; waiting-room times reflect login state, not clinical urgency. |
+| **Potential causes** | Monitoring chips show single most-recent values without surrounding history; the API response does not include qualifiers; referrals appear "open" when actually awaiting administrative closure; waiting-room times reflect login state, not clinical urgency. |
 | **Affected users / components** | All users. Components: all display modules. |
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 3 (Possible) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) Sentinel chips link back to the Medicus record where full context is visible. (b) The Clinical Safety Notice states explicitly that the extension reorganises data already in Medicus — it does not interpret it. (c) Threshold checks are described in the disclaimer as arithmetic, not clinical. (d) No chip applies clinical language that asserts meaning beyond the threshold check. (e) The deploying practice's induction is asked to cover the "in-context vs out-of-context" distinction. |
+| **Controls / mitigations** | (a) Monitoring chips link back to the Medicus record where full context is visible. (b) The Clinical Safety Notice states explicitly that the extension reorganises data already in Medicus — it does not interpret it. (c) Threshold checks are described in the disclaimer as arithmetic, not clinical. (d) No chip applies clinical language that asserts meaning beyond the threshold check. (e) The deploying practice's induction is asked to cover the "in-context vs out-of-context" distinction. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -306,9 +309,9 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-012 |
-| **Description** | Repeated low-value or false-positive alerts cause users to dismiss Sentinel or Triage Lens chips without due attention, including dismissing alerts that on a given occasion are genuinely meaningful — or cause users to bypass their normal verification step because "the extension would have flagged it". |
+| **Description** | Repeated low-value or false-positive alerts cause users to dismiss Monitoring or Triage Lens chips without due attention, including dismissing alerts that on a given occasion are genuinely meaningful — or cause users to bypass their normal verification step because "the extension would have flagged it". |
 | **Potential causes** | Practice-authored rule set is too broad; bundled rule set produces excessive chips for some patient cohorts; chips persist across sessions; visual prominence too aggressive; no way to dismiss-with-reason. |
-| **Affected users / components** | All clinical users. Components: Sentinel display logic, Triage Lens HUD, `sentinel-options/*`. |
+| **Affected users / components** | All clinical users. Components: Monitoring display logic, Triage Lens HUD, `sentinel-options/*`. |
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 3 (Possible) |
 | **Initial risk** | 9 |
@@ -320,11 +323,106 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-013 — Patient Record Visualiser — PDF snapshot staleness
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-013 |
+| **Description** | The Patient Record Visualiser is loaded with an EPR export PDF that was generated at some point in the past. Clinical information displayed — including medications, investigations, problems, frailty score, prescribing flags, and monitoring compliance — may not reflect the patient's current clinical status if the PDF is outdated. |
+| **Potential causes** | User re-uses a PDF exported at a prior consultation; PDF generated days or weeks before the current session; multiple clinical events have occurred since export (medications changed, investigations resulted, problems resolved or added); user shares a PDF with a colleague who analyses it later. |
+| **Affected users / components** | Any user of the Patient Record Visualiser. Components: `visualiser-core.html`, `visualiser-core.js`. |
+| **Initial severity** | 4 (Major — clinical decision based on stale data) |
+| **Initial likelihood** | 3 (Possible — PDF workflow naturally introduces a lag between export and analysis) |
+| **Initial risk** | 12 |
+| **Controls / mitigations** | (a) PDF export date is extracted from the document and displayed prominently in the patient banner at the top of the Visualiser. (b) User instructions state that the most recently exported PDF should be used. (c) The Visualiser is positioned as an audit and analytical tool, not a substitute for the live record. (d) Verification against the current live Medicus record is required by the disclaimer before any clinical action. (e) The Visualiser opens in a separate browser tab, visually distinct from the live Medicus session — the two cannot be confused. (f) Clinical Safety Notice section 7 explicitly lists PDF staleness as a known limitation. |
+| **Residual severity** | 4 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 8 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Any clinical action informed by the Visualiser must be verified against the current Medicus record before it is taken. |
+
+---
+
+### H-014 — Patient Record Visualiser — silent partial data omission during PDF parsing
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-014 |
+| **Description** | The PDF text extraction layer fails to parse some entries from the record — for example entries on pages with unusual layout, items rendered as images, or sections using non-standard fonts — and the Visualiser displays a dashboard that silently omits those entries. |
+| **Potential causes** | pdf.js returning text items without `transform` data (certain font types or print drivers); non-text PDF elements (images, form fields, scanned pages); encrypted or DRM-protected PDFs; Medicus changing its PDF export layout after a Visualiser release; very large PDFs; page-level parse errors in the `reconstructLines` function. |
+| **Affected users / components** | All Visualiser users. Components: `visualiser-core.js` `parsePDF()`, `reconstructLines()`. |
+| **Initial severity** | 3 (Moderate — analytical conclusions may be based on an incomplete record) |
+| **Initial likelihood** | 2 (Unlikely — item-level `transform` guard prevents crash; standard Medicus PDF exports are text-based) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) `reconstructLines()` includes a guard (`!item.transform`) that skips malformed text items rather than crashing, preventing silent partial display from becoming a complete failure. (b) Stage-aware error messages in the catch block identify which parsing stage failed (v1.8.0). (c) `[Visualiser]` prefixed warnings are logged to the browser console for any parse anomaly. (d) Entry counts are displayed throughout the Visualiser (e.g. filter bar "Showing N of M entries") so a user can detect implausibly low counts. (e) Verification against the live Medicus record is required before any clinical action. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. |
+
+---
+
+### H-015 — eFI score inaccuracy (frailty under- or over-estimated)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-015 |
+| **Description** | The Electronic Frailty Index (eFI) score computed by the Visualiser is inaccurate — either overstating frailty (leading to unnecessary frailty-pathway intervention or labelling) or understating it (leading to frailty being overlooked in clinical planning). |
+| **Potential causes** | Deficit detection relies on substring matching of problem-list text against a 36-deficit reference list; non-standard or abbreviated problem coding may miss deficits; historical problems (inactive but still listed) may over-count; the 36-deficit set is based on the Clegg 2016 academic index and may not exactly replicate the eFI as calculated from SNOMED refsets in GP clinical systems; very sparse problem lists (new patients, recently registered patients) will produce artifactually low scores. |
+| **Affected users / components** | Clinicians using the Snapshot tab. Components: `visualiser-core.js` `computeEFI()`, `EFI_DEFICITS` constant. |
+| **Initial severity** | 3 (Moderate — frailty status is a screening indicator used to inform care planning; it is not a diagnostic label and clinical frailty assessment requires clinical synthesis) |
+| **Initial likelihood** | 3 (Possible — problem-list coding variability is common in GP records) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) eFI is displayed alongside the detected deficit count (e.g. "8/36 deficits detected") so the user can see the basis for the score. (b) The gauge category labels (Fit / Mild / Moderate / Severe) are from the published Clegg index and are standard frailty categories, not novel clinical labels. (c) The Visualiser is an analytical aid, not a diagnostic system; the eFI is one data point in the Snapshot tab alongside the full problem list. (d) Clinical frailty classification must be validated by the clinician against the full clinical picture and direct patient assessment. (e) The disclaimer and Clinical Safety Notice (section 7, limitation 12) explicitly state that the eFI is an arithmetic approximation. (f) No clinical workflow or referral pathway is triggered by the eFI score in the software — it is display only. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 3 |
+| **Residual risk** | 9 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Clinician retains full responsibility for frailty classification and any frailty-pathway decisions. |
+
+---
+
+### H-016 — PINCER / drug-monitoring false-negative (prescribing safety hazard missed)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-016 |
+| **Description** | The Visualiser fails to surface a PINCER prescribing safety flag or a high-risk drug monitoring overdue indicator when one should be present — for example, a patient is taking an NSAID and has heart failure, or is on methotrexate with monitoring now overdue, but no flag appears in the Medications tab or Snapshot. |
+| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v1.8.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
+| **Affected users / components** | Clinicians using the Medications tab or Snapshot PINCER card. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`, `HIGH_RISK_DRUGS` constant, `PINCER_RULES` constant. |
+| **Initial severity** | 4 (Major — a clinically significant prescribing safety hazard is not surfaced) |
+| **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set at v1.8.1) |
+| **Initial risk** | 12 |
+| **Controls / mitigations** | (a) The PINCER implementation is explicitly documented as a subset of the full PINCER tool — it is supplementary to Medicus's own prescribing safety systems, which remain the primary clinical safety gate. (b) The implemented PINCER rules and drug families are listed in `INTENDED-PURPOSE.md` and the known limitations section of the Clinical Safety Notice. (c) Absence of a PINCER flag is explicitly documented as not a guarantee of prescribing safety (Clinical Safety Notice section 7, limitation 13). (d) Drug-family regex is designed to capture common brand names and generic variants for each family, but cannot cover all possible nomenclature variants. (e) Medicus's own drug interaction and contraindication checking system operates independently of this extension. (f) Verification against the live Medicus record is required by the disclaimer before any clinical action. |
+| **Residual severity** | 4 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 8 — Acceptable (ALARP) |
+| **Acceptability** | Accepted, with the express condition that PINCER flags in the Visualiser are supplementary prompts only and that Medicus's own prescribing safety systems remain the primary clinical control. |
+
+---
+
+### H-017 — PINCER / drug-monitoring false-positive (spurious prescribing safety flag)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-017 |
+| **Description** | A PINCER prescribing safety flag or drug monitoring overdue badge is shown when no clinical hazard exists — for example, a drug is no longer prescribed but appears in the historical medication list in the PDF, or a disease label matches the substring but the condition is resolved, or a monitoring test was performed recently but was not detected in the PDF text. |
+| **Potential causes** | PDF export includes historical medications that are no longer active and are not clearly labelled as discontinued; problem list contains historically-coded problems now resolved; monitoring test uses a locally-abbreviated name not matched to the expected investigation name; date parsing error causes a recent test to appear older than it is. |
+| **Affected users / components** | All Visualiser users. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`. |
+| **Initial severity** | 2 (Minor — unnecessary clinical review; no harm to patient) |
+| **Initial likelihood** | 3 (Possible — PDF-based extraction cannot reliably distinguish active from historical medications in all Medicus export formats) |
+| **Initial risk** | 6 |
+| **Controls / mitigations** | (a) Verification against the live Medicus record is required before any clinical action — a false-positive flag leads to a brief unnecessary check, not patient harm. (b) The Medications tab displays the source context (drug name as detected in the PDF) alongside the flag, allowing the clinician to judge its currency. (c) The disclaimer and Clinical Safety Notice frame flags as prompts to check, not clinical decisions. (d) False-positive flags are a minor inconvenience, not a safety hazard in themselves — they prompt verification rather than preventing it. |
+| **Residual severity** | 2 |
+| **Residual likelihood** | 3 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. |
+
+---
+
 ## 6. Hazard summary
 
 | ID | Hazard | Initial S×L | Initial risk | Residual S×L | Residual risk | Status |
 |----|--------|-------------|-------------|--------------|---------------|--------|
-| H-001 | Wrong-patient data | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
+| H-001 | Wrong-patient data (live panel) | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-002 | False-negative indicator | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
 | H-003 | False-positive indicator | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
 | H-004 | Practice-authored rule incorrect | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
@@ -336,8 +434,13 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-010 | Out-of-context display | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
 | H-011 | Browser/platform compatibility | 2×3 | 6 | 2×2 | 4 | Broadly acceptable |
 | H-012 | Alert fatigue | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-013 | Visualiser PDF staleness | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
+| H-014 | Visualiser silent data omission | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-015 | eFI score inaccuracy | 3×3 | 9 | 3×3 | 9 | Accepted (ALARP) |
+| H-016 | PINCER/drug-monitoring false-negative | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
+| H-017 | PINCER/drug-monitoring false-positive | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
 
-No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v1.4.16 is approved by the Clinical Safety Officer on the basis of this hazard log.
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v1.8.1 is approved by the Clinical Safety Officer on the basis of this hazard log.
 
 ## 7. Review and reporting
 
@@ -348,6 +451,7 @@ This log is reviewed:
 - On any annual QOF specification refresh
 - On any change to Medicus's APIs that affects data extraction
 - On any change to UK regulatory guidance on software as a medical device
+- On any change to NICE, BNF, or KDIGO guidance affecting implemented clinical thresholds or monitoring intervals
 
 Reports of suspected hazardous behaviour must be sent to the CSO at **dave@graysbrook.co.uk** with sufficient detail to investigate (date, time, version, module, observed output, expected output). Patient-identifiable data must not be sent by email — use the practice's own information governance channels.
 
@@ -359,12 +463,13 @@ If an incident meeting the threshold of a patient safety incident is identified,
 |------|---------|--------|--------|
 | 2026-05 | 1.0 | DT | Initial hazard log — limited distribution to named GP users |
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129 style; expanded to 12 hazards; added severity/likelihood matrix; added explicit acceptability thresholds; aligned with `CLINICAL-SAFETY-NOTICE.md` v2.0 |
+| 2026-05-22 | 3.0 | DT | Updated to v1.8.1; expanded scope to include Patient Record Visualiser; added H-013 (PDF staleness), H-014 (silent data omission), H-015 (eFI inaccuracy), H-016 (PINCER false-negative), H-017 (PINCER false-positive); updated H-007 to include Visualiser automation bias; updated test count to 213+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.0 |
 
 ## 9. Clinical Safety Officer sign-off
 
-I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v1.4.16, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v1.8.1, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-20
+**Date:** 2026-05-22
