@@ -214,6 +214,31 @@
       width: 64px; padding: 5px 8px; font-size: 11px;
     }
 
+    .cap-min-label-row {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    }
+    .cap-copy-mon {
+      background: transparent; border: none; color: var(--accent);
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.03em;
+      cursor: pointer; padding: 0;
+    }
+    .cap-copy-mon:hover { text-decoration: underline; }
+    .cap-day-mins-row {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+      margin-top: 6px;
+    }
+    .cap-day-min { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .cap-day-min-label {
+      font-family: var(--mono); font-size: 9px;
+      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-4);
+    }
+    .cap-day-min-input {
+      width: 100%; padding: 5px 6px; font-size: 11px; text-align: center;
+    }
+    .cap-min-hint {
+      font-size: 10px; color: var(--text-4); margin-top: 6px; font-family: var(--sans);
+    }
+
     .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
     .add-preset-btn {
       background: linear-gradient(135deg, rgba(74,127,184,0.25), rgba(74,127,184,0.1));
@@ -413,7 +438,7 @@
       <!-- Capacity Forecast section -->
       <section class="opt-section" id="sect-capacity">
         <h1>Capacity Forecast <span class="module-badge">v1.0</span></h1>
-        <p class="section-desc">Presets define what counts as "capacity" — which slot types matter, what the daily minimum is, and at what thresholds the day status shifts from sufficient to tight, low, and critical.</p>
+        <p class="section-desc">Presets define what counts as "capacity" — which slot types matter, the minimum free slots required for each weekday (Mon–Sun), and at what thresholds the day status shifts from sufficient to tight, low, and critical.</p>
 
         <div id="capPresetEditor"></div>
       </section>

@@ -7,6 +7,31 @@
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return escHtml(s).replace(/"/g,'&quot;'); }
 
+const CAP_WEEKDAYS = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
+
+function capDefaultMinimumByDay(legacyMin) {
+  const m = legacyMin || 0;
+  return { mon: m, tue: m, wed: m, thu: m, fri: m, sat: 0, sun: 0 };
+}
+
+function capPresetMinimumSummary(p) {
+  const mins = p.minimumByDay;
+  if (!mins) return `Min ${p.minimumPerDay || 0}/day`;
+  const values = CAP_WEEKDAYS.map(d => mins[d.key] || 0);
+  const allSame = values.slice(0, 5).every(v => v === values[0]);
+  if (allSame && values[5] === 0 && values[6] === 0) return `Min ${values[0]}/weekday`;
+  const wkTotal = values.reduce((a, b) => a + b, 0);
+  return `Min ${wkTotal}/week`;
+}
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -175,7 +200,7 @@ async function renderPresetEditor() {
             </div>
           </div>
           <div class="preset-card-meta">
-            <span>Min ${p.minimumPerDay}/day</span>
+            <span>${capPresetMinimumSummary(p)}</span>
             <span>Tight at ${p.thresholds?.tight ?? 75}%</span>
             <span>Low at ${p.thresholds?.low ?? 50}%</span>
             <span>${p.slotTypes.length} slot type${p.slotTypes.length!==1?'s':''}</span>
@@ -195,8 +220,15 @@ async function renderPresetEditor() {
 async function openForm(presetId) {
   editingPresetId = presetId;
   const { 'capacity.presets': presets = [] } = await chrome.storage.local.get('capacity.presets');
-  const editing = presetId ? presets.find(p => p.id === presetId) : null;
-  const p = editing || { name: '', slotTypes: [], minimumPerDay: 20, thresholds: { tight: 75, low: 50 } };
+  const editingRaw = presetId ? presets.find(p => p.id === presetId) : null;
+  const editing = editingRaw
+    ? { ...editingRaw, minimumByDay: editingRaw.minimumByDay || capDefaultMinimumByDay(editingRaw.minimumPerDay) }
+    : null;
+  const p = editing || {
+    name: '', slotTypes: [],
+    minimumByDay: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 20, sat: 0, sun: 0 },
+    thresholds: { tight: 75, low: 50 },
+  };
 
   if (availableTypes.length === 0) {
     availableTypes = await loadAvailableTypes();
@@ -206,6 +238,13 @@ async function openForm(presetId) {
   const allTypeNames = new Set([...availableTypes.map(t => t.name), ...p.slotTypes]);
   const sortedTypes = Array.from(allTypeNames).sort();
 
+  const weekdayInputs = CAP_WEEKDAYS.map(d => `
+    <div class="cap-day-min">
+      <label class="cap-day-min-label">${d.label}</label>
+      <input type="number" class="cap-day-min-input" data-day="${d.key}" value="${p.minimumByDay[d.key] ?? 0}" min="0" max="999" />
+    </div>
+  `).join('');
+
   presetEditor.innerHTML = `
     <div class="preset-form">
       <h3>${editing ? 'Edit preset' : 'New preset'}</h3>
@@ -213,20 +252,22 @@ async function openForm(presetId) {
         <label>Name</label>
         <input type="text" id="fName" value="${escAttr(p.name)}" placeholder="e.g. GP Routine" />
       </div>
-      <div class="form-row">
-        <div>
-          <label>Daily minimum</label>
-          <input type="number" id="fMin" value="${p.minimumPerDay}" min="0" max="500" />
+      <div class="form-row full">
+        <div class="cap-min-label-row">
+          <label>Minimum free slots per weekday</label>
+          <button type="button" class="cap-copy-mon" id="fCopyMon">Copy Mon to all weekdays</button>
         </div>
-        <div>
-          <label>Thresholds (% of minimum)</label>
-          <div class="threshold-row">
-            <span>Tight at</span>
-            <input type="number" id="fTight" value="${p.thresholds?.tight ?? 75}" min="1" max="99" />
-            <span>%, Low at</span>
-            <input type="number" id="fLow" value="${p.thresholds?.low ?? 50}" min="1" max="99" />
-            <span>%</span>
-          </div>
+        <div class="cap-day-mins-row">${weekdayInputs}</div>
+        <div class="cap-min-hint">Set 0 for days when no minimum applies (e.g. weekends, half-day clinics).</div>
+      </div>
+      <div class="form-row full">
+        <label>Thresholds (% of minimum)</label>
+        <div class="threshold-row">
+          <span>Tight at</span>
+          <input type="number" id="fTight" value="${p.thresholds?.tight ?? 75}" min="1" max="99" />
+          <span>%, Low at</span>
+          <input type="number" id="fLow" value="${p.thresholds?.low ?? 50}" min="1" max="99" />
+          <span>%</span>
         </div>
       </div>
       <div class="form-row full">
@@ -249,11 +290,22 @@ async function openForm(presetId) {
 
   presetEditor.querySelector('#fSave').addEventListener('click', () => savePreset(editing));
   presetEditor.querySelector('#fCancel').addEventListener('click', renderPresetEditor);
+  presetEditor.querySelector('#fCopyMon')?.addEventListener('click', () => {
+    const monVal = presetEditor.querySelector('input[data-day="mon"]').value;
+    ['tue', 'wed', 'thu', 'fri'].forEach(d => {
+      const el = presetEditor.querySelector(`input[data-day="${d}"]`);
+      if (el) el.value = monVal;
+    });
+  });
 }
 
 async function savePreset(editing) {
   const name = document.getElementById('fName').value.trim();
-  const minimumPerDay = parseInt(document.getElementById('fMin').value, 10) || 0;
+  const minimumByDay = {};
+  CAP_WEEKDAYS.forEach(d => {
+    const el = presetEditor.querySelector(`input[data-day="${d.key}"]`);
+    minimumByDay[d.key] = parseInt(el?.value, 10) || 0;
+  });
   const tight = parseInt(document.getElementById('fTight').value, 10) || 75;
   const low = parseInt(document.getElementById('fLow').value, 10) || 50;
   const slotTypes = Array.from(document.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(i => i.value);
@@ -261,12 +313,14 @@ async function savePreset(editing) {
   if (!name) { alert('Preset needs a name.'); return; }
   if (slotTypes.length === 0) { alert('Select at least one slot type.'); return; }
   if (low >= tight) { alert('Low threshold must be below Tight threshold.'); return; }
+  if (tight >= 100 || low >= 100) { alert('Thresholds must be below 100%.'); return; }
 
   const { 'capacity.presets': presets = [] } = await chrome.storage.local.get('capacity.presets');
 
   const preset = editing
-    ? { ...editing, name, slotTypes, minimumPerDay, thresholds: { tight, low } }
-    : { id: 'p_' + Math.random().toString(36).slice(2, 10), name, slotTypes, minimumPerDay, thresholds: { tight, low }, createdAt: new Date().toISOString() };
+    ? { ...editing, name, slotTypes, minimumByDay, thresholds: { tight, low } }
+    : { id: 'p_' + Math.random().toString(36).slice(2, 10), name, slotTypes, minimumByDay, thresholds: { tight, low }, createdAt: new Date().toISOString() };
+  delete preset.minimumPerDay;
 
   const updated = editing
     ? presets.map(p => p.id === editing.id ? preset : p)
