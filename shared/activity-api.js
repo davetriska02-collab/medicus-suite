@@ -25,7 +25,7 @@
   const METRICS = [
     { key: 'consultations',                      short: 'Consults',     long: 'Consultations',                       colour: '#3b82f6' }, // blue
     { key: 'routinePrescriptionRequestTasks',    short: 'Routine Rx',   long: 'Routine prescription requests',       colour: '#f59e0b' }, // amber
-    { key: 'nonRoutinePrescriptionRequestTasks', short: 'Urgent Rx',    long: 'Non-routine prescription requests',   colour: '#ef4444' }, // red
+    { key: 'nonRoutinePrescriptionRequestTasks', short: 'Non-routine', long: 'Non-routine prescription requests',   colour: '#ef4444' }, // red
     { key: 'medicationReviews',                  short: 'Med reviews',  long: 'Medication reviews',                  colour: '#a78bfa' }, // purple
     { key: 'documentTasks',                      short: 'Documents',    long: 'Document tasks',                      colour: '#94a3b8' }, // grey
     { key: 'investigationReportTasks',           short: 'Results',      long: 'Investigation report tasks (Results)', colour: '#4ade80' }, // green
