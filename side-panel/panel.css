@@ -601,31 +601,31 @@ html, body {
 .rm-strip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  font-size: 11px;
+  gap: 10px;
+  padding: 6px 15px;
+  font-size: 14px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   background: rgba(59,130,246,0.06);
   border-bottom-color: rgba(59,130,246,0.18);
   overflow-x: auto;
-  min-height: 28px;
+  min-height: 35px;
   white-space: nowrap;
 }
 
 .rm-strip-hidden { display: none; }
 
-.rm-strip-icon  { font-size: 12px; flex-shrink: 0; }
-.rm-strip-label { color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; flex-shrink: 0; }
+.rm-strip-icon  { font-size: 15px; flex-shrink: 0; }
+.rm-strip-label { color: var(--t4); font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; flex-shrink: 0; }
 
 .rm-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 13px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 13px;
   background: rgba(255,255,255,0.04);
   color: var(--t3);
   border: 1px solid rgba(255,255,255,0.06);
@@ -634,7 +634,7 @@ html, body {
   flex-shrink: 0;
 }
 .rm-pill:hover { background: rgba(255,255,255,0.08); }
-.rm-pill-count { color: var(--t1); font-weight: 600; min-width: 12px; text-align: right; }
+.rm-pill-count { color: var(--t1); font-weight: 600; min-width: 15px; text-align: right; }
 
 /* Highlight pills with any items */
 .rm-pill-active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); }
@@ -647,7 +647,7 @@ html, body {
 .rm-strip-error {
   color: #f87171;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 13px;
   margin-left: auto;
 }
 
