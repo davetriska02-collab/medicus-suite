@@ -33,7 +33,7 @@ export async function init(el) {
   wrPollTimer = setInterval(fetchWaitingRoom, WR_POLL_MS);
 
   await refresh();
-  pollTimer = setInterval(refresh, 3000);
+  pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 
@@ -190,6 +190,7 @@ function updateWrPinned(el) {
 
 async function refresh() {
   if (!container) return;
+  if (document.visibilityState !== 'visible') return;
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
   if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {

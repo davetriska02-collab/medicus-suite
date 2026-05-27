@@ -6,6 +6,7 @@ const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
 let activeModule = 'slots';
 let moduleCleanup = null;
+let switchSeq = 0;
 
 // ── Module registry ───────────────────────────────────────────────────────────
 
@@ -116,8 +117,12 @@ chrome.runtime.onMessage.addListener(msg => {
 updatePopoutBtn();
 
 async function switchModule(name) {
-  // Cleanup previous module
-  if (moduleCleanup) { try { moduleCleanup(); } catch (e) {} moduleCleanup = null; }
+  const mySeq = ++switchSeq;
+
+  // Cleanup previous module before wiping content
+  const prevCleanup = moduleCleanup;
+  moduleCleanup = null;
+  if (prevCleanup) try { prevCleanup(); } catch (e) { console.error(e); }
 
   // Update nav
   document.querySelectorAll('.nav-tab').forEach(t =>
@@ -135,10 +140,18 @@ async function switchModule(name) {
 
   try {
     const mod = await entry.js();
+    if (mySeq !== switchSeq) return;
     if (mod.init) {
-      moduleCleanup = await mod.init(content);
+      const cleanup = await mod.init(content);
+      if (mySeq !== switchSeq) {
+        // A newer switch happened while init was running — clean up immediately
+        if (typeof cleanup === 'function') try { cleanup(); } catch (e) { console.error(e); }
+        return;
+      }
+      moduleCleanup = cleanup;
     }
   } catch (err) {
+    if (mySeq !== switchSeq) return;
     content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load module: ${err.message}</div></div>`;
   }
 }
@@ -300,6 +313,7 @@ const wrStripEl   = document.getElementById('wrStrip');
 let wrPollTimer   = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
+  if (document.visibilityState !== 'visible') return;
   // Resolve practice code on every call so user changes take effect immediately
   const { code, source } = await window.PracticeCode.resolve();
   SITE_ID_WR = code;
@@ -417,6 +431,7 @@ let rmPollTimer = null;
 let rmPollSeconds = 60;
 
 async function fetchAndRenderRmStrip() {
+  if (document.visibilityState !== 'visible') return;
   if (!rmStripEl || !window.RequestMonitor) return;
 
   const cfg = await window.RequestMonitor.getConfig();
@@ -574,6 +589,7 @@ function _subRagLevel(key, value, thresholds) {
 }
 
 async function fetchAndRenderSubRagStrip() {
+  if (document.visibilityState !== 'visible') return;
   if (!subRagStripEl) return;
 
   const stored = await chrome.storage.local.get('submissions.thresholds');
@@ -634,7 +650,16 @@ async function fetchAndRenderSubRagStrip() {
 }
 
 fetchAndRenderSubRagStrip();
-setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
+let subRagPollTimer = setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
+
+// Refresh all three strips immediately when the panel becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    fetchAndRenderStrip();
+    fetchAndRenderRmStrip();
+    fetchAndRenderSubRagStrip();
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 

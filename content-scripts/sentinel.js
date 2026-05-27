@@ -355,10 +355,12 @@
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 400);
 
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
       const resp = await fetch(
         `${apiOrigin}/clinical/data/patient-journal/overview/${patientId}`,
-        { credentials: 'include' }
+        { credentials: 'include', signal: ctrl.signal }
       );
       if (!resp.ok) return [];
       const d = await resp.json();
@@ -415,8 +417,11 @@
       }
       return result;
     } catch (e) {
+      if (e.name === 'AbortError') return [];
       console.warn('[Sentinel] fetchJournalObservations failed:', e.message);
       return [];
+    } finally {
+      clearTimeout(timer);
     }
   }
 

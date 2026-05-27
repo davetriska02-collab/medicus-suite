@@ -38,6 +38,9 @@ let container = null;
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means user has not configured one yet.
 let SITE_ID = null;
+// Set to true while savePreset/deletePreset is writing to storage, so that
+// onStorageChange does not trigger a redundant loadVisibleDates() call.
+let selfWriteInProgress = false;
 let availableTypes = []; // cached from API
 let state = {
   presets: [],
@@ -93,6 +96,7 @@ function onSlotsRefresh() {
 }
 
 function onStorageChange(changes) {
+  if (selfWriteInProgress) return;
   let changed = false;
   if (changes['capacity.presets']) { state.presets = changes['capacity.presets'].newValue || []; changed = true; }
   if (changes['capacity.activePresetId']) { state.activePresetId = changes['capacity.activePresetId'].newValue; changed = true; }
@@ -875,7 +879,9 @@ async function savePreset() {
     state.activePresetId = preset.id;
     setKeys['capacity.activePresetId'] = preset.id;
   }
+  selfWriteInProgress = true;
   await chrome.storage.local.set(setKeys);
+  selfWriteInProgress = false;
   Object.keys(state.data).forEach(d => delete state.data[d]);
   closeEditor();
 }
@@ -886,10 +892,12 @@ async function deletePreset() {
   state.presets = state.presets.filter(p => p.id !== id);
   const newActive = state.activePresetId === id ? (state.presets[0]?.id || null) : state.activePresetId;
   state.activePresetId = newActive;
+  selfWriteInProgress = true;
   await chrome.storage.local.set({
     'capacity.presets': state.presets,
     'capacity.activePresetId': newActive,
   });
+  selfWriteInProgress = false;
   Object.keys(state.data).forEach(d => delete state.data[d]);
   closeEditor();
 }

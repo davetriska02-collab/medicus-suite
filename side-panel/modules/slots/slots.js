@@ -25,6 +25,7 @@ let state = {
 };
 
 let container = null;
+let _inFlight = false;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -83,41 +84,50 @@ function onStorageChange(changes) {
 
 async function fetchAndRender() {
   if (!container) return;
-  // Re-resolve practice code on every fetch (auto-detect from tab if available)
-  if (window.PracticeCode) {
-    const { code } = await window.PracticeCode.resolve();
-    if (code) {
-      SITE_ID = code;
-      API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
-    }
-  }
-  if (!SITE_ID || !API_BASE) {
-    state.loading = false;
-    state.error = 'No practice code — open a Medicus tab or set it in Options.';
-    render();
-    return;
-  }
-  state.loading = true;
-  state.error = null;
-  render();
-
+  if (_inFlight) return;
+  _inFlight = true;
+  const refreshBtn = container.querySelector('#refreshSlots');
+  if (refreshBtn) refreshBtn.disabled = true;
   try {
-    const url = `${API_BASE}/scheduling/data/appointment-book/embedded-overview?date=${state.date}&filterByUsualLocation=false`;
-    const resp = await fetch(url, { credentials: 'include' });
-    if (!resp.ok) {
-      if (resp.status === 401 || resp.status === 403) throw new Error('Not signed in to Medicus. Open Medicus in a tab and sign in.');
-      throw new Error(`API error ${resp.status}`);
+    // Re-resolve practice code on every fetch (auto-detect from tab if available)
+    if (window.PracticeCode) {
+      const { code } = await window.PracticeCode.resolve();
+      if (code) {
+        SITE_ID = code;
+        API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
+      }
     }
-    const raw = await resp.json();
-    state.data = aggregate(raw, state.date);
-    state.lastFetched = new Date();
+    if (!SITE_ID || !API_BASE) {
+      state.loading = false;
+      state.error = 'No practice code — open a Medicus tab or set it in Options.';
+      render();
+      return;
+    }
+    state.loading = true;
     state.error = null;
-  } catch (err) {
-    state.error = err.message;
-  }
+    render();
 
-  state.loading = false;
-  render();
+    try {
+      const url = `${API_BASE}/scheduling/data/appointment-book/embedded-overview?date=${state.date}&filterByUsualLocation=false`;
+      const resp = await fetch(url, { credentials: 'include' });
+      if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) throw new Error('Not signed in to Medicus. Open Medicus in a tab and sign in.');
+        throw new Error(`API error ${resp.status}`);
+      }
+      const raw = await resp.json();
+      state.data = aggregate(raw, state.date);
+      state.lastFetched = new Date();
+      state.error = null;
+    } catch (err) {
+      state.error = err.message;
+    }
+
+    state.loading = false;
+    render();
+  } finally {
+    _inFlight = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
