@@ -32,6 +32,7 @@
     downloadUrl:   'suite.update.downloadUrl',
     checkedAt:     'suite.update.checkedAt',
     error:         'suite.update.error',
+    etag:          'suite.update.etag',
   };
 
   // ── Semver comparison ───────────────────────────────────────────────────────
@@ -76,16 +77,40 @@
       }
     }
 
+    // Build request headers; add If-None-Match if we have a stored ETag
+    const stored = await chrome.storage.local.get([STORAGE_KEYS.etag]);
+    const storedEtag = stored[STORAGE_KEYS.etag] || null;
+    const reqHeaders = { 'Accept': 'application/vnd.github+json' };
+    if (storedEtag) reqHeaders['If-None-Match'] = storedEtag;
+
     let raw;
     try {
-      const r = await _fetch(RELEASES_URL, {
-        headers: { 'Accept': 'application/vnd.github+json' },
-      });
+      const r = await _fetch(RELEASES_URL, { headers: reqHeaders });
+
+      if (r.status === 304) {
+        // Not modified — our cached data is still current; just refresh checkedAt
+        await chrome.storage.local.set({ [STORAGE_KEYS.checkedAt]: Date.now() });
+        return { ok: true, notModified: true, reason: 'ETag match — release unchanged' };
+      }
+
       if (!r.ok) {
         const err = `GitHub API HTTP ${r.status}`;
-        await chrome.storage.local.set({ [STORAGE_KEYS.error]: err });
+        const toWrite = { [STORAGE_KEYS.error]: err };
+        // On rate-limit (403/429) also write checkedAt so the 23h cooldown engages
+        // and we don't hammer GitHub's API on every subsequent alarm fire.
+        if (r.status === 403 || r.status === 429) {
+          toWrite[STORAGE_KEYS.checkedAt] = Date.now();
+        }
+        await chrome.storage.local.set(toWrite);
         return { ok: false, error: err };
       }
+
+      // Capture the ETag for future conditional requests
+      const newEtag = r.headers && r.headers.get ? r.headers.get('etag') : null;
+      if (newEtag) {
+        await chrome.storage.local.set({ [STORAGE_KEYS.etag]: newEtag });
+      }
+
       raw = await r.json();
     } catch (e) {
       const err = `Network: ${e.message || e}`;
@@ -124,6 +149,7 @@
       downloadUrl:   r[STORAGE_KEYS.downloadUrl]   || null,
       checkedAt:     r[STORAGE_KEYS.checkedAt]     || null,
       error:         r[STORAGE_KEYS.error]         || null,
+      etag:          r[STORAGE_KEYS.etag]          || null,
     };
   }
 

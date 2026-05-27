@@ -10,6 +10,7 @@ const STATUS_LABEL  = { overdue:'OVERDUE', not_met:'NOT MET', stale:'STALE', due
 let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
+let _refreshBtnHandler = null;
 
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
@@ -32,13 +33,16 @@ export async function init(el) {
   wrPollTimer = setInterval(fetchWaitingRoom, WR_POLL_MS);
 
   await refresh();
-  pollTimer = setInterval(refresh, 3000);
+  pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 
   // Listen for Pusher-driven refresh signals from service worker
   const onMsg = (msg) => { if (msg?.type === 'waiting:refresh') fetchWaitingRoom(true); };
   chrome.runtime.onMessage.addListener(onMsg);
+
+  _refreshBtnHandler = e => { if (e.target?.id === 'sentRefreshBtn') refresh(); };
+  document.addEventListener('click', _refreshBtnHandler);
 
   return () => {
     cleanup();
@@ -54,6 +58,10 @@ async function cleanup() {
   clearInterval(wrPollTimer);
   chrome.tabs.onActivated.removeListener(refresh);
   chrome.tabs.onUpdated.removeListener(onUpdated);
+  if (_refreshBtnHandler) {
+    document.removeEventListener('click', _refreshBtnHandler);
+    _refreshBtnHandler = null;
+  }
   container = null;
 }
 
@@ -182,6 +190,7 @@ function updateWrPinned(el) {
 
 async function refresh() {
   if (!container) return;
+  if (document.visibilityState !== 'visible') return;
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
   if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {
@@ -387,6 +396,3 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-document.addEventListener('click', e => {
-  if (e.target?.id === 'sentRefreshBtn') refresh();
-});

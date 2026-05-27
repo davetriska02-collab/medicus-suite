@@ -42,7 +42,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'pusher:scheduling:appointments-updated':
       broadcastToSidePanel({ type: 'slots:refresh' });
       broadcastToSidePanel({ type: 'waiting:refresh' });
-      chrome.runtime.sendMessage({ type: 'waiting:refresh' }).catch(() => {});
       break;
 
     // Triage Lens: open its options (routes to unified options page)
@@ -98,13 +97,13 @@ chrome.runtime.onInstalled.addListener(() => {
   runMigration();
   migrateTriageLensConfig();
   initialiseTriage();
-  initialiseRequestMonitor();
+  initialiseRequestMonitor().then(() => pollRequestMonitor());
   initialiseUpdateChecker();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   startPolling();
-  initialiseRequestMonitor();
+  initialiseRequestMonitor().then(() => pollRequestMonitor());
   initialiseUpdateChecker();
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
@@ -262,8 +261,13 @@ async function initialiseRequestMonitor() {
   const cfg = await self.RequestMonitor.getConfig();
   if (cfg.enabled && cfg.assigneeId) {
     await scheduleRmAlarm(cfg.pollSeconds);
-    pollRequestMonitor();  // initial fetch
+    // No synchronous pollRequestMonitor() here — the alarm is the single source
+    // of polling. MV3 alarms have a ≥30 s minimum delay so one initial poll is
+    // fired explicitly only at install/startup via the onInstalled / onStartup
+    // handlers, not on every re-init triggered by a config change.
   } else {
+    // User disabled the monitor — abort any in-flight requests immediately
+    if (self.RequestMonitor) self.RequestMonitor.abortInFlight();
     await chrome.alarms.clear(RM_ALARM);
   }
 }
@@ -271,17 +275,33 @@ async function initialiseRequestMonitor() {
 async function scheduleRmAlarm(seconds) {
   const minutes = Math.max(0.5, seconds / 60);
   await chrome.alarms.clear(RM_ALARM);
-  await chrome.alarms.create(RM_ALARM, { periodInMinutes: minutes, delayInMinutes: 0 });
+  // delayInMinutes omitted so the alarm only fires on its period — avoids a
+  // second immediate poll racing with the explicit startup poll.
+  await chrome.alarms.create(RM_ALARM, { periodInMinutes: minutes });
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === RM_ALARM) pollRequestMonitor();
 });
 
-// Re-evaluate alarm and immediate poll on any RM config change
+// Allowlist of user-config keys that should trigger a re-init.
+// NOTE: deliberately excludes state/notifMap/authError — those are written by
+// the poller itself and must NOT re-trigger initialiseRequestMonitor or the
+// storage write from every poll cycle causes an infinite reinit loop.
+const RM_CONFIG_KEYS = new Set([
+  'suite.requestMonitor.enabled',
+  'suite.requestMonitor.assigneeId',
+  'suite.requestMonitor.pollSeconds',
+  'suite.requestMonitor.notifyEnabled',
+  'suite.requestMonitor.notifySound',
+]);
+
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
-  if (Object.keys(changes).some(k => k.startsWith('suite.requestMonitor.'))) {
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.some(k => RM_CONFIG_KEYS.has(k))) {
+    // Clear auth back-off so the user can immediately retry after re-configuring
+    if (self.RequestMonitor) self.RequestMonitor.clearAuthPause();
     await initialiseRequestMonitor();
   }
 });
@@ -357,6 +377,19 @@ chrome.notifications?.onClicked.addListener(async notifId => {
   const url = map[notifId];
   if (url) chrome.tabs.create({ url });
   chrome.notifications.clear(notifId);
+  // Remove this entry from the persisted map so it doesn't accumulate stale entries
+  delete map[notifId];
+  await chrome.storage.local.set({ [RM_NOTIF_MAP_KEY]: map });
+});
+
+chrome.notifications?.onClosed.addListener(async (notifId, byUser) => {
+  if (!notifId.startsWith('mrm_')) return;
+  // Clean up the map entry when the notification is dismissed (by user or programmatically)
+  const map = (await chrome.storage.local.get(RM_NOTIF_MAP_KEY))[RM_NOTIF_MAP_KEY] || {};
+  if (map[notifId]) {
+    delete map[notifId];
+    await chrome.storage.local.set({ [RM_NOTIF_MAP_KEY]: map });
+  }
 });
 
 // ── Update Checker: once-daily GitHub releases poll (v1.3.1) ──────────────────

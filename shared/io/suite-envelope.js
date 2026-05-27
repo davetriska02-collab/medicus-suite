@@ -4,7 +4,7 @@
 //   format: "medicus-suite-backup"
 //   formatVersion: 1
 //   scope: "suite" | "sentinel" | "capacity" | "triage" | "triageAlerts" |
-//           "slots" | "submissions" | "popout"
+//           "slots" | "submissions" | "popout" | "referrals" | "requestMonitor"
 //   modules: { [scope]: { ...module data } }
 //
 // A scoped export (e.g. just Capacity) includes only that module's key under
@@ -28,7 +28,7 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '1.6.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -127,6 +127,15 @@ function previewEnvelope(envelope) {
   }
   if (mods.popout) {
     lines.push('Pop-out: window state included');
+  }
+  if (mods.referrals) {
+    const discoveryCount = Array.isArray(mods.referrals.discovery) ? mods.referrals.discovery.length : (mods.referrals.discovery != null ? 1 : 0);
+    const hasConfig = mods.referrals.config != null;
+    lines.push(`Referrals: ${discoveryCount} discovered, config ${hasConfig ? 'present' : 'absent'}`);
+  }
+  if (mods.requestMonitor) {
+    const enabled = mods.requestMonitor.enabled;
+    lines.push(`Request Monitor: ${enabled ? 'enabled' : 'disabled'}, assignee ${mods.requestMonitor.assigneeId || 'not set'}`);
   }
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);

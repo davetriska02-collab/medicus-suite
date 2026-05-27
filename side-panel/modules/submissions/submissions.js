@@ -39,6 +39,8 @@ let state = {
 let container    = null;
 let pollInterval = null;
 let _lastMetricItems = null;
+let _inFlight = false;
+let _storageListener = null;
 
 function getRagLevel(key, value, thresholds) {
   const t = thresholds[key];
@@ -65,15 +67,18 @@ export async function init(el) {
     if (state.mode === 'today' && document.visibilityState === 'visible') fetchAndRender(false);
   }, 60000);
 
-  chrome.storage.onChanged.addListener((changes, area) => {
+  _storageListener = (changes, area) => {
     if (area === 'local' && changes['submissions.thresholds'] && container) {
       state.thresholds = { ...DEFAULT_THRESHOLDS, ...(changes['submissions.thresholds'].newValue || {}) };
       renderAll();
     }
-  });
+  };
+  chrome.storage.onChanged.addListener(_storageListener);
 
   return () => {
     clearInterval(pollInterval);
+    chrome.storage.onChanged.removeListener(_storageListener);
+    _storageListener = null;
     container = null;
   };
 }
@@ -208,29 +213,38 @@ function datePicker(label, value, onChange) {
 
 async function fetchAndRender(force = false) {
   if (!container) return;
-  // Re-resolve practice code (auto-detect from tab, fall back to storage)
-  if (window.PracticeCode) {
-    const { code } = await window.PracticeCode.resolve();
-    if (code) state.config.practiceCode = code;
-  }
-  if (!state.config.practiceCode) {
-    setBanner('No practice code — open a Medicus tab or set it in Options.', 'info'); showSkeleton(); return;
-  }
-  state.loading = true; showSkeleton(); setBanner(null); updateTitles();
+  if (_inFlight) return;
+  _inFlight = true;
+  const refreshBtn = container.querySelector('#subRefreshBtn');
+  if (refreshBtn) refreshBtn.disabled = true;
   try {
-    if (state.mode === 'today') {
-      state.data = { primary: await fetchDay(state.primaryDate), compare: null };
-    } else if (state.mode === 'compare') {
-      const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
-      state.data = { primary: p, compare: c };
-    } else {
-      state.data = { primary: await fetchRange(state.rangeStart, state.rangeEnd), compare: null };
+    // Re-resolve practice code (auto-detect from tab, fall back to storage)
+    if (window.PracticeCode) {
+      const { code } = await window.PracticeCode.resolve();
+      if (code) state.config.practiceCode = code;
     }
-    state.lastFetched = new Date(); state.loading = false;
-    renderAll();
-  } catch (err) {
-    state.loading = false;
-    setBanner(`Failed to load: ${err.message}. Check you're signed into Medicus.`);
+    if (!state.config.practiceCode) {
+      setBanner('No practice code — open a Medicus tab or set it in Options.', 'info'); showSkeleton(); return;
+    }
+    state.loading = true; showSkeleton(); setBanner(null); updateTitles();
+    try {
+      if (state.mode === 'today') {
+        state.data = { primary: await fetchDay(state.primaryDate), compare: null };
+      } else if (state.mode === 'compare') {
+        const [p, c] = await Promise.all([fetchDay(state.primaryDate), fetchDay(state.compareDate)]);
+        state.data = { primary: p, compare: c };
+      } else {
+        state.data = { primary: await fetchRange(state.rangeStart, state.rangeEnd), compare: null };
+      }
+      state.lastFetched = new Date(); state.loading = false;
+      renderAll();
+    } catch (err) {
+      state.loading = false;
+      setBanner(`Failed to load: ${err.message}. Check you're signed into Medicus.`);
+    }
+  } finally {
+    _inFlight = false;
+    if (refreshBtn) refreshBtn.disabled = false;
   }
 }
 

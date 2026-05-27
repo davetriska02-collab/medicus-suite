@@ -12,7 +12,8 @@
 // just read off window.
 function ApiNs() { return (typeof window !== 'undefined') ? window.ActivityApi : null; }
 
-let container = null;
+let container  = null;
+let _inFlight  = false;
 let state = {
   startDate: null,
   endDate: null,
@@ -52,40 +53,49 @@ export async function init(el) {
 
 async function fetchAndRender() {
   if (!container) return;
-  const api = ApiNs();
-  if (!api) {
-    state.error = 'Activity API module not loaded';
-    render();
-    return;
-  }
-
-  const { code, source } = await window.PracticeCode.resolve();
-  if (!code) {
-    state.error = 'No practice code — open a Medicus tab or set it in Options.';
-    state.loading = false;
-    render();
-    return;
-  }
-
-  state.loading = true;
-  state.error = null;
-  render();
-
+  if (_inFlight) return;
+  _inFlight = true;
+  const refreshBtn = container.querySelector('#actRefresh');
+  if (refreshBtn) refreshBtn.disabled = true;
   try {
-    const data = await api.fetchActivityReport(code, state.startDate, state.endDate, {
-      fetch: (url, init) => window.ApiDiag.fetch({
-        module: 'activity', url, code, codeSource: source, init,
-      }),
-    });
-    state.rawResponse = data;
-    state.aggregated = api.aggregate(data?.rowData || []);
-    state.lastFetched = new Date();
+    const api = ApiNs();
+    if (!api) {
+      state.error = 'Activity API module not loaded';
+      render();
+      return;
+    }
+
+    const { code, source } = await window.PracticeCode.resolve();
+    if (!code) {
+      state.error = 'No practice code — open a Medicus tab or set it in Options.';
+      state.loading = false;
+      render();
+      return;
+    }
+
+    state.loading = true;
     state.error = null;
-  } catch (e) {
-    state.error = e.message || String(e);
-  } finally {
-    state.loading = false;
     render();
+
+    try {
+      const data = await api.fetchActivityReport(code, state.startDate, state.endDate, {
+        fetch: (url, init) => window.ApiDiag.fetch({
+          module: 'activity', url, code, codeSource: source, init,
+        }),
+      });
+      state.rawResponse = data;
+      state.aggregated = api.aggregate(data?.rowData || []);
+      state.lastFetched = new Date();
+      state.error = null;
+    } catch (e) {
+      state.error = e.message || String(e);
+    } finally {
+      state.loading = false;
+      render();
+    }
+  } finally {
+    _inFlight = false;
+    if (refreshBtn) refreshBtn.disabled = false;
   }
 }
 

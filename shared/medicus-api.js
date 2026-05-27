@@ -13,7 +13,8 @@ function apiBase(siteId) {
 
 export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = false } = {}) {
   if (!siteId) throw new Error('Practice code not set');
-  const cached = _cache.get(dateISO);
+  const cacheKey = `${siteId}|${dateISO}`;
+  const cached = _cache.get(cacheKey);
   if (!bypassCache && cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
     return cached.data;
   }
@@ -25,12 +26,22 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
     throw new Error(`API error ${r.status}`);
   }
   const data = await r.json();
-  _cache.set(dateISO, { data, fetchedAt: Date.now() });
+  _cache.set(cacheKey, { data, fetchedAt: Date.now() });
   return data;
 }
 
-export function invalidateCache(dateISO) {
-  if (dateISO) _cache.delete(dateISO);
+export function invalidateCache(siteId, dateISO) {
+  // Support legacy single-arg call: invalidateCache(dateISO)
+  // In that case siteId looks like "YYYY-MM-DD" and dateISO is undefined.
+  // Fall back to clearing all entries for that date across all practices.
+  if (siteId && !dateISO && /^\d{4}-\d{2}-\d{2}$/.test(siteId)) {
+    const dateSuffix = `|${siteId}`;
+    for (const k of _cache.keys()) {
+      if (k.endsWith(dateSuffix)) _cache.delete(k);
+    }
+    return;
+  }
+  if (siteId && dateISO) _cache.delete(`${siteId}|${dateISO}`);
   else _cache.clear();
 }
 

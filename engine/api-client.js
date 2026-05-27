@@ -226,6 +226,7 @@
 
   const CACHE = new Map();
   const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+  const IN_FLIGHT = new Map(); // key -> Promise (dedup concurrent fetches)
 
   function cacheKey(apiBase, uuid, endpoint) {
     return `${apiBase}|${uuid}|${endpoint}`;
@@ -267,8 +268,17 @@
         const cached = getCached(apiBase, uuid, key);
         if (cached) { results[key] = cached; return; }
       }
+      const k = cacheKey(apiBase, uuid, key);
       try {
-        const data = await fn(apiBase, uuid);
+        let promise;
+        if (IN_FLIGHT.has(k)) {
+          promise = IN_FLIGHT.get(k);
+        } else {
+          promise = fn(apiBase, uuid);
+          IN_FLIGHT.set(k, promise);
+          promise.finally(() => IN_FLIGHT.delete(k));
+        }
+        const data = await promise;
         results[key] = data;
         setCached(apiBase, uuid, key, data);
       } catch (e) {

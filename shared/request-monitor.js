@@ -1,4 +1,4 @@
-// Medicus Suite — Request Monitor (v1.3)
+// Medicus Suite — Request Monitor (v1.4)
 //
 // Polls Medicus task-list API for new/replied medical and admin requests
 // against a configured team (assignee UUID). Tracks seen task IDs across
@@ -11,6 +11,7 @@
 //   suite.requestMonitor.notifyEnabled boolean — desktop notifications (default false)
 //   suite.requestMonitor.notifySound   boolean — sound on notification (default false)
 //   suite.requestMonitor.state         object  — { buckets, seenIds, lastPoll, error }
+//   suite.requestMonitor.authError     boolean — transient: true when paused after 401/403
 //
 // Practice code is resolved at fetch time via PracticeCode.resolve() — never
 // duplicated in this module's config.
@@ -25,7 +26,28 @@
     notifyEnabled: 'suite.requestMonitor.notifyEnabled',
     notifySound:   'suite.requestMonitor.notifySound',
   };
-  const STATE_KEY = 'suite.requestMonitor.state';
+  const STATE_KEY     = 'suite.requestMonitor.state';
+  const AUTH_ERR_KEY  = 'suite.requestMonitor.authError';
+
+  // ── In-flight deduplication ─────────────────────────────────────────────────
+  // A single Promise shared across concurrent callers (SW alarm + panel strip).
+  // Cleared in .finally() so the next invocation starts a fresh poll.
+
+  let inFlightPoll = null;
+
+  // ── Auth failure back-off ───────────────────────────────────────────────────
+  // When the API returns 401/403, polling is paused for 5 minutes so we don't
+  // burn rate-limited requests against a session that has expired.
+
+  let pausedUntil = 0;
+  const AUTH_PAUSE_MS = 5 * 60 * 1000;
+
+  // ── AbortController for in-flight requests ──────────────────────────────────
+  // Replaced on every new pollAll. The previous controller is never explicitly
+  // aborted except via abortInFlight(), so ongoing fetches are only cancelled
+  // when the caller (SW) decides to stop polling (e.g. user disables the monitor).
+
+  let currentAbortController = null;
 
   const DEFAULTS = {
     enabled: false,
@@ -87,14 +109,20 @@
 
   // ── Bucket fetch ────────────────────────────────────────────────────────────
 
-  async function fetchBucket(practiceCode, assigneeId, bucket, fetchImpl) {
+  async function fetchBucket(practiceCode, assigneeId, bucket, fetchImpl, signal) {
     const url = buildApiUrl(practiceCode, bucket.taskType, bucket.status, assigneeId);
     const _fetch = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     if (!_fetch) return { count: 0, taskIds: [], items: [], error: 'No fetch impl' };
 
     try {
-      const r = await _fetch(url, { credentials: 'include' });
-      if (!r.ok) return { count: 0, taskIds: [], items: [], error: `HTTP ${r.status}` };
+      const r = await _fetch(url, { credentials: 'include', signal });
+      if (!r.ok) {
+        // 401/403: signal auth failure to pollAll so it can pause polling
+        if (r.status === 401 || r.status === 403) {
+          return { count: 0, taskIds: [], items: [], error: `HTTP ${r.status}`, authFailed: true };
+        }
+        return { count: 0, taskIds: [], items: [], error: `HTTP ${r.status}` };
+      }
       const d = await r.json();
       const tasks = d.tasks || [];
       return {
@@ -115,14 +143,55 @@
   }
 
   // ── Poll all four buckets ───────────────────────────────────────────────────
+  //
+  // Deduplication: if a poll is already in flight (e.g. SW alarm fires while
+  // the panel strip is also polling), share the same Promise rather than
+  // launching a second set of fetches that would race on the storage write.
+  //
+  // Auth back-off: when any bucket returns 401/403, polling is paused for
+  // AUTH_PAUSE_MS (5 min) and suite.requestMonitor.authError is set to true.
+  // The pause is cleared when the user updates any config key.
 
-  async function pollAll(practiceCode, assigneeId, opts) {
+  function pollAll(practiceCode, assigneeId, opts) {
+    if (inFlightPoll) return inFlightPoll;
+
+    inFlightPoll = _doPollAll(practiceCode, assigneeId, opts).finally(() => {
+      inFlightPoll = null;
+    });
+    return inFlightPoll;
+  }
+
+  async function _doPollAll(practiceCode, assigneeId, opts) {
     opts = opts || {};
     const fetchImpl = opts.fetch;
+    // usesRealFetch: true when running against the live Medicus API (no override).
+    // Auth back-off only applies to real API calls — mocked tests always proceed.
+    const usesRealFetch = !fetchImpl;
 
     if (!practiceCode || !assigneeId) {
       return { ok: false, error: 'Not configured', buckets: {}, totalCount: 0, freshByBucket: {} };
     }
+
+    // Return cached state without fetching if we are in auth back-off (production only)
+    if (usesRealFetch && pausedUntil > Date.now()) {
+      const cached = (await chrome.storage.local.get(STATE_KEY))[STATE_KEY] || { buckets: {}, seenIds: {} };
+      return {
+        ok: false,
+        error: 'Auth error — polling paused',
+        buckets: cached.buckets || {},
+        totalCount: 0,
+        freshByBucket: {},
+        isFirstPoll: !cached.lastPoll,
+        authPaused: true,
+      };
+    }
+
+    // New AbortController per poll cycle; previous cycle's signal is not reused
+    const ac = new (typeof AbortController !== 'undefined' ? AbortController : function() {
+      this.signal = null; this.abort = function() {};
+    })();
+    currentAbortController = ac;
+    const signal = ac.signal;
 
     const prevState = (await chrome.storage.local.get(STATE_KEY))[STATE_KEY] || { buckets: {}, seenIds: {} };
     const seenIds = prevState.seenIds || {};
@@ -131,12 +200,14 @@
     let totalCount = 0;
     const freshByBucket = {};
     let firstError = null;
+    let authFailed = false;
 
     for (const b of BUCKETS) {
-      const result = await fetchBucket(practiceCode, assigneeId, b, fetchImpl);
+      const result = await fetchBucket(practiceCode, assigneeId, b, fetchImpl, signal);
       buckets[b.key] = result;
       totalCount += result.count;
       if (result.error && !firstError) firstError = result.error;
+      if (result.authFailed) authFailed = true;
 
       // Fresh = items in current poll whose IDs weren't in the previous seenIds
       const seen = new Set(seenIds[b.key] || []);
@@ -145,6 +216,12 @@
 
       // Update seenIds to current snapshot (resolved tasks naturally fall out)
       seenIds[b.key] = result.taskIds;
+    }
+
+    // If any bucket signalled an auth failure, engage 5-min back-off (production only)
+    if (authFailed && usesRealFetch) {
+      pausedUntil = Date.now() + AUTH_PAUSE_MS;
+      await chrome.storage.local.set({ [AUTH_ERR_KEY]: true });
     }
 
     const newState = {
@@ -176,6 +253,27 @@
     await chrome.storage.local.set({ [STATE_KEY]: { buckets: {}, seenIds: {}, lastPoll: null, error: null } });
   }
 
+  // ── Abort helper ────────────────────────────────────────────────────────────
+  // Called by the SW when the user disables the monitor so in-flight network
+  // requests are cancelled immediately rather than completing and writing state.
+
+  function abortInFlight() {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+    }
+  }
+
+  // ── Config-change reset ─────────────────────────────────────────────────────
+  // Clears auth back-off so a user who re-enters their credentials (or changes
+  // any config key) can immediately retry without waiting 5 minutes.
+
+  function clearAuthPause() {
+    pausedUntil = 0;
+    // Clear transient storage flag (fire-and-forget)
+    chrome.storage.local.remove(AUTH_ERR_KEY).catch(() => {});
+  }
+
   // ── Public surface ──────────────────────────────────────────────────────────
 
   const api = {
@@ -184,6 +282,7 @@
     MIN_POLL_SECONDS,
     CFG_KEYS,
     STATE_KEY,
+    AUTH_ERR_KEY,
     getConfig,
     setConfig,
     buildApiUrl,
@@ -192,6 +291,8 @@
     pollAll,
     getState,
     clearState,
+    abortInFlight,
+    clearAuthPause,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

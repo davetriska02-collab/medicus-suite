@@ -94,8 +94,15 @@
   async function storeConfig(url, data) {
     if (configCaptured) return;
     configCaptured = true;
+    // Skip write if the non-timestamp portion is unchanged (avoids per-page-load storage churn)
+    const existing = (await chrome.storage.local.get(CONFIG_KEY))[CONFIG_KEY];
+    if (existing && existing.url === url && JSON.stringify(existing.data) === JSON.stringify(data)) {
+      tryDataEndpoints(url, data);
+      return;
+    }
     await chrome.storage.local.set({ [CONFIG_KEY]: { url, discoveredAt: new Date().toISOString(), data } });
-    chrome.runtime.sendMessage({ action: 'referrals:configDiscovered' }).catch(() => {});
+    // No runtime message needed: the side panel listens to chrome.storage.onChanged
+    // for referrals.config and referrals.discovery and reacts automatically.
     // Immediately try to fetch the actual data using the config values
     tryDataEndpoints(url, data);
   }
@@ -103,9 +110,15 @@
   async function storeDataDiscovery(url, data) {
     if (dataCaptured) return;
     dataCaptured = true;
+    // Skip write if the non-timestamp portion is unchanged (avoids per-page-load storage churn)
+    const existing = (await chrome.storage.local.get(DISCOVERY_KEY))[DISCOVERY_KEY];
+    if (existing && existing.url === url && JSON.stringify(existing.sample) === JSON.stringify(data)) {
+      return;
+    }
     const discovery = { url, discoveredAt: new Date().toISOString(), sample: data };
     await chrome.storage.local.set({ [DISCOVERY_KEY]: discovery });
-    chrome.runtime.sendMessage({ action: 'referrals:discovered' }).catch(() => {});
+    // No runtime message needed: the side panel listens to chrome.storage.onChanged
+    // for referrals.config and referrals.discovery and reacts automatically.
   }
 
   // ── Capture from a seen URL ─────────────────────────────────────────────────

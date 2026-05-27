@@ -12,6 +12,7 @@ const CONFIG_KEY     = 'referrals.config';
 
 let container      = null;
 let stalenessTimer = null;
+let _inFlight      = false;
 
 let state = {
   discoveryUrl:     null,
@@ -147,64 +148,73 @@ export async function init(el) {
 
 async function fetchAndRender() {
   if (!container) return;
-  const api = ApiNs();
-  if (!api) { state.error = 'Referrals API module not loaded'; render(); return; }
-  if (!state.discoveryUrl) { render(); return; }
+  if (_inFlight) return;
+  _inFlight = true;
+  const refreshBtn = container.querySelector('#refRefresh');
+  if (refreshBtn) refreshBtn.disabled = true;
+  try {
+    const api = ApiNs();
+    if (!api) { state.error = 'Referrals API module not loaded'; render(); return; }
+    if (!state.discoveryUrl) { render(); return; }
 
-  const { code, source } = await window.PracticeCode.resolve();
+    const { code, source } = await window.PracticeCode.resolve();
 
-  state.loading        = true;
-  state.error          = null;
-  state.loadingProgress  = null;
-  state.activityLoading  = true;
-  state.activityError    = null;
-  state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
-  render();
+    state.loading        = true;
+    state.error          = null;
+    state.loadingProgress  = null;
+    state.activityLoading  = true;
+    state.activityError    = null;
+    state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
+    render();
 
-  const actFetch = window.ActivityApi
-    ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
+    const actFetch = window.ActivityApi
+      ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
+          fetch: (url, init) => window.ApiDiag.fetch({
+            module: 'referrals-rate', url, code: code || '(auto)', codeSource: source || 'tab', init,
+          }),
+        })
+      : Promise.reject(new Error('Activity module not loaded'));
+
+    const [refResult, actResult] = await Promise.allSettled([
+      api.fetchReferrals(code, state.startDate, state.endDate, {
+        templateUrl: state.discoveryUrl,
+        onProgress: (loaded, total) => { state.loadingProgress = { loaded, total }; render(); },
         fetch: (url, init) => window.ApiDiag.fetch({
-          module: 'referrals-rate', url, code: code || '(auto)', codeSource: source || 'tab', init,
+          module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
         }),
-      })
-    : Promise.reject(new Error('Activity module not loaded'));
-
-  const [refResult, actResult] = await Promise.allSettled([
-    api.fetchReferrals(code, state.startDate, state.endDate, {
-      templateUrl: state.discoveryUrl,
-      onProgress: (loaded, total) => { state.loadingProgress = { loaded, total }; render(); },
-      fetch: (url, init) => window.ApiDiag.fetch({
-        module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
       }),
-    }),
-    actFetch,
-  ]);
+      actFetch,
+    ]);
 
-  if (refResult.status === 'fulfilled') {
-    const result = refResult.value;
-    state.rawReferrals = result.referrals;
-    state.totalCount   = result.totalCount;
-    state.aggregated   = api.aggregate(result.referrals);
-    state.lastFetched  = new Date();
-    state.error        = null;
-    if (result.url) state.lastAttemptedUrl = result.url;
-  } else {
-    state.error = refResult.reason?.message || String(refResult.reason);
-    if (refResult.reason?.url) state.lastAttemptedUrl = refResult.reason.url;
+    if (refResult.status === 'fulfilled') {
+      const result = refResult.value;
+      state.rawReferrals = result.referrals;
+      state.totalCount   = result.totalCount;
+      state.aggregated   = api.aggregate(result.referrals);
+      state.lastFetched  = new Date();
+      state.error        = null;
+      if (result.url) state.lastAttemptedUrl = result.url;
+    } else {
+      state.error = refResult.reason?.message || String(refResult.reason);
+      if (refResult.reason?.url) state.lastAttemptedUrl = refResult.reason.url;
+    }
+
+    if (actResult.status === 'fulfilled') {
+      state.activityData  = actResult.value?.rowData || [];
+      state.activityError = null;
+    } else {
+      state.activityData  = null;
+      state.activityError = actResult.reason?.message || String(actResult.reason);
+    }
+
+    state.loading         = false;
+    state.loadingProgress = null;
+    state.activityLoading = false;
+    render();
+  } finally {
+    _inFlight = false;
+    if (refreshBtn) refreshBtn.disabled = false;
   }
-
-  if (actResult.status === 'fulfilled') {
-    state.activityData  = actResult.value?.rowData || [];
-    state.activityError = null;
-  } else {
-    state.activityData  = null;
-    state.activityError = actResult.reason?.message || String(actResult.reason);
-  }
-
-  state.loading         = false;
-  state.loadingProgress = null;
-  state.activityLoading = false;
-  render();
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

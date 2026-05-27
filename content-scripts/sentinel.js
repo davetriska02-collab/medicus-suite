@@ -355,10 +355,12 @@
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 400);
 
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
       const resp = await fetch(
         `${apiOrigin}/clinical/data/patient-journal/overview/${patientId}`,
-        { credentials: 'include' }
+        { credentials: 'include', signal: ctrl.signal }
       );
       if (!resp.ok) return [];
       const d = await resp.json();
@@ -394,6 +396,7 @@
           for (const topic of (item.data?.consultationTopics || [])) {
             for (const heading of (topic.headings || [])) {
               for (const entry of (heading.entries || [])) {
+                // Skip entries missing a type name, or entries that aren't observations (e.g. medications, problems).
                 if (!entry.type || entry.entryType !== 'observation') continue;
                 const entryDate = parseDisplayDate(entry.observationDate) || groupDate;
                 if (!entryDate || entryDate < cutoff) continue;
@@ -414,8 +417,11 @@
       }
       return result;
     } catch (e) {
+      if (e.name === 'AbortError') return [];
       console.warn('[Sentinel] fetchJournalObservations failed:', e.message);
       return [];
+    } finally {
+      clearTimeout(timer);
     }
   }
 
