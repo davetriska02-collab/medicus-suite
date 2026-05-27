@@ -16,6 +16,8 @@ async function triageImport(data, _opts = {}) {
     throw new Error('triagelens.config must be an object.');
   }
   await chrome.storage.local.set({ 'triagelens.config': data.config });
+  // Clean up legacy key from pre-1.x installs
+  chrome.storage.local.remove('config');
 }
 
 if (typeof module !== 'undefined' && module.exports) {

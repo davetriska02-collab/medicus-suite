@@ -394,6 +394,7 @@
           for (const topic of (item.data?.consultationTopics || [])) {
             for (const heading of (topic.headings || [])) {
               for (const entry of (heading.entries || [])) {
+                // Skip entries missing a type name, or entries that aren't observations (e.g. medications, problems).
                 if (!entry.type || entry.entryType !== 'observation') continue;
                 const entryDate = parseDisplayDate(entry.observationDate) || groupDate;
                 if (!entryDate || entryDate < cutoff) continue;

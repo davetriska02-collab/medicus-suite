@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.8.5] — 2026-05-27
+### Fixed
+- Backup gaps: `referrals.*`, `popout.activeModule`, `suite.requestMonitor.*` now captured in full-suite export/restore.
+- `submissions.config` no longer overwritten with a partial object when saving practice code.
+- Pusher `waiting:refresh` no longer fires twice per appointment update.
+- Referrals discovery messages now properly handled; live updates work.
+- Sentinel module: module-level `document.addEventListener('click', …)` moved into `init()` and removed in `cleanup()` — eliminates listener accumulation on module reload.
+### Removed
+- `side-panel/modules/triage/` directory deleted (module decommissioned in v1.5.3; files were left behind).
+- `shared/waiting-room-api.js` deleted (logic duplicated inline; no consumers).
+- Legacy `config` storage key removed during triage migration.
+
 ## [v1.8.4] — 2026-05-26
 ### Changed
 - Side-panel demand banner (`#rmStrip` — medical/admin request alerts): increased size by ~25% (padding, font-size, pill dimensions) for improved legibility.

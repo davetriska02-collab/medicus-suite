@@ -42,7 +42,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'pusher:scheduling:appointments-updated':
       broadcastToSidePanel({ type: 'slots:refresh' });
       broadcastToSidePanel({ type: 'waiting:refresh' });
-      chrome.runtime.sendMessage({ type: 'waiting:refresh' }).catch(() => {});
       break;
 
     // Triage Lens: open its options (routes to unified options page)

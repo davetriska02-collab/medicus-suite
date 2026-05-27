@@ -91,9 +91,10 @@ const testConnectionResult = document.getElementById('testConnectionResult');
 saveSuiteBtn?.addEventListener('click', async () => {
   if (!practiceCodeInput) return;
   const code = practiceCodeInput.value.trim().toLowerCase();
+  const { 'submissions.config': existingSubConfig = {} } = await chrome.storage.local.get('submissions.config');
   await chrome.storage.local.set({
     'suite.practiceCode': code,
-    'submissions.config': { practiceCode: code },
+    'submissions.config': { ...existingSubConfig, practiceCode: code },
   });
   if (suiteSaved) {
     suiteSaved.classList.add('show');
@@ -300,15 +301,15 @@ async function openForm(presetId) {
 }
 
 async function savePreset(editing) {
-  const name = document.getElementById('fName').value.trim();
+  const name = presetEditor.querySelector('#fName').value.trim();
   const minimumByDay = {};
   CAP_WEEKDAYS.forEach(d => {
     const el = presetEditor.querySelector(`input[data-day="${d.key}"]`);
     minimumByDay[d.key] = parseInt(el?.value, 10) || 0;
   });
-  const tight = parseInt(document.getElementById('fTight').value, 10) || 75;
-  const low = parseInt(document.getElementById('fLow').value, 10) || 50;
-  const slotTypes = Array.from(document.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(i => i.value);
+  const tight = parseInt(presetEditor.querySelector('#fTight').value, 10) || 75;
+  const low = parseInt(presetEditor.querySelector('#fLow').value, 10) || 50;
+  const slotTypes = Array.from(presetEditor.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(i => i.value);
 
   if (!name) { alert('Preset needs a name.'); return; }
   if (slotTypes.length === 0) { alert('Select at least one slot type.'); return; }
@@ -361,7 +362,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 //     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout] = await Promise.all([
+  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor] = await Promise.all([
     sentinelExport(),
     capacityExport(),
     triageExport(),
@@ -369,20 +370,24 @@ async function doFullExport() {
     slotCounterExport(),
     submissionsExport(),
     popoutExport(),
+    referralsExport(),
+    requestMonitorExport(),
   ]);
   const pc = submissions.practiceCode ?? null;
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, suite: { practiceCode: pc } });
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc } });
 }
 
 async function doModuleExport(scope) {
   const exporters = {
-    sentinel:     () => sentinelExport(),
-    capacity:     () => capacityExport(),
-    triage:       () => triageExport(),
-    triageAlerts: () => TriageAlertIO.exportData(),
-    slots:        () => slotCounterExport(),
-    submissions:  () => submissionsExport(),
-    popout:       () => popoutExport(),
+    sentinel:      () => sentinelExport(),
+    capacity:      () => capacityExport(),
+    triage:        () => triageExport(),
+    triageAlerts:  () => TriageAlertIO.exportData(),
+    slots:         () => slotCounterExport(),
+    submissions:   () => submissionsExport(),
+    popout:        () => popoutExport(),
+    referrals:     () => referralsExport(),
+    requestMonitor: () => requestMonitorExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -392,13 +397,15 @@ async function doModuleExport(scope) {
 async function applyEnvelope(envelope) {
   const mods = envelope.modules || {};
   await Promise.all([
-    mods.sentinel     && sentinelImport(mods.sentinel),
-    mods.capacity     && capacityImport(mods.capacity),
-    mods.triage       && triageImport(mods.triage),
-    mods.triageAlerts && TriageAlertIO.importData(mods.triageAlerts),
-    mods.slots        && slotCounterImport(mods.slots),
-    mods.submissions  && submissionsImport(mods.submissions),
-    mods.popout       && popoutImport(mods.popout),
+    mods.sentinel      && sentinelImport(mods.sentinel),
+    mods.capacity      && capacityImport(mods.capacity),
+    mods.triage        && triageImport(mods.triage),
+    mods.triageAlerts  && TriageAlertIO.importData(mods.triageAlerts),
+    mods.slots         && slotCounterImport(mods.slots),
+    mods.submissions   && submissionsImport(mods.submissions),
+    mods.popout        && popoutImport(mods.popout),
+    mods.referrals     && referralsImport(mods.referrals),
+    mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
     mods.suite?.practiceCode && chrome.storage.local.set({ 'suite.practiceCode': mods.suite.practiceCode }),
   ].filter(Boolean));
 }

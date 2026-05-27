@@ -95,7 +95,8 @@
     if (configCaptured) return;
     configCaptured = true;
     await chrome.storage.local.set({ [CONFIG_KEY]: { url, discoveredAt: new Date().toISOString(), data } });
-    chrome.runtime.sendMessage({ action: 'referrals:configDiscovered' }).catch(() => {});
+    // No runtime message needed: the side panel listens to chrome.storage.onChanged
+    // for referrals.config and referrals.discovery and reacts automatically.
     // Immediately try to fetch the actual data using the config values
     tryDataEndpoints(url, data);
   }
@@ -105,7 +106,8 @@
     dataCaptured = true;
     const discovery = { url, discoveredAt: new Date().toISOString(), sample: data };
     await chrome.storage.local.set({ [DISCOVERY_KEY]: discovery });
-    chrome.runtime.sendMessage({ action: 'referrals:discovered' }).catch(() => {});
+    // No runtime message needed: the side panel listens to chrome.storage.onChanged
+    // for referrals.config and referrals.discovery and reacts automatically.
   }
 
   // ── Capture from a seen URL ─────────────────────────────────────────────────
