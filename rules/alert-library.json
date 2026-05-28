@@ -211,7 +211,7 @@
         "id": "custom-pincer-9-metformin-renal",
         "label": "Metformin — annual eGFR overdue",
         "drug": {
-          "match": ["metformin"],
+          "match": ["metformin","glucophage","janumet","komboglyze","eucreas","xigduo","synjardy","vipdomet","jentadueto"],
           "exclude": []
         },
         "tests": [
@@ -283,7 +283,7 @@
         "enabled": true,
         "label": "Lithium + NSAID concurrent",
         "drugSets": [
-          { "name": "Lithium", "match": ["lithium"] },
+          { "name": "Lithium", "match": ["lithium"], "exclude": ["shampoo","topical","gel","cream"] },
           { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
@@ -407,7 +407,7 @@
         "enabled": true,
         "label": "Isotretinoin — female childbearing age",
         "drugSets": [
-          { "name": "Isotretinoin", "match": ["isotretinoin","roaccutane","tretinoin oral"], "exclude": ["topical","gel","cream"] }
+          { "name": "Isotretinoin", "match": ["isotretinoin","roaccutane"], "exclude": ["topical","gel","cream"] }
         ],
         "ageRange": { "min": 12, "max": 55 },
         "sex": "F",
@@ -456,7 +456,7 @@
         "label": "Recurrent UTI (≥3 in 12 months)",
         "sourceKind": "problems",
         "match": ["urinary tract infection","uti","cystitis","lower urinary tract"],
-        "exclude": ["history of","chronic","interstitial","radiation","previous","old"],
+        "exclude": ["history of","chronic","interstitial","radiation","previous","old","symptoms","luts","outflow"],
         "windowMonths": 12,
         "countThreshold": 3,
         "operator": ">=",
@@ -523,6 +523,8 @@
         "enabled": true,
         "indicatorCode": "TREND-PSA",
         "indicatorName": "Rising PSA trend",
+        "sex": "M",
+        "ageRange": { "min": 40 },
         "useQofYearFloor": false,
         "check": {
           "kind": "observation-trend",

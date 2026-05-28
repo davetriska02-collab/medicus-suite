@@ -152,6 +152,9 @@
 
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
+    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    if (!passesProblemFilters(rule, data.problems)) return [];
     const matchedMeds = (data.medications || []).filter(m => drugMatchesRule(m.name, rule));
     return matchedMeds.map(med => {
       const testEvaluations = (rule.tests || []).map(test => {
@@ -214,6 +217,8 @@
 
   // QOF register rule evaluator -> chip if patient is on register
   function evaluateQofRegisterRule(rule, data) {
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
+    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
     const result = patientOnRegister(data.problems, rule);
     if (!result || !result.matched) return [];
     return [{
@@ -250,9 +255,48 @@
 
   function passesSexFilter(sex, patientContext) {
     if (!sex || sex === 'any') return true;
+    const s = String(sex).toUpperCase();
     const patSex = patientContext ? String(patientContext.sex || '').toLowerCase() : '';
-    if (sex === 'M' && !patSex.startsWith('m')) return false;
-    if (sex === 'F' && !patSex.startsWith('f')) return false;
+    if (s === 'M' && !patSex.startsWith('m')) return false;
+    if (s === 'F' && !patSex.startsWith('f')) return false;
+    return true;
+  }
+
+  // Negation prefixes that disqualify a substring problem-match. A problem like
+  // "no heart failure" or "family history of heart failure" should NOT satisfy
+  // requiresProblem: ["heart failure"]. We check whether the match falls within
+  // a negating context in the label.
+  const PROBLEM_NEGATION_PATTERNS = [
+    /\bno\s+/, /\bnot\s+/, /\bfamily history\s+of\s+/, /\bfh\s+of\s+/,
+    /\bhistory of\s+/, /\bh\/?o\s+/, /\bpast\s+/, /\bprevious\s+/,
+    /\bresolved\s+/, /\bat risk of\s+/, /\brisk of\s+/, /\bquery\s+/, /\b\?/
+  ];
+  function problemLabelMatchesTerm(label, term) {
+    const l = String(label || '').toLowerCase();
+    const t = String(term || '').toLowerCase();
+    if (!t) return false;
+    const idx = l.indexOf(t);
+    if (idx < 0) return false;
+    // Strip everything from the match onward; check the prefix for negation.
+    const prefix = l.slice(0, idx);
+    return !PROBLEM_NEGATION_PATTERNS.some(rx => rx.test(prefix));
+  }
+
+  // Shared problem-include / problem-exclude filter. Used by drug-monitoring,
+  // drug-combo, event-count, qof-indicator. Returns true if patient passes.
+  function passesProblemFilters(rule, problems) {
+    const probs = problems || [];
+    const requiresProblems = rule.requiresProblem || [];
+    const excludesProblems = rule.excludesProblem || [];
+    if (requiresProblems.length > 0) {
+      const allMet = requiresProblems.every(req =>
+        probs.some(p => problemLabelMatchesTerm(p.label, req))
+      );
+      if (!allMet) return false;
+    }
+    if (excludesProblems.some(exc =>
+      probs.some(p => problemLabelMatchesTerm(p.label, exc))
+    )) return false;
     return true;
   }
 
@@ -264,23 +308,12 @@
     if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
     if (!passesSexFilter(rule.sex, data.patientContext)) return [];
 
-    const meds  = data.medications || [];
-    const probs = data.problems    || [];
-    const norm  = s => String(s || '').toLowerCase();
+    const meds = data.medications || [];
+    const norm = s => String(s || '').toLowerCase();
 
-    // Problem filters
-    const requiresProblems = rule.requiresProblem || [];
-    const excludesProblems = rule.excludesProblem || [];
-
-    if (requiresProblems.length > 0) {
-      const allMet = requiresProblems.every(req =>
-        probs.some(p => norm(p.label).includes(norm(req)))
-      );
-      if (!allMet) return [];
-    }
-    if (excludesProblems.some(exc =>
-      probs.some(p => norm(p.label).includes(norm(exc)))
-    )) return [];
+    // Problem filters (shared helper applies negation-aware substring matching:
+    // "no heart failure" / "family history of HF" no longer satisfy requiresProblem)
+    if (!passesProblemFilters(rule, data.problems)) return [];
 
     // mustNotBePresent: single-drug absence check (e.g. "no PPI prescribed")
     const mustNotBePresent = rule.mustNotBePresent || [];
@@ -305,6 +338,26 @@
 
     // All sets must have at least one match
     if (matchedPerSet.some(matched => matched.length === 0)) return [];
+
+    // Distinct-drug guard: when drugSets overlap (e.g. QTc-prolonging A vs B
+    // are the same list), a single matched med can satisfy every set. Require
+    // the matched meds resolved across all sets to include at least one
+    // distinct med per set. We check this greedily: assign the smallest match
+    // pool to a set, mark that med as used, repeat. If any set ends with no
+    // available med, the rule does not fire.
+    if (rule.drugSets.length > 1) {
+      const used = new Set();
+      const setsByPoolSize = matchedPerSet
+        .map((matched, i) => ({ i, matched }))
+        .sort((a, b) => a.matched.length - b.matched.length);
+      let ok = true;
+      for (const { matched } of setsByPoolSize) {
+        const pick = matched.find(m => !used.has(m.name));
+        if (!pick) { ok = false; break; }
+        used.add(pick.name);
+      }
+      if (!ok) return [];
+    }
 
     const matchSummary = matchedPerSet.map((matched, i) => ({
       setName: (rule.drugSets[i] || {}).name || `Set ${i + 1}`,
@@ -477,12 +530,13 @@
       if (!reg || !reg.matched) return [];
     }
 
-    // Step 2: age constraints
+    // Step 2: age + sex constraints
     const age = data.patientContext?.ageYears;
     if (rule.ageRange) {
       if (rule.ageRange.min != null && (age == null || age < rule.ageRange.min)) return [];
       if (rule.ageRange.max != null && (age == null || age > rule.ageRange.max)) return [];
     }
+    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
 
     // Step 3: problem-based exclusions (e.g. frailty)
     if (rule.excludeIfProblem) {
