@@ -246,7 +246,73 @@
     };
   }
 
-  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
+  // Render a drug-combo chip (concurrent drug combination with optional filters).
+  function renderDrugComboChip(chip) {
+    const col = STATUS_COLOUR[chip.status] || 'neutral';
+    const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
+    const setsText = (chip.matchSummary || [])
+      .map(s => `<strong>${escHtml(s.setName)}:</strong> ${escHtml((s.drugs || []).join(', '))}`)
+      .join(' + ');
+    const tooltipBits = [];
+    if (chip.notes)  tooltipBits.push(chip.notes);
+    if (chip.source) tooltipBits.push('Source: ' + chip.source);
+    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    return `
+      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+        <div class="sent-chip-head">
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+        </div>
+        ${setsText ? `<div class="sent-chip-obs">${setsText}</div>` : ''}
+        <div class="sent-chip-cat"><span class="sent-custom-tag">Custom</span></div>
+      </div>`;
+  }
+
+  // Render an event-count chip (recurrent events: ≥N matches in window).
+  function renderEventCountChip(chip) {
+    const col = STATUS_COLOUR[chip.status] || 'neutral';
+    const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
+    const summary = `${chip.count} ${chip.operator || '≥'} ${chip.countThreshold} in last ${chip.windowMonths || 12} mo`;
+    const sample = (chip.matchedItems || []).slice(0, 3).map(escHtml).join(' · ');
+    const moreCount = Math.max(0, (chip.matchedItems || []).length - 3);
+    const moreSuffix = moreCount > 0 ? ` <span class="sent-chip-more">+${moreCount} more</span>` : '';
+    const tooltipBits = [];
+    if (chip.notes)  tooltipBits.push(chip.notes);
+    if (chip.source) tooltipBits.push('Source: ' + chip.source);
+    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    return `
+      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+        <div class="sent-chip-head">
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+        </div>
+        <div class="sent-chip-obs">${escHtml(summary)}</div>
+        ${sample ? `<div class="sent-chip-cat">${sample}${moreSuffix}</div>` : ''}
+      </div>`;
+  }
+
+  // Render a composite chip (AND/OR combination of other rules).
+  function renderCompositeChip(chip) {
+    const col = STATUS_COLOUR[chip.status] || 'neutral';
+    const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
+    const op  = chip.operator || 'AND';
+    const fired = (chip.firedRuleIds || []).length;
+    const tooltipBits = [];
+    if (chip.notes)  tooltipBits.push(chip.notes);
+    if (chip.source) tooltipBits.push('Source: ' + chip.source);
+    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    return `
+      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+        <div class="sent-chip-head">
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+        </div>
+        <div class="sent-chip-obs">${fired} rule${fired === 1 ? '' : 's'} fired (${escHtml(op)})</div>
+        <div class="sent-chip-cat"><span class="sent-custom-tag">Composite</span></div>
+      </div>`;
+  }
+
+  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

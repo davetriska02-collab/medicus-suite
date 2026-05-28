@@ -127,8 +127,11 @@
     // BP "120/80" — take the systolic (first part)
     const bpMatch = s.match(/^(\d{2,3})\s*\/\s*\d{2,3}/);
     if (bpMatch) return parseFloat(bpMatch[1]);
-    // Strip leading < > ~ operators
-    const stripped = s.replace(/^[<>~=]+\s*/, '');
+    // Strip leading comparison operators (ASCII + Unicode ≤ ≥)
+    let stripped = s.replace(/^[<>~=≤≥]+\s*/, '');
+    // European comma-decimal: convert "3,5" → "3.5" only when there's exactly one
+    // comma between digits and no period — otherwise leave alone (e.g. thousands).
+    if (/^\d+,\d+$/.test(stripped)) stripped = stripped.replace(',', '.');
     const n = parseFloat(stripped);
     return isFinite(n) ? n : NaN;
   }

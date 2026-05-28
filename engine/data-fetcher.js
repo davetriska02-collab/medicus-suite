@@ -39,6 +39,14 @@
       { name: 'Blood pressure', code: '75367002', date: '2026-04-27', value: '146/82 mmHg', source: 'mock' },
       { name: 'HbA1c', code: '43396009', date: '2026-02-01', value: '65 mmol/mol', source: 'mock' }
     ],
+    observationHistory: [
+      { name: 'HbA1c', code: '43396009', group: 'HbA1c', unit: 'mmol/mol', history: [
+        { date: '2026-02-01', value: 65, rawValue: '65', isAbove: true,  isBelow: false, source: 'mock' },
+        { date: '2025-08-15', value: 62, rawValue: '62', isAbove: true,  isBelow: false, source: 'mock' },
+        { date: '2025-02-10', value: 58, rawValue: '58', isAbove: false, isBelow: false, source: 'mock' },
+        { date: '2024-08-05', value: 55, rawValue: '55', isAbove: false, isBelow: false, source: 'mock' }
+      ]}
+    ],
     problems: [
       { label: 'Type 2 diabetes mellitus', codedDate: '2019-06-12', status: 'active', source: 'mock' },
       { label: 'Essential hypertension', codedDate: '2018-03-04', status: 'active', source: 'mock' }
@@ -231,6 +239,7 @@
         patientContext: null,
         medications: [],
         observations: [],
+        observationHistory: [],
         problems: [],
         debug: { foundHeadings: [], parseFailures: [], error: String(e), dataSource: 'error' },
         error: String(e)

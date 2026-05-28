@@ -619,6 +619,13 @@
     if (chip.type === 'drug-monitoring') return drugChipHtml(chip);
     if (chip.type === 'qof-indicator') return qofIndicatorChipHtml(chip);
     if (chip.type === 'qof-register') return qofRegisterChipHtml(chip);
+    // v3 custom-alert chip types delegate to the shared renderer.
+    const CR = (typeof window !== 'undefined') ? window.ChipRenderer : null;
+    if (CR) {
+      if (chip.type === 'drug-combo')  return CR.renderDrugComboChip(chip);
+      if (chip.type === 'event-count') return CR.renderEventCountChip(chip);
+      if (chip.type === 'composite')   return CR.renderCompositeChip(chip);
+    }
     return '<div>Unknown chip type</div>';
   }
 

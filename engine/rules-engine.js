@@ -561,13 +561,20 @@
         else status = 'overdue';
       }
     } else if (check.kind === 'observation-trend') {
-      // Find the matching investigation history entry via substring match on name.
+      // Find matching investigation history entries; multiple substrings may match
+      // distinct test types (e.g. "PSA" matches both "PSA" and "PSA free/total ratio").
+      // Pick the entry with the most data points so the trend uses the richest series.
+      // BP-style "120/80" values are not supported in trend mode — they parse to NaN
+      // in observationHistory and get filtered below.
       const normStr = s => String(s || '').toLowerCase();
       const matchTerms = check.observation || [];
-      const historyEntry = (data.observationHistory || []).find(entry => {
+      const candidates = (data.observationHistory || []).filter(entry => {
         const name = normStr(entry.name);
         return matchTerms.some(m => name.includes(normStr(m)));
       });
+      const historyEntry = candidates.length === 0
+        ? null
+        : candidates.reduce((a, b) => (b.history?.length || 0) > (a.history?.length || 0) ? b : a);
 
       if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
         // Filter history to within check.withinMonths of now
@@ -577,8 +584,8 @@
         const inWindow = historyEntry.history.filter(pt => {
           const d = new Date(pt.date || '');
           if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return false;
-          // Skip points whose numeric value is NaN (e.g. "Negative", text results)
-          return !isNaN(pt.value);
+          // isFinite excludes NaN AND Infinity; protects subsequent arithmetic
+          return isFinite(pt.value);
         });
 
         if (inWindow.length < (check.minPoints || 2)) {
@@ -599,10 +606,11 @@
             (30.4375 * 24 * 60 * 60 * 1000)
           );
           const direction = check.direction || 'rising';
-          // Trend fires (not_met) when delta moves in the named direction AND meets minDelta
+          // Trend fires only when delta moves strictly in the named direction AND meets minDelta.
+          // Strict inequality on delta prevents a flat line firing as either direction.
           const trendFires =
-            direction === 'rising'  ? (delta >= minDelta) :
-            direction === 'falling' ? (delta <= -minDelta) :
+            direction === 'rising'  ? (delta > 0 && delta >=  minDelta) :
+            direction === 'falling' ? (delta < 0 && delta <= -minDelta) :
             false;
 
           const unit = historyEntry.unit ? ` ${historyEntry.unit}` : '';

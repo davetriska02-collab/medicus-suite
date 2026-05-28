@@ -261,8 +261,8 @@ function render(payload) {
       <button class="sent-filter-btn${currentFilter==='clear'?' active clear':''}" data-filter="clear">In date (${clearCount})</button>
     </div>`;
 
-  const typeOrder = ['drug-monitoring', 'qof-indicator', 'qof-process-indicator', 'qof-register'];
-  const typeLabelMap = { 'drug-monitoring':'Drug Monitoring', 'qof-indicator':'QOF Indicators', 'qof-process-indicator':'QOF Process', 'qof-register':'Registers' };
+  const typeOrder = ['drug-combo', 'event-count', 'composite', 'drug-monitoring', 'qof-indicator', 'qof-process-indicator', 'qof-register'];
+  const typeLabelMap = { 'drug-combo':'Drug Combinations', 'event-count':'Recurrent Events', 'composite':'Composite Alerts', 'drug-monitoring':'Drug Monitoring', 'qof-indicator':'QOF Indicators', 'qof-process-indicator':'QOF Process', 'qof-register':'Registers' };
 
   const groupsHtml = typeOrder
     .filter(t => groups[t]?.length)
@@ -295,12 +295,15 @@ function renderChip(chip) {
   const col = STATUS_COLOUR[chip.status] || 'neutral';
   const lbl = STATUS_LABEL[chip.status] || (chip.status || '').toUpperCase();
 
-  // Drug-monitoring and qof-indicator chips delegate to the shared renderer.
-  // This keeps the side-panel rendering in sync with the options-page preview.
+  // Drug-monitoring, qof-indicator, and the v3 custom-alert chip types delegate
+  // to the shared renderer to keep side-panel rendering in sync with previews.
   const CR = (typeof window !== 'undefined') ? window.ChipRenderer : null;
   if (CR) {
     if (chip.type === 'drug-monitoring')  return CR.renderDrugChip(chip);
     if (chip.type === 'qof-indicator')    return CR.renderQofIndicatorChip(chip);
+    if (chip.type === 'drug-combo')       return CR.renderDrugComboChip(chip);
+    if (chip.type === 'event-count')      return CR.renderEventCountChip(chip);
+    if (chip.type === 'composite')        return CR.renderCompositeChip(chip);
   }
 
   if (chip.type === 'drug-monitoring') {

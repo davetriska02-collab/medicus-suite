@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.1.1] — 2026-05-28
+### Fixed
+Four-agent code review of v3.0/v3.1 turned up real bugs. All fixed in this patch.
+
+**Trend evaluator (v3.1.0 bugs):**
+- `observation-trend` rule used `.find()` to pick a history series — would silently pick the first match if multiple existed (e.g. "PSA" and "PSA free/total ratio"). Now uses `.filter()` and picks the series with the most data points.
+- Flat-line readings (delta = 0) used to fire as a "rising" trend because `0 >= 0` was true. Now requires strict directional movement: rising needs `delta > 0`, falling needs `delta < 0`. Combined with the existing `minDelta` check.
+- `!isNaN(pt.value)` let `Infinity` through. Now `isFinite()` — matches author's stated intent.
+
+**Side-panel rendering (v3.0 carryover):**
+- `event-count`, `drug-combo`, and `composite` chips were computed correctly but **never rendered** in the side panel — they weren't in `typeOrder`, so any GP using the v3.0 alert library was seeing nothing for those types. Added them under labels "Recurrent Events", "Drug Combinations", "Composite Alerts".
+- `shared/chip-renderer.js`: added `renderDrugComboChip`, `renderEventCountChip`, `renderCompositeChip`. Surfaces drug-set summary, count vs threshold, fired-rules count.
+- `content-scripts/sentinel.js` `chipHtml`: new branches for the three chip types, delegating to the shared renderer.
+- `manifest.json`: added `shared/chip-renderer.js` to content_scripts so the delegation actually resolves.
+
+**Value parsing edge cases:**
+- `parseObservationValue` now strips Unicode `≤` and `≥` operators (not just ASCII `<` / `>`). A PSA recorded as "≥10" was silently NaN before.
+- European comma-decimal `"3,5"` → 3.5 instead of silently truncating to 3.
+
+**Mock / error paths:**
+- `MOCK_PATIENT` now includes a 4-point HbA1c history so trend/event-count rules are actually testable in mock mode.
+- `fetchPatientData` error fallback now includes `observationHistory: []` for consistency with all other return paths.
+
+### Backward compatibility
+Four-agent review confirmed zero regressions. All v3.0 and earlier rule types (drug-monitoring, qof-register, qof-indicator with the three pre-existing check kinds, drug-combo with `sourceKind: "problems"`) evaluate through unmodified code paths.
+
 ## [v3.1.0] — 2026-05-28
 ### Added — Multi-point observation history
 The observation-history extractor that v3.0 alerts depended on. Two alert types that previously always returned "no data" now actually fire:
