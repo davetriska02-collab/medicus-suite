@@ -2,6 +2,17 @@
 // Tabs: Display | Custom Rules | Rule Overrides
 'use strict';
 
+(function applyDisplayPrefs() {
+  function apply(p) {
+    p = p || {};
+    document.documentElement.setAttribute('data-theme',      p.theme      || 'light');
+    document.documentElement.setAttribute('data-size',       p.size       || 'medium');
+    document.documentElement.setAttribute('data-colorblind', String(!!p.colorblind));
+  }
+  chrome.storage.local.get('suite.display', r => apply(r['suite.display'] || {}));
+  chrome.storage.onChanged.addListener(c => { if (c['suite.display']) apply(c['suite.display'].newValue || {}); });
+})();
+
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab-btn').forEach(btn => {

@@ -7,11 +7,19 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
+  --bg: #f8fafc; --bg-e: #ffffff; --border: #cbd5e1; --accent: #2563eb;
+  --t1: #0f172a; --t2: #1e3a5f; --t3: #475569; --t4: #64748b; --t5: #94a3b8;
+  --green: #16a34a; --red: #dc2626; --amber: #b45309; --purple: #7c3aed;
+  --mono: 'JetBrains Mono', monospace;
+}
+html[data-theme="dark"] {
   --bg: #0b1424; --bg-e: #131e34; --border: #1e3050; --accent: #4a7fb8;
   --t1: #f1f5f9; --t2: #cfe1ff; --t3: #93a8c5; --t4: #5d7a9d; --t5: #3d5070;
   --green: #4ade80; --red: #f87171; --amber: #fbbf24; --purple: #a78bfa;
-  --mono: 'JetBrains Mono', monospace;
 }
+html[data-size="small"]  { zoom: 0.85; }
+html[data-size="medium"] { zoom: 1; }
+html[data-size="large"]  { zoom: 1.25; }
 body { background: var(--bg); color: var(--t1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
 .tab-nav { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px; background: var(--bg); position: sticky; top: 0; z-index: 10; }
 .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; padding: 11px 12px; cursor: pointer; transition: color 0.15s; margin-bottom: -1px; }
@@ -53,7 +61,7 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
 .cr-bar { display: flex; gap: 7px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .cr-form { background: var(--bg-e); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
 .cr-section-label { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t4); margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); display: block; }
-.test-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; margin-bottom: 9px; }
+.test-card { background: var(--bg-e); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; margin-bottom: 9px; }
 .test-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .test-card-title { flex: 1; font-size: 11px; color: var(--t2); font-weight: 600; font-family: var(--mono); letter-spacing: 0.05em; text-transform: uppercase; }
 .interval-row { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }

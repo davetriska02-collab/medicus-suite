@@ -168,6 +168,28 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .prog-bar-outer{width:360px;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
 .prog-bar-inner{height:100%;background:#41b3e0;border-radius:4px;transition:width .3s}
 .prog-text{font-size:12px;opacity:.75}
+/* Dark theme */
+html[data-theme="dark"]{
+  --nhs-pale:#0b1424;--card:#131e34;--text:#f1f5f9;--text2:#93a8c5;--border:#1e3050;
+}
+html[data-theme="dark"] body{background:var(--nhs-pale)}
+html[data-theme="dark"] #tab-nav{background:var(--card);border-bottom-color:var(--border)}
+html[data-theme="dark"] #filter-bar{background:#0d1930;border-bottom-color:var(--border)}
+html[data-theme="dark"] .fb-select{background:var(--card);color:var(--text);border-color:var(--border)}
+html[data-theme="dark"] .inv-toolbar input[type="text"],html[data-theme="dark"] .inv-toolbar select{background:var(--card);color:var(--text);border-color:var(--border)}
+html[data-theme="dark"] .drop-box{background:var(--card);border-color:var(--border)}
+html[data-theme="dark"] .swimlane-svg{background:var(--card);border-color:var(--border)}
+html[data-theme="dark"] .swimlane-svg .lane-bg{fill:#0d1930}
+html[data-theme="dark"] .swimlane-svg .lane-bg.alt{fill:var(--card)}
+html[data-theme="dark"] .drug-row:hover{background:#0d1930}
+html[data-theme="dark"] .drug-row.overdue{background:#2a1010}
+html[data-theme="dark"] .prob-item{border-bottom-color:#1e3050}
+html[data-theme="dark"] .pincer-item{background:#1a0d0d}
+html[data-theme="dark"] .pincer-item.high{background:#2a1010}
+html[data-theme="dark"] .pincer-item.med{background:#1e1a08}
+html[data-size="small"]{zoom:0.85}
+html[data-size="medium"]{zoom:1}
+html[data-size="large"]{zoom:1.25}
 </style>
 </head>
 <body>

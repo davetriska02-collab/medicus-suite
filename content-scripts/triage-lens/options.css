@@ -15,37 +15,51 @@ body {
 }
 
 .tl-head {
-  background: #1f3a5f; color: #fff;
+  background: #f1f5f9; color: #0f172a;
   position: sticky; top: 0; z-index: 50;
-  border-bottom: 1px solid #15294a;
+  border-bottom: 1px solid #cbd5e1;
 }
 .tl-head-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 24px;
 }
 .tl-head h1 { margin: 0; font-size: 18px; font-weight: 500; }
-.tl-ver { opacity: 0.7; font-size: 11px; margin-left: 6px; font-weight: 400; }
-.tl-status { font-size: 11px; opacity: 0.85; }
-.tl-status.tl-status-ok { color: #cdf2d8; }
-.tl-status.tl-status-err { color: #ffd2d4; }
+.tl-ver { opacity: 0.6; font-size: 11px; margin-left: 6px; font-weight: 400; }
+.tl-status { font-size: 11px; }
+.tl-status.tl-status-ok { color: #16a34a; }
+.tl-status.tl-status-err { color: #dc2626; }
 
 .tl-tabs {
   display: flex; gap: 0;
   padding: 0 24px;
-  background: #15294a;
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
 }
 .tl-tab {
   background: transparent;
-  color: #c8d4e3;
+  color: #64748b;
   border: none;
   padding: 10px 18px;
   font-size: 12px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   font-family: inherit;
+  margin-bottom: -1px;
 }
-.tl-tab:hover { color: #fff; }
-.tl-tab-active { color: #fff; border-bottom-color: #fff; }
+.tl-tab:hover { color: #0f172a; }
+.tl-tab-active { color: #2563eb; border-bottom-color: #2563eb; }
+
+/* Dark theme overrides for triage-lens header */
+html[data-theme="dark"] .tl-head { background: #0b1424; color: #f1f5f9; border-bottom-color: #1e3050; }
+html[data-theme="dark"] .tl-tabs { background: #0b1424; border-bottom-color: #1e3050; }
+html[data-theme="dark"] .tl-tab { color: #5d7a9d; }
+html[data-theme="dark"] .tl-tab:hover { color: #cfe1ff; }
+html[data-theme="dark"] .tl-tab-active { color: #4a7fb8; border-bottom-color: #4a7fb8; }
+html[data-theme="dark"] .tl-status.tl-status-ok  { color: #4ade80; }
+html[data-theme="dark"] .tl-status.tl-status-err { color: #f87171; }
+html[data-size="small"]  { zoom: 0.85; }
+html[data-size="medium"] { zoom: 1; }
+html[data-size="large"]  { zoom: 1.25; }
 
 main {
   max-width: 1100px;

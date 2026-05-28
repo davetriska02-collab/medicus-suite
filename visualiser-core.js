@@ -1,5 +1,19 @@
 'use strict';
 
+// ══ DISPLAY PREFERENCES ════════════════════════════════════════════════════
+(function applyDisplayPrefs() {
+  function apply(p) {
+    p = p || {};
+    document.documentElement.setAttribute('data-theme', p.theme || 'light');
+    document.documentElement.setAttribute('data-size', p.size || 'medium');
+    document.documentElement.setAttribute('data-colorblind', String(!!p.colorblind));
+  }
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.local.get('suite.display', r => apply(r['suite.display'] || {}));
+    chrome.storage.onChanged.addListener(c => { if (c['suite.display']) apply(c['suite.display'].newValue || {}); });
+  }
+})();
+
 // ══ PDF.JS WORKER ══════════════════════════════════════════════════════════
 // Worker is shipped as a same-origin extension resource. Use chrome.runtime
 // .getURL so pdf.js loads it as a real Worker (not the slow main-thread "fake
