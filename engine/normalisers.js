@@ -111,6 +111,28 @@
       .filter(p => p.label);
   }
 
+  // ---- Observation value numeric parser ----
+  // Used when building observationHistory to produce a numeric value from raw strings.
+  // Handles common edge cases from the Medicus investigation dashboard:
+  //   "58"       → 58
+  //   "<5"       → 5   (strip leading comparison operator)
+  //   ">100"     → 100
+  //   "120/80"   → 120 (BP — take systolic; diastolic is dropped here, used separately)
+  //   "Negative" → NaN
+  //   Blank/null → NaN
+  function parseObservationValue(rawValue) {
+    if (rawValue == null) return NaN;
+    const s = String(rawValue).trim();
+    if (s === '') return NaN;
+    // BP "120/80" — take the systolic (first part)
+    const bpMatch = s.match(/^(\d{2,3})\s*\/\s*\d{2,3}/);
+    if (bpMatch) return parseFloat(bpMatch[1]);
+    // Strip leading < > ~ operators
+    const stripped = s.replace(/^[<>~=]+\s*/, '');
+    const n = parseFloat(stripped);
+    return isFinite(n) ? n : NaN;
+  }
+
   // ---- Observations from investigation dashboard ----
   // The dashboard returns:
   //   rowData: [{ investigationGroup, investigationType, unit, dataYYYYMMDD: { result, ... }, ... }]
@@ -181,12 +203,63 @@
     return out;
   }
 
+  // ---- Full observation history from investigation dashboard ----
+  // Produces one entry per investigationType, each with a full history array
+  // sorted newest-first. This is a SEPARATE field (observationHistory) and does
+  // not affect data.observations (latest-per-name) used by all existing rules.
+  //
+  // Shape per entry:
+  //   { name, code, group, unit, history: [{ date, value, rawValue, isAbove, isBelow, source }, ...] }
+  //
+  // history entries are newest-first by date. value is numeric (parseObservationValue),
+  // rawValue is the original string. Group aggregates are intentionally NOT included
+  // here — trend/count rules match on individual analyte names.
+  function normaliseObservationHistory(dashboard) {
+    if (!dashboard || !Array.isArray(dashboard.rowData)) return [];
+    const out = [];
+    dashboard.rowData.forEach(row => {
+      if (!row.investigationType) return;
+      const dataKeys = Object.keys(row).filter(k => /^data\d{8}$/.test(k));
+      if (dataKeys.length === 0) return;
+      // Collect all date-keyed cells that have a non-empty result
+      const historyEntries = [];
+      dataKeys.forEach(key => {
+        const cell = row[key];
+        if (!cell || cell.result == null || cell.result === '') return;
+        const yyyy = key.slice(4, 8);
+        const mm   = key.slice(8, 10);
+        const dd   = key.slice(10, 12);
+        const dateIso = `${yyyy}-${mm}-${dd}`;
+        historyEntries.push({
+          date: dateIso,
+          value: parseObservationValue(cell.result),
+          rawValue: String(cell.result),
+          isAbove: !!cell.isAboveReferenceRange,
+          isBelow: !!cell.isBelowReferenceRange,
+          source: 'API:investigation-dashboard'
+        });
+      });
+      if (historyEntries.length === 0) return;
+      // Sort newest-first
+      historyEntries.sort((a, b) => b.date.localeCompare(a.date));
+      out.push({
+        name:  row.investigationType,
+        code:  null,
+        group: row.investigationGroup || null,
+        unit:  row.unit || null,
+        history: historyEntries
+      });
+    });
+    return out;
+  }
+
   // ---- Combined normalisation ----
   function normaliseAll(apiResults, urlContext) {
     return {
       patientContext: normaliseBanner(apiResults?.banner, urlContext),
       medications: normaliseMedications(apiResults?.medicationRegimen),
       observations: normaliseObservations(apiResults?.investigationDashboard),
+      observationHistory: normaliseObservationHistory(apiResults?.investigationDashboard),
       problems: normaliseProblems(apiResults?.problemListing),
       apiErrors: apiResults?.errors || {}
     };
@@ -197,6 +270,8 @@
     normaliseMedications,
     normaliseProblems,
     normaliseObservations,
+    normaliseObservationHistory,
+    parseObservationValue,
     normaliseAll
   };
   if (typeof module !== 'undefined' && module.exports) {

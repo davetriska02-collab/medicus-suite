@@ -324,12 +324,8 @@
   // Counts matching items (problems or observations) within a rolling time window
   // and fires when the count satisfies the threshold operator.
   //
-  // Known limitation: data.observations only surfaces the *latest* observation per
-  // test type (the normaliser surfaces one row per investigationType from the
-  // investigation dashboard). For sourceKind=observations, this evaluator works with
-  // whatever is in the array; it cannot see historical duplicates. A chip note flags
-  // this when the count is borderline. Addressing this properly requires a history
-  // endpoint — tracked as a future enhancement (do not modify data-fetcher here).
+  // For sourceKind === 'observations', uses data.observationHistory to count
+  // individual historical readings (not just distinct test types).
   function evaluateEventCountRule(rule, data, now) {
     if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
     if (!passesSexFilter(rule.sex, data.patientContext)) return [];
@@ -342,7 +338,6 @@
     const excludeTerms  = rule.exclude || [];
 
     let items = [];
-    let historyLimitedNote = null;
 
     if (rule.sourceKind === 'problems') {
       // Problems have codedDate; we match label text
@@ -354,15 +349,21 @@
         return !isNaN(d.getTime()) && d.getTime() >= cutoffMs;
       });
     } else {
-      // sourceKind === 'observations': only latest-per-type is available
-      // Flag a limitation note so the clinician understands the count may undercount
-      historyLimitedNote = 'Observation history unavailable; count reflects distinct test types only.';
-      items = (data.observations || []).filter(obs => {
-        const name = norm(obs.name);
+      // sourceKind === 'observations': flatten observationHistory into individual readings.
+      // Each history entry represents one recorded result on a specific date.
+      // First, find matching investigation types, then collect their in-window readings.
+      const matchedEntries = (data.observationHistory || []).filter(entry => {
+        const name = norm(entry.name);
         if (excludeTerms.some(e => name.includes(norm(e)))) return false;
-        if (!matchTerms.some(m => name.includes(norm(m)))) return false;
-        const d = new Date(obs.date || '');
-        return !isNaN(d.getTime()) && d.getTime() >= cutoffMs;
+        return matchTerms.some(m => name.includes(norm(m)));
+      });
+      // Flatten to individual { name, date } items for count and chip summary
+      matchedEntries.forEach(entry => {
+        (entry.history || []).forEach(pt => {
+          const d = new Date(pt.date || '');
+          if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return;
+          items.push({ name: entry.name, date: pt.date, rawValue: pt.rawValue });
+        });
       });
     }
 
@@ -387,8 +388,8 @@
       countThreshold: threshold,
       operator:    op,
       windowMonths: rule.windowMonths,
-      matchedItems: items.slice(0, 10).map(it => it.label || it.name || ''),
-      notes:       [rule.notes, historyLimitedNote].filter(Boolean).join(' ') || null,
+      matchedItems: items.slice(0, 10).map(it => it.date ? `${it.name} ${it.date}` : (it.label || it.name || '')),
+      notes:       rule.notes || null,
       source:      rule.source || null
     }];
   }
@@ -560,21 +561,59 @@
         else status = 'overdue';
       }
     } else if (check.kind === 'observation-trend') {
-      // Known limitation: data.observations only surfaces the latest observation per
-      // test type (one row per investigationType from the investigation dashboard).
-      // A meaningful trend requires at least minPoints historical readings, which are
-      // not available without a dedicated history endpoint. Until that endpoint is
-      // implemented in data-fetcher/normalisers, we emit no_data with an explanatory
-      // note. Do not modify normalisers or data-fetcher in this PR — tracked as
-      // a future enhancement.
-      const latestObs = findLatestObservation(data.observations, { match: check.observation });
-      if (latestObs) {
-        valueText = latestObs.value != null ? String(latestObs.value).trim() : null;
-        dateText  = latestObs.date || null;
-        // Only one data point available; trend cannot be computed
-        status = 'no_data';
+      // Find the matching investigation history entry via substring match on name.
+      const normStr = s => String(s || '').toLowerCase();
+      const matchTerms = check.observation || [];
+      const historyEntry = (data.observationHistory || []).find(entry => {
+        const name = normStr(entry.name);
+        return matchTerms.some(m => name.includes(normStr(m)));
+      });
+
+      if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
+        // Filter history to within check.withinMonths of now
+        const withinMs = (check.withinMonths || 24) * 30.4375 * 24 * 60 * 60 * 1000;
+        const nowMs    = new Date(now).getTime();
+        const cutoffMs = nowMs - withinMs;
+        const inWindow = historyEntry.history.filter(pt => {
+          const d = new Date(pt.date || '');
+          if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return false;
+          // Skip points whose numeric value is NaN (e.g. "Negative", text results)
+          return !isNaN(pt.value);
+        });
+
+        if (inWindow.length < (check.minPoints || 2)) {
+          // Not enough data points for a meaningful trend
+          status = 'no_data';
+          valueText = `${inWindow.length} point${inWindow.length !== 1 ? 's' : ''} in window (need ${check.minPoints || 2})`;
+        } else {
+          // History is sorted newest-first; first entry is most recent, last is oldest.
+          // Trend direction: compare oldest value to newest value overall.
+          // Using first-vs-last comparison (not regression) — simpler and less noisy
+          // for the kind of sparse GP data seen in Medicus (3–6 points typical).
+          const newest = inWindow[0].value;                       // most recent reading
+          const oldest = inWindow[inWindow.length - 1].value;    // earliest reading
+          const delta  = newest - oldest;                        // positive = rising
+          const minDelta = check.minDelta != null ? check.minDelta : 0;
+          const spanMonths = Math.round(
+            (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /
+            (30.4375 * 24 * 60 * 60 * 1000)
+          );
+          const direction = check.direction || 'rising';
+          // Trend fires (not_met) when delta moves in the named direction AND meets minDelta
+          const trendFires =
+            direction === 'rising'  ? (delta >= minDelta) :
+            direction === 'falling' ? (delta <= -minDelta) :
+            false;
+
+          const unit = historyEntry.unit ? ` ${historyEntry.unit}` : '';
+          const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
+          valueText = `${oldest.toFixed(1)} → ${newest.toFixed(1)}${unit} (${deltaStr}, ${inWindow.length} pts, ${spanMonths} mo)`;
+          dateText  = inWindow[0].date;
+
+          status = trendFires ? 'not_met' : 'achieved';
+        }
       }
-      // status remains 'no_data' whether or not we found a latest observation
+      // status remains 'no_data' when no history entry found or history array is empty
     }
 
     return [{
@@ -603,8 +642,12 @@
     const now = options.now || new Date().toISOString();
     const problems = options.problems || [];
     const patientContext = options.patientContext || null;
+    // observationHistory: full multi-point history per investigation type.
+    // Populated from the investigation dashboard's dataYYYYMMDD keys by the normaliser.
+    // Falls back to empty array when not available (DOM fallback, mock, old callers).
+    const observationHistory = options.observationHistory || [];
 
-    const data = { medications, observations, problems, patientContext };
+    const data = { medications, observations, observationHistory, problems, patientContext };
 
     // Pre-build register lookup for indicator rules
     const registerLookup = {};

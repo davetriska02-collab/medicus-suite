@@ -108,6 +108,8 @@
       patientContext,
       medications: medsResult.medications,
       observations: obsResult.observations,
+      // DOM fallback has no structured history — evaluators treat empty array as no_data
+      observationHistory: [],
       problems: probResult.problems,
       debug: {
         foundHeadings: [],
@@ -195,6 +197,7 @@
         patientContext: normalised.patientContext,
         medications: normalised.medications,
         observations: normalised.observations,
+        observationHistory: normalised.observationHistory,
         problems: normalised.problems,
         debug: {
           foundHeadings: [],
@@ -205,6 +208,7 @@
           counts: {
             medications: normalised.medications.length,
             observations: normalised.observations.length,
+            observationHistory: normalised.observationHistory.length,
             problems: normalised.problems.length
           }
         }

@@ -270,7 +270,8 @@
         {
           now: new Date().toISOString(),
           problems: data.problems || [],
-          patientContext: data.patientContext
+          patientContext: data.patientContext,
+          observationHistory: data.observationHistory || []
         }
       );
 
@@ -880,6 +881,7 @@
             now: new Date().toISOString(),
             problems: data.problems || [],
             patientContext: data.patientContext,
+            observationHistory: data.observationHistory || []
           }
         );
       }).catch(() => {});
