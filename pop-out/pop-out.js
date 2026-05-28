@@ -95,6 +95,19 @@ chrome.runtime.onMessage.addListener(msg => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 (async () => {
+  // Apply display preferences so pop-out matches the main panel's theme/size
+  function applyDisplayPrefs(prefs) {
+    prefs = prefs || {};
+    document.documentElement.setAttribute('data-theme',      prefs.theme      || 'light');
+    document.documentElement.setAttribute('data-size',       prefs.size       || 'medium');
+    document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
+  }
+  const dp = await chrome.storage.local.get('suite.display');
+  applyDisplayPrefs(dp['suite.display'] || {});
+  chrome.storage.onChanged.addListener(changes => {
+    if (changes['suite.display']) applyDisplayPrefs(changes['suite.display'].newValue || {});
+  });
+
   const r = await chrome.storage.local.get('popout.activeModule');
   const startMod = r['popout.activeModule'] || 'slots';
   switchModule(startMod);
