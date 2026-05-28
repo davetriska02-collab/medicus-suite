@@ -74,6 +74,72 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
 .cr-preview-head select { width: auto; font-size: 10px; padding: 3px 8px; }
 #crPreviewChip { min-height: 56px; }
 .cr-form-error { color: var(--red); font-size: 11px; font-family: var(--mono); margin-top: 8px; min-height: 18px; }
+
+/* ── Alert Library ───────────────────────────────────────────────────────── */
+.lib-panel { background: var(--bg-e); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+.lib-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: var(--t1); }
+.lib-toggle-icon { font-size: 15px; }
+.lib-toggle-text { flex: 1; }
+.lib-toggle-title { font-size: 13px; font-weight: 600; color: var(--t2); display: block; }
+.lib-toggle-sub { font-size: 10px; color: var(--t4); display: block; margin-top: 1px; }
+.lib-toggle-chevron { font-family: var(--mono); font-size: 12px; color: var(--t5); transition: transform 0.2s; }
+.lib-panel.open .lib-toggle-chevron { transform: rotate(90deg); }
+.lib-body { display: none; padding: 0 16px 16px; }
+.lib-panel.open .lib-body { display: block; }
+.lib-placeholder { color: var(--t4); font-size: 12px; font-style: italic; padding: 12px 0; }
+.lib-category { margin-bottom: 16px; }
+.lib-category-title { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t4); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.lib-cards { display: flex; flex-direction: column; gap: 6px; }
+.lib-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; }
+.lib-card-body { flex: 1; min-width: 0; }
+.lib-card-title { font-size: 12px; font-weight: 600; color: var(--t2); margin-bottom: 3px; }
+.lib-card-desc { font-size: 11px; color: var(--t4); line-height: 1.4; margin-bottom: 5px; }
+.lib-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.lib-source-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
+.lib-source-badge.pincer { background: rgba(220,38,38,0.12); color: var(--red); border: 1px solid rgba(220,38,38,0.25); }
+.lib-source-badge.ardens { background: rgba(124,58,237,0.12); color: var(--purple); border: 1px solid rgba(124,58,237,0.25); }
+.lib-source-badge.pcit { background: rgba(37,99,235,0.12); color: var(--accent); border: 1px solid rgba(37,99,235,0.25); }
+.lib-source-badge.other { background: rgba(100,116,139,0.12); color: var(--t4); border: 1px solid var(--border); }
+.lib-type-badge { font-family: var(--mono); font-size: 9px; color: var(--t5); }
+.lib-card-action { flex-shrink: 0; }
+button.lib-add-btn { background: rgba(22,163,74,0.15); border: 1px solid rgba(22,163,74,0.35); color: var(--green); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 6px; padding: 6px 10px; white-space: nowrap; }
+button.lib-add-btn:hover { background: rgba(22,163,74,0.28); }
+button.lib-add-btn.added { background: rgba(100,116,139,0.1); border-color: var(--border); color: var(--t5); cursor: default; }
+.lib-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--t2); color: var(--bg-e); font-family: var(--mono); font-size: 11px; border-radius: 8px; padding: 9px 16px; z-index: 100; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; }
+.lib-toast.show { opacity: 1; }
+
+/* ── Severity badge ──────────────────────────────────────────────────────── */
+.sev-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+.sev-badge.red   { background: rgba(220,38,38,0.12); color: var(--red); border: 1px solid rgba(220,38,38,0.25); }
+.sev-badge.amber { background: rgba(180,83,9,0.12); color: var(--amber); border: 1px solid rgba(180,83,9,0.25); }
+.sev-badge.info  { background: rgba(37,99,235,0.1); color: var(--accent); border: 1px solid rgba(37,99,235,0.2); }
+
+/* ── Drug-set card ──────────────────────────────────────────────────────── */
+.dc-set-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.dc-set-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dc-set-title { flex: 1; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t4); }
+
+/* ── Patient filters collapsible ─────────────────────────────────────────── */
+.filters-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 0; margin-bottom: 8px; }
+.filters-toggle:hover { color: var(--t2); }
+.filters-toggle-chevron { font-size: 10px; transition: transform 0.15s; }
+.filters-toggle.open .filters-toggle-chevron { transform: rotate(90deg); }
+.filters-body { display: none; }
+.filters-body.open { display: block; }
+
+/* ── Composite rule multi-select listbox ────────────────────────────────── */
+.cm-rule-list { background: var(--bg-e); border: 1px solid var(--border); border-radius: 6px; max-height: 140px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.cm-rule-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 5px; cursor: pointer; }
+.cm-rule-item:hover { background: rgba(74,127,184,0.08); }
+.cm-rule-item input[type=checkbox] { accent-color: var(--accent); flex-shrink: 0; }
+.cm-rule-item-label { font-size: 11px; color: var(--t2); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-rule-item-type { font-family: var(--mono); font-size: 9px; color: var(--t5); flex-shrink: 0; }
+.cm-rule-empty { font-size: 11px; color: var(--t4); font-style: italic; padding: 8px; }
+.cm-warn { background: rgba(180,83,9,0.1); border: 1px solid rgba(180,83,9,0.25); color: var(--amber); font-size: 10px; border-radius: 6px; padding: 6px 10px; margin-top: 6px; display: none; }
+
+/* ── Highlight flash on newly-added card ────────────────────────────────── */
+@keyframes row-flash { 0%,100% { background: var(--bg-e); } 40% { background: rgba(22,163,74,0.15); } }
+.cr-card.flash { animation: row-flash 1.4s ease; }
 </style>
 </head>
 <body>
@@ -118,6 +184,22 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
 
 <!-- Custom Rules tab -->
 <div class="tab-panel" id="tab-customrules">
+
+  <!-- ── Alert Library ─────────────────────────────────────────────────── -->
+  <div class="lib-panel" id="alertLibraryPanel">
+    <button class="lib-toggle" id="libToggleBtn" aria-expanded="false">
+      <span class="lib-toggle-icon">📚</span>
+      <span class="lib-toggle-text">
+        <span class="lib-toggle-title">Alert Library — quick-add common alerts</span>
+        <span class="lib-toggle-sub">Curated alerts from PINCER, Ardens, and Primary Care IT. Click to add — edit anything afterwards.</span>
+      </span>
+      <span class="lib-toggle-chevron">▶</span>
+    </button>
+    <div class="lib-body" id="libBody">
+      <div class="lib-placeholder" id="libPlaceholder">Loading library…</div>
+    </div>
+  </div>
+
   <h2>Custom Drug-Monitoring Rules</h2>
   <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">Add monitoring rules for shared-care drugs not in the bundled set. Rules use the same passive display engine — no recommendation, no record write.</p>
 
@@ -252,6 +334,10 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
           <input type="radio" id="ciKindObsWithin" name="ciKind" value="observation-recent" />
           <label for="ciKindObsWithin">Observation has been recorded within a time window</label>
         </div>
+        <div class="checkbox-row" style="margin-bottom:6px;">
+          <input type="radio" id="ciKindObsTrend" name="ciKind" value="observation-trend" />
+          <label for="ciKindObsTrend">Observation is showing a rising or falling trend</label>
+        </div>
       </div>
 
       <!-- Section C: Observation threshold (visible when kind = observation-threshold) -->
@@ -343,6 +429,37 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
         </div>
       </div>
 
+      <!-- Section E2: Observation trend (hidden by default) -->
+      <div id="ciSectionTrend" style="margin-bottom:14px; display:none;">
+        <span class="cr-section-label">Observation trend details</span>
+        <div class="field">
+          <label for="ciTrendObsMatch">Observation match terms (one per line)</label>
+          <textarea id="ciTrendObsMatch" rows="2" style="height:48px;" placeholder="psa&#10;prostate specific antigen"></textarea>
+        </div>
+        <div class="field">
+          <label>Direction</label>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ciTrendRising" name="ciTrendDirection" value="rising" checked /><label for="ciTrendRising">Rising</label></div>
+          <div class="checkbox-row"><input type="radio" id="ciTrendFalling" name="ciTrendDirection" value="falling" /><label for="ciTrendFalling">Falling</label></div>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label for="ciTrendMinPoints">Minimum data points</label>
+            <input type="number" id="ciTrendMinPoints" min="2" max="100" value="3" />
+            <div class="form-hint">Minimum readings needed to detect trend (min 2).</div>
+          </div>
+          <div class="field">
+            <label for="ciTrendWithinMonths">Within months</label>
+            <input type="number" id="ciTrendWithinMonths" min="1" max="360" value="24" />
+            <div class="form-hint">Only readings within this window count.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ciTrendMinDelta">Minimum delta (optional)</label>
+          <input type="number" id="ciTrendMinDelta" min="0" step="any" placeholder="e.g. 1.0" />
+          <div class="form-hint">Minimum total change across data points to qualify as a trend.</div>
+        </div>
+      </div>
+
       <!-- Section F: Patient filters -->
       <div style="margin-bottom:14px;">
         <span class="cr-section-label">Patient filters</span>
@@ -407,6 +524,264 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
       </div>
     </div>
   </div>
+
+  <!-- ── Drug-Combo Alerts ──────────────────────────────────────────────── -->
+  <h2 style="margin-top:28px;">Drug-Combo Alerts</h2>
+  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
+    Flag patients currently prescribed two or more drug groups concurrently. Based on PINCER and NICE prescribing safety indicators.
+  </p>
+
+  <div id="dcListView">
+    <div class="cr-bar">
+      <button class="primary" id="dcAddBtn">+ Add drug-combo alert</button>
+    </div>
+    <div class="cr-list" id="dcList"><div class="cr-empty">No drug-combo alerts yet.</div></div>
+  </div>
+
+  <div id="dcFormView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <h2 id="dcFormTitle" style="margin:0; border:none; padding:0; flex:1;">New drug-combo alert</h2>
+      <button class="ghost" id="dcCancelBtn">Cancel</button>
+    </div>
+    <div class="cr-form">
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Alert identification</span>
+        <div class="field">
+          <label for="dcLabel">Alert label</label>
+          <input type="text" id="dcLabel" placeholder="e.g. Warfarin + NSAID concurrent" />
+        </div>
+        <div class="field">
+          <label>Severity</label>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSevRed" name="dcSeverity" value="red" checked /><label for="dcSevRed" style="color:var(--red);">Red — high risk</label></div>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSevAmber" name="dcSeverity" value="amber" /><label for="dcSevAmber" style="color:var(--amber);">Amber — caution</label></div>
+          <div class="checkbox-row"><input type="radio" id="dcSevInfo" name="dcSeverity" value="info" /><label for="dcSevInfo" style="color:var(--accent);">Info — note only</label></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Drug sets (all must be present)</span>
+        <div id="dcSetCards"></div>
+        <button class="ghost" id="dcAddSetBtn" style="margin-top:4px;">+ Add drug set</button>
+        <div class="form-hint" style="margin-top:6px;">Each set defines a drug group. The alert fires only when the patient has at least one drug from every set.</div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <button class="filters-toggle" id="dcFiltersToggle" aria-expanded="false">
+          <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
+        </button>
+        <div class="filters-body" id="dcFiltersBody">
+          <div class="two-col">
+            <div class="field"><label for="dcAgeMin">Min age</label><input type="number" id="dcAgeMin" min="0" max="120" placeholder="any" /></div>
+            <div class="field"><label for="dcAgeMax">Max age</label><input type="number" id="dcAgeMax" min="0" max="120" placeholder="any" /></div>
+          </div>
+          <div class="field">
+            <label>Sex</label>
+            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSexAny" name="dcSex" value="any" checked /><label for="dcSexAny">Any</label></div>
+            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSexM" name="dcSex" value="M" /><label for="dcSexM">Male</label></div>
+            <div class="checkbox-row"><input type="radio" id="dcSexF" name="dcSex" value="F" /><label for="dcSexF">Female</label></div>
+          </div>
+          <div class="field">
+            <label for="dcRequiresProblem">Requires problem (one per line — all must match)</label>
+            <textarea id="dcRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. atrial fibrillation"></textarea>
+          </div>
+          <div class="field">
+            <label for="dcExcludesProblem">Excludes problem (one per line — any match disqualifies)</label>
+            <textarea id="dcExcludesProblem" rows="2" style="height:44px;" placeholder="e.g. end of life care"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:6px;">
+        <span class="cr-section-label">Additional information</span>
+        <div class="field">
+          <label for="dcNotes">Notes (shown on alert)</label>
+          <textarea id="dcNotes" rows="2" style="height:44px;" placeholder="e.g. Review prescribing — consider PPI cover."></textarea>
+        </div>
+        <div class="field">
+          <label for="dcSource">Source reference (URL or citation)</label>
+          <input type="url" id="dcSource" placeholder="https://" />
+        </div>
+      </div>
+
+      <div class="cr-form-error" id="dcFormError"></div>
+
+      <div class="actions" style="margin-top:16px;">
+        <button class="primary" id="dcSaveBtn">Save drug-combo alert</button>
+        <button class="ghost" id="dcCancelBtn2">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Event-Count Alerts ────────────────────────────────────────────── -->
+  <h2 style="margin-top:28px;">Event-Count Alerts</h2>
+  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
+    Alert when a patient has a coded problem or observation recorded more than N times within a time window (e.g. recurrent UTIs, repeated falls).
+  </p>
+
+  <div id="ecListView">
+    <div class="cr-bar">
+      <button class="primary" id="ecAddBtn">+ Add event-count alert</button>
+    </div>
+    <div class="cr-list" id="ecList"><div class="cr-empty">No event-count alerts yet.</div></div>
+  </div>
+
+  <div id="ecFormView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <h2 id="ecFormTitle" style="margin:0; border:none; padding:0; flex:1;">New event-count alert</h2>
+      <button class="ghost" id="ecCancelBtn">Cancel</button>
+    </div>
+    <div class="cr-form">
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Alert identification</span>
+        <div class="field">
+          <label for="ecLabel">Alert label</label>
+          <input type="text" id="ecLabel" placeholder="e.g. Recurrent UTI (≥3 in 12 months)" />
+        </div>
+        <div class="field">
+          <label>Severity</label>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSevRed" name="ecSeverity" value="red" /><label for="ecSevRed" style="color:var(--red);">Red — high risk</label></div>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSevAmber" name="ecSeverity" value="amber" checked /><label for="ecSevAmber" style="color:var(--amber);">Amber — caution</label></div>
+          <div class="checkbox-row"><input type="radio" id="ecSevInfo" name="ecSeverity" value="info" /><label for="ecSevInfo" style="color:var(--accent);">Info — note only</label></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">What to count</span>
+        <div class="field">
+          <label>Source</label>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSrcProblems" name="ecSourceKind" value="problems" checked /><label for="ecSrcProblems">Problems / coded diagnoses</label></div>
+          <div class="checkbox-row"><input type="radio" id="ecSrcObs" name="ecSourceKind" value="observations" /><label for="ecSrcObs">Observations / test results</label></div>
+        </div>
+        <div class="form-hint" id="ecObsHint" style="display:none; background:rgba(180,83,9,0.08); border:1px solid rgba(180,83,9,0.2); border-radius:6px; padding:7px 10px; margin-bottom:8px;">Note: observation history counting requires v3.1 — currently only the latest observation value is used.</div>
+        <div class="field">
+          <label for="ecMatch">Match terms (one per line)</label>
+          <textarea id="ecMatch" rows="3" style="height:60px;" placeholder="urinary tract infection&#10;uti"></textarea>
+        </div>
+        <div class="field">
+          <label for="ecExclude">Exclude terms (optional, one per line)</label>
+          <textarea id="ecExclude" rows="2" style="height:44px;" placeholder="history of&#10;resolved"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Threshold</span>
+        <div class="interval-row">
+          <label>Window</label>
+          <input type="number" id="ecWindowMonths" min="1" max="120" value="12" style="width:64px;" />
+          <span style="font-size:11px; color:var(--t4);">months</span>
+        </div>
+        <div class="interval-row">
+          <label>Count</label>
+          <select id="ecOperator" style="width:72px;">
+            <option value=">=" selected>≥</option>
+            <option value=">">&gt;</option>
+            <option value="=">=</option>
+            <option value="<=">≤</option>
+            <option value="<">&lt;</option>
+          </select>
+          <input type="number" id="ecCountThreshold" min="0" max="9999" value="3" style="width:64px;" />
+          <span style="font-size:11px; color:var(--t4);">events</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <button class="filters-toggle" id="ecFiltersToggle" aria-expanded="false">
+          <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
+        </button>
+        <div class="filters-body" id="ecFiltersBody">
+          <div class="two-col">
+            <div class="field"><label for="ecAgeMin">Min age</label><input type="number" id="ecAgeMin" min="0" max="120" placeholder="any" /></div>
+            <div class="field"><label for="ecAgeMax">Max age</label><input type="number" id="ecAgeMax" min="0" max="120" placeholder="any" /></div>
+          </div>
+          <div class="field">
+            <label>Sex</label>
+            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSexAny" name="ecSex" value="any" checked /><label for="ecSexAny">Any</label></div>
+            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSexM" name="ecSex" value="M" /><label for="ecSexM">Male</label></div>
+            <div class="checkbox-row"><input type="radio" id="ecSexF" name="ecSex" value="F" /><label for="ecSexF">Female</label></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:6px;">
+        <span class="cr-section-label">Additional information</span>
+        <div class="field">
+          <label for="ecNotes">Notes (shown on alert)</label>
+          <textarea id="ecNotes" rows="2" style="height:44px;" placeholder="e.g. Consider referral or further investigation."></textarea>
+        </div>
+      </div>
+
+      <div class="cr-form-error" id="ecFormError"></div>
+
+      <div class="actions" style="margin-top:16px;">
+        <button class="primary" id="ecSaveBtn">Save event-count alert</button>
+        <button class="ghost" id="ecCancelBtn2">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Composite Alerts ──────────────────────────────────────────────── -->
+  <h2 style="margin-top:28px;">Composite Alerts</h2>
+  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
+    Combine two or more existing custom alerts with AND/OR logic to create compound safety checks.
+  </p>
+
+  <div id="cmListView">
+    <div class="cr-bar">
+      <button class="primary" id="cmAddBtn">+ Add composite alert</button>
+    </div>
+    <div class="cr-list" id="cmList"><div class="cr-empty">No composite alerts yet.</div></div>
+  </div>
+
+  <div id="cmFormView" style="display:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <h2 id="cmFormTitle" style="margin:0; border:none; padding:0; flex:1;">New composite alert</h2>
+      <button class="ghost" id="cmCancelBtn">Cancel</button>
+    </div>
+    <div class="cr-form">
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Alert identification</span>
+        <div class="field">
+          <label for="cmLabel">Alert label</label>
+          <input type="text" id="cmLabel" placeholder="e.g. Anticoagulant + Renal impairment" />
+        </div>
+        <div class="field">
+          <label>Severity</label>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmSevRed" name="cmSeverity" value="red" checked /><label for="cmSevRed" style="color:var(--red);">Red — high risk</label></div>
+          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmSevAmber" name="cmSeverity" value="amber" /><label for="cmSevAmber" style="color:var(--amber);">Amber — caution</label></div>
+          <div class="checkbox-row"><input type="radio" id="cmSevInfo" name="cmSeverity" value="info" /><label for="cmSevInfo" style="color:var(--accent);">Info — note only</label></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Logic operator</span>
+        <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmOpAnd" name="cmOperator" value="AND" checked /><label for="cmOpAnd"><strong>AND</strong> — all selected rules must fire</label></div>
+        <div class="checkbox-row"><input type="radio" id="cmOpOr" name="cmOperator" value="OR" /><label for="cmOpOr"><strong>OR</strong> — any selected rule firing is sufficient</label></div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Rules to combine</span>
+        <div class="form-hint" style="margin-bottom:8px;">Select two or more rules. Composite rules cannot reference other composite rules.</div>
+        <div class="cm-rule-list" id="cmRuleList"><div class="cm-rule-empty">No eligible rules yet — create drug-monitoring, drug-combo, or event-count rules first.</div></div>
+        <div class="cm-warn" id="cmCompositeWarn">One or more selected rules is a composite — this is not allowed. Deselect them to continue.</div>
+      </div>
+
+      <div style="margin-bottom:6px;">
+        <span class="cr-section-label">Additional information</span>
+        <div class="field">
+          <label for="cmNotes">Notes (shown on alert)</label>
+          <textarea id="cmNotes" rows="2" style="height:44px;" placeholder="e.g. Review urgently — multiple risk factors present."></textarea>
+        </div>
+      </div>
+
+      <div class="cr-form-error" id="cmFormError"></div>
+
+      <div class="actions" style="margin-top:16px;">
+        <button class="primary" id="cmSaveBtn">Save composite alert</button>
+        <button class="ghost" id="cmCancelBtn2">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 <div class="tab-panel" id="tab-overrides">
   <h2>Rule overrides — Import / Export</h2>
@@ -418,7 +793,9 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
   <textarea id="ioArea" style="height:80px;" placeholder="Paste exported JSON here then click Import…"></textarea>
 </div>
 
+<div class="lib-toast" id="libToast"></div>
 <script src="../shared/chip-renderer.js"></script>
+<script src="../shared/io/sentinel-io.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
