@@ -85,10 +85,14 @@
       hrtCtxHtml = `<div class="sent-chip-hrt-ctx ${ctxClass}">${ctxText}</div>`;
     }
 
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
-      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}</span>
+          <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         ${chip.drugClass ? `<div class="sent-chip-cat">${escHtml(chip.drugClass)}</div>` : ''}
@@ -130,10 +134,14 @@
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
     const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
 
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
-      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
+          <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${pointsText}</span>
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearOrCustomTag}</div>` : yearOrCustomTag}
@@ -257,10 +265,14 @@
     if (chip.notes)  tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
     const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
-      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         ${setsText ? `<div class="sent-chip-obs">${setsText}</div>` : ''}
@@ -280,10 +292,14 @@
     if (chip.notes)  tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
     const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
-      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         <div class="sent-chip-obs">${escHtml(summary)}</div>
@@ -301,10 +317,14 @@
     if (chip.notes)  tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
     const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
-      <div class="sent-chip sent-chip-${col}"${titleAttr}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         <div class="sent-chip-obs">${fired} rule${fired === 1 ? '' : 's'} fired (${escHtml(op)})</div>
@@ -312,7 +332,78 @@
       </div>`;
   }
 
-  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
+  // === EVIDENCE PANEL ===
+  // Renders the click-to-detail panel for a chip's evidence object.
+  // Shape: { summary, facts: [{label, value, date?, detail?}], refs?, series? }
+  function renderEvidencePanel(evidence) {
+    if (!evidence) return '';
+    const rows = (evidence.facts || []).map(f => {
+      const v = escHtml(f.value);
+      const d = f.date ? `<span class="sent-ev-date">${escHtml(formatDate(f.date))}</span>` : '';
+      const det = f.detail ? `<span class="sent-ev-detail">${escHtml(f.detail)}</span>` : '';
+      return `<div class="sent-ev-row">
+        <span class="sent-ev-label">${escHtml(f.label)}</span>
+        <span class="sent-ev-value">${v}${d ? ' · ' + d : ''}${det ? ' · ' + det : ''}</span>
+      </div>`;
+    }).join('');
+
+    const refsHtml = (evidence.refs && evidence.refs.length)
+      ? `<div class="sent-ev-refs">
+          <div class="sent-ev-refs-head">Sub-rules</div>
+          ${evidence.refs.map(r => `
+            <button class="sent-ev-ref${r.fired ? ' fired' : ''}" data-ref-rule-id="${escHtml(r.ruleId)}">
+              <span class="sent-ev-ref-dot${r.fired ? ' on' : ''}"></span>
+              <span class="sent-ev-ref-label">${escHtml(r.label)}</span>
+              <span class="sent-ev-ref-state">${r.fired ? 'fired' : 'did not fire'}</span>
+            </button>`).join('')}
+        </div>`
+      : '';
+
+    const sparklineHtml = evidence.series ? renderSparkline(evidence.series) : '';
+
+    return `<div class="sent-evidence-panel">
+      <div class="sent-ev-summary">${escHtml(evidence.summary || '')}</div>
+      ${sparklineHtml}
+      <div class="sent-ev-rows">${rows}</div>
+      ${refsHtml}
+      <div class="sent-ev-foot">
+        <button class="sent-ev-close" aria-label="Close evidence">Close</button>
+      </div>
+    </div>`;
+  }
+
+  // SVG sparkline for observation-trend evidence. Points oldest→newest, line
+  // coloured by direction (rising=red if "rising" is the trigger direction).
+  function renderSparkline(series) {
+    const pts = (series.points || []).filter(p => Number.isFinite(p.value));
+    if (pts.length < 2) return '';
+    const W = 260, H = 60, PAD = 6;
+    const vals = pts.map(p => p.value);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const rangeV = (maxV - minV) || 1;
+    const stepX = (W - 2 * PAD) / (pts.length - 1);
+    const coords = pts.map((p, i) => {
+      const x = PAD + i * stepX;
+      const y = H - PAD - ((p.value - minV) / rangeV) * (H - 2 * PAD);
+      return { x, y, value: p.value, date: p.date };
+    });
+    const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ');
+    const dots = coords.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.5"><title>${escHtml(formatDate(c.date))}: ${escHtml(String(c.value))}${series.unit ? ' ' + escHtml(series.unit) : ''}</title></circle>`).join('');
+    const lineCls = series.fires
+      ? (series.direction === 'rising' ? 'sent-spark-line rising' : 'sent-spark-line falling')
+      : 'sent-spark-line steady';
+    const legend = `${pts[0].value} → ${pts[pts.length - 1].value}${series.unit ? ' ' + series.unit : ''} · Δ ${series.delta >= 0 ? '+' : ''}${series.delta.toFixed(1)}`;
+    return `<div class="sent-ev-sparkline">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="trend">
+        <path d="${linePath}" class="${lineCls}" fill="none"/>
+        ${dots}
+      </svg>
+      <div class="sent-ev-sparkline-legend">${escHtml(legend)}</div>
+    </div>`;
+  }
+
+  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, renderEvidencePanel, renderSparkline, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

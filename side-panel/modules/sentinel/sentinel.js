@@ -12,6 +12,14 @@ let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
+// Evidence-panel state: track which chip is open by its data-evidence-key so
+// the 10s poll re-render can restore the panel. _evidenceByKey caches the chip
+// objects from the latest snapshot for lookup on click.
+let _openEvidenceKey = null;
+let _evidenceByKey = new Map();
+let _evidenceKeydownHandler = null;
+let _evidenceHandlersAttached = false;
+
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
 let WR_SITE_ID     = null;
@@ -66,6 +74,13 @@ async function cleanup() {
     document.removeEventListener('click', _refreshBtnHandler);
     _refreshBtnHandler = null;
   }
+  if (_evidenceKeydownHandler) {
+    document.removeEventListener('keydown', _evidenceKeydownHandler);
+    _evidenceKeydownHandler = null;
+  }
+  _evidenceHandlersAttached = false;
+  _openEvidenceKey = null;
+  _evidenceByKey.clear();
   container = null;
 }
 
@@ -281,14 +296,129 @@ function render(payload) {
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
     </div>`);
 
+  // Build evidence-key → chip lookup for this render so the click handler can
+  // find the chip object without re-parsing DOM.
+  _evidenceByKey = new Map();
+  visibleChips.forEach(chip => {
+    if (!chip.evidence) return;
+    const key = (chip.ruleId || '') + (chip.type === 'drug-monitoring' ? '|' + (chip.drugName || '') : '');
+    _evidenceByKey.set(key, chip);
+  });
+
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
   container.querySelector('#sentRefreshBtn')?.addEventListener('click', () => refresh());
   container.querySelectorAll('.sent-filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       currentFilter = btn.dataset.filter;
+      _openEvidenceKey = null; // filter change closes any open panel
       render(payload); // re-render with new filter
     });
   });
+
+  attachEvidenceHandlers();
+
+  // Restore the evidence panel that was open before this re-render, if its chip
+  // still exists in the new snapshot.
+  if (_openEvidenceKey && _evidenceByKey.has(_openEvidenceKey)) {
+    const chipEl = container.querySelector(`.sent-chip[data-evidence-key="${cssEscape(_openEvidenceKey)}"]`);
+    if (chipEl) openEvidenceFor(chipEl, _openEvidenceKey);
+    else _openEvidenceKey = null;
+  } else {
+    _openEvidenceKey = null;
+  }
+}
+
+function cssEscape(s) {
+  return String(s || '').replace(/(["\\\]])/g, '\\$1');
+}
+
+function attachEvidenceHandlers() {
+  if (_evidenceHandlersAttached) return; // Idempotent; container persists across re-renders
+  container.addEventListener('click', onEvidenceClick);
+  container.addEventListener('keydown', onEvidenceKeydown);
+
+  _evidenceKeydownHandler = (e) => {
+    if (e.key === 'Escape' && _openEvidenceKey) closeOpenEvidence();
+  };
+  document.addEventListener('keydown', _evidenceKeydownHandler);
+  _evidenceHandlersAttached = true;
+}
+
+function onEvidenceClick(e) {
+  // Composite sub-rule drill-through: jump to that chip and open its panel.
+  const refBtn = e.target.closest('.sent-ev-ref[data-ref-rule-id]');
+  if (refBtn) {
+    e.stopPropagation();
+    const refId = refBtn.dataset.refRuleId;
+    // Find a chip whose key starts with this ruleId (drug-monitoring keys also
+    // include the drug name). Picks the first match — sufficient for v1.
+    let targetKey = null;
+    for (const k of _evidenceByKey.keys()) {
+      if (k === refId || k.startsWith(refId + '|')) { targetKey = k; break; }
+    }
+    if (!targetKey) return;
+    closeOpenEvidence();
+    const targetEl = container.querySelector(`.sent-chip[data-evidence-key="${cssEscape(targetKey)}"]`);
+    if (!targetEl) return;
+    openEvidenceFor(targetEl, targetKey);
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  // Close button inside the panel
+  if (e.target.closest('.sent-ev-close')) {
+    e.stopPropagation();
+    closeOpenEvidence();
+    return;
+  }
+
+  // Click on a chip with evidence
+  const chipEl = e.target.closest('.sent-chip[data-evidence-key]');
+  if (!chipEl) return;
+  const key = chipEl.dataset.evidenceKey;
+  if (_openEvidenceKey === key) {
+    closeOpenEvidence();
+  } else {
+    closeOpenEvidence();
+    openEvidenceFor(chipEl, key);
+  }
+}
+
+function onEvidenceKeydown(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const chipEl = e.target.closest('.sent-chip[data-evidence-key]');
+  if (!chipEl || !container.contains(chipEl)) return;
+  if (e.target !== chipEl) return; // only the chip itself, not inner buttons
+  e.preventDefault();
+  const key = chipEl.dataset.evidenceKey;
+  if (_openEvidenceKey === key) closeOpenEvidence();
+  else { closeOpenEvidence(); openEvidenceFor(chipEl, key); }
+}
+
+function openEvidenceFor(chipEl, key) {
+  const chip = _evidenceByKey.get(key);
+  if (!chip || !chip.evidence) return;
+  const CR = window.ChipRenderer;
+  if (!CR || !CR.renderEvidencePanel) return;
+  const panel = document.createElement('div');
+  panel.className = 'sent-evidence-wrapper';
+  panel.innerHTML = CR.renderEvidencePanel(chip.evidence);
+  chipEl.insertAdjacentElement('afterend', panel);
+  chipEl.setAttribute('aria-expanded', 'true');
+  chipEl.classList.add('sent-chip-open');
+  _openEvidenceKey = key;
+}
+
+function closeOpenEvidence() {
+  if (!container) return;
+  const open = container.querySelector('.sent-chip-open[data-evidence-key]');
+  if (open) {
+    open.setAttribute('aria-expanded', 'false');
+    open.classList.remove('sent-chip-open');
+    const next = open.nextElementSibling;
+    if (next && next.classList.contains('sent-evidence-wrapper')) next.remove();
+  }
+  _openEvidenceKey = null;
 }
 
 function renderChip(chip) {

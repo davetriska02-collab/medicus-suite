@@ -148,6 +148,196 @@
     return { matched: false };
   }
 
+  // === EVIDENCE BUILDERS ===
+  // Each builder produces a chip.evidence = { summary, facts[], refs?, series? }
+  // shape consumed by ChipRenderer.renderEvidencePanel.
+
+  const STATUS_PHRASE = {
+    overdue: 'overdue', not_met: 'not met', stale: 'stale',
+    due_soon: 'due soon', no_data: 'no data', recently_initiated: 'recently initiated',
+    achieved: 'in date', in_date: 'in date'
+  };
+
+  function fmt(v) { return v == null || v === '' ? '—' : String(v); }
+
+  function buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data) {
+    const facts = [];
+    facts.push({ label: 'Drug matched', value: med.name, date: med.startDate || null });
+    if (rule.drugClass) facts.push({ label: 'Class', value: rule.drugClass });
+
+    const pat = data.patientContext || {};
+    const patBits = [];
+    if (pat.ageYears != null) patBits.push(`${pat.ageYears}y`);
+    if (pat.sex) patBits.push(String(pat.sex));
+    if (patBits.length) facts.push({ label: 'Patient', value: patBits.join(' · ') });
+
+    testEvaluations.forEach(te => {
+      const tName = te.testName || te.name || '';
+      if (te.latestObs && te.latestObs.date) {
+        const valPart = te.latestObs.value != null ? String(te.latestObs.value).trim() : '';
+        const dueBit = (te.status === 'overdue' || te.status === 'stale') && te.days != null && te.intervalDays
+          ? `due ${te.days - te.intervalDays}d ago`
+          : (te.status === 'due_soon' && te.days != null && te.intervalDays
+              ? `due in ${te.intervalDays - te.days}d`
+              : `${te.days}d since`);
+        facts.push({
+          label: tName,
+          value: valPart || STATUS_PHRASE[te.status] || te.status,
+          date: te.latestObs.date,
+          detail: `${dueBit} · interval ${te.intervalDays || 365}d · ${STATUS_PHRASE[te.status] || te.status}`
+        });
+      } else {
+        facts.push({
+          label: tName,
+          value: 'not found in record',
+          detail: `we looked for: ${(te.match || []).slice(0, 4).join(', ')}${(te.match || []).length > 4 ? '…' : ''} · interval ${te.intervalDays || 365}d`
+        });
+      }
+    });
+
+    if (med.startDate && testEvaluations.some(te => te.status === 'recently_initiated')) {
+      facts.push({ label: 'Note', value: 'within recently-initiated grace window — monitoring not yet due' });
+    }
+
+    const summary = `${med.name} — ${STATUS_PHRASE[worstStatus] || worstStatus}`;
+    return { summary, facts };
+  }
+
+  function buildDrugComboEvidence(rule, matchedPerSet, matchedRequiredProblems, data) {
+    const facts = [];
+    matchedPerSet.forEach((matched, i) => {
+      const set = rule.drugSets[i] || {};
+      facts.push({
+        label: set.name || `Drug set ${i + 1}`,
+        value: matched.map(m => m.name).join(', ')
+      });
+    });
+    const pat = data.patientContext || {};
+    const patBits = [];
+    if (pat.ageYears != null) patBits.push(`age ${pat.ageYears}`);
+    if (pat.sex) patBits.push(String(pat.sex));
+    if (patBits.length) facts.push({ label: 'Patient', value: patBits.join(' · ') });
+
+    if (rule.ageRange) {
+      const r = rule.ageRange;
+      const range = `${r.min != null ? r.min : ''}–${r.max != null ? r.max : ''}`;
+      facts.push({ label: 'Age range required', value: range });
+    }
+    if (rule.sex && rule.sex !== 'any') facts.push({ label: 'Sex required', value: String(rule.sex) });
+
+    matchedRequiredProblems.forEach(p => {
+      facts.push({ label: 'Required problem', value: p.label, date: p.codedDate });
+    });
+    if ((rule.excludesProblem || []).length) {
+      facts.push({ label: 'Excluded problems (none matched)', value: rule.excludesProblem.join(', ') });
+    }
+    if ((rule.mustNotBePresent || []).length) {
+      facts.push({ label: 'Drugs that would block this rule (none present)', value: rule.mustNotBePresent.join(', ') });
+    }
+
+    const summary = matchedPerSet.map(matched => matched.map(m => m.name).join('/')).join(' + ');
+    return { summary, facts };
+  }
+
+  function buildEventCountEvidence(rule, items, count, threshold, op, cutoffISO) {
+    const facts = [];
+    facts.push({ label: 'Count', value: `${count} ${op} ${threshold} (${rule.sourceKind || 'observations'})` });
+    facts.push({ label: 'Window', value: `last ${rule.windowMonths || 12} months`, date: cutoffISO, detail: `from ${cutoffISO}` });
+    if ((rule.match || []).length) facts.push({ label: 'Match terms', value: rule.match.join(', ') });
+    if ((rule.exclude || []).length) facts.push({ label: 'Exclude terms', value: rule.exclude.join(', ') });
+    items.slice(0, 15).forEach((it, i) => {
+      const det = it.rawValue != null ? String(it.rawValue) : null;
+      facts.push({ label: `#${i + 1}`, value: it.name || it.label || '', date: it.date || null, detail: det });
+    });
+    if (items.length > 15) facts.push({ label: '…', value: `+ ${items.length - 15} more` });
+    return { summary: `${count} ${op} ${threshold} in last ${rule.windowMonths || 12}mo`, facts };
+  }
+
+  function buildCompositeEvidence(rule, ruleIds, firedIds, evaluatedById, allRules) {
+    const labelById = {};
+    (allRules || []).forEach(r => {
+      if (!r.id) return;
+      labelById[r.id] = r.label || r.indicatorName || r.drug?.match?.[0] || r.registerName || r.id;
+    });
+    const refs = ruleIds.map(id => {
+      const fired = firedIds.includes(id);
+      const chips = evaluatedById.get(id) || [];
+      const labelFromChip = chips[0]?.label || chips[0]?.indicatorName || chips[0]?.drugName || chips[0]?.registerName;
+      return { ruleId: id, label: labelFromChip || labelById[id] || id, fired };
+    });
+    const facts = [
+      { label: 'Operator', value: rule.operator || 'AND' },
+      { label: 'Fired', value: `${firedIds.length} of ${ruleIds.length}` }
+    ];
+    return { summary: `${rule.operator || 'AND'}: ${firedIds.length} of ${ruleIds.length} sub-rules fired`, facts, refs };
+  }
+
+  function buildQofIndicatorEvidence(rule, status, valueText, dateText, days, ctx) {
+    const facts = [];
+    const check = rule.check || {};
+
+    if (ctx.matchedRegisterProblem) {
+      facts.push({
+        label: 'Register precondition',
+        value: `${ctx.matchedRegisterProblem.registerName} (${ctx.matchedRegisterProblem.label})`,
+        date: ctx.matchedRegisterProblem.codedDate
+      });
+    }
+
+    if (check.kind === 'observation-threshold' || check.kind === 'observation-recent') {
+      if (ctx.matchedObs) {
+        facts.push({
+          label: 'Observation',
+          value: valueText || String(ctx.matchedObs.value || ''),
+          date: ctx.matchedObs.date,
+          detail: days != null ? `${days}d ago` : null
+        });
+      } else {
+        facts.push({
+          label: 'Observation',
+          value: 'not found in record',
+          detail: `we looked for: ${(check.observation || []).slice(0, 4).join(', ')}`
+        });
+      }
+      if (check.thresholdSystolic && check.thresholdDiastolic) {
+        facts.push({ label: 'Threshold', value: `≤ ${check.thresholdSystolic}/${check.thresholdDiastolic}` });
+      } else if (check.threshold != null && check.operator) {
+        facts.push({ label: 'Threshold', value: `${check.operator} ${check.threshold}${check.unit ? ' ' + check.unit : ''}` });
+      }
+      const useFloor = rule.useQofYearFloor !== false;
+      facts.push({ label: 'Window', value: useFloor ? 'QOF year floor (1 Apr)' : `last ${check.withinDays || 365}d` });
+    } else if (check.kind === 'medication-present') {
+      facts.push({
+        label: 'Medication',
+        value: ctx.matchedMed || 'not prescribed',
+        detail: `we looked for: ${(check.medicationMatch || []).slice(0, 4).join(', ')}`
+      });
+    } else if (check.kind === 'observation-trend') {
+      const s = ctx.trendSeries;
+      if (s) {
+        facts.push({ label: 'Test', value: s.testName, detail: s.unit || null });
+        facts.push({ label: 'Direction', value: `${s.direction} (Δ ${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}${s.unit ? ' ' + s.unit : ''}, min ${s.minDelta})` });
+        facts.push({ label: 'Span', value: `${s.spanMonths} months · ${s.points.length} points` });
+        s.points.forEach((p, i) => {
+          facts.push({ label: `Point ${i + 1}`, value: `${p.value.toFixed(1)}${s.unit ? ' ' + s.unit : ''}`, date: p.date });
+        });
+      } else {
+        facts.push({ label: 'Trend', value: valueText || 'insufficient data' });
+      }
+    }
+
+    if ((rule.excludeIfProblem || []).length) {
+      facts.push({ label: 'Excluded if (none matched)', value: rule.excludeIfProblem.join(', ') });
+    }
+
+    const phrase = STATUS_PHRASE[status] || status;
+    const summary = `${rule.indicatorName || rule.indicatorCode || rule.id} — ${phrase}`;
+
+    const evidence = { summary, facts };
+    if (ctx.trendSeries) evidence.series = ctx.trendSeries;
+    return evidence;
+  }
+
   // === EVALUATORS ===
 
   // Drug-monitoring rule evaluator
@@ -200,7 +390,8 @@
         source: rule.source || null,
         sharedCare: !!rule.sharedCare,
         suppressedNoData,
-        notes: rule.notes || null
+        notes: rule.notes || null,
+        evidence: buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data)
       };
 
       // HRT-specific: annotate oestrogen chips with progestogen coverage context.
@@ -230,7 +421,14 @@
       matchedProblem: result.problem.label,
       codedDate: result.problem.codedDate,
       source: rule.source || null,
-      notes: rule.notes || null
+      notes: rule.notes || null,
+      evidence: {
+        summary: `On ${rule.registerName || rule.registerCode || 'register'} (matched: ${result.problem.label})`,
+        facts: [
+          { label: 'Register', value: rule.registerName || rule.registerCode || '' },
+          { label: 'Matched problem', value: result.problem.label, date: result.problem.codedDate || null }
+        ]
+      }
     }];
   }
 
@@ -364,6 +562,13 @@
       drugs:   matched.map(m => m.name)
     }));
 
+    // Capture which required problems matched (for evidence panel)
+    const matchedRequiredProblems = (rule.requiresProblem || []).map(req => {
+      const probs = data.problems || [];
+      const hit = probs.find(p => problemLabelMatchesTerm(p.label, req));
+      return hit ? { term: req, label: hit.label, codedDate: hit.codedDate || null } : null;
+    }).filter(Boolean);
+
     return [{
       type:        'drug-combo',
       ruleId:      rule.id,
@@ -371,7 +576,8 @@
       label:       rule.label || rule.id,
       matchSummary,
       source:      rule.source || null,
-      notes:       rule.notes  || null
+      notes:       rule.notes  || null,
+      evidence:    buildDrugComboEvidence(rule, matchedPerSet, matchedRequiredProblems, data)
     }];
   }
 
@@ -459,7 +665,8 @@
       windowMonths: rule.windowMonths,
       matchedItems: items.slice(0, 10).map(it => it.date ? `${it.name} ${it.date}` : (it.label || it.name || '')),
       notes:       rule.notes || null,
-      source:      rule.source || null
+      source:      rule.source || null,
+      evidence:    buildEventCountEvidence(rule, items, count, threshold, op, new Date(cutoffMs).toISOString().slice(0, 10))
     }];
   }
 
@@ -505,29 +712,37 @@
 
     if (!fires) return [];
 
+    const firedIds = ruleIds.filter(id => {
+      const chips = evaluatedById.get(id);
+      return chips && chips.length > 0;
+    });
     return [{
       type:      'composite',
       ruleId:    rule.id,
       status:    severityToStatus(rule.severity),
       label:     rule.label || rule.id,
       operator:  rule.operator,
-      firedRuleIds: ruleIds.filter(id => {
-        const chips = evaluatedById.get(id);
-        return chips && chips.length > 0;
-      }),
+      firedRuleIds: firedIds,
       notes:     rule.notes  || null,
-      source:    rule.source || null
+      source:    rule.source || null,
+      evidence:  buildCompositeEvidence(rule, ruleIds, firedIds, evaluatedById, allRules)
     }];
   }
 
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
+    // evidenceCtx accumulates the matched data the evaluator consults so the
+    // evidence panel can show "we looked here, we found X" without re-running
+    // the match logic.
+    const evidenceCtx = { matchedRegisterProblem: null, matchedObs: null, matchedMed: null, trendSeries: null };
+
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
       const registerRule = (data._registerLookup || {})[rule.requiresRegister];
       if (!registerRule) return [];  // register rule not configured/disabled
       const reg = patientOnRegister(data.problems, registerRule);
       if (!reg || !reg.matched) return [];
+      evidenceCtx.matchedRegisterProblem = { label: reg.problem.label, codedDate: reg.problem.codedDate || null, registerName: registerRule.registerName || registerRule.registerCode };
     }
 
     // Step 2: age + sex constraints
@@ -558,6 +773,7 @@
     if (check.kind === 'observation-threshold') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
       if (obs && obs.date) {
+        evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
         // Boundary check: by default bundled QOF indicators apply the 1 Apr – 31 Mar
@@ -602,14 +818,16 @@
       }
     } else if (check.kind === 'medication-present') {
       const matchTerms = check.medicationMatch || [];
-      const found = (data.medications || []).some(m => {
+      const foundMed = (data.medications || []).find(m => {
         const norm = normaliseDrugString(m.name);
         return matchTerms.some(t => norm.includes(normaliseDrugString(t)));
       });
-      status = found ? 'achieved' : 'not_met';
+      if (foundMed) evidenceCtx.matchedMed = foundMed.name;
+      status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
       if (obs && obs.date) {
+        evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
         // Capture the recorded value so the chip can show e.g. "Weight: 87 kg ·
@@ -691,6 +909,13 @@
           valueText = `${oldest.toFixed(1)} → ${newest.toFixed(1)}${unit} (${deltaStr}, ${inWindow.length} pts, ${spanMonths} mo)`;
           dateText  = inWindow[0].date;
 
+          evidenceCtx.trendSeries = {
+            testName: historyEntry.name,
+            unit: historyEntry.unit || '',
+            points: inWindow.slice().reverse().map(p => ({ date: p.date, value: p.value })),
+            delta, direction, minDelta, spanMonths, fires: trendFires
+          };
+
           status = trendFires ? 'not_met' : 'achieved';
         }
       }
@@ -713,7 +938,8 @@
       qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
       check: rule.check,
       source: rule.source || null,
-      notes: rule.notes || null
+      notes: rule.notes || null,
+      evidence: buildQofIndicatorEvidence(rule, status, valueText, dateText, days, evidenceCtx)
     }];
   }
 

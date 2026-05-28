@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.2.0] — 2026-05-28
+### Added — chip provenance (click-to-see-evidence)
+Side-panel sentinel chips are now clickable and surface the exact data the rules
+engine matched to fire each alert. Clinicians can validate an alert before
+acting on it — "this fired because <X happened on <date>>".
+
+**Engine — `evidence` field on every chip:**
+- Each evaluator now attaches `chip.evidence = { summary, facts[], refs?, series? }` built from the variables already in scope (no new data fetches). Shape is flat so one renderer handles all rule types.
+- Drug-monitoring evidence: matched medication + start date; per-test name, last result + date + days-ago, interval threshold, status; "we looked for: …" rows for tests with no data; HRT context note when present.
+- Drug-combo evidence: per-set matched drugs; patient age/sex; required problems matched (with coded date); excluded problems and `mustNotBePresent` list confirming none matched.
+- QOF-indicator evidence: matched observation + value + date + days-ago, or "not found" with the search-terms list; threshold + operator + unit; QOF year / rolling window context; register precondition (which problem made the patient eligible); medication-present details.
+- QOF-register evidence: register name + matched problem label + coded date.
+- Event-count evidence: count vs threshold; window cutoff date; match/exclude terms; up to 15 matched items with date and raw value.
+- Composite evidence: operator, "N of M sub-rules fired", per-sub-rule label + fired/not-fired status. Sub-rule refs are **clickable** in the panel — clicking drills into that sub-chip's own evidence (scroll + open).
+- Observation-trend evidence: full point series (date + value, oldest → newest), delta, direction, span months, threshold.
+
+**Renderer — `ChipRenderer.renderEvidencePanel(evidence)`:**
+- New flat-list renderer in `shared/chip-renderer.js` used by all chip types.
+- Inline SVG sparkline for observation-trend evidence — coloured by trigger direction (rising = red if rule is "rising"; falling = blue; steady = grey), tooltips on each point with date + value.
+- Every clickable chip now carries `data-rule-id` + `data-evidence-key` + a small ⓘ affordance + `role="button"` / `aria-expanded`. Chips without evidence render exactly as before (backwards-compat).
+
+**Side-panel sentinel module:**
+- Inline panel appears directly under the clicked chip — no modal, no floating popover. Click to toggle, Esc to close, Enter / Space to activate from keyboard.
+- Open state survives the 10-second poll re-render: the panel restores itself after each refresh as long as the chip is still in the snapshot.
+- Composite sub-rule drill-through: click a fired sub-rule ref → previous panel closes, target chip opens, scrolls into view.
+- One delegated click handler at the container level (idempotent across re-renders).
+- Cleanup on module unmount removes document-level Esc handler and resets state.
+
+**Scope of v1:**
+- Side-panel + pop-out only. In-page sentinel HUD and full-tab visualiser unchanged (chip data carries `evidence` and they can adopt the renderer later without engine changes).
+- No-data chips still render evidence ("we looked for X, found nothing").
+- Inapplicable-chip leaks were closed in v3.1.8 first so the evidence panel lands on a clean baseline.
+
 ## [v3.1.8] — 2026-05-28
 ### Fixed — applicability filter audit (engine + bundled rules)
 Pre-evidence-feature audit by adversarial agent. Closes silent filter holes
