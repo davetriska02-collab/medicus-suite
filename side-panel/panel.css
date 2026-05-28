@@ -709,3 +709,52 @@ html, body {
   transition: color 0.1s, border-color 0.1s;
 }
 .sub-rag-goto:hover { color: var(--t2); border-color: var(--t4); }
+
+/* ── Display preferences ─────────────────────────────────────────────────── */
+
+/* Light theme */
+html[data-theme="light"] {
+  --bg-deep:    #f8fafc;
+  --bg-mid:     #f1f5f9;
+  --bg-elev:    #ffffff;
+  --bg-hover:   #e2eaf5;
+  --border:     #cbd5e1;
+  --border-hi:  #94a3b8;
+  --border-acc: #2563eb;
+  --text-1:     #0f172a;
+  --text-2:     #1e3a5f;
+  --text-3:     #475569;
+  --text-4:     #64748b;
+  --text-5:     #94a3b8;
+  --accent:     #2563eb;
+  --accent-dim: rgba(37,99,235,0.10);
+  --green:      #16a34a;
+  --amber:      #b45309;
+  --red:        #dc2626;
+}
+
+html[data-theme="light"] body {
+  background: var(--bg-deep);
+  color: var(--text-1);
+}
+
+/* Text size — zoom scales all px dimensions uniformly without touching module CSS */
+html[data-size="small"]  { zoom: 0.85; }
+html[data-size="medium"] { zoom: 1;    }
+html[data-size="large"]  { zoom: 1.25; }
+
+/* Colorblind-friendly palette: swap red→orange, green→blue */
+html[data-colorblind="true"] {
+  --red:   #ea580c;
+  --green: #2563eb;
+}
+
+/* Colorblind badge text overrides (badges use hard-coded rgba fills referencing red/green) */
+html[data-colorblind="true"] .sent-chip-red    { border-left-color: #ea580c; background: rgba(234,88,12,0.06); }
+html[data-colorblind="true"] .sent-chip-green  { border-left-color: #2563eb; background: rgba(37,99,235,0.06); }
+html[data-colorblind="true"] .sent-badge-red   { background: rgba(234,88,12,0.18); color: #ea580c; border-color: rgba(234,88,12,0.3); }
+html[data-colorblind="true"] .sent-badge-green { background: rgba(37,99,235,0.12); color: #2563eb; border-color: rgba(37,99,235,0.25); }
+html[data-colorblind="true"] .sent-test-red    { color: #ea580c !important; }
+html[data-colorblind="true"] .sent-test-green  { color: #2563eb !important; }
+html[data-colorblind="true"] .ampm-am .ampm-num { color: #ea580c; }
+html[data-colorblind="true"] .ampm-pm .ampm-num { color: #2563eb; }

@@ -8,6 +8,13 @@ let activeModule = 'slots';
 let moduleCleanup = null;
 let switchSeq = 0;
 
+function applyDisplayPrefs(prefs) {
+  prefs = prefs || {};
+  document.documentElement.setAttribute('data-theme',     prefs.theme     || 'dark');
+  document.documentElement.setAttribute('data-size',      prefs.size      || 'medium');
+  document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
+}
+
 // ── Module registry ───────────────────────────────────────────────────────────
 
 const MODULES = {
@@ -662,5 +669,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+
+// Load and apply display preferences
+chrome.storage.local.get('suite.display').then(r => applyDisplayPrefs(r['suite.display'] || {}));
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['suite.display']) applyDisplayPrefs(changes['suite.display'].newValue || {});
+});
 
 switchModule('slots');
