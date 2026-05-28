@@ -178,7 +178,7 @@ async function renderCrList() {
     return `
       <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
         <div class="cr-card-info">
-          <div class="cr-card-name">${escHtml(rule.drug?.match?.[0] || rule.id)} ${rule.drugClass ? `<span style="font-size:10px;color:var(--t4)">(${escHtml(rule.drugClass)})</span>` : ''}</div>
+          <div class="cr-card-name">${escHtml(rule.label || rule.drug?.match?.[0] || rule.id)} ${rule.drugClass ? `<span style="font-size:10px;color:var(--t4)">(${escHtml(rule.drugClass)})</span>` : ''}</div>
           <div class="cr-card-meta">${testCount} test${testCount !== 1 ? 's' : ''} · ${disabled ? 'disabled' : 'enabled'}${editedAgo ? ' · ' + editedAgo : ''}</div>
         </div>
         <div class="cr-card-actions">
@@ -575,7 +575,7 @@ async function ciRenderList() {
     return `
       <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
         <div class="cr-card-info">
-          <div class="cr-card-name">${escHtml(rule.indicatorCode || rule.id)} <span style="font-size:10px;color:var(--t4)">${escHtml(rule.indicatorName || '')}</span></div>
+          <div class="cr-card-name">${escHtml(rule.indicatorName || rule.indicatorCode || rule.id)}${rule.indicatorCode ? ` <span style="font-size:10px;color:var(--t4)">${escHtml(rule.indicatorCode)}</span>` : ''}</div>
           <div class="cr-card-meta">${escHtml(kindLabel)} · register: ${escHtml(regLabel)} · ${disabled ? 'disabled' : 'enabled'}</div>
         </div>
         <div class="cr-card-actions">

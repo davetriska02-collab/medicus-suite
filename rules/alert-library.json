@@ -322,7 +322,7 @@
     },
 
     {
-      "libId": "ardens-1",
+      "libId": "mhra-valproate-ppg",
       "category": "Prescribing safety",
       "subcategory": "Teratogenicity",
       "title": "Valproate in female of childbearing age",
@@ -346,7 +346,7 @@
     },
 
     {
-      "libId": "ardens-2",
+      "libId": "nice-lithium-monitoring",
       "category": "Prescribing safety",
       "subcategory": "Lithium safety",
       "title": "Lithium without 3-monthly level + 6-monthly U&E/TFT",
@@ -355,7 +355,7 @@
       "rule": {
         "type": "drug-monitoring",
         "enabled": true,
-        "id": "custom-ardens-2-lithium-monitoring",
+        "id": "custom-nice-lithium-monitoring",
         "label": "Lithium — monitoring overdue",
         "drug": {
           "match": ["lithium"],
@@ -373,7 +373,7 @@
     },
 
     {
-      "libId": "ardens-3",
+      "libId": "mhra-sglt2-dka",
       "category": "Prescribing safety",
       "subcategory": "Renal",
       "title": "SGLT2 inhibitor — DKA awareness reminder",
@@ -396,7 +396,7 @@
     },
 
     {
-      "libId": "ardens-4",
+      "libId": "mhra-isotretinoin-ppg",
       "category": "Prescribing safety",
       "subcategory": "Teratogenicity",
       "title": "Isotretinoin in female of childbearing age",
@@ -420,7 +420,7 @@
     },
 
     {
-      "libId": "pcit-1",
+      "libId": "prescribing-qtc-combination",
       "category": "Prescribing safety",
       "subcategory": "QTc prolongation",
       "title": "Two or more QTc-prolonging drugs concurrent",
