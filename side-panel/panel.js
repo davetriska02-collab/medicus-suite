@@ -231,6 +231,13 @@ async function switchModule(name) {
 function renderAbout() {
   content.innerHTML = `
     <div class="about-module">
+      <div class="feature-list-link">
+        <a href="https://github.com/davetriska02-collab/medicus-suite/raw/main/docs/feature-list.docx" target="_blank" rel="noopener noreferrer">
+          📄 Download the latest feature list (.docx)
+        </a>
+        <div class="feature-list-link-sub">Regenerated weekly. Source: <a href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/feature-list.md" target="_blank" rel="noopener noreferrer">view on GitHub</a></div>
+      </div>
+
       <h2>Modules</h2>
 
       <div class="module-card">

@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.1.6] — 2026-05-28
+### Added — feature-list hotlink in About tab + weekly auto-generator
+- New card at the top of the side-panel **About** tab linking to the latest `docs/feature-list.docx` on GitHub (raw download) and the Markdown source.
+- `.claude/scheduled-tasks/weekly-feature-list.md` — prompt for a scheduled Claude Code on the web trigger that regenerates `docs/feature-list.md` and `docs/feature-list.docx` once a week. No-op commit when the feature surface hasn't changed (avoids weekly noise commits).
+- Placeholder `docs/feature-list.md` shipped so the About link works immediately before the first scheduled run lands.
+
 ## [v3.1.5] — 2026-05-28
 ### Added — Alert Library alpha-feature acknowledgement gate
 - Library cards are dimmed and `+ ADD` buttons inert until the user clicks "I understand — enable the library" on a warning banner.
