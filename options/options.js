@@ -1085,6 +1085,72 @@ rmSaveBtn?.addEventListener('click', async () => {
   }
 })();
 
+// ── Manual update check button (v3.0) ─────────────────────────────────────────
+
+(function initManualUpdateCheck() {
+  const btn    = document.getElementById('checkUpdateBtn');
+  const result = document.getElementById('checkUpdateResult');
+  if (!btn || !window.UpdateChecker) return;
+
+  function formatTimeAgo(ts) {
+    if (!ts) return 'never';
+    const mins = Math.round((Date.now() - ts) / 60000);
+    if (mins < 1)   return 'just now';
+    if (mins < 60)  return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24)   return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }
+
+  async function setIdleStatus() {
+    const state = await window.UpdateChecker.getState();
+    const installed = window.UpdateChecker.getInstalledVersion();
+    if (!result) return;
+    if (state.error) {
+      result.textContent = `Last check failed: ${state.error}`;
+      result.style.color = '#f59e0b';
+      return;
+    }
+    if (!state.latestVersion) {
+      result.textContent = 'Not checked yet';
+      result.style.color = '';
+      return;
+    }
+    const newer = window.UpdateChecker.isNewer(state.latestVersion, installed);
+    if (newer) {
+      result.textContent = `Update available: v${state.latestVersion} (you have v${installed}) · checked ${formatTimeAgo(state.checkedAt)}`;
+      result.style.color = '#4ade80';
+    } else {
+      result.textContent = `Up to date (v${installed}) · checked ${formatTimeAgo(state.checkedAt)}`;
+      result.style.color = 'var(--text-3)';
+    }
+  }
+
+  setIdleStatus();
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Checking…';
+    if (result) {
+      result.textContent = 'Contacting GitHub…';
+      result.style.color = 'var(--text-3)';
+    }
+    try {
+      const res = await window.UpdateChecker.checkForUpdate({ force: true });
+      if (!res.ok) {
+        if (result) { result.textContent = `Check failed: ${res.error}`; result.style.color = '#ef4444'; }
+      } else {
+        await setIdleStatus();
+      }
+    } catch (e) {
+      if (result) { result.textContent = `Check failed: ${e.message}`; result.style.color = '#ef4444'; }
+    }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  });
+})();
+
 // ── Update banner (v1.3.1) ────────────────────────────────────────────────────
 
 (async function initUpdateBanner() {
