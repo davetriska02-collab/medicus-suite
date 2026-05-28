@@ -282,6 +282,11 @@
       if (obs && obs.date) {
         days = daysBetween(obs.date, now);
         dateText = obs.date;
+        // Capture the recorded value so the chip can show e.g. "Weight: 87 kg ·
+        // 12 Mar 2025" instead of just the date. observation-threshold sets
+        // this already; observation-recent was the gap that left in-date
+        // chips (HRT review, smoking status, etc.) value-less.
+        if (obs.value != null) valueText = String(obs.value).trim();
         // Boundary check — supports useQofYearFloor opt-out (see threshold case above)
         const _obsDate2 = new Date(obs.date);
         const _qofStart2 = qofYearStart(now);

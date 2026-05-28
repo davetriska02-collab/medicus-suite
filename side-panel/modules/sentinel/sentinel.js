@@ -308,10 +308,13 @@ function renderChip(chip) {
       const tCol = STATUS_COLOUR[t.status] || 'neutral';
       const tLbl = STATUS_LABEL[t.status] || '';
       const dateStr = t.latestObs ? formatDate(t.latestObs.date) : '';
+      const valStr  = t.latestObs && t.latestObs.value != null
+        ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
+        : '';
       const dayStr  = t.days != null ? ` · ${t.days}d` : '';
       return `<div class="sent-test-row">
         <span class="sent-test-name">${escHtml(t.testName || t.name || '')}</span>
-        <span class="sent-test-status sent-test-${tCol}">${tLbl}${dateStr ? ` · ${dateStr}${dayStr}` : ''}</span>
+        <span class="sent-test-status sent-test-${tCol}">${tLbl}${valStr}${dateStr ? ` · ${dateStr}${dayStr}` : ''}</span>
       </div>`;
     }).join('');
     return `
