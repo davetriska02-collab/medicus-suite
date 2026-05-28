@@ -2,6 +2,21 @@
 
 'use strict';
 
+// ── Inject current extension version into header badges ───────────────────────
+// Both badges used to be hard-coded; they drifted out of sync with manifest.json
+// and showed the install-time version of the page chrome forever.
+(function injectVersionBadges() {
+  try {
+    const v = 'v' + chrome.runtime.getManifest().version;
+    document.addEventListener('DOMContentLoaded', () => {
+      const a = document.getElementById('suiteVersionBadge');
+      const b = document.getElementById('debugVersionBadge');
+      if (a) a.textContent = v;
+      if (b) b.textContent = v;
+    });
+  } catch (_) {}
+})();
+
 // ── Helpers (hoisted to top so any subsequent code can use them) ──────────────
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

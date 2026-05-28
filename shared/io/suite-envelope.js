@@ -91,52 +91,70 @@ function unwrap(raw, expectedScope) {
 
 // Build a human-readable preview summary of a validated envelope.
 // Returns an array of description strings suitable for display before import.
+//
+// For a "suite" scoped backup the preview lists every known module so users can
+// see at a glance which ones are present and which are missing (older backups
+// often pre-date newer modules like Request Monitor or Triage Lens). Missing
+// modules render as "— not in this backup".
 function previewEnvelope(envelope) {
   const lines = [];
   lines.push(`Scope: ${envelope.scope}`);
   lines.push(`Exported: ${envelope.exportedAt ? new Date(envelope.exportedAt).toLocaleString() : 'unknown'}`);
-  if (envelope.extensionVersion) lines.push(`Extension version: ${envelope.extensionVersion}`);
+  if (envelope.extensionVersion) lines.push(`Backup created with extension version: ${envelope.extensionVersion}`);
 
   const mods = envelope.modules || {};
+  const isSuite = envelope.scope === 'suite';
+  const missing = (label) => isSuite ? `${label}: — not in this backup` : null;
 
   if (mods.sentinel) {
     const customCount = (mods.sentinel.customRules || []).length;
     const overrideCount = Object.keys(mods.sentinel.rules || {}).length;
-    lines.push(`Sentinel: ${overrideCount} rule override(s), ${customCount} custom rule(s)`);
-  }
+    lines.push(`Sentinel (Monitoring): ${overrideCount} rule override(s), ${customCount} custom rule(s)`);
+  } else { const m = missing('Sentinel (Monitoring)'); if (m) lines.push(m); }
+
   if (mods.capacity) {
     const presetCount = (mods.capacity.presets || []).length;
-    lines.push(`Capacity: ${presetCount} preset(s)`);
-  }
+    lines.push(`Capacity Forecast: ${presetCount} preset(s)`);
+  } else { const m = missing('Capacity Forecast'); if (m) lines.push(m); }
+
   if (mods.triage) {
-    const ruleCount = (mods.triage.config?.rules || []).length;
-    lines.push(`Triage Lens: ${ruleCount} rule(s)`);
-  }
+    const cfg = mods.triage.config || {};
+    const ruleCount = (cfg.rules || []).length;
+    const hasPrefs = Object.keys(cfg).some(k => k !== 'rules');
+    lines.push(`Triage Lens (custom rules + prefs): ${ruleCount} rule(s)${hasPrefs ? ', prefs included' : ''}`);
+  } else { const m = missing('Triage Lens (custom rules + prefs)'); if (m) lines.push(m); }
+
   if (mods.slots) {
     const hiddenCount  = (mods.slots.hiddenTypes || []).length;
     const alertCount   = (mods.slots.alertRules  || []).length;
     lines.push(`Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s)`);
-  }
+  } else { const m = missing('Slot Counter'); if (m) lines.push(m); }
+
   if (mods.submissions) {
     const hasThresholds = mods.submissions.thresholds != null;
     lines.push(`Submissions Tracker: config included${hasThresholds ? ', thresholds included' : ''}`);
-  }
+  } else { const m = missing('Submissions Tracker'); if (m) lines.push(m); }
+
   if (mods.triageAlerts) {
     const ruleCount = (mods.triageAlerts.rules || []).length;
     lines.push(`Triage capacity alerts: ${ruleCount} rule(s)`);
-  }
+  } else { const m = missing('Triage capacity alerts'); if (m) lines.push(m); }
+
   if (mods.popout) {
     lines.push('Pop-out: window state included');
-  }
+  } else { const m = missing('Pop-out'); if (m) lines.push(m); }
+
   if (mods.referrals) {
     const discoveryCount = Array.isArray(mods.referrals.discovery) ? mods.referrals.discovery.length : (mods.referrals.discovery != null ? 1 : 0);
     const hasConfig = mods.referrals.config != null;
     lines.push(`Referrals: ${discoveryCount} discovered, config ${hasConfig ? 'present' : 'absent'}`);
-  }
+  } else { const m = missing('Referrals'); if (m) lines.push(m); }
+
   if (mods.requestMonitor) {
     const enabled = mods.requestMonitor.enabled;
     lines.push(`Request Monitor: ${enabled ? 'enabled' : 'disabled'}, assignee ${mods.requestMonitor.assigneeId || 'not set'}`);
-  }
+  } else { const m = missing('Request Monitor'); if (m) lines.push(m); }
+
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
   }
