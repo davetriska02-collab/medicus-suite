@@ -260,7 +260,7 @@
         } else if (check.threshold != null && check.operator) {
           const v = parseNumeric(obs.value);
           if (v != null) {
-            valueText = String(v);
+            valueText = check.unit ? `${v} ${check.unit}` : String(v);
             const op = check.operator;
             if (op === '<=' && v <= check.threshold) status = 'achieved';
             else if (op === '<' && v < check.threshold) status = 'achieved';

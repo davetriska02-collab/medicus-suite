@@ -239,6 +239,7 @@
         "observation": ["hba1c", "haemoglobin a1c"],
         "operator": "<=",
         "threshold": 64,
+        "unit": "mmol/mol",
         "withinDays": 365
       },
       "thresholds": { "lower": 52, "upper": 72 },
@@ -258,6 +259,7 @@
         "observation": ["hba1c", "haemoglobin a1c"],
         "operator": "<=",
         "threshold": 75,
+        "unit": "mmol/mol",
         "withinDays": 365
       },
       "thresholds": { "lower": 60, "upper": 90 },
@@ -453,6 +455,7 @@
         "observation": ["non-hdl", "non hdl", "ldl", "ldl cholesterol"],
         "operator": "<=",
         "threshold": 2.6,
+        "unit": "mmol/L",
         "withinDays": 365
       },
       "thresholds": { "lower": 20, "upper": 50 },
@@ -541,6 +544,7 @@
         "observation": ["hba1c", "haemoglobin a1c"],
         "operator": "<=",
         "threshold": 58,
+        "unit": "mmol/mol",
         "withinDays": 365
       },
       "thresholds": { "lower": 35, "upper": 75 },
@@ -561,6 +565,7 @@
         "observation": ["hba1c", "haemoglobin a1c"],
         "operator": "<=",
         "threshold": 75,
+        "unit": "mmol/mol",
         "withinDays": 365
       },
       "thresholds": { "lower": 52, "upper": 92 },
