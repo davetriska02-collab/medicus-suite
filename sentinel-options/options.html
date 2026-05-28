@@ -106,6 +106,19 @@ button.lib-add-btn.added { background: rgba(100,116,139,0.1); border-color: var(
 .lib-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--t2); color: var(--bg-e); font-family: var(--mono); font-size: 11px; border-radius: 8px; padding: 9px 16px; z-index: 100; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; }
 .lib-toast.show { opacity: 1; }
 
+/* One-time unlock — alpha-feature acknowledgement gate */
+.lib-unlock { background: rgba(180, 83, 9, 0.08); border: 1px solid rgba(180, 83, 9, 0.35); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; display: flex; gap: 12px; align-items: flex-start; }
+.lib-unlock-icon { font-size: 22px; line-height: 1; color: var(--amber); flex-shrink: 0; margin-top: 1px; }
+.lib-unlock-text { flex: 1; }
+.lib-unlock-title { font-size: 13px; font-weight: 700; color: var(--amber); margin-bottom: 6px; }
+.lib-unlock-body { font-size: 11px; color: var(--t3); line-height: 1.55; margin-bottom: 10px; }
+.lib-unlock-body strong { color: var(--t2); }
+.lib-unlock-btn { background: var(--amber); border: 1px solid var(--amber); color: var(--bg); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 6px; padding: 8px 14px; }
+.lib-unlock-btn:hover { filter: brightness(0.95); }
+.lib-body.lib-locked .lib-cards { opacity: 0.45; pointer-events: none; filter: grayscale(0.5); }
+.lib-body.lib-locked .lib-category-title { opacity: 0.55; }
+.lib-body.lib-locked button.lib-add-btn { cursor: not-allowed; }
+
 /* ── Severity badge ──────────────────────────────────────────────────────── */
 .sev-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
 .sev-badge.red   { background: rgba(220,38,38,0.12); color: var(--red); border: 1px solid rgba(220,38,38,0.25); }
@@ -194,6 +207,16 @@ button.lib-add-btn.added { background: rgba(100,116,139,0.1); border-color: var(
       <span class="lib-toggle-chevron">▶</span>
     </button>
     <div class="lib-body" id="libBody">
+      <div class="lib-unlock" id="libUnlockBanner" hidden>
+        <div class="lib-unlock-icon">⚠</div>
+        <div class="lib-unlock-text">
+          <div class="lib-unlock-title">Alpha feature — review before relying on these alerts</div>
+          <div class="lib-unlock-body">
+            Library alerts are starter templates derived from published prescribing-safety guidelines (PINCER, NICE, MHRA). They have <strong>not been clinically validated</strong> in this codebase and individual rules may match incorrectly, miss cases, or fire on irrelevant medications. You are responsible for reviewing match terms, thresholds, and behaviour against your local formulary and patient population before clinical use. By acknowledging, you accept that these alerts are decision support only — they do not replace clinical judgement, and the suite author accepts no liability for their use.
+          </div>
+          <button class="lib-unlock-btn" id="libUnlockBtn">I understand — enable the library</button>
+        </div>
+      </div>
       <div class="lib-placeholder" id="libPlaceholder">Loading library…</div>
     </div>
   </div>

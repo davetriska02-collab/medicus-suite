@@ -938,10 +938,43 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
   const body = getEl('libBody');
   const placeholder = getEl('libPlaceholder');
   const toast = getEl('libToast');
+  const unlockBanner = getEl('libUnlockBanner');
+  const unlockBtn = getEl('libUnlockBtn');
   if (!panel || !toggleBtn) return;
 
+  const ACK_KEY = 'sentinel.alertLibrary.acknowledged';
   let libData = null;  // cached library JSON
   let libLoaded = false;
+  let acknowledged = false;
+
+  async function loadAcknowledgement() {
+    const r = await chrome.storage.local.get(ACK_KEY);
+    acknowledged = r[ACK_KEY] === true;
+    applyLockState();
+  }
+  function applyLockState() {
+    if (!body || !unlockBanner) return;
+    if (acknowledged) {
+      body.classList.remove('lib-locked');
+      unlockBanner.hidden = true;
+    } else {
+      body.classList.add('lib-locked');
+      unlockBanner.hidden = false;
+    }
+  }
+  unlockBtn?.addEventListener('click', async () => {
+    acknowledged = true;
+    await chrome.storage.local.set({ [ACK_KEY]: true });
+    applyLockState();
+    showToast('Library enabled — review each alert before relying on it');
+  });
+  chrome.storage.onChanged.addListener(changes => {
+    if (changes[ACK_KEY]) {
+      acknowledged = changes[ACK_KEY].newValue === true;
+      applyLockState();
+    }
+  });
+  loadAcknowledgement();
 
   function showToast(msg) {
     if (!toast) return;
@@ -1041,6 +1074,7 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
   }
 
   async function addLibraryEntry(libId) {
+    if (!acknowledged) { showToast('Acknowledge the alpha-feature notice first'); return; }
     if (!libData) return;
     const entry = (libData.library || []).find(e => e.libId === libId);
     if (!entry || !entry.rule) return;
