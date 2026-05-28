@@ -1,0 +1,541 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-05-28",
+  "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Inspired by PINCER (BMJ 2012, doi:10.1136/bmj.e6501), Ardens, and Primary Care IT alert sets. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
+  "library": [
+
+    {
+      "libId": "pincer-1",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "NSAID without gastroprotection (≥65)",
+      "description": "PINCER #1: patient aged ≥65 prescribed a systemic NSAID without a co-prescribed PPI or H2-blocker. The absence-of-gastroprotection half cannot be fully expressed with a single drug-combo set; this rule fires on NSAID presence in ≥65s and flags review. Enable the mustNotBePresent variant below if your formulary is consistent.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID without gastroprotection (≥65)",
+        "drugSets": [
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac","dexibuprofen"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine","cimetidine"],
+        "ageRange": { "min": 65 },
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #1. Co-prescribe PPI (first line) or H2-blocker if NSAID must be continued. Consider whether NSAID can be stopped. mustNotBePresent list covers PPIs and H2-blockers — rule fires only when NONE of these are co-prescribed.",
+        "source": "PINCER #1"
+      }
+    },
+
+    {
+      "libId": "pincer-2",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "Anticoagulant + NSAID concurrent",
+      "description": "PINCER #2: patient prescribed an oral anticoagulant (warfarin or DOAC) AND a systemic NSAID — major GI bleed risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Anticoagulant + NSAID concurrent",
+        "drugSets": [
+          { "name": "Anticoagulant", "match": ["warfarin","apixaban","rivaroxaban","dabigatran","edoxaban"] },
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #2. Concurrent anticoagulant + systemic NSAID markedly increases GI bleed risk. Consider stopping NSAID; ensure PPI co-prescribed if continuation unavoidable.",
+        "source": "PINCER #2"
+      }
+    },
+
+    {
+      "libId": "pincer-3",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "Aspirin + NSAID concurrent (no PPI)",
+      "description": "PINCER #3: concurrent aspirin and systemic NSAID without gastroprotection — additive GI bleed risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Aspirin + NSAID concurrent (no PPI)",
+        "drugSets": [
+          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","low-dose aspirin","aspirin tablet"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine"],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #3. Aspirin + NSAID combination carries significantly elevated GI bleed risk. Co-prescription of PPI is strongly recommended if both drugs must be continued. Review indication for NSAID.",
+        "source": "PINCER #3"
+      }
+    },
+
+    {
+      "libId": "pincer-4",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "ACE inhibitor or ARB + NSAID concurrent",
+      "description": "PINCER #4: concurrent RAAS blocker (ACEi/ARB) + systemic NSAID — risk of acute kidney injury.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "ACEi/ARB + NSAID concurrent",
+        "drugSets": [
+          { "name": "ACEi/ARB", "match": ["ramipril","lisinopril","perindopril","enalapril","captopril","trandolapril","fosinopril","losartan","candesartan","valsartan","irbesartan","telmisartan","olmesartan","azilsartan","sacubitril"] },
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #4. 'Triple whammy' risk if diuretic also present. NSAIDs reduce renal perfusion synergistically with RAAS blockade. Counsel sick-day rules; review NSAID indication.",
+        "source": "PINCER #4"
+      }
+    },
+
+    {
+      "libId": "pincer-5",
+      "category": "Prescribing safety",
+      "subcategory": "Cardiovascular",
+      "title": "Beta-blocker + verapamil or diltiazem concurrent",
+      "description": "PINCER #5: concurrent beta-blocker and rate-limiting calcium channel blocker — risk of bradycardia and heart block.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Beta-blocker + rate-limiting CCB",
+        "drugSets": [
+          { "name": "Beta-blocker", "match": ["bisoprolol","atenolol","metoprolol","carvedilol","nebivolol","propranolol","sotalol","nadolol","labetalol"] },
+          { "name": "Rate-limiting CCB", "match": ["verapamil","diltiazem"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #5. Combination causes additive negative chronotropic and dromotropic effects. Risk of severe bradycardia, AV block, and asystole. Usually contraindicated unless under specialist supervision (e.g. refractory angina).",
+        "source": "PINCER #5"
+      }
+    },
+
+    {
+      "libId": "pincer-6",
+      "category": "Prescribing safety",
+      "subcategory": "Heart failure",
+      "title": "NSAID in heart failure",
+      "description": "PINCER #6: systemic NSAID prescribed in a patient with a heart failure diagnosis — fluid retention worsens HF.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "NSAID in heart failure",
+        "drugSets": [
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "sex": "any",
+        "requiresProblem": ["heart failure"],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #6. NSAIDs cause sodium and water retention, worsen cardiac function, and antagonise the effect of loop diuretics. Avoid in heart failure; paracetamol is preferred for analgesia.",
+        "source": "PINCER #6"
+      }
+    },
+
+    {
+      "libId": "pincer-7",
+      "category": "Prescribing safety",
+      "subcategory": "Anticoagulation",
+      "title": "Warfarin without recent INR (90 days)",
+      "description": "PINCER #7: patient on warfarin with no INR recorded in the last 90 days — INR monitoring overdue.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-7-warfarin-inr",
+        "label": "Warfarin without recent INR",
+        "drug": {
+          "match": ["warfarin"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "INR", "match": ["inr","international normalised ratio","prothrombin time"], "intervalDays": 90, "dueSoonDays": 14 }
+        ],
+        "notes": "PINCER #7. INR must be within therapeutic range for warfarin to be safe. Monitoring frequency varies by stability — 90 days is the maximum acceptable gap for stable patients.",
+        "source": "PINCER #7"
+      }
+    },
+
+    {
+      "libId": "pincer-8",
+      "category": "Prescribing safety",
+      "subcategory": "Bleeding",
+      "title": "Aspirin + clopidogrel without PPI (dual antiplatelet)",
+      "description": "PINCER #8: dual antiplatelet therapy (aspirin + clopidogrel/ticagrelor/prasugrel) without PPI gastroprotection.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Dual antiplatelet without PPI",
+        "drugSets": [
+          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","aspirin tablet"], "exclude": ["aspirin 500","anadin","migraleve"] },
+          { "name": "P2Y12", "match": ["clopidogrel","ticagrelor","prasugrel"] }
+        ],
+        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole"],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "PINCER #8. NICE recommends PPI co-prescription with dual antiplatelet therapy. Review after 12 months — dual antiplatelet is usually time-limited post-ACS or PCI.",
+        "source": "PINCER #8"
+      }
+    },
+
+    {
+      "libId": "pincer-9",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "Metformin without recent renal function check",
+      "description": "PINCER #9: patient on metformin with no U&E/eGFR in the last 12 months — lactic acidosis risk if eGFR <30.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-9-metformin-renal",
+        "label": "Metformin — annual eGFR overdue",
+        "drug": {
+          "match": ["metformin"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "U&E / eGFR", "match": ["u&e","urea and electrolytes","renal profile","egfr","creatinine"], "intervalDays": 365, "dueSoonDays": 30 }
+        ],
+        "notes": "PINCER #9. Metformin is contraindicated when eGFR <30 mL/min/1.73m² and should be used with caution <45. Annual renal function monitoring is essential. Stop/withhold during acute illness, dehydration, or before iodinated contrast.",
+        "source": "PINCER #9"
+      }
+    },
+
+    {
+      "libId": "pincer-10",
+      "category": "Prescribing safety",
+      "subcategory": "Electrolytes",
+      "title": "Loop diuretic without recent U&E (6 months)",
+      "description": "PINCER #10: patient on a loop diuretic (furosemide/bumetanide) without U&E check in 6 months — hypokalaemia and electrolyte disturbance risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-10-loop-diuretic-ue",
+        "label": "Loop diuretic — 6-monthly U&E overdue",
+        "drug": {
+          "match": ["furosemide","frusemide","bumetanide","torasemide"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "U&E", "match": ["u&e","urea and electrolytes","renal profile","electrolytes"], "intervalDays": 180, "dueSoonDays": 21 }
+        ],
+        "notes": "PINCER #10. Loop diuretics cause electrolyte loss — especially hypokalaemia and hyponatraemia. 6-monthly U&E is the minimum; more frequent if frail, high dose, or renal impairment.",
+        "source": "PINCER #10"
+      }
+    },
+
+    {
+      "libId": "pincer-11",
+      "category": "Prescribing safety",
+      "subcategory": "Electrolytes",
+      "title": "Amiodarone without 6-monthly TFT/LFT",
+      "description": "PINCER #11: patient on amiodarone without thyroid and liver function tests in 6 months — amiodarone-induced thyroid and hepatic toxicity.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-pincer-11-amiodarone-monitoring",
+        "label": "Amiodarone — 6-monthly TFT/LFT overdue",
+        "drug": {
+          "match": ["amiodarone"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "TFT", "match": ["tft","thyroid function","tsh"], "intervalDays": 180, "dueSoonDays": 21 },
+          { "name": "LFT", "match": ["lft","liver function"], "intervalDays": 180, "dueSoonDays": 21 }
+        ],
+        "notes": "PINCER #11. Amiodarone causes both hypo- and hyperthyroidism and hepatotoxicity. 6-monthly TFT and LFT are mandatory. CXR annually for pulmonary toxicity.",
+        "source": "PINCER #11"
+      }
+    },
+
+    {
+      "libId": "pincer-12",
+      "category": "Prescribing safety",
+      "subcategory": "Lithium safety",
+      "title": "Lithium + NSAID concurrent",
+      "description": "PINCER #12: concurrent lithium and systemic NSAID — NSAIDs reduce renal lithium clearance causing toxicity.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Lithium + NSAID concurrent",
+        "drugSets": [
+          { "name": "Lithium", "match": ["lithium"] },
+          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #12. NSAIDs reduce renal lithium excretion by up to 25%, raising levels into the toxic range (>1.5 mmol/L). Recommend paracetamol as first-line analgesia for patients on lithium. If NSAID unavoidable, check lithium level urgently and reduce dose.",
+        "source": "PINCER #12"
+      }
+    },
+
+    {
+      "libId": "pincer-13",
+      "category": "Prescribing safety",
+      "subcategory": "Anticoagulation",
+      "title": "Anticoagulant + antiplatelet (triple therapy) in ≥75s",
+      "description": "PINCER #13: triple therapy (anticoagulant + dual antiplatelet) in patients aged ≥75 — very high bleeding risk.",
+      "source": "PINCER",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Triple antithrombotic therapy (≥75)",
+        "drugSets": [
+          { "name": "Anticoagulant", "match": ["warfarin","apixaban","rivaroxaban","dabigatran","edoxaban"] },
+          { "name": "Antiplatelet 1", "match": ["aspirin 75","aspirin 300","aspirin tablet"], "exclude": ["aspirin 500","anadin","migraleve"] },
+          { "name": "Antiplatelet 2", "match": ["clopidogrel","ticagrelor","prasugrel"] }
+        ],
+        "ageRange": { "min": 75 },
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "PINCER #13. Triple antithrombotic therapy in ≥75s carries very high bleeding risk. NICE recommends limiting dual antiplatelet + anticoagulant therapy duration (typically 1–4 weeks post-ACS/PCI) then stepping down to single agent. Review indication and duration urgently.",
+        "source": "PINCER #13"
+      }
+    },
+
+    {
+      "libId": "ardens-1",
+      "category": "Prescribing safety",
+      "subcategory": "Teratogenicity",
+      "title": "Valproate in female of childbearing age",
+      "description": "Valproate (sodium valproate / valproic acid) in female aged 12–55 — MHRA Pregnancy Prevention Programme (PPP) mandatory.",
+      "source": "MHRA / Ardens",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Valproate — female childbearing age",
+        "drugSets": [
+          { "name": "Valproate", "match": ["sodium valproate","valproic acid","valproate","epilim","depakote","convulex"] }
+        ],
+        "ageRange": { "min": 12, "max": 55 },
+        "sex": "F",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
+        "source": "MHRA Drug Safety Update / Ardens"
+      }
+    },
+
+    {
+      "libId": "ardens-2",
+      "category": "Prescribing safety",
+      "subcategory": "Lithium safety",
+      "title": "Lithium without 3-monthly level + 6-monthly U&E/TFT",
+      "description": "Lithium monitoring overdue — serum level every 3 months, U&E and TFT every 6 months.",
+      "source": "Ardens / NICE CG185",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-ardens-2-lithium-monitoring",
+        "label": "Lithium — monitoring overdue",
+        "drug": {
+          "match": ["lithium"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "Lithium level", "match": ["lithium level","serum lithium"], "intervalDays": 90, "dueSoonDays": 14 },
+          { "name": "U&E", "match": ["u&e","urea and electrolytes","renal profile"], "intervalDays": 180, "dueSoonDays": 21 },
+          { "name": "TFT", "match": ["tft","thyroid function"], "intervalDays": 180, "dueSoonDays": 21 },
+          { "name": "Calcium", "match": ["calcium","corrected calcium"], "intervalDays": 180, "dueSoonDays": 21 }
+        ],
+        "notes": "NICE CG185 / Ardens. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
+        "source": "NICE CG185 / Ardens"
+      }
+    },
+
+    {
+      "libId": "ardens-3",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "SGLT2 inhibitor — DKA awareness reminder",
+      "description": "Patient on SGLT2 inhibitor: reminder to check sick-day rules and DKA risk awareness (including euglycaemic DKA).",
+      "source": "MHRA / Primary Care IT",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "SGLT2 inhibitor — DKA risk reminder",
+        "drugSets": [
+          { "name": "SGLT2 inhibitor", "match": ["dapagliflozin","empagliflozin","canagliflozin","ertugliflozin"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "info",
+        "notes": "MHRA Drug Safety Updates 2020–2024. SGLT2 inhibitors carry risk of euglycaemic DKA (blood glucose may be near-normal). Sick-day rules: withhold during acute illness, dehydration, surgery, or prolonged fasting. Counsel on symptoms of DKA. Annual eGFR monitoring via drug-monitoring rule (sglt2-inhibitor). This alert is an informational prompt — review sick-day rule education at each medication review.",
+        "source": "MHRA / Primary Care IT"
+      }
+    },
+
+    {
+      "libId": "ardens-4",
+      "category": "Prescribing safety",
+      "subcategory": "Teratogenicity",
+      "title": "Isotretinoin in female of childbearing age",
+      "description": "Isotretinoin (Roaccutane) in female aged 12–55 — Pregnancy Prevention Programme mandatory, initiated and managed by dermatology but GP must be aware.",
+      "source": "MHRA / Ardens",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Isotretinoin — female childbearing age",
+        "drugSets": [
+          { "name": "Isotretinoin", "match": ["isotretinoin","roaccutane","tretinoin oral"], "exclude": ["topical","gel","cream"] }
+        ],
+        "ageRange": { "min": 12, "max": 55 },
+        "sex": "F",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
+        "source": "MHRA Pregnancy Prevention Programme"
+      }
+    },
+
+    {
+      "libId": "pcit-1",
+      "category": "Prescribing safety",
+      "subcategory": "QTc prolongation",
+      "title": "Two or more QTc-prolonging drugs concurrent",
+      "description": "Concurrent use of two or more drugs known to prolong the QT interval — additive risk of torsades de pointes.",
+      "source": "Primary Care IT",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "QTc-prolonging drug combination",
+        "drugSets": [
+          { "name": "QTc drug A", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] },
+          { "name": "QTc drug B", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "Note: this rule will fire when any two drugs from the QTc list are co-prescribed, including the same drug in different formulations. Review the matchSummary in the chip to confirm these are genuinely two different QTc-prolonging agents. Consider ECG monitoring, especially if patient has hypokalaemia, bradycardia, or prior QTc prolongation.",
+        "source": "Primary Care IT / crediblemeds.org"
+      }
+    },
+
+    {
+      "libId": "event-count-1",
+      "category": "Clinical review",
+      "subcategory": "Infections",
+      "title": "Recurrent UTI (≥3 in 12 months, female <65)",
+      "description": "Female patient aged under 65 with 3 or more UTI / cystitis problems coded in the last 12 months — consider recurrent UTI workup.",
+      "source": "Ardens / NICE NG112",
+      "rule": {
+        "type": "event-count",
+        "enabled": true,
+        "label": "Recurrent UTI (≥3 in 12 months)",
+        "sourceKind": "problems",
+        "match": ["urinary tract infection","uti","cystitis","lower urinary tract"],
+        "exclude": ["history of","chronic","interstitial","radiation","previous","old"],
+        "windowMonths": 12,
+        "countThreshold": 3,
+        "operator": ">=",
+        "ageRange": { "max": 65 },
+        "sex": "F",
+        "severity": "amber",
+        "notes": "NICE NG112: consider recurrent UTI if ≥2 in 6 months or ≥3 in 12 months. Workup: MSU culture, urine dipstick, consider renal USS and referral. Low-dose antibiotic prophylaxis or vaginal oestrogen may be appropriate post-menopausally.",
+        "source": "NICE NG112 / Ardens"
+      }
+    },
+
+    {
+      "libId": "event-count-2",
+      "category": "Clinical review",
+      "subcategory": "Falls",
+      "title": "Recurrent falls (≥2 in 12 months, ≥65)",
+      "description": "Patient aged ≥65 with 2 or more falls coded in the last 12 months — consider multifactorial falls assessment.",
+      "source": "NICE CG161 / Ardens",
+      "rule": {
+        "type": "event-count",
+        "enabled": true,
+        "label": "Recurrent falls (≥2 in 12 months)",
+        "sourceKind": "problems",
+        "match": ["fall","fallen","falling","trip and fall"],
+        "exclude": ["risk of fall","fear of fall","history of fall"],
+        "windowMonths": 12,
+        "countThreshold": 2,
+        "operator": ">=",
+        "ageRange": { "min": 65 },
+        "sex": "any",
+        "severity": "amber",
+        "notes": "NICE CG161: offer multifactorial falls assessment to older people with ≥2 falls or one fall with injury in 12 months. Review medications (particularly those causing hypotension, sedation), vision, balance, home hazards. Consider medication review, physiotherapy, and home assessment.",
+        "source": "NICE CG161 / Ardens"
+      }
+    },
+
+    {
+      "libId": "composite-1",
+      "category": "Prescribing safety",
+      "subcategory": "GI bleed",
+      "title": "High-risk GI bleed combination (NSAID + anticoagulant, ≥65, HF)",
+      "description": "Example composite: fires when BOTH pincer-2 (anticoagulant + NSAID) AND pincer-6 (NSAID in HF) are active — i.e. the patient has all three risk factors simultaneously. Shows how composite rules combine others.",
+      "source": "Composite example",
+      "rule": {
+        "type": "composite",
+        "enabled": true,
+        "label": "NSAID + anticoagulant + HF — extreme GI bleed risk",
+        "operator": "AND",
+        "ruleIds": ["custom-replace-with-pincer-2-id","custom-replace-with-pincer-6-id"],
+        "severity": "red",
+        "notes": "Composite rule example. Replace the placeholder ruleIds above with the actual saved IDs of the pincer-2 (anticoagulant+NSAID) and pincer-6 (NSAID in HF) rules in your custom rules list after importing them. When both fire simultaneously this composite surfaces a consolidated high-severity alert."
+      }
+    },
+
+    {
+      "libId": "trend-1",
+      "category": "Clinical review",
+      "subcategory": "Cancer screening",
+      "title": "Rising PSA trend (≥3 readings, 24 months)",
+      "description": "PSA values showing a rising trend across ≥3 readings in 24 months with a minimum delta of 1.0 ng/mL — consider urology referral.",
+      "source": "NICE NG12 / Primary Care IT",
+      "rule": {
+        "type": "qof-indicator",
+        "enabled": true,
+        "indicatorCode": "TREND-PSA",
+        "indicatorName": "Rising PSA trend",
+        "useQofYearFloor": false,
+        "check": {
+          "kind": "observation-trend",
+          "observation": ["psa","prostate specific antigen"],
+          "direction": "rising",
+          "minPoints": 3,
+          "withinMonths": 24,
+          "minDelta": 1.0
+        },
+        "notes": "Observation history is required for trend analysis. Currently, only the latest PSA value is available via the investigation dashboard API. This rule will show no_data until multi-point history is available. When history is available: a PSA rise >1 ng/mL/year or PSA velocity >0.75 ng/mL/year warrants urology referral (NICE NG12).",
+        "source": "NICE NG12"
+      }
+    }
+
+  ]
+}

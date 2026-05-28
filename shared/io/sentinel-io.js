@@ -90,7 +90,10 @@ function validateCustomRule(rule, index) {
 
   if (rule.type === 'drug-monitoring')  return validateDrugMonitoringRule(rule, loc);
   if (rule.type === 'qof-indicator')    return validateQofIndicatorRule(rule, loc);
-  throw new Error(`Custom rule${loc}: type must be "drug-monitoring" or "qof-indicator".`);
+  if (rule.type === 'drug-combo')       return validateDrugComboRule(rule, loc);
+  if (rule.type === 'event-count')      return validateEventCountRule(rule, loc);
+  if (rule.type === 'composite')        return validateCompositeRule(rule, loc);
+  throw new Error(`Custom rule${loc}: type must be one of "drug-monitoring", "qof-indicator", "drug-combo", "event-count", "composite".`);
 }
 
 function validateDrugMonitoringRule(rule, loc) {
@@ -117,7 +120,11 @@ function validateDrugMonitoringRule(rule, loc) {
 }
 
 const ALLOWED_QOF_REGISTERS = ['DM','HYP','CHD','HF','STIA','CKD','PAD','ASTHMA','COPD','AF'];
-const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent'];
+const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend'];
+const ALLOWED_SEVERITIES = ['red','amber','info'];
+const ALLOWED_SEX_VALUES = ['any','M','F'];
+const ALLOWED_EVENT_COUNT_OPERATORS = ['>=','>','=','<=','<'];
+const ALLOWED_SOURCE_KINDS = ['problems','observations'];
 
 function validateQofIndicatorRule(rule, loc) {
   if (!rule.indicatorCode || typeof rule.indicatorCode !== 'string') {
@@ -158,6 +165,23 @@ function validateQofIndicatorRule(rule, loc) {
       throw new Error(`Custom rule${loc}: check.withinDays must be a positive number.`);
     }
   }
+  if (rule.check.kind === 'observation-trend') {
+    if (!Array.isArray(rule.check.observation) || rule.check.observation.length === 0) {
+      throw new Error(`Custom rule${loc}: check.observation must be a non-empty array.`);
+    }
+    if (!['rising','falling'].includes(rule.check.direction)) {
+      throw new Error(`Custom rule${loc}: check.direction must be "rising" or "falling".`);
+    }
+    if (rule.check.minPoints != null && (typeof rule.check.minPoints !== 'number' || rule.check.minPoints < 2)) {
+      throw new Error(`Custom rule${loc}: check.minPoints must be a number >= 2.`);
+    }
+    if (rule.check.withinMonths != null && (typeof rule.check.withinMonths !== 'number' || rule.check.withinMonths <= 0)) {
+      throw new Error(`Custom rule${loc}: check.withinMonths must be a positive number.`);
+    }
+    if (rule.check.minDelta != null && (typeof rule.check.minDelta !== 'number' || rule.check.minDelta < 0)) {
+      throw new Error(`Custom rule${loc}: check.minDelta must be a non-negative number.`);
+    }
+  }
   if (rule.requiresRegister != null && rule.requiresRegister !== '' && !ALLOWED_QOF_REGISTERS.includes(rule.requiresRegister)) {
     throw new Error(`Custom rule${loc}: requiresRegister must be one of: ${ALLOWED_QOF_REGISTERS.join(', ')}.`);
   }
@@ -174,6 +198,103 @@ function validateQofIndicatorRule(rule, loc) {
   }
   if (rule.useQofYearFloor !== undefined && typeof rule.useQofYearFloor !== 'boolean') {
     throw new Error(`Custom rule${loc}: useQofYearFloor must be a boolean.`);
+  }
+}
+
+// Validate a drug-combo rule: concurrent drug combinations with optional patient filters.
+function validateDrugComboRule(rule, loc) {
+  if (!Array.isArray(rule.drugSets) || rule.drugSets.length === 0) {
+    throw new Error(`Custom rule${loc}: drugSets must be a non-empty array.`);
+  }
+  rule.drugSets.forEach((set, si) => {
+    if (!set.name || typeof set.name !== 'string') {
+      throw new Error(`Custom rule${loc} drugSets[${si}]: name is required.`);
+    }
+    if (!Array.isArray(set.match) || set.match.length === 0) {
+      throw new Error(`Custom rule${loc} drugSets[${si}]: match must be a non-empty array.`);
+    }
+    if (set.exclude !== undefined && !Array.isArray(set.exclude)) {
+      throw new Error(`Custom rule${loc} drugSets[${si}]: exclude must be an array.`);
+    }
+  });
+  if (!ALLOWED_SEVERITIES.includes(rule.severity)) {
+    throw new Error(`Custom rule${loc}: severity must be one of ${ALLOWED_SEVERITIES.join(', ')}.`);
+  }
+  if (rule.sex !== undefined && !ALLOWED_SEX_VALUES.includes(rule.sex)) {
+    throw new Error(`Custom rule${loc}: sex must be one of ${ALLOWED_SEX_VALUES.join(', ')}.`);
+  }
+  if (rule.ageRange) {
+    if (rule.ageRange.min != null && (typeof rule.ageRange.min !== 'number' || rule.ageRange.min < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.min must be a non-negative number.`);
+    }
+    if (rule.ageRange.max != null && (typeof rule.ageRange.max !== 'number' || rule.ageRange.max < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.max must be a non-negative number.`);
+    }
+  }
+  if (rule.requiresProblem !== undefined && !Array.isArray(rule.requiresProblem)) {
+    throw new Error(`Custom rule${loc}: requiresProblem must be an array.`);
+  }
+  if (rule.excludesProblem !== undefined && !Array.isArray(rule.excludesProblem)) {
+    throw new Error(`Custom rule${loc}: excludesProblem must be an array.`);
+  }
+  if (rule.mustNotBePresent !== undefined && !Array.isArray(rule.mustNotBePresent)) {
+    throw new Error(`Custom rule${loc}: mustNotBePresent must be an array of drug name strings.`);
+  }
+}
+
+// Validate an event-count rule: count matching coded items within a time window.
+function validateEventCountRule(rule, loc) {
+  if (!ALLOWED_SOURCE_KINDS.includes(rule.sourceKind)) {
+    throw new Error(`Custom rule${loc}: sourceKind must be one of ${ALLOWED_SOURCE_KINDS.join(', ')}.`);
+  }
+  if (!Array.isArray(rule.match) || rule.match.length === 0) {
+    throw new Error(`Custom rule${loc}: match must be a non-empty array.`);
+  }
+  if (rule.exclude !== undefined && !Array.isArray(rule.exclude)) {
+    throw new Error(`Custom rule${loc}: exclude must be an array.`);
+  }
+  if (typeof rule.windowMonths !== 'number' || rule.windowMonths <= 0) {
+    throw new Error(`Custom rule${loc}: windowMonths must be a positive number.`);
+  }
+  if (typeof rule.countThreshold !== 'number' || rule.countThreshold < 0) {
+    throw new Error(`Custom rule${loc}: countThreshold must be a non-negative number.`);
+  }
+  if (!ALLOWED_EVENT_COUNT_OPERATORS.includes(rule.operator)) {
+    throw new Error(`Custom rule${loc}: operator must be one of ${ALLOWED_EVENT_COUNT_OPERATORS.join(', ')}.`);
+  }
+  if (!ALLOWED_SEVERITIES.includes(rule.severity)) {
+    throw new Error(`Custom rule${loc}: severity must be one of ${ALLOWED_SEVERITIES.join(', ')}.`);
+  }
+  if (rule.sex !== undefined && !ALLOWED_SEX_VALUES.includes(rule.sex)) {
+    throw new Error(`Custom rule${loc}: sex must be one of ${ALLOWED_SEX_VALUES.join(', ')}.`);
+  }
+  if (rule.ageRange) {
+    if (rule.ageRange.min != null && (typeof rule.ageRange.min !== 'number' || rule.ageRange.min < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.min must be a non-negative number.`);
+    }
+    if (rule.ageRange.max != null && (typeof rule.ageRange.max !== 'number' || rule.ageRange.max < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.max must be a non-negative number.`);
+    }
+  }
+}
+
+// Validate a composite rule: boolean AND/OR over other custom rule IDs.
+// The validator does NOT resolve the referenced IDs — that is a runtime concern.
+// Composite rules cannot reference other composite rules (enforced at runtime).
+function validateCompositeRule(rule, loc) {
+  if (!['AND','OR'].includes(rule.operator)) {
+    throw new Error(`Custom rule${loc}: operator must be "AND" or "OR".`);
+  }
+  if (!Array.isArray(rule.ruleIds) || rule.ruleIds.length === 0) {
+    throw new Error(`Custom rule${loc}: ruleIds must be a non-empty array.`);
+  }
+  rule.ruleIds.forEach((id, ri) => {
+    if (typeof id !== 'string' || !id) {
+      throw new Error(`Custom rule${loc} ruleIds[${ri}]: each id must be a non-empty string.`);
+    }
+  });
+  if (!ALLOWED_SEVERITIES.includes(rule.severity)) {
+    throw new Error(`Custom rule${loc}: severity must be one of ${ALLOWED_SEVERITIES.join(', ')}.`);
   }
 }
 

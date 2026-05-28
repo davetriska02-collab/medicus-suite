@@ -229,6 +229,227 @@
     }];
   }
 
+  // === SEVERITY → STATUS MAPPING ===
+  // Maps the user-facing severity field on custom rules to the STATUS_RANK keys
+  // used throughout the engine. "red" is the worst (overdue), "amber" is due_soon,
+  // "info" is in_date (neutral/informational).
+  function severityToStatus(severity) {
+    if (severity === 'red')   return 'overdue';
+    if (severity === 'amber') return 'due_soon';
+    return 'in_date';
+  }
+
+  // === AGE / SEX PATIENT FILTERS (shared by drug-combo and event-count) ===
+  function passesAgeFilter(ageRange, patientContext) {
+    if (!ageRange) return true;
+    const age = patientContext ? patientContext.ageYears : null;
+    if (ageRange.min != null && (age == null || age < ageRange.min)) return false;
+    if (ageRange.max != null && (age == null || age > ageRange.max)) return false;
+    return true;
+  }
+
+  function passesSexFilter(sex, patientContext) {
+    if (!sex || sex === 'any') return true;
+    const patSex = patientContext ? String(patientContext.sex || '').toLowerCase() : '';
+    if (sex === 'M' && !patSex.startsWith('m')) return false;
+    if (sex === 'F' && !patSex.startsWith('f')) return false;
+    return true;
+  }
+
+  // === DRUG-COMBO EVALUATOR ===
+  // Fires when at least one drug from each drugSet is present in active medications,
+  // AND the patient passes age/sex/problem filters.
+  // Optional mustNotBePresent: any match in that list disqualifies the rule.
+  function evaluateDrugComboRule(rule, data) {
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
+    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+
+    const meds  = data.medications || [];
+    const probs = data.problems    || [];
+    const norm  = s => String(s || '').toLowerCase();
+
+    // Problem filters
+    const requiresProblems = rule.requiresProblem || [];
+    const excludesProblems = rule.excludesProblem || [];
+
+    if (requiresProblems.length > 0) {
+      const allMet = requiresProblems.every(req =>
+        probs.some(p => norm(p.label).includes(norm(req)))
+      );
+      if (!allMet) return [];
+    }
+    if (excludesProblems.some(exc =>
+      probs.some(p => norm(p.label).includes(norm(exc)))
+    )) return [];
+
+    // mustNotBePresent: single-drug absence check (e.g. "no PPI prescribed")
+    const mustNotBePresent = rule.mustNotBePresent || [];
+    if (mustNotBePresent.length > 0) {
+      const anyForbiddenPresent = mustNotBePresent.some(term =>
+        meds.some(m => norm(m.name).includes(norm(term)))
+      );
+      if (anyForbiddenPresent) return [];
+    }
+
+    // Each drugSet must have at least one matching active medication
+    const matchedPerSet = (rule.drugSets || []).map(set => {
+      return meds.filter(m => {
+        const n = norm(m.name);
+        const excluded = (set.exclude || []).some(e => n.includes(norm(e)));
+        if (excluded) return false;
+        return set.match.some(term => n.includes(norm(term)));
+      });
+    });
+
+    // All sets must have at least one match
+    if (matchedPerSet.some(matched => matched.length === 0)) return [];
+
+    const matchSummary = matchedPerSet.map((matched, i) => ({
+      setName: (rule.drugSets[i] || {}).name || `Set ${i + 1}`,
+      drugs:   matched.map(m => m.name)
+    }));
+
+    return [{
+      type:        'drug-combo',
+      ruleId:      rule.id,
+      status:      severityToStatus(rule.severity),
+      label:       rule.label || rule.id,
+      matchSummary,
+      source:      rule.source || null,
+      notes:       rule.notes  || null
+    }];
+  }
+
+  // === EVENT-COUNT EVALUATOR ===
+  // Counts matching items (problems or observations) within a rolling time window
+  // and fires when the count satisfies the threshold operator.
+  //
+  // Known limitation: data.observations only surfaces the *latest* observation per
+  // test type (the normaliser surfaces one row per investigationType from the
+  // investigation dashboard). For sourceKind=observations, this evaluator works with
+  // whatever is in the array; it cannot see historical duplicates. A chip note flags
+  // this when the count is borderline. Addressing this properly requires a history
+  // endpoint — tracked as a future enhancement (do not modify data-fetcher here).
+  function evaluateEventCountRule(rule, data, now) {
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
+    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+
+    const norm          = s => String(s || '').toLowerCase();
+    const windowMs      = (rule.windowMonths || 12) * 30.4375 * 24 * 60 * 60 * 1000;
+    const nowMs         = new Date(now).getTime();
+    const cutoffMs      = nowMs - windowMs;
+    const matchTerms    = rule.match  || [];
+    const excludeTerms  = rule.exclude || [];
+
+    let items = [];
+    let historyLimitedNote = null;
+
+    if (rule.sourceKind === 'problems') {
+      // Problems have codedDate; we match label text
+      items = (data.problems || []).filter(p => {
+        const label = norm(p.label);
+        if (excludeTerms.some(e => label.includes(norm(e)))) return false;
+        if (!matchTerms.some(m => label.includes(norm(m)))) return false;
+        const d = new Date(p.codedDate || '');
+        return !isNaN(d.getTime()) && d.getTime() >= cutoffMs;
+      });
+    } else {
+      // sourceKind === 'observations': only latest-per-type is available
+      // Flag a limitation note so the clinician understands the count may undercount
+      historyLimitedNote = 'Observation history unavailable; count reflects distinct test types only.';
+      items = (data.observations || []).filter(obs => {
+        const name = norm(obs.name);
+        if (excludeTerms.some(e => name.includes(norm(e)))) return false;
+        if (!matchTerms.some(m => name.includes(norm(m)))) return false;
+        const d = new Date(obs.date || '');
+        return !isNaN(d.getTime()) && d.getTime() >= cutoffMs;
+      });
+    }
+
+    const count = items.length;
+    const threshold = rule.countThreshold;
+    const op = rule.operator;
+    let fires = false;
+    if (op === '>=') fires = count >= threshold;
+    else if (op === '>')  fires = count >  threshold;
+    else if (op === '=')  fires = count === threshold;
+    else if (op === '<=') fires = count <= threshold;
+    else if (op === '<')  fires = count <  threshold;
+
+    if (!fires) return [];
+
+    return [{
+      type:        'event-count',
+      ruleId:      rule.id,
+      status:      severityToStatus(rule.severity),
+      label:       rule.label || rule.id,
+      count,
+      countThreshold: threshold,
+      operator:    op,
+      windowMonths: rule.windowMonths,
+      matchedItems: items.slice(0, 10).map(it => it.label || it.name || ''),
+      notes:       [rule.notes, historyLimitedNote].filter(Boolean).join(' ') || null,
+      source:      rule.source || null
+    }];
+  }
+
+  // === COMPOSITE EVALUATOR ===
+  // Combines results of other rules by AND (all must fire) or OR (any must fire).
+  // evaluatedById is a Map<ruleId, chip[]> built by evaluatePatient before composites run.
+  // Composite rules silently skip if any referenced ruleId is not found.
+  // Composite rules cannot reference other composite rules (validated here at runtime).
+  function evaluateCompositeRule(rule, allRules, evaluatedById) {
+    const ruleIds = rule.ruleIds || [];
+    if (ruleIds.length === 0) return [];
+
+    // Build a lookup of rule type by id to guard against composite→composite references
+    const ruleTypeById = {};
+    (allRules || []).forEach(r => { if (r.id) ruleTypeById[r.id] = r.type; });
+
+    const results = ruleIds.map(id => {
+      if (ruleTypeById[id] === 'composite') {
+        // Silently skip — composite cannot reference composite (prevents infinite recursion)
+        return null;
+      }
+      if (!evaluatedById.has(id)) {
+        // Referenced rule not found (may have been deleted) — skip silently
+        return null;
+      }
+      return evaluatedById.get(id);
+    });
+
+    // If any referenced rule resolved to null (missing or composite ref), skip the whole rule
+    // only when operator is AND; for OR, still allow if at least one resolved.
+    const resolved = results.filter(r => r !== null);
+    if (resolved.length === 0) return [];
+
+    let fires = false;
+    if (rule.operator === 'AND') {
+      // All referenced (and resolvable) rules must have fired (non-empty chips)
+      if (resolved.length < ruleIds.length) return []; // some were missing/skipped
+      fires = resolved.every(chips => chips.length > 0);
+    } else {
+      // OR: any referenced rule that fired is sufficient
+      fires = resolved.some(chips => chips.length > 0);
+    }
+
+    if (!fires) return [];
+
+    return [{
+      type:      'composite',
+      ruleId:    rule.id,
+      status:    severityToStatus(rule.severity),
+      label:     rule.label || rule.id,
+      operator:  rule.operator,
+      firedRuleIds: ruleIds.filter(id => {
+        const chips = evaluatedById.get(id);
+        return chips && chips.length > 0;
+      }),
+      notes:     rule.notes  || null,
+      source:    rule.source || null
+    }];
+  }
+
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
     // Step 1: register membership precondition
@@ -338,6 +559,22 @@
         if (_inWindow) status = 'achieved';
         else status = 'overdue';
       }
+    } else if (check.kind === 'observation-trend') {
+      // Known limitation: data.observations only surfaces the latest observation per
+      // test type (one row per investigationType from the investigation dashboard).
+      // A meaningful trend requires at least minPoints historical readings, which are
+      // not available without a dedicated history endpoint. Until that endpoint is
+      // implemented in data-fetcher/normalisers, we emit no_data with an explanatory
+      // note. Do not modify normalisers or data-fetcher in this PR — tracked as
+      // a future enhancement.
+      const latestObs = findLatestObservation(data.observations, { match: check.observation });
+      if (latestObs) {
+        valueText = latestObs.value != null ? String(latestObs.value).trim() : null;
+        dateText  = latestObs.date || null;
+        // Only one data point available; trend cannot be computed
+        status = 'no_data';
+      }
+      // status remains 'no_data' whether or not we found a latest observation
     }
 
     return [{
@@ -379,14 +616,32 @@
     data._registerLookup = registerLookup;
 
     const chips = [];
+    // evaluatedById is keyed by ruleId -> chips[] so composite rules can inspect
+    // whether other rules fired. Composites are evaluated last (after the loop).
+    const evaluatedById = new Map();
+
     (rules || []).forEach(rule => {
       if (rule.enabled === false) return;
       const type = rule.type || 'drug-monitoring';
+      // Composite rules are collected separately and evaluated after all other rules.
+      if (type === 'composite') return;
       let out = [];
-      if (type === 'drug-monitoring') out = evaluateDrugRule(rule, data, now);
-      else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data);
+      if (type === 'drug-monitoring')  out = evaluateDrugRule(rule, data, now);
+      else if (type === 'qof-register')  out = evaluateQofRegisterRule(rule, data);
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
+      else if (type === 'drug-combo')    out = evaluateDrugComboRule(rule, data);
+      else if (type === 'event-count')   out = evaluateEventCountRule(rule, data, now);
       chips.push(...out);
+      if (rule.id) evaluatedById.set(rule.id, out);
+    });
+
+    // Evaluate composite rules last so all referenced rule results are available.
+    (rules || []).forEach(rule => {
+      if (rule.enabled === false) return;
+      if ((rule.type || '') !== 'composite') return;
+      const out = evaluateCompositeRule(rule, rules, evaluatedById);
+      chips.push(...out);
+      if (rule.id) evaluatedById.set(rule.id, out);
     });
 
     // Sort: worst status first; then by type to keep drug-monitoring grouped
@@ -413,6 +668,10 @@
     evaluateDrugRule,
     evaluateQofRegisterRule,
     evaluateQofIndicatorRule,
+    evaluateDrugComboRule,
+    evaluateEventCountRule,
+    evaluateCompositeRule,
+    severityToStatus,
     STATUS_RANK
   };
   if (typeof module !== 'undefined' && module.exports) {
