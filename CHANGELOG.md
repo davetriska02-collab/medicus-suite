@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.1.2] — 2026-05-28
+### Maintenance — remaining nits from the 4-agent code review
+- `engine/normalisers.js`: extracted `keyToIsoDate(key)` helper to eliminate duplicated `dataYYYYMMDD` slice offsets between `normaliseObservations` and `normaliseObservationHistory`. One place owns the format assumption now.
+- `engine/normalisers.js`: documented that `observationHistory[].history[].value` is numeric (parseObservationValue output), unlike `observations[].value` which is a display string with unit. Future maintainers won't trip on the type difference.
+- `engine/normalisers.js`: replaced `localeCompare` date sort with plain string comparison — ISO YYYY-MM-DD sorts lexicographically identical to chronologically, without any risk of locale-collation surprises.
+- `engine/rules-engine.js`: documented the 30.4375-days-per-month window arithmetic in `evaluateEventCountRule` — explains why event-count windows are approximate (not calendar-aligned) and consistent with observation-trend, but different from drug-monitoring's `daysBetween`.
+- `engine/rules-engine.js`: documented inclusive boundary semantics on the event-count window.
+- `engine/rules-engine.js`: documented `minDelta: 0` default semantics on observation-trend (means "any movement in named direction fires"; flat lines blocked by the strict-inequality direction check).
+
+### Functional changes
+None — pure code clarity and maintainability pass.
+
 ## [v3.1.1] — 2026-05-28
 ### Fixed
 Four-agent code review of v3.0/v3.1 turned up real bugs. All fixed in this patch.

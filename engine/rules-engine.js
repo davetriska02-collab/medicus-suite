@@ -331,6 +331,11 @@
     if (!passesSexFilter(rule.sex, data.patientContext)) return [];
 
     const norm          = s => String(s || '').toLowerCase();
+    // Window arithmetic uses the average Gregorian month (30.4375 days). This
+    // means "12 months ago" is approximate — not aligned to the calendar date
+    // — which keeps event-count and observation-trend consistent with each
+    // other but differs from drug-monitoring (which uses calendar daysBetween).
+    // Boundary is inclusive: a record dated exactly at cutoffMs is in-window.
     const windowMs      = (rule.windowMonths || 12) * 30.4375 * 24 * 60 * 60 * 1000;
     const nowMs         = new Date(now).getTime();
     const cutoffMs      = nowMs - windowMs;
@@ -600,6 +605,9 @@
           const newest = inWindow[0].value;                       // most recent reading
           const oldest = inWindow[inWindow.length - 1].value;    // earliest reading
           const delta  = newest - oldest;                        // positive = rising
+          // minDelta default 0 means "any movement in the named direction fires".
+          // The strict-inequality check on delta below prevents a flat line
+          // (delta exactly 0) from firing as either rising or falling.
           const minDelta = check.minDelta != null ? check.minDelta : 0;
           const spanMonths = Math.round(
             (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /

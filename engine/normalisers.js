@@ -120,6 +120,12 @@
   //   "120/80"   → 120 (BP — take systolic; diastolic is dropped here, used separately)
   //   "Negative" → NaN
   //   Blank/null → NaN
+  // Convert a "dataYYYYMMDD" cell key into an ISO date string ("YYYY-MM-DD").
+  // The key prefix is always 4 chars; year/month/day are 4/2/2 at fixed offsets.
+  function keyToIsoDate(key) {
+    return `${key.slice(4, 8)}-${key.slice(8, 10)}-${key.slice(10, 12)}`;
+  }
+
   function parseObservationValue(rawValue) {
     if (rawValue == null) return NaN;
     const s = String(rawValue).trim();
@@ -160,10 +166,7 @@
       const latestKey = dataKeys[dataKeys.length - 1];
       const cell = row[latestKey];
       if (!cell || cell.result == null || cell.result === '') return;
-      const yyyy = latestKey.slice(4, 8);
-      const mm = latestKey.slice(8, 10);
-      const dd = latestKey.slice(10, 12);
-      const dateIso = `${yyyy}-${mm}-${dd}`;
+      const dateIso = keyToIsoDate(latestKey);
       const valueWithUnit = row.unit ? `${cell.result} ${row.unit}` : String(cell.result);
       out.push({
         name: row.investigationType,
@@ -214,9 +217,18 @@
   // Shape per entry:
   //   { name, code, group, unit, history: [{ date, value, rawValue, isAbove, isBelow, source }, ...] }
   //
-  // history entries are newest-first by date. value is numeric (parseObservationValue),
-  // rawValue is the original string. Group aggregates are intentionally NOT included
-  // here — trend/count rules match on individual analyte names.
+  // history entries are newest-first by date.
+  //
+  // IMPORTANT — `value` here is NUMERIC (parseObservationValue output), unlike
+  // `observations[].value` which is a display string with unit appended
+  // (e.g. "65 mmol/mol"). Engine code that reads observationHistory must treat
+  // value as a number and may yield NaN for non-numeric results ("Negative").
+  // `rawValue` preserves the original string. `unit` is only on the parent
+  // entry, not on each history point (uniform per investigation type).
+  //
+  // Group aggregates (e.g. "U&Es", "LFTs") are intentionally NOT included —
+  // trend and event-count rules match on individual analyte names. No cap on
+  // history length; expect <200 entries per type for the most-tested analytes.
   function normaliseObservationHistory(dashboard) {
     if (!dashboard || !Array.isArray(dashboard.rowData)) return [];
     const out = [];
@@ -229,12 +241,8 @@
       dataKeys.forEach(key => {
         const cell = row[key];
         if (!cell || cell.result == null || cell.result === '') return;
-        const yyyy = key.slice(4, 8);
-        const mm   = key.slice(8, 10);
-        const dd   = key.slice(10, 12);
-        const dateIso = `${yyyy}-${mm}-${dd}`;
         historyEntries.push({
-          date: dateIso,
+          date: keyToIsoDate(key),
           value: parseObservationValue(cell.result),
           rawValue: String(cell.result),
           isAbove: !!cell.isAboveReferenceRange,
@@ -243,8 +251,10 @@
         });
       });
       if (historyEntries.length === 0) return;
-      // Sort newest-first
-      historyEntries.sort((a, b) => b.date.localeCompare(a.date));
+      // Sort newest-first. ISO YYYY-MM-DD strings sort lexicographically the
+      // same as chronologically; use plain string comparison (not localeCompare)
+      // to avoid any locale-collation surprises.
+      historyEntries.sort((a, b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
       out.push({
         name:  row.investigationType,
         code:  null,
