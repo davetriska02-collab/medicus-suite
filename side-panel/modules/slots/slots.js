@@ -132,17 +132,28 @@ async function fetchAndRender() {
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
 
+// Slots are bucketed as AM (start hour < 12) or PM (start hour >= 12).
+// Slots with no startDateTime default to AM (rare; the API always provides one
+// for real slots, this is just a defensive default).
+function bucketOf(entry) {
+  if (!entry.startDateTime) return 'am';
+  const hour = new Date(entry.startDateTime).getHours();
+  return hour < 12 ? 'am' : 'pm';
+}
+
+function emptyAmPm() { return { am: 0, pm: 0 }; }
+
 function aggregate(raw, forDate) {
   const byType = {};
   const byStaff = [];
-  let total = 0;
+  const total = emptyAmPm();
 
   // For today, filter to slots that haven't started yet
   const isToday = forDate === todayISO();
   const now = new Date();
 
   (raw.staffSchedules || []).forEach(staff => {
-    let staffTotal = 0;
+    const staffTotal = emptyAmPm();
     const staffByType = {};
 
     (staff.schedule || []).forEach(session => {
@@ -156,14 +167,17 @@ function aggregate(raw, forDate) {
         }
 
         const type = entry.appointmentType?.name || 'Unknown';
-        byType[type] = (byType[type] || 0) + 1;
-        staffByType[type] = (staffByType[type] || 0) + 1;
-        staffTotal++;
-        total++;
+        const bucket = bucketOf(entry);
+        if (!byType[type]) byType[type] = emptyAmPm();
+        if (!staffByType[type]) staffByType[type] = emptyAmPm();
+        byType[type][bucket]++;
+        staffByType[type][bucket]++;
+        staffTotal[bucket]++;
+        total[bucket]++;
       });
     });
 
-    if (staffTotal > 0) {
+    if (staffTotal.am + staffTotal.pm > 0) {
       byStaff.push({ name: staff.name || 'Unknown', total: staffTotal, byType: staffByType });
     }
   });
@@ -171,6 +185,8 @@ function aggregate(raw, forDate) {
   byStaff.sort((a, b) => a.name.localeCompare(b.name));
   return { total, byType, byStaff, isToday };
 }
+
+function sumAmPm(o) { return (o?.am || 0) + (o?.pm || 0); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -200,8 +216,15 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+// Returns { am, pm } summed across all non-hidden types.
 function visibleTotal(byType, hiddenTypes) {
-  return Object.entries(byType).reduce((sum, [type, n]) => hiddenTypes.has(type) ? sum : sum + n, 0);
+  const out = emptyAmPm();
+  for (const [type, n] of Object.entries(byType)) {
+    if (hiddenTypes.has(type)) continue;
+    out.am += n.am || 0;
+    out.pm += n.pm || 0;
+  }
+  return out;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -210,20 +233,20 @@ function render() {
   if (!container) return;
 
   const d = state.data;
-  const visible = d ? visibleTotal(d.byType, state.hiddenTypes) : 0;
+  const visible = d ? visibleTotal(d.byType, state.hiddenTypes) : emptyAmPm();
+  const visibleSum = sumAmPm(visible);
 
-  // Dispatch count for nav badge
-  const _visible = state.data ? visibleTotal(state.data.byType, state.hiddenTypes) : 0;
-  document.dispatchEvent(new CustomEvent('suite:slots:count', { detail: { count: state.loading ? null : _visible } }));
+  // Dispatch count for nav badge — sum AM+PM so badge shows day total
+  document.dispatchEvent(new CustomEvent('suite:slots:count', { detail: { count: state.loading ? null : visibleSum } }));
 
   container.innerHTML = `
     <div class="module-wrap slots-module">
-      ${renderHeader(visible)}
+      ${renderHeader(visible, visibleSum)}
       <div id="slotsBanner" class="banner${state.error ? '' : ' hidden'}">
         ${escHtml(state.error || '')}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
-      ${state.loading ? renderSkeleton() : (d ? renderData(d, visible) : '')}
+      ${state.loading ? renderSkeleton() : (d ? renderData(d, visible, visibleSum) : '')}
       <div class="foot">${state.lastFetched ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
     </div>
   `;
@@ -231,17 +254,24 @@ function render() {
   bindEvents();
 }
 
-function renderHeader(visible) {
+function renderHeader(visible, visibleSum) {
   const isToday = state.data?.isToday;
+  const splitLine = !state.loading && state.data
+    ? `<div class="slots-ampm-split">
+         <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am}</span></span>
+         <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm}</span></span>
+       </div>`
+    : '';
   return `
     <div class="mod-header">
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
         ${!state.loading ? `
-          <div class="slots-count-hero">${visible}</div>
-          <div class="slots-count-label${visible===0?' zero':''}">
+          <div class="slots-count-hero">${visibleSum}</div>
+          <div class="slots-count-label${visibleSum===0?' zero':''}">
             ${isToday ? 'slots remaining today' : 'available slots'}
-          </div>` : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`}
+          </div>
+          ${splitLine}` : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`}
       </div>
       <div class="header-actions" style="align-self:flex-start;margin-top:2px">
         <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
@@ -260,7 +290,7 @@ function renderAlertRibbon(byType) {
   const triggered = [];
   for (const rule of state.alertRules) {
     if (!rule.enabled) continue;
-    const count = byType[rule.typeName] ?? 0;
+    const count = sumAmPm(byType[rule.typeName]);
     if (count <= rule.threshold) {
       triggered.push({ ...rule, count, level: count === 0 ? 'red' : 'amber' });
     }
@@ -286,23 +316,36 @@ function renderSkeleton() {
   return `<div class="skeleton-list">${Array(5).fill('<div class="skel-row"></div>').join('')}</div>`;
 }
 
-function renderData(d, visible) {
+function renderData(d, visible, visibleSum) {
   if (!d.byType || Object.keys(d.byType).length === 0) {
     return `<div class="empty-state">No sessions found for ${escHtml(formatDate(state.date))}.</div>`;
   }
 
-  const entries = Object.entries(d.byType).sort((a, b) => b[1] - a[1]);
+  const entries = Object.entries(d.byType).sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
   const ticked   = entries.filter(([t]) => !state.hiddenTypes.has(t));
   const unticked = entries.filter(([t]) =>  state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;
 
-  const row = (type, count, hidden) => `
+  const countCell = (n) => {
+    const total = sumAmPm(n);
+    return `
+      <span class="slot-count-group${total === 0 ? ' zero' : ''}">
+        <span class="slot-count-ampm" title="Morning">${n.am}<span class="ampm-tag-inline">am</span></span>
+        <span class="slot-count-sep">·</span>
+        <span class="slot-count-ampm" title="Afternoon">${n.pm}<span class="ampm-tag-inline">pm</span></span>
+        <span class="slot-count-sep">·</span>
+        <span class="slot-count slot-count-total">${total}</span>
+      </span>
+    `;
+  };
+
+  const row = (type, n, hidden) => `
     <div class="slot-row${hidden ? ' row-hidden' : ''}">
       <label class="slot-label">
         <input type="checkbox" class="type-toggle" data-type="${escHtml(type)}" ${hidden ? '' : 'checked'} />
         <span class="slot-type">${escHtml(type)}</span>
       </label>
-      <span class="slot-count${count === 0 ? ' zero' : ''}">${count}</span>
+      ${countCell(n)}
     </div>
   `;
 
@@ -317,18 +360,34 @@ function renderData(d, visible) {
   const staffRows = d.byStaff.map(s => {
     const isExpanded = state.expanded.has(s.name);
     const staffVisible = visibleTotal(s.byType, state.hiddenTypes);
+    const staffSum = sumAmPm(staffVisible);
     return `
       <div class="staff-row">
         <button class="staff-toggle" data-staff="${escHtml(s.name)}">
           <span class="staff-chevron">${isExpanded ? '▾' : '▸'}</span>
           <span class="staff-name">${escHtml(s.name)}</span>
-          <span class="staff-count">${staffVisible}</span>
+          <span class="staff-count-mini">
+            <span title="Morning">${staffVisible.am}<span class="ampm-tag-inline">am</span></span>
+            <span class="slot-count-sep">·</span>
+            <span title="Afternoon">${staffVisible.pm}<span class="ampm-tag-inline">pm</span></span>
+            <span class="slot-count-sep">·</span>
+            <span class="staff-count">${staffSum}</span>
+          </span>
         </button>
         ${isExpanded ? `<div class="staff-detail">
           ${Object.entries(s.byType)
             .filter(([t]) => !state.hiddenTypes.has(t))
-            .sort((a,b) => b[1]-a[1])
-            .map(([t,n]) => `<div class="staff-type-row"><span>${escHtml(t)}</span><span>${n}</span></div>`)
+            .sort((a,b) => sumAmPm(b[1]) - sumAmPm(a[1]))
+            .map(([t,n]) => `<div class="staff-type-row">
+              <span>${escHtml(t)}</span>
+              <span class="staff-type-counts">
+                <span>${n.am}<span class="ampm-tag-inline">am</span></span>
+                <span class="slot-count-sep">·</span>
+                <span>${n.pm}<span class="ampm-tag-inline">pm</span></span>
+                <span class="slot-count-sep">·</span>
+                <span class="staff-type-total">${sumAmPm(n)}</span>
+              </span>
+            </div>`)
             .join('')}
         </div>` : ''}
       </div>

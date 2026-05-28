@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v1.10.0] — 2026-05-28
+### Added
+- Slot Counter now visually distinguishes AM from PM appointments. Under the day-total hero are two chips — `AM 14` and `PM 9` — and every "By type" and "By clinician" row shows the same breakdown inline (`8 am · 4 pm · 12`). Lets a clinician see at a glance whether the day still has morning capacity, afternoon capacity, or both, instead of just a single combined number. AM is `startDateTime` hour < 12; PM is 12:00 onward.
+
 ## [v1.9.0] — 2026-05-28
 ### Fixed
 - Settings page version badges now read the live extension version instead of a hard-coded `v1.4.2` that had not been updated since the first release.
