@@ -11,8 +11,6 @@ let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
-let displayPrefs = { theme: 'dark', size: 'medium', colorblind: false };
-let settingsOpen = false;
 
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
@@ -29,9 +27,6 @@ let wrPollTimer    = null;
 export async function init(el) {
   container = el;
   render({ state: 'loading' });
-
-  const dp = await chrome.storage.local.get('suite.display');
-  if (dp['suite.display']) Object.assign(displayPrefs, dp['suite.display']);
 
   // Start waiting room fetch in parallel with sentinel chip poll
   fetchWaitingRoom();
@@ -215,9 +210,7 @@ async function refresh() {
   }
 }
 
-let _lastPayload = { state: 'loading' };
 function render(payload) {
-  _lastPayload = payload;
   if (!container) return;
   const { state, snapshot, message } = payload;
 
@@ -296,7 +289,6 @@ function render(payload) {
       render(payload); // re-render with new filter
     });
   });
-  bindDisplaySettings();
 }
 
 function renderChip(chip) {
@@ -378,15 +370,12 @@ function renderChip(chip) {
 }
 
 function shell(top, inner) {
-  const popover = settingsOpen ? renderDisplayPopover() : '';
   return `<div class="module-wrap sent-module">
     <div class="sent-header-row">
       <div class="mod-eyebrow">Clinical Monitoring</div>
-      <div style="display:flex;gap:6px;align-items:center;position:relative">
+      <div style="display:flex;gap:6px;align-items:center">
         <span class="module-ver">v0.4.2</span>
-        <button class="icon-btn" id="sentDisplayBtn" title="Display settings">⚙</button>
         <button class="icon-btn" id="sentRefreshBtn" title="Refresh">↻</button>
-        ${popover}
       </div>
     </div>
     <div class="mod-title" style="margin-bottom:10px">Monitoring</div>
@@ -407,65 +396,6 @@ function formatDate(s) {
   if (!s) return '';
   try { return new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
   catch { return s; }
-}
-
-function renderDisplayPopover() {
-  const themeOpts = [['dark','Dark'],['light','Light']].map(([v,l]) =>
-    `<button class="sent-dp-seg${displayPrefs.theme===v?' active':''}" data-dp-key="theme" data-dp-val="${v}">${l}</button>`).join('');
-  const sizeOpts = [['small','S'],['medium','M'],['large','L']].map(([v,l]) =>
-    `<button class="sent-dp-seg${displayPrefs.size===v?' active':''}" data-dp-key="size" data-dp-val="${v}">${l}</button>`).join('');
-  return `<div class="sent-dp-popover" id="sentDpPopover">
-    <div class="sent-dp-row">
-      <span class="sent-dp-lbl">Theme</span>
-      <div class="sent-dp-segs">${themeOpts}</div>
-    </div>
-    <div class="sent-dp-row">
-      <span class="sent-dp-lbl">Text size</span>
-      <div class="sent-dp-segs">${sizeOpts}</div>
-    </div>
-    <div class="sent-dp-row">
-      <span class="sent-dp-lbl">Colour-blind</span>
-      <label class="sent-dp-toggle">
-        <input type="checkbox" id="sentDpColorblind" ${displayPrefs.colorblind ? 'checked' : ''} />
-        <span class="sent-dp-track"><span class="sent-dp-thumb"></span></span>
-      </label>
-    </div>
-  </div>`;
-}
-
-function bindDisplaySettings() {
-  if (!container) return;
-  container.querySelector('#sentDisplayBtn')?.addEventListener('click', e => {
-    e.stopPropagation();
-    settingsOpen = !settingsOpen;
-    // Re-render last payload to toggle popover
-    render(_lastPayload);
-  });
-  container.querySelectorAll('[data-dp-key]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      displayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
-      saveDisplayPrefs();
-      render(_lastPayload);
-    });
-  });
-  container.querySelector('#sentDpColorblind')?.addEventListener('change', e => {
-    displayPrefs.colorblind = e.target.checked;
-    saveDisplayPrefs();
-    render(_lastPayload);
-  });
-  // Close on outside click
-  const closeOnOutside = (e) => {
-    if (settingsOpen && !e.target.closest('#sentDpPopover') && !e.target.closest('#sentDisplayBtn')) {
-      settingsOpen = false;
-      render(_lastPayload);
-      document.removeEventListener('click', closeOnOutside);
-    }
-  };
-  if (settingsOpen) document.addEventListener('click', closeOnOutside);
-}
-
-function saveDisplayPrefs() {
-  chrome.storage.local.set({ 'suite.display': { ...displayPrefs } });
 }
 
 function escHtml(s) {

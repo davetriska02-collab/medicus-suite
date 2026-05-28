@@ -8,11 +8,74 @@ let activeModule = 'slots';
 let moduleCleanup = null;
 let switchSeq = 0;
 
+let panelDisplayPrefs = { theme: 'light', size: 'medium', colorblind: false };
+let displayOpen = false;
+
 function applyDisplayPrefs(prefs) {
   prefs = prefs || {};
-  document.documentElement.setAttribute('data-theme',     prefs.theme     || 'dark');
-  document.documentElement.setAttribute('data-size',      prefs.size      || 'medium');
-  document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
+  panelDisplayPrefs.theme     = prefs.theme     || 'light';
+  panelDisplayPrefs.size      = prefs.size      || 'medium';
+  panelDisplayPrefs.colorblind = !!prefs.colorblind;
+  document.documentElement.setAttribute('data-theme',      panelDisplayPrefs.theme);
+  document.documentElement.setAttribute('data-size',       panelDisplayPrefs.size);
+  document.documentElement.setAttribute('data-colorblind', String(panelDisplayPrefs.colorblind));
+}
+
+function buildDisplayPopoverHTML() {
+  const p = panelDisplayPrefs;
+  const themeOpts = [['light','Light'],['dark','Dark']].map(([v,l]) =>
+    `<button class="dp-seg${p.theme===v?' active':''}" data-dp-key="theme" data-dp-val="${v}">${l}</button>`).join('');
+  const sizeOpts = [['small','S'],['medium','M'],['large','L']].map(([v,l]) =>
+    `<button class="dp-seg${p.size===v?' active':''}" data-dp-key="size" data-dp-val="${v}">${l}</button>`).join('');
+  return `<div class="dp-popover" id="dpPopover">
+    <div class="dp-title">Display</div>
+    <div class="dp-row">
+      <span class="dp-lbl">Theme</span>
+      <div class="dp-segs">${themeOpts}</div>
+    </div>
+    <div class="dp-row">
+      <span class="dp-lbl">Text size</span>
+      <div class="dp-segs">${sizeOpts}</div>
+    </div>
+    <div class="dp-row">
+      <span class="dp-lbl">Colour-blind</span>
+      <label class="dp-toggle">
+        <input type="checkbox" id="dpColorblind" ${p.colorblind ? 'checked' : ''} />
+        <span class="dp-track"><span class="dp-thumb"></span></span>
+      </label>
+    </div>
+  </div>`;
+}
+
+function renderDisplayPopover() {
+  const host = document.getElementById('displayPopoverHost');
+  if (!host) return;
+  host.innerHTML = displayOpen ? buildDisplayPopoverHTML() : '';
+  if (!displayOpen) return;
+
+  host.querySelectorAll('[data-dp-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      panelDisplayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
+      chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+      applyDisplayPrefs(panelDisplayPrefs);
+      renderDisplayPopover();
+    });
+  });
+  host.querySelector('#dpColorblind')?.addEventListener('change', e => {
+    panelDisplayPrefs.colorblind = e.target.checked;
+    chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+    applyDisplayPrefs(panelDisplayPrefs);
+    renderDisplayPopover();
+  });
+
+  const closeOnOutside = (e) => {
+    if (!e.target.closest('#displayPopoverHost') && !e.target.closest('#displayBtn')) {
+      displayOpen = false;
+      renderDisplayPopover();
+      document.removeEventListener('click', closeOnOutside);
+    }
+  };
+  document.addEventListener('click', closeOnOutside);
 }
 
 // ── Module registry ───────────────────────────────────────────────────────────
@@ -670,10 +733,19 @@ document.addEventListener('visibilitychange', () => {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
-// Load and apply display preferences
-chrome.storage.local.get('suite.display').then(r => applyDisplayPrefs(r['suite.display'] || {}));
+// Load and apply display preferences; keep popover state in sync with external changes
+chrome.storage.local.get('suite.display').then(r => {
+  applyDisplayPrefs(r['suite.display'] || {});
+});
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['suite.display']) applyDisplayPrefs(changes['suite.display'].newValue || {});
+});
+
+// Wire display button
+document.getElementById('displayBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  displayOpen = !displayOpen;
+  renderDisplayPopover();
 });
 
 switchModule('slots');
