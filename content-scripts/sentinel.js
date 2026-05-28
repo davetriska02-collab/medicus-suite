@@ -902,6 +902,12 @@
         patientContext: opts && opts.patientContext || null,
         evaluatedAt: new Date().toISOString(),
       };
+      // Notify any open side panel that a fresh snapshot is available so it can
+      // re-render immediately on patient change instead of waiting for its poll.
+      try {
+        const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (_) {}
       return chips;
     };
   }

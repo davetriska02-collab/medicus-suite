@@ -37,8 +37,12 @@ export async function init(el) {
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
 
-  // Listen for Pusher-driven refresh signals from service worker
-  const onMsg = (msg) => { if (msg?.type === 'waiting:refresh') fetchWaitingRoom(true); };
+  // Listen for refresh signals: waiting-room polls (Pusher) + sentinel snapshot
+  // updates pushed by the content script when the patient context changes.
+  const onMsg = (msg) => {
+    if (msg?.type === 'waiting:refresh') fetchWaitingRoom(true);
+    if (msg?.type === 'sentinel:snapshot-updated') refresh();
+  };
   chrome.runtime.onMessage.addListener(onMsg);
 
   _refreshBtnHandler = e => { if (e.target?.id === 'sentRefreshBtn') refresh(); };
@@ -190,7 +194,6 @@ function updateWrPinned(el) {
 
 async function refresh() {
   if (!container) return;
-  if (document.visibilityState !== 'visible') return;
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
   if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {
