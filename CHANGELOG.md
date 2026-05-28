@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v2.5.0] — 2026-05-28
+### Added — Practice Profile (shared-folder managed deployment)
+- New **Practice Profile** system for practices running the extension from a shared network folder. Drop a `practice-profile.json` file into the extension folder alongside the other files and it propagates default settings automatically to every PC that loads the extension — no manual steps for users after initial install.
+- **Service worker** reads the profile on every browser start (`onInstalled` + `onStartup`). If `profileVersion` has changed since it was last applied, new settings are merged/applied automatically.
+- **Three apply modes** controlled by the practice admin in the JSON file:
+  - `mergeMissing` (default) — only writes settings the user hasn't already configured; safe, never overwrites user customisation
+  - `forceOverride` — always replaces — use to push a mandatory rule change to all users
+  - `firstRunOnly` — seeds new installs only; ignores version bumps after first apply
+- **Settings → Backup & Restore** now shows a Practice Profile card: file status, version last applied, timestamp, and whether an update is available. Buttons: *Check for update*, *Apply now* (manual force), and **Generate profile from current settings** — configure one PC exactly how you want then generate a ready-to-use `practice-profile.json` in one click.
+- **Full setup guide** embedded in a collapsible panel in the Settings page: step-by-step instructions for creating the file, editing the header, choosing a mode, pushing updates, and first-time install on each PC.
+- Desktop notification (silent, one per version) when a new profile version is applied, if the admin enables `notifyUserOnApply`.
+- Application history stored in `suite.practiceProfile` (last 10 applies) for auditability.
+- New file `shared/io/practice-profile.js` — self-contained, loads in both service worker and options page contexts.
+
 ## [v2.0.5] — 2026-05-28
 ### Added
 - Settings → Suite tab now includes a "Support development" card with a Buy Me a Coffee link (`buymeacoffee.com/davetriska`). Short note explaining the suite is built in spare time and given away free, AI tokens cost money out of pocket, and 100% of donations go straight back into development. Card sits at the bottom of the Suite section so it's visible from the default landing tab but never gets in the way.

@@ -10,6 +10,7 @@ try {
   importScripts('shared/request-monitor.js');
   importScripts('shared/update-checker.js');
   importScripts('shared/popout-manager.js');
+  importScripts('shared/io/practice-profile.js');
 } catch (e) {
   console.warn('[Service Worker] importScripts failed:', e.message);
 }
@@ -99,6 +100,7 @@ chrome.runtime.onInstalled.addListener(() => {
   initialiseTriage();
   initialiseRequestMonitor().then(() => pollRequestMonitor());
   initialiseUpdateChecker();
+  applyPracticeProfile();
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -107,7 +109,17 @@ chrome.runtime.onStartup.addListener(() => {
   initialiseUpdateChecker();
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
+  applyPracticeProfile();
 });
+
+async function applyPracticeProfile() {
+  if (!self.PracticeProfile) return;
+  try {
+    await self.PracticeProfile.checkAndApply();
+  } catch (e) {
+    console.warn('[Practice Profile] startup apply failed:', e.message);
+  }
+}
 
 // ── Popout window lifecycle ───────────────────────────────────────────────────
 

@@ -26,7 +26,7 @@
 
 const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
-const EXTENSION_VERSION = '1.6.0';
+const EXTENSION_VERSION = '2.5.0';
 
 const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor'];
 

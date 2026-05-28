@@ -501,8 +501,82 @@
 
       <!-- Backup & Restore section -->
       <section class="opt-section" id="sect-backup">
-        <h1>Backup &amp; Restore <span class="module-badge">v1.2</span></h1>
+        <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
         <p class="section-desc">Export all module settings to a single JSON file, or restore from a previous backup. Per-module quick actions are available below for targeted exports.</p>
+
+        <!-- ── Practice Profile ─────────────────────────────────────────────── -->
+        <div style="border:1px solid var(--border-hi); border-radius:10px; overflow:hidden; margin-bottom:28px;">
+
+          <!-- Header -->
+          <div style="background:var(--bg-mid); padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px;">
+            <div style="font-size:20px; line-height:1;">🏥</div>
+            <div style="flex:1;">
+              <div style="font-weight:600; font-size:13px; color:var(--text-1);">Practice Profile</div>
+              <div style="font-size:11px; color:var(--text-3); margin-top:2px;">Automatically sync default settings across every PC at your practice</div>
+            </div>
+            <span id="ppBadge" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 9px; border-radius:3px; background:rgba(74,127,184,0.18); color:var(--accent);">Update available</span>
+          </div>
+
+          <!-- Status + actions -->
+          <div style="padding:14px 16px;">
+            <div id="ppStatusBlock" style="font-size:12px; line-height:1.75; color:var(--text-2);">Checking…</div>
+            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+              <button class="ghost" id="ppCheckBtn" style="font-size:11px; padding:5px 12px;">Check for update</button>
+              <button class="primary" id="ppApplyBtn" style="font-size:11px; padding:5px 12px; display:none;">Apply now</button>
+              <button class="ghost" id="ppGenerateBtn" style="font-size:11px; padding:5px 12px;">Generate profile from current settings</button>
+              <span id="ppActionStatus" style="font-family:var(--mono); font-size:10px; color:var(--text-3);"></span>
+            </div>
+          </div>
+
+          <!-- Collapsible setup guide -->
+          <details style="border-top:1px solid var(--border);">
+            <summary style="padding:10px 16px; font-size:12px; font-weight:500; color:var(--text-2); cursor:pointer; user-select:none;">
+              &#9654; How to set up shared-folder deployment
+            </summary>
+            <div style="padding:16px 18px; font-size:12px; line-height:1.75; color:var(--text-2); border-top:1px solid var(--border);">
+              <p style="margin:0 0 10px;">
+                <strong>How it works:</strong> Place a file called <code>practice-profile.json</code> alongside the extension files in your shared folder.
+                The extension reads it on every browser start. If the file's <code>profileVersion</code> has changed since it was last applied,
+                the new settings are merged in automatically — no user action needed.
+              </p>
+
+              <p style="margin:0 0 8px;"><strong>Step 1 — Create a starter file</strong></p>
+              <p style="margin:0 0 10px;">
+                Configure one PC exactly how you want it (practice code, alert thresholds, monitoring rules, triage keywords),
+                then click <em>Generate profile from current settings</em> above.
+                Save the downloaded file as <code>practice-profile.json</code> in the extension folder (the same folder you pointed Edge at when you loaded it unpacked).
+              </p>
+
+              <p style="margin:0 0 8px;"><strong>Step 2 — Edit the profile header in Notepad</strong></p>
+              <ul style="margin:0 0 10px; padding-left:20px;">
+                <li><code>"profileLabel"</code> — a friendly name, e.g. <code>"Acme Surgery — May 2026"</code></li>
+                <li><code>"profileVersion"</code> — any string you'll recognise, e.g. <code>"2026-05-28.1"</code></li>
+                <li><code>"publishedBy"</code> — your email, for reference</li>
+              </ul>
+
+              <p style="margin:0 0 8px;"><strong>Step 3 — Choose a propagation mode</strong></p>
+              <ul style="margin:0 0 10px; padding-left:20px;">
+                <li><code>"mergeMissing"</code> <em>(default, recommended)</em> — only fills in settings the user hasn't already set. Safe: never overwrites individual customisations.</li>
+                <li><code>"forceOverride"</code> — always replaces user settings with the profile. Use when you need to push a mandatory change (e.g. a corrected drug-monitoring rule).</li>
+                <li><code>"firstRunOnly"</code> — applies once on brand-new installs, then never again regardless of version bumps.</li>
+              </ul>
+
+              <p style="margin:0 0 8px;"><strong>Step 4 — Pushing updates</strong></p>
+              <p style="margin:0 0 10px;">
+                Edit <code>practice-profile.json</code> in the shared folder and increment <code>"profileVersion"</code> (e.g. <code>"2026-06-01.1"</code>).
+                Each user's extension picks up the change on their next browser start. No action needed from them.
+                Edge auto-reloads the extension whenever any file in the folder changes, so the update is seamless.
+              </p>
+
+              <p style="margin:0 0 8px;"><strong>First-time install on a new PC</strong></p>
+              <p style="margin:0;">
+                Each PC still needs a one-time manual setup: open Edge → <code>edge://extensions</code> → enable <em>Developer mode</em> → <em>Load unpacked</em> → pick the shared folder.
+                After that, all future extension updates and settings changes propagate automatically from the shared folder — no further steps needed on that PC.
+              </p>
+            </div>
+          </details>
+        </div>
+        <!-- ── End Practice Profile ──────────────────────────────────────────── -->
 
         <div class="field">
           <label class="field-label">Suite-wide backup</label>
@@ -658,6 +732,7 @@
   </div>
 
   <script src="../shared/io/suite-envelope.js"></script>
+  <script src="../shared/io/practice-profile.js"></script>
   <script src="../shared/io/sentinel-io.js"></script>
   <script src="../shared/io/capacity-io.js"></script>
   <script src="../shared/io/triage-io.js"></script>

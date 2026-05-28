@@ -572,6 +572,145 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
   });
 });
 
+// ── Practice Profile (v2.5) ──────────────────────────────────────────────────
+
+(async function initPracticeProfileSection() {
+  try {
+    if (!window.PracticeProfile) return;
+
+    const statusBlock  = document.getElementById('ppStatusBlock');
+    const badge        = document.getElementById('ppBadge');
+    const checkBtn     = document.getElementById('ppCheckBtn');
+    const applyBtn     = document.getElementById('ppApplyBtn');
+    const generateBtn  = document.getElementById('ppGenerateBtn');
+    const actionStatus = document.getElementById('ppActionStatus');
+
+    if (!statusBlock) return;
+
+    let _profile = null;
+
+    function setPPStatus(msg, isError = false) {
+      if (!actionStatus) return;
+      actionStatus.textContent = msg;
+      actionStatus.style.color = isError ? '#ef4444' : 'var(--text-3)';
+      if (msg) setTimeout(() => { if (actionStatus.textContent === msg) actionStatus.textContent = ''; }, 4000);
+    }
+
+    async function render() {
+      _profile = await window.PracticeProfile.fetchProfile();
+      const stored = await window.PracticeProfile.getStatus();
+
+      if (!_profile) {
+        statusBlock.innerHTML =
+          `<span style="color:var(--text-3);">No <code>practice-profile.json</code> found in the extension folder.</span><br>` +
+          `<span style="font-size:11px; color:var(--text-3);">Use <em>Generate profile from current settings</em> to create one, ` +
+          `then drop it into the extension folder. See the setup guide below.</span>`;
+        if (badge) badge.style.display = 'none';
+        if (applyBtn) applyBtn.style.display = 'none';
+        return;
+      }
+
+      const incomingVersion = _profile.profileVersion;
+      const currentVersion  = stored?.lastAppliedVersion;
+      const hasUpdate       = currentVersion !== incomingVersion;
+      const appliedAt       = stored?.lastAppliedAt ? new Date(stored.lastAppliedAt).toLocaleString() : null;
+      const autoApply       = _profile.apply?.autoApplyOnStartup !== false;
+      const mode            = _profile.apply?.mode || 'mergeMissing';
+
+      let html =
+        `<div><strong>Profile found:</strong> ${escHtml(_profile.profileLabel || '(no label)')}</div>` +
+        `<div><strong>Version in folder:</strong> <code style="font-family:var(--mono);font-size:11px">${escHtml(incomingVersion)}</code></div>` +
+        `<div><strong>Mode:</strong> ${escHtml(mode)} &nbsp;·&nbsp; Auto-apply on startup: ${autoApply ? 'yes' : 'no'}</div>`;
+
+      if (stored?.lastAppliedVersion) {
+        html += `<div style="margin-top:4px;"><strong>Last applied:</strong> ` +
+          `<code style="font-family:var(--mono);font-size:11px">${escHtml(stored.lastAppliedVersion)}</code>` +
+          ` on ${escHtml(appliedAt || '—')} ` +
+          `<span style="font-size:11px; color:var(--text-3);">(${escHtml(stored.lastAppliedMode || mode)})</span></div>`;
+      } else {
+        html += `<div style="margin-top:4px; color:var(--text-3);">Not yet applied on this install.</div>`;
+      }
+
+      if (hasUpdate) {
+        html += `<div style="margin-top:6px; color:var(--accent); font-weight:500;">&#8593; A newer version is ready to apply.</div>`;
+      }
+
+      statusBlock.innerHTML = html;
+      if (badge) badge.style.display = hasUpdate ? '' : 'none';
+      if (applyBtn) applyBtn.style.display = (hasUpdate || !stored?.lastAppliedVersion) ? '' : 'none';
+    }
+
+    await render();
+
+    checkBtn?.addEventListener('click', async () => {
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking…';
+      await render();
+      checkBtn.disabled = false;
+      checkBtn.textContent = 'Check for update';
+      if (!_profile) {
+        setPPStatus('No practice-profile.json found in the extension folder.');
+      } else {
+        const stored = await window.PracticeProfile.getStatus();
+        setPPStatus(stored?.lastAppliedVersion === _profile.profileVersion ? 'Up to date.' : 'New version available — click Apply now.');
+      }
+    });
+
+    applyBtn?.addEventListener('click', async () => {
+      if (!_profile) return;
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Applying…';
+      try {
+        const result = await window.PracticeProfile.applyProfile(_profile, { force: true });
+        if (result.skipped) {
+          setPPStatus('Nothing to apply.');
+        } else {
+          const mods = (result.modulesApplied || []).join(', ') || 'no modules changed';
+          setPPStatus(`Applied successfully — ${mods}.`);
+        }
+        await render();
+      } catch (e) {
+        setPPStatus('Apply failed: ' + e.message, true);
+      }
+      applyBtn.disabled = false;
+      applyBtn.textContent = 'Apply now';
+    });
+
+    generateBtn?.addEventListener('click', async () => {
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating…';
+      try {
+        const envelope = await doFullExport();
+        const stamp = new Date().toISOString().slice(0, 10);
+        const practiceProfile = {
+          format:        'medicus-suite-practice-profile',
+          formatVersion: 1,
+          profileVersion: stamp + '.1',
+          profileLabel:  'Your Practice Name — Default Settings',
+          publishedAt:   new Date().toISOString(),
+          publishedBy:   '',
+          apply: {
+            mode:               'mergeMissing',
+            modules:            ['sentinel', 'triage', 'submissions', 'slots', 'capacity'],
+            autoApplyOnStartup: true,
+            notifyUserOnApply:  false,
+          },
+          envelope,
+        };
+        downloadJson(practiceProfile, 'practice-profile.json');
+        setPPStatus('Downloaded — edit profileLabel, profileVersion, and publishedBy, then save to the extension folder.');
+      } catch (e) {
+        setPPStatus('Could not generate: ' + e.message, true);
+      }
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'Generate profile from current settings';
+    });
+
+  } catch (e) {
+    console.warn('[Practice Profile section]', e.message);
+  }
+})();
+
 // ── Debug section (v1.2.2) ────────────────────────────────────────────────────
 
 async function buildDebugState() {
