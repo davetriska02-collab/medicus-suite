@@ -336,12 +336,15 @@ async function savePreset(editing) {
     const el = presetEditor.querySelector(`input[data-day="${d.key}"]`);
     minimumByDay[d.key] = parseInt(el?.value, 10) || 0;
   });
-  const tight = parseInt(presetEditor.querySelector('#fTight').value, 10) || 75;
-  const low = parseInt(presetEditor.querySelector('#fLow').value, 10) || 50;
+  const tightRaw = parseInt(presetEditor.querySelector('#fTight').value, 10);
+  const lowRaw = parseInt(presetEditor.querySelector('#fLow').value, 10);
+  const tight = Number.isFinite(tightRaw) ? tightRaw : 75;
+  const low = Number.isFinite(lowRaw) ? lowRaw : 50;
   const slotTypes = Array.from(presetEditor.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(i => i.value);
 
   if (!name) { alert('Preset needs a name.'); return; }
   if (slotTypes.length === 0) { alert('Select at least one slot type.'); return; }
+  if (tight < 0 || low < 0) { alert('Thresholds must be non-negative.'); return; }
   if (low >= tight) { alert('Low threshold must be below Tight threshold.'); return; }
   if (tight >= 100 || low >= 100) { alert('Thresholds must be below 100%.'); return; }
 

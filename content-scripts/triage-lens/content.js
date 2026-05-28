@@ -1161,7 +1161,7 @@
     if (onPalliative && !hasACP) {
       sig.carePlan.level = bumpLevel(sig.carePlan.level, 'red');
       sig.carePlan.items.push({ severity: 'red', text: 'Palliative without visible ACP', detail: 'No DNACPR/ReSPECT entry found in record' });
-    } else if (frailtyHits.length >= 3 && !hasACP) {
+    } else if (frailtyHits.length >= TH('frailtyHitsRed') && !hasACP) {
       sig.carePlan.level = bumpLevel(sig.carePlan.level, 'amber');
       sig.carePlan.items.push({ severity: 'amber', text: 'Severe frailty without visible ACP', detail: 'Consider proactive ACP discussion' });
     } else if (hasACP) {
@@ -1493,7 +1493,7 @@
     const patient = extractPatientName();
 
     const requestPanel = (rs) => {
-      if (!rs || (!rs.chips.length && !rs.categories.length && !rs.snippet)) return '';
+      if (!rs || (!rs.chips?.length && !rs.snippet)) return '';
       return `
         <div class="ch-request">
           <div class="ch-request-head">REQUEST</div>
@@ -1669,7 +1669,7 @@
       request: requestText || '',
       problems: safe(data?.problems, 'name'),
       registers: data?.registers || [],
-      meds: [...safe(data?.meds?.repeats, 'name'), ...safe(data?.meds?.acutes, 'name'), ...safe(data?.meds?.otc, 'name')],
+      meds: [...safe(data?.meds?.repeats), ...safe(data?.meds?.acutes), ...safe(data?.meds?.otc)],
       allergies: data?.banner?.warnings || [],
       banner: data?.banner?.warnings || [],
       consultations: safe(data?.cons || [], 'type').concat(safe(data?.cons || [], 'clinician')),
@@ -1904,13 +1904,10 @@
     document.querySelectorAll('.ch-queue-chips').forEach(s => s.remove());
     document.querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
-    // Re-attach to whichever container is currently in the DOM (may be a fresh
-    // node after SPA navigation rebuilt the AG Grid component)
-    const container = document.querySelector('.ag-body-viewport') || document.querySelector('.ag-root-wrapper');
-    if (container && queueObserver) {
-      queueObservedContainer = container;
-      queueObserver.observe(container, { childList: true, subtree: true });
-    }
+    // Re-attach via setupQueueObserver so the observer is created if it was
+    // never initialised, and re-bound to the current container if it was.
+    queueObservedContainer = null;
+    setupQueueObserver();
   };
 
   const setupQueueObserver = () => {

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "lastUpdated": "2026-05-28",
-  "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Inspired by PINCER (BMJ 2012, doi:10.1136/bmj.e6501), Ardens, and Primary Care IT alert sets. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
+  "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
     {
@@ -327,7 +327,7 @@
       "subcategory": "Teratogenicity",
       "title": "Valproate in female of childbearing age",
       "description": "Valproate (sodium valproate / valproic acid) in female aged 12–55 — MHRA Pregnancy Prevention Programme (PPP) mandatory.",
-      "source": "MHRA / Ardens",
+      "source": "MHRA",
       "rule": {
         "type": "drug-combo",
         "enabled": true,
@@ -341,7 +341,7 @@
         "excludesProblem": [],
         "severity": "red",
         "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
-        "source": "MHRA Drug Safety Update / Ardens"
+        "source": "MHRA Drug Safety Update"
       }
     },
 
@@ -351,7 +351,7 @@
       "subcategory": "Lithium safety",
       "title": "Lithium without 3-monthly level + 6-monthly U&E/TFT",
       "description": "Lithium monitoring overdue — serum level every 3 months, U&E and TFT every 6 months.",
-      "source": "Ardens / NICE CG185",
+      "source": "NICE CG185",
       "rule": {
         "type": "drug-monitoring",
         "enabled": true,
@@ -367,8 +367,8 @@
           { "name": "TFT", "match": ["tft","thyroid function"], "intervalDays": 180, "dueSoonDays": 21 },
           { "name": "Calcium", "match": ["calcium","corrected calcium"], "intervalDays": 180, "dueSoonDays": 21 }
         ],
-        "notes": "NICE CG185 / Ardens. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
-        "source": "NICE CG185 / Ardens"
+        "notes": "NICE CG185. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
+        "source": "NICE CG185"
       }
     },
 
@@ -378,7 +378,7 @@
       "subcategory": "Renal",
       "title": "SGLT2 inhibitor — DKA awareness reminder",
       "description": "Patient on SGLT2 inhibitor: reminder to check sick-day rules and DKA risk awareness (including euglycaemic DKA).",
-      "source": "MHRA / Primary Care IT",
+      "source": "MHRA",
       "rule": {
         "type": "drug-combo",
         "enabled": true,
@@ -391,7 +391,7 @@
         "excludesProblem": [],
         "severity": "info",
         "notes": "MHRA Drug Safety Updates 2020–2024. SGLT2 inhibitors carry risk of euglycaemic DKA (blood glucose may be near-normal). Sick-day rules: withhold during acute illness, dehydration, surgery, or prolonged fasting. Counsel on symptoms of DKA. Annual eGFR monitoring via drug-monitoring rule (sglt2-inhibitor). This alert is an informational prompt — review sick-day rule education at each medication review.",
-        "source": "MHRA / Primary Care IT"
+        "source": "MHRA"
       }
     },
 
@@ -401,7 +401,7 @@
       "subcategory": "Teratogenicity",
       "title": "Isotretinoin in female of childbearing age",
       "description": "Isotretinoin (Roaccutane) in female aged 12–55 — Pregnancy Prevention Programme mandatory, initiated and managed by dermatology but GP must be aware.",
-      "source": "MHRA / Ardens",
+      "source": "MHRA",
       "rule": {
         "type": "drug-combo",
         "enabled": true,
@@ -425,7 +425,7 @@
       "subcategory": "QTc prolongation",
       "title": "Two or more QTc-prolonging drugs concurrent",
       "description": "Concurrent use of two or more drugs known to prolong the QT interval — additive risk of torsades de pointes.",
-      "source": "Primary Care IT",
+      "source": "UK Prescribing Safety",
       "rule": {
         "type": "drug-combo",
         "enabled": true,
@@ -439,7 +439,7 @@
         "excludesProblem": [],
         "severity": "amber",
         "notes": "Note: this rule will fire when any two drugs from the QTc list are co-prescribed, including the same drug in different formulations. Review the matchSummary in the chip to confirm these are genuinely two different QTc-prolonging agents. Consider ECG monitoring, especially if patient has hypokalaemia, bradycardia, or prior QTc prolongation.",
-        "source": "Primary Care IT / crediblemeds.org"
+        "source": "crediblemeds.org"
       }
     },
 
@@ -449,7 +449,7 @@
       "subcategory": "Infections",
       "title": "Recurrent UTI (≥3 in 12 months, female <65)",
       "description": "Female patient aged under 65 with 3 or more UTI / cystitis problems coded in the last 12 months — consider recurrent UTI workup.",
-      "source": "Ardens / NICE NG112",
+      "source": "NICE NG112",
       "rule": {
         "type": "event-count",
         "enabled": true,
@@ -464,7 +464,7 @@
         "sex": "F",
         "severity": "amber",
         "notes": "NICE NG112: consider recurrent UTI if ≥2 in 6 months or ≥3 in 12 months. Workup: MSU culture, urine dipstick, consider renal USS and referral. Low-dose antibiotic prophylaxis or vaginal oestrogen may be appropriate post-menopausally.",
-        "source": "NICE NG112 / Ardens"
+        "source": "NICE NG112"
       }
     },
 
@@ -474,7 +474,7 @@
       "subcategory": "Falls",
       "title": "Recurrent falls (≥2 in 12 months, ≥65)",
       "description": "Patient aged ≥65 with 2 or more falls coded in the last 12 months — consider multifactorial falls assessment.",
-      "source": "NICE CG161 / Ardens",
+      "source": "NICE CG161",
       "rule": {
         "type": "event-count",
         "enabled": true,
@@ -489,7 +489,7 @@
         "sex": "any",
         "severity": "amber",
         "notes": "NICE CG161: offer multifactorial falls assessment to older people with ≥2 falls or one fall with injury in 12 months. Review medications (particularly those causing hypotension, sedation), vision, balance, home hazards. Consider medication review, physiotherapy, and home assessment.",
-        "source": "NICE CG161 / Ardens"
+        "source": "NICE CG161"
       }
     },
 
@@ -517,7 +517,7 @@
       "subcategory": "Cancer screening",
       "title": "Rising PSA trend (≥3 readings, 24 months)",
       "description": "PSA values showing a rising trend across ≥3 readings in 24 months with a minimum delta of 1.0 ng/mL — consider urology referral.",
-      "source": "NICE NG12 / Primary Care IT",
+      "source": "NICE NG12",
       "rule": {
         "type": "qof-indicator",
         "enabled": true,

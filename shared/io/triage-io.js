@@ -20,8 +20,10 @@ async function triageImport(data, _opts = {}) {
   // so importing them used to wipe the user's current triage-lens settings.
   if (Object.keys(data.config).length === 0) return;
   await chrome.storage.local.set({ 'triagelens.config': data.config });
-  // Clean up legacy key from pre-1.x installs
-  chrome.storage.local.remove('config');
+  // Clean up legacy bare 'config' key from pre-1.x installs, but only if it
+  // actually exists — gating prevents removing a key some other module owns.
+  const existing = await chrome.storage.local.get('config');
+  if (existing.config !== undefined) await chrome.storage.local.remove('config');
 }
 
 if (typeof module !== 'undefined' && module.exports) {

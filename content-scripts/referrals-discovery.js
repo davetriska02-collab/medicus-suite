@@ -37,9 +37,9 @@
     if (!data || typeof data !== 'object') return false;
     // Referral list responses typically carry an array of records under a
     // well-known key, or are themselves an array.
-    if (Array.isArray(data)) return data.length >= 0;
+    if (Array.isArray(data)) return data.length > 0;
     const keys = Object.keys(data);
-    return keys.some(k => Array.isArray(data[k]) && !['priorityOptions','statusOptions'].includes(k));
+    return keys.some(k => Array.isArray(data[k]) && data[k].length > 0 && !['priorityOptions','statusOptions'].includes(k));
   }
 
   // ── Proactive data fetch using config values ────────────────────────────────
@@ -123,9 +123,14 @@
 
   // ── Capture from a seen URL ─────────────────────────────────────────────────
 
+  const inFlightUrls = new Set();
   async function captureUrl(url) {
+    if (inFlightUrls.has(url)) return;
+    inFlightUrls.add(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     try {
-      const r = await fetch(url, { credentials: 'include' });
+      const r = await fetch(url, { credentials: 'include', signal: controller.signal });
       if (!r.ok) return;
       const data = await r.json();
       if (isConfigResponse(data)) {
@@ -135,6 +140,9 @@
       }
     } catch (e) {
       console.warn('[Referrals Discovery] fetch failed:', url, e.message);
+    } finally {
+      clearTimeout(timer);
+      inFlightUrls.delete(url);
     }
   }
 

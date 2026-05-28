@@ -292,7 +292,9 @@
     }
 
     // Each drugSet must have at least one matching active medication
+    if (!rule.drugSets || rule.drugSets.length === 0) return [];
     const matchedPerSet = (rule.drugSets || []).map(set => {
+      if (!Array.isArray(set.match) || set.match.length === 0) return [];
       return meds.filter(m => {
         const n = norm(m.name);
         const excluded = (set.exclude || []).some(e => n.includes(norm(e)));
@@ -336,7 +338,11 @@
     // — which keeps event-count and observation-trend consistent with each
     // other but differs from drug-monitoring (which uses calendar daysBetween).
     // Boundary is inclusive: a record dated exactly at cutoffMs is in-window.
-    const windowMs      = (rule.windowMonths || 12) * 30.4375 * 24 * 60 * 60 * 1000;
+    // Reject 0/negative explicitly — a 0 window collapses to "now exactly", silently
+    // breaking the rule. Also reject NaN. Fall through to 12-month default for
+    // missing/non-numeric values.
+    const wm = Number(rule.windowMonths);
+    const windowMs      = (Number.isFinite(wm) && wm > 0 ? wm : 12) * 30.4375 * 24 * 60 * 60 * 1000;
     const nowMs         = new Date(now).getTime();
     const cutoffMs      = nowMs - windowMs;
     const matchTerms    = rule.match  || [];
@@ -375,6 +381,11 @@
     const count = items.length;
     const threshold = rule.countThreshold;
     const op = rule.operator;
+    const validOps = ['>=', '>', '=', '<=', '<'];
+    if (!validOps.includes(op)) {
+      console.warn(`[Sentinel] event-count rule "${rule.label || rule.id}" has unknown operator "${op}" — rule will never fire`);
+      return [];
+    }
     let fires = false;
     if (op === '>=') fires = count >= threshold;
     else if (op === '>')  fires = count >  threshold;

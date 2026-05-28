@@ -117,7 +117,11 @@ export async function init(el) {
   stalenessTimer = setInterval(() => {
     if (!container) return;
     const tsEl = container.querySelector('.ref-ts');
-    if (tsEl) tsEl.innerHTML = renderTimestampContent();
+    if (!tsEl) return;
+    tsEl.innerHTML = renderTimestampContent();
+    // Re-attach the click handler for the "Refresh?" button that re-renders
+    // when the timestamp transitions to a stale state.
+    tsEl.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   }, 60_000);
 
   const onChange = ch => {

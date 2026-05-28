@@ -222,7 +222,7 @@ async function switchModule(name) {
     }
   } catch (err) {
     if (mySeq !== switchSeq) return;
-    content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load module: ${err.message}</div></div>`;
+    content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load module: ${escStrip(err.message)}</div></div>`;
   }
 }
 
@@ -350,7 +350,10 @@ function renderAbout() {
         status.textContent = result.error || 'Check failed';
       } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
         status.style.color = 'var(--amber)';
-        status.innerHTML = `v${result.latestVersion} available — <a href="${result.releaseUrl}" target="_blank" style="color:var(--accent);">view release ↗</a>`;
+        // Validate releaseUrl is a github.com https URL before injecting (defends against
+        // a spoofed/poisoned GitHub API response that could deliver a javascript: URL).
+        const safeUrl = /^https:\/\/github\.com\//.test(result.releaseUrl || '') ? result.releaseUrl : '#';
+        status.innerHTML = `v${escStrip(result.latestVersion)} available — <a href="${escStrip(safeUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">view release ↗</a>`;
       } else {
         status.style.color = 'var(--green)';
         status.textContent = `v${installed} is up to date`;

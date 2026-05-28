@@ -293,7 +293,9 @@ async function scheduleRmAlarm(seconds) {
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === RM_ALARM) pollRequestMonitor();
+  if (alarm.name === RM_ALARM) {
+    pollRequestMonitor().catch(e => console.warn('[RM] poll failed:', e.message));
+  }
 });
 
 // Allowlist of user-config keys that should trigger a re-init.
@@ -375,6 +377,10 @@ async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
       priority: bucket.status === 'new-request' ? 2 : 1,
       requireInteraction: bucket.status === 'new-request',
       silent: !cfg.notifySound,
+    }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('[RM] notification create failed:', chrome.runtime.lastError.message);
+      }
     });
   }
 

@@ -37,6 +37,21 @@ function getEl(id) { return document.getElementById(id); }
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function escAttr(s) { return escHtml(s).replace(/"/g,'&quot;'); }
 
+// Returns the labels of composite rules that reference the given rule id, so
+// delete handlers can warn the user before silently breaking those composites.
+async function findCompositesReferencing(ruleId) {
+  const r = await chrome.storage.local.get('sentinel.customRules');
+  const all = r['sentinel.customRules'] || [];
+  return all
+    .filter(rule => rule.type === 'composite' && Array.isArray(rule.ruleIds) && rule.ruleIds.includes(ruleId))
+    .map(rule => rule.label || rule.id);
+}
+async function confirmDeleteWithRefs(ruleId, baseMsg) {
+  const refs = await findCompositesReferencing(ruleId);
+  if (refs.length === 0) return confirm(baseMsg);
+  return confirm(`${baseMsg}\n\nThis rule is referenced by ${refs.length} composite alert(s):\n• ${refs.join('\n• ')}\n\nThose composites will silently stop firing. Continue?`);
+}
+
 chrome.storage.local.get(['sentinel.config'], res => {
   const cfg = res['sentinel.config'] || {};
   BOOL_FIELDS.forEach(k => { const el = getEl(k); if (el) el.checked = cfg[k] !== false; });
@@ -189,7 +204,7 @@ async function renderCrList() {
   });
   list.querySelectorAll('.cr-delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Delete this custom rule?')) return;
+      if (!await confirmDeleteWithRefs(btn.dataset.id, 'Delete this custom rule?')) return;
       const r2 = await chrome.storage.local.get('sentinel.customRules');
       const arr = r2['sentinel.customRules'] || [];
       await chrome.storage.local.set({ 'sentinel.customRules': arr.filter(r => r.id !== btn.dataset.id) });
@@ -421,10 +436,21 @@ getEl('crImportFile')?.addEventListener('change', async (e) => {
     const res = await chrome.storage.local.get('sentinel.customRules');
     const existing = res['sentinel.customRules'] || [];
     const existingIds = new Set(existing.map(r => r.id));
-    const toAdd = incoming.filter(r => !existingIds.has(r.id));
-    await chrome.storage.local.set({ 'sentinel.customRules': [...existing, ...toAdd] });
+    const valid = [];
+    const rejected = [];
+    incoming.filter(r => !existingIds.has(r.id)).forEach((rule, i) => {
+      try {
+        if (typeof validateCustomRule === 'function') validateCustomRule(rule, i);
+        valid.push(rule);
+      } catch (e) {
+        rejected.push({ rule, err: e.message });
+      }
+    });
+    await chrome.storage.local.set({ 'sentinel.customRules': [...existing, ...valid] });
     renderCrList();
-    alert(`Imported ${toAdd.length} rule(s). ${incoming.length - toAdd.length} skipped (duplicate IDs).`);
+    let msg = `Imported ${valid.length} rule(s). ${incoming.length - valid.length - rejected.length} skipped (duplicate IDs).`;
+    if (rejected.length) msg += `\n${rejected.length} rejected as invalid:\n• ` + rejected.slice(0, 5).map(r => `${r.rule.label || r.rule.id || '(no id)'}: ${r.err}`).join('\n• ');
+    alert(msg);
   } catch (err) {
     alert('Import failed: ' + err.message);
   }
@@ -569,7 +595,7 @@ async function ciRenderList() {
     ciRenderList();
   }));
   list.querySelectorAll('.ci-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Delete this custom indicator?')) return;
+    if (!await confirmDeleteWithRefs(btn.dataset.id, 'Delete this custom indicator?')) return;
     const r2 = await chrome.storage.local.get('sentinel.customRules');
     const arr = r2['sentinel.customRules'] || [];
     await chrome.storage.local.set({ 'sentinel.customRules': arr.filter(r => r.id !== btn.dataset.id) });
@@ -928,8 +954,6 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
     if (!src) return 'other';
     const s = src.toUpperCase();
     if (s.includes('PINCER')) return 'pincer';
-    if (s.includes('ARDENS')) return 'ardens';
-    if (s.includes('PCIT') || s.includes('PRIMARY CARE IT')) return 'pcit';
     return 'other';
   }
 
@@ -953,7 +977,8 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
 
   function isAlreadyAdded(entry, existingKeys) {
     const titleKey = (entry.title || '').toLowerCase().trim();
-    return existingKeys.has(titleKey);
+    const labelKey = (entry.rule?.label || entry.rule?.indicatorName || '').toLowerCase().trim();
+    return existingKeys.has(titleKey) || (labelKey && existingKeys.has(labelKey));
   }
 
   async function renderLibrary() {
@@ -1039,6 +1064,13 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
     await chrome.storage.local.set({ 'sentinel.customRules': [...existing, rule] });
 
     showToast('Added — edit in the section below');
+
+    if (rule.type === 'composite') {
+      const hasPlaceholder = (rule.ruleIds || []).some(id => id.includes('replace-with'));
+      if (hasPlaceholder) {
+        setTimeout(() => showToast('⚠ Edit this composite to select your actual rules'), 1500);
+      }
+    }
 
     // Re-render library cards to mark as added
     await renderLibrary();
@@ -1209,7 +1241,7 @@ async function dcRenderList() {
     dcRenderList();
   }));
   list.querySelectorAll('.dc-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Delete this drug-combo alert?')) return;
+    if (!await confirmDeleteWithRefs(btn.dataset.id, 'Delete this drug-combo alert?')) return;
     const r2 = await chrome.storage.local.get('sentinel.customRules');
     const arr = r2['sentinel.customRules'] || [];
     await chrome.storage.local.set({ 'sentinel.customRules': arr.filter(r => r.id !== btn.dataset.id) });
@@ -1390,7 +1422,7 @@ async function ecRenderList() {
     ecRenderList();
   }));
   list.querySelectorAll('.ec-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-    if (!confirm('Delete this event-count alert?')) return;
+    if (!await confirmDeleteWithRefs(btn.dataset.id, 'Delete this event-count alert?')) return;
     const r2 = await chrome.storage.local.get('sentinel.customRules');
     const arr = r2['sentinel.customRules'] || [];
     await chrome.storage.local.set({ 'sentinel.customRules': arr.filter(r => r.id !== btn.dataset.id) });

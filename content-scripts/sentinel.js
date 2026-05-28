@@ -791,6 +791,8 @@
   // ============================================================
 
   function setupNavWatcher() {
+    if (window.__sentinelNavWatcherInstalled) return;
+    window.__sentinelNavWatcherInstalled = true;
     const titleObserver = new MutationObserver(() => debouncedRefresh());
     const titleEl = document.querySelector('title');
     if (titleEl) titleObserver.observe(titleEl, { childList: true });
@@ -854,20 +856,24 @@
   bootDataOnly();
 
   function bootDataOnly() {
+    if (window.__sentinelBootDataObserver) return;
     loadSettings(async () => {
       try {
         const rules = await loadRules();
         evaluateAndPublish(rules);
-        // Re-evaluate on URL changes inside the SPA
+        // Re-evaluate on URL changes inside the SPA. Single observer per page;
+        // the idempotency guard above prevents stacking on re-injection.
         let lastUrl = location.href;
-        new MutationObserver(() => {
+        const obs = new MutationObserver(() => {
           if (location.href !== lastUrl) {
             lastUrl = location.href;
             setTimeout(async () => {
               try { evaluateAndPublish(await loadRules()); } catch (e) {}
             }, 800);
           }
-        }).observe(document.body, { childList: true, subtree: true });
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        window.__sentinelBootDataObserver = obs;
       } catch (e) {}
     });
   }

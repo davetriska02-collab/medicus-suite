@@ -121,7 +121,7 @@
       ? `<span class="sent-custom-tag">Custom</span>`
       : (chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '');
     const pointsText = chip.points
-      ? ` · ${chip.points}pt`
+      ? ` · ${escHtml(String(chip.points))}pt`
       : '';
 
     // Hover-surface notes/source on custom chips

@@ -574,9 +574,21 @@ function daysBetween(a, b) { return Math.round((new Date(b+'T12:00:00')-new Date
 function formatDate(iso) { return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 function formatDateShort(iso) { return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'}); }
 function hourLabels() { return Array.from({length:24},(_,h)=>`${pad(h)}`); }
-function parseTime(str) { if (!str) return null; const m=str.match(/(\d{2}):(\d{2})$/); return m?parseInt(m[1],10):null; }
+function parseTime(str) {
+  if (!str) return null;
+  // ISO 8601: "2024-01-15T09:30:00Z" or "...+00:00" — pull hour after T
+  const iso = str.match(/T(\d{2}):\d{2}/);
+  if (iso) return parseInt(iso[1], 10);
+  // Legacy "DD Mon YYYY HH:MM"
+  const m = str.match(/(\d{2}):(\d{2})(?!.*\d)/);
+  return m ? parseInt(m[1], 10) : null;
+}
 function parseDate(str) {
   if (!str) return null;
+  // ISO 8601: "2024-01-15..." — first 10 chars are YYYY-MM-DD
+  const iso = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  // Legacy "DD Mon YYYY"
   const months={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
   const m=str.match(/^(\d{2})\s(\w{3})\s(\d{4})/);
   return m?`${m[3]}-${months[m[2]]}-${m[1]}`:null;

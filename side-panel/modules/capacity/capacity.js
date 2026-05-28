@@ -880,8 +880,11 @@ async function savePreset() {
     setKeys['capacity.activePresetId'] = preset.id;
   }
   selfWriteInProgress = true;
-  await chrome.storage.local.set(setKeys);
-  selfWriteInProgress = false;
+  try {
+    await chrome.storage.local.set(setKeys);
+  } finally {
+    selfWriteInProgress = false;
+  }
   Object.keys(state.data).forEach(d => delete state.data[d]);
   closeEditor();
 }
@@ -893,11 +896,14 @@ async function deletePreset() {
   const newActive = state.activePresetId === id ? (state.presets[0]?.id || null) : state.activePresetId;
   state.activePresetId = newActive;
   selfWriteInProgress = true;
-  await chrome.storage.local.set({
-    'capacity.presets': state.presets,
-    'capacity.activePresetId': newActive,
-  });
-  selfWriteInProgress = false;
+  try {
+    await chrome.storage.local.set({
+      'capacity.presets': state.presets,
+      'capacity.activePresetId': newActive,
+    });
+  } finally {
+    selfWriteInProgress = false;
+  }
   Object.keys(state.data).forEach(d => delete state.data[d]);
   closeEditor();
 }
