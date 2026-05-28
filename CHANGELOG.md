@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v2.0.2] — 2026-05-28
+### Fixed
+- Levothyroxine monitoring chip now correctly labels the test as **TSH** rather than **TFT**. The recorded value Medicus surfaces is the TSH number alone (full TFTs aren't routinely run for stable replacement), so the previous "TFT · 3.2" was misleading. Match terms still cover TSH/TFT/thyroid function so existing observations continue to be detected. Notes updated to reflect TSH-only monitoring per NICE NG145.
+
 ## [v2.0.1] — 2026-05-28
 ### Added
 - HRT monitoring chip now surfaces progestogen coverage context for oestrogen-triggered chips:

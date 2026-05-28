@@ -327,10 +327,10 @@
       },
       "phase": "maintenance",
       "tests": [
-        { "name": "TFT", "match": ["tft", "thyroid function", "tsh"], "snomed": ["166842003"], "intervalDays": 365, "dueSoonDays": 30 }
+        { "name": "TSH", "match": ["tsh", "thyroid stimulating hormone", "thyroid function", "tft"], "snomed": ["1022791000000101", "166842003"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "NICE NG145 / BTA guidance",
-      "notes": "Annual TFT once stable. More frequent during dose titration or in pregnancy.",
+      "notes": "Annual TSH once stable on levothyroxine. More frequent during dose titration or in pregnancy. TSH alone is sufficient for monitoring stable replacement; full TFTs only needed if TSH abnormal or symptoms.",
       "sharedCare": false
     },
     {
