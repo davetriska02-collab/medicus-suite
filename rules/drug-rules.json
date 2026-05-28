@@ -349,7 +349,13 @@
       ],
       "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
       "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have different monitoring (no systemic effects). LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) is included as it provides the progestogen component of HRT in perimenopausal women using systemic oestrogen.",
-      "sharedCare": false
+      "sharedCare": false,
+      "hrtContext": {
+        "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve"],
+        "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
+        "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
+        "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
+      }
     }
   ]
 }

@@ -61,6 +61,30 @@
     const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
     const customTag = isCustom ? `<span class="sent-custom-tag">Custom</span>` : '';
 
+    let hrtCtxHtml = '';
+    if (chip.hrtContext) {
+      const ctx = chip.hrtContext;
+      let ctxClass, ctxText;
+      if (ctx.hasHysterectomy) {
+        ctxClass = 'hrt-ctx-ok';
+        ctxText  = 'Hysterectomy — progestogen not required';
+      } else if (ctx.iusMed) {
+        ctxClass = 'hrt-ctx-ok';
+        // Show "IUS in situ" + brand name trimmed to first two words
+        const brand = ctx.iusMed.split(/\s+/).slice(0, 2).join(' ');
+        ctxText = `IUS in situ — ${escHtml(brand)}`;
+      } else if (ctx.progestogenMed) {
+        ctxClass = 'hrt-ctx-ok';
+        // Strip trailing dose (e.g. "Utrogestan 100mg capsules" → "Utrogestan")
+        const name = ctx.progestogenMed.replace(/\s+\d.*$/i, '').trim();
+        ctxText = `Progestogen: ${escHtml(name)}`;
+      } else {
+        ctxClass = 'hrt-ctx-warn';
+        ctxText  = 'No progestogen or hysterectomy recorded';
+      }
+      hrtCtxHtml = `<div class="sent-chip-hrt-ctx ${ctxClass}">${ctxText}</div>`;
+    }
+
     return `
       <div class="sent-chip sent-chip-${col}"${titleAttr}>
         <div class="sent-chip-head">
@@ -68,6 +92,7 @@
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         ${chip.drugClass ? `<div class="sent-chip-cat">${escHtml(chip.drugClass)}</div>` : ''}
+        ${hrtCtxHtml}
         ${testLines ? `<div class="sent-test-list">${testLines}</div>` : ''}
       </div>`;
   }

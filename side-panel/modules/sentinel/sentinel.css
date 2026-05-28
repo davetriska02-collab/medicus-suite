@@ -231,6 +231,18 @@
   text-transform: uppercase;
 }
 
+/* HRT progestogen context line */
+.sent-chip-hrt-ctx {
+  font-size: 10.5px;
+  font-family: var(--mono);
+  padding: 4px 0 2px;
+  margin-top: 3px;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.02em;
+}
+.hrt-ctx-ok   { color: var(--green); }
+.hrt-ctx-warn { color: var(--amber); }
+
 /* Custom rule tag on drug-monitoring chips */
 .sent-custom-tag {
   display: inline-block;

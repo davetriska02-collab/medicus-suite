@@ -104,6 +104,34 @@
     return m ? parseFloat(m[0]) : null;
   }
 
+  // === HRT PROGESTOGEN CONTEXT ===
+  // For oestrogen-triggered HRT chips, annotate with whether the patient has
+  // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
+  // at a glance whether progestogen coverage is documented or missing.
+  function buildHrtContext(hrtConfig, data) {
+    const norm = s => String(s || '').toLowerCase();
+    const meds     = data.medications || [];
+    const problems = data.problems    || [];
+
+    const hasHysterectomy = problems.some(p =>
+      (hrtConfig.hysterectomyTerms || []).some(t => norm(p.label).includes(norm(t)))
+    );
+
+    const iusMed = meds.find(m =>
+      (hrtConfig.iusTerms || []).some(t => norm(m.name).includes(norm(t)))
+    );
+
+    const progestogenMed = meds.find(m =>
+      (hrtConfig.progestogenTerms || []).some(t => norm(m.name).includes(norm(t)))
+    );
+
+    return {
+      hasHysterectomy,
+      iusMed:          iusMed          ? iusMed.name          : null,
+      progestogenMed:  progestogenMed  ? progestogenMed.name  : null,
+    };
+  }
+
   // === REGISTER MEMBERSHIP ===
   function patientOnRegister(problems, registerRule) {
     if (!Array.isArray(problems) || !registerRule.problemMatch) return null;
@@ -159,7 +187,7 @@
         return rankCurrent < rankWorst ? te.status : worst;
       }, 'in_date');
 
-      return {
+      const chip = {
         type: 'drug-monitoring',
         ruleId: rule.id,
         drugName: med.name,
@@ -171,6 +199,16 @@
         suppressedNoData,
         notes: rule.notes || null
       };
+
+      // HRT-specific: annotate oestrogen chips with progestogen coverage context.
+      // Only fires when the matched medication is an oestrogen (not the IUS or
+      // oral progestogen, which have their own chip when prescribed standalone).
+      if (rule.hrtContext && (rule.hrtContext.oestrogenTerms || []).some(
+          t => normaliseDrugString(med.name).includes(normaliseDrugString(t)))) {
+        chip.hrtContext = buildHrtContext(rule.hrtContext, data);
+      }
+
+      return chip;
     });
   }
 
