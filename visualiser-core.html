@@ -142,9 +142,10 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .bar-val{width:40px;font-size:11px;color:var(--text2)}
 /* Heatmap */
 .heatmap{display:grid;gap:3px}
-.hm-cell{border-radius:2px;cursor:default;transition:opacity .1s}
+.hm-cell{height:20px;border-radius:3px;cursor:default;transition:opacity .1s}
 .hm-cell:hover{opacity:.7}
 .hm-label{font-size:10px;color:var(--text2);text-align:center}
+.hm-legend{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
 /* Recall badges */
 .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
 .badge-red{background:#fde8e8;color:var(--nhs-red)}
@@ -155,6 +156,10 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .reg-card{background:var(--nhs-pale);border:1px solid var(--border);border-radius:var(--r);padding:12px}
 .reg-name{font-size:13px;font-weight:700;color:var(--nhs-blue);margin-bottom:4px}
 .reg-conds{font-size:11px;color:var(--text2);margin-bottom:6px}
+/* Condition summary cards */
+.cond-card{background:var(--nhs-pale);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.cond-value{font-size:24px;font-weight:700;color:var(--nhs-blue);line-height:1.1;font-variant-numeric:tabular-nums}
+.cond-target{font-size:11px;color:var(--text2)}
 /* Index card */
 .idx-card{text-align:center;padding:20px}
 .idx-pct{font-size:42px;font-weight:700;color:var(--nhs-blue);line-height:1}
