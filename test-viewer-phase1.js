@@ -75,8 +75,18 @@ assert(r.total === 3, 'diabetes + age 60 → total 3');
 r = computeCharlson([{ name: 'Type 2 diabetes mellitus' }, { name: 'Old stroke' }], [], '60');
 assert(r.comorbidityScore === 2, 'diabetes + stroke → comorbidityScore 2');
 
-r = computeCharlson([{ name: 'Metastatic breast carcinoma' }, { name: 'Breast cancer' }], [], '');
-assert(r.comorbidityScore === 6, 'metastatic + cancer → 6 (NOT 8, malignancy suppressed)');
+// Real-world single-problem metastatic cancer must be caught, and the lower
+// malignancy(2) tier suppressed so the score is 6, not 8.
+r = computeCharlson([{ name: 'Metastatic breast carcinoma' }], [], '');
+assert(r.comorbidityScore === 6, 'metastatic breast carcinoma → 6 (malignancy suppressed)');
+
+// ...but the benign non-cancer 'metastatic calcification' must NOT score.
+r = computeCharlson([{ name: 'Metastatic calcification' }], [], '');
+assert(r.items.every(it => it.label !== 'Metastatic solid tumour'), "'metastatic calcification' → no metastatic item");
+
+// Tightened HIV terms must NOT fire on 'HIV test requested' / 'HIV negative'.
+r = computeCharlson([{ name: 'HIV test requested' }], [], '');
+assert(r.items.every(it => it.label !== 'AIDS / HIV'), "'HIV test requested' → no AIDS/HIV item");
 
 r = computeCharlson([{ name: 'Family history of bowel cancer' }], [], '70');
 assert(r.comorbidityScore === 0, 'family history of cancer → comorbidityScore 0 (negation guard)');
@@ -87,6 +97,9 @@ assert(r.ageScore === 0 && r.ageKnown === false, "age '' → ageScore 0, ageKnow
 
 r = computeCharlson([], [], '49');
 assert(r.ageScore === 0, "age '49' → ageScore 0");
+
+r = computeCharlson([], [], '50');
+assert(r.ageScore === 1 && r.total === 1, "age '50' → ageScore 1, total 1");
 
 r = computeCharlson([], [], '80');
 assert(r.ageScore === 4, "age '80' → ageScore 4");

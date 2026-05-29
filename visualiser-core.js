@@ -186,7 +186,7 @@ const CHARLSON_WEIGHTS = [
   { id:'renal',       label:'Renal disease',             weight:2, terms:['chronic kidney disease','ckd stage','end stage renal','dialysis'] },
   { id:'malignancy',  label:'Malignancy',                weight:2, terms:['cancer','malignancy','carcinoma','lymphoma','leukaemia'] },
   { id:'metastatic',  label:'Metastatic solid tumour',   weight:6, terms:['metastatic','metastases','secondary malignancy'] },
-  { id:'aids',        label:'AIDS / HIV',                weight:6, terms:[' aids ','hiv'] },
+  { id:'aids',        label:'AIDS / HIV',                weight:6, terms:[' aids ','aids-defining','hiv infection','hiv positive','hiv disease','human immunodeficiency'] },
 ];
 
 // High-risk drugs (NICE / BNF / PINCER). For each: the names to detect, the
@@ -878,11 +878,13 @@ function computeDrugMonitoring(entries) {
 
 // Charlson Comorbidity Index from the coded problem list (active + past).
 // Keyword substring matching, with a negation guard to skip family-history /
-// "no evidence" / risk-only mentions. One interaction: a metastatic match
-// suppresses the lower-weight malignancy contribution (count 6, not 8). Age is
-// added by the standard decade banding (50→1 … 80+→4). Display-only; no
-// mortality mapping. Flags missing age rather than inventing it.
-const NEG_RE = /family history|fh of|no evidence|negative|screen|excluded|risk of|at risk/i;
+// "no evidence" / risk-only mentions, and non-cancer "metastatic calcification /
+// calcinosis" (which would otherwise match the weight-6 metastatic tier — no
+// Charlson category legitimately contains "calcification"). One interaction: a
+// metastatic match suppresses the lower-weight malignancy contribution (count 6,
+// not 8). Age is added by the standard decade banding (50→1 … 80+→4).
+// Display-only; no mortality mapping. Flags missing age rather than inventing it.
+const NEG_RE = /family history|fh of|no evidence|negative|screen|excluded|risk of|at risk|calcification|calcinosis/i;
 
 function computeCharlson(active, past, ageStr) {
   const all = [...(active||[]), ...(past||[])];
@@ -922,7 +924,7 @@ function computeCharlson(active, past, ageStr) {
 // conditions that carry a single trackable bloods/observation analyte are here;
 // every other register is already shown by the review-status grid in Recalls.
 const CONDITION_METRICS = {
-  dm:  { analyteTerms:['hba1c'],                    target:{ label:'≤58 mmol/mol', good:v=>v<=58 } },
+  dm:  { analyteTerms:['hba1c'],                    target:{ label:'≤58 mmol/mol', unit:/mmol/i, good:v=>v<=58 } },
   htn: { analyteTerms:['systolic blood pressure'],  target:{ label:'<140 systolic', good:v=>v<140 } },
   ckd: { analyteTerms:['egfr'],                     target:{ label:'monitor trend', good:null } },
 };
@@ -939,8 +941,12 @@ function computeConditionSummaries(registersWithReview, analytes) {
     const matches = keys.filter(k => metric.analyteTerms.some(t => k.toLowerCase().includes(t)));
     const key = matches.sort((a, b) => b.length - a.length)[0];
     let points = ((key && analytes[key]) || []).filter(p => p.date instanceof Date && !isNaN(p.date));
+    points.sort((a,b)=>a.date-b.date);
     const latest = points.length ? points[points.length - 1] : null;
-    const onTarget = (latest && metric.target.good) ? metric.target.good(Number(latest.value)) : null;
+    const v = latest ? Number(latest.value) : NaN;
+    const t = metric.target;
+    const unitOk = !t.unit || t.unit.test((latest && latest.unit) || '');
+    const onTarget = (latest && t.good && !isNaN(v) && unitOk) ? t.good(v) : null;
     out.push({
       reg,
       key: key || null,
@@ -1129,7 +1135,6 @@ function rebuildAll() {
   const contactableEntries = entries.filter(e => e.bucket === 'consultation');
   const upc  = computeUPC(clinicians, entries.length);
   const bice = computeBice(clinicians, entries.length);
-  const timeline   = computeTimeline(entries);
   const invData    = computeInvestigations(entries);
   const recalls    = computeRecalls(entries);
   const registers  = computeRegisters(_s.activeProblems, _s.pastProblems);
@@ -1205,7 +1210,7 @@ function buildSnapshot(d, entries, recalls, efi, pincer, drugs, charlson, regist
     ? `incl. age +${ch.ageScore}`
     : `<span style="color:var(--nhs-red)">age unknown — not age-adjusted</span>`;
   const condText = chItems.length
-    ? chItems.slice(0,4).map(it => esc(it.label)).join(' · ') + (chItems.length > 4 ? ` · +${chItems.length-4} more` : '')
+    ? chItems.slice(0,4).map(it => `<span title="${esc(it.evidence)}">${esc(it.label)}</span>`).join(' · ') + (chItems.length > 4 ? ` · +${chItems.length-4} more` : '')
     : 'No CCI-weighted conditions coded';
   const comorbidityHtml = `<div class="card">
     <div class="card-title">Comorbidity</div>
@@ -1618,7 +1623,7 @@ function renderContactsHeatmap(tl) {
     </div>`;
   }
 
-  const yearsPresent = cellKeys.map(c => c.year);
+  const yearsPresent = cellKeys.filter(c => (c.byBucket?.consultation || 0) > 0).map(c => c.year);
   const minYear = Math.min(...yearsPresent);
   const maxYear = Math.max(...yearsPresent);
 
@@ -1628,10 +1633,13 @@ function renderContactsHeatmap(tl) {
     for (let m = 0; m < 12; m++) max = Math.max(max, consultAt(y, m));
   }
   max = max || 1;
+  // Floor the quantisation denominator so a single contact isn't the darkest
+  // shade — a quiet patient's lone consult shouldn't read as a busy month.
+  const denom = Math.max(max, 5);
 
   const colourFor = v => {
-    if (v === 0) return 'var(--nhs-pale)';
-    const idx = Math.min(Math.ceil(v / max * 5) - 1, 4);
+    if (v === 0) return 'transparent';
+    const idx = Math.min(Math.ceil(v / denom * 5) - 1, 4);
     return HEAT_BLUES[idx];
   };
 
@@ -2159,7 +2167,7 @@ function renderConditionCards(summaries) {
   }).join('');
   return `<div class="card">
     <div class="card-title">Condition summaries</div>
-    <div class="cond-grid grid-3">${cards}</div>
+    <div class="grid-3">${cards}</div>
     <div style="font-size:10px;color:#768692;margin-top:8px">Latest tracked value from coded results — verify against the full record.</div>
   </div>`;
 }
