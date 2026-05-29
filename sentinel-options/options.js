@@ -940,6 +940,9 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
   const toast = getEl('libToast');
   const unlockBanner = getEl('libUnlockBanner');
   const unlockBtn = getEl('libUnlockBtn');
+  const addAllBar = getEl('libAddAllBar');
+  const addAllBtn = getEl('libAddAllBtn');
+  const addAllCount = getEl('libAddAllCount');
   if (!panel || !toggleBtn) return;
 
   const ACK_KEY = 'sentinel.alertLibrary.acknowledged';
@@ -1071,6 +1074,13 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
     body.querySelectorAll('.lib-add-btn:not(.added)').forEach(btn => {
       btn.addEventListener('click', () => addLibraryEntry(btn.dataset.libId));
     });
+
+    // Update "Add all" bar
+    const unadded = library.filter(e => e.rule && !isAlreadyAdded(e, existingKeys));
+    if (addAllBar) {
+      addAllBar.hidden = unadded.length === 0;
+      if (addAllCount) addAllCount.textContent = unadded.length > 0 ? `${unadded.length} not yet added` : '';
+    }
   }
 
   async function addLibraryEntry(libId) {
@@ -1129,10 +1139,42 @@ document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEv
     }
   }
 
+  async function addAllLibraryEntries() {
+    if (!acknowledged) { showToast('Acknowledge the alpha-feature notice first'); return; }
+    if (!libData) return;
+    const existingKeys = await getExistingRuleTitles();
+    const toAdd = (libData.library || []).filter(e => e.rule && !isAlreadyAdded(e, existingKeys));
+    if (toAdd.length === 0) { showToast('All alerts already added'); return; }
+
+    const res = await chrome.storage.local.get('sentinel.customRules');
+    const existing = res['sentinel.customRules'] || [];
+    const newRules = [];
+    for (const entry of toAdd) {
+      const rule = JSON.parse(JSON.stringify(entry.rule));
+      rule.id = `custom-${entry.libId}-${Date.now().toString(36)}`;
+      rule.enabled = true;
+      if (!rule.label && !rule.indicatorName) rule.label = entry.title;
+      rule._authored = { at: new Date().toISOString(), by: 'library', libId: entry.libId };
+      try {
+        if (typeof validateCustomRule === 'function') validateCustomRule(rule);
+        newRules.push(rule);
+      } catch (_) { /* skip invalid */ }
+    }
+    await chrome.storage.local.set({ 'sentinel.customRules': [...existing, ...newRules] });
+    showToast(`Added ${newRules.length} alert${newRules.length !== 1 ? 's' : ''} — edit in the sections below`);
+    await renderLibrary();
+    await renderCrList();
+    await ciRenderList();
+    await dcRenderList();
+    await ecRenderList();
+    await cmRenderList();
+  }
+
+  addAllBtn?.addEventListener('click', addAllLibraryEntries);
+
   function focusNewCard(listId, ruleId) {
     const card = document.querySelector(`#${listId} .cr-card[data-rule-id="${CSS.escape(ruleId)}"]`);
     if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       card.classList.add('flash');
       setTimeout(() => card.classList.remove('flash'), 1500);
     }
