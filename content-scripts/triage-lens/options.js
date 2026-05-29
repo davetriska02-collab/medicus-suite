@@ -516,9 +516,6 @@
     { id: 'queue.taskAgeAmber',  page: 'Queue',  desc: 'Task open ≥ taskAgeAmber but < taskAgeRed days',         vars: ['{days}'] },
     { id: 'queue.taskAgeRed',    page: 'Queue',  desc: 'Task open ≥ taskAgeRed days',                            vars: ['{days}'] },
     { id: 'queue.priority',      page: 'Queue',  desc: 'Task priority is High or Urgent',                        vars: ['{priority}'] },
-    { id: 'queue.readTime2m',    page: 'Queue',  desc: 'Request body roughly 2-minute read',                     vars: [] },
-    { id: 'queue.readTime5m',    page: 'Queue',  desc: 'Request body roughly 5-minute read',                     vars: [] },
-    { id: 'queue.readTime10m',   page: 'Queue',  desc: 'Request body 10+ minute read',                           vars: [] },
     // Detail
     { id: 'detail.statusAwaiting',      page: 'Detail', desc: 'Task status contains "awaiting"',                 vars: ['{status}'] },
     { id: 'detail.statusReplyReceived', page: 'Detail', desc: 'Task status is "reply received"',                 vars: ['{status}'] },
@@ -531,7 +528,6 @@
     { id: 'detail.today',               page: 'Detail', desc: 'Task created today',                              vars: [] },
     { id: 'detail.proxy',               page: 'Detail', desc: 'Request submitted by a non-self proxy',           vars: ['{relationship}'] },
     { id: 'detail.attachments',         page: 'Detail', desc: 'Request has one or more attachments',             vars: ['{count}'] },
-    { id: 'detail.readTime',            page: 'Detail', desc: 'Estimated read time of request body',             vars: ['{label}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },
