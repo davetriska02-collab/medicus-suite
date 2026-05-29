@@ -1272,11 +1272,18 @@
 
   // Cache the canonical drug-rules JSON across navigations (do not refetch).
   let _monitoringRulesCache = null;
-  // Token of the most recent injected monitoring chip, to dedupe re-injection.
-  let _monitoringChipToken = null;
+  // Last computed monitoring result + the token it belongs to, so a HUD
+  // re-render can re-paint the chip from cache (it lives outside the base
+  // template and would otherwise be wiped) without waiting for a refetch.
+  let _lastMonitoring = null; // { token, result|null }
   // Dynamic action lists for system chips whose actions are built at runtime
   // (keyed by the 'system:<id>' ruleId so findRuleById can resolve them).
   const _dynamicSysActions = {};
+  const MONITORING_CHIP_IDS = ['record.monitoringDueRed', 'record.monitoringDueAmber', 'detail.monitoringDueRed', 'detail.monitoringDueAmber'];
+  // Drop any retained per-patient monitoring note (clinical text must not
+  // outlive the patient it belongs to).
+  const clearMonitoringDynActions = () => { MONITORING_CHIP_IDS.forEach(k => { delete _dynamicSysActions['system:' + k]; }); };
+  const removeMonitoringChipEl = () => { hudEl?.querySelectorAll?.('.ch-monitoring-chip').forEach(el => el.remove()); };
 
   const loadMonitoringRules = async () => {
     if (_monitoringRulesCache) return _monitoringRulesCache;
@@ -1343,7 +1350,12 @@
   // Identity token captured before the await — pageType + best-effort patient
   // id/URL — so a result that resolves after the user navigated away (or to a
   // different patient) is discarded rather than injected against the wrong page.
-  const monitoringToken = () => pageType() + '|' + (lastPatientUrl || location.href);
+  // Patient-granular: fetchPatientData resolves the patient from location.href,
+  // so the full URL is the identity. (Do NOT use the sticky lastPatientUrl — it
+  // only updates on /care-record/ pages, so two different task-detail patients
+  // would otherwise alias to the same token and a slow fetch could paint the
+  // wrong patient's chip.)
+  const monitoringToken = () => pageType() + '|' + location.href;
 
   // Kick off the async monitoring computation after the synchronous HUD render.
   // Captures the page/patient token before awaiting; on resolve, discards if the
@@ -1351,11 +1363,29 @@
   // rendered HUD without a full re-render (deduped by ruleId).
   const runMonitoringChip = () => {
     const token = monitoringToken();
+    // Navigated to a different patient/page: drop the previous patient's cached
+    // result and any retained note before doing anything else.
+    if (_lastMonitoring && _lastMonitoring.token !== token) {
+      _lastMonitoring = null;
+      clearMonitoringDynActions();
+    }
+    // Re-paint instantly from cache for the same patient — the HUD was just
+    // rebuilt (innerHTML) and wiped the injected chip, so without this the chip
+    // flickers out until the (re)fetch resolves.
+    if (_lastMonitoring && _lastMonitoring.token === token && _lastMonitoring.result) {
+      injectMonitoringChip(_lastMonitoring.result);
+    }
     computeMonitoringChip().then(result => {
-      if (!result) return;
       // Staleness guard: page/patient changed while we were fetching.
       if (monitoringToken() !== token) { log('monitoring chip discarded (stale)'); return; }
-      injectMonitoringChip(result);
+      _lastMonitoring = { token, result };
+      if (result) {
+        injectMonitoringChip(result);
+      } else {
+        // No monitoring due for this patient now — clear any cached chip/note.
+        clearMonitoringDynActions();
+        removeMonitoringChipEl();
+      }
     }).catch(e => log('monitoring chip error', e));
   };
 
@@ -1396,7 +1426,6 @@
       showActionMenu(el, el.dataset.ruleId);
     });
     row.appendChild(el);
-    _monitoringChipToken = monitoringToken();
   };
 
   // ============================================================
