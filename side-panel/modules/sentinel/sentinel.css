@@ -275,7 +275,7 @@
 
 .sent-evidence-wrapper { margin: 0 0 8px 0; }
 .sent-evidence-panel {
-  background: var(--surface-2, #1c2130);
+  background: var(--bg-elev);
   border: 1px solid var(--border, #2a3146);
   border-radius: 6px;
   padding: 10px 12px;
@@ -315,7 +315,7 @@
 .sent-ev-detail { color: var(--text-3, #8a96aa); font-size: 11px; font-style: italic; }
 
 .sent-ev-sparkline {
-  background: var(--surface-1, #141826);
+  background: var(--bg-deep);
   border-radius: 4px;
   padding: 6px 8px;
   margin: 4px 0 10px 0;
@@ -354,7 +354,7 @@
   cursor: pointer;
   transition: background 100ms;
 }
-.sent-ev-ref:hover { background: var(--surface-3, #232a3f); }
+.sent-ev-ref:hover { background: var(--bg-hover); }
 .sent-ev-ref.fired { color: var(--text-1, #e2e8f0); }
 .sent-ev-ref-dot {
   display: inline-block;
@@ -382,4 +382,4 @@
   font-size: 11px;
   cursor: pointer;
 }
-.sent-ev-close:hover { background: var(--surface-3, #232a3f); }
+.sent-ev-close:hover { background: var(--bg-hover); }
