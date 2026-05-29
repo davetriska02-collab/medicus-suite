@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 1.8.1  
-**Document version:** 3.0  
-**Date issued:** 2026-05-22  
+**Product version:** 3.4.1  
+**Document version:** 3.1  
+**Date issued:** 2026-05-29  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
 **Status:** Live — reviewed at each minor or major release  
@@ -24,7 +24,7 @@ The log is intended to be read alongside:
 
 ## 2. Scope
 
-This hazard log applies to all functional modules of Medicus Suite v1.8.1, namely:
+This hazard log applies to all functional modules of Medicus Suite v3.4.1, namely:
 
 - **Monitoring (Sentinel)** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
 - **Slot Counter** — display of appointment slot availability
@@ -125,7 +125,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate — missed monitoring, eventually caught by Medicus's own workflows) |
 | **Initial likelihood** | 3 (Possible — curated rule set is intentionally a subset) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) Monitoring is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 213+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
+| **Controls / mitigations** | (a) Monitoring is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 230+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -201,7 +201,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 2 (Unlikely — CI gates) |
 | **Initial risk** | 6 |
-| **Controls / mitigations** | (a) The full automated test suite (213+ tests at v1.8.1) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
+| **Controls / mitigations** | (a) The full automated test suite (230+ tests at v3.4.1) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -386,10 +386,10 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 |-------|-------|
 | **Hazard ID** | H-016 |
 | **Description** | The Visualiser fails to surface a PINCER prescribing safety flag or a high-risk drug monitoring overdue indicator when one should be present — for example, a patient is taking an NSAID and has heart failure, or is on methotrexate with monitoring now overdue, but no flag appears in the Medications tab or Snapshot. |
-| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v1.8.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
+| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v3.4.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
 | **Affected users / components** | Clinicians using the Medications tab or Snapshot PINCER card. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`, `HIGH_RISK_DRUGS` constant, `PINCER_RULES` constant. |
 | **Initial severity** | 4 (Major — a clinically significant prescribing safety hazard is not surfaced) |
-| **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set at v1.8.1) |
+| **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set at v3.4.1) |
 | **Initial risk** | 12 |
 | **Controls / mitigations** | (a) The PINCER implementation is explicitly documented as a subset of the full PINCER tool — it is supplementary to Medicus's own prescribing safety systems, which remain the primary clinical safety gate. (b) The implemented PINCER rules and drug families are listed in `INTENDED-PURPOSE.md` and the known limitations section of the Clinical Safety Notice. (c) Absence of a PINCER flag is explicitly documented as not a guarantee of prescribing safety (Clinical Safety Notice section 7, limitation 13). (d) Drug-family regex is designed to capture common brand names and generic variants for each family, but cannot cover all possible nomenclature variants. (e) Medicus's own drug interaction and contraindication checking system operates independently of this extension. (f) Verification against the live Medicus record is required by the disclaimer before any clinical action. |
 | **Residual severity** | 4 |
@@ -418,6 +418,25 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-018 — Patient-identifiable data entered into the feedback email
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-018 |
+| **Description** | The in-app Feedback / feature request / bug report control composes an email to the developer via the user's own mail client. A user could type or paste patient-identifiable information (name, NHS number, date of birth, clinical detail) into the subject or body, causing it to be transmitted outside the authenticated Medicus session to the configured recipient inbox. |
+| **Potential causes** | User pastes record content to illustrate a bug; user describes a specific patient rather than the behaviour; misunderstanding that the channel is internal/anonymised. |
+| **Affected users / components** | The reporting user and any patient they reference; information-governance impact for the deploying practice. Components: `side-panel/panel.js` (feedback composer), Options › Suite (`suite.feedbackEmail` recipient). |
+| **Initial severity** | 4 (Major — confidentiality breach, but bounded: single known recipient, user-initiated, requires deliberate text entry) |
+| **Initial likelihood** | 2 (Unlikely) |
+| **Initial risk** | 8 |
+| **Controls / mitigations** | (a) The feedback form displays an explicit warning not to include patient-identifiable information (names, NHS numbers, dates of birth). (b) The extension auto-attaches only non-clinical diagnostics — suite version, browser user-agent, and timestamp; it never auto-includes any record data. (c) The email opens pre-filled in the user's own mail client and must be reviewed and sent manually — the extension transmits nothing itself and has no server endpoint (`mailto:` only). (d) The recipient address is configurable (Options › Suite), so a practice may direct feedback to an internal, IG-approved mailbox rather than an external one. (e) The Clinical Safety Notice instructs users that feedback must never contain patient data. |
+| **Residual severity** | 4 |
+| **Residual likelihood** | 1 |
+| **Residual risk** | 4 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. Any report received containing patient-identifiable data is to be deleted and the sender reminded of the rule. |
+
+---
+
 ## 6. Hazard summary
 
 | ID | Hazard | Initial S×L | Initial risk | Residual S×L | Residual risk | Status |
@@ -439,8 +458,9 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-015 | eFI score inaccuracy | 3×3 | 9 | 3×3 | 9 | Accepted (ALARP) |
 | H-016 | PINCER/drug-monitoring false-negative | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-017 | PINCER/drug-monitoring false-positive | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
+| H-018 | PID in feedback email | 4×2 | 8 | 4×1 | 4 | Accepted (ALARP) |
 
-No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v1.8.1 is approved by the Clinical Safety Officer on the basis of this hazard log.
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.4.1 is approved by the Clinical Safety Officer on the basis of this hazard log.
 
 ## 7. Review and reporting
 
@@ -464,12 +484,13 @@ If an incident meeting the threshold of a patient safety incident is identified,
 | 2026-05 | 1.0 | DT | Initial hazard log — limited distribution to named GP users |
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129 style; expanded to 12 hazards; added severity/likelihood matrix; added explicit acceptability thresholds; aligned with `CLINICAL-SAFETY-NOTICE.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; expanded scope to include Patient Record Visualiser; added H-013 (PDF staleness), H-014 (silent data omission), H-015 (eFI inaccuracy), H-016 (PINCER false-negative), H-017 (PINCER false-positive); updated H-007 to include Visualiser automation bias; updated test count to 213+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.0 |
+| 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added H-018 (patient-identifiable data in feedback email) following the new in-app feedback channel; updated test count to 230+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.1 |
 
 ## 9. Clinical Safety Officer sign-off
 
-I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v1.8.1, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.4.1, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-22
+**Date:** 2026-05-29

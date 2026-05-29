@@ -1,6 +1,6 @@
 # Medicus Suite — Intended Purpose Statement
 
-**Version:** 1.8.1  
+**Version:** 3.4.1  
 **Date:** May 2026  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Status:** Limited distribution — named clinical users only
@@ -9,7 +9,7 @@
 
 ## Software description
 
-Medicus Suite is a browser extension for Google Chrome that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional display overlays to the Medicus web interface. It does not install any software on clinical systems, does not write to any patient record, and does not transmit patient data outside the user's browser.
+Medicus Suite is a browser extension for Google Chrome that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional display overlays to the Medicus web interface. It does not install any software on clinical systems, does not write to any patient record, and does not transmit patient data outside the user's browser. The suite also provides an in-app feedback channel that composes an ordinary email via the user's own mail client; it transmits no patient data and auto-attaches only the suite version, browser, and timestamp.
 
 The extension comprises the following functional modules:
 

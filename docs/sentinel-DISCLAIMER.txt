@@ -357,3 +357,23 @@ Custom clinical indicators authored through the form builder remain within the s
 Custom indicators are not QOF indicators. They do not constitute QOF achievement and must not be relied upon for QOF income claims. They are labelled visually as Custom and their points field (if set) is metadata only; it does not contribute to any QOF total in the UI. User-authored thresholds may diverge from any published guideline. The clinician retains responsibility for verifying the threshold and for verifying every displayed value against the source patient record before taking any clinical action.
 
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
+
+
+--- v3.4.1 addendum ---
+
+This addendum records the state of the software at Medicus Suite v3.4.1. The
+suite has expanded since earlier addenda to include the modules described in
+INTENDED-PURPOSE.md and HAZARD-LOG.md (Monitoring, Slot Counter, Capacity
+Forecast, Submissions, Activity, Referrals Tracker, Triage Lens, Waiting Room /
+Request Monitor, and the Patient Record Visualiser).
+
+v3.4.0 / v3.4.1 add an in-app feedback channel (a "Feedback / feature request /
+bug report" control) that composes an ordinary email to the developer using the
+user's own mail client. The feature transmits nothing automatically and runs no
+server endpoint; it auto-attaches only the suite version, the browser
+identification string, and a timestamp. It never includes patient-record data.
+Users must not enter patient-identifiable information into feedback. The
+recipient address is configurable so a practice may direct feedback to an
+internal, information-governance-approved mailbox. This addendum does not alter
+the nature of the software, its intended purpose, or any data-handling
+characteristic described above; it is a clarification only.

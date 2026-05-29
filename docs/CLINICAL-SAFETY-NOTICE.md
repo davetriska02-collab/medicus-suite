@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 1.8.1  
-**Document version:** 3.0  
-**Date issued:** 2026-05-22  
+**Product version:** 3.4.1  
+**Document version:** 3.1  
+**Date issued:** 2026-05-29  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -124,7 +124,7 @@ The user and the deploying practice must understand and accept the following kno
 10. **The Visualiser operates on a PDF snapshot, not the live record.** Clinical information may have changed since the PDF was exported. The export date is displayed; users must ensure they are working from a current export.
 11. **PDF parsing completeness is not guaranteed.** Entries rendered as images, in certain font types, or in non-standard Medicus export layouts may not be extracted. Entry counts are displayed so users can detect implausibly low figures.
 12. **The eFI score is an approximation.** It is computed by matching problem-list text against a 36-deficit reference list using substring matching. It is not equivalent to the eFI as calculated by GP clinical systems from SNOMED-coded data. Both under- and over-estimation of frailty are possible. It is a screening aid only.
-13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E at v1.8.1). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
+13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E at v3.4.1). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
 14. **Drug detection is regex-based.** High-risk drug and PINCER drug detection works by text-matching PDF content. Brand names or abbreviated entries not in the implemented regex may be missed.
 15. **High-risk drug monitoring intervals are defaults from NICE/BNF guidance.** They do not account for patient-specific monitoring plans, clinician-directed variation, or local protocol modifications.
 16. **RCV delta flags are based on published reference change values.** They indicate statistically significant analytical change, not clinical significance in any individual patient's context.
@@ -203,7 +203,7 @@ The CSO will:
 | Item | Mechanism |
 |------|-----------|
 | **Versioning** | Semantic versioning (`MAJOR.MINOR.PATCH`) recorded in `manifest.json` and surfaced in the Options page, popup and side panel. |
-| **Release gating** | GitHub Actions release workflow runs the full automated test suite (213+ tests at v1.8.1) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
+| **Release gating** | GitHub Actions release workflow runs the full automated test suite (230+ tests at v3.4.1) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
 | **Changelog** | Every release is documented in `CHANGELOG.md` including any safety-relevant change. |
 | **Auto-update notification** | The extension checks `api.github.com` once a day and surfaces a banner in the Options page when a newer version exists. The user controls when to install the update. |
 | **Hazard log review** | Reviewed at every minor or major release; recorded in `docs/HAZARD-LOG.md` section 8. |
@@ -228,6 +228,7 @@ By installing or using Medicus Suite the user confirms that:
 4. They will verify every value the extension displays against the Medicus record before taking any clinical action that depends on the value.
 5. They retain full and undivided clinical responsibility for every decision they make about every patient.
 6. They will cease use and report promptly under section 10 in the event of any suspected anomaly.
+7. **Never include patient-identifiable information in feedback.** The in-app feedback / bug-report channel composes an ordinary email to the developer; it must never contain patient names, NHS numbers, dates of birth, or any clinical detail that could identify a patient. The extension itself transmits no record data — only the suite version, browser, and timestamp are attached automatically.
 
 If the user does not accept these terms, **they must not install the extension**.
 
@@ -248,12 +249,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v1.8.1; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.4.1; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-22
+**Date:** 2026-05-29
 
 ---
 
@@ -264,6 +265,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 | 2026-05 | 1.0 | DT | Initial Clinical Safety Notice — limited distribution |
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129/0160-style structure; added intended user roles; added explicit DOES / DOES NOT sections; added deploying-organisation responsibilities; added incident classification table; added sign-off forms; aligned with `HAZARD-LOG.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; added Patient Record Visualiser to intended purpose, DOES, DOES NOT, and known limitations; added Visualiser-specific safety conditions; expanded known limitations to 17 items; updated test count; aligned with `HAZARD-LOG.md` v3.0 |
+| 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added user instruction on the feedback channel (no patient data in feedback) |
 
 ---
 
