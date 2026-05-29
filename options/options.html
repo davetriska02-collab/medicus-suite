@@ -111,6 +111,16 @@
     }
     button.primary:hover { background: rgba(74,127,184,0.3); }
 
+    button.ghost {
+      background: transparent;
+      border: 1px solid var(--border); color: var(--text-3);
+      font-family: var(--mono); font-size: 11px;
+      font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; border-radius: 8px; padding: 10px 18px;
+      transition: all 0.15s;
+    }
+    button.ghost:hover { border-color: var(--border-hi); color: var(--text-2); background: var(--bg-hover); }
+
     .saved {
       color: #4ade80; font-family: var(--mono); font-size: 11px;
       letter-spacing: 0.06em; opacity: 0; transition: opacity 0.3s;

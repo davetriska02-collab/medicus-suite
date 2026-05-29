@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.2.4] — 2026-05-29
+### Fixed — "Test connection" and "Check for updates" button styling
+- Both buttons used a `.ghost` class that had no base CSS definition in `options/options.html`, causing the browser to render them as unstyled system buttons that clashed with the rest of the UI. Added a proper `button.ghost` rule matching the same font, weight, letter-spacing, border-radius, and padding family as `button.primary`. (`options/options.html`)
+
 ## [v3.2.3] — 2026-05-29
 ### Fixed / improved — alert library UX
 - Added **"+ Add all"** button at the top of the alert library body. Shows a count of unadded entries; hides itself once everything has been added. (`sentinel-options/options.html`, `sentinel-options/options.js`)
