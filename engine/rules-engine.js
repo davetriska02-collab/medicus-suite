@@ -19,12 +19,21 @@
   // recently_initiated: drug started recently, no monitoring expected yet
   // achieved: indicator met
   // in_date: drug monitoring within interval
+  //
+  // Non-time-based statuses (drug-combo / event-count / composite alerts that
+  // fire on presence/count/threshold rather than a recall interval). These ride
+  // alongside the time-based ranks so they sort and filter consistently:
+  // alert (red) ranks with overdue, caution (amber) with due_soon, noted (info)
+  // is neutral.
   const STATUS_RANK = {
     overdue: 0,
     not_met: 0,
+    alert: 0,
     stale: 1,
     due_soon: 2,
+    caution: 2,
     no_data: 3,
+    noted: 3,
     recently_initiated: 4,
     achieved: 5,
     in_date: 5
@@ -155,7 +164,8 @@
   const STATUS_PHRASE = {
     overdue: 'overdue', not_met: 'not met', stale: 'severely overdue',
     due_soon: 'due soon', no_data: 'no data', recently_initiated: 'recently initiated',
-    achieved: 'in date', in_date: 'in date'
+    achieved: 'in date', in_date: 'in date',
+    alert: 'alert', caution: 'caution', noted: 'noted'
   };
 
   function fmt(v) { return v == null || v === '' ? '—' : String(v); }
@@ -433,13 +443,17 @@
   }
 
   // === SEVERITY → STATUS MAPPING ===
-  // Maps the user-facing severity field on custom rules to the STATUS_RANK keys
-  // used throughout the engine. "red" is the worst (overdue), "amber" is due_soon,
-  // "info" is in_date (neutral/informational).
+  // Maps the user-facing severity field on custom rules to status keys. Used by
+  // the non-time-based rule types (drug-combo, event-count, composite) which fire
+  // on presence / count / threshold, not on a recall interval. These must NOT
+  // borrow the time-based vocabulary (OVERDUE / DUE SOON / IN DATE) — for a QTc
+  // drug combination or a UTI count, nothing is "due" or "overdue". Instead they
+  // map to alert / caution / noted, which carry the same red / amber / neutral
+  // colour and ranking but read correctly for a flag.
   function severityToStatus(severity) {
-    if (severity === 'red')   return 'overdue';
-    if (severity === 'amber') return 'due_soon';
-    return 'in_date';
+    if (severity === 'red')   return 'alert';
+    if (severity === 'amber') return 'caution';
+    return 'noted';
   }
 
   // === AGE / SEX PATIENT FILTERS (shared by drug-combo and event-count) ===

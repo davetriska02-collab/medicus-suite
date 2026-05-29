@@ -261,6 +261,32 @@ console.log('\n--- defaultDueSoonDays ---');
   assert(defaultDueSoonDays(7)   <= 30, 'defaultDueSoonDays: 1 week is sane');
 }
 
+// ── severityToStatus: non-time-based alert statuses ──────────────────────────
+// drug-combo / event-count / composite alerts fire on presence/count/threshold,
+// not on a recall interval, so they must NOT show the time-based vocabulary
+// (OVERDUE / DUE SOON / IN DATE). They map to alert / caution / noted instead.
+
+console.log('\n--- severityToStatus (non-time-based alerts) ---');
+
+{
+  assert(engine.severityToStatus('red')   === 'alert',   'severityToStatus: red -> alert (not overdue)');
+  assert(engine.severityToStatus('amber') === 'caution', 'severityToStatus: amber -> caution (not due_soon)');
+  assert(engine.severityToStatus('info')  === 'noted',   'severityToStatus: info -> noted (not in_date)');
+  assert(engine.severityToStatus(undefined) === 'noted', 'severityToStatus: default -> noted');
+
+  // Labels read correctly and carry the right colour
+  assert(chipRenderer.STATUS_LABEL.alert   === 'ALERT',   'STATUS_LABEL: alert -> ALERT');
+  assert(chipRenderer.STATUS_LABEL.caution === 'CAUTION', 'STATUS_LABEL: caution -> CAUTION');
+  assert(chipRenderer.STATUS_LABEL.noted   === 'NOTED',   'STATUS_LABEL: noted -> NOTED');
+  assert(chipRenderer.STATUS_COLOUR.alert   === 'red',     'STATUS_COLOUR: alert -> red');
+  assert(chipRenderer.STATUS_COLOUR.caution === 'amber',   'STATUS_COLOUR: caution -> amber');
+  assert(chipRenderer.STATUS_COLOUR.noted   === 'neutral', 'STATUS_COLOUR: noted -> neutral');
+
+  // Ranking keeps alerts sorting with their time-based colour-peers
+  assert(engine.STATUS_RANK.alert   === engine.STATUS_RANK.overdue,  'STATUS_RANK: alert ranks with overdue');
+  assert(engine.STATUS_RANK.caution === engine.STATUS_RANK.due_soon, 'STATUS_RANK: caution ranks with due_soon');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

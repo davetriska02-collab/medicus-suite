@@ -119,13 +119,23 @@
       cursor: pointer; border-radius: 8px; padding: 10px 18px;
       transition: all 0.15s;
     }
-    button.ghost:hover { border-color: var(--border-hi); color: var(--text-2); background: var(--bg-hover); }
+    button.ghost:hover { border-color: var(--border-hi); color: var(--text-2); background: var(--bg-mid); }
 
     .saved {
       color: #4ade80; font-family: var(--mono); font-size: 11px;
       letter-spacing: 0.06em; opacity: 0; transition: opacity 0.3s;
     }
     .saved.show { opacity: 1; }
+
+    /* Clinical Safety document links */
+    .safety-doc-link {
+      display: block; text-decoration: none;
+      background: var(--bg-elev); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px; transition: all 0.15s;
+    }
+    .safety-doc-link:hover { border-color: var(--border-hi); background: var(--bg-mid); }
+    .safety-doc-title { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 3px; }
+    .safety-doc-desc { display: block; font-size: 11px; color: var(--text-4); line-height: 1.5; }
 
     .iframe-section { margin-top: 8px; }
     .iframe-section iframe {
@@ -292,6 +302,7 @@
       <button class="nav-item" data-section="submissions">Submissions</button>
       <button class="nav-item" data-section="sentinel">Monitoring</button>
       <button class="nav-item" data-section="triage">Triage Lens</button>
+      <button class="nav-item" data-section="safety">Clinical Safety</button>
       <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
       <button class="nav-item" data-section="debug">Debug</button>
     </nav>
@@ -508,6 +519,60 @@
         <p class="section-desc">Triage Lens keyword rules and display settings.</p>
         <div class="iframe-section">
           <iframe id="triageFrame" src="../content-scripts/triage-lens/options.html" title="Triage Lens settings"></iframe>
+        </div>
+      </section>
+
+      <!-- Clinical Safety section -->
+      <section class="opt-section" id="sect-safety">
+        <h1>Clinical Safety</h1>
+        <p class="section-desc">What this software is, what it isn't, and the clinical safety documentation behind it. Please read before relying on any output.</p>
+
+        <!-- Limitations / best-effort notice -->
+        <div style="background: rgba(180,83,9,0.08); border: 1px solid rgba(180,83,9,0.35); border-radius: 10px; padding: 16px 18px; margin-bottom: 24px; line-height: 1.6;">
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="font-size:20px; line-height:1; color:var(--amber, #b45309); flex-shrink:0; margin-top:1px;">&#9888;</div>
+            <div style="flex:1; font-size:12px; color:var(--text-2);">
+              <div style="font-weight:700; font-size:13px; color:var(--text-1); margin-bottom:8px;">Please read &mdash; the honest version</div>
+              <p style="margin:0 0 10px;">
+                This software is built, maintained, and released by a <strong>single GP developer</strong> as a personal project,
+                on a <strong>best-effort basis</strong>. I maintain a clinical safety case &mdash; an intended-purpose statement,
+                a hazard log, and a clinical safety notice (all linked below) &mdash; and do my honest best to identify and mitigate
+                risks. But this is <strong>not a commercially assured medical device</strong> and it comes with <strong>no warranty</strong>.
+              </p>
+              <p style="margin:0 0 10px;">
+                It is a <strong>supplementary aid</strong> that re-organises and surfaces information already in the Medicus record.
+                It does not make clinical decisions, does not constitute clinical decision support, and is <strong>not a substitute
+                for your own clinical judgement or for the live patient record</strong>. Every value it displays must be verified
+                against the source record before you act on it.
+              </p>
+              <p style="margin:0;">
+                Use it at your own discretion and risk. If you are not comfortable with these terms, please do not use it.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Document links -->
+        <h2 style="font-size:13px; font-weight:600; color:var(--text-1); margin:0 0 4px;">Clinical safety case documents</h2>
+        <p class="field-help" style="margin-bottom:14px;">The full documents live in the public repository and are regenerated weekly from the current codebase, so they always reflect the latest release.</p>
+
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/INTENDED-PURPOSE.md" target="_blank" rel="noopener noreferrer">
+            <span class="safety-doc-title">Intended Purpose ↗</span>
+            <span class="safety-doc-desc">What the software is for, and what it is explicitly not for.</span>
+          </a>
+          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/CLINICAL-SAFETY-NOTICE.md" target="_blank" rel="noopener noreferrer">
+            <span class="safety-doc-title">Clinical Safety Notice ↗</span>
+            <span class="safety-doc-desc">Required reading: conditions of safe use, known limitations, and the single most important rule.</span>
+          </a>
+          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/HAZARD-LOG.md" target="_blank" rel="noopener noreferrer">
+            <span class="safety-doc-title">Hazard Log ↗</span>
+            <span class="safety-doc-desc">Identified hazards, their controls/mitigations, and residual risk assessment.</span>
+          </a>
+          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/sentinel-DISCLAIMER.txt" target="_blank" rel="noopener noreferrer">
+            <span class="safety-doc-title">Full Disclaimer &amp; Terms ↗</span>
+            <span class="safety-doc-desc">The binding terms of use. In any conflict, the disclaimer prevails.</span>
+          </a>
         </div>
       </section>
 

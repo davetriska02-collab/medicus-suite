@@ -602,9 +602,12 @@
     const parts = [];
     if (counts.not_met) parts.push(`<span class="sum-bad">${counts.not_met} not met</span>`);
     if (counts.overdue) parts.push(`<span class="sum-bad">${counts.overdue} overdue</span>`);
+    if (counts.alert) parts.push(`<span class="sum-bad">${counts.alert} alert</span>`);
     if (counts.stale) parts.push(`<span class="sum-warn">${counts.stale} severely overdue</span>`);
     if (counts.due_soon) parts.push(`<span class="sum-warn">${counts.due_soon} due soon</span>`);
+    if (counts.caution) parts.push(`<span class="sum-warn">${counts.caution} caution</span>`);
     if (counts.no_data) parts.push(`<span class="sum-meh">${counts.no_data} no data</span>`);
+    if (counts.noted) parts.push(`<span class="sum-meh">${counts.noted} noted</span>`);
     if (counts.achieved) parts.push(`<span class="sum-good">${counts.achieved} achieved</span>`);
     if (counts.in_date) parts.push(`<span class="sum-good">${counts.in_date} in date</span>`);
     if (counts.recently_initiated) parts.push(`<span class="sum-meh">${counts.recently_initiated} new</span>`);
@@ -844,7 +847,8 @@
     const map = {
       overdue: 'OVERDUE', stale: 'SEVERELY OVERDUE', due_soon: 'DUE SOON',
       no_data: 'NO DATA', recently_initiated: 'NEW', in_date: 'IN DATE',
-      achieved: 'MET', not_met: 'NOT MET'
+      achieved: 'MET', not_met: 'NOT MET',
+      alert: 'ALERT', caution: 'CAUTION', noted: 'NOTED'
     };
     return map[status] || String(status).toUpperCase();
   }
