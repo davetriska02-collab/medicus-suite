@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.7.0] — 2026-05-29
+### Added — Triage Lens document task lens
+- The Triage Lens HUD now correctly extracts context from document task pages (`/tasks/data/document/overview/{UUID}`), which have a different card layout to regular tasks. (`content-scripts/triage-lens/content.js`)
+- Introduced `isDocumentTask()` (URL test) and `extractDocumentTaskInfo()` which reads the four relevant `.m-card` elements: "Task Overview" (status/priority/created), "Document Details" (type/date/author/specialty), "Codes & Actions" (GP-coded items), and "Internal Comments" (admin routing notes).
+- `runDetail` now branches on `isDocumentTask()`: document tasks use the new extractor to build `taskDetails` and `initialReq` from document metadata + internal comments + coded items; regular tasks continue to use the existing `extractTaskDetails` / `extractInitialRequest` path.
+- Two new system chips — `detail.docType` (document type, e.g. "Clinical letter") and `detail.docSpecialty` (clinical specialty or sender) — are surfaced on document task HUDs, configurable in Options › System chips. (`content-scripts/triage-lens/defaults.json`, `content-scripts/triage-lens/options.js`)
+- `pageReady` now also waits for the "Task Overview" card so document task pages are not polled prematurely.
+
+## [v3.6.0] — 2026-05-29
+### Added — Triage Lens "Monitoring due" overlay chip
+- The Triage Lens HUD now surfaces a configurable **"Monitoring due"** chip on single-patient views (record / detail only — never the queue), flagging high-risk-drug monitoring that is overdue, severely overdue, or due soon, with what tests and how overdue. Click the chip for a per-drug breakdown. (`content-scripts/triage-lens/content.js`)
+- The chip reuses the **Sentinel drug-monitoring engine** end to end: it calls `window.SentinelDataFetcher.fetchPatientData` and `window.SentinelRules.evaluatePatient` against the canonical `rules/drug-rules.json` and computes nothing clinical itself — it only filters the engine's `drug-monitoring` chips (status `overdue`/`stale`/`due_soon`) and formats them. Red when anything is overdue/severely overdue, amber when only due-soon.
+- Toggleable per page/severity via four new system chips (`record`/`detail` × Red/Amber) that appear in **Options › System chips** with enable toggles; disabling a chip stops it fetching. (`content-scripts/triage-lens/defaults.json`, `content-scripts/triage-lens/options.js`)
+- **Safety:** the chip is decision-support only — it reflects the rules engine's computed statuses from real observation data, ends every detail listing with "Decision support — verify against the record.", and emits NO chip if Sentinel is unavailable, the fetch fails, or there is no usable data (never a false "all clear", never a false "overdue"). An async staleness guard discards any result whose patient/page changed during the fetch, so a chip is never shown against the wrong patient.
+## [v3.5.0] — 2026-05-29
+### Added — Patient-record viewer LTC features
+- **Monitoring-due card (Snapshot)**: surfaces high-risk drugs whose monitoring is overdue, with the required tests and the last monitoring date — showing "No record" in red where none is held (never invented) — or a green "all up to date" when nothing is due. (`visualiser-core.js`, `visualiser-core.html`)
+- **Contacts calendar heatmap (Timeline)**: a year × month grid of dated consultation contacts using a colour-blind-safe single-hue Blues ramp, native cell tooltips, a legend, and an empty state; reuses the existing `computeTimeline` aggregation. (`visualiser-core.js`, `visualiser-core.html`)
+- **Multimorbidity + Charlson Comorbidity Index (Snapshot)**: a Comorbidity card showing the LTC-register count and a flat-weight Charlson index (with the standard decade age banding and a negation guard against family-history / "no evidence" mentions); flags "age unknown" rather than assuming an age. (`visualiser-core.js`, `visualiser-core.html`)
+- **Condition summary cards (Recalls)**: per-register cards for analyte-bearing conditions (diabetes/HbA1c, hypertension/systolic BP, CKD/eGFR) showing the latest tracked value, a mini-trend sparkline, the target, an on/off-target chip, and a shared review-due badge — or "no recent value" when no dated result exists. (`visualiser-core.js`, `visualiser-core.html`)
+- Safety: all four features are deterministic and keyword-derived display-only decision-support; they flag missing inputs ("No record" / "no recent value" / "age unknown") instead of inventing clinical values, and the Charlson index carries no mortality-percentage mapping.
+
 ## [v3.4.2] — 2026-05-29
 ### Changed — Slots page number polish
 - Aligned the Slots module's numeric styling with the rest of the suite: `font-variant-numeric: tabular-nums` is now set on every numeric class (hero total, AM/PM chips, per-type and per-clinician breakdowns), so digits sit in fixed-width columns. (`side-panel/modules/slots/slots.css`)
