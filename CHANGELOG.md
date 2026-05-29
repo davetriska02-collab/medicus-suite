@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.2.2] — 2026-05-29
+### Fixed — subRagPollTimer declaration hygiene (panel.js)
+
+**side-panel/panel.js:**
+- `subRagPollTimer` was declared and assigned inline as
+  `let subRagPollTimer = setInterval(...)`, skipping the null-init pattern used
+  by `wrPollTimer` and `rmPollTimer`. Changed to `let subRagPollTimer = null`
+  followed by a separate assignment so the declaration is consistent with the other
+  two strip timers and is safely accessible by the existing `pagehide` cleanup
+  handler.
+
+## [v3.2.1] — 2026-05-29
+### Fixed — strip timer cleanup and redundant storage write in applyEnvelope
+
+**side-panel/panel.js — strip poll timer hygiene:**
+- Added `clearInterval` guard before each boot-time `setInterval` assignment for
+  `wrPollTimer` and `rmPollTimer` (prevents orphaned intervals if the boot path is
+  ever re-entered; `rmPollTimer` already had the same guard inside its poll function
+  for config-change reassignment, now consistent at the boot site too).
+- Added a `pagehide` listener that clears all three global strip timers
+  (`wrPollTimer`, `rmPollTimer`, `subRagPollTimer`) on page unload — they were
+  previously started but never explicitly stopped.
+
+**options/options.js — remove raw `suite.practiceCode` write in applyEnvelope:**
+- Removed the direct `chrome.storage.local.set({ 'suite.practiceCode': ... })` line
+  from `applyEnvelope()`. `submissionsImport()` (in `shared/io/submissions-io.js`)
+  already owns and restores this key when `data.practiceCode` is present, so the
+  hard-coded write was redundant and violated the IO-delegation convention in CLAUDE.md.
+
 ## [v3.2.0] — 2026-05-28
 ### Added — chip provenance (click-to-see-evidence)
 Side-panel sentinel chips are now clickable and surface the exact data the rules

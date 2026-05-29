@@ -499,6 +499,7 @@ chrome.runtime.onMessage.addListener(msg => {
 
 // Boot the strip — initial fetch + poll
 fetchAndRenderStrip();
+if (wrPollTimer) clearInterval(wrPollTimer);
 wrPollTimer = setInterval(fetchAndRenderStrip, WR_POLL_MS);
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
@@ -641,6 +642,7 @@ chrome.storage.onChanged.addListener(changes => {
 // Boot the rm strip
 fetchAndRenderRmStrip();
 // Initial poll interval — will adjust to cfg.pollSeconds on first fetch
+if (rmPollTimer) clearInterval(rmPollTimer);
 rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
 
 // ── Submissions demand strip (global — visible on every module) ───────────────
@@ -730,7 +732,8 @@ async function fetchAndRenderSubRagStrip() {
 }
 
 fetchAndRenderSubRagStrip();
-let subRagPollTimer = setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
+let subRagPollTimer = null;
+subRagPollTimer = setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
 
 // Refresh all three strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
@@ -739,6 +742,13 @@ document.addEventListener('visibilitychange', () => {
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
   }
+});
+
+// Clear all strip poll timers on page unload to prevent orphaned intervals
+window.addEventListener('pagehide', () => {
+  if (wrPollTimer)     { clearInterval(wrPollTimer);     wrPollTimer     = null; }
+  if (rmPollTimer)     { clearInterval(rmPollTimer);     rmPollTimer     = null; }
+  if (subRagPollTimer) { clearInterval(subRagPollTimer); subRagPollTimer = null; }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

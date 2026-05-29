@@ -438,7 +438,9 @@ async function applyEnvelope(envelope) {
     mods.popout        && popoutImport(mods.popout),
     mods.referrals     && referralsImport(mods.referrals),
     mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
-    mods.suite?.practiceCode && chrome.storage.local.set({ 'suite.practiceCode': mods.suite.practiceCode }),
+    // suite.practiceCode is restored via submissionsImport(mods.submissions) above
+    // (submissionsExport/Import owns the 'suite.practiceCode' key per the IO convention).
+    // The raw chrome.storage.local.set was redundant and violated the IO-delegation rule.
   ].filter(Boolean));
 }
 
