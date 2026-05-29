@@ -3,9 +3,9 @@
 
 'use strict';
 
-const STATUS_RANK   = { overdue:0, not_met:0, stale:1, due_soon:2, no_data:3, recently_initiated:4, achieved:5, in_date:5 };
-const STATUS_COLOUR = { overdue:'red', not_met:'red', stale:'amber', due_soon:'amber', no_data:'neutral', recently_initiated:'neutral', achieved:'green', in_date:'green' };
-const STATUS_LABEL  = { overdue:'OVERDUE', not_met:'NOT MET', stale:'SEVERELY OVERDUE', due_soon:'DUE SOON', no_data:'NO DATA', recently_initiated:'NEW', achieved:'MET', in_date:'IN DATE' };
+const STATUS_RANK   = { overdue:0, not_met:0, alert:0, stale:1, due_soon:2, caution:2, no_data:3, noted:3, recently_initiated:4, achieved:5, in_date:5 };
+const STATUS_COLOUR = { overdue:'red', not_met:'red', alert:'red', stale:'amber', due_soon:'amber', caution:'amber', no_data:'neutral', noted:'neutral', recently_initiated:'neutral', achieved:'green', in_date:'green' };
+const STATUS_LABEL  = { overdue:'OVERDUE', not_met:'NOT MET', alert:'ALERT', stale:'SEVERELY OVERDUE', due_soon:'DUE SOON', caution:'CAUTION', no_data:'NO DATA', noted:'NOTED', recently_initiated:'NEW', achieved:'MET', in_date:'IN DATE' };
 
 let container = null;
 let pollTimer = null;

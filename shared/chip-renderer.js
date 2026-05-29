@@ -13,14 +13,18 @@
     overdue: 'red', not_met: 'red',
     stale: 'amber', due_soon: 'amber',
     no_data: 'neutral', recently_initiated: 'neutral',
-    achieved: 'green', in_date: 'green'
+    achieved: 'green', in_date: 'green',
+    // Non-time-based alert statuses (drug-combo / event-count / composite)
+    alert: 'red', caution: 'amber', noted: 'neutral'
   };
 
   const STATUS_LABEL = {
     overdue: 'OVERDUE', not_met: 'NOT MET',
     stale: 'SEVERELY OVERDUE', due_soon: 'DUE SOON',
     no_data: 'NO DATA', recently_initiated: 'NEW',
-    achieved: 'MET', in_date: 'IN DATE'
+    achieved: 'MET', in_date: 'IN DATE',
+    // Non-time-based alert statuses (drug-combo / event-count / composite)
+    alert: 'ALERT', caution: 'CAUTION', noted: 'NOTED'
   };
 
   function escHtml(s) {
