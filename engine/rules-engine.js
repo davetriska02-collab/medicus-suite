@@ -153,7 +153,7 @@
   // shape consumed by ChipRenderer.renderEvidencePanel.
 
   const STATUS_PHRASE = {
-    overdue: 'overdue', not_met: 'not met', stale: 'stale',
+    overdue: 'overdue', not_met: 'not met', stale: 'severely overdue',
     due_soon: 'due soon', no_data: 'no data', recently_initiated: 'recently initiated',
     achieved: 'in date', in_date: 'in date'
   };

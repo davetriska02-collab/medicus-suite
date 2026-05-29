@@ -18,7 +18,7 @@
 
   const STATUS_LABEL = {
     overdue: 'OVERDUE', not_met: 'NOT MET',
-    stale: 'STALE', due_soon: 'DUE SOON',
+    stale: 'SEVERELY OVERDUE', due_soon: 'DUE SOON',
     no_data: 'NO DATA', recently_initiated: 'NEW',
     achieved: 'MET', in_date: 'IN DATE'
   };
