@@ -783,24 +783,6 @@
       "kind": "red",
       "actions": []
     },
-    "queue.readTime2m": {
-      "enabled": true,
-      "label": "2m read",
-      "kind": "info",
-      "actions": []
-    },
-    "queue.readTime5m": {
-      "enabled": true,
-      "label": "5m read",
-      "kind": "info",
-      "actions": []
-    },
-    "queue.readTime10m": {
-      "enabled": true,
-      "label": "10m+ read",
-      "kind": "info",
-      "actions": []
-    },
     "detail.statusAwaiting": {
       "enabled": true,
       "label": "{status}",
@@ -864,12 +846,6 @@
     "detail.attachments": {
       "enabled": true,
       "label": "{count} attach",
-      "kind": "info",
-      "actions": []
-    },
-    "detail.readTime": {
-      "enabled": true,
-      "label": "{label}",
       "kind": "info",
       "actions": []
     },
