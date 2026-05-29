@@ -157,6 +157,7 @@ function previewEnvelope(envelope) {
 
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
+    if (mods.suite.feedbackEmail) lines.push(`Feedback email: ${mods.suite.feedbackEmail}`);
   }
 
   return lines;

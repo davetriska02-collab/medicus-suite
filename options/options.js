@@ -76,6 +76,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 // ── Suite settings (practice code) ────────────────────────────────────────────
 
 const practiceCodeInput = document.getElementById('practiceCode');
+const feedbackEmailInput = document.getElementById('feedbackEmail');
 const saveSuiteBtn = document.getElementById('saveSuite');
 const suiteSaved = document.getElementById('suiteSaved');
 const codeDetectedRow = document.getElementById('codeDetectedRow');
@@ -93,6 +94,12 @@ const testConnectionResult = document.getElementById('testConnectionResult');
     if (practiceCodeInput) {
       chrome.storage.local.get(['suite.practiceCode'], res => {
         practiceCodeInput.value = res['suite.practiceCode'] || '';
+      });
+    }
+    // Load saved feedback recipient email
+    if (feedbackEmailInput) {
+      chrome.storage.local.get(['suite.feedbackEmail'], res => {
+        feedbackEmailInput.value = res['suite.feedbackEmail'] || '';
       });
     }
     // Try to auto-detect from open Medicus tab
@@ -124,6 +131,7 @@ saveSuiteBtn?.addEventListener('click', async () => {
   await chrome.storage.local.set({
     'suite.practiceCode': code,
     'submissions.config': { ...existingSubConfig, practiceCode: code },
+    'suite.feedbackEmail': (feedbackEmailInput?.value || '').trim(),
   });
   if (suiteSaved) {
     suiteSaved.classList.add('show');
@@ -406,7 +414,8 @@ async function doFullExport() {
     requestMonitorExport(),
   ]);
   const pc = submissions.practiceCode ?? null;
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc } });
+  const { 'suite.feedbackEmail': feedbackEmail = null } = await chrome.storage.local.get('suite.feedbackEmail');
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc, feedbackEmail } });
 }
 
 async function doModuleExport(scope) {
@@ -439,6 +448,7 @@ async function applyEnvelope(envelope) {
     mods.referrals     && referralsImport(mods.referrals),
     mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
     mods.suite?.practiceCode && chrome.storage.local.set({ 'suite.practiceCode': mods.suite.practiceCode }),
+    mods.suite?.feedbackEmail && chrome.storage.local.set({ 'suite.feedbackEmail': mods.suite.feedbackEmail }),
   ].filter(Boolean));
 }
 

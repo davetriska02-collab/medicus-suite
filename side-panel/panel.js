@@ -400,14 +400,16 @@ function renderAbout() {
   });
 
   // ── Feedback / feature request / bug report (mailto) ──────────────────────────
-  const FEEDBACK_EMAIL = 'davetriska02@gmail.com';
+  // Recipient is configurable in Options › Suite (suite.feedbackEmail); falls back
+  // to the default below when unset.
+  const FEEDBACK_EMAIL_DEFAULT = 'davetriska02@gmail.com';
   const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
   fbTypeBtns.forEach(b => b.addEventListener('click', () => {
     fbTypeBtns.forEach(x => x.classList.remove('active'));
     b.classList.add('active');
   }));
 
-  document.getElementById('fbSendBtn')?.addEventListener('click', () => {
+  document.getElementById('fbSendBtn')?.addEventListener('click', async () => {
     const status = document.getElementById('fbStatus');
     const subjectEl = document.getElementById('fbSubject');
     const detailsEl = document.getElementById('fbDetails');
@@ -433,7 +435,9 @@ function renderAbout() {
     ].join('\n');
     const mailSubject = `[Medicus Suite] ${type}${subject ? ': ' + subject : ''}`;
     const mailBody = `${details}\n${diag}`;
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+    const stored = await chrome.storage.local.get('suite.feedbackEmail');
+    const recipient = (stored['suite.feedbackEmail'] || '').trim() || FEEDBACK_EMAIL_DEFAULT;
+    const url = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
 
     // Use a transient anchor click rather than navigating the panel away.
     const a = document.createElement('a');
