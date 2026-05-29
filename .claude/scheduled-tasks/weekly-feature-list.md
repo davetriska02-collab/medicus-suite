@@ -83,40 +83,92 @@ so the side-panel "About" tab can hotlink to them.
 
    Aim for 1500–2500 words total. Tight, scannable, no marketing fluff.
 
-7. **Convert to .docx**: prefer `pandoc` if available:
+7. **No-op guard (run BEFORE generating the .docx)**: this routine must
+   produce `docs/feature-list.docx`, because the side-panel About tab hotlinks
+   to it at `.../raw/main/docs/feature-list.docx`. Skip the run **only if both**
+   of these hold:
+   - the new `docs/feature-list.md` differs from the copy on `origin/main`
+     **only** in the `Generated:` date line (i.e. the feature surface didn't
+     move), **and**
+   - `docs/feature-list.docx` already exists on `origin/main`.
+
+   Check existence explicitly — do not assume it's there:
    ```
-   pandoc docs/feature-list.md -o docs/feature-list.docx \
-     --reference-doc=docs/feature-list-template.docx 2>/dev/null \
-     || pandoc docs/feature-list.md -o docs/feature-list.docx
+   git fetch origin main
+   git cat-file -e origin/main:docs/feature-list.docx 2>/dev/null \
+     && echo "docx present on main" || echo "DOCX MISSING — must regenerate"
    ```
-   If pandoc isn't installed, try `apt-get install -y pandoc` once. If that
-   also fails, fall back to a small Python script using `python-docx`:
+   If the docx is missing, **always proceed** even when the .md is unchanged.
+   This is the exact bug that left the link 404ing: the old guard abandoned the
+   commit whenever the .md looked stable, so the .docx was never committed.
+
+8. **Convert to .docx (mandatory — never skip, never end silently on failure)**.
+   Try converters in order; the first that works wins:
    ```
-   pip install --quiet python-docx
-   python -c "
-   from docx import Document
+   # (a) pandoc if already installed
+   command -v pandoc >/dev/null && pandoc docs/feature-list.md -o docs/feature-list.docx
+   # (b) install pandoc once if (a) absent
+   # (c) python-docx fallback (no system packages; this is the reliable path)
+   python3 -c "import docx" 2>/dev/null || pip install --quiet python-docx
+   ```
+   Then, if pandoc didn't produce the file, generate it with this script
+   (handles `###` sub-headings, `**bold**`, and strips inline `code` backticks
+   so the Word doc reads cleanly):
+   ```
+   python3 - <<'PY'
    import re
+   from docx import Document
    md = open('docs/feature-list.md').read()
    doc = Document()
-   for line in md.splitlines():
-       if line.startswith('# '):   doc.add_heading(line[2:], 0)
-       elif line.startswith('## '): doc.add_heading(line[3:], 1)
-       elif line.startswith('### '): doc.add_heading(line[4:], 2)
-       elif line.startswith('- '): doc.add_paragraph(line[2:], style='List Bullet')
-       elif line.strip():          doc.add_paragraph(line)
+   def add_runs(p, text):
+       for seg in re.split(r'(\*\*[^*]+\*\*)', text):
+           if not seg: continue
+           if seg.startswith('**') and seg.endswith('**'):
+               r = p.add_run(seg[2:-2]); r.bold = True
+           else:
+               p.add_run(seg.replace('`', ''))
+   for raw in md.splitlines():
+       line = raw.rstrip()
+       if not line.strip(): continue
+       if   line.startswith('### '): doc.add_heading(line[4:], 2)
+       elif line.startswith('## '):  doc.add_heading(line[3:], 1)
+       elif line.startswith('# '):   doc.add_heading(line[2:], 0)
+       elif line.lstrip().startswith('- '):
+           add_runs(doc.add_paragraph(style='List Bullet'), line.lstrip()[2:])
+       else:
+           add_runs(doc.add_paragraph(), line)
    doc.save('docs/feature-list.docx')
-   "
+   PY
    ```
+   **Verify the artefact before committing.** It must exist and be a valid
+   OOXML zip:
+   ```
+   python3 -c "import zipfile,sys; sys.exit(0 if zipfile.is_zipfile('docs/feature-list.docx') else 1)"
+   ```
+   If no converter succeeds or the verify fails, **STOP and report loudly** —
+   print `ROUTINE FAILED: could not generate a valid docs/feature-list.docx`
+   and end **without committing**. Do NOT commit the .md alone (that recreates
+   the 404), and do NOT end silently.
 
-8. **Commit and push**: stage both files, commit with message
-   `docs: weekly feature-list refresh (YYYY-MM-DD)`, push to `main`.
-   Do NOT bump `manifest.json` version — the .docx isn't a code change.
-   Do NOT open a PR.
+9. **Commit and push to `main`**:
+   - Always operate against `origin/main`, never a local `main` branch — this
+     workspace has been seen with a stale, unrelated-history local `main`.
+     `git fetch origin main` first.
+   - Stage **both** files (`git add docs/feature-list.md docs/feature-list.docx`),
+     commit `docs: weekly feature-list refresh (YYYY-MM-DD)`, and push to `main`.
+     A fast-forward push of your working ref to main is fine:
+     `git push origin HEAD:main`. On network failure, retry up to 4× with
+     exponential backoff (2s, 4s, 8s, 16s).
+   - Do NOT bump `manifest.json` — the docs aren't a code change. Do NOT open a PR.
 
-9. **No-op if unchanged**: after generating, `git diff --stat` the .md file.
-   If only the date line changed (i.e. the feature surface didn't move),
-   abandon the commit and end silently. This avoids weekly noise commits
-   when nothing has changed.
+10. **Verify the push landed** (the link can't 404 after this passes):
+    ```
+    git fetch origin main
+    git cat-file -e origin/main:docs/feature-list.docx \
+      && echo "OK: docx on main ($(git cat-file -s origin/main:docs/feature-list.docx) bytes, commit $(git rev-parse --short origin/main))" \
+      || echo "VERIFY FAILED: docx not on main after push"
+    ```
+    If verification fails, report it — do not end as if successful.
 
 ### What NOT to do
 
