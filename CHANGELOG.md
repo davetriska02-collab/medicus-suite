@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.5.0] — 2026-05-29
+### Added — Patient-record viewer LTC features
+- **Monitoring-due card (Snapshot)**: surfaces high-risk drugs whose monitoring is overdue, with the required tests and the last monitoring date — showing "No record" in red where none is held (never invented) — or a green "all up to date" when nothing is due. (`visualiser-core.js`, `visualiser-core.html`)
+- **Contacts calendar heatmap (Timeline)**: a year × month grid of dated consultation contacts using a colour-blind-safe single-hue Blues ramp, native cell tooltips, a legend, and an empty state; reuses the existing `computeTimeline` aggregation. (`visualiser-core.js`, `visualiser-core.html`)
+- **Multimorbidity + Charlson Comorbidity Index (Snapshot)**: a Comorbidity card showing the LTC-register count and a flat-weight Charlson index (with the standard decade age banding and a negation guard against family-history / "no evidence" mentions); flags "age unknown" rather than assuming an age. (`visualiser-core.js`, `visualiser-core.html`)
+- **Condition summary cards (Recalls)**: per-register cards for analyte-bearing conditions (diabetes/HbA1c, hypertension/systolic BP, CKD/eGFR) showing the latest tracked value, a mini-trend sparkline, the target, an on/off-target chip, and a shared review-due badge — or "no recent value" when no dated result exists. (`visualiser-core.js`, `visualiser-core.html`)
+- Safety: all four features are deterministic and keyword-derived display-only decision-support; they flag missing inputs ("No record" / "no recent value" / "age unknown") instead of inventing clinical values, and the Charlson index carries no mortality-percentage mapping.
+
 ## [v3.4.2] — 2026-05-29
 ### Changed — Slots page number polish
 - Aligned the Slots module's numeric styling with the rest of the suite: `font-variant-numeric: tabular-nums` is now set on every numeric class (hero total, AM/PM chips, per-type and per-clinician breakdowns), so digits sit in fixed-width columns. (`side-panel/modules/slots/slots.css`)
