@@ -528,6 +528,8 @@
     { id: 'detail.today',               page: 'Detail', desc: 'Task created today',                              vars: [] },
     { id: 'detail.proxy',               page: 'Detail', desc: 'Request submitted by a non-self proxy',           vars: ['{relationship}'] },
     { id: 'detail.attachments',         page: 'Detail', desc: 'Request has one or more attachments',             vars: ['{count}'] },
+    { id: 'detail.monitoringDueAmber',  page: 'Detail', desc: 'High-risk drug monitoring due soon (Sentinel engine)',         vars: ['{count}'] },
+    { id: 'detail.monitoringDueRed',    page: 'Detail', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },
@@ -537,7 +539,9 @@
     { id: 'record.recentAdmissionAmber', page: 'Record', desc: 'Discharge summary in last recentDischargeAmber days',  vars: ['{days}'] },
     { id: 'record.recentAdmissionRed',   page: 'Record', desc: 'Discharge summary in last recentDischargeRed days',    vars: ['{days}'] },
     { id: 'record.polypharmacyAmber',    page: 'Record', desc: 'Repeat count ≥ polypharmacyAmber',               vars: ['{count}'] },
-    { id: 'record.polypharmacyRed',      page: 'Record', desc: 'Repeat count ≥ polypharmacyRed',                 vars: ['{count}'] }
+    { id: 'record.polypharmacyRed',      page: 'Record', desc: 'Repeat count ≥ polypharmacyRed',                 vars: ['{count}'] },
+    { id: 'record.monitoringDueAmber',   page: 'Record', desc: 'High-risk drug monitoring due soon (Sentinel engine)',         vars: ['{count}'] },
+    { id: 'record.monitoringDueRed',     page: 'Record', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] }
   ];
 
   let sysEditingId = null;

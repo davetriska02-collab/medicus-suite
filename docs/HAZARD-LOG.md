@@ -121,7 +121,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Hazard ID** | H-002 |
 | **Description** | A drug-monitoring interval that is overdue, or a QOF indicator that is unachieved, is not surfaced by Monitoring when it should be. |
 | **Potential causes** | QOF register membership not matched (substring miss); rule omitted from curated rule set; Medicus API response shape change breaks normaliser; encounter-coded entry not present on the investigation dashboard endpoint; rule disabled by practice configuration; user-edited threshold diverges from current guidance. |
-| **Affected users / components** | Clinicians using Monitoring for monitoring or QOF review. Components: `engine/rules-engine.js`, `engine/normalisers.js`, `rules/*`. |
+| **Affected users / components** | Clinicians using Monitoring for monitoring or QOF review. Components: `engine/rules-engine.js`, `engine/normalisers.js`, `rules/*`. The Triage Lens "Monitoring due" overlay chip (v3.6.0, `content-scripts/triage-lens/content.js`) is an additional surface for the same drug-monitoring signal — it reuses this engine and `rules/drug-rules.json` unchanged (so the same controls apply) and shows NO chip on fetch failure / no data rather than a false "clear". |
 | **Initial severity** | 3 (Moderate — missed monitoring, eventually caught by Medicus's own workflows) |
 | **Initial likelihood** | 3 (Possible — curated rule set is intentionally a subset) |
 | **Initial risk** | 9 |
