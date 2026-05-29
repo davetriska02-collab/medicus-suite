@@ -339,6 +339,32 @@ function renderAbout() {
           <span id="updateStatus" style="font-size:11px; font-family:var(--mono); color:var(--text-3);"></span>
         </div>
       </div>
+
+      <h2>Feedback</h2>
+      <div class="module-card">
+        <div class="module-card-desc" style="margin-bottom:10px;">
+          Found a bug, want a new feature, or have general feedback? Send it straight to the developer.
+          Your email client opens pre-filled — review and hit send.
+        </div>
+        <div class="fb-types" role="group" aria-label="Feedback type">
+          <button type="button" class="fb-type-btn active" data-fb-type="Feedback">Feedback</button>
+          <button type="button" class="fb-type-btn" data-fb-type="Feature request">Feature request</button>
+          <button type="button" class="fb-type-btn" data-fb-type="Bug report">Bug report</button>
+        </div>
+        <div class="fb-field">
+          <label for="fbSubject">Subject</label>
+          <input id="fbSubject" type="text" maxlength="120" placeholder="Short summary" />
+        </div>
+        <div class="fb-field">
+          <label for="fbDetails">Details</label>
+          <textarea id="fbDetails" rows="5" placeholder="What happened, what you expected, steps to reproduce…"></textarea>
+        </div>
+        <div class="fb-warn" role="note">⚠ Do not include patient-identifiable information (names, NHS numbers, dates of birth). Suite version and browser details are attached automatically.</div>
+        <div class="fb-actions">
+          <button id="fbSendBtn" type="button" class="fb-send-btn">Open email</button>
+          <span id="fbStatus" class="fb-status"></span>
+        </div>
+      </div>
     </div>
   `;
 
@@ -371,6 +397,53 @@ function renderAbout() {
     }
     btn.disabled = false;
     btn.textContent = 'Check for updates';
+  });
+
+  // ── Feedback / feature request / bug report (mailto) ──────────────────────────
+  const FEEDBACK_EMAIL = 'davetriska02@gmail.com';
+  const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
+  fbTypeBtns.forEach(b => b.addEventListener('click', () => {
+    fbTypeBtns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  }));
+
+  document.getElementById('fbSendBtn')?.addEventListener('click', () => {
+    const status = document.getElementById('fbStatus');
+    const subjectEl = document.getElementById('fbSubject');
+    const detailsEl = document.getElementById('fbDetails');
+    const type = document.querySelector('.fb-type-btn.active')?.dataset.fbType || 'Feedback';
+    const subject = (subjectEl?.value || '').trim();
+    const details = (detailsEl?.value || '').trim();
+
+    if (!subject && !details) {
+      if (status) { status.style.color = 'var(--red)'; status.textContent = 'Add a subject or details first'; }
+      subjectEl?.focus();
+      return;
+    }
+
+    const version = chrome.runtime.getManifest().version;
+    const diag = [
+      '',
+      '──────────',
+      '(Diagnostics — please keep)',
+      `Type: ${type}`,
+      `Suite version: v${version}`,
+      `Browser: ${navigator.userAgent}`,
+      `Date: ${new Date().toISOString()}`,
+    ].join('\n');
+    const mailSubject = `[Medicus Suite] ${type}${subject ? ': ' + subject : ''}`;
+    const mailBody = `${details}\n${diag}`;
+    const url = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+
+    // Use a transient anchor click rather than navigating the panel away.
+    const a = document.createElement('a');
+    a.href = url;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    if (status) { status.style.color = 'var(--green)'; status.textContent = 'Opening your email client…'; }
   });
 }
 
