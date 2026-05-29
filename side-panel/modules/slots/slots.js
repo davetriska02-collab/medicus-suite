@@ -258,8 +258,8 @@ function renderHeader(visible, visibleSum) {
   const isToday = state.data?.isToday;
   const splitLine = !state.loading && state.data
     ? `<div class="slots-ampm-split">
-         <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am}</span></span>
-         <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm}</span></span>
+         <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
+         <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
        </div>`
     : '';
   return `
@@ -267,7 +267,7 @@ function renderHeader(visible, visibleSum) {
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
         ${!state.loading ? `
-          <div class="slots-count-hero">${visibleSum}</div>
+          <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
           <div class="slots-count-label${visibleSum===0?' zero':''}">
             ${isToday ? 'slots remaining today' : 'available slots'}
           </div>
@@ -301,7 +301,7 @@ function renderAlertRibbon(byType) {
   const items = triggered.map(t => {
     const msg = t.count === 0
       ? `No ${escHtml(t.typeName)} slots`
-      : `${escHtml(t.typeName)}: ${t.count} remaining`;
+      : `${escHtml(t.typeName)}: <span class="slots-alert-count">${t.count.toLocaleString('en-GB')}</span> slot${t.count !== 1 ? 's' : ''} remaining`;
     return `<div class="slots-alert-item">${msg}</div>`;
   }).join('');
   return `
@@ -326,7 +326,7 @@ function renderData(d, visible, visibleSum) {
   const unticked = entries.filter(([t]) =>  state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;
 
-  const countCell = (n) => {
+  const countCell = (n, pct) => {
     const total = sumAmPm(n);
     return `
       <span class="slot-count-group${total === 0 ? ' zero' : ''}">
@@ -335,19 +335,23 @@ function renderData(d, visible, visibleSum) {
         <span class="slot-count-ampm" title="Afternoon">${n.pm}<span class="ampm-tag-inline">pm</span></span>
         <span class="slot-count-sep">·</span>
         <span class="slot-count slot-count-total">${total}</span>
+        ${pct != null ? `<span class="slot-count-pct" title="Share of visible total">${pct}%</span>` : ''}
       </span>
     `;
   };
 
-  const row = (type, n, hidden) => `
-    <div class="slot-row${hidden ? ' row-hidden' : ''}">
-      <label class="slot-label">
-        <input type="checkbox" class="type-toggle" data-type="${escHtml(type)}" ${hidden ? '' : 'checked'} />
-        <span class="slot-type">${escHtml(type)}</span>
-      </label>
-      ${countCell(n)}
-    </div>
-  `;
+  const row = (type, n, hidden) => {
+    const pct = (!hidden && visibleSum > 0) ? Math.round((sumAmPm(n) / visibleSum) * 100) : null;
+    return `
+      <div class="slot-row${hidden ? ' row-hidden' : ''}">
+        <label class="slot-label">
+          <input type="checkbox" class="type-toggle" data-type="${escHtml(type)}" ${hidden ? '' : 'checked'} />
+          <span class="slot-type">${escHtml(type)}</span>
+        </label>
+        ${countCell(n, pct)}
+      </div>
+    `;
+  };
 
   const excludedSection = unticked.length === 0 ? '' : `
     <div class="excluded-toggle" id="excludedToggle">

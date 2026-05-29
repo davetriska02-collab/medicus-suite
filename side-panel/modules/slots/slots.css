@@ -116,6 +116,7 @@
   min-width: 24px;
   text-align: right;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .slot-count.zero { color: var(--text-5); }
@@ -150,7 +151,7 @@
 
 .staff-chevron { font-size: 9px; color: var(--text-5); flex-shrink: 0; }
 .staff-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.staff-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); flex-shrink: 0; }
+.staff-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
 .staff-detail {
   background: var(--bg-mid);
@@ -237,6 +238,7 @@
   margin: 4px 0 2px;
   font-family: var(--mono);
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .slots-count-label {
   font-size: 11px;
@@ -271,9 +273,10 @@
 }
 .ampm-num {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
 .ampm-am .ampm-num { color: #f0b65b; }
 .ampm-pm .ampm-num { color: #8db8e3; }
@@ -284,16 +287,17 @@
   align-items: baseline;
   gap: 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .slot-count-group.zero { color: var(--text-5); }
 .slot-count-ampm {
   display: inline-flex;
   align-items: baseline;
   gap: 1px;
-  min-width: 18px;
+  min-width: 24px;
   justify-content: flex-end;
 }
 .ampm-tag-inline {
@@ -311,10 +315,23 @@
   font-weight: 600;
   color: var(--green);
   font-size: 13px;
-  min-width: 20px;
+  min-width: 28px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .slot-count-group.zero .slot-count-total { color: var(--text-5); }
+
+/* Share-of-total annotation on each type row */
+.slot-count-pct {
+  font-size: 9px;
+  color: var(--text-5);
+  font-weight: 500;
+  min-width: 30px;
+  text-align: right;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.slot-count-group.zero .slot-count-pct { color: var(--text-5); }
 
 /* Per-clinician AM · PM · Total mini badge */
 .staff-count-mini {
@@ -322,9 +339,10 @@
   align-items: baseline;
   gap: 4px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-4);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .staff-count-mini > span { display: inline-flex; align-items: baseline; gap: 1px; }
 
@@ -333,9 +351,17 @@
   align-items: baseline;
   gap: 4px;
   font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 .staff-type-counts > span { display: inline-flex; align-items: baseline; gap: 1px; }
-.staff-type-total { color: var(--text-3); font-weight: 600; }
+.staff-type-total {
+  font-family: var(--mono);
+  color: var(--text-3);
+  font-weight: 600;
+  min-width: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Slot alert ribbon */
 .slots-alert-ribbon {
@@ -363,3 +389,9 @@
 .slots-alert-icon { flex-shrink: 0; font-style: normal; }
 .slots-alert-items { display: flex; flex-direction: column; gap: 2px; }
 .slots-alert-item { white-space: nowrap; }
+.slots-alert-count {
+  font-weight: 700;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 1px;
+}

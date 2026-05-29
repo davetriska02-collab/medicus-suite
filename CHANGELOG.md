@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.4.2] — 2026-05-29
+### Changed — Slots page number polish
+- Aligned the Slots module's numeric styling with the rest of the suite: `font-variant-numeric: tabular-nums` is now set on every numeric class (hero total, AM/PM chips, per-type and per-clinician breakdowns), so digits sit in fixed-width columns. (`side-panel/modules/slots/slots.css`)
+- Widened numeric column `min-width`s so 3-digit counts no longer break row alignment (`.slot-count-ampm` 18→24px, `.slot-count-total` 20→28px), and gave the expanded clinician detail total (`.staff-type-total`) a mono font, fixed width, and right alignment. (`side-panel/modules/slots/slots.css`)
+- Normalised AM/PM count font-size to 12px across the hero chips, per-type rows, and per-clinician rows (previously 15/11/10px). (`side-panel/modules/slots/slots.css`)
+- Hero total and header AM/PM counts now render via `toLocaleString('en-GB')` for thousands separators, matching the referrals and activity modules. (`side-panel/modules/slots/slots.js`)
+- Each "By type" row now shows its share of the visible day total as a muted `%` annotation. (`side-panel/modules/slots/slots.js`, `side-panel/modules/slots/slots.css`)
+- The slot alert ribbon now emphasises the count and pluralises ("3 slots remaining" / "1 slot remaining"). (`side-panel/modules/slots/slots.js`, `side-panel/modules/slots/slots.css`)
+
 ## [v3.4.1] — 2026-05-29
 ### Changed — Configurable feedback recipient
 - The feedback button's recipient email is now configurable in **Options › Suite** (`suite.feedbackEmail`), saved alongside the practice code. The About-tab button reads it at send time and falls back to the default (`davetriska02@gmail.com`) when unset. (`options/options.html`, `options/options.js`, `side-panel/panel.js`)
