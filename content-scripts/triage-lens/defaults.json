@@ -938,6 +938,18 @@
       "label": "{specialty}",
       "kind": "info",
       "actions": []
+    },
+    "queue.monitoringDueRed": {
+      "enabled": false,
+      "label": "Monitoring ×{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.monitoringDueAmber": {
+      "enabled": false,
+      "label": "Monitoring {count}",
+      "kind": "amber",
+      "actions": []
     }
   }
 }

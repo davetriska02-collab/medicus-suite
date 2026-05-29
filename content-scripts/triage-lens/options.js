@@ -532,6 +532,8 @@
     { id: 'detail.monitoringDueRed',    page: 'Detail', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] },
     { id: 'detail.docType',             page: 'Detail', desc: 'Document type label on document task pages (e.g. "Clinical letter")',    vars: ['{docType}'] },
     { id: 'detail.docSpecialty',        page: 'Detail', desc: 'Clinical specialty or sender on document task pages',                   vars: ['{specialty}'] },
+    { id: 'queue.monitoringDueRed',   page: 'Queue', desc: 'High-risk drug monitoring overdue on queue rows (requires network per row — off by default)', vars: ['{count}'] },
+    { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },

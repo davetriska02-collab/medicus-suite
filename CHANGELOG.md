@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.7.1] — 2026-05-29
+### Added — Triage Lens queue monitoring chips via fetch intercept
+- Per-row **monitoring chips** on the AG Grid task queue, surfacing high-risk drug monitoring that is overdue (red) or due soon (amber) directly on each queue row. (`content-scripts/triage-lens/content.js`)
+- Because AG Grid's JavaScript data model is opaque across the isolated-world boundary, row UUIDs are captured by injecting a page-world `<script>` element that intercepts `window.fetch` and watches for `/tasks/data/{slug}/task-list` responses; it fires a `CustomEvent('ch-task-list-data')` with the row UUIDs and task-type slug back to the content script.
+- `runQueue` now calls `injectTaskListInterceptor()` (installs once per page load) and `scheduleQueueMonitoring()` (processes up to 8 rows per load with 200ms spacing). Results are session-cached per patient UUID so re-renders don't re-fetch.
+- Two new system chips — `queue.monitoringDueRed` and `queue.monitoringDueAmber` — default **off** (these trigger a network request per row; users opt in via Options › System chips). (`content-scripts/triage-lens/defaults.json`, `content-scripts/triage-lens/options.js`)
+- `refreshQueueChips` now also removes `.ch-q-mon` elements when AG Grid recycles rows, preventing stale chips on recycled row nodes.
+
 ## [v3.7.0] — 2026-05-29
 ### Added — Triage Lens document task lens
 - The Triage Lens HUD now correctly extracts context from document task pages (`/tasks/data/document/overview/{UUID}`), which have a different card layout to regular tasks. (`content-scripts/triage-lens/content.js`)
