@@ -902,6 +902,30 @@
       "label": "Meds x{count}",
       "kind": "amber",
       "actions": []
+    },
+    "record.monitoringDueRed": {
+      "enabled": true,
+      "label": "Monitoring due x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "record.monitoringDueAmber": {
+      "enabled": true,
+      "label": "Monitoring x{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "detail.monitoringDueRed": {
+      "enabled": true,
+      "label": "Monitoring due x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.monitoringDueAmber": {
+      "enabled": true,
+      "label": "Monitoring x{count}",
+      "kind": "amber",
+      "actions": []
     }
   }
 }
