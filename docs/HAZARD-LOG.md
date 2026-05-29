@@ -31,7 +31,7 @@ This hazard log applies to all functional modules of Medicus Suite v3.4.1, namel
 - **Capacity Forecast** — display of historical session/slot usage
 - **Submissions Tracker** — display of daily task volume counts
 - **Triage Lens** — overlay HUD on Medicus triage pages
-- **Activity Module** — display of staff activity counts
+- **Activity Report** — display of staff activity counts
 - **Referrals Tracker** — display of referral audit data drawn from Medicus
 - **Waiting Room / Request Monitor** — live demand display with configurable thresholds
 - **Patient Record Visualiser** — offline PDF-based multi-tab clinical dashboard, including: continuity-of-care indices, investigation trends with clinical zone bands, high-risk drug monitoring compliance, Electronic Frailty Index (eFI), PINCER-style prescribing safety flags, QOF register review status, swim-lane event timeline
