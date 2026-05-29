@@ -900,27 +900,30 @@
   const isDocumentTask = () => /\/tasks\/data\/document\/overview\//.test(location.href);
 
   const extractDocumentTaskInfo = () => {
+    // Use findCardByTitle (handles both .m-card-v2 and legacy .m-card selectors)
     const getCardText = (heading) => {
-      const h = [...document.querySelectorAll('.m-card h2,.m-card h3,.m-card h4')]
-        .find(el => el.textContent.trim() === heading);
-      return h ? getText(h.closest('.m-card') || h.parentElement) : '';
+      const card = findCardByTitle(heading);
+      return card ? getText(card) : '';
     };
     const overviewText = getCardText('Task Overview');
     const detailText   = getCardText('Document Details');
     const commentText  = getCardText('Internal Comments');
     const codesText    = getCardText('Codes & Actions');
 
+    // Anchor key match to line-start to avoid substring collisions (e.g. 'Type' in 'Document Type')
     const field = (text, key, stopRe) => {
-      const i = text.indexOf(key);
-      if (i < 0) return '';
-      const rest = text.slice(i + key.length);
-      const m = stopRe ? rest.match(stopRe) : null;
-      return (m ? rest.slice(0, m.index) : rest.split(/Edit task|Expand|New task|Save/i)[0]).trim();
+      const re = new RegExp('(?:^|\\n)' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\n?');
+      const m = re.exec(text);
+      if (!m) return '';
+      const rest = text.slice(m.index + m[0].length);
+      const stop = stopRe ? rest.match(stopRe) : null;
+      return (stop ? rest.slice(0, stop.index) : rest.split(/Edit task|Expand|New task|Save/i)[0]).trim();
     };
 
+    // Strip heading and autocomplete chrome line-by-line (avoid lazy [\s\S]*?suggestions)
     const codes = codesText
-      .replace(/Codes & Actions[\s\S]*?suggestions\s*/i, '')
-      .replace(/Type to enter[\s\S]*?suggestions\s*/gi, '')
+      .replace(/^Codes & Actions\s*/i, '')
+      .replace(/^Type to enter[^\n]*\n?/gim, '')
       .trim();
 
     return {
@@ -936,7 +939,8 @@
       comments:  commentText
         .replace(/Internal Comments \(\d+\)\s*/i, '')
         .replace(/New task comment[\s\S]*/i, '')
-        .replace(/[A-Z]\w+ [A-Z]\w+\s*•[^\n]*/g, '')
+        // Strip author attribution lines (Name • timestamp); allow hyphens/apostrophes in names
+        .replace(/^[A-Z][A-Za-z'\-]+(?: [A-Z][A-Za-z'\-]+)+\s*•[^\n]*/gm, '')
         .trim(),
       codes
     };
@@ -1911,13 +1915,17 @@
     applyRules(signals, 'detail', buildFieldsData(data, initialReq.text || ''));
     const requestSignals = computeRequestSignals(taskDetails, requester, initialReq);
 
-    if (docInfo && docInfo.docType) {
-      const chip = getSystemChip('detail.docType', { docType: docInfo.docType });
-      if (chip) requestSignals.chips.unshift(chip);
-    }
-    if (docInfo && docInfo.specialty) {
-      const specChip = getSystemChip('detail.docSpecialty', { specialty: docInfo.specialty });
-      if (specChip) requestSignals.chips.splice(1, 0, specChip);
+    if (docInfo) {
+      const newChips = [];
+      if (docInfo.docType) {
+        const c = getSystemChip('detail.docType', { docType: docInfo.docType });
+        if (c) newChips.push(c);
+      }
+      if (docInfo.specialty) {
+        const c = getSystemChip('detail.docSpecialty', { specialty: docInfo.specialty });
+        if (c) newChips.push(c);
+      }
+      if (newChips.length) requestSignals.chips.unshift(...newChips);
     }
 
     renderHUD(data, signals, requestSignals);
@@ -1930,6 +1938,14 @@
   const runQueue = () => {
     teardownQueueObserver();
     hideHud();
+    // Clear row-to-UUID mapping so stale UUIDs from a previous queue never
+    // inject chips onto wrong rows in the new queue before the fresh
+    // ch-task-list-data event arrives. Prune cache entries older than 2×TTL.
+    _queueRowUuids.clear();
+    const pruneTs = Date.now() - 2 * _MON_CACHE_TTL;
+    for (const [uuid, entry] of _queueMonCache) {
+      if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
+    }
     decorateQueueRows();
     setupQueueObserver();
     injectTaskListInterceptor();
@@ -1964,12 +1980,15 @@
   // Page-world injected script — intercepts fetch to capture task-list row UUIDs
   // and posts them back as a CustomEvent. Installed once per page load.
   const injectTaskListInterceptor = () => {
-    if (document.querySelector('script[data-ch-interceptor]')) return;
+    // Guard lives entirely in page-world via window.__chIntercepted (the script
+    // element is removed immediately after injection so a DOM attribute check
+    // would never match on re-entry). beforeunload clears the flag so that SPA
+    // navigations that reset window.fetch get a fresh interceptor installation.
     const s = document.createElement('script');
-    s.setAttribute('data-ch-interceptor', '1');
     s.textContent = `(function(){
       if(window.__chIntercepted)return;window.__chIntercepted=true;
-      const UUID_RE=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+      window.addEventListener('beforeunload',function(){delete window.__chIntercepted;},{once:true});
+      const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const orig=window.fetch;
       window.fetch=async function(url,...a){
         const r=await orig.apply(this,[url,...a]);
@@ -1981,13 +2000,15 @@
             if(!Array.isArray(items))return;
             const rows=items.map((item,i)=>({
               rowIndex:i,
-              taskUuid:typeof item.id==='string'&&UUID_RE.test(item.id)?item.id
-                      :typeof item.uuid==='string'&&UUID_RE.test(item.uuid)?item.uuid
+              // Prefer explicit uuid/taskId fields over generic id to avoid
+              // numeric surrogate-key false-positives
+              taskUuid:typeof item.uuid==='string'&&UUID_RE.test(item.uuid)?item.uuid
                       :typeof item.taskId==='string'&&UUID_RE.test(item.taskId)?item.taskId
+                      :typeof item.id==='string'&&UUID_RE.test(item.id)?item.id
                       :null
             })).filter(r=>r.taskUuid);
             if(rows.length)window.dispatchEvent(new CustomEvent('ch-task-list-data',{detail:{rows,taskTypeSlug:m[1]}}));
-          }).catch(()=>{});}
+          }).catch(e=>console.warn('[ClinHUD] task-list parse error',e));}
         }catch(_){}
         return r;
       };
@@ -1998,9 +2019,11 @@
 
   // rowIndex → taskUuid for the current queue load
   const _queueRowUuids = new Map();
-  // taskUuid → { taskTypeSlug, result } — session-level cache
+  // taskUuid → { taskTypeSlug, result, ts } — session-level cache with TTL
   const _queueMonCache = new Map();
+  const _MON_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   let _queueMonRunning = false;
+  let _queueMonGeneration = 0; // incremented on each new data arrival
 
   window.addEventListener('ch-task-list-data', (e) => {
     const { rows, taskTypeSlug } = e.detail || {};
@@ -2021,21 +2044,21 @@
     const API    = window.SentinelApiClient;
     const NORM   = window.SentinelNormalisers;
     const engine = window.SentinelRules;
-    if (!API || !NORM || !engine) return null;
+    if (!API || !NORM || !engine) { log('queue-mon: globals not loaded', taskUuid); return null; }
     const ctx = API.detectMedicusContext(location.href);
-    if (!ctx) return null;
+    if (!ctx) { log('queue-mon: no medicus context'); return null; }
     const patientUuid = await API.resolveTaskToPatient(ctx.apiBase, taskTypeSlug, taskUuid);
-    if (!patientUuid) return null;
+    if (!patientUuid) { log('queue-mon: patient resolution failed', taskUuid); return null; }
     let apiResults;
     try { apiResults = await API.fetchAll(ctx.apiBase, patientUuid); }
-    catch (e) { return null; }
-    if (!apiResults?.banner) return null;
+    catch (e) { log('queue-mon: fetchAll threw', e.message); return null; }
+    if (!apiResults?.banner) { log('queue-mon: api returned no banner', patientUuid); return null; }
     const normalised = NORM.normaliseAll(apiResults, {
       url: location.href, title: '', view: null,
       patientUuid, resolutionSource: 'queue-monitoring'
     });
     const rules = await loadMonitoringRules();
-    if (!rules?.length) return null;
+    if (!rules?.length) { log('queue-mon: no monitoring rules loaded'); return null; }
     let chips;
     try {
       chips = engine.evaluatePatient(
@@ -2046,7 +2069,7 @@
           patientContext: normalised.patientContext || null,
           observationHistory: normalised.observationHistory || [] }
       );
-    } catch (e) { return null; }
+    } catch (e) { log('queue-mon: evaluatePatient threw', e.message); return null; }
     return selectMonitoringDue(chips);
   };
 
@@ -2069,25 +2092,33 @@
   };
 
   const scheduleQueueMonitoring = async () => {
+    const gen = ++_queueMonGeneration;
+    // If a run is already in progress, the generation bump above is sufficient —
+    // when that run finishes it will see the generation has changed and restart.
     if (_queueMonRunning) return;
     _queueMonRunning = true;
     const MAX = 8;
     let done = 0;
     for (const [rowIndex, taskUuid] of _queueRowUuids) {
-      if (done >= MAX || pageType() !== 'queue') break;
+      // Abort if we've hit the row cap, navigated away, or newer data arrived
+      if (done >= MAX || pageType() !== 'queue' || _queueMonGeneration !== gen) break;
       const entry = _queueMonCache.get(taskUuid);
       if (!entry) continue;
-      if (entry.result !== undefined) {
+      const stale = entry.result !== undefined && entry.ts && (Date.now() - entry.ts) > _MON_CACHE_TTL;
+      if (entry.result !== undefined && !stale) {
         injectQueueMonitoringChip(rowIndex, entry.result);
       } else {
         const result = await computeQueueRowMonitoring(entry.taskTypeSlug, taskUuid);
         entry.result = result;
+        entry.ts = Date.now();
         injectQueueMonitoringChip(rowIndex, result);
         done++;
         if (done < MAX) await new Promise(res => setTimeout(res, 200));
       }
     }
     _queueMonRunning = false;
+    // If a newer generation was queued while we were running, start a fresh pass
+    if (_queueMonGeneration !== gen) scheduleQueueMonitoring();
   };
 
   const QUEUE_DECORATED_KEY = 'chQDec';
@@ -2255,6 +2286,8 @@
     // never initialised, and re-bound to the current container if it was.
     queueObservedContainer = null;
     setupQueueObserver();
+    // Re-inject monitoring chips — AG Grid row recycling on scroll destroys them
+    if (_queueRowUuids.size > 0) scheduleQueueMonitoring();
   };
 
   const setupQueueObserver = () => {
@@ -2412,6 +2445,7 @@
       // task detail, prescription detail) or the patient banner.
       return !!(findCardByTitle('Task Details')
              || findCardByTitle('Task Overview')
+             || findCardByTitle('Document Details')
              || findCardByTitle('Active Problems')
              || findCardByTitle('Initial Request')
              || findCardByTitle('Current Medication')

@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.7.2] — 2026-05-29
+### Fixed — Code-review fixes: document task lens + queue monitoring chips
+**Document task lens (7 fixes):**
+- `extractDocumentTaskInfo.getCardText` now delegates to the shared `findCardByTitle` helper (handles both `.m-card-v2` and legacy `.m-card`); previously the private selector returned empty strings on newer card markup
+- `field()` now uses a line-anchored regex instead of `indexOf` — prevents `'Type'` matching `'Document Type'` or `'Author'` matching `'Authorisation'` mid-string
+- `codes` extraction replaced lazy `[\s\S]*?suggestions` glob (could over-strip real coded items) with line-by-line `^…` replacements using the `m` flag
+- Author-strip regex in `comments` now uses `^…` (multiline) anchoring and allows hyphens/apostrophes (`O'Brien`, `Al-Hassan`); also prevents false-positive matches on capitalised clinical terms followed by `•`
+- `pageReady` now includes `findCardByTitle('Document Details')` — the most document-task-specific card and the most reliable render-complete signal
+- Chip ordering when `detail.docType` is disabled: replaced `splice(1,0,...)` with a batch `unshift(...newChips)` so specialty chip always lands at position 0 when docType chip is suppressed
+
+**Queue monitoring chips (8 fixes):**
+- **Critical:** `refreshQueueChips` now calls `scheduleQueueMonitoring()` after each redecoration — previously AG Grid row recycling on scroll permanently destroyed monitoring chips
+- **Critical:** `scheduleQueueMonitoring` now uses a generation counter (`_queueMonGeneration`) — when new task-list data arrives while a run is in progress, the running loop detects the stale generation and a fresh run starts on completion (previously new-data events were silently dropped)
+- **Critical:** `runQueue` now clears `_queueRowUuids` before setting up the new queue, and prunes cache entries older than 2×TTL — prevents stale UUIDs from a previous queue injecting chips onto wrong rows
+- `injectTaskListInterceptor` guard now relies entirely on `window.__chIntercepted` (the DOM `data-ch-interceptor` attribute was never matchable after immediate `s.remove()`); adds `{once:true}` `beforeunload` handler to clear the flag on SPA navigation that resets `window.fetch`
+- UUID extraction now prefers `item.uuid` and `item.taskId` before `item.id` to avoid numeric surrogate-key false-positives; UUID regex anchored with `^…$`
+- `_queueMonCache` entries now carry a `ts` timestamp; `scheduleQueueMonitoring` treats results older than 5 minutes as stale (forces recompute); `runQueue` prunes entries older than 10 minutes
+- `computeQueueRowMonitoring` now logs each silent-failure path via the existing `log()` helper, making debugging possible when chips don't appear
+- `clone.json().catch()` now logs a warning instead of swallowing parse errors silently
+
 ## [v3.7.1] — 2026-05-29
 ### Added — Triage Lens queue monitoring chips via fetch intercept
 - Per-row **monitoring chips** on the AG Grid task queue, surfacing high-risk drug monitoring that is overdue (red) or due soon (amber) directly on each queue row. (`content-scripts/triage-lens/content.js`)
