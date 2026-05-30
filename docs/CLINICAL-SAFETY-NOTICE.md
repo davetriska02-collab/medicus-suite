@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.4.1  
-**Document version:** 3.1  
-**Date issued:** 2026-05-29  
+**Product version:** 3.6.0  
+**Document version:** 3.2  
+**Date issued:** 2026-05-30  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -80,7 +80,7 @@ In summary, Medicus Suite:
 2. **Reorganises and summarises** that data in a side panel and on configurable HUD overlays
 3. **Applies arithmetic threshold checks** to monitoring intervals and QOF indicator criteria
 4. **Displays** the result as colour-coded indicators (chips), aggregate counts, and tabular summaries
-5. **Analyses a locally-held EPR export PDF** (Patient Record Visualiser only) to produce a multi-tab clinical dashboard including: continuity indices, investigation trends, drug monitoring compliance, eFI score, PINCER-style prescribing prompts, and QOF register review status — all computed locally in the browser, with no external transmission
+5. **Analyses a locally-held EPR export PDF** (Patient Record Visualiser only) to produce a multi-tab clinical dashboard including: continuity indices, investigation trends, drug monitoring compliance, eFI score, PINCER-style prescribing prompts, and QOF register review status — all computed locally in the browser, with no external transmission; from v3.5.0 also: contacts calendar heatmap, per-condition summary cards (diabetes, hypertension, CKD) with population-default target bands, Charlson Comorbidity Index (display-only, no mortality mapping), and a monitoring-bloods-due card
 6. **Checks the GitHub releases API** once a day for new versions of itself (no patient data is transmitted in this check)
 
 That is the entirety of the software's behaviour.
@@ -123,12 +123,13 @@ The user and the deploying practice must understand and accept the following kno
 
 10. **The Visualiser operates on a PDF snapshot, not the live record.** Clinical information may have changed since the PDF was exported. The export date is displayed; users must ensure they are working from a current export.
 11. **PDF parsing completeness is not guaranteed.** Entries rendered as images, in certain font types, or in non-standard Medicus export layouts may not be extracted. Entry counts are displayed so users can detect implausibly low figures.
-12. **The eFI score is an approximation.** It is computed by matching problem-list text against a 36-deficit reference list using substring matching. It is not equivalent to the eFI as calculated by GP clinical systems from SNOMED-coded data. Both under- and over-estimation of frailty are possible. It is a screening aid only.
+12. **The eFI score is an approximation.** It is computed by matching problem-list text against a 36-deficit reference list using substring matching. It is not equivalent to the eFI as calculated by GP clinical systems from SNOMED-coded data. Both under- and over-estimation of frailty are possible. It is a screening aid only. **The Charlson Comorbidity Index (v3.5.0) shares the same keyword-matching limitation.** The Charlson score is display-only and is not mapped to any mortality percentage — it is an audit indicator, not a prognostic instrument.
 13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E at v3.4.1). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
 14. **Drug detection is regex-based.** High-risk drug and PINCER drug detection works by text-matching PDF content. Brand names or abbreviated entries not in the implemented regex may be missed.
 15. **High-risk drug monitoring intervals are defaults from NICE/BNF guidance.** They do not account for patient-specific monitoring plans, clinician-directed variation, or local protocol modifications.
 16. **RCV delta flags are based on published reference change values.** They indicate statistically significant analytical change, not clinical significance in any individual patient's context.
 17. **Clinical zone bands (eGFR, HbA1c, BP) are based on current published guidance.** They reflect KDIGO, NICE QOF, and NICE hypertension thresholds at the time of release; they do not account for patient-specific targets.
+18. **Condition-summary target bands (v3.5.0) use population-default QOF thresholds.** The diabetes card compares HbA1c against ≤58 mmol/mol and the hypertension card against systolic <140 mmHg. These are the QOF population thresholds, not patient-specific targets. Patients managed to deliberately permissive targets (e.g., frail elderly patients, those on palliative pathways) will be labelled "off target" even when their care plan is clinically appropriate. The threshold in use is always displayed alongside the badge so users can apply clinical judgement. Verification against the live record and individual care plan is mandatory before interpreting any on/off-target label.
 
 ## 8. The single most important safety rule
 
@@ -203,7 +204,7 @@ The CSO will:
 | Item | Mechanism |
 |------|-----------|
 | **Versioning** | Semantic versioning (`MAJOR.MINOR.PATCH`) recorded in `manifest.json` and surfaced in the Options page, popup and side panel. |
-| **Release gating** | GitHub Actions release workflow runs the full automated test suite (230+ tests at v3.4.1) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
+| **Release gating** | GitHub Actions release workflow runs the full automated test suite (262+ tests at v3.6.0) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
 | **Changelog** | Every release is documented in `CHANGELOG.md` including any safety-relevant change. |
 | **Auto-update notification** | The extension checks `api.github.com` once a day and surfaces a banner in the Options page when a newer version exists. The user controls when to install the update. |
 | **Hazard log review** | Reviewed at every minor or major release; recorded in `docs/HAZARD-LOG.md` section 8. |
@@ -249,12 +250,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.4.1; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.6.0; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-29
+**Date:** 2026-05-30
 
 ---
 
@@ -266,6 +267,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129/0160-style structure; added intended user roles; added explicit DOES / DOES NOT sections; added deploying-organisation responsibilities; added incident classification table; added sign-off forms; aligned with `HAZARD-LOG.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; added Patient Record Visualiser to intended purpose, DOES, DOES NOT, and known limitations; added Visualiser-specific safety conditions; expanded known limitations to 17 items; updated test count; aligned with `HAZARD-LOG.md` v3.0 |
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added user instruction on the feedback channel (no patient data in feedback) |
+| 2026-05-30 | 3.2 | DT | Synchronised to v3.6.0; updated intended purpose (section 2) and DOES section (section 5) for Phase 1 LTC Visualiser features; updated section 7 limitation 12 to include Charlson CCI; added section 7 limitation 18 (condition-summary population-default target bands); updated test count to 262+; aligned with `HAZARD-LOG.md` v3.2 |
 
 ---
 

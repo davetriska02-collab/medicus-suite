@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.4.1  
-**Document version:** 3.1  
-**Date issued:** 2026-05-29  
+**Product version:** 3.6.0  
+**Document version:** 3.2  
+**Date issued:** 2026-05-30  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
 **Status:** Live — reviewed at each minor or major release  
@@ -24,7 +24,7 @@ The log is intended to be read alongside:
 
 ## 2. Scope
 
-This hazard log applies to all functional modules of Medicus Suite v3.4.1, namely:
+This hazard log applies to all functional modules of Medicus Suite v3.6.0, namely:
 
 - **Monitoring (Sentinel)** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
 - **Slot Counter** — display of appointment slot availability
@@ -34,7 +34,7 @@ This hazard log applies to all functional modules of Medicus Suite v3.4.1, namel
 - **Activity Report** — display of staff activity counts
 - **Referrals Tracker** — display of referral audit data drawn from Medicus
 - **Waiting Room / Request Monitor** — live demand display with configurable thresholds
-- **Patient Record Visualiser** — offline PDF-based multi-tab clinical dashboard, including: continuity-of-care indices, investigation trends with clinical zone bands, high-risk drug monitoring compliance, Electronic Frailty Index (eFI), PINCER-style prescribing safety flags, QOF register review status, swim-lane event timeline
+- **Patient Record Visualiser** — offline PDF-based multi-tab clinical dashboard, including: continuity-of-care indices, investigation trends with clinical zone bands, high-risk drug monitoring compliance, Electronic Frailty Index (eFI), PINCER-style prescribing safety flags, QOF register review status, swim-lane event timeline; and from v3.5.0: contacts calendar heatmap, per-condition summary cards (diabetes, hypertension, CKD) with population-default target bands, Charlson Comorbidity Index, and a monitoring-bloods-due card
 
 It covers hazards arising from the technical operation of the extension, from the human factors of its use by trained GP practice staff, and from foreseeable failure modes of the surrounding environment (browser, network, Medicus platform).
 
@@ -201,7 +201,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 2 (Unlikely — CI gates) |
 | **Initial risk** | 6 |
-| **Controls / mitigations** | (a) The full automated test suite (230+ tests at v3.4.1) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
+| **Controls / mitigations** | (a) The full automated test suite (262+ tests at v3.6.0) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, request monitor, triage lens monitoring chip, and Visualiser Phase 1 LTC logic. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -220,7 +220,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate — clinical action based on incorrect display) |
 | **Initial likelihood** | 4 (Likely — automation bias is a well-documented human factors phenomenon) |
 | **Initial risk** | 12 |
-| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". (h) Visualiser eFI and PINCER outputs are explicitly labelled as supplementary screening aids with disclosed limitations. |
+| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". (h) Visualiser eFI and PINCER outputs are explicitly labelled as supplementary screening aids with disclosed limitations. (i) The v3.5.0 Charlson Comorbidity Index displays its total score and contributing conditions but does NOT map the score to a 1-year or 10-year mortality percentage — this is a deliberate safety decision to prevent the score being used as a direct prognostic instrument without clinical synthesis. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 3 |
 | **Residual risk** | 9 — Acceptable (ALARP); identified as the **primary residual risk** in the system |
@@ -272,12 +272,12 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 |-------|-------|
 | **Hazard ID** | H-010 |
 | **Description** | A correctly-extracted value is displayed without the contextual qualifiers that change its clinical meaning (e.g. an HbA1c result from before a diagnostic change of treatment; a BP recorded under unusual conditions; a referral whose "open" status reflects an administrative backlog rather than clinical reality). |
-| **Potential causes** | Monitoring chips show single most-recent values without surrounding history; the API response does not include qualifiers; referrals appear "open" when actually awaiting administrative closure; waiting-room times reflect login state, not clinical urgency. |
-| **Affected users / components** | All users. Components: all display modules. |
+| **Potential causes** | Monitoring chips show single most-recent values without surrounding history; the API response does not include qualifiers; referrals appear "open" when actually awaiting administrative closure; waiting-room times reflect login state, not clinical urgency; from v3.5.0, the Visualiser condition-summary cards show "on target / off target" using population-default QOF thresholds (HbA1c ≤58 mmol/mol, systolic BP <140 mmHg) which differ from patient-specific targets in use for elderly, frail, or complex patients (e.g. a frail diabetic managed to HbA1c ≤75 mmol/mol would be labelled "off target"). |
+| **Affected users / components** | All users. Components: all display modules. From v3.5.0: `visualiser-core.js` `CONDITION_METRICS`, condition-summary card rendering. |
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 3 (Possible) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) Monitoring chips link back to the Medicus record where full context is visible. (b) The Clinical Safety Notice states explicitly that the extension reorganises data already in Medicus — it does not interpret it. (c) Threshold checks are described in the disclaimer as arithmetic, not clinical. (d) No chip applies clinical language that asserts meaning beyond the threshold check. (e) The deploying practice's induction is asked to cover the "in-context vs out-of-context" distinction. |
+| **Controls / mitigations** | (a) Monitoring chips link back to the Medicus record where full context is visible. (b) The Clinical Safety Notice states explicitly that the extension reorganises data already in Medicus — it does not interpret it. (c) Threshold checks are described in the disclaimer as arithmetic, not clinical. (d) No chip applies clinical language that asserts meaning beyond the threshold check. (e) The deploying practice's induction is asked to cover the "in-context vs out-of-context" distinction. (f) Condition-summary cards display the target threshold label alongside the on/off-target badge (e.g. "Target: ≤58 mmol/mol") so the user can see the population default being used and apply clinical judgement about its relevance to the individual patient. (g) The Visualiser is a PDF snapshot tool positioned as an audit and analytical aid; the Clinical Safety Notice states it does not reflect the live record and that verification against the current Medicus record is required before any action. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -367,8 +367,8 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 |-------|-------|
 | **Hazard ID** | H-015 |
 | **Description** | The Electronic Frailty Index (eFI) score computed by the Visualiser is inaccurate — either overstating frailty (leading to unnecessary frailty-pathway intervention or labelling) or understating it (leading to frailty being overlooked in clinical planning). The Charlson Comorbidity Index and the condition-summary cards (v3.5.0) share this same keyword-matching limitation and are likewise display-only indicators, not diagnostic outputs. |
-| **Potential causes** | Deficit detection relies on substring matching of problem-list text against a 36-deficit reference list; non-standard or abbreviated problem coding may miss deficits; historical problems (inactive but still listed) may over-count; the 36-deficit set is based on the Clegg 2016 academic index and may not exactly replicate the eFI as calculated from SNOMED refsets in GP clinical systems; very sparse problem lists (new patients, recently registered patients) will produce artifactually low scores. |
-| **Affected users / components** | Clinicians using the Snapshot tab. Components: `visualiser-core.js` `computeEFI()`, `EFI_DEFICITS` constant. |
+| **Potential causes** | Deficit detection relies on substring matching of problem-list text against a 36-deficit reference list; non-standard or abbreviated problem coding may miss deficits; historical problems (inactive but still listed) may over-count; the 36-deficit set is based on the Clegg 2016 academic index and may not exactly replicate the eFI as calculated from SNOMED refsets in GP clinical systems; very sparse problem lists (new patients, recently registered patients) will produce artifactually low scores. For the v3.5.0 Charlson CCI: the negation guard (`NEG_RE` regex) may not catch every phrasing of family history or historical mentions, and the metastatic-subsumption interaction (metastatic tier suppresses the malignancy(2) tier) may not hold for certain overlapping problem-list entries; age not extractable from the PDF will suppress the age-adjustment component. For condition-summary cards: the analyte-matching logic uses substring terms and may not match locally-abbreviated investigation names. |
+| **Affected users / components** | Clinicians using the Snapshot tab. Components: `visualiser-core.js` `computeEFI()`, `EFI_DEFICITS`, `computeCharlson()`, `CHARLSON_WEIGHTS`, condition-summary card rendering. |
 | **Initial severity** | 3 (Moderate — frailty status is a screening indicator used to inform care planning; it is not a diagnostic label and clinical frailty assessment requires clinical synthesis) |
 | **Initial likelihood** | 3 (Possible — problem-list coding variability is common in GP records) |
 | **Initial risk** | 9 |
@@ -385,9 +385,9 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | Field | Value |
 |-------|-------|
 | **Hazard ID** | H-016 |
-| **Description** | The Visualiser fails to surface a PINCER prescribing safety flag or a high-risk drug monitoring overdue indicator when one should be present — for example, a patient is taking an NSAID and has heart failure, or is on methotrexate with monitoring now overdue, but no flag appears in the Medications tab or Snapshot. |
-| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v3.4.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
-| **Affected users / components** | Clinicians using the Medications tab or Snapshot PINCER card. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`, `HIGH_RISK_DRUGS` constant, `PINCER_RULES` constant. |
+| **Description** | The Visualiser fails to surface a PINCER prescribing safety flag or a high-risk drug monitoring overdue indicator when one should be present — for example, a patient is taking an NSAID and has heart failure, or is on methotrexate with monitoring now overdue, but no flag appears in the Medications tab, Snapshot, or (from v3.5.0) the monitoring-bloods-due card in the LTC section. |
+| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v3.4.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window; for the v3.5.0 monitoring-bloods-due card, monitoring may have been completed after the PDF was exported (see also H-013) — the card shows "No record" rather than inventing a date, but this may be misread as a true absence of monitoring. |
+| **Affected users / components** | Clinicians using the Medications tab, Snapshot PINCER card, or (v3.5.0) the LTC monitoring-bloods-due card. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`, `HIGH_RISK_DRUGS` constant, `PINCER_RULES` constant. |
 | **Initial severity** | 4 (Major — a clinically significant prescribing safety hazard is not surfaced) |
 | **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set at v3.4.1) |
 | **Initial risk** | 12 |
@@ -455,12 +455,12 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-012 | Alert fatigue | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
 | H-013 | Visualiser PDF staleness | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-014 | Visualiser silent data omission | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
-| H-015 | eFI score inaccuracy | 3×3 | 9 | 3×3 | 9 | Accepted (ALARP) |
+| H-015 | eFI / Charlson / condition-card score inaccuracy | 3×3 | 9 | 3×3 | 9 | Accepted (ALARP) |
 | H-016 | PINCER/drug-monitoring false-negative | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-017 | PINCER/drug-monitoring false-positive | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
 | H-018 | PID in feedback email | 4×2 | 8 | 4×1 | 4 | Accepted (ALARP) |
 
-No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.4.1 is approved by the Clinical Safety Officer on the basis of this hazard log.
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The releases of v3.5.0 and v3.6.0 are approved by the Clinical Safety Officer on the basis of this hazard log.
 
 ## 7. Review and reporting
 
@@ -485,12 +485,13 @@ If an incident meeting the threshold of a patient safety incident is identified,
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129 style; expanded to 12 hazards; added severity/likelihood matrix; added explicit acceptability thresholds; aligned with `CLINICAL-SAFETY-NOTICE.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; expanded scope to include Patient Record Visualiser; added H-013 (PDF staleness), H-014 (silent data omission), H-015 (eFI inaccuracy), H-016 (PINCER false-negative), H-017 (PINCER false-positive); updated H-007 to include Visualiser automation bias; updated test count to 213+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.0 |
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added H-018 (patient-identifiable data in feedback email) following the new in-app feedback channel; updated test count to 230+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.1 |
+| 2026-05-30 | 3.2 | DT | Synchronised to v3.6.0; extended H-002 affected-components for Triage Lens "Monitoring due" chip (commits 715d219, 9621a72); updated H-007 controls with Charlson CCI no-mortality-mapping decision; updated H-010 potential-causes and controls for condition-summary card population-default target bands; updated H-015 description, potential causes, and affected components for Charlson CCI and condition-summary cards; updated H-016 description and potential causes for monitoring-bloods-due card in Visualiser; updated H-006 test count to 262+; updated hazard summary table H-015 label; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.2 |
 
 ## 9. Clinical Safety Officer sign-off
 
-I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.4.1, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.6.0, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-29
+**Date:** 2026-05-30
