@@ -1,6 +1,49 @@
 # Document Body — Implementation Plan
 
-## Phase 0 — Discovery (run first)
+## Phase 0 — Discovery (DONE 2026-05-30)
+
+Discovery ran on a live `document_task`. Confirmed endpoint chain (site `560b6c`):
+
+| Step | Endpoint | Type | Carries |
+|---|---|---|---|
+| 1 | `/tasks/data/document/overview/{taskUuid}` | JSON | `data.fileId` |
+| 2 | `/clinical/data/document/modals/version/preview/{versionId}` | JSON | `attachment`, `inboundMessage`, `documentId`, `document.typeLabel` |
+| 3 | `/tasks/data/document/file/document-preview/{fileId}` | JSON | `rendersAsPdf`, `conversionInProgress`, `conversionFailed`, `conversionFailureReason` |
+| 4 | `/clinical/document/entries/{documentId}` | JSON | `entries`, `sortOrderHash` |
+| 5 | **`/clinical/document/download-file/{fileId}?convertToPDF=1`** | **application/pdf** | **the letter body** |
+
+**Outcome: B (binary PDF).** The authoritative letter body is a PDF at step 5.
+Medicus server-side converts source formats to PDF (`convertToPDF=1`, with
+`conversionInProgress`/`conversionFailed` flags surfaced at step 3).
+
+**Open question (Probe 2 resolves this):** steps 2 and 4 are JSON and *may* carry
+the text directly:
+- `inboundMessage` (step 2) — for electronic letters, often the plain-text covering message
+- `entries` (step 4) — possibly text leaves, possibly only coded items
+
+If either carries usable prose, we skip PDF.js entirely (much simpler). If both
+are empty / codes-only, we need PDF.js on the step-5 PDF via the service worker.
+
+### ID plumbing
+- `taskUuid` — from the page URL (`detectMedicusContext` already extracts it)
+- `fileId` — from step 1 `data.fileId` (we already call step 1 in `resolveTaskToPatient`)
+- `documentId` — from step 2 `documentId` / `document.id`
+- `versionId` — from step 1 or the document-preview component; needs confirming
+
+So `fetchDocumentBody` is: step 1 (have it) → fileId → step 5 PDF, OR step 1 →
+step 2 → `inboundMessage`. Both start from the taskUuid already in the URL.
+
+---
+
+## Phase 0b — Probe 2 (run next)
+
+Paste `doc-body-probe2.js` into the console on a document task page, then open a
+document. It dumps the actual *values* of `inboundMessage` and `entries` so we can
+choose the JSON path (simple) vs the PDF.js path (heavier). Report the output.
+
+---
+
+## (Superseded) Phase 0 — original discovery instructions
 
 Paste `doc-body-discovery.js` into the browser console on a document task page
 (`/tasks/data/document/overview/UUID`), then open or expand the letter.
