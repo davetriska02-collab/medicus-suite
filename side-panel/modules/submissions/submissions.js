@@ -570,7 +570,7 @@ function addDays(iso, n) {
   const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate()+n);
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
-function daysBetween(a, b) { return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/(864e5)); }
+function daysBetween(a, b) { if (!a || !b) return 0; const d = Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/(864e5)); return Number.isFinite(d) ? d : 0; }
 function formatDate(iso) { return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 function formatDateShort(iso) { return new Date(iso+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric'}); }
 function hourLabels() { return Array.from({length:24},(_,h)=>`${pad(h)}`); }

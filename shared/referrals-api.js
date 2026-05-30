@@ -261,7 +261,6 @@
         start.setMonth(start.getMonth() - 3);
         start.setDate(1);
         end.setDate(0); // last day of month before current
-        end.setMonth(end.getMonth());
         break;
       case 'last6m':
         start.setMonth(start.getMonth() - 6);

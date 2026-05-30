@@ -92,21 +92,31 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 });
 
+// Run a startup task without letting a rejection bubble up as an unhandled
+// rejection (which would silently swallow e.g. storage-quota failures).
+function runStartupTask(label, fn) {
+  try {
+    Promise.resolve(fn()).catch(e => console.warn(`[Suite] ${label} failed:`, e && e.message));
+  } catch (e) {
+    console.warn(`[Suite] ${label} threw:`, e && e.message);
+  }
+}
+
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
-  startPolling();
-  runMigration();
-  migrateTriageLensConfig();
-  initialiseTriage();
-  initialiseRequestMonitor().then(() => pollRequestMonitor());
-  initialiseUpdateChecker();
+  runStartupTask('startPolling', startPolling);
+  runStartupTask('runMigration', runMigration);
+  runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
+  runStartupTask('initialiseTriage', initialiseTriage);
+  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
+  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   applyPracticeProfile();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  startPolling();
-  initialiseRequestMonitor().then(() => pollRequestMonitor());
-  initialiseUpdateChecker();
+  runStartupTask('startPolling', startPolling);
+  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
+  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
   applyPracticeProfile();

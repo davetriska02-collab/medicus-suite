@@ -1972,7 +1972,6 @@
     }
     decorateQueueRows();
     setupQueueObserver();
-    injectTaskListInterceptor();
     scheduleQueueMonitoring();
   };
 
@@ -2000,8 +1999,8 @@
   // so we re-decorate any time the row container mutates.
 
   // ---- Queue monitoring chips (fetch-intercepted UUIDs) ----
-
-  const injectTaskListInterceptor = () => { /* no-op: interceptor now runs as a MAIN-world content script (page-world.js); inline <script> injection is blocked by the Medicus CSP */ };
+  // The task-list fetch/XHR interception runs in the MAIN world (page-world.js);
+  // it re-dispatches 'ch-task-list-data' to the listener below.
 
   // rowIndex → taskUuid for the current queue load
   const _queueRowUuids = new Map();
@@ -2332,16 +2331,6 @@
 
     let dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
 
-    const onDown = (e) => {
-      if (e.target.closest('button')) return;
-      const rect = hud.getBoundingClientRect();
-      sx = e.clientX; sy = e.clientY;
-      sl = rect.left; st = rect.top;
-      dragging = true;
-      e.preventDefault();
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp, { once: true });
-    };
     const onMove = (e) => {
       if (!dragging) return;
       const left = Math.max(0, Math.min(window.innerWidth - 60, sl + (e.clientX - sx)));
@@ -2350,13 +2339,30 @@
       hud.style.top = top + 'px';
       hud.style.right = 'auto';
     };
-    const onUp = () => {
+    // End the drag and tear down every transient listener. Also fires on window
+    // blur so a drag interrupted by an alt-tab (mouseup never delivered) can't
+    // leave a live mousemove handler clamped to the HUD.
+    const endDrag = () => {
+      if (!dragging) return;
       dragging = false;
       document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', endDrag);
+      window.removeEventListener('blur', endDrag);
       try {
         const r = hud.getBoundingClientRect();
         localStorage.setItem(POS_KEY, JSON.stringify({ left: r.left, top: r.top }));
       } catch (e) {}
+    };
+    const onDown = (e) => {
+      if (e.target.closest('button')) return;
+      const rect = hud.getBoundingClientRect();
+      sx = e.clientX; sy = e.clientY;
+      sl = rect.left; st = rect.top;
+      dragging = true;
+      e.preventDefault();
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', endDrag);
+      window.addEventListener('blur', endDrag);
     };
     header.addEventListener('mousedown', onDown);
   };
@@ -2445,12 +2451,6 @@
     if (t === 'queue') return !!document.querySelector('.ag-row');
     return true; // unknown page type — bail quickly
   };
-
-  // The task-list XHR (Axios) fires during SPA
-  // navigation INTO the queue, before runQueue runs. Install the interceptor
-  // here at init so the first task-list load is captured. Idempotent via the
-  // page-world window.__chIntercepted guard (runQueue also calls it).
-  injectTaskListInterceptor();
 
   // Load config first, then start. Config drives rule matching.
   loadConfig().then(() => {

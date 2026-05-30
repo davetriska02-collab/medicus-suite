@@ -820,7 +820,8 @@ function bindEditor() {
 
   // Copy Mon value to all weekdays
   container.querySelector('#capCopyMon')?.addEventListener('click', () => {
-    const monVal = container.querySelector('input[data-day="mon"]').value;
+    const monVal = container.querySelector('input[data-day="mon"]')?.value;
+    if (monVal == null) return;
     ['tue', 'wed', 'thu', 'fri'].forEach(d => {
       const el = container.querySelector(`input[data-day="${d}"]`);
       if (el) el.value = monVal;

@@ -35,13 +35,13 @@ async function capacityImport(data, { merge = false } = {}) {
   });
 
   const toSet = {};
+  let conflicts = [];
 
   if (data.presets !== undefined) {
     if (merge) {
       const existing = await chrome.storage.local.get('capacity.presets');
       const existingPresets = existing['capacity.presets'] || [];
       const existingIds = new Map(existingPresets.map(p => [p.id, p]));
-      const conflicts = [];
       const merged = [...existingPresets];
       for (const incoming of data.presets) {
         if (existingIds.has(incoming.id)) {
@@ -51,8 +51,6 @@ async function capacityImport(data, { merge = false } = {}) {
         }
       }
       toSet['capacity.presets'] = merged;
-      await chrome.storage.local.set(toSet);
-      return { conflicts };
     } else {
       toSet['capacity.presets'] = data.presets;
     }
@@ -67,7 +65,7 @@ async function capacityImport(data, { merge = false } = {}) {
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
   }
-  return { conflicts: [] };
+  return { conflicts };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
