@@ -5,7 +5,9 @@
 // (it needs DOM/worker primitives).
 //
 // Contract: listens for runtime messages of shape
-//   { target: 'offscreen', type: 'extractPdf', bytes: ArrayBuffer }
+//   { target: 'offscreen', type: 'extractPdf', b64: string }
+// (PDF bytes are base64-encoded because chrome.runtime.sendMessage
+//  JSON-serializes its payload and would otherwise drop an ArrayBuffer)
 // and replies with
 //   { ok: true, text }            on success (text may be '' for image-only PDFs)
 //   { ok: false, error: string }  on failure
@@ -29,18 +31,27 @@ try {
   // If this fails, extraction will fail gracefully and report ok:false below.
 }
 
-async function extractPdfText(bytes) {
+function base64ToBytes(b64) {
+  const binary = atob(b64);
+  const len = binary.length;
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+async function extractPdfText(b64) {
   if (typeof pdfjsLib === 'undefined') {
     return { ok: false, error: 'pdfjsLib not loaded' };
   }
-  if (!bytes || bytes.byteLength === 0) {
+  if (!b64 || typeof b64 !== 'string') {
     return { ok: false, error: 'no bytes' };
   }
 
   let pdf = null;
   try {
-    // PDF.js may transfer/detach the passed buffer; pass a fresh Uint8Array.
-    const data = new Uint8Array(bytes);
+    let data;
+    try { data = base64ToBytes(b64); } catch (e) { return { ok: false, error: 'bad base64' }; }
+    if (!data.length) return { ok: false, error: 'no bytes' };
     const loadingTask = pdfjsLib.getDocument({
       data,
       disableFontFace: true,
@@ -87,7 +98,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.target !== 'offscreen' || msg.type !== 'extractPdf') return;
   // Wrap everything so we never throw across the message boundary.
   Promise.resolve()
-    .then(() => extractPdfText(msg.bytes))
+    .then(() => extractPdfText(msg.b64))
     .then(result => sendResponse(result))
     .catch(err => sendResponse({ ok: false, error: (err && err.message) || String(err) }));
   return true; // keep the channel open for the async reply
