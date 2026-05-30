@@ -1649,6 +1649,39 @@
       "label": "Monitoring {count}",
       "kind": "amber",
       "actions": []
+    },
+    "record.stoppStart": {
+      "enabled": true,
+      "label": "Rx review ×{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "record.riskScores": {
+      "enabled": true,
+      "label": "Risk tools",
+      "kind": "info",
+      "actions": [
+        {
+          "type": "link",
+          "label": "QRISK3 (CVD 10-yr)",
+          "url": "https://qrisk.org/"
+        },
+        {
+          "type": "link",
+          "label": "QCancer",
+          "url": "https://qcancer.org/"
+        },
+        {
+          "type": "link",
+          "label": "eFI — electronic frailty index (NHSE)",
+          "url": "https://www.england.nhs.uk/ourwork/clinical-policy/older-people/frailty/efi/"
+        },
+        {
+          "type": "note",
+          "label": "How to use",
+          "text": "Signpost only — Medicus does not compute these scores.\n\nOpen the calculator and enter the inputs from the record:\n• QRISK3: age, sex, ethnicity, smoking, systolic BP, total cholesterol:HDL ratio, BMI, comorbidities\n• QCancer: age, sex, symptoms, comorbidities\n• eFI: coded frailty deficits\n\nAlways verify against the patient record."
+        }
+      ]
     }
   }
 }
