@@ -2005,40 +2005,64 @@
 
   // ---- Queue monitoring chips (fetch-intercepted UUIDs) ----
 
-  // Page-world injected script — intercepts fetch to capture task-list row UUIDs
-  // and posts them back as a CustomEvent. Installed once per page load.
   const injectTaskListInterceptor = () => {
-    // Guard lives entirely in page-world via window.__chIntercepted (the script
-    // element is removed immediately after injection so a DOM attribute check
-    // would never match on re-entry). beforeunload clears the flag so that SPA
-    // navigations that reset window.fetch get a fresh interceptor installation.
+    // Medicus loads the task list via Axios (XMLHttpRequest), NOT fetch — so we
+    // MUST wrap both window.fetch AND XMLHttpRequest or the queue chips never get
+    // any UUIDs. Regexes are built with new RegExp(plain-slash string) so the
+    // template literal needs no backslash escaping. Guard lives in page-world via
+    // window.__chIntercepted; beforeunload clears it so an SPA reset re-installs.
     const s = document.createElement('script');
     s.textContent = `(function(){
       if(window.__chIntercepted)return;window.__chIntercepted=true;
       window.addEventListener('beforeunload',function(){delete window.__chIntercepted;},{once:true});
-      const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const orig=window.fetch;
-      window.fetch=async function(url,...a){
-        const r=await orig.apply(this,[url,...a]);
+      var UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      var TL_RE=new RegExp('/tasks/data/([^/?]+)/task-list');
+      function pickUuid(item){
+        if(!item||typeof item!=='object')return null;
+        var pref=['taskUuid','taskId','uuid','id'];
+        for(var i=0;i<pref.length;i++){var v=item[pref[i]];if(typeof v==='string'&&UUID_RE.test(v))return v;}
+        for(var k in item){
+          if(/patient/i.test(k))continue;
+          var val=item[k];
+          if(typeof val==='string'&&UUID_RE.test(val)&&/task|id|uuid/i.test(k))return val;
+        }
+        return null;
+      }
+      function handleTaskList(u,body){
+        var m=u.match(TL_RE);
+        if(!m)return;
+        var items=body&&(body.tasks||body.data||body.results||body.rows||(Array.isArray(body)?body:null));
+        if(!Array.isArray(items)){console.warn('[ClinHUD] task-list: no array found; body keys=',body?Object.keys(body):body);return;}
+        if(items.length&&!window.__chTaskKeysLogged){window.__chTaskKeysLogged=1;console.debug('[ClinHUD] task-list first item keys:',Object.keys(items[0]));}
+        var rows=items.map(function(item,i){return {rowIndex:i,taskUuid:pickUuid(item)};}).filter(function(r){return r.taskUuid;});
+        if(rows.length){window.dispatchEvent(new CustomEvent('ch-task-list-data',{detail:{rows:rows,taskTypeSlug:m[1]}}));}
+        else{console.warn('[ClinHUD] task-list: no task UUIDs from '+items.length+' items; sample=',items[0]);}
+      }
+      var origFetch=window.fetch;
+      window.fetch=async function(url){
+        var r=await origFetch.apply(this,arguments);
         try{
-          const u=typeof url==='string'?url:(url&&url.url)||'';
-          const m=u.match(/\\/tasks\\/data\\/([^/?]+)\\/task-list/);
-          if(m){const clone=r.clone();clone.json().then(body=>{
-            const items=body&&(body.data||body.results||(Array.isArray(body)?body:null));
-            if(!Array.isArray(items))return;
-            const rows=items.map((item,i)=>({
-              rowIndex:i,
-              // Prefer explicit uuid/taskId fields over generic id to avoid
-              // numeric surrogate-key false-positives
-              taskUuid:typeof item.uuid==='string'&&UUID_RE.test(item.uuid)?item.uuid
-                      :typeof item.taskId==='string'&&UUID_RE.test(item.taskId)?item.taskId
-                      :typeof item.id==='string'&&UUID_RE.test(item.id)?item.id
-                      :null
-            })).filter(r=>r.taskUuid);
-            if(rows.length)window.dispatchEvent(new CustomEvent('ch-task-list-data',{detail:{rows,taskTypeSlug:m[1]}}));
-          }).catch(e=>console.warn('[ClinHUD] task-list parse error',e));}
+          var u=typeof url==='string'?url:(url&&url.url)||'';
+          if(TL_RE.test(u)){r.clone().json().then(function(b){handleTaskList(u,b);}).catch(function(e){console.warn('[ClinHUD] task-list parse error',e);});}
         }catch(_){}
         return r;
+      };
+      var origOpen=XMLHttpRequest.prototype.open;
+      var origSend=XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open=function(method,url){
+        try{this.__chTLUrl=url;}catch(_){}
+        return origOpen.apply(this,arguments);
+      };
+      XMLHttpRequest.prototype.send=function(){
+        try{
+          var xhr=this;var u=xhr.__chTLUrl||'';
+          if(TL_RE.test(u)){
+            xhr.addEventListener('load',function(){
+              try{handleTaskList(u,JSON.parse(xhr.responseText));}catch(e){console.warn('[ClinHUD] task-list parse error',e);}
+            });
+          }
+        }catch(_){}
+        return origSend.apply(this,arguments);
       };
     })();`;
     (document.head || document.documentElement).appendChild(s);
