@@ -207,6 +207,22 @@ function updateWrPinned(el) {
   if (newEl) el.replaceWith(newEl);
 }
 
+// Pure: decide how a Sentinel snapshot should be surfaced. Kept separate and
+// unit-tested (test-sentinel-panel-state.js) because getting this wrong is the
+// H-005 failure mode — a degraded extraction or a stale/invalidated snapshot
+// must NEVER read as a benign "no chips for this patient" all-clear.
+//   degraded    → extraction succeeded but produced nothing on a patient view
+//   unavailable → snapshot was invalidated (navigating / failed extraction)
+//   no-chips    → no snapshot yet
+//   data        → real chips to render (may legitimately be an empty array)
+function classifySnapshot(snapshot) {
+  if (!snapshot) return 'no-chips';
+  if (snapshot.unavailable) return 'unavailable';
+  if (snapshot.degraded) return 'degraded';
+  if (!snapshot.chips) return 'no-chips';
+  return 'data';
+}
+
 async function refresh() {
   if (!container) return;
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -218,8 +234,12 @@ async function refresh() {
     const mountCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__sentinelMounted });
     if (!mountCheck?.[0]?.result) { render({ state: 'not-mounted' }); return; }
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
-    if (!snapshot?.chips) { render({ state: 'no-chips' }); return; }
-    render({ state: 'data', snapshot });
+    switch (classifySnapshot(snapshot)) {
+      case 'degraded':    render({ state: 'degraded', snapshot }); return;
+      case 'unavailable': render({ state: 'no-chips' }); return;
+      case 'no-chips':    render({ state: 'no-chips' }); return;
+      default:            render({ state: 'data', snapshot }); return;
+    }
   } catch (err) {
     render({ state: 'error', message: err.message });
   }
@@ -237,6 +257,15 @@ function render(payload) {
   if (state === 'not-mounted') { container.innerHTML = shell('', statusBlock('idle', 'Navigate to a patient record', 'Sentinel activates on patient record and triage task pages.')); return; }
   if (state === 'no-chips') { container.innerHTML = shell('', statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.')); return; }
   if (state === 'error') { container.innerHTML = shell('', statusBlock('error', 'Could not connect to Sentinel', message || '')); return; }
+  if (state === 'degraded') {
+    // H-005: a patient was identified but nothing could be extracted. This must
+    // be surfaced as a warning, never as a benign empty — see classifySnapshot.
+    const reason = (snapshot && snapshot.reason) ||
+      'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.';
+    container.innerHTML = shell('', statusBlock('error', "⚠ Couldn't read this record",
+      `${reason} This is NOT an "all clear" — verify the patient directly in Medicus, and the extension may need updating.`));
+    return;
+  }
 
   const { chips, patientContext, evaluatedAt } = snapshot;
   const patient = patientContext;
