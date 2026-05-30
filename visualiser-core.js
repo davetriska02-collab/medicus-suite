@@ -48,6 +48,10 @@ const BUCKET_COLOUR = {
   referral:     '#d4351c',
 };
 
+// Colour-blind-safe single-hue (Blues) ramp for the contacts calendar heatmap.
+// Index 0 = fewest, index 4 = most. Zero-count cells use the page background.
+const HEAT_BLUES = ['#eef3f9','#cfe0f0','#91bce0','#4a8fcf','#005eb8'];
+
 // Reference Change Values — fractional change between successive results that
 // is clinically significant. Source: published RCVs (PMC10197470 et al).
 // Match by lower-cased substring on the analyte name. Longest key wins.
@@ -160,6 +164,29 @@ const EFI_DEFICITS = [
   { id:'visual',     label:'Visual impairment',          terms:['cataract','macular','glaucoma','visual impair','blind '] },
   { id:'weight',     label:'Weight loss / anorexia',     terms:['weight loss','anorexia','cachexia','malnutrition'] },
   { id:'activity',   label:'Activity limitation',        terms:['activity limit','frailty','functional decline'] },
+];
+
+// Charlson Comorbidity Index — flat standard CCI weights, ONE category per
+// condition (no diabetes/liver tier-splitting — kept simple and conservative).
+// Detection is keyword substring on the problem-list text, mirroring the eFI
+// table. Short/ambiguous terms are space-padded (' tia ', ' aids ') so they
+// don't match inside unrelated words. Weights are the published CCI values.
+const CHARLSON_WEIGHTS = [
+  { id:'mi',          label:'Myocardial infarction',     weight:1, terms:['myocardial infarction','heart attack'] },
+  { id:'chf',         label:'Heart failure',             weight:1, terms:['heart failure'] },
+  { id:'pvd',         label:'Peripheral vascular disease',weight:1,terms:['peripheral vascular','peripheral arterial','intermittent claudication'] },
+  { id:'cva',         label:'Cerebrovascular disease',   weight:1, terms:['stroke',' tia ','transient ischaem','cerebrovascular'] },
+  { id:'dementia',    label:'Dementia',                  weight:1, terms:['dementia','alzheimer'] },
+  { id:'copd',        label:'COPD',                      weight:1, terms:['copd','chronic obstructive','emphysema'] },
+  { id:'rheumatic',   label:'Rheumatic disease',         weight:1, terms:['rheumatoid arthritis','systemic lupus','connective tissue'] },
+  { id:'ulcer',       label:'Peptic ulcer disease',      weight:1, terms:['peptic ulcer','gastric ulcer','duodenal ulcer'] },
+  { id:'liver_mild',  label:'Mild liver disease',        weight:1, terms:['chronic hepatitis','cirrhosis'] },
+  { id:'diabetes',    label:'Diabetes',                  weight:1, terms:['diabetes mellitus','type 1 diabetes','type 2 diabetes','diabetic'] },
+  { id:'hemiplegia',  label:'Hemiplegia / paraplegia',   weight:2, terms:['hemiplegia','paraplegia'] },
+  { id:'renal',       label:'Renal disease',             weight:2, terms:['chronic kidney disease','ckd stage','end stage renal','dialysis'] },
+  { id:'malignancy',  label:'Malignancy',                weight:2, terms:['cancer','malignancy','carcinoma','lymphoma','leukaemia'] },
+  { id:'metastatic',  label:'Metastatic solid tumour',   weight:6, terms:['metastatic','metastases','secondary malignancy'] },
+  { id:'aids',        label:'AIDS / HIV',                weight:6, terms:[' aids ','aids-defining','hiv infection','hiv positive','hiv disease','human immunodeficiency'] },
 ];
 
 // High-risk drugs (NICE / BNF / PINCER). For each: the names to detect, the
@@ -849,6 +876,99 @@ function computeDrugMonitoring(entries) {
   });
 }
 
+// Charlson Comorbidity Index from the coded problem list (active + past).
+// Keyword substring matching, with a negation guard to skip family-history /
+// "no evidence" / risk-only mentions, and non-cancer "metastatic calcification /
+// calcinosis" (which would otherwise match the weight-6 metastatic tier — no
+// Charlson category legitimately contains "calcification"). One interaction: a
+// metastatic match suppresses the lower-weight malignancy contribution (count 6,
+// not 8). Age is added by the standard decade banding (50→1 … 80+→4).
+// Display-only; no mortality mapping. Flags missing age rather than inventing it.
+const NEG_RE = /family history|fh of|no evidence|negative|screen|excluded|risk of|at risk|calcification|calcinosis/i;
+
+function computeCharlson(active, past, ageStr) {
+  const all = [...(active||[]), ...(past||[])];
+  const items = [];
+  const matchedIds = new Set();
+  for (const cat of CHARLSON_WEIGHTS) {
+    const hit = all.find(p => {
+      const name = (p && p.name) || '';
+      if (NEG_RE.test(name)) return false;
+      const low = name.toLowerCase();
+      return cat.terms.some(t => low.includes(t));
+    });
+    if (hit) {
+      matchedIds.add(cat.id);
+      items.push({ id: cat.id, label: cat.label, weight: cat.weight, evidence: hit.name });
+    }
+  }
+  // Interaction: metastatic solid tumour subsumes the malignancy(2) tier.
+  let scored = items;
+  if (matchedIds.has('metastatic')) {
+    scored = items.filter(it => it.id !== 'malignancy');
+  }
+  const comorbidityScore = scored.reduce((a, it) => a + (it.weight || 0), 0);
+  const age = parseInt(ageStr, 10);
+  const ageKnown = Number.isFinite(age);
+  const ageScore = ageKnown && age >= 50 ? Math.min(Math.floor((age - 40) / 10), 4) : 0;
+  return {
+    items: scored.map(it => ({ label: it.label, weight: it.weight, evidence: it.evidence })),
+    comorbidityScore,
+    ageScore,
+    total: comorbidityScore + ageScore,
+    ageKnown,
+  };
+}
+
+// Per-condition tracked analyte + target, keyed by QOF_REGISTERS id. Only the
+// conditions that carry a single trackable bloods/observation analyte are here;
+// every other register is already shown by the review-status grid in Recalls.
+const CONDITION_METRICS = {
+  dm:  { analyteTerms:['hba1c'],                    target:{ label:'≤58 mmol/mol', unit:/mmol/i, good:v=>v<=58 } },
+  htn: { analyteTerms:['systolic blood pressure'],  target:{ label:'<140 systolic', good:v=>v<140 } },
+  ckd: { analyteTerms:['egfr'],                     target:{ label:'monitor trend', good:null } },
+};
+
+// For each register with a CONDITION_METRICS entry, pick the matching analyte
+// series (substring + LONGEST-match so 'systolic blood pressure' wins over a
+// looser match), drop null-dated points, and report the latest value + target.
+function computeConditionSummaries(registersWithReview, analytes) {
+  const out = [];
+  const keys = Object.keys(analytes || {});
+  for (const reg of (registersWithReview || [])) {
+    const metric = CONDITION_METRICS[reg.id];
+    if (!metric) continue;
+    const matches = keys.filter(k => metric.analyteTerms.some(t => k.toLowerCase().includes(t)));
+    const key = matches.sort((a, b) => b.length - a.length)[0];
+    let points = ((key && analytes[key]) || []).filter(p => p.date instanceof Date && !isNaN(p.date));
+    points.sort((a,b)=>a.date-b.date);
+    const latest = points.length ? points[points.length - 1] : null;
+    const v = latest ? Number(latest.value) : NaN;
+    const t = metric.target;
+    const unitOk = !t.unit || t.unit.test((latest && latest.unit) || '');
+    const onTarget = (latest && t.good && !isNaN(v) && unitOk) ? t.good(v) : null;
+    out.push({
+      reg,
+      key: key || null,
+      latest,
+      points,
+      target: metric.target,
+      onTarget,
+      overdue: reg.overdue,
+      monthsSinceReview: reg.monthsSinceReview,
+    });
+  }
+  return out;
+}
+
+// Review-due badge for a register (extracted from buildRecalls so the Recalls
+// grid and the condition cards stay in lockstep). Returns { cls, text }.
+function reviewBadge(reg) {
+  if (!reg || !reg.lastReview) return { cls:'badge-red', text:'No review recorded' };
+  if (reg.overdue) return { cls:'badge-amber', text:`${reg.monthsSinceReview}m ago` };
+  return { cls:'badge-green', text:`${reg.monthsSinceReview}m ago` };
+}
+
 // ══ FILTER BAR ═════════════════════════════════════════════════════════════
 
 function buildFilterBarSelects() {
@@ -1015,7 +1135,6 @@ function rebuildAll() {
   const contactableEntries = entries.filter(e => e.bucket === 'consultation');
   const upc  = computeUPC(clinicians, entries.length);
   const bice = computeBice(clinicians, entries.length);
-  const timeline   = computeTimeline(entries);
   const invData    = computeInvestigations(entries);
   const recalls    = computeRecalls(entries);
   const registers  = computeRegisters(_s.activeProblems, _s.pastProblems);
@@ -1023,13 +1142,15 @@ function rebuildAll() {
   const drugs      = computeDrugMonitoring(_s.entries);  // drugs use FULL record
   const efi        = computeEFI(_s.activeProblems, _s.pastProblems, drugs);
   const pincer     = computePINCER([..._s.activeProblems, ..._s.pastProblems], drugs, _s.entries);
+  const charlson   = computeCharlson(_s.activeProblems, _s.pastProblems, _s.demographics?.age);
+  const conditionSummaries = computeConditionSummaries(registersWithReview, invData.analytes);
 
-  buildSnapshot(d, entries, recalls, efi, pincer);
+  buildSnapshot(d, entries, recalls, efi, pincer, drugs, charlson, registersWithReview);
   buildContinuity(clinicians, entries, upc, bice, contactableEntries);
   buildTimeline(entries);
   buildInvestigations(invData);
   buildMedications(drugs, pincer);
-  buildRecalls(recalls, registersWithReview);
+  buildRecalls(recalls, registersWithReview, conditionSummaries);
   buildLetters(entries);
 
   // Filter-bar summary
@@ -1047,7 +1168,7 @@ function rebuildAll() {
 
 // ══ TAB: SNAPSHOT ══════════════════════════════════════════════════════════
 
-function buildSnapshot(d, entries, recalls, efi, pincer) {
+function buildSnapshot(d, entries, recalls, efi, pincer, drugs, charlson, registersWithReview) {
   const ap = _s.activeProblems, pp = _s.pastProblems;
   const now = new Date();
   const last12m = entries.filter(e => e.date && (now - e.date) < 365*864e5).length;
@@ -1079,6 +1200,65 @@ function buildSnapshot(d, entries, recalls, efi, pincer) {
       </div>
     </div>
   </div>`;
+
+  // Comorbidity card — multimorbidity (LTC register count) + Charlson index.
+  // Display-only, keyword-derived, flags missing age. Sits beside the eFI gauge.
+  const ltcCount = (registersWithReview || []).length;
+  const ch = charlson || { items:[], comorbidityScore:0, ageScore:0, total:0, ageKnown:false };
+  const chItems = ch.items || [];
+  const ageMeta = ch.ageKnown
+    ? `incl. age +${ch.ageScore}`
+    : `<span style="color:var(--nhs-red)">age unknown — not age-adjusted</span>`;
+  const condText = chItems.length
+    ? chItems.slice(0,4).map(it => `<span title="${esc(it.evidence)}">${esc(it.label)}</span>`).join(' · ') + (chItems.length > 4 ? ` · +${chItems.length-4} more` : '')
+    : 'No CCI-weighted conditions coded';
+  const comorbidityHtml = `<div class="card">
+    <div class="card-title">Comorbidity</div>
+    <div class="grid-2" style="gap:10px">
+      <div style="text-align:center">
+        <div class="stat-num" style="font-variant-numeric:tabular-nums">${ltcCount}</div>
+        <div class="stat-lbl">LTC registers</div>
+      </div>
+      <div style="text-align:center">
+        <div class="stat-num" style="font-variant-numeric:tabular-nums">${ch.total}</div>
+        <div class="stat-lbl">Charlson index</div>
+      </div>
+    </div>
+    <div class="efi-meta" style="margin-top:10px">${ageMeta}</div>
+    <div class="efi-meta" style="margin-top:4px">${condText}</div>
+    <div style="font-size:10px;color:#768692;margin-top:6px">Indicative, from coded problems — verify against record.</div>
+  </div>`;
+
+  // Monitoring-due card — overdue high-risk-drug monitoring. Never invents a
+  // last-monitoring date: shows "No record" in red when none is held.
+  const dueDrugs = (drugs||[]).filter(x => x.active && x.overdue);
+  let monitoringHtml = '';
+  if (dueDrugs.length) {
+    const fmtMon = d => d ? d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : null;
+    const rows = dueDrugs.map(x => {
+      const req = (x.requires||[]).slice(0,2).join(', ') || 'No specific monitoring';
+      const lastStr = x.lastMonitoring == null
+        ? `<span style="color:var(--nhs-red);font-weight:600">No record</span>`
+        : `${esc(fmtMon(x.lastMonitoring))}${x.daysSinceMonitoring != null ? ` <span class="drug-meta" style="font-variant-numeric:tabular-nums">(${x.daysSinceMonitoring}d ago)</span>` : ''}`;
+      return `<div class="drug-row overdue">
+        <span class="drug-name">${esc(x.label)}</span>
+        <span class="drug-meta">${esc(req)}</span>
+        <span>${lastStr}</span>
+        <span style="font-variant-numeric:tabular-nums">every ${Math.round((x.interval||0)/30)}m</span>
+        <span><span class="badge badge-red">Overdue</span></span>
+      </div>`;
+    }).join('');
+    monitoringHtml = `<div class="card" style="border-left:4px solid var(--nhs-red)">
+      <div class="card-title" style="color:var(--nhs-red)">Monitoring due (${dueDrugs.length})</div>
+      ${rows}
+      <div style="font-size:10px;color:#768692;margin-top:6px">See Medications tab for full monitoring detail.</div>
+    </div>`;
+  } else if ((drugs||[]).some(x => x.active && x.interval > 0)) {
+    monitoringHtml = `<div class="card" style="border-left:4px solid var(--nhs-green)">
+      <div class="card-title">Monitoring due</div>
+      <div style="font-size:12px;color:#4c6272">All monitoring up to date.</div>
+    </div>`;
+  }
 
   // PINCER red-flag card. Always renders so its absence is informative.
   let pincerHtml;
@@ -1160,10 +1340,13 @@ function buildSnapshot(d, entries, recalls, efi, pincer) {
     <div class="stat-tile"><div class="stat-num">${openRecalls.length}</div><div class="stat-lbl">Open recalls</div></div>
   </div>
 
-  <div class="grid-2" style="margin-bottom:14px">
+  <div class="grid-3" style="margin-bottom:14px">
     ${efiHtml}
+    ${comorbidityHtml}
     ${pincerHtml}
   </div>
+
+  ${monitoringHtml}
 
   ${whatsNewHtml}
 
@@ -1388,18 +1571,13 @@ function buildTimeline(entries) {
       <span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block"></span>${b}
     </span>`).join('');
 
-  // Quick stats — entries in scope
-  const yearMap = {};
-  for (const e of entries) {
-    if (!e.date) continue;
-    const yk = e.date.getFullYear();
-    yearMap[yk] = (yearMap[yk]||0) + 1;
-  }
-  const years = Object.keys(yearMap).sort();
-  const maxYr = Math.max(...Object.values(yearMap), 1);
+  // Single aggregation for both the year-volume bar and the calendar heatmap.
+  const tl = computeTimeline(entries);
+  const years = Object.keys(tl.byYear).sort();
+  const maxYr = Math.max(...years.map(y => tl.byYear[y].total), 1);
   let yearBars = '';
   for (const y of years) {
-    const v = yearMap[y];
+    const v = tl.byYear[y].total;
     const pct = Math.round(v / maxYr * 100);
     yearBars += `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
       <div style="font-size:10px;color:#768692">${v}</div>
@@ -1421,9 +1599,79 @@ function buildTimeline(entries) {
   <div class="card">
     <div class="card-title">Volume by year</div>
     <div style="display:flex;align-items:flex-end;gap:6px;height:140px;overflow-x:auto;padding-bottom:6px">${yearBars}</div>
-  </div>`;
+  </div>
+  ${renderContactsHeatmap(tl)}`;
 
   renderSwimLane(entries);
+}
+
+// Calendar heatmap of dated CONSULTATION contacts (year rows × month columns).
+// Colour-blind-safe single-hue Blues; zero-count cells are a neutral pale cell
+// distinct from "1 contact". Uses computeTimeline's month keys verbatim
+// (`${year}-${m}`, 0-indexed, no padding). Returns a card HTML string.
+function renderContactsHeatmap(tl) {
+  const bym = (tl && tl.byYearMonth) || {};
+  const consultAt = (y, m) => bym[`${y}-${m}`]?.byBucket?.consultation || 0;
+
+  const cellKeys = Object.values(bym);
+  let total = 0;
+  for (const c of cellKeys) total += (c.byBucket?.consultation || 0);
+  if (!total) {
+    return `<div class="card">
+      <div class="card-title">Contacts calendar — consultations by month</div>
+      <div style="font-size:13px;color:#768692">No dated contacts in the current selection.</div>
+    </div>`;
+  }
+
+  const yearsPresent = cellKeys.filter(c => (c.byBucket?.consultation || 0) > 0).map(c => c.year);
+  const minYear = Math.min(...yearsPresent);
+  const maxYear = Math.max(...yearsPresent);
+
+  // Max consultation count across all cells, for quantisation.
+  let max = 0;
+  for (let y = minYear; y <= maxYear; y++) {
+    for (let m = 0; m < 12; m++) max = Math.max(max, consultAt(y, m));
+  }
+  max = max || 1;
+  // Floor the quantisation denominator so a single contact isn't the darkest
+  // shade — a quiet patient's lone consult shouldn't read as a busy month.
+  const denom = Math.max(max, 5);
+
+  const colourFor = v => {
+    if (v === 0) return 'transparent';
+    const idx = Math.min(Math.ceil(v / denom * 5) - 1, 4);
+    return HEAT_BLUES[idx];
+  };
+
+  // Header row: empty corner + month labels.
+  let header = `<div class="hm-label"></div>`;
+  for (let m = 0; m < 12; m++) header += `<div class="hm-label">${MONTHS[m]}</div>`;
+
+  let rows = '';
+  for (let y = minYear; y <= maxYear; y++) {
+    rows += `<div class="hm-label">${y}</div>`;
+    for (let m = 0; m < 12; m++) {
+      const v = consultAt(y, m);
+      const title = `${MONTHS[m]} ${y} — ${v} contact${v !== 1 ? 's' : ''}`;
+      const border = v === 0 ? 'border:1px solid var(--border)' : '';
+      rows += `<div class="hm-cell" title="${esc(title)}" style="background:${colourFor(v)};${border}"></div>`;
+    }
+  }
+
+  const legendSwatches = HEAT_BLUES.map(c =>
+    `<span style="width:14px;height:14px;border-radius:3px;background:${c};display:inline-block"></span>`).join('');
+
+  return `<div class="card">
+    <div class="card-title">Contacts calendar — consultations by month</div>
+    <div class="heatmap" style="grid-template-columns:44px repeat(12,1fr)">
+      ${header}
+      ${rows}
+    </div>
+    <div class="hm-legend">
+      <span>fewer</span>${legendSwatches}<span>more</span>
+      <span style="margin-left:10px;color:#768692;font-variant-numeric:tabular-nums">peak ${max}/month</span>
+    </div>
+  </div>`;
 }
 
 function renderSwimLane(entries) {
@@ -1885,7 +2133,48 @@ function buildMedications(drugs, pincer) {
 
 // ══ TAB: REGISTERS & RECALLS ═══════════════════════════════════════════════
 
-function buildRecalls(recalls, registers) {
+// Condition summary cards — latest tracked value, mini-trend, target, and
+// review-due badge for each analyte-bearing register. "no recent value" when
+// there is no dated point; never invents a value.
+function renderConditionCards(summaries) {
+  if (!summaries || !summaries.length) return '';
+  const fmtD = d => d ? d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
+  const cards = summaries.map(s => {
+    const reg = s.reg || {};
+    const latest = s.latest;
+    const valHtml = latest && !isNaN(Number(latest.value))
+      ? `<div class="cond-value" style="font-variant-numeric:tabular-nums">${esc(String(latest.value))}${latest.unit ? ' <span style="font-size:12px;color:var(--text2)">'+esc(latest.unit)+'</span>' : ''}</div>
+         <div style="font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums">${esc(fmtD(latest.date))}</div>`
+      : `<div class="cond-value" style="color:var(--text2);font-size:14px">no recent value</div>`;
+    const spark = renderSparkline(s.points || [], null, null);
+    let targetChip = '';
+    if (s.onTarget !== null && s.onTarget !== undefined) {
+      targetChip = s.onTarget
+        ? `<span class="badge badge-green">on target</span>`
+        : `<span class="badge badge-amber">off target</span>`;
+    }
+    const rb = reviewBadge(reg);
+    return `<div class="cond-card">
+      <div class="reg-name">${esc(reg.label || '')}</div>
+      ${valHtml}
+      <div style="margin:6px 0">${spark}</div>
+      <div class="cond-target">Target: ${esc((s.target && s.target.label) || '—')} ${targetChip}</div>
+      <div class="reg-review" style="margin-top:6px">
+        <span class="reg-review-date">Review</span>
+        <span class="badge ${rb.cls}">${esc(rb.text)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <div class="card-title">Condition summaries</div>
+    <div class="grid-3">${cards}</div>
+    <div style="font-size:10px;color:#768692;margin-top:8px">Latest tracked value from coded results — verify against the full record.</div>
+  </div>`;
+}
+
+function buildRecalls(recalls, registers, conditionSummaries) {
+  const condHtml = renderConditionCards(conditionSummaries || []);
+
   let regHtml = '';
   if (registers.length) {
     // Sort overdue registers first.
@@ -1894,14 +2183,8 @@ function buildRecalls(recalls, registers) {
       return (b.monthsSinceReview ?? -1) - (a.monthsSinceReview ?? -1);
     });
     const regsGrid = ordered.map(r=>{
-      let reviewLine;
-      if (!r.lastReview) {
-        reviewLine = `<span class="badge badge-red">No review recorded</span>`;
-      } else if (r.overdue) {
-        reviewLine = `<span class="badge badge-amber">${r.monthsSinceReview}m ago</span>`;
-      } else {
-        reviewLine = `<span class="badge badge-green">${r.monthsSinceReview}m ago</span>`;
-      }
+      const rb = reviewBadge(r);
+      const reviewLine = `<span class="badge ${rb.cls}">${esc(rb.text)}</span>`;
       const dateStr = r.lastReview ? r.lastReview.date.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
       return `<div class="reg-card" data-register="${esc(r.conditions[0]?.name||'')}" style="cursor:pointer;${r.overdue?'border-color:var(--nhs-orange);background:#fff9e6':''}">
         <div class="reg-name">${esc(r.label)}</div>
@@ -1936,6 +2219,7 @@ function buildRecalls(recalls, registers) {
   }
 
   const html = `
+  ${condHtml}
   ${regHtml}
   <div class="card">
     <div class="card-title">Open recalls (${recalls.open.length})</div>
