@@ -543,15 +543,8 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
 
       <!-- Section H: Live preview -->
       <div class="cr-preview-wrap">
-        <div class="cr-preview-head">
-          Live preview
-          <select id="ciPreviewStatus">
-            <option value="achieved">Achieved (met)</option>
-            <option value="not_met">Not met</option>
-            <option value="overdue">Overdue</option>
-            <option value="no_data">No data</option>
-          </select>
-        </div>
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="ciMockMount"></div>
         <div id="ciPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Fill in code, name, and check details to see a preview.</span></div>
       </div>
 
@@ -640,6 +633,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <label for="dcSource">Source reference (URL or citation)</label>
           <input type="url" id="dcSource" placeholder="https://" />
         </div>
+      </div>
+
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="dcMockMount"></div>
+        <div id="dcPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Add a label and at least one drug set to see a preview.</span></div>
       </div>
 
       <div class="cr-form-error" id="dcFormError"></div>
@@ -749,6 +748,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
         </div>
       </div>
 
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="ecMockMount"></div>
+        <div id="ecPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Set the source, terms and threshold to see a preview.</span></div>
+      </div>
+
       <div class="cr-form-error" id="ecFormError"></div>
 
       <div class="actions" style="margin-top:16px;">
@@ -810,6 +815,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <label for="cmNotes">Notes (shown on alert)</label>
           <textarea id="cmNotes" rows="2" style="height:44px;" placeholder="e.g. Review urgently — multiple risk factors present."></textarea>
         </div>
+      </div>
+
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="cmMockMount"></div>
+        <div id="cmPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Pick a label, operator and at least two child rules to see a preview.</span></div>
       </div>
 
       <div class="cr-form-error" id="cmFormError"></div>
