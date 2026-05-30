@@ -2180,7 +2180,8 @@
     const urgentOn = urgentCfg && urgentCfg.enabled !== false;
     const actionOn = actionCfg && actionCfg.enabled !== false;
     if (!urgentOn && !actionOn) return; // neither opted in — skip entirely
-    const ctx = (typeof API !== 'undefined' && API.detectMedicusContext) ? API.detectMedicusContext(location.href) : null;
+    const API = (typeof window !== 'undefined') ? window.SentinelApiClient : null;
+    const ctx = (API && API.detectMedicusContext) ? API.detectMedicusContext(location.href) : null;
     if (!ctx || !ctx.apiBase || !ctx.taskUuid) return;
     // De-dupe: do not re-request body text for a document we already asked about.
     if (_docPdfRequestedFor === ctx.taskUuid) return;

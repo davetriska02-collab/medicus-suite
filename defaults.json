@@ -783,24 +783,6 @@
       "kind": "red",
       "actions": []
     },
-    "queue.readTime2m": {
-      "enabled": true,
-      "label": "2m read",
-      "kind": "info",
-      "actions": []
-    },
-    "queue.readTime5m": {
-      "enabled": true,
-      "label": "5m read",
-      "kind": "info",
-      "actions": []
-    },
-    "queue.readTime10m": {
-      "enabled": true,
-      "label": "10m+ read",
-      "kind": "info",
-      "actions": []
-    },
     "detail.statusAwaiting": {
       "enabled": true,
       "label": "{status}",
@@ -867,12 +849,6 @@
       "kind": "info",
       "actions": []
     },
-    "detail.readTime": {
-      "enabled": true,
-      "label": "{label}",
-      "kind": "info",
-      "actions": []
-    },
     "record.age": {
       "enabled": true,
       "label": "{age}y",
@@ -924,6 +900,72 @@
     "record.polypharmacyAmber": {
       "enabled": true,
       "label": "Meds x{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "record.monitoringDueRed": {
+      "enabled": true,
+      "label": "Monitoring due x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "record.monitoringDueAmber": {
+      "enabled": true,
+      "label": "Monitoring x{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "detail.monitoringDueRed": {
+      "enabled": true,
+      "label": "Monitoring due x{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.monitoringDueAmber": {
+      "enabled": true,
+      "label": "Monitoring x{count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "detail.docType": {
+      "enabled": true,
+      "label": "{docType}",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.docSpecialty": {
+      "enabled": true,
+      "label": "{specialty}",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.docEntries": {
+      "enabled": true,
+      "label": "Filed notes ×{count}",
+      "kind": "info",
+      "actions": []
+    },
+    "detail.docUrgent": {
+      "enabled": false,
+      "label": "Urgent: {term}",
+      "kind": "red",
+      "actions": []
+    },
+    "detail.docAction": {
+      "enabled": false,
+      "label": "Action: {phrase}",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.monitoringDueRed": {
+      "enabled": false,
+      "label": "Monitoring ×{count}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.monitoringDueAmber": {
+      "enabled": false,
+      "label": "Monitoring {count}",
       "kind": "amber",
       "actions": []
     }
