@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.4.1  
-**Document version:** 3.1  
-**Date issued:** 2026-05-29  
+**Product version:** 3.16.0  
+**Document version:** 3.2  
+**Date issued:** 2026-05-30  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
 **Status:** Live — reviewed at each minor or major release  
@@ -24,13 +24,14 @@ The log is intended to be read alongside:
 
 ## 2. Scope
 
-This hazard log applies to all functional modules of Medicus Suite v3.4.1, namely:
+This hazard log applies to all functional modules of Medicus Suite v3.16.0, namely:
 
 - **Monitoring (Sentinel)** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list
+- **Custom Alert Builder (Sentinel options)** — form-based authoring of practice custom rules across five rule types (drug-monitoring, drug-combo, qof-indicator, event-count, composite), with an engine-backed live "would this fire?" preview against an editable test patient and schema validation on save (v3.15.0–v3.16.0)
 - **Slot Counter** — display of appointment slot availability
 - **Capacity Forecast** — display of historical session/slot usage
 - **Submissions Tracker** — display of daily task volume counts
-- **Triage Lens** — overlay HUD on Medicus triage pages
+- **Triage Lens** — overlay HUD on Medicus triage/record pages. Surfaces: red/amber/info text-pattern chips on patient requests; computed record chips (frailty, polypharmacy, anticholinergic burden, drug-monitoring due); **STOPP/START-style prescribing-combination prompts** on the record medications tile (NSAID + anticoagulant/antiplatelet, "triple whammy" NSAID + ACEi/ARB + diuretic, benzodiazepine/Z-drug in age ≥80) (v3.14.0); a **risk-tool signpost chip** linking to the QRISK3 / QCancer / eFI calculators (signpost only — no score computed) (v3.14.0); and **NHS Pharmacy First pathway signposting** snippets across all seven England pathways (v3.13.0)
 - **Activity Report** — display of staff activity counts
 - **Referrals Tracker** — display of referral audit data drawn from Medicus
 - **Waiting Room / Request Monitor** — live demand display with configurable thresholds
@@ -125,7 +126,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate — missed monitoring, eventually caught by Medicus's own workflows) |
 | **Initial likelihood** | 3 (Possible — curated rule set is intentionally a subset) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) Monitoring is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 230+ unit tests cover threshold and date logic. (f) Annual QOF specification review is a documented release checklist item. |
+| **Controls / mitigations** | (a) Monitoring is positioned as a memory aid, not the system of record — see `CLINICAL-SAFETY-NOTICE.md`. (b) Absence of a chip is documented as "no data retrieved or no rule defined", not "clear". (c) The disclaimer explicitly discloses incomplete coverage. (d) Medicus itself surfaces overdue monitoring and QOF items independently of the extension. (e) 320+ automated checks cover threshold, date and rule-firing logic. (f) Annual QOF specification review is a documented release checklist item. (g) **Applicability filters fail OPEN on unknown demographics (v3.12.1):** a rule gated to a sex or age band still fires when the patient's age/sex cannot be scraped from the page — so a demographic-gated safety alert (e.g. the MHRA valproate "female of childbearing potential" alert, or age-gated QOF indicators) is no longer silently suppressed when the banner can't be read. A rule is excluded only when the patient is *positively known* to be out of scope. Patient-context age/sex extraction was also made more robust, and a regression test (`test-applicability-filters.js`) pins this behaviour. (h) A Dementia (DEM) QOF register was added to the bundled set (it was previously absent). |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -144,11 +145,11 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 2 (Minor — repeat test or unnecessary clinical attention) |
 | **Initial likelihood** | 3 (Possible) |
 | **Initial risk** | 6 |
-| **Controls / mitigations** | (a) Substring matching limitation explicitly disclosed. (b) Verification against source record required by disclaimer before any action. (c) Register match logic is intentionally conservative (label must contain the expected substring). (d) Test suite includes false-positive regression cases (`test-custom-rules.js`, `test-qof-year.js`). (e) Practice-authored custom rules are constrained to three supported check shapes via the form builder — arbitrary logic is not exposed. |
+| **Controls / mitigations** | (a) Substring matching limitation explicitly disclosed. (b) Verification against source record required by disclaimer before any action. (c) Register match logic is intentionally conservative (label must contain the expected substring). (d) Test suite includes false-positive regression cases (`test-custom-rules.js`, `test-qof-year.js`, `test-applicability-filters.js`). (e) Practice-authored custom rules are constrained to the engine's supported rule types via the form builder — drug-monitoring, drug-combo, qof-indicator (observation-threshold / medication-present / observation-recent / observation-trend), event-count, and composite — and to those fields the schema validator accepts; arbitrary logic is not exposed. (f) **Deliberate fail-open trade-off (v3.12.1):** because age/sex filters now fail open on *unknown* demographics (see H-002), a gated rule can fire for a patient who is in fact out of scope when the banner can't be read — a small, accepted increase in out-of-scope prompts, chosen so safety-critical alerts are not missed, and intercepted by mandatory source-record verification. A rule still does **not** fire for a patient *known* to be out of scope. (g) **Engine-backed live preview (v3.15.0–v3.16.0):** the builder evaluates the rule-under-construction against an editable test patient using the real engine, so an author can see false-positive (and false-negative) firing behaviour before saving. |
 | **Residual severity** | 2 |
 | **Residual likelihood** | 3 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
-| **Acceptability** | Accepted. Over-investigation risk exists but is intercepted by clinician verification of the source record. |
+| **Acceptability** | Accepted. Over-investigation risk exists but is intercepted by clinician verification of the source record. The fail-open trade-off was reviewed by the CSO and accepted as net safety-positive (missed safety alerts are the more serious failure mode). |
 
 ---
 
@@ -163,11 +164,11 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 3 (Possible — depends on practice rule-authoring discipline) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) The deploying practice is responsible for clinical validity of its own rules — stated in `CLINICAL-SAFETY-NOTICE.md` and in the disclaimer. (b) The form builder constrains rule logic to three engine-supported shapes (observation-threshold, medication-present, observation-recent) — arbitrary decision logic is not exposed. (c) Custom rules are visually labelled "Custom" in the UI. (d) Custom rules are explicitly not QOF rules; their points field is metadata only. (e) Backup/restore of rule sets allows the practice to review historical configurations. (f) The CSO recommends practices nominate a rules owner who reviews custom rules at each guidance update. |
+| **Controls / mitigations** | (a) The deploying practice is responsible for clinical validity of its own rules — stated in `CLINICAL-SAFETY-NOTICE.md` and in the disclaimer. (b) The form builder constrains rule logic to the engine-supported rule types (drug-monitoring, drug-combo, qof-indicator, event-count, composite) and their defined check shapes — arbitrary decision logic is not exposed. (c) Custom rules are visually labelled "Custom" in the UI. (d) Custom rules are explicitly not QOF rules; their points field is metadata only. (e) Backup/restore of rule sets allows the practice to review historical configurations. (f) The CSO recommends practices nominate a rules owner who reviews custom rules at each guidance update. (g) **Engine-backed live preview (v3.15.0–v3.16.0):** before saving, the author can run the rule against an editable test patient (medications / observations / problems / age / sex / date) and see whether — and why — it would fire, using the same engine the runtime uses, with an "auto-fill from rule" helper that seeds a firing example. This lets an author catch a mis-scoped or non-firing rule at authoring time rather than in production. (h) **Validate-on-save (v3.15.0–v3.16.0):** every rule type now saves only after passing the shared `validateCustomRule` schema validator (the same one used on import), so the form can no longer persist an object the engine would reject or silently mis-evaluate; covered by `test-alert-builder.js`. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP), with explicit deploying-organisation duty |
-| **Acceptability** | Accepted, subject to the practice fulfilling its DCB0160-style duties as described in `CLINICAL-SAFETY-NOTICE.md`. |
+| **Acceptability** | Accepted, subject to the practice fulfilling its DCB0160-style duties as described in `CLINICAL-SAFETY-NOTICE.md`. The v3.15.0–v3.16.0 live preview and validate-on-save materially reduce the likelihood of a malformed or mis-scoped rule reaching production, but do not relieve the practice of responsibility for the *clinical* correctness of the rule. |
 
 ---
 
@@ -201,7 +202,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 2 (Unlikely — CI gates) |
 | **Initial risk** | 6 |
-| **Controls / mitigations** | (a) The full automated test suite (230+ tests at v3.4.1) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover rule engine, QOF year logic, custom indicators, IO, update checker, and request monitor. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
+| **Controls / mitigations** | (a) The full automated test suite (320+ automated checks at v3.16.0) must pass before a release tag is pushed; CI release workflow fails closed. (b) Test files cover the rule engine, QOF year logic, custom indicators, IO, update checker, request monitor, applicability filters, STOPP/START prescribing flags, and the custom-rule-builder round-trip. (c) `CHANGELOG.md` documents every change. (d) Version number is surfaced in the Options page and popup. (e) The auto-update mechanism alerts users to new versions but does not auto-install. (f) A CSO-approved hot-fix release can be cut within hours. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -220,7 +221,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate — clinical action based on incorrect display) |
 | **Initial likelihood** | 4 (Likely — automation bias is a well-documented human factors phenomenon) |
 | **Initial risk** | 12 |
-| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". (h) Visualiser eFI and PINCER outputs are explicitly labelled as supplementary screening aids with disclosed limitations. |
+| **Controls / mitigations** | (a) The "single most important rule" in `CLINICAL-SAFETY-NOTICE.md` explicitly requires verification of every value against the source record before any clinical action. (b) The disclaimer makes verification a binding condition of use. (c) The side panel is visually positioned as an overlay — not styled to imitate the Medicus record. (d) No chip uses language that asserts clinical truth. (e) The Clinical Safety Notice is required reading before installation. (f) The deploying practice is asked to brief users at induction on the "not the record" principle. (g) Custom indicators are visually labelled "Custom". (h) Visualiser eFI and PINCER outputs are explicitly labelled as supplementary screening aids with disclosed limitations. (i) The Triage Lens record-panel STOPP/START prescribing prompts, the risk-tool signpost chip, and the Pharmacy First signposting snippets (v3.13.0–v3.14.0) are likewise deterministic, name-based prompts to *review and verify* — they carry no assertion of clinical truth, the risk-tool chip explicitly states the suite does not compute the score, and the Pharmacy First snippets are worded "consider … if eligible" with red-flag safety-netting (see H-019). |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 3 |
 | **Residual risk** | 9 — Acceptable (ALARP); identified as the **primary residual risk** in the system |
@@ -386,10 +387,10 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 |-------|-------|
 | **Hazard ID** | H-016 |
 | **Description** | The Visualiser fails to surface a PINCER prescribing safety flag or a high-risk drug monitoring overdue indicator when one should be present — for example, a patient is taking an NSAID and has heart failure, or is on methotrexate with monitoring now overdue, but no flag appears in the Medications tab or Snapshot. |
-| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations at v3.4.1); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
+| **Potential causes** | Drug name in the PDF text is a brand name, abbreviation, or coding variant not matched by the drug-family regex; disease label does not contain the expected substring; the drug-disease combination is not in the implemented PINCER rule set (5 combinations as at v3.16.0); monitoring investigation uses a local or abbreviated name not matched to the expected panel name; the PDF section containing the drug or problem was not extracted (see H-014); historical prescribing not visible in the export window. |
 | **Affected users / components** | Clinicians using the Medications tab or Snapshot PINCER card. Components: `visualiser-core.js` `computePINCER()`, `computeDrugMonitoring()`, `HIGH_RISK_DRUGS` constant, `PINCER_RULES` constant. |
 | **Initial severity** | 4 (Major — a clinically significant prescribing safety hazard is not surfaced) |
-| **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set at v3.4.1) |
+| **Initial likelihood** | 3 (Possible — regex-based detection; limited PINCER rule set as at v3.16.0) |
 | **Initial risk** | 12 |
 | **Controls / mitigations** | (a) The PINCER implementation is explicitly documented as a subset of the full PINCER tool — it is supplementary to Medicus's own prescribing safety systems, which remain the primary clinical safety gate. (b) The implemented PINCER rules and drug families are listed in `INTENDED-PURPOSE.md` and the known limitations section of the Clinical Safety Notice. (c) Absence of a PINCER flag is explicitly documented as not a guarantee of prescribing safety (Clinical Safety Notice section 7, limitation 13). (d) Drug-family regex is designed to capture common brand names and generic variants for each family, but cannot cover all possible nomenclature variants. (e) Medicus's own drug interaction and contraindication checking system operates independently of this extension. (f) Verification against the live Medicus record is required by the disclaimer before any clinical action. |
 | **Residual severity** | 4 |
@@ -437,6 +438,25 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-019 — Triage Lens record-panel prescribing prompts and signposting (STOPP/START, Pharmacy First, risk-tool links)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-019 |
+| **Description** | The Triage Lens record / medications panel surfaces deterministic prescribing-combination prompts (STOPP/START-style: NSAID + anticoagulant/antiplatelet; "triple whammy" NSAID + ACEi/ARB + diuretic; benzodiazepine/Z-drug in age ≥80), a risk-tool signpost chip (links to the QRISK3 / QCancer / eFI calculators), and NHS Pharmacy First pathway signposting snippets. These may (a) fail to surface a relevant prescribing combination (false-negative), (b) surface a combination that is not in fact a hazard for this patient (false-positive), or (c) prompt signposting of a patient to community pharmacy whose presentation is not actually suitable for a Pharmacy First pathway. |
+| **Potential causes** | Drug detection is name-based regex and will miss brand/abbreviation/coding variants and topical-vs-systemic nuances beyond those excluded; the implemented STOPP/START set is a small, intentionally low-false-positive subset, not the full STOPP/START v2 criteria; combination "hazard" cannot account for the individual's indication, existing gastroprotection, monitoring, or specialist plan; Pharmacy First eligibility is age/sex/clinically gated and the patient's age/sex may be unknown or the request text ambiguous; the risk-tool chip computes no score. |
+| **Affected users / components** | Clinicians using the Triage Lens record panel. Components: `content-scripts/triage-lens/content.js` (`evaluatePrescribingFlags`, `computeSignals` MEDS tile, `record.stoppStart` / `record.riskScores` chips), `content-scripts/triage-lens/defaults.json` (Pharmacy First actions and the four added pathway rules). |
+| **Initial severity** | 3 (Moderate — a missed prompt is backed by Medicus's own prescribing safety; a spurious prompt or mis-signpost prompts a check, not harm) |
+| **Initial likelihood** | 3 (Possible — name-based detection; subset rule set) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) The prompts are explicitly supplementary to Medicus's own prescribing-safety systems, which remain the primary control. (b) STOPP/START detection is deterministic, name-based, and worded as a *review* prompt ("review need / gastroprotection", "consider deprescribing") — never a recommendation of a specific drug, dose, or change. (c) Topical NSAIDs are excluded from the combination logic; the age-gated benzodiazepine check fires only when age is *known* ≥80. (d) The risk-tool chip is signpost-only — it links to the official calculators and lists the inputs they need; the suite computes no score, deliberately avoiding the medical-device exposure of an unvalidated reimplementation (the extractors cannot supply cholesterol ratio / smoking / ethnicity). (e) Pharmacy First snippets state each pathway's age/sex gateway, are worded "consider … if eligible", carry red-flag safety-netting, and instruct the clinician to confirm eligibility — the signposting decision remains the clinician's. (f) Verification against the source record is required by the disclaimer before any action. (g) The deterministic logic is unit-tested (`test-prescribing-flags.js`) and the Pharmacy First detection rules were checked against firing / non-firing examples. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted, with the express condition that these prompts are supplementary and that Medicus's own prescribing-safety systems and the clinician's own assessment of Pharmacy First suitability remain the primary controls. This hazard extends the H-016 / H-017 (Visualiser PINCER) framing to the live record panel. |
+
+---
+
 ## 6. Hazard summary
 
 | ID | Hazard | Initial S×L | Initial risk | Residual S×L | Residual risk | Status |
@@ -459,8 +479,9 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-016 | PINCER/drug-monitoring false-negative | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-017 | PINCER/drug-monitoring false-positive | 2×3 | 6 | 2×3 | 6 | Accepted (ALARP) |
 | H-018 | PID in feedback email | 4×2 | 8 | 4×1 | 4 | Accepted (ALARP) |
+| H-019 | Triage Lens record-panel prescribing prompts & signposting | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
 
-No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.4.1 is approved by the Clinical Safety Officer on the basis of this hazard log.
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.16.0 is approved by the Clinical Safety Officer on the basis of this hazard log.
 
 ## 7. Review and reporting
 
@@ -485,12 +506,13 @@ If an incident meeting the threshold of a patient safety incident is identified,
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129 style; expanded to 12 hazards; added severity/likelihood matrix; added explicit acceptability thresholds; aligned with `CLINICAL-SAFETY-NOTICE.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; expanded scope to include Patient Record Visualiser; added H-013 (PDF staleness), H-014 (silent data omission), H-015 (eFI inaccuracy), H-016 (PINCER false-negative), H-017 (PINCER false-positive); updated H-007 to include Visualiser automation bias; updated test count to 213+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.0 |
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added H-018 (patient-identifiable data in feedback email) following the new in-app feedback channel; updated test count to 230+; aligned with `CLINICAL-SAFETY-NOTICE.md` v3.1 |
+| 2026-05-30 | 3.2 | DT | Synchronised to v3.16.0. Added H-019 (Triage Lens record-panel STOPP/START prescribing prompts, Pharmacy First signposting, and risk-tool signpost links, v3.13.0–v3.14.0). Updated H-002 to record the v3.12.1 applicability-filter "fail-open on unknown demographics" fix and sturdier patient-context extraction (prevents silent suppression of demographic-gated safety alerts such as the MHRA valproate alert and age-gated QOF indicators) plus the added Dementia register. Updated H-003 to record the deliberate fail-open trade-off and the new engine-backed live preview, and corrected the rule-type description (five rule types, not "three check shapes"). Updated H-004 to record the v3.15.0–v3.16.0 engine-backed live preview and validate-on-save controls. Updated H-007 to include the new live-panel prompt surfaces. Updated test count to 320+ automated checks. Aligned with `CLINICAL-SAFETY-NOTICE.md` v3.2 and `INTENDED-PURPOSE.md` v3.16.0. |
 
 ## 9. Clinical Safety Officer sign-off
 
-I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.4.1, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.16.0, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-29
+**Date:** 2026-05-30

@@ -28,6 +28,17 @@ gone. `test-alert-builder.js` now covers the full form-object → validate →
 engine-fires round-trip for all five types (18 assertions, incl. composite
 AND-firing); full suite passes.
 
+### Docs — Clinical safety case synchronised to v3.16.0
+Updated the safety case (`docs/HAZARD-LOG.md` → v3.2, `docs/CLINICAL-SAFETY-NOTICE.md`
+→ v3.2, `docs/INTENDED-PURPOSE.md` → v3.16.0) to cover this session's
+safety-relevant changes: new hazard **H-019** (Triage Lens record-panel STOPP/START
+prescribing prompts, Pharmacy First signposting, risk-tool signpost links); H-002
+updated for the v3.12.1 applicability-filter fail-open fix (prevents silent
+suppression of demographic-gated safety alerts) + sturdier patient-context
+extraction + the added Dementia register; H-003/H-004 updated for the five rule
+types and the engine-backed live-preview / validate-on-save controls; H-007
+extended to the new prompt surfaces; test count refreshed.
+
 ## [v3.15.0] — 2026-05-30
 ### Added — Custom Alert Builder: engine-backed live preview (Phase 1 of 5)
 The Sentinel custom-rule builder (`sentinel-options/`) gains a **real
