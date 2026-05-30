@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.11.0] — 2026-05-30
+### Removed — Document-body text-analysis feature
+Removed the Triage Lens document-**body** text-analysis feature in full — both
+the v3.8.0 keyword chips and the v3.9.0 PDF body-extraction pipeline that fed
+them. The descriptive document-metadata chips (`detail.docType`,
+`detail.docSpecialty`, and the on-by-default `detail.docEntries` "Filed notes
+×N" count) and the queue monitoring chips are unaffected.
+
+- **Chips removed:** `detail.docUrgent` (red) and `detail.docAction` (amber),
+  including their keyword matchers (`DOC_URGENT_RE` / `DOC_ACTION_RE`), the
+  negation guard, and the covering-message / filed-notes text matching in
+  `content.js`. (`defaults.json`, `content-scripts/triage-lens/defaults.json`,
+  `content-scripts/triage-lens/content.js`, `content-scripts/triage-lens/options.js`)
+- **PDF pipeline removed:** the offscreen document (`offscreen.html` /
+  `offscreen.js`), the service-worker `sentinelDocPdfText` handler and its
+  offscreen helpers, the `requestDocPdfText` content-script requester, the
+  `offscreen` manifest permission, and the offscreen web-accessible resources.
+  (`service-worker.js`, `manifest.json`)
+- **Interceptor narrowed:** `page-world.js` no longer intercepts the
+  `/document/modals/version/preview/` endpoint (the `ch-doc-preview` /
+  `inboundMessage` covering-message source); it still re-dispatches
+  `/clinical/document/entries/` as `ch-doc-entries` to power the kept "Filed
+  notes ×N" chip. (`content-scripts/triage-lens/page-world.js`)
+- **Scratch files removed:** `doc-body-plan.md`, `doc-body-probe2.js`,
+  `doc-body-discovery.js`.
+- No `chrome.storage` keys, `shared/io/*` files, or backup envelopes were
+  involved (the feature was deliberately ephemeral), so suite backups are
+  unaffected. `vendor/pdf.min.js` / `pdf.worker.min.js` are retained — still
+  used by the Patient Record Visualiser.
+
 ## [v3.10.0] — 2026-05-30
 ### Fixed — Network interceptors blocked by Medicus CSP (the real root cause)
 - **This is why the queue monitoring chips and document-context lens never

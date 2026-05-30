@@ -945,18 +945,6 @@
       "kind": "info",
       "actions": []
     },
-    "detail.docUrgent": {
-      "enabled": false,
-      "label": "Urgent: {term}",
-      "kind": "red",
-      "actions": []
-    },
-    "detail.docAction": {
-      "enabled": false,
-      "label": "Action: {phrase}",
-      "kind": "amber",
-      "actions": []
-    },
     "queue.monitoringDueRed": {
       "enabled": false,
       "label": "Monitoring ×{count}",

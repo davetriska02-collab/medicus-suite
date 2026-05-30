@@ -12,8 +12,7 @@
 // re-broadcasts the bits the isolated content script needs as window
 // CustomEvents (which cross the world boundary for JSON-serialisable detail):
 //   • /tasks/data/{slug}/task-list      → 'ch-task-list-data'   (queue monitoring)
-//   • /clinical/document/entries/…       → 'ch-doc-entries'      (doc context)
-//   • /document/modals/version/preview/… → 'ch-doc-preview'      (doc context)
+//   • /clinical/document/entries/…       → 'ch-doc-entries'      (filed-notes count)
 //
 // It reads responses only; it never blocks, rewrites, or sends anything. No
 // patient data leaves the browser.
@@ -26,7 +25,6 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
   var ENTRIES_RE = new RegExp('/clinical/document/entries/');
-  var PREVIEW_RE = new RegExp('/document/modals/version/preview/');
   var TAIL_RE = new RegExp('/([0-9a-f-]+)(?:\\?|$)', 'i');
 
   function tailId(u) { var m = String(u || '').match(TAIL_RE); return m ? m[1] : null; }
@@ -79,19 +77,12 @@
           documentId: tailId(u),
           entries: (body && body.entries) || []
         } }));
-      } else if (PREVIEW_RE.test(u)) {
-        var body2 = JSON.parse(text);
-        window.dispatchEvent(new CustomEvent('ch-doc-preview', { detail: {
-          documentId: (body2 && body2.documentId) || null,
-          inboundMessage: (body2 && body2.inboundMessage) || '',
-          typeLabel: (body2 && body2.document && body2.document.typeLabel) || ''
-        } }));
       }
     } catch (e) { console.warn('[ClinHUD] doc-context parse error', e); }
   }
 
   function isInteresting(u) {
-    return TL_RE.test(u) || ENTRIES_RE.test(u) || PREVIEW_RE.test(u);
+    return TL_RE.test(u) || ENTRIES_RE.test(u);
   }
 
   // ---- fetch wrap ----
