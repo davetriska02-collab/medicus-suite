@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.4.1  
-**Document version:** 3.1  
-**Date issued:** 2026-05-29  
+**Product version:** 3.16.0  
+**Document version:** 3.2  
+**Date issued:** 2026-05-30  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -27,6 +27,8 @@ In the event of any conflict between this notice and the disclaimer, the disclai
 Medicus Suite is a passive, read-only Google Chrome extension that operates alongside the Medicus electronic patient record (EPR). It reads data already present in the clinician's authenticated Medicus session and re-displays a reorganised, summarised view in a side panel and on configurable on-page overlays. It applies arithmetic threshold checks (for example: "the most recent HbA1c was recorded 114 days ago; the configured monitoring interval is 90 days; the indicator is therefore overdue") and surfaces the result as a colour-coded indicator.
 
 From v1.6 onwards, the extension additionally includes the **Patient Record Visualiser** — a full-page dashboard that processes a locally-held Medicus EPR export PDF to produce summary analytics. These include continuity-of-care indices, investigation trend charts with clinical zone bands, high-risk drug monitoring compliance, a computed Electronic Frailty Index (eFI), PINCER-style prescribing safety prompts, and QOF register review status. All Visualiser processing occurs locally in the user's browser; no patient data is transmitted externally at any stage.
+
+From v3.13.0–v3.14.0 the live Triage Lens side panel additionally surfaces, on the record/medications view, **deterministic prescribing-combination prompts** (STOPP/START-style: NSAID + anticoagulant/antiplatelet, "triple whammy" NSAID + ACEi/ARB + diuretic, benzodiazepine/Z-drug in age ≥80), a **risk-tool signpost chip** that links to the official QRISK3 / QCancer / eFI calculators (it computes no score), and **NHS Pharmacy First pathway signposting** snippets. These are supplementary prompts to *review and verify*, framed in the same way as the Visualiser's PINCER prompts — they are not clinical recommendations, diagnoses, or triage decisions. The practice-facing **Custom Alert Builder** also gained (v3.15.0–v3.16.0) an engine-backed live preview and save-time schema validation, so an author can see whether a rule they are building would fire against a test patient before saving it.
 
 ## 3. Intended users
 
@@ -60,6 +62,9 @@ The author asserts, on a good-faith reading of MHRA guidance on Software as a Me
 - The clinical rules executed by the software are authored either by the manufacturer (a curated subset of QOF and drug-monitoring rules, configurable by the practice) or by the practice itself — the software is a rules runner and display layer, not a clinical knowledge base.
 - The Patient Record Visualiser's eFI score is an arithmetic count of matched problem-list terms against a published 36-deficit reference list — it is not a validated clinical assessment instrument as implemented in GP clinical systems.
 - The Patient Record Visualiser's PINCER flags are a subset of the published PINCER prescribing safety criteria, surfaced as prompts to verify against the source record — they are supplementary to Medicus's own prescribing safety systems and do not replace them.
+- The live Triage Lens prescribing-combination prompts (STOPP/START-style) are deterministic, name-based detections of co-prescribed drug classes, surfaced as prompts to review against the source record. They recommend no drug, dose, or change and are supplementary to Medicus's own prescribing-safety systems.
+- The risk-tool chip provides hyperlinks to externally-hosted, independently-validated calculators (QRISK3, QCancer, eFI) together with a list of the inputs each requires; the software computes no risk score itself.
+- The Pharmacy First signposting snippets are pre-written reference text and hyperlinks surfaced for the clinician's consideration. The clinician makes any signposting decision; the snippets state the pathway's eligibility gateway and red-flag safety-netting. They do not constitute a triage decision made by the software.
 
 Consistent with this position:
 
@@ -116,7 +121,7 @@ The user and the deploying practice must understand and accept the following kno
 5. **User-edited thresholds override the defaults.** If the practice edits a threshold, the practice is responsible for confirming it against current published guidance.
 6. **Medicus API changes are not auto-detected.** If Medicus changes the shape of its API, the extension may show incomplete or no data until updated.
 7. **The extension does not validate the correctness of the Medicus record.** If the source data is wrong, the displayed evaluation will be wrong.
-8. **Practice-authored rules are the practice's responsibility.** Custom rules built via the form builder are passive threshold checks; the clinical validity of the rule itself is the responsibility of the practice author.
+8. **Practice-authored rules are the practice's responsibility.** Custom rules built via the form builder span five rule types (drug-monitoring, drug-combo, qof-indicator, event-count, composite). From v3.15.0–v3.16.0 the builder offers an engine-backed live preview (it evaluates the rule against an editable test patient using the real engine) and validates each rule against the engine schema on save — but the *clinical* validity of the rule itself remains the responsibility of the practice author.
 9. **Custom indicators are not QOF indicators** and do not contribute to any QOF income claim. They are visually labelled "Custom".
 
 ### Patient Record Visualiser
@@ -124,11 +129,21 @@ The user and the deploying practice must understand and accept the following kno
 10. **The Visualiser operates on a PDF snapshot, not the live record.** Clinical information may have changed since the PDF was exported. The export date is displayed; users must ensure they are working from a current export.
 11. **PDF parsing completeness is not guaranteed.** Entries rendered as images, in certain font types, or in non-standard Medicus export layouts may not be extracted. Entry counts are displayed so users can detect implausibly low figures.
 12. **The eFI score is an approximation.** It is computed by matching problem-list text against a 36-deficit reference list using substring matching. It is not equivalent to the eFI as calculated by GP clinical systems from SNOMED-coded data. Both under- and over-estimation of frailty are possible. It is a screening aid only.
-13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E at v3.4.1). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
+13. **PINCER flags are a partial implementation.** Only a defined subset of PINCER criteria are implemented (NSAID + CKD, NSAID + heart failure, NSAID + anticoagulant, beta-blocker + asthma, ACEi/ARB + CKD with overdue U&E, as at v3.16.0). Absence of a flag does not guarantee prescribing safety. Medicus's own prescribing safety systems remain the primary control.
 14. **Drug detection is regex-based.** High-risk drug and PINCER drug detection works by text-matching PDF content. Brand names or abbreviated entries not in the implemented regex may be missed.
 15. **High-risk drug monitoring intervals are defaults from NICE/BNF guidance.** They do not account for patient-specific monitoring plans, clinician-directed variation, or local protocol modifications.
 16. **RCV delta flags are based on published reference change values.** They indicate statistically significant analytical change, not clinical significance in any individual patient's context.
 17. **Clinical zone bands (eGFR, HbA1c, BP) are based on current published guidance.** They reflect KDIGO, NICE QOF, and NICE hypertension thresholds at the time of release; they do not account for patient-specific targets.
+
+### Live Triage Lens prescribing prompts and signposting (v3.13.0–v3.14.0)
+
+18. **STOPP/START prompts are a small, name-based subset.** The record-panel prescribing-combination prompts cover only a few well-established, low-false-positive combinations (NSAID + anticoagulant/antiplatelet; NSAID + ACEi/ARB + diuretic; benzodiazepine/Z-drug in age ≥80). They are not the full STOPP/START v2 criteria, detect drugs by name (brand, abbreviation, or coding variants may be missed), cannot account for the individual patient's indication, gastroprotection, monitoring, or specialist plan, and are supplementary to Medicus's own prescribing-safety systems. Absence of a prompt does not indicate prescribing safety.
+19. **Pharmacy First signposting is conditional on eligibility the clinician must confirm.** The snippets surface "consider Pharmacy First if eligible" for the relevant pathways; each pathway is age/sex/clinically gated, the patient's age/sex may be unknown to the software, and the request text may be ambiguous. The clinician is responsible for confirming pathway eligibility and clinical suitability before signposting, and for acting on the red-flag safety-netting stated in the snippet.
+20. **The risk-tool chip computes nothing.** It links to the official QRISK3 / QCancer / eFI calculators and lists the inputs each requires. The software calculates no risk score; the clinician enters the inputs into the external calculator and interprets the result.
+
+### Applicability filters (all rule types)
+
+21. **Demographic-gated rules fire when age or sex is unknown (fail-open, v3.12.1).** A rule restricted to a sex or age band will still fire when the patient's age/sex cannot be read from the page. This is deliberate, so that safety-critical alerts (for example the MHRA valproate alert) are not silently suppressed when the banner cannot be scraped; the consequence is that such a rule may occasionally appear for a patient who is in fact outside its intended scope. A rule is suppressed only when the patient is positively known to be out of scope. As always, verify against the source record.
 
 ## 8. The single most important safety rule
 
@@ -203,7 +218,7 @@ The CSO will:
 | Item | Mechanism |
 |------|-----------|
 | **Versioning** | Semantic versioning (`MAJOR.MINOR.PATCH`) recorded in `manifest.json` and surfaced in the Options page, popup and side panel. |
-| **Release gating** | GitHub Actions release workflow runs the full automated test suite (230+ tests at v3.4.1) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
+| **Release gating** | GitHub Actions release workflow runs the full automated test suite (320+ automated checks at v3.16.0, including applicability-filter, STOPP/START prescribing-flag, and custom-rule-builder round-trip tests) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
 | **Changelog** | Every release is documented in `CHANGELOG.md` including any safety-relevant change. |
 | **Auto-update notification** | The extension checks `api.github.com` once a day and surfaces a banner in the Options page when a newer version exists. The user controls when to install the update. |
 | **Hazard log review** | Reviewed at every minor or major release; recorded in `docs/HAZARD-LOG.md` section 8. |
@@ -249,12 +264,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.4.1; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.16.0; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-29
+**Date:** 2026-05-30
 
 ---
 
@@ -266,6 +281,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 | 2026-05-20 | 2.0 | DT | Reformatted to DCB0129/0160-style structure; added intended user roles; added explicit DOES / DOES NOT sections; added deploying-organisation responsibilities; added incident classification table; added sign-off forms; aligned with `HAZARD-LOG.md` v2.0 |
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; added Patient Record Visualiser to intended purpose, DOES, DOES NOT, and known limitations; added Visualiser-specific safety conditions; expanded known limitations to 17 items; updated test count; aligned with `HAZARD-LOG.md` v3.0 |
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added user instruction on the feedback channel (no patient data in feedback) |
+| 2026-05-30 | 3.2 | DT | Synchronised to v3.16.0. Added the live Triage Lens prescribing prompts and signposting to intended purpose, regulatory status, and known limitations (items 18–20: STOPP/START subset, Pharmacy First eligibility, risk-tool signpost-only). Added limitation 21 (applicability filters fail open on unknown demographics, v3.12.1). Updated the custom-rules limitation for the five rule types and the v3.15.0–v3.16.0 engine-backed live preview / validate-on-save. Updated test count. Aligned with `HAZARD-LOG.md` v3.2 (incl. new H-019) and `INTENDED-PURPOSE.md` v3.16.0. |
 
 ---
 
