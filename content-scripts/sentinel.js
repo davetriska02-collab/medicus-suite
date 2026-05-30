@@ -500,6 +500,20 @@
     });
 
     if (chips.length === 0) {
+      // Before showing the benign "No active alerts", check whether this empty
+      // result is actually a likely extraction failure (Medicus DOM/API drift).
+      // Failing closed here would read as a false "all clear" (H-005).
+      const health = assessExtractionHealth(data);
+      if (health.degraded) {
+        list.innerHTML = `
+          <div class="empty-state" style="border-left:3px solid #c62828;background:rgba(198,40,40,0.08);padding:10px 12px;border-radius:6px">
+            <strong>⚠ Couldn't read this record</strong>
+            <p>${escapeHtml(health.reason)} This is <strong>not</strong> an &ldquo;all clear&rdquo; — verify the patient directly in Medicus, and the extension may need updating.</p>
+          </div>
+        `;
+        updateSummary(allChips);
+        return;
+      }
       list.innerHTML = `
         <div class="empty-state">
           <strong>No active alerts.</strong>
@@ -570,6 +584,27 @@
     el.querySelector('.chip-expand')?.addEventListener('click', () => {
       el.classList.toggle('expanded');
     });
+  }
+
+  // Pure: decide whether a zero-result render is genuinely "no matched rules" or a
+  // likely extraction failure (Medicus DOM/API drift) that must NOT read as an
+  // "all clear". Degraded = we are on a live patient view (a patient was
+  // identified) yet extracted no medications, problems, observations AND no
+  // demographics — a real record virtually always has at least demographics, so
+  // an across-the-board blank means our scrapers stopped matching the page.
+  function assessExtractionHealth(data) {
+    if (!data || data.mode !== 'live') return { degraded: false };
+    const pc = data.patientContext || {};
+    const onPatientView = !!(pc.patientId || pc.id || pc.uuid || pc.patientName);
+    if (!onPatientView) return { degraded: false };
+    const clinical = (data.medications || []).length + (data.observations || []).length + (data.problems || []).length;
+    if (clinical > 0) return { degraded: false };
+    const noDemographics = !pc.dob && !pc.dobRaw && pc.ageYears == null && !pc.sex && !pc.nhsNumber;
+    if (!noDemographics) return { degraded: false };
+    return {
+      degraded: true,
+      reason: 'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.'
+    };
   }
 
   function renderViewHint(data, list) {

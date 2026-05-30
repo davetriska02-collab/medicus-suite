@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.17.0] — 2026-05-30
+### Added — Silent-failure detection + defaults-integrity tooling (continuous improvement)
+
+**Extraction health check (turns silent failure into a visible warning — H-005).**
+When the Sentinel panel renders zero results on a *live patient view* where a
+patient was identified but nothing at all could be extracted (no medications,
+problems, observations, or demographics — the signature of a Medicus DOM/API
+change), it now shows a prominent **"⚠ Couldn't read this record"** warning
+instead of the benign "No active alerts" — explicitly stating this is *not* an
+"all clear" and to verify in Medicus. The decision is a pure, unit-tested helper
+`assessExtractionHealth` (`content-scripts/sentinel.js`); a genuinely sparse
+record (which still has demographics) is not flagged. New `test-extraction-health.js`
+(10 assertions). A companion weekly **extraction-drift canary** scheduled task
+was added (`.claude/scheduled-tasks/weekly-extraction-canary.md`).
+
+**Triage Lens defaults — 3-copy integrity (removes a recurring footgun).**
+- New `scripts/regen-defaults.js` regenerates the two *derived* copies
+  (`content-scripts/triage-lens/defaults.json` and the `EMBEDDED_DEFAULTS`
+  literal) from the source-of-truth root `defaults.json`, with a `--check` mode.
+  This ends hand-editing of the embedded literal (the backslash-doubling that
+  has caused regen bugs).
+- `test-triage-defaults.js` now also pins the **root `defaults.json`** (previously
+  untested despite being the copy loaded at runtime) and runs the regen `--check`.
+- New CI **`.github/workflows/test.yml`** runs the full suite + the defaults
+  `--check` + syntax checks on every push/PR and fails closed — making the
+  "release gating runs the test suite" control in the safety case actually true
+  (the release workflow previously built/released without running tests).
+- The release build now excludes `scripts/` and `.claude/` from the shipped zip.
+
 ## [v3.16.0] — 2026-05-30
 ### Added — Custom Alert Builder live preview: all five rule types (Phases 2–5)
 Completes the engine-backed live preview started in v3.15.0. The editable

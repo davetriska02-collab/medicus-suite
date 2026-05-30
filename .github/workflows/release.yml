@@ -55,6 +55,8 @@ jobs:
             --exclude='LICENSE' \
             --exclude='_build/' \
             --exclude='test-*.js' \
+            --exclude='scripts/' \
+            --exclude='.claude/' \
             --exclude='*.zip' \
             --exclude='.DS_Store' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
