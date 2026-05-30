@@ -46,7 +46,22 @@ if (embedded) {
   let identical = true;
   try { assert.deepStrictEqual(embedded, fileDefaults); }
   catch (e) { identical = false; console.error('    ' + e.message.split('\n')[0]); }
-  check(identical, 'defaults.json and EMBEDDED_DEFAULTS are identical (no drift)');
+  check(identical, 'content-scripts defaults.json and EMBEDDED_DEFAULTS are identical (no drift)');
+
+  // The ROOT defaults.json is the copy actually loaded at runtime (via getURL)
+  // but was previously NOT guarded here — pin it too so all three stay in lock-step.
+  let rootMatches = true;
+  try { assert.deepStrictEqual(require(path.join(__dirname, 'defaults.json')), fileDefaults); }
+  catch (e) { rootMatches = false; console.error('    ' + e.message.split('\n')[0]); }
+  check(rootMatches, 'root defaults.json matches content-scripts copy (no drift)');
+
+  // The regenerator must reproduce the derived copies byte-for-byte. This guards
+  // against hand-edits to EMBEDDED_DEFAULTS that drift from the source of truth.
+  const { execFileSync } = require('child_process');
+  let regenInSync = true;
+  try { execFileSync('node', [path.join(__dirname, 'scripts', 'regen-defaults.js'), '--check'], { stdio: 'pipe' }); }
+  catch (e) { regenInSync = false; console.error('    regen --check failed: ' + String(e.stdout || e.message).split('\n')[0]); }
+  check(regenInSync, 'scripts/regen-defaults.js --check passes (derived copies reproducible)');
 
   // Read-time chips are gone from both sources.
   const fileKeys = Object.keys(fileDefaults.systemChips || {});
