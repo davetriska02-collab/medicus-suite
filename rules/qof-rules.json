@@ -16,6 +16,17 @@
       "problemExclude": ["pre-diabetes", "pre diabetes", "gestational diabetes", "no diabetes", "diabetes insipidus"],
       "source": "QOF 26/27 DM register (DM_COD refset approximation)"
     },
+
+    {
+      "id": "qof-reg-dem",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "DEM",
+      "registerName": "Dementia",
+      "problemMatch": ["dementia", "alzheimer", "vascular dementia", "lewy body", "frontotemporal dementia", "mixed dementia"],
+      "problemExclude": ["no dementia", "family history", "memory clinic referral"],
+      "source": "QOF 26/27 DEM register (DEM_COD refset approximation)"
+    },
     {
       "id": "qof-reg-hyp",
       "type": "qof-register",

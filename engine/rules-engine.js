@@ -457,18 +457,26 @@
   }
 
   // === AGE / SEX PATIENT FILTERS (shared by drug-combo and event-count) ===
+  // IMPORTANT: these filters only EXCLUDE when the patient is *positively known*
+  // to be out of scope. When age or sex cannot be determined from the record
+  // (extraction returned null/unknown), we fail OPEN — the rule still fires and
+  // the clinician verifies applicability. Failing closed on unknown demographics
+  // silently suppressed safety alerts (e.g. MHRA valproate, female 12–55) and
+  // age-gated QOF indicators whenever the page sex/DOB couldn't be scraped.
   function passesAgeFilter(ageRange, patientContext) {
     if (!ageRange) return true;
     const age = patientContext ? patientContext.ageYears : null;
-    if (ageRange.min != null && (age == null || age < ageRange.min)) return false;
-    if (ageRange.max != null && (age == null || age > ageRange.max)) return false;
+    if (age == null) return true; // unknown age — do not suppress
+    if (ageRange.min != null && age < ageRange.min) return false;
+    if (ageRange.max != null && age > ageRange.max) return false;
     return true;
   }
 
   function passesSexFilter(sex, patientContext) {
     if (!sex || sex === 'any') return true;
-    const s = String(sex).toUpperCase();
     const patSex = patientContext ? String(patientContext.sex || '').toLowerCase() : '';
+    if (!patSex) return true; // unknown sex — do not suppress
+    const s = String(sex).toUpperCase();
     if (s === 'M' && !patSex.startsWith('m')) return false;
     if (s === 'F' && !patSex.startsWith('f')) return false;
     return true;
