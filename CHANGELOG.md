@@ -2,6 +2,54 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.16.0] — 2026-05-30
+### Added — Custom Alert Builder live preview: all five rule types (Phases 2–5)
+Completes the engine-backed live preview started in v3.15.0. The editable
+mock-patient + real-engine preview (and validate-on-save via `validateCustomRule`)
+now cover **every** Sentinel rule type:
+- **drug-combo** and **event-count** — new preview wired via a shared
+  `wireFormPreview` helper (mock panel + delegated, debounced re-evaluation).
+- **qof-indicator** — replaced the cosmetic preview with the real engine across
+  all four `check.kind` branches; a new `ciGetFormRuleFull` assembles the
+  observation-trend check (previously only built at save time) so trend rules
+  preview correctly.
+- **composite** — preview resolves the **referenced child rules** (cached when
+  the rule selector builds) and passes them to the engine, so an AND/OR
+  composite shows whether it fires given its children.
+
+The **"Auto-fill from rule"** seeder now understands every type — including
+event-count (seeds N+1 events in the window), qof thresholds/recency/trend
+(seeds crossing values / a trending series), and composites (seeds from the
+child rules) — so one click produces a firing example.
+
+All five save handlers now route through the shared `validateCustomRule`
+(replacing hand-rolled checks), and the removed cosmetic status dropdowns are
+gone. `test-alert-builder.js` now covers the full form-object → validate →
+engine-fires round-trip for all five types (18 assertions, incl. composite
+AND-firing); full suite passes.
+
+## [v3.15.0] — 2026-05-30
+### Added — Custom Alert Builder: engine-backed live preview (Phase 1 of 5)
+The Sentinel custom-rule builder (`sentinel-options/`) gains a **real
+"would this fire?" preview** driven by the actual exported engine
+(`SentinelRules.evaluatePatient`) — the same function the runtime uses — instead
+of the previous cosmetic chip render. New shared infrastructure (reused by the
+remaining rule-type forms in later phases):
+- An **editable mock patient** panel (medications / observations / problems /
+  age / sex / "as of" date) with an **"Auto-fill from rule"** button that seeds a
+  firing example from the rule under construction.
+- `runEnginePreview` / `renderEnginePreview` show **fire / no-fire + the engine's
+  own evidence** (status, summary, facts), so parity with production is guaranteed.
+- **Live validation**: the preview and Save now both route through the shared
+  `validateCustomRule`, surfacing schema errors inline instead of the old
+  hand-rolled checks.
+
+This phase wires it into the **drug-monitoring** form (the engine `<script>` is
+now loaded in the builder page). The other four rule types reuse the identical
+infrastructure in subsequent phases. New `test-alert-builder.js` (7 assertions)
+pins the form-object → validate → engine-fires round-trip and the documented
+mock-patient parse shape.
+
 ## [v3.14.0] — 2026-05-30
 ### Added — STOPP/START prescribing flags + risk-tool signposting
 Two competitor-gap "quick wins" from the EMIS/SystmOne market review.

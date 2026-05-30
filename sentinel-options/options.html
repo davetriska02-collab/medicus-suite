@@ -75,6 +75,24 @@ button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
 #crPreviewChip { min-height: 56px; }
 .cr-form-error { color: var(--red); font-size: 11px; font-family: var(--mono); margin-top: 8px; min-height: 18px; }
 
+/* ── Mock-patient live preview ───────────────────────────────────────────── */
+.mock-patient { margin-bottom: 10px; }
+.mock-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.mock-grid label, .mock-row label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--t3); display: flex; flex-direction: column; gap: 3px; }
+.mock-grid textarea { font-family: var(--mono); font-size: 11px; height: 44px; }
+.mock-row { display: flex; align-items: flex-end; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+.mock-row label { flex-direction: row; align-items: center; gap: 5px; text-transform: none; font-weight: 600; }
+.mock-row input[type=number], .mock-row input[type=date], .mock-row select { font-size: 11px; padding: 3px 6px; }
+.mock-row button { margin-left: auto; font-size: 11px; }
+.preview-fire { border-left: 3px solid var(--green, #2e7d32); padding: 8px 11px; background: rgba(46,125,50,0.07); border-radius: 5px; font-size: 12px; }
+.preview-fire.preview-overdue, .preview-fire.preview-alert, .preview-fire.preview-stale { border-left-color: var(--red, #c62828); background: rgba(198,40,40,0.07); }
+.preview-fire strong { font-family: var(--mono); }
+.preview-summary { margin: 5px 0; color: var(--t2); }
+.preview-facts { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--t3); }
+.preview-facts span { color: var(--t2); font-weight: 600; }
+.preview-nofire { color: var(--t4); font-size: 12px; font-style: italic; padding: 8px 0; }
+.preview-incomplete { color: var(--amber, #b26a00); font-size: 11px; font-family: var(--mono); padding: 6px 0; }
+
 /* ── Alert Library ───────────────────────────────────────────────────────── */
 .lib-panel { background: var(--bg-e); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
 .lib-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: var(--t1); }
@@ -287,17 +305,8 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
       </div>
 
       <div class="cr-preview-wrap">
-        <div class="cr-preview-head">
-          Live preview
-          <select id="crPreviewStatus">
-            <option value="in_date">In date</option>
-            <option value="due_soon">Due soon</option>
-            <option value="overdue">Overdue</option>
-            <option value="stale">Severely overdue</option>
-            <option value="no_data">No data</option>
-            <option value="recently_initiated">Recently initiated</option>
-          </select>
-        </div>
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="crMockMount"></div>
         <div id="crPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Enter drug names and at least one test to see a preview.</span></div>
       </div>
 
@@ -534,15 +543,8 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
 
       <!-- Section H: Live preview -->
       <div class="cr-preview-wrap">
-        <div class="cr-preview-head">
-          Live preview
-          <select id="ciPreviewStatus">
-            <option value="achieved">Achieved (met)</option>
-            <option value="not_met">Not met</option>
-            <option value="overdue">Overdue</option>
-            <option value="no_data">No data</option>
-          </select>
-        </div>
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="ciMockMount"></div>
         <div id="ciPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Fill in code, name, and check details to see a preview.</span></div>
       </div>
 
@@ -631,6 +633,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <label for="dcSource">Source reference (URL or citation)</label>
           <input type="url" id="dcSource" placeholder="https://" />
         </div>
+      </div>
+
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="dcMockMount"></div>
+        <div id="dcPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Add a label and at least one drug set to see a preview.</span></div>
       </div>
 
       <div class="cr-form-error" id="dcFormError"></div>
@@ -740,6 +748,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
         </div>
       </div>
 
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="ecMockMount"></div>
+        <div id="ecPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Set the source, terms and threshold to see a preview.</span></div>
+      </div>
+
       <div class="cr-form-error" id="ecFormError"></div>
 
       <div class="actions" style="margin-top:16px;">
@@ -803,6 +817,12 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
         </div>
       </div>
 
+      <div class="cr-preview-wrap">
+        <div class="cr-preview-head">Live preview — test patient</div>
+        <div id="cmMockMount"></div>
+        <div id="cmPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Pick a label, operator and at least two child rules to see a preview.</span></div>
+      </div>
+
       <div class="cr-form-error" id="cmFormError"></div>
 
       <div class="actions" style="margin-top:16px;">
@@ -826,6 +846,7 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
 <div class="lib-toast" id="libToast"></div>
 <script src="../shared/chip-renderer.js"></script>
 <script src="../shared/io/sentinel-io.js"></script>
+<script src="../engine/rules-engine.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
