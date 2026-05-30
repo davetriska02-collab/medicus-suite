@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.10.0] — 2026-05-30
+### Fixed — Network interceptors blocked by Medicus CSP (the real root cause)
+- **This is why the queue monitoring chips and document-context lens never
+  worked.** Both relied on wrapping `window.fetch`/`XMLHttpRequest` by injecting
+  an inline `<script>` element from the isolated content script — but Medicus
+  ships a strict Content-Security-Policy (`script-src 'self'`, no
+  `'unsafe-inline'`), so the browser **blocked every inline-script injection**.
+  The interceptors never installed; no task-list or document data was ever
+  captured (the side-panel Monitoring module was unaffected — it uses a
+  different data path). The earlier fetch-vs-XHR fixes (v3.9.3 / v3.9.4) were
+  correct but moot because nothing was injecting at all.
+- **Fix:** the interceptors now live in a dedicated `page-world.js` registered as
+  a **`"world": "MAIN"` content script** (run_at `document_start`). The browser
+  injects MAIN-world content scripts itself, so they run in the page's JS context
+  **exempt from the page CSP**, and communicate back to the isolated content
+  script via the same `ch-task-list-data` / `ch-doc-entries` / `ch-doc-preview`
+  `CustomEvent`s. One file now wraps both fetch and XHR for both the queue
+  task-list and the document-context endpoints. (`content-scripts/triage-lens/page-world.js`, `manifest.json`)
+- The old `injectTaskListInterceptor` / `injectDocContextInterceptor` inline
+  injectors in `content.js` are now no-ops (kept as named functions so existing
+  call sites are harmless), which also removes the CSP-violation console spam.
+
+## [v3.9.4] — 2026-05-30
+### Fixed — Queue task-list interceptor now wraps XHR (superseded by v3.10.0)
+- Rewrote `injectTaskListInterceptor` to wrap both `window.fetch` and
+  `XMLHttpRequest` (Medicus loads the task list via Axios/XHR), read rows from
+  `body.tasks`, and extract the task UUID robustly. Note: this was still injected
+  inline and so remained CSP-blocked until v3.10.0 moved it to a MAIN-world
+  content script. (`content-scripts/triage-lens/content.js`)
+
 ## [v3.9.3] — 2026-05-30
 ### Fixed — Queue monitoring chips never appeared (task-list never captured)
 - The queue monitoring overlay captured task-row UUIDs by wrapping `window.fetch`
