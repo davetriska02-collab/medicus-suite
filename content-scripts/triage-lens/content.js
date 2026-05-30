@@ -2005,69 +2005,7 @@
 
   // ---- Queue monitoring chips (fetch-intercepted UUIDs) ----
 
-  const injectTaskListInterceptor = () => {
-    // Medicus loads the task list via Axios (XMLHttpRequest), NOT fetch — so we
-    // MUST wrap both window.fetch AND XMLHttpRequest or the queue chips never get
-    // any UUIDs. Regexes are built with new RegExp(plain-slash string) so the
-    // template literal needs no backslash escaping. Guard lives in page-world via
-    // window.__chIntercepted; beforeunload clears it so an SPA reset re-installs.
-    const s = document.createElement('script');
-    s.textContent = `(function(){
-      if(window.__chIntercepted)return;window.__chIntercepted=true;
-      window.addEventListener('beforeunload',function(){delete window.__chIntercepted;},{once:true});
-      var UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      var TL_RE=new RegExp('/tasks/data/([^/?]+)/task-list');
-      function pickUuid(item){
-        if(!item||typeof item!=='object')return null;
-        var pref=['taskUuid','taskId','uuid','id'];
-        for(var i=0;i<pref.length;i++){var v=item[pref[i]];if(typeof v==='string'&&UUID_RE.test(v))return v;}
-        for(var k in item){
-          if(/patient/i.test(k))continue;
-          var val=item[k];
-          if(typeof val==='string'&&UUID_RE.test(val)&&/task|id|uuid/i.test(k))return val;
-        }
-        return null;
-      }
-      function handleTaskList(u,body){
-        var m=u.match(TL_RE);
-        if(!m)return;
-        var items=body&&(body.tasks||body.data||body.results||body.rows||(Array.isArray(body)?body:null));
-        if(!Array.isArray(items)){console.warn('[ClinHUD] task-list: no array found; body keys=',body?Object.keys(body):body);return;}
-        if(items.length&&!window.__chTaskKeysLogged){window.__chTaskKeysLogged=1;console.debug('[ClinHUD] task-list first item keys:',Object.keys(items[0]));}
-        var rows=items.map(function(item,i){return {rowIndex:i,taskUuid:pickUuid(item)};}).filter(function(r){return r.taskUuid;});
-        if(rows.length){window.dispatchEvent(new CustomEvent('ch-task-list-data',{detail:{rows:rows,taskTypeSlug:m[1]}}));}
-        else{console.warn('[ClinHUD] task-list: no task UUIDs from '+items.length+' items; sample=',items[0]);}
-      }
-      var origFetch=window.fetch;
-      window.fetch=async function(url){
-        var r=await origFetch.apply(this,arguments);
-        try{
-          var u=typeof url==='string'?url:(url&&url.url)||'';
-          if(TL_RE.test(u)){r.clone().json().then(function(b){handleTaskList(u,b);}).catch(function(e){console.warn('[ClinHUD] task-list parse error',e);});}
-        }catch(_){}
-        return r;
-      };
-      var origOpen=XMLHttpRequest.prototype.open;
-      var origSend=XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open=function(method,url){
-        try{this.__chTLUrl=url;}catch(_){}
-        return origOpen.apply(this,arguments);
-      };
-      XMLHttpRequest.prototype.send=function(){
-        try{
-          var xhr=this;var u=xhr.__chTLUrl||'';
-          if(TL_RE.test(u)){
-            xhr.addEventListener('load',function(){
-              try{handleTaskList(u,JSON.parse(xhr.responseText));}catch(e){console.warn('[ClinHUD] task-list parse error',e);}
-            });
-          }
-        }catch(_){}
-        return origSend.apply(this,arguments);
-      };
-    })();`;
-    (document.head || document.documentElement).appendChild(s);
-    s.remove();
-  };
+  const injectTaskListInterceptor = () => { /* no-op: interceptor now runs as a MAIN-world content script (page-world.js); inline <script> injection is blocked by the Medicus CSP */ };
 
   // ---- Document-context interceptor (Phase 1) ----
   // Page-world injected script — passively wraps BOTH window.fetch AND
@@ -2079,64 +2017,7 @@
   // makes no network calls of its own, and sends nothing anywhere. The document
   // body PDF (download-file) is deliberately NOT touched here — that's a later
   // phase. Installed once per page load; guarded by window.__chDocIntercepted.
-  const injectDocContextInterceptor = () => {
-    const s = document.createElement('script');
-    s.textContent = `(function(){
-      if(window.__chDocIntercepted)return;window.__chDocIntercepted=true;
-      window.addEventListener('beforeunload',function(){delete window.__chDocIntercepted;},{once:true});
-      var TAIL=/\\/([0-9a-f-]+)(?:\\?|$)/i;
-      function tailId(u){var m=String(u||'').match(TAIL);return m?m[1]:null;}
-      function handle(url,text){
-        try{
-          var u=String(url||'');
-          if(/\\/clinical\\/document\\/entries\\//.test(u)){
-            var body=JSON.parse(text);
-            window.dispatchEvent(new CustomEvent('ch-doc-entries',{detail:{
-              documentId:tailId(u),
-              entries:(body&&body.entries)||[]
-            }}));
-          }else if(/\\/document\\/modals\\/version\\/preview\\//.test(u)){
-            var body2=JSON.parse(text);
-            window.dispatchEvent(new CustomEvent('ch-doc-preview',{detail:{
-              documentId:(body2&&body2.documentId)||null,
-              inboundMessage:(body2&&body2.inboundMessage)||'',
-              typeLabel:(body2&&body2.document&&body2.document.typeLabel)||''
-            }}));
-          }
-        }catch(e){console.warn('[ClinHUD] doc-context parse error',e);}
-      }
-      var origFetch=window.fetch;
-      window.fetch=async function(url,...a){
-        var r=await origFetch.apply(this,[url,...a]);
-        try{
-          var u=typeof url==='string'?url:(url&&url.url)||'';
-          if(/\\/clinical\\/document\\/entries\\//.test(u)||/\\/document\\/modals\\/version\\/preview\\//.test(u)){
-            r.clone().text().then(function(t){handle(u,t);}).catch(function(e){console.warn('[ClinHUD] doc-context parse error',e);});
-          }
-        }catch(_){}
-        return r;
-      };
-      var origOpen=XMLHttpRequest.prototype.open;
-      var origSend=XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.open=function(method,url){
-        try{this.__chDocUrl=url;}catch(_){}
-        return origOpen.apply(this,arguments);
-      };
-      XMLHttpRequest.prototype.send=function(){
-        try{
-          var xhr=this;var u=xhr.__chDocUrl||'';
-          if(/\\/clinical\\/document\\/entries\\//.test(u)||/\\/document\\/modals\\/version\\/preview\\//.test(u)){
-            xhr.addEventListener('load',function(){
-              try{handle(u,xhr.responseText);}catch(e){console.warn('[ClinHUD] doc-context parse error',e);}
-            });
-          }
-        }catch(_){}
-        return origSend.apply(this,arguments);
-      };
-    })();`;
-    (document.head || document.documentElement).appendChild(s);
-    s.remove();
-  };
+  const injectDocContextInterceptor = () => { /* no-op: see page-world.js (MAIN-world content script) */ };
 
   // ---- Document-context state + chips (Phase 1) ----
   // Ephemeral, in-memory only. The combined text (filed entries + electronic
