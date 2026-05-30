@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.9.0] — 2026-05-30
+
+### Added
+- **Triage Lens — document-body PDF text extraction (Phase 2).** Completes the
+    body-extraction phase begun in v3.8.0 (Phase 1, phased rollout): the document
+    body is downloaded as a server-converted PDF and parsed with PDF.js to extract
+    its prose, which is fed into the EXISTING `detail.docUrgent` (red) and
+    `detail.docAction` (amber) chips. No new chips were added — this is purely a
+    new text source for the existing two.
+  - **Architecture:** PDF.js runs in an MV3 **offscreen document**
+    (`offscreen.html` / `offscreen.js`, reason `WORKERS`) because the service
+    worker cannot run PDF.js reliably. The service worker resolves the file UUID
+    via the document overview endpoint, downloads the PDF from the same Medicus
+    api host the page already uses, forwards the bytes to the offscreen document
+    for extraction, then closes the offscreen document.
+  - **Default OFF / opt-in:** the PDF is fetched and parsed only when at least
+    one of `detail.docUrgent` / `detail.docAction` is enabled (both default off).
+  - **Ephemeral & private:** PDF bytes and extracted text live only transiently in
+    the service worker / offscreen document / content-script `_docCtx`; they are
+    never written to `chrome.storage` or any backup, and never leave the browser.
+    Staleness-token guarded and bound to the current document (cleared on
+    navigation) so prose from one document can never match on another.
+  - **Graceful degradation:** scanned / image-only PDFs with no text layer, or
+    documents whose server-side conversion is still pending/failed, yield no text
+    and therefore no chip (never a false "all clear").
+
 ## [v3.8.0] — 2026-05-30
 ### Added — Document-context lens (Phase 1 of a phased rollout)
 Triage Lens now surfaces the cheap JSON text already loaded when a GP opens a

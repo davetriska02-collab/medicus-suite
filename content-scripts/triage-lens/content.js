@@ -1935,7 +1935,7 @@
     // Document-context chips (Phase 1): paint from any already-arrived doc
     // context (the interceptor events may have fired before runDetail ran).
     // Late-arriving events are handled by the ch-doc-* listeners.
-    if (docInfo) runDocContextChips();
+    if (docInfo) { runDocContextChips(); requestDocPdfText(); }
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
   };
 
@@ -2096,10 +2096,20 @@
   // matching: it is NEVER written to chrome.storage and NEVER added to any
   // shared/io backup. It is overwritten on the next document and cleared by the
   // staleness token guard so it cannot outlive the patient it belongs to.
-  let _docCtx = { documentId: null, entries: [], inboundMessage: '', typeLabel: '', at: 0 };
+  let _docCtx = { documentId: null, entries: [], inboundMessage: '', typeLabel: '', pdfText: '', at: 0 };
+  // Last document id we requested a body-PDF extraction for (de-dupe guard).
+  let _docPdfRequestedFor = null;
+  // Clear prose extracted from document A so it can never match on document B.
+  const _docCtxMaybeClearPdf = (incomingDocId) => {
+    if (incomingDocId && _docCtx.documentId && incomingDocId !== _docCtx.documentId) {
+      _docCtx.pdfText = '';
+      _docPdfRequestedFor = null;
+    }
+  };
 
   window.addEventListener('ch-doc-entries', (e) => {
     const d = e.detail || {};
+    _docCtxMaybeClearPdf(d.documentId);
     if (Array.isArray(d.entries)) _docCtx.entries = d.entries;
     if (d.documentId) _docCtx.documentId = d.documentId;
     _docCtx.at = Date.now();
@@ -2108,6 +2118,7 @@
 
   window.addEventListener('ch-doc-preview', (e) => {
     const d = e.detail || {};
+    _docCtxMaybeClearPdf(d.documentId);
     if (typeof d.inboundMessage === 'string') _docCtx.inboundMessage = d.inboundMessage;
     if (typeof d.typeLabel === 'string' && d.typeLabel) _docCtx.typeLabel = d.typeLabel;
     if (d.documentId) _docCtx.documentId = d.documentId;
@@ -2120,6 +2131,7 @@
   const extractDocContextText = () => {
     const parts = [];
     if (_docCtx.inboundMessage) parts.push(_docCtx.inboundMessage);
+    if (_docCtx.pdfText) parts.push(_docCtx.pdfText);
     for (const en of _docCtx.entries || []) {
       if (en && en.text) parts.push(String(en.text));
       if (en && en.code) parts.push(String(en.code));
@@ -2150,6 +2162,47 @@
   // Staleness token guard prevents wrong-document/wrong-patient bleed. Urgent /
   // action chips default OFF (opt-in) and use the negation guard; only the
   // purely descriptive "Filed notes" info chip defaults on.
+  // requestDocPdfText: ask the service worker to fetch + extract the document
+  // body PDF (server-converted, parsed via offscreen PDF.js) and feed the prose
+  // into _docCtx.pdfText so it flows through the EXISTING docUrgent/docAction chips.
+  //  - Only on a document task page.
+  //  - Only if at least one of detail.docUrgent / detail.docAction is enabled
+  //    (opt-in; both default OFF). No fetch/parse for users who have not opted in.
+  //  - De-duped per document (do not re-request the same open document).
+  //  - Staleness-token guarded + bound to the current document; a late reply that
+  //    arrives after navigation is dropped (no wrong-document prose).
+  //  - PDF bytes + extracted text are ephemeral; never persisted.
+  const requestDocPdfText = () => {
+    if (!isDocumentTask()) return;
+    if (!(typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.sendMessage === 'function')) return;
+    const urgentCfg = findSystemChip('detail.docUrgent');
+    const actionCfg = findSystemChip('detail.docAction');
+    const urgentOn = urgentCfg && urgentCfg.enabled !== false;
+    const actionOn = actionCfg && actionCfg.enabled !== false;
+    if (!urgentOn && !actionOn) return; // neither opted in — skip entirely
+    const ctx = (typeof API !== 'undefined' && API.detectMedicusContext) ? API.detectMedicusContext(location.href) : null;
+    if (!ctx || !ctx.apiBase || !ctx.taskUuid) return;
+    // De-dupe: do not re-request body text for a document we already asked about.
+    if (_docPdfRequestedFor === ctx.taskUuid) return;
+    _docPdfRequestedFor = ctx.taskUuid;
+    const reqToken = (typeof monitoringToken === 'function') ? monitoringToken() : location.href;
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'sentinelDocPdfText', apiBase: ctx.apiBase, taskUuid: ctx.taskUuid },
+        (resp) => {
+          if (chrome.runtime.lastError) { log('doc pdf text request failed:', chrome.runtime.lastError.message); return; }
+          if (!resp || !resp.ok || !resp.text) return; // no text layer / pending / failed → no chip
+          const tokNow = (typeof monitoringToken === 'function') ? monitoringToken() : location.href;
+          if (tokNow !== reqToken) return;
+          if (!isDocumentTask()) return;
+          _docCtx.pdfText = String(resp.text);
+          _docCtx.at = Date.now();
+          runDocContextChips();
+        }
+      );
+    } catch (e) { log('doc pdf text sendMessage threw:', e && e.message); }
+  };
+
   const runDocContextChips = async () => {
     if (!isDocumentTask()) return;
     const token = (typeof monitoringToken === 'function') ? monitoringToken() : location.href;
