@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.17.1] — 2026-05-30
+### Changed — Tighten `web_accessible_resources` exposure (security hardening)
+
+Removed `<all_urls>` from the `web_accessible_resources` `matches` array in
+`manifest.json`, leaving only `https://*.medicus.health/*`. The extension's
+content scripts only run on `medicus.health`, and the suite's own pages
+(options, side panel, pop-out, visualiser) load these resources from the
+extension origin — which is not subject to `web_accessible_resources` matching
+— so the `<all_urls>` entry granted no needed access. Dropping it stops any
+arbitrary web origin from probing for these bundled resources (a fingerprinting
+surface), without changing behaviour on Medicus pages.
+
 ## [v3.17.0] — 2026-05-30
 ### Added — Silent-failure detection + defaults-integrity tooling (continuous improvement)
 
