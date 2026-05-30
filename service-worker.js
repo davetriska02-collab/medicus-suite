@@ -67,6 +67,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 let _offscreenCreating = null; // guards against concurrent createDocument()
 
+// chrome.runtime.sendMessage JSON-serializes its payload — a raw ArrayBuffer
+// would arrive as {}. Encode PDF bytes as base64 to cross the SW→offscreen
+// message boundary intact (decoded back to bytes in offscreen.js).
+function abToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const CHUNK = 0x8000; // avoid call-stack overflow on large PDFs
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 async function ensureOffscreenDocument() {
   if (chrome.offscreen && chrome.offscreen.hasDocument) {
     const exists = await chrome.offscreen.hasDocument();
@@ -130,9 +143,10 @@ async function extractDocPdfText({ apiBase, taskUuid, fileId }) {
   const bytes = await pdfResp.arrayBuffer();
   if (!bytes || bytes.byteLength === 0) return { ok: false, error: 'empty pdf' };
 
-  // 4. Run PDF.js in the offscreen document.
+  // 4. Run PDF.js in the offscreen document. Bytes go as base64 (sendMessage
+  // JSON-serializes, so a raw ArrayBuffer would arrive empty).
   await ensureOffscreenDocument();
-  const result = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'extractPdf', bytes });
+  const result = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'extractPdf', b64: abToBase64(bytes) });
 
   // 5. Close the offscreen doc (simplest, lowest-memory policy).
   await closeOffscreenDocument();
