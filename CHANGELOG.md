@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.9.1] — 2026-05-30
+### Fixed — Triage Lens settings showed no options for newer chips
+- Both the Triage Lens settings page and the content script fetch their chip
+  defaults via `chrome.runtime.getURL('defaults.json')`, which resolves to the
+  **extension-root** `defaults.json` — not `content-scripts/triage-lens/defaults.json`.
+  The root copy had silently drifted (28 chips vs 35) across several releases
+  because the drift test only guarded the triage-lens copy. As a result the
+  settings page read stale defaults missing the document-context chips
+  (`detail.docEntries/docUrgent/docAction`), the queue monitoring chips
+  (`queue.monitoringDue*`), and `detail.docType/docSpecialty`. Synced the root
+  copy to the canonical version and extended `test-triage-defaults.js` to assert
+  the two stay identical (now 8 checks).
+- **Document-body PDF request never fired:** `requestDocPdfText` referenced a
+  bare `API` symbol that wasn't in scope (it is `window.SentinelApiClient`), so
+  `detectMedicusContext` was never called and the request silently bailed. Now
+  resolves `API` from `window.SentinelApiClient`, matching the queue path.
+
 ## [v3.9.0] — 2026-05-30
 
 ### Added
