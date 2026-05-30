@@ -415,7 +415,7 @@ async function doFullExport() {
   ]);
   const pc = submissions.practiceCode ?? null;
   const { 'suite.feedbackEmail': feedbackEmail = null } = await chrome.storage.local.get('suite.feedbackEmail');
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc, feedbackEmail } });
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc, feedbackEmail } }, chrome.runtime.getManifest().version);
 }
 
 async function doModuleExport(scope) {
@@ -432,7 +432,7 @@ async function doModuleExport(scope) {
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
-  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
 }
 
 async function applyEnvelope(envelope) {

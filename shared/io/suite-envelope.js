@@ -26,7 +26,12 @@
 
 const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
-const EXTENSION_VERSION = '2.5.0';
+// Fallback only — callers in the extension MUST pass the real version
+// (chrome.runtime.getManifest().version) into wrap(). This module also runs
+// under Node for tests, where chrome.runtime is unavailable, so we keep a
+// neutral placeholder rather than a hardcoded version number that silently
+// rots out of date.
+const EXTENSION_VERSION = 'unknown';
 
 const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor'];
 

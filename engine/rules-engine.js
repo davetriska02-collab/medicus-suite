@@ -363,6 +363,13 @@
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
         const days = daysBetween(obs.date, now);
+        // A present-but-unparseable observation date yields days === null. Treat
+        // it as no_data (a data-quality flag) rather than letting the null fall
+        // through the comparisons below, where `null > intervalDays` is silently
+        // false and the test would be misclassified as in_date (looks safe).
+        if (days === null) {
+          return { ...test, status: 'no_data', latestObs: obs, days: null };
+        }
         const intervalDays = test.intervalDays || 365;
         const dueSoonDays = test.dueSoonDays || 30;
         const staleDays = intervalDays * 2;

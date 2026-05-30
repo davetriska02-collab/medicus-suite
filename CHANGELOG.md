@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.10.2] — 2026-05-30
+### Fixed — Backups stamped with a stale extension version
+- `shared/io/suite-envelope.js` hardcoded `EXTENSION_VERSION = '2.5.0'` (five
+  majors behind), and `options.js` never passed the real version into `wrap()`,
+  so every backup envelope recorded `2.5.0`. `doFullExport`/`doModuleExport` now
+  pass `chrome.runtime.getManifest().version`; the constant is reduced to a
+  neutral `'unknown'` fallback for the Node test context.
+
+### Fixed — Drug monitoring could misclassify malformed observation dates as in-date
+- `engine/rules-engine.js`: a present-but-unparseable observation date made
+  `daysBetween()` return `null`, which fell through the interval comparisons
+  (`null > intervalDays` is silently false) and landed the test in `in_date` —
+  i.e. it looked safe. Such dates are now flagged as `no_data`, consistent with
+  the suite's "flag missing inputs, never assert what you can't substantiate"
+  rule.
+
+### Added — Enforced test runner
+- Added `package.json` with `npm test` running every `test-*.js`, failing on the
+  first non-zero exit. The defaults-drift guard and monitoring tests now run with
+  one command instead of being invoked individually by hand.
+
 ## [v3.10.1] — 2026-05-30
 ### Fixed — Queue monitoring chips: task slug mismatch caused 404 on patient lookup
 - `resolveTaskToPatient` was calling `/tasks/data/prescription_request_task_routine/overview/{uuid}`
