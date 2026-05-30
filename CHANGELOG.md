@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.12.0] — 2026-05-30
+### Improved — Triage Lens base rule detection (much higher recall)
+Substantially expanded the detection phrases for all 20 built-in Triage Lens
+rules so the baseline capture is far stronger on real, lay, patient-written
+request text. Total shipped patterns grew from **106 → 620** (~5.8×).
+
+For each rule we added: lay/patient phrasings ("water infection", "my back
+hurts", "worst headache of my life"), clinical synonyms, common abbreviations
+(SOB, COPD, MTX, DOAC, AOM), British **and** American spellings
+(melaena/melena, haematemesis/hematemesis, oestrogen/estrogen,
+anaesthesia/anesthesia), medication brand names (Eliquis, Xarelto, Pradaxa,
+Priadel, Metoject, Evorel, Oestrogel…), common misspellings, and
+hyphen/space variants.
+
+Precision was preserved alongside recall:
+- Rules that needed safe abbreviations or word-boundary control were switched
+  from plain-text to `regex` mode, with every existing pattern rewritten to
+  keep its original stem behaviour (e.g. `cough` → `cough\w*`,
+  `depress` → `depress\w*`) — so the trailing word boundary can't silently
+  drop suffix matches.
+- Fixed the long-standing `fit-note` "med ?3" pattern that, in plain-text
+  mode, never actually matched "med3"/"med 3" (the `?` was treated literally);
+  it now uses `med[- ]?3`.
+- `UTI` is now `\bUTI\b` (regex) so it no longer mis-fires on "utility";
+  `repeat-meds` "out of my" now uses a negative lookahead so it captures
+  "out of my amlodipine" but not "out of my mind"; `post-discharge` drops the
+  bare noun "discharge" (kept "discharged" + "discharge summary") so it no
+  longer fires on "vaginal/ear discharge"; assorted over-broad stems removed
+  (`my back`, `irritab\w*`, accidental-injury phrasings in mh-crisis).
+
+Every rule's new patterns were generated with per-rule expansion and then
+gated by an automated harness (compiling patterns exactly as `content.js`
+does) against `shouldMatch`/`shouldNotMatch` controls — **0 compile errors,
+0 control failures** across ~90 assertions. All three synced copies
+(`defaults.json`, `content-scripts/triage-lens/defaults.json`, and the
+`EMBEDDED_DEFAULTS` fallback) were regenerated together; the drift guard
+(`test-triage-defaults.js`) and full test suite pass.
+
 ## [v3.11.1] — 2026-05-30
 ### Fixed — Bug-bash findings (verified)
 A parallel code audit (8 fast-model sweeps, verified by review) surfaced a
