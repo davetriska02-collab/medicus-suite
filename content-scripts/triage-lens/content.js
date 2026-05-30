@@ -2734,6 +2734,12 @@
   // idempotent via the page-world window.__chDocIntercepted guard.
   injectDocContextInterceptor();
 
+  // Same reasoning for the queue: the task-list XHR (Axios) fires during SPA
+  // navigation INTO the queue, before runQueue runs. Install the interceptor
+  // here at init so the first task-list load is captured. Idempotent via the
+  // page-world window.__chIntercepted guard (runQueue also calls it).
+  injectTaskListInterceptor();
+
   // Load config first, then start. Config drives rule matching.
   loadConfig().then(() => {
     waitFor(pageReady, () => {

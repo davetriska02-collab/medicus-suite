@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.9.3] — 2026-05-30
+### Fixed — Queue monitoring chips never appeared (task-list never captured)
+- The queue monitoring overlay captured task-row UUIDs by wrapping `window.fetch`
+  only — but Medicus loads the task list via **Axios (XMLHttpRequest)**, so the
+  task-list response was never seen, `ch-task-list-data` never fired, and no
+  queue chips were ever injected (the side-panel Monitoring module worked because
+  it uses a different data path). The interceptor now wraps **both** `window.fetch`
+  AND `XMLHttpRequest`, mirroring the document-context interceptor. (`content-scripts/triage-lens/content.js`)
+- It also now reads the rows from `body.tasks` (the actual Medicus task-list
+  array key) in addition to `data`/`results`/`rows`/bare-array, and extracts the
+  task UUID robustly (known `taskUuid`/`taskId`/`uuid`/`id` keys first, then a
+  guarded scan of task/id-ish keys, never a patient id). Diagnostic `console`
+  logging is emitted if the array or a row UUID can't be found, so any remaining
+  shape mismatch is visible.
+- The interceptor is now installed **early at content-script init** (not only in
+  `runQueue`), because the task-list XHR fires during SPA navigation into the
+  queue before `runQueue` runs — same fix already applied to the document-context
+  interceptor. Idempotent via the `window.__chIntercepted` page-world guard.
+
 ## [v3.9.2] — 2026-05-30
 ### Changed — Monitoring overlays now flag "no monitoring on record" (red)
 - A high-risk drug with **no recognised monitoring tests on record at all**
