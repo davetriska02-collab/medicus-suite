@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.17.2] — 2026-05-30
+### Fixed — Wire the extraction-health canary to the side panel + invalidate stale snapshots (H-005, clinical safety)
+
+The v3.17.0 silent-failure canary (`assessExtractionHealth`) was only consulted
+by the **in-page HUD** renderer (`renderGroupedChips`), which suite mode never
+mounts — the side panel boots via `bootDataOnly()`. So on the surface clinicians
+actually use, a Medicus DOM/API drift that extracted nothing still rendered the
+benign **"No chips for this patient"** — exactly the false "all clear" H-005 was
+written to prevent. Two fixes:
+
+- **Canary now reaches the side panel.** `evaluateAndPublish` computes
+  `assessExtractionHealth` and the snapshot bridge stamps a `degraded`/`reason`
+  flag onto the snapshot the side panel reads. The Sentinel side-panel module
+  now renders a prominent **"⚠ Couldn't read this record"** warning for a
+  degraded snapshot instead of a benign empty state.
+- **Stale snapshots are invalidated.** `_lastSnapshot` previously updated *only*
+  on a successful evaluation, so a thrown fetch/rules-load (the swallowed
+  `catch` paths) left the **previous patient's** chips in place — and the panel
+  rendered them with no patient-identity guard (wrong-patient risk on
+  navigation). The snapshot is now invalidated the instant the SPA navigates and
+  whenever an extraction fails; the panel treats an invalidated snapshot as
+  "refreshing", never as data.
+
+New pure helper `classifySnapshot` in the side-panel module with
+`test-sentinel-panel-state.js` (10 assertions) guarding that a degraded or
+invalidated snapshot can never be classified as renderable data.
+
 ## [v3.17.1] — 2026-05-30
 ### Changed — Tighten `web_accessible_resources` exposure (security hardening)
 

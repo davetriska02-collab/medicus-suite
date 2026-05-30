@@ -906,8 +906,11 @@
         const obs = new MutationObserver(() => {
           if (location.href !== lastUrl) {
             lastUrl = location.href;
+            // Invalidate immediately on navigation so the side panel can't show
+            // the previous patient's chips during the debounce/fetch window.
+            invalidateSnapshot();
             setTimeout(async () => {
-              try { evaluateAndPublish(await loadRules()); } catch (e) {}
+              try { evaluateAndPublish(await loadRules()); } catch (e) { invalidateSnapshot(); }
             }, 800);
           }
         });
@@ -923,7 +926,12 @@
       if (!fetcher) return;
       const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
       Promise.resolve(result).then(data => {
-        if (!data || !window.SentinelRules) return;
+        if (!data || !window.SentinelRules) { invalidateSnapshot(); return; }
+        // Assess extraction health BEFORE evaluating so the patched
+        // evaluatePatient can stamp the degraded flag onto the snapshot the side
+        // panel reads. Without this the H-005 canary only guarded the in-page
+        // HUD renderer, never the side-panel UI the suite actually uses.
+        _pendingHealth = assessExtractionHealth(data);
         // This call triggers the patched evaluatePatient below, which stores the snapshot.
         window.SentinelRules.evaluatePatient(
           data.medications || [],
@@ -936,14 +944,34 @@
             observationHistory: data.observationHistory || []
           }
         );
-      }).catch(() => {});
-    } catch (e) {}
+      }).catch(() => { invalidateSnapshot(); });
+    } catch (e) { invalidateSnapshot(); }
   }
 
   // ── Side panel bridge ──────────────────────────────────────────────────────
   // Stores the last evaluated chip snapshot so the suite side panel can read it
   // without needing a fresh fetch. Updated every time chips are evaluated.
   let _lastSnapshot = null;
+  // Health of the in-flight evaluation, computed in evaluateAndPublish and
+  // stamped onto the snapshot by the patched evaluatePatient below.
+  let _pendingHealth = { degraded: false };
+
+  // Notify any open side panel that the snapshot changed.
+  function notifySnapshotUpdated() {
+    try {
+      const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) {}
+  }
+
+  // Drop any prior patient's snapshot. Called the instant the SPA navigates and
+  // whenever an extraction fails, so the side panel can never render a previous
+  // patient's chips as if they belonged to the record now on screen. The panel
+  // treats `unavailable` as "refreshing", never as a clinical "all clear".
+  function invalidateSnapshot() {
+    _lastSnapshot = { chips: null, patientContext: null, evaluatedAt: new Date().toISOString(), unavailable: true };
+    notifySnapshotUpdated();
+  }
 
   // Patch into the evaluate-and-render flow by intercepting the storage pattern
   // via a flag set after the first successful evaluation.
@@ -955,13 +983,12 @@
         chips,
         patientContext: opts && opts.patientContext || null,
         evaluatedAt: new Date().toISOString(),
+        degraded: !!_pendingHealth.degraded,
+        reason: _pendingHealth.reason || null,
       };
       // Notify any open side panel that a fresh snapshot is available so it can
       // re-render immediately on patient change instead of waiting for its poll.
-      try {
-        const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch (_) {}
+      notifySnapshotUpdated();
       return chips;
     };
   }
