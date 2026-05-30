@@ -2,6 +2,82 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.11.1] — 2026-05-30
+### Fixed — Bug-bash findings (verified)
+A parallel code audit (8 fast-model sweeps, verified by review) surfaced a
+handful of real bugs; the rest were false positives. Fixes:
+
+- **Capacity backup — merge import dropped settings (data loss).** A
+  `merge: true` import early-returned after writing presets, silently discarding
+  `activePresetId`, `viewMode`, and `showWeekends`. The merge path now falls
+  through and persists all scalar settings. (`shared/io/capacity-io.js`)
+- **Side panel — display popover leaked document listeners.** Each
+  re-render of the display popover (including every in-popover click) added a new
+  `document` click handler that was only removed on an outside click. Now tracked
+  in a single module-level ref and removed before re-adding. (`side-panel/panel.js`)
+- **Service worker — unhandled startup rejections.** `onInstalled` /
+  `onStartup` fired async init tasks (`runMigration`, `initialiseRequestMonitor`,
+  `initialiseUpdateChecker`) without `.catch()`, so storage failures were
+  silently swallowed. Wrapped each in a `runStartupTask` guard that logs
+  failures. (`service-worker.js`)
+- **Submissions — "NaNd" subtitle.** `daysBetween()` returned `NaN` when a
+  date `<input>` was cleared; now guarded. (`side-panel/modules/submissions/submissions.js`)
+- **Capacity — null deref on "copy Mon".** `querySelector('input[data-day="mon"]').value`
+  had no null check; now optional-chained with an early bail.
+  (`side-panel/modules/capacity/capacity.js`)
+- **Triage Lens — drag handler lingered on lost mouseup.** If a HUD drag was
+  interrupted by an alt-tab (no `mouseup`), the `mousemove` listener stayed live
+  and the HUD jittered on later mouse moves. Drag now also ends on window `blur`
+  and tears down all transient listeners. (`content-scripts/triage-lens/content.js`)
+- **Triage Lens — removed dead `injectTaskListInterceptor` no-op** and its two
+  call sites (left over from the MAIN-world `page-world.js` refactor).
+  (`content-scripts/triage-lens/content.js`)
+- **Referrals — removed dead no-op line** in the `last3m` date preset
+  (`end.setMonth(end.getMonth())`); range was already correct.
+  (`shared/referrals-api.js`)
+
+Notable **false positives** dismissed during verification: a hallucinated
+16-site Visualiser XSS class (the `esc()` helper is applied everywhere), an
+"inverted" QOF trend status (correct by design), and a request-monitor backup
+"asymmetry" (symmetric in practice).
+
+## [v3.11.0] — 2026-05-30
+### Removed — Document-context lens (dead feature)
+Removed the Triage Lens **document-context lens** in full — the v3.8.0 lens
+(`detail.docEntries` / `detail.docUrgent` / `detail.docAction` chips fed by the
+`/clinical/document/entries/` + `/document/modals/version/preview/`
+interceptor) **and** the v3.9.0 PDF body-extraction pipeline built on top of it.
+The whole feature is gone. The separate, DOM-sourced document **metadata** chips
+(`detail.docType`, `detail.docSpecialty` — read from the document task card in
+`extractDocumentTaskInfo`, not via any interceptor) and the queue monitoring
+chips are unaffected.
+
+- **Chips removed:** `detail.docEntries` (info, "Filed notes ×N"),
+  `detail.docUrgent` (red), `detail.docAction` (amber) — from `defaults.json`,
+  `content-scripts/triage-lens/defaults.json`, the embedded defaults and the
+  settings catalogue. (`content-scripts/triage-lens/content.js`,
+  `content-scripts/triage-lens/options.js`)
+- **Content-script logic removed:** `_docCtx` state, the `ch-doc-entries`
+  listener, `runDocContextChips`, the `injectDocContextInterceptor` stub and its
+  init call, plus the v3.9.0 body machinery (`requestDocPdfText`, the
+  covering-message text matching, `DOC_URGENT_RE` / `DOC_ACTION_RE` and the
+  negation guard). (`content-scripts/triage-lens/content.js`)
+- **PDF pipeline removed:** the offscreen document (`offscreen.html` /
+  `offscreen.js`), the service-worker `sentinelDocPdfText` handler and its
+  offscreen helpers, the `offscreen` manifest permission, and the offscreen
+  web-accessible resources. (`service-worker.js`, `manifest.json`)
+- **Interceptor narrowed:** `page-world.js` now intercepts **only** the queue
+  `/tasks/data/{slug}/task-list` endpoint (`ch-task-list-data`); all
+  document-context interception (`ch-doc-entries` / `ch-doc-preview`,
+  `handleDoc`, the entries/preview regexes) is removed.
+  (`content-scripts/triage-lens/page-world.js`)
+- **Scratch files removed:** `doc-body-plan.md`, `doc-body-probe2.js`,
+  `doc-body-discovery.js`.
+- No `chrome.storage` keys, `shared/io/*` files, or backup envelopes were
+  involved (the feature was deliberately ephemeral), so suite backups are
+  unaffected. `vendor/pdf.min.js` / `pdf.worker.min.js` are retained — still
+  used by the Patient Record Visualiser.
+
 ## [v3.10.0] — 2026-05-30
 ### Fixed — Network interceptors blocked by Medicus CSP (the real root cause)
 - **This is why the queue monitoring chips and document-context lens never

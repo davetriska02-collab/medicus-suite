@@ -55,114 +55,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// ── Triage Lens: document-body PDF text extraction ────────────────────
-//
-// Handles { type:'sentinelDocPdfText', apiBase, taskUuid, fileId? } from the
-// Triage Lens content script. Resolves the document file UUID, downloads the
-// server-converted PDF (same Medicus api host the page already uses), and runs
-// PDF.js inside an offscreen document to extract the body prose. The text is
-// returned to the caller, which feeds it into the existing docUrgent/docAction
-// chips. Nothing is persisted: PDF bytes and extracted text are ephemeral.
-// All failures resolve to { ok:false, ... } — never crash the service worker.
-
-let _offscreenCreating = null; // guards against concurrent createDocument()
-
-// chrome.runtime.sendMessage JSON-serializes its payload — a raw ArrayBuffer
-// would arrive as {}. Encode PDF bytes as base64 to cross the SW→offscreen
-// message boundary intact (decoded back to bytes in offscreen.js).
-function abToBase64(buf) {
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  const CHUNK = 0x8000; // avoid call-stack overflow on large PDFs
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
-
-async function ensureOffscreenDocument() {
-  if (chrome.offscreen && chrome.offscreen.hasDocument) {
-    const exists = await chrome.offscreen.hasDocument();
-    if (exists) return;
-  }
-  if (_offscreenCreating) { await _offscreenCreating; return; }
-  _offscreenCreating = chrome.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: ['WORKERS'],
-    justification: 'Extract text from clinical document PDF for decision-support chips',
-  }).catch(err => {
-    if (err && /single offscreen|already/i.test(err.message || '')) return;
-    throw err;
-  });
-  try { await _offscreenCreating; } finally { _offscreenCreating = null; }
-}
-
-async function closeOffscreenDocument() {
-  try {
-    if (chrome.offscreen && chrome.offscreen.hasDocument) {
-      const exists = await chrome.offscreen.hasDocument();
-      if (!exists) return;
-    }
-    await chrome.offscreen.closeDocument();
-  } catch (_) { /* already closed / never opened */ }
-}
-
-async function extractDocPdfText({ apiBase, taskUuid, fileId }) {
-  if (!apiBase || (!taskUuid && !fileId)) return { ok: false, error: 'missing apiBase/taskUuid' };
-
-  // 1. Resolve fileId if not supplied.
-  let resolvedFileId = fileId || null;
-  if (!resolvedFileId) {
-    const ov = await fetch(`${apiBase}/tasks/data/document/overview/${taskUuid}`, {
-      credentials: 'include', headers: { 'Accept': 'application/json' },
-    });
-    if (!ov.ok) return { ok: false, error: `overview HTTP ${ov.status}` };
-    const ovJson = await ov.json();
-    resolvedFileId = (ovJson && ovJson.data && ovJson.data.fileId) || (ovJson && ovJson.fileId) || null;
-  }
-  if (!resolvedFileId) return { ok: false, error: 'no fileId' };
-
-  // 2. Optional guard: skip if the server-side conversion is not ready.
-  try {
-    const prev = await fetch(`${apiBase}/tasks/data/document/file/document-preview/${resolvedFileId}`, {
-      credentials: 'include', headers: { 'Accept': 'application/json' },
-    });
-    if (prev.ok) {
-      const pj = await prev.json();
-      const d = (pj && pj.data) || pj || {};
-      if (d.conversionInProgress) return { ok: false, reason: 'conversionInProgress' };
-      if (d.conversionFailed) return { ok: false, reason: d.conversionFailureReason || 'conversionFailed' };
-    }
-  } catch (_) { /* best-effort; proceed to download */ }
-
-  // 3. Download the server-converted PDF.
-  const pdfResp = await fetch(`${apiBase}/clinical/document/download-file/${resolvedFileId}?convertToPDF=1`, {
-    credentials: 'include',
-  });
-  if (!pdfResp.ok) return { ok: false, error: `download HTTP ${pdfResp.status}` };
-  const bytes = await pdfResp.arrayBuffer();
-  if (!bytes || bytes.byteLength === 0) return { ok: false, error: 'empty pdf' };
-
-  // 4. Run PDF.js in the offscreen document. Bytes go as base64 (sendMessage
-  // JSON-serializes, so a raw ArrayBuffer would arrive empty).
-  await ensureOffscreenDocument();
-  const result = await chrome.runtime.sendMessage({ target: 'offscreen', type: 'extractPdf', b64: abToBase64(bytes) });
-
-  // 5. Close the offscreen doc (simplest, lowest-memory policy).
-  await closeOffscreenDocument();
-
-  if (!result || !result.ok) return { ok: false, error: (result && result.error) || 'offscreen extraction failed' };
-  return { ok: true, text: result.text || '' };
-}
-
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.type !== 'sentinelDocPdfText') return; // not ours
-  extractDocPdfText(msg)
-    .then(res => sendResponse(res))
-    .catch(err => sendResponse({ ok: false, error: (err && err.message) || String(err) }));
-  return true; // keep the channel open for the async reply
-});
-
 // ── Broadcast to side panel ───────────────────────────────────────────────────
 
 function broadcastToSidePanel(payload) {
@@ -200,21 +92,31 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 });
 
+// Run a startup task without letting a rejection bubble up as an unhandled
+// rejection (which would silently swallow e.g. storage-quota failures).
+function runStartupTask(label, fn) {
+  try {
+    Promise.resolve(fn()).catch(e => console.warn(`[Suite] ${label} failed:`, e && e.message));
+  } catch (e) {
+    console.warn(`[Suite] ${label} threw:`, e && e.message);
+  }
+}
+
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
-  startPolling();
-  runMigration();
-  migrateTriageLensConfig();
-  initialiseTriage();
-  initialiseRequestMonitor().then(() => pollRequestMonitor());
-  initialiseUpdateChecker();
+  runStartupTask('startPolling', startPolling);
+  runStartupTask('runMigration', runMigration);
+  runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
+  runStartupTask('initialiseTriage', initialiseTriage);
+  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
+  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   applyPracticeProfile();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  startPolling();
-  initialiseRequestMonitor().then(() => pollRequestMonitor());
-  initialiseUpdateChecker();
+  runStartupTask('startPolling', startPolling);
+  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
+  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
   applyPracticeProfile();

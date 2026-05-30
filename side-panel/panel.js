@@ -10,6 +10,7 @@ let switchSeq = 0;
 
 let panelDisplayPrefs = { theme: 'light', size: 'medium', colorblind: false };
 let displayOpen = false;
+let _dpCloseHandler = null;
 
 function applyDisplayPrefs(prefs) {
   prefs = prefs || {};
@@ -68,14 +69,18 @@ function renderDisplayPopover() {
     renderDisplayPopover();
   });
 
-  const closeOnOutside = (e) => {
+  // Re-rendering the popover (e.g. on each in-popover click) must not stack
+  // duplicate document listeners — remove any previous one before adding.
+  if (_dpCloseHandler) document.removeEventListener('click', _dpCloseHandler);
+  _dpCloseHandler = (e) => {
     if (!e.target.closest('#displayPopoverHost') && !e.target.closest('#displayBtn')) {
       displayOpen = false;
+      document.removeEventListener('click', _dpCloseHandler);
+      _dpCloseHandler = null;
       renderDisplayPopover();
-      document.removeEventListener('click', closeOnOutside);
     }
   };
-  document.addEventListener('click', closeOnOutside);
+  document.addEventListener('click', _dpCloseHandler);
 }
 
 // ── Module registry ───────────────────────────────────────────────────────────

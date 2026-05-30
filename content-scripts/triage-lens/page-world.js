@@ -8,12 +8,10 @@
 // manifest-declared MAIN-world content script is injected by the browser itself
 // and is exempt from the page CSP.
 //
-// It wraps fetch + XHR to observe two classes of Medicus API response and
-// re-broadcasts the bits the isolated content script needs as window
-// CustomEvents (which cross the world boundary for JSON-serialisable detail):
+// It wraps fetch + XHR to observe the queue task-list response and re-broadcasts
+// the bits the isolated content script needs as a window CustomEvent (which
+// crosses the world boundary for JSON-serialisable detail):
 //   • /tasks/data/{slug}/task-list      → 'ch-task-list-data'   (queue monitoring)
-//   • /clinical/document/entries/…       → 'ch-doc-entries'      (doc context)
-//   • /document/modals/version/preview/… → 'ch-doc-preview'      (doc context)
 //
 // It reads responses only; it never blocks, rewrites, or sends anything. No
 // patient data leaves the browser.
@@ -25,11 +23,6 @@
 
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
-  var ENTRIES_RE = new RegExp('/clinical/document/entries/');
-  var PREVIEW_RE = new RegExp('/document/modals/version/preview/');
-  var TAIL_RE = new RegExp('/([0-9a-f-]+)(?:\\?|$)', 'i');
-
-  function tailId(u) { var m = String(u || '').match(TAIL_RE); return m ? m[1] : null; }
 
   // ---- Queue task-list ----
   function pickUuid(item) {
@@ -69,31 +62,6 @@
     }
   }
 
-  // ---- Document context ----
-  function handleDoc(url, text) {
-    try {
-      var u = String(url || '');
-      if (ENTRIES_RE.test(u)) {
-        var body = JSON.parse(text);
-        window.dispatchEvent(new CustomEvent('ch-doc-entries', { detail: {
-          documentId: tailId(u),
-          entries: (body && body.entries) || []
-        } }));
-      } else if (PREVIEW_RE.test(u)) {
-        var body2 = JSON.parse(text);
-        window.dispatchEvent(new CustomEvent('ch-doc-preview', { detail: {
-          documentId: (body2 && body2.documentId) || null,
-          inboundMessage: (body2 && body2.inboundMessage) || '',
-          typeLabel: (body2 && body2.document && body2.document.typeLabel) || ''
-        } }));
-      }
-    } catch (e) { console.warn('[ClinHUD] doc-context parse error', e); }
-  }
-
-  function isInteresting(u) {
-    return TL_RE.test(u) || ENTRIES_RE.test(u) || PREVIEW_RE.test(u);
-  }
-
   // ---- fetch wrap ----
   var origFetch = window.fetch;
   if (typeof origFetch === 'function') {
@@ -101,17 +69,11 @@
       var p = origFetch.apply(this, arguments);
       try {
         var u = typeof url === 'string' ? url : (url && url.url) || '';
-        if (isInteresting(u)) {
+        if (TL_RE.test(u)) {
           p.then(function (r) {
             try {
-              var clone = r.clone();
-              if (TL_RE.test(u)) {
-                clone.json().then(function (b) { handleTaskList(u, b); })
-                  .catch(function (e) { console.warn('[ClinHUD] task-list parse error', e); });
-              } else {
-                clone.text().then(function (t) { handleDoc(u, t); })
-                  .catch(function (e) { console.warn('[ClinHUD] doc-context parse error', e); });
-              }
+              r.clone().json().then(function (b) { handleTaskList(u, b); })
+                .catch(function (e) { console.warn('[ClinHUD] task-list parse error', e); });
             } catch (_) {}
           });
         }
@@ -131,14 +93,10 @@
     try {
       var xhr = this;
       var u = xhr.__chUrl || '';
-      if (isInteresting(u)) {
+      if (TL_RE.test(u)) {
         xhr.addEventListener('load', function () {
           try {
-            if (TL_RE.test(u)) {
-              handleTaskList(u, JSON.parse(xhr.responseText));
-            } else {
-              handleDoc(u, xhr.responseText);
-            }
+            handleTaskList(u, JSON.parse(xhr.responseText));
           } catch (e) { console.warn('[ClinHUD] interceptor parse error', e); }
         });
       }
