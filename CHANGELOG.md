@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.14.0] — 2026-05-30
+### Added — STOPP/START prescribing flags + risk-tool signposting
+Two competitor-gap "quick wins" from the EMIS/SystmOne market review.
+
+**STOPP/START-style prescribing-safety flags** (record MEDS tile). A new
+deterministic, pure `evaluatePrescribingFlags(meds, age)` helper adds review
+prompts for well-established, low-false-positive medication combinations:
+- **NSAID + anticoagulant** (or antiplatelet) — GI bleed risk
+- **Triple whammy** — NSAID + ACEi/ARB + diuretic — AKI risk (PINCER/STOPP)
+- **Benzodiazepine / Z-drug in age ≥80** — falls & sedation (STOPP)
+
+Detection is medication-name based (topical NSAIDs are excluded), age-gated only
+where the threshold is known, and surfaced via a new amber `record.stoppStart`
+header chip. Worded as review prompts — decision support, verify against record.
+
+**Risk-tool signpost chip** (`record.riskScores`, info). On adult records
+(age ≥25) a "Risk tools" chip offers one-click links to the official **QRISK3**,
+**QCancer**, and **eFI** calculators plus a note listing the inputs each needs.
+Deliberately **signpost-only** — Medicus does not compute the scores (the
+extractors can't supply cholesterol ratio / smoking / ethnicity, and an
+unvalidated reimplementation would be a medical-device concern).
+
+Added `test-prescribing-flags.js` (15 assertions, vm-extracted pure helper):
+fires on the real combinations, ignores topical NSAIDs, respects the anticoag>
+antiplatelet precedence, the age-≥80 gate (incl. unknown age), and clean lists.
+Updated all three synced defaults copies; drift guard + full suite pass.
+SNOMED code-suggestion actions were dropped from the roadmap.
+
 ## [v3.13.0] — 2026-05-30
 ### Added — Pharmacy First signposting across all 7 clinical pathways
 Triage Lens now signposts to NHS Pharmacy First (England) for every one of the
