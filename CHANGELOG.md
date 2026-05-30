@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.8.0] — 2026-05-30
+### Added — Document-context lens (Phase 1 of a phased rollout)
+Triage Lens now surfaces the cheap JSON text already loaded when a GP opens a
+document task (`/tasks/data/document/overview/{taskUuid}`), as HUD chips. This
+is **Phase 1**: it uses only the data the Medicus SPA already fetches — the
+filed care-record entries (`/clinical/document/entries/`) and the electronic
+covering message (`inboundMessage` from `/document/modals/version/preview/`).
+Extracting the document *body* PDF (`download-file`) needs PDF.js and is a
+deliberate later phase — not touched here.
+
+- New page-world interceptor `injectDocContextInterceptor()` passively wraps
+  both `window.fetch` AND `XMLHttpRequest` (the document calls come through
+  Axios/XHR, so a fetch-only wrapper would miss them) and re-dispatches the JSON
+  text back to the content script as `ch-doc-entries` / `ch-doc-preview`
+  CustomEvents. Guarded by `window.__chDocIntercepted`; installed once, early at
+  init (the XHRs fire during SPA navigation into the document, before
+  `runDetail`). No new network calls; nothing leaves the browser; the combined
+  text is held only in an ephemeral in-memory variable and is never persisted to
+  chrome.storage or any suite backup.
+- Three new system chips (`detail.docEntries`, `detail.docUrgent`,
+  `detail.docAction`), configurable in Triage Lens settings:
+  - **Filed notes ×N** (info) — defaults **on**; purely descriptive, reflects
+    coding already filed by the GP.
+  - **Urgent: …** (red) and **Action: …** (amber) — both default **OFF**
+    (opt-in), keyword-matched with a negation guard ("no", "not", "denies",
+    "ruled out", etc.) to reduce false positives against the GP's own coding.
+- Staleness token guard applied before any chip is injected to prevent
+  wrong-document / wrong-patient display. If no text is available, no chip is
+  shown (never a false "all clear").
+
 ## [v3.7.2] — 2026-05-29
 ### Fixed — Code-review fixes: document task lens + queue monitoring chips
 **Document task lens (7 fixes):**
