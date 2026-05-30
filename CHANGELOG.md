@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.11.0] — 2026-05-30
+### Added — Drug-monitoring rules: warfarin and diuretics
+- `rules/drug-rules.json`: added `warfarin` (INR, 90-day max gap; also matches
+  acenocoumarol/phenindione) and `diuretic-loop-thiazide` (U&E, 180-day; loop +
+  thiazide diuretics incl. combination products). Intervals aligned with PINCER
+  indicators #7 and #10. Closes monitoring-chip gaps for two common high-risk
+  primary-care drug groups. Rule count 19 → 21.
+
+### Added — `bump.js` version helper
+- `node bump.js <patch|minor|major> "message"` (also `npm run bump`) bumps
+  `manifest.json` version + description and prepends a dated `CHANGELOG.md`
+  entry in one step, replacing the manual two-file edit CLAUDE.md mandates.
+- Added a `bump` script to `package.json` for discoverability.
+
 ## [v3.10.2] — 2026-05-30
 ### Fixed — Backups stamped with a stale extension version
 - `shared/io/suite-envelope.js` hardcoded `EXTENSION_VERSION = '2.5.0'` (five

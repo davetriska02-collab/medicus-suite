@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-05-12",
+  "lastUpdated": "2026-05-30",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - May 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at May 2026. Includes 13 rules from previous version plus 6 additions (leflunomide, hydroxychloroquine, SGLT2 inhibitors, carbimazole/propylthiouracil, mirabegron, GLP-1 receptor agonists). Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at May 2026. Includes 13 rules from previous version plus 6 additions (leflunomide, hydroxychloroquine, SGLT2 inhibitors, carbimazole/propylthiouracil, mirabegron, GLP-1 receptor agonists), plus 2 further additions (warfarin/INR and loop/thiazide diuretics/U&E, aligned with PINCER indicators #7 and #10). Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -356,6 +356,39 @@
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
       }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "warfarin",
+      "drugClass": "Vitamin K antagonist",
+      "drug": {
+        "match": ["warfarin", "acenocoumarol", "phenindione"],
+        "snomed": ["372756006"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "INR", "match": ["inr", "international normalised ratio", "international normalized ratio"], "snomed": ["165581004"], "intervalDays": 90, "dueSoonDays": 14 }
+      ],
+      "source": "BNF / NICE NG196 / BCSH oral anticoagulation guideline (PINCER #7)",
+      "notes": "INR must stay within the patient's target therapeutic range. Testing frequency varies with stability — up to a maximum 12-week interval for stable patients per BCSH; Sentinel uses 90 days as the maximum acceptable gap. Many patients are managed by an anticoagulation service, in which case INR may be recorded there; this rule still prompts if no INR is visible in the record.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "diuretic-loop-thiazide",
+      "drugClass": "Diuretic",
+      "drug": {
+        "match": ["furosemide", "frusemide", "bumetanide", "torasemide", "bendroflumethiazide", "indapamide", "chlortalidone", "chlortalidone", "metolazone", "hydrochlorothiazide", "co-amilofruse", "co-amilozide"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 180, "dueSoonDays": 21 }
+      ],
+      "source": "NICE NG136 (hypertension) / NG106 (heart failure) / BNF (PINCER #10)",
+      "notes": "U&E within 1-2 weeks of initiation or dose change, then periodically. Hypokalaemia (thiazides/loop), hyponatraemia and renal impairment are the principal monitoring concerns. Sentinel uses a 6-monthly baseline; intensify to 3-monthly or sooner in the elderly, CKD, or with concurrent RAAS blockade. Combination products (co-amilofruse, co-amilozide) included.",
+      "sharedCare": false
     }
   ]
 }

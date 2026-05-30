@@ -3,6 +3,7 @@
   "private": true,
   "description": "Medicus Suite — Chrome extension test runner (no runtime dependencies)",
   "scripts": {
-    "test": "for f in test-*.js; do echo \"\\n=== $f ===\"; node \"$f\" || exit 1; done"
+    "test": "for f in test-*.js; do echo \"\\n=== $f ===\"; node \"$f\" || exit 1; done",
+    "bump": "node bump.js"
   }
 }
