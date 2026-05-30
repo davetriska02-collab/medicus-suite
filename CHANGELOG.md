@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.13.0] — 2026-05-30
+### Added — Pharmacy First signposting across all 7 clinical pathways
+Triage Lens now signposts to NHS Pharmacy First (England) for every one of the
+seven national clinical pathways, addressing a competitor gap (PATCHS/Klinik
+signpost lower-acuity demand away from GP slots).
+
+- Added a **NHS Pharmacy First link + an eligibility/safety-net referral
+  snippet** to the three existing matching rules: `uti`, `sore-throat`,
+  `otitis`. Snippets state the pathway's age/sex gateway ("if eligible") and
+  red-flag safety-netting — they assert *consideration*, not eligibility, since
+  the patient's age/sex can't always be read.
+- Added **four new amber detection rules** for the previously-uncovered
+  pathways, each with the same Pharmacy First actions:
+  - `sinusitis` — acute sinusitis (age 12+)
+  - `insect-bite` — infected insect bite (age 1+)
+  - `impetigo` — impetigo (age 1+)
+  - `shingles` — shingles / herpes zoster (age 18+)
+
+All four ship with lay + clinical detection patterns, verified against a
+match/no-match spot-check (e.g. does not fire on "sinus rhythm", "my dog bit
+me", or "crusty cough"). Updated all three synced defaults copies
+(`defaults.json`, `content-scripts/triage-lens/defaults.json`,
+`EMBEDDED_DEFAULTS`); drift guard and full suite pass.
+
+(SNOMED code-suggestion actions were scoped out of this release.)
+
 ## [v3.12.1] — 2026-05-30
 ### Fixed — Applicability filters silently suppressed alerts on unknown demographics
 A user reported the MHRA valproate alert never firing (even after pasting the
