@@ -624,6 +624,16 @@
           "type": "snippet",
           "label": "UTI history & exam",
           "text": "UTI history:\n- Dysuria / frequency / urgency:\n- Suprapubic pain / loin pain:\n- Duration of symptoms:\n- Fever / rigors / vomiting:\n- Vaginal discharge:\n- Sexually active / new partner:\n- Pregnancy possible:\n- Catheter / structural abnormality:\n- Recent abx / hospitalisation:\n- Recurrence (≥3 in 12mo or ≥2 in 6mo):\n- Diabetes / immunosuppression:\n\nO/E:\n- Vitals (sepsis screen):\n- Abdominal exam:\n- Loin tenderness:\n- (Dipstick: not for ≥65y or catheterised):\n\nPlan:\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\n- 2nd line: pivmecillinam / fosfomycin\n- Pyelonephritis features → admit / IV abx"
+        },
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (UTI)",
+          "text": "Consider Pharmacy First — uncomplicated lower UTI, women aged 16–64, not pregnant. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: pregnant, male, <16 or >64, recurrent UTI, catheter, immunosuppressed, suspected pyelonephritis (fever, loin/back pain, rigors, vomiting), visible haematuria, or not improving in 48h."
         }
       ]
     },
@@ -672,6 +682,16 @@
           "type": "snippet",
           "label": "FeverPAIN scoring",
           "text": "FeverPAIN score (1 point each):\n- Fever in last 24h:\n- Purulence (tonsils):\n- Attended within 3 days of onset:\n- Inflamed tonsils (severe):\n- No cough or coryza:\n\nTotal: __\n0-1: 13-18% strep — no abx, self-care\n2-3: 34-40% strep — delayed abx (3d) or no abx\n4-5: 62-65% strep — immediate abx\n\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"
+        },
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (sore throat)",
+          "text": "Consider Pharmacy First — acute sore throat, age 5+. Pharmacist applies FeverPAIN.\n\nSafety-net / urgent: difficulty breathing, difficulty swallowing saliva, drooling, muffled “hot potato” voice, stridor, neck stiffness, systemically very unwell, or immunosuppressed → same-day assessment (?quinsy / epiglottitis)."
         }
       ]
     },
@@ -719,6 +739,171 @@
           "type": "snippet",
           "label": "OM history & exam",
           "text": "Otitis media history:\n- Onset / duration:\n- Fever / unwell:\n- Otalgia laterality:\n- Discharge / hearing loss:\n- Recent URTI:\n- Recurrent OM (≥3 in 6mo or ≥4/yr):\n- Eardrum perforation history:\n- Grommets:\n\nO/E:\n- TM appearance: bulging / erythematous / dull / perforated / effusion\n- Mastoid tenderness:\n- General — temp, fluid intake:\n\nPlan:\n- Most resolve in 3 days, paracetamol / ibuprofen\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"
+        },
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (otitis media)",
+          "text": "Consider Pharmacy First — acute otitis media, age 1–17. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: <1y or >17y, systemically very unwell, immunosuppressed, suspected mastoiditis (swelling/redness behind the ear), or symptoms not improving after 3 days."
+        }
+      ]
+    },
+    {
+      "id": "sinusitis",
+      "enabled": true,
+      "label": "Sinusitis",
+      "kind": "amber",
+      "patterns": [
+        "sinusit\\w*",
+        "sinus infection",
+        "sinus pain",
+        "sinus pressure",
+        "blocked sinus\\w*",
+        "facial pain",
+        "facial pressure",
+        "pressure (in|around|behind) (my )?(face|cheek|cheeks|eyes)",
+        "pain (over|around) (my )?(cheek|cheeks|sinuses)",
+        "post.?nasal drip"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (sinusitis)",
+          "text": "Consider Pharmacy First — acute sinusitis, age 12+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: symptoms >10 days, swelling or redness around the eye, double vision, severe frontal headache, photophobia, neck stiffness, or systemically very unwell."
+        }
+      ]
+    },
+    {
+      "id": "insect-bite",
+      "enabled": true,
+      "label": "Insect bite",
+      "kind": "amber",
+      "patterns": [
+        "insect bite\\w*",
+        "insect sting\\w*",
+        "bug bite\\w*",
+        "spider bite\\w*",
+        "mosquito bite\\w*",
+        "infected bite\\w*",
+        "infected sting\\w*",
+        "bite (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)",
+        "sting (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)",
+        "bitten by (an? )?(insect|mosquito|spider|midge|wasp|bee)\\w*"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (infected insect bite)",
+          "text": "Consider Pharmacy First — infected insect bite, age 1+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: rapidly spreading redness, fever or systemic illness, suspected cellulitis, bite near the eye, or breathing difficulty / facial swelling suggesting anaphylaxis → emergency."
+        }
+      ]
+    },
+    {
+      "id": "impetigo",
+      "enabled": true,
+      "label": "Impetigo",
+      "kind": "amber",
+      "patterns": [
+        "impetigo\\w*",
+        "school sores?",
+        "golden crust\\w*",
+        "honey.?colou?red crust\\w*",
+        "weeping sore\\w*",
+        "crusty (sore|sores|rash|spot|spots) (on|around) (the |my )?(face|nose|mouth|chin|lip|lips)",
+        "infected (sore|sores) (on|around) (my |the )?(face|nose|mouth)"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (impetigo)",
+          "text": "Consider Pharmacy First — impetigo, age 1+ (non-bullous, localised). If eligible, signpost to community pharmacy.\n\nNot suitable / refer: bullous impetigo, widespread or recurrent, systemically unwell, immunosuppressed, or not improving with treatment."
+        }
+      ]
+    },
+    {
+      "id": "shingles",
+      "enabled": true,
+      "label": "Shingles",
+      "kind": "amber",
+      "patterns": [
+        "shingles",
+        "herpes zoster",
+        "\\bzoster\\b",
+        "shingle rash",
+        "blistering rash",
+        "band of blister\\w*",
+        "painful rash (on )?one side",
+        "rash (on )?one side of (my )?(face|body|chest|back|torso)"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "link",
+          "label": "NHS Pharmacy First",
+          "url": "https://www.nhs.uk/nhs-services/pharmacies/pharmacy-first/"
+        },
+        {
+          "type": "snippet",
+          "label": "Pharmacy First referral (shingles)",
+          "text": "Consider Pharmacy First — shingles, age 18+. Antiviral most effective within 72h of rash onset.\n\nUrgent / not suitable for PF: eye involvement or rash on the tip of the nose (Hutchinson’s sign — ?ophthalmic zoster), immunocompromised, pregnant, severe / widespread / disseminated rash, or signs of complications."
         }
       ]
     },
