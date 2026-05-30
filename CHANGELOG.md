@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.10.1] — 2026-05-30
+### Fixed — Queue monitoring chips: task slug mismatch caused 404 on patient lookup
+- `resolveTaskToPatient` was calling `/tasks/data/prescription_request_task_routine/overview/{uuid}`
+  but the Medicus overview endpoint uses the shorter kebab-case slug `prescription-requests`.
+  Added `TASK_SLUG_OVERRIDES` map in `engine/api-client.js` covering all known internal
+  type names (`prescription_request_task_routine`, `prescription_request_task_non_routine`,
+  `medical_patient_request_task`, `admin_patient_request_task`,
+  `review_investigation_results_task`, `document_task`) → correct overview slug.
+  Unknown types fall through to the raw slug unchanged.
+- Improved warning log when overview lookup fails (logs both raw and resolved slug).
+
 ## [v3.10.0] — 2026-05-30
 ### Fixed — Network interceptors blocked by Medicus CSP (the real root cause)
 - **This is why the queue monitoring chips and document-context lens never

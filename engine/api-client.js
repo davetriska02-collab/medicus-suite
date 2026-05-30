@@ -198,18 +198,31 @@
   // Resolve a task UUID to its patient UUID via the corresponding task overview endpoint.
   // Task overview pages follow the pattern /tasks/data/{type-slug}/overview/{taskUuid}
   // and the response carries data.patient.id (and/or data.patientId).
-  // Verified on prescription-requests; expected to generalise to other task types
-  // (investigation results, medical requests, general tasks) which share the API shape.
+  //
+  // Medicus task-list URLs use snake_case internal type names (e.g.
+  // prescription_request_task_routine) but the overview endpoints use shorter
+  // kebab-case slugs (e.g. prescription-requests).  TASK_SLUG_OVERRIDES maps
+  // known internal types to their overview slugs; unknown types fall through.
+  const TASK_SLUG_OVERRIDES = {
+    'prescription_request_task_routine':     'prescription-requests',
+    'prescription_request_task_non_routine': 'prescription-requests',
+    'medical_patient_request_task':          'medical-requests',
+    'admin_patient_request_task':            'admin',
+    'review_investigation_results_task':     'investigation-results',
+    'document_task':                         'document',
+  };
+
   const TASK_PATIENT_CACHE = new Map();
   const TASK_PATIENT_TTL_MS = 5 * 60 * 1000;
 
   async function resolveTaskToPatient(apiBase, taskTypeSlug, taskUuid) {
     if (!taskTypeSlug || !taskUuid) return null;
-    const k = `${apiBase}|${taskTypeSlug}|${taskUuid}`;
+    const overviewSlug = TASK_SLUG_OVERRIDES[taskTypeSlug] || taskTypeSlug;
+    const k = `${apiBase}|${overviewSlug}|${taskUuid}`;
     const entry = TASK_PATIENT_CACHE.get(k);
     if (entry && (Date.now() - entry.at) < TASK_PATIENT_TTL_MS) return entry.patientUuid;
     try {
-      const data = await safeFetch(`${apiBase}/tasks/data/${taskTypeSlug}/overview/${taskUuid}`);
+      const data = await safeFetch(`${apiBase}/tasks/data/${overviewSlug}/overview/${taskUuid}`);
       const patientUuid = data?.data?.patient?.id
         || data?.data?.patientId
         || data?.patient?.id
@@ -218,6 +231,7 @@
       if (patientUuid) TASK_PATIENT_CACHE.set(k, { at: Date.now(), patientUuid });
       return patientUuid;
     } catch (e) {
+      console.warn('[ClinHUD] resolveTaskToPatient failed for slug', overviewSlug, '(raw:', taskTypeSlug, '):', e.message);
       return null;
     }
   }
