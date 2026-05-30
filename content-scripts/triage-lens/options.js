@@ -530,11 +530,6 @@
     { id: 'detail.attachments',         page: 'Detail', desc: 'Request has one or more attachments',             vars: ['{count}'] },
     { id: 'detail.monitoringDueAmber',  page: 'Detail', desc: 'High-risk drug monitoring due soon (Sentinel engine)',         vars: ['{count}'] },
     { id: 'detail.monitoringDueRed',    page: 'Detail', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] },
-    { id: 'detail.docType',             page: 'Detail', desc: 'Document type label on document task pages (e.g. "Clinical letter")',    vars: ['{docType}'] },
-    { id: 'detail.docSpecialty',        page: 'Detail', desc: 'Clinical specialty or sender on document task pages',                   vars: ['{specialty}'] },
-    { id: 'detail.docEntries',          page: 'Detail', desc: 'Filed care-record notes/codes exist against the open document (count only — reflects data already filed). Defaults on.', vars: ['{count}'] },
-    { id: 'detail.docUrgent',           page: 'Detail', desc: 'Document covering message / filed notes contain urgent terms (2WW, suspected cancer, red flag, safeguarding, deteriorating). Negation-guarded. Off by default.', vars: ['{term}'] },
-    { id: 'detail.docAction',           page: 'Detail', desc: 'Document text contains action phrases (please arrange, GP to, we recommend, please prescribe/monitor, follow-up in, kindly). Negation-guarded. Off by default.', vars: ['{phrase}'] },
     { id: 'queue.monitoringDueRed',   page: 'Queue', desc: 'High-risk drug monitoring overdue on queue rows (requires network per row — off by default)', vars: ['{count}'] },
     { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
     // Record
