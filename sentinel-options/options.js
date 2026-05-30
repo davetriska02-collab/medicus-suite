@@ -330,6 +330,120 @@ function addTestCard(existing) {
   });
 }
 
+// ── Shared engine-backed live preview (editable mock patient) ─────────────────
+// Drives the "would this rule fire?" preview for every rule-type form off the
+// REAL exported engine (window.SentinelRules.evaluatePatient) — the same
+// function the runtime uses — so the preview matches production behaviour.
+function mockPanelHtml(p) {
+  return `
+  <div class="mock-patient">
+    <div class="mock-grid">
+      <label>Medications<textarea id="${p}MockMeds" placeholder="one per line&#10;Methotrexate 10mg"></textarea></label>
+      <label>Observations<textarea id="${p}MockObs" placeholder="name | value | YYYY-MM-DD&#10;FBC | normal | 2024-01-10"></textarea></label>
+      <label>Problems<textarea id="${p}MockProblems" placeholder="label | YYYY-MM-DD&#10;Atrial fibrillation | 2020-03-01"></textarea></label>
+    </div>
+    <div class="mock-row">
+      <label>Age <input type="number" id="${p}MockAge" min="0" max="120" /></label>
+      <label>Sex <select id="${p}MockSex"><option value="">unknown</option><option value="female">female</option><option value="male">male</option></select></label>
+      <label>As of <input type="date" id="${p}MockDate" /></label>
+      <button type="button" class="ghost" id="${p}MockSeed">Auto-fill from rule</button>
+    </div>
+  </div>`;
+}
+
+function isoDaysAgo(n) {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function readMockPatient(p) {
+  const v = (suffix) => (getEl(p + suffix)?.value || '');
+  const lines = (txt) => txt.split('\n').map(s => s.trim()).filter(Boolean);
+  const cols = (line) => line.split('|').map(x => x.trim());
+  const medications = lines(v('MockMeds')).map(name => ({ name }));
+  const observations = lines(v('MockObs')).map(l => { const [name, value, date] = cols(l); return { name: name || '', code: null, value: value || '', date: date || null }; });
+  const problems = lines(v('MockProblems')).map(l => { const [label, codedDate] = cols(l); return { label: label || '', codedDate: codedDate || null, status: 'active' }; });
+  const ageRaw = v('MockAge');
+  const ageYears = ageRaw === '' ? null : parseInt(ageRaw, 10);
+  const sex = v('MockSex') || null;
+  const dateRaw = v('MockDate');
+  const now = dateRaw ? new Date(dateRaw + 'T12:00:00').toISOString() : new Date().toISOString();
+  // observation-trend / event-count(observations) read observationHistory — seed it from the rows.
+  const observationHistory = observations.map(o => ({ name: o.name, testName: o.name, value: o.value, date: o.date }));
+  return { medications, observations, observationHistory, problems, patientContext: { ageYears, sex }, now };
+}
+
+function runEnginePreview(rule, mock, extraRules) {
+  const RE = window.SentinelRules;
+  if (!RE || typeof RE.evaluatePatient !== 'function') return { error: 'Engine not loaded.' };
+  const rules = [...(extraRules || []), rule];
+  try {
+    const chips = RE.evaluatePatient(mock.medications, mock.observations, rules, {
+      now: mock.now, problems: mock.problems, patientContext: mock.patientContext, observationHistory: mock.observationHistory
+    });
+    return { chips: chips || [] };
+  } catch (e) { return { error: e.message }; }
+}
+
+function renderEnginePreview(p, rule, extraRules) {
+  const el = getEl(p + 'PreviewChip');
+  if (!el) return;
+  rule.id = rule.id || ('custom-preview-' + p);
+  // Live validation feedback via the shared schema validator (same one used on save).
+  try { if (typeof validateCustomRule === 'function') validateCustomRule(rule); }
+  catch (e) { el.innerHTML = `<div class="preview-incomplete">⚠ ${escHtml(e.message)}</div>`; return; }
+  const mock = readMockPatient(p);
+  const res = runEnginePreview(rule, mock, extraRules);
+  if (res.error) { el.innerHTML = `<div class="preview-incomplete">⚠ ${escHtml(res.error)}</div>`; return; }
+  const fired = res.chips.find(c => c.ruleId === rule.id);
+  if (!fired) {
+    el.innerHTML = `<div class="preview-nofire">Would not fire for this test patient. Adjust the rule or the test patient above, or click "Auto-fill from rule".</div>`;
+    return;
+  }
+  const facts = (fired.evidence?.facts || []).map(f =>
+    `<li><span>${escHtml(f.label)}:</span> ${escHtml(String(f.value ?? ''))}${f.date ? ` <em>(${escHtml(String(f.date))})</em>` : ''}</li>`).join('');
+  el.innerHTML = `<div class="preview-fire preview-${escHtml(fired.status || '')}">`
+    + `<strong>✓ Would fire</strong>${fired.status ? ' — ' + escHtml(fired.status) : ''}`
+    + (fired.evidence?.summary ? `<div class="preview-summary">${escHtml(fired.evidence.summary)}</div>` : '')
+    + (facts ? `<ul class="preview-facts">${facts}</ul>` : '')
+    + `</div>`;
+}
+
+// Seed the mock patient from the rule under construction so the preview shows a
+// firing example (meds from drug/drugSets, a problem per requiresProblem, an
+// observation per test/check dated to trigger, age/sex inside any filter).
+function seedMockFromRule(p, rule) {
+  const set = (suffix, val) => { const el = getEl(p + suffix); if (el) el.value = val; };
+  const meds = [];
+  (rule.drug?.match || []).forEach(m => meds.push(m));
+  (rule.drugSets || []).forEach(s => { if (s.match && s.match[0]) meds.push(s.match[0]); });
+  (rule.check?.medicationMatch || []).forEach(m => meds.push(m));
+  set('MockMeds', meds.join('\n'));
+  set('MockProblems', (rule.requiresProblem || []).map(x => `${x} | ${isoDaysAgo(365)}`).join('\n'));
+  const obs = [];
+  (rule.tests || []).forEach(t => { const term = (t.match && t.match[0]) || t.name; obs.push(`${term} | normal | ${isoDaysAgo((t.intervalDays || 84) + 60)}`); });
+  (rule.check?.observation || []).forEach(o => obs.push(`${o} | 0 | ${isoDaysAgo(20)}`));
+  if (obs.length) set('MockObs', obs.join('\n'));
+  if (rule.ageRange?.min != null) set('MockAge', String(rule.ageRange.min + 1));
+  else if (!getEl(p + 'MockAge')?.value) set('MockAge', '60');
+  if (rule.sex === 'F') set('MockSex', 'female');
+  else if (rule.sex === 'M') set('MockSex', 'male');
+}
+
+// Mount the mock-patient panel into a form's preview area and bind live updates.
+function mountMockPanel(p, getRuleFn, extraRulesFn) {
+  const mount = getEl(p + 'MockMount');
+  if (!mount || mount.dataset.mounted) return;
+  mount.innerHTML = mockPanelHtml(p);
+  mount.dataset.mounted = '1';
+  const rerun = () => renderEnginePreview(p, getRuleFn(), extraRulesFn ? extraRulesFn() : []);
+  ['MockMeds', 'MockObs', 'MockProblems', 'MockAge', 'MockSex', 'MockDate'].forEach(s => {
+    getEl(p + s)?.addEventListener('input', rerun);
+    getEl(p + s)?.addEventListener('change', rerun);
+  });
+  getEl(p + 'MockSeed')?.addEventListener('click', () => { seedMockFromRule(p, getRuleFn()); rerun(); });
+}
+
 // Debounced preview update
 let previewTimer = null;
 function updatePreview() {
@@ -338,21 +452,7 @@ function updatePreview() {
 }
 
 function _doPreview() {
-  const rule = getFormRule();
-  const drugName = rule.drug?.match?.[0] || 'Drug';
-  const status = getEl('crPreviewStatus')?.value || 'in_date';
-  const previewEl = getEl('crPreviewChip');
-  if (!previewEl) return;
-
-  if (!drugName || !rule.tests?.length) {
-    previewEl.innerHTML = '<span style="color:var(--t4); font-size:11px; font-style:italic;">Enter drug names and at least one test to see a preview.</span>';
-    return;
-  }
-
-  const CR = window.ChipRenderer;
-  if (!CR) return;
-  const chip = CR.buildPreviewChip(rule, status, drugName);
-  previewEl.innerHTML = CR.renderDrugChip(chip);
+  renderEnginePreview('cr', getFormRule());
 }
 
 // Wire form controls
@@ -360,7 +460,7 @@ getEl('crAddBtn')?.addEventListener('click', () => openCrForm(null));
 getEl('crCancelBtn')?.addEventListener('click', closeCrForm);
 getEl('crCancelBtn2')?.addEventListener('click', closeCrForm);
 getEl('crAddTestBtn')?.addEventListener('click', () => { addTestCard(); updatePreview(); });
-getEl('crPreviewStatus')?.addEventListener('change', updatePreview);
+mountMockPanel('cr', getFormRule);
 
 // Input listeners for live preview
 ['crDrugNames','crExcludeNames','crDrugClass','crSharedCare','crNotes'].forEach(id => {
@@ -374,13 +474,10 @@ getEl('crSaveBtn')?.addEventListener('click', async () => {
   const errEl = getEl('crFormError');
   errEl.textContent = '';
 
-  // Client-side validation
-  if (!rule.drug?.match?.length) { errEl.textContent = 'Enter at least one drug name.'; return; }
-  if (!rule.tests?.length) { errEl.textContent = 'Add at least one test.'; return; }
-  for (const [i, t] of rule.tests.entries()) {
-    if (!t.name) { errEl.textContent = `Test ${i+1}: name is required.`; return; }
-    if (!t.intervalDays || t.intervalDays <= 0 || t.intervalDays > 3650) { errEl.textContent = `Test ${i+1}: interval must be between 1 and 3650 days.`; return; }
-  }
+  // Validate via the shared schema validator (the same one the engine import
+  // path uses), so the form can never save an object the engine would reject.
+  try { validateCustomRule({ ...rule, id: crEditingId || 'custom-temp' }); }
+  catch (e) { errEl.textContent = e.message; return; }
 
   // Load existing rules
   const res = await chrome.storage.local.get('sentinel.customRules');
