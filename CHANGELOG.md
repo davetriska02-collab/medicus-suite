@@ -2,33 +2,6 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.12.0] — 2026-05-30
-### Removed — Document context lens / PDF-body processing (out of scope)
-- Removed the experimental document-context feature (overlaying key actions on
-  Medicus document tasks via PDF text extraction). It never worked reliably and
-  was adding code surface across the suite. The queue drug-monitoring overlay is
-  the priority and is unaffected.
-- Deleted: `offscreen.html`, `offscreen.js` (offscreen PDF.js host),
-  `content-scripts/triage-lens/doc-body-discovery.js`, `doc-body-probe2.js`,
-  `doc-body-plan.md` (dev/discovery artifacts).
-- `service-worker.js`: removed the entire offscreen PDF extraction subsystem
-  (`extractDocPdfText`, `ensureOffscreenDocument`, `closeOffscreenDocument`,
-  `abToBase64`, the `sentinelDocPdfText` handler). The `toggleSidebar`/
-  `openOptionsPage` handler is unchanged.
-- `content-scripts/triage-lens/page-world.js`: removed the document interceptors
-  (`ENTRIES_RE`, `PREVIEW_RE`, `handleDoc`, the `ch-doc-entries`/`ch-doc-preview`
-  events). The task-list interception that powers queue monitoring is unchanged.
-- `manifest.json`: dropped the `offscreen` permission and the `offscreen.*`
-  web-accessible resources. `vendor/*` (PDF.js) is retained — the patient-record
-  visualiser still uses it.
-- Removed the 5 document chips (`detail.docType/docSpecialty/docEntries/
-  docUrgent/docAction`) from `defaults.json`, `content-scripts/triage-lens/
-  defaults.json`, the `EMBEDDED_DEFAULTS` literal in `content.js`, and the
-  settings UI in `content-scripts/triage-lens/options.js`.
-- Note: the now-inert document code paths inside `content.js` (listeners that no
-  longer fire, `requestDocPdfText`/`runDocContextChips` with no backing plumbing)
-  are dead and will be excised in a follow-up; the feature is fully disabled.
-
 ## [v3.11.0] — 2026-05-30
 ### Added — Drug-monitoring rules: warfarin and diuretics
 - `rules/drug-rules.json`: added `warfarin` (INR, 90-day max gap; also matches
