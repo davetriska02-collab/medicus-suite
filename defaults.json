@@ -939,12 +939,6 @@
       "kind": "info",
       "actions": []
     },
-    "detail.docEntries": {
-      "enabled": true,
-      "label": "Filed notes ×{count}",
-      "kind": "info",
-      "actions": []
-    },
     "queue.monitoringDueRed": {
       "enabled": false,
       "label": "Monitoring ×{count}",
