@@ -1304,18 +1304,42 @@
   // for the action-needed drug-monitoring entries, or null when none.
   function selectMonitoringDue(chips) {
     if (!Array.isArray(chips)) return null;
+    // Substantiated-overdue (we have dated bloods and they're late) and missing
+    // (no recognised monitoring test on record at all) are surfaced together.
+    // no_data on a high-risk drug is clinically a red flag — but we must word it
+    // honestly ("no recent FBC/…") and never imply an overdue value we can't see.
     const ACTION = ['overdue', 'stale', 'due_soon'];
-    const due = chips.filter(c => c && c.type === 'drug-monitoring' && ACTION.includes(c.status));
+    const due = chips.filter(c => c && c.type === 'drug-monitoring' &&
+      (ACTION.includes(c.status) || c.status === 'no_data'));
     if (due.length === 0) return null;
+
+    // Build an honest detail line for a no_data chip: name the specific tests
+    // that have no value on record (not a blanket "no bloods", since a drug like
+    // leflunomide also wants BP/weight which a practice may simply not code).
+    const missingDetail = (c) => {
+      const missing = (c.tests || [])
+        .filter(t => t && t.status === 'no_data')
+        .map(t => t.name)
+        .filter(Boolean);
+      if (!missing.length) return 'no monitoring on record';
+      return 'no recent ' + missing.join(', ');
+    };
+
     const items = due.map(c => ({
       // Engine emits `drugName`; tolerate `displayName` for forward-compat.
       name: c.displayName || c.drugName || c.label || 'Medication',
       status: c.status,
-      // Human detail: engine puts the readable summary on evidence.summary;
-      // tolerate a flat `detail` field too.
-      detail: c.detail || (c.evidence && c.evidence.summary) || c.status
+      // Human detail: for no_data, name the missing tests; otherwise use the
+      // engine's readable summary (tolerate a flat `detail` field too).
+      detail: c.status === 'no_data'
+        ? missingDetail(c)
+        : (c.detail || (c.evidence && c.evidence.summary) || c.status)
     }));
-    const level = due.some(c => c.status === 'overdue' || c.status === 'stale') ? 'red' : 'amber';
+    // Red when anything is substantiated-overdue/severely-overdue, OR when a
+    // high-risk drug has no recognised monitoring at all (no_data). Amber only
+    // when the sole finding is due-soon.
+    const level = due.some(c => c.status === 'overdue' || c.status === 'stale' || c.status === 'no_data')
+      ? 'red' : 'amber';
     return { count: due.length, level, items };
   }
 

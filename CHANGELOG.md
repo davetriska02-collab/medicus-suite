@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.9.2] — 2026-05-30
+### Changed — Monitoring overlays now flag "no monitoring on record" (red)
+- A high-risk drug with **no recognised monitoring tests on record at all**
+  (engine status `no_data`) is now surfaced as a **red** monitoring chip, across
+  the queue, detail, and record overlays. Previously `selectMonitoringDue` only
+  counted substantiated `overdue`/`stale`/`due_soon` and silently dropped
+  `no_data`, so e.g. a patient on leflunomide with no FBC/U&E/LFT we could find
+  produced no chip — arguably the most concerning case. (`content-scripts/triage-lens/content.js`)
+- **Honest wording (no false "overdue"):** the per-drug detail names the
+  *specific* tests with no value on record — e.g. *"Leflunomide — no recent BP,
+  Weight"* — rather than a blanket "no bloods". This matters because some rules
+  (leflunomide wants BP + weight, lithium wants TFT/calcium) include tests a
+  practice may simply not code, so a patient with perfect FBC/U&E/LFT but no
+  coded weight is described accurately instead of being mislabelled. Bare chips
+  with no per-test breakdown fall back to "no monitoring on record".
+- DMARDs covered by the monitoring ruleset: methotrexate, leflunomide,
+  hydroxychloroquine, azathioprine, sulfasalazine (plus lithium, amiodarone,
+  carbimazole/PTU, and others — 19 rules total in `rules/drug-rules.json`).
+- Tests updated to lock the new behaviour: `no_data` now counts toward the chip,
+  is always red, and its detail names only the missing tests. (`test-monitoring-chip.js`, 20 passing)
+
 ## [v3.9.1] — 2026-05-30
 ### Fixed — Triage Lens settings showed no options for newer chips
 - Both the Triage Lens settings page and the content script fetch their chip

@@ -89,7 +89,8 @@ if (fnMatch) {
 
 if (selectMonitoringDue) {
   // Mixed set: one overdue drug-monitoring, one due_soon, one in_date (ignored),
-  // one no_data (ignored), and a non-drug-monitoring chip (ignored).
+  // one no_data (NOW SURFACED as red — high-risk drug with no recognised
+  // monitoring), and a non-drug-monitoring chip (ignored).
   const mixed = [
     { type: 'drug-monitoring', drugName: 'Methotrexate', status: 'overdue', evidence: { summary: 'Methotrexate — overdue' } },
     { type: 'drug-monitoring', drugName: 'Lithium', status: 'due_soon', detail: 'Lithium level — due in 10d' },
@@ -98,9 +99,9 @@ if (selectMonitoringDue) {
     { type: 'qof-indicator', indicatorName: 'BP', status: 'overdue' }
   ];
   const r = selectMonitoringDue(mixed);
-  check(r && r.count === 2, `picks only overdue/stale/due_soon drug-monitoring (count=2, got ${r && r.count})`);
+  check(r && r.count === 3, `picks overdue/stale/due_soon + no_data drug-monitoring (count=3, got ${r && r.count})`);
   check(r && r.level === 'red', `level is red when any overdue (got '${r && r.level}')`);
-  check(r && r.items.length === 2, 'two items returned');
+  check(r && r.items.length === 3, 'three items returned');
   // Item line formatting "name — detail" (detail falls back to evidence.summary).
   const line0 = r && r.items[0] && `${r.items[0].name} — ${r.items[0].detail}`;
   check(line0 === 'Methotrexate — Methotrexate — overdue',
@@ -108,6 +109,24 @@ if (selectMonitoringDue) {
   const line1 = r && r.items[1] && `${r.items[1].name} — ${r.items[1].detail}`;
   check(line1 === 'Lithium — Lithium level — due in 10d',
     `item formats as "name — detail" using flat detail (got "${line1}")`);
+
+  // no_data: detail names the specific missing tests, not a blanket "no bloods".
+  const noDataChip = [
+    { type: 'drug-monitoring', drugName: 'Leflunomide', status: 'no_data', tests: [
+      { name: 'FBC', status: 'in_date' }, { name: 'U&E', status: 'in_date' },
+      { name: 'LFT', status: 'in_date' }, { name: 'BP', status: 'no_data' },
+      { name: 'Weight', status: 'no_data' }
+    ] }
+  ];
+  const rnd = selectMonitoringDue(noDataChip);
+  check(rnd && rnd.level === 'red', `no_data on a high-risk drug is red (got '${rnd && rnd.level}')`);
+  check(rnd && rnd.items[0].detail === 'no recent BP, Weight',
+    `no_data detail names only the missing tests (got "${rnd && rnd.items[0].detail}")`);
+  // no_data with no per-test breakdown falls back to a generic honest message.
+  const noDataBare = [{ type: 'drug-monitoring', drugName: 'Leflunomide', status: 'no_data' }];
+  const rnb = selectMonitoringDue(noDataBare);
+  check(rnb && rnb.items[0].detail === 'no monitoring on record',
+    `bare no_data falls back to "no monitoring on record" (got "${rnb && rnb.items[0].detail}")`);
 
   // Amber when only due_soon present.
   const amberOnly = [
@@ -123,7 +142,7 @@ if (selectMonitoringDue) {
   const rs = selectMonitoringDue(staleSet);
   check(rs && rs.level === 'red', `level is red when stale present (got '${rs && rs.level}')`);
 
-  // null when nothing action-needed.
+  // null when nothing action-needed (in_date + non-drug-monitoring only).
   const noneSet = [
     { type: 'drug-monitoring', drugName: 'Atorvastatin', status: 'in_date' },
     { type: 'qof-indicator', status: 'overdue' }
