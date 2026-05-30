@@ -86,16 +86,49 @@
       if (m) nhsNumber = m[1].replace(/\s/g, '');
     }
 
-    const dob = parseDob(dobRaw);
-    const ageYears = computeAge(dob, now);
+    // Fallback: scan the page for a labelled DOB anywhere if the info container
+    // didn't carry one (banner layouts vary).
+    if (!dobRaw) {
+      const body = (doc.body && doc.body.textContent) || '';
+      const m = body.match(/DOB[:\s]*([\d\/\-A-Za-z\s]{8,20})/i);
+      if (m) dobRaw = m[1].trim();
+    }
 
-    // Sex extraction (look for typical demographics row)
+    const dob = parseDob(dobRaw);
+    let ageYears = computeAge(dob, now);
+
+    // Fallback: explicit age token like "Age: 35", "(35y)", "35 yrs old".
+    if (ageYears == null) {
+      const scan = (infoContainer && infoContainer.textContent) ||
+                   (doc.body && doc.body.textContent) || '';
+      const am = scan.match(/\bage\b\s*[:\-]?\s*(\d{1,3})\b/i) ||
+                 scan.match(/\((\d{1,3})\s*(?:y|yr|yrs|years?)\b/i) ||
+                 scan.match(/\b(\d{1,3})\s*(?:y|yr|yrs|years?)\s*old\b/i);
+      if (am) { const a = parseInt(am[1], 10); if (a >= 0 && a <= 120) ageYears = a; }
+    }
+
+    // Sex extraction — try a dedicated element, then the patient-info text, then
+    // a clearly labelled Sex/Gender field anywhere. Female checked before male so
+    // a stray "male" inside other text can't pre-empt it.
+    const readSex = (t) => {
+      if (!t) return null;
+      const labelled = t.match(/\b(?:sex|gender)\b\s*[:\-]?\s*(female|male|f|m)\b/i);
+      if (labelled) {
+        const v = labelled[1].toLowerCase();
+        return (v === 'f' || v === 'female') ? 'female' : 'male';
+      }
+      if (/\bfemale\b/i.test(t)) return 'female';
+      if (/\bmale\b/i.test(t)) return 'male';
+      return null;
+    };
     let sex = null;
     const sexEl = doc.querySelector('[class*="sex" i], [class*="gender" i]');
-    if (sexEl) {
-      const t = (sexEl.textContent || '').trim();
-      if (/\bmale\b/i.test(t)) sex = 'male';
-      else if (/\bfemale\b/i.test(t)) sex = 'female';
+    if (sexEl) sex = readSex(sexEl.textContent || '');
+    if (!sex && infoContainer) sex = readSex(infoContainer.textContent || '');
+    if (!sex) {
+      const body = (doc.body && doc.body.textContent) || '';
+      const m = body.match(/\b(?:sex|gender)\b\s*[:\-]?\s*(female|male|f|m)\b/i);
+      if (m) { const v = m[1].toLowerCase(); sex = (v === 'f' || v === 'female') ? 'female' : 'male'; }
     }
 
     return {

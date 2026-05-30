@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.12.1] — 2026-05-30
+### Fixed — Applicability filters silently suppressed alerts on unknown demographics
+A user reported the MHRA valproate alert never firing (even after pasting the
+exact drug string into the rule's match list) and QOF rules "not firing at all."
+
+**Root cause:** v3.1.8 ("applicability filter audit") made the engine start
+*enforcing* `sex`/`ageRange` filters that were previously ignored — but
+`passesAgeFilter`/`passesSexFilter` failed **closed** when the patient's age or
+sex couldn't be determined. Patient sex/age are scraped from the page
+(`patient-context.js`) and are frequently `null` depending on the record
+layout, so any rule with a sex/age gate (e.g. valproate = female 12–55, and the
+age-gated QOF indicators) silently never fired. For a red teratogenicity alert,
+failing closed on *unknown* sex is the dangerous direction.
+
+**Fixes:**
+- `engine/rules-engine.js` — `passesAgeFilter`/`passesSexFilter` now **fail
+  open** on unknown demographics: they exclude only when the patient is
+  *positively known* to be out of scope. A known male still won't get the
+  valproate alert; a patient whose sex/age can't be read now will (clinician
+  verifies applicability).
+- `engine/extractors/patient-context.js` — sturdier extraction: sex is now read
+  from a labelled "Sex/Gender: …" field (dedicated element → patient-info text →
+  whole-page fallback), and age falls back to an explicit "Age: 35"/"(35y)"/
+  "35 yrs old" token and a page-wide DOB scan when the info container has none.
+- `rules/qof-rules.json` — added the **Dementia (DEM) QOF register** (it was
+  never shipped; the user's dementia example couldn't fire for that reason).
+
+Added `test-applicability-filters.js` (16 assertions) covering fail-open on
+unknown sex/age, correct suppression for *known* out-of-scope patients, the new
+dementia register, and the patient-context extraction fallbacks. Full suite
+passes.
+
 ## [v3.12.0] — 2026-05-30
 ### Improved — Triage Lens base rule detection (much higher recall)
 Substantially expanded the detection phrases for all 20 built-in Triage Lens
