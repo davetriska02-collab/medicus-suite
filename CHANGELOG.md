@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.3] — 2026-05-31
+### Fixed
+
+- **Toolbar icon now reliably opens the side panel**: after removing `default_popup` in v3.18.2 the declarative `openPanelOnActionClick` did not always open the panel (the icon appeared to do nothing). Added an explicit `chrome.action.onClicked` handler that calls `chrome.sidePanel.open({ windowId })` and set `openPanelOnActionClick: false` (required for `onClicked` to fire), so a single click opens the suite even after a service-worker restart. (`service-worker.js`)
+
 ## [v3.18.2] — 2026-05-31
 ### Fixed
 
