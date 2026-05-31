@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.2] — 2026-05-31
+### Fixed
+
+- **Icon click no longer shows popup chooser**: removed `default_popup` from the manifest `action` object so clicking the toolbar icon directly opens the side panel via `chrome.sidePanel.setPanelBehavior`. (`manifest.json`)
+- **Alert Library unlock button**: made the handler synchronous — `applyLockState()` now fires immediately on click so the disclaimer overlay and `lib-locked` CSS class are removed at once, unblocking the Add and Add All buttons without waiting for the storage write to return. (`sentinel-options/options.js`)
+- **eGFR trend window extended to 24 months**: the previous 12-month window typically captured only 1-2 annual GP eGFR readings, preventing the required `minPoints: 3` from being met. Extended to 24 months so three readings are reliably available; the NICE NG203 12-month clinical criterion is unchanged — only the data-search window has been widened. (`rules/qof-rules.json`)
+
 ## [v3.18.1] — 2026-05-31
 ### Added
 

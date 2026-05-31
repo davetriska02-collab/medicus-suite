@@ -1167,11 +1167,11 @@ getEl('ciAlertComparator')?.addEventListener('change', ciUpdatePreview);
       unlockBanner.hidden = false;
     }
   }
-  unlockBtn?.addEventListener('click', async () => {
+  unlockBtn?.addEventListener('click', () => {
     acknowledged = true;
-    await chrome.storage.local.set({ [ACK_KEY]: true });
     applyLockState();
     showToast('Library enabled — review each alert before relying on it');
+    chrome.storage.local.set({ [ACK_KEY]: true }).catch(() => {});
   });
   chrome.storage.onChanged.addListener(changes => {
     if (changes[ACK_KEY]) {

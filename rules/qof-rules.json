@@ -805,11 +805,11 @@
         "observation": ["egfr", "estimated glomerular filtration rate"],
         "direction": "falling",
         "minPoints": 3,
-        "withinMonths": 12,
+        "withinMonths": 24,
         "minDelta": 15
       },
       "source": "NICE NG203",
-      "notes": "Clinical-review trend monitor, not a QOF claim indicator. Observation history is required: where only the latest eGFR is available the chip shows no_data until multi-point history exists. NICE NG203 defines accelerated CKD progression as a sustained decrease in eGFR of >=15 mL/min/1.73m2 within 12 months (or >=25% with a change in GFR category). Confirm a sustained fall on repeat testing and exclude AKI before acting."
+      "notes": "Clinical-review trend monitor, not a QOF claim indicator. Observation history is required: where only the latest eGFR is available the chip shows no_data until multi-point history exists. NICE NG203 defines accelerated CKD progression as a sustained decrease in eGFR of >=15 mL/min/1.73m2 within 12 months (or >=25% with a change in GFR category). Window is 24 months to capture enough GP data points (annual bloods mean 12 months yields only 1-2 readings). Confirm a sustained fall on repeat testing and exclude AKI before acting."
     },
 
     {
