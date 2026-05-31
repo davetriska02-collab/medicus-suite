@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.6] — 2026-05-31
+### Changed
+
+- **Restored the toolbar popup so the icon reliably does something — independent of the service worker**: re-added `default_popup: popup.html` to the manifest. The popup runs in its own page context and does not depend on the service worker registering, so clicking the icon always works. The popup now **auto-opens the side panel on load** (the icon click is a user gesture) and closes itself, so there's no chooser — it goes straight to the suite. If a Chrome build won't allow the programmatic open, the popup falls back to showing the waiting-room view with an "Open Suite" button (a fresh click gesture, which always works). (`manifest.json`, `popup.js`)
+
 ## [v3.19.5] — 2026-05-31
 ### Fixed
 

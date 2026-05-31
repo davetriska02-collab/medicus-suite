@@ -19,8 +19,28 @@ let lastFetchAt = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
+// Opening the popup is itself a user gesture, so we can open the side panel
+// straight away — the user just wants the suite, not a chooser. We try the
+// current window first (synchronous-ish), and fall back to the waiting-room
+// view + "Open Suite" button if the programmatic open isn't permitted.
+autoOpenSidePanel();
+
 refresh();
 pollTimer = setInterval(refresh, POLL_MS);
+
+async function autoOpenSidePanel() {
+  try {
+    const win = await chrome.windows.getCurrent();
+    if (win && win.id != null) {
+      await chrome.sidePanel.open({ windowId: win.id });
+      window.close();
+    }
+  } catch (e) {
+    // Programmatic open not allowed here — leave the popup open so the user can
+    // use the "Open Suite" button (which runs inside a fresh click gesture).
+    console.warn('[Suite] auto-open side panel failed:', e && e.message);
+  }
+}
 
 // Stop polling when popup closes
 window.addEventListener('unload', () => clearInterval(pollTimer));
