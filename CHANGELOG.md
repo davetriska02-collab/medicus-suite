@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.11] — 2026-05-31
+### Removed
+
+- **Deleted the orphaned toolbar popup**: removed `popup.html` and `popup.js` and their `web_accessible_resources` entries. The icon now opens the side panel directly via `openPanelOnActionClick` (no `default_popup`), so the popup waiting-room page was dead code. (`popup.html`, `popup.js`, `manifest.json`)
+
 ## [v3.19.10] — 2026-05-31
 ### Fixed
 
