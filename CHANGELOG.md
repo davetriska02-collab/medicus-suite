@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.5] — 2026-05-31
+### Fixed
+
+- **THE actual cause of "Service worker registration failed. Status code: 2"**: the v3.19.4 service worker called `chrome.action.setPopup({ popup: '' }).then(...)` at the top level. `chrome.action.setPopup()` does not reliably return a Promise across Chrome builds — when it returns `undefined`, `.then()` throws `TypeError` synchronously during the worker's initial evaluation, outside any try/catch. An uncaught top-level throw aborts the entire service-worker registration (status code 2), so no listeners ever registered and the icon did nothing. Rewrote the side-panel setup to: (1) sit **before** `importScripts` so a module-load failure can't affect it; (2) never assume an API returns a Promise (guard with `typeof r.catch === 'function'`); (3) never throw at the top level (wrapped in try/catch); (4) use the simple declarative `openPanelOnActionClick: true` that worked in v3.17.2, removing the `setPopup`/`setOptions`/`onClicked` surface area entirely. Also isolated each `importScripts` in its own try/catch. Verified by simulation that the worker now evaluates without throwing even when every sidePanel/action API returns `undefined`. (`service-worker.js`)
+
 ## [v3.19.4] — 2026-05-31
 ### Fixed
 

@@ -3,55 +3,43 @@
 
 'use strict';
 
-// Load shared modules. Service worker is a classic script — importScripts is
-// the way to bring in non-module helpers. RequestMonitor exposes itself on
-// `self` (the service worker's global scope).
-try {
-  importScripts('shared/request-monitor.js');
-  importScripts('shared/update-checker.js');
-  importScripts('shared/popout-manager.js');
-  importScripts('shared/io/practice-profile.js');
-} catch (e) {
-  console.warn('[Service Worker] importScripts failed:', e.message);
-}
-
-// ── Side panel behaviour ─────────────────────────────────────────────────────
-// Explicitly remove any cached popup and arm the action.onClicked handler.
-// chrome.action.onClicked only fires when NO popup is set. The manifest removed
-// default_popup but Chrome can persist the old association across reloads.
-// Calling setPopup('') clears it definitively, so the click always reaches
-// the service worker rather than trying to open a (now missing) popup.
-function configureActionClick() {
-  // Clear any persisted popup — empty string means "no popup".
-  chrome.action.setPopup({ popup: '' })
-    .then(() => console.log('[Suite] popup cleared'))
-    .catch(err => console.warn('[Suite] setPopup clear failed:', err && err.message));
-
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: false })
-    .then(() => console.log('[Suite] openPanelOnActionClick=false set'))
-    .catch(err => console.warn('[Suite] setPanelBehavior failed:', err && err.message));
-}
-
-configureActionClick();
-
-chrome.action.onClicked.addListener(async (tab) => {
-  console.log('[Suite] toolbar icon clicked — tab', tab && tab.id, 'window', tab && tab.windowId);
+// ── Side panel behaviour (CONFIGURED FIRST, before importScripts) ─────────────
+// This is the single most important line for "click icon → open side panel".
+// It is deliberately placed BEFORE importScripts so that even if a module load
+// fails, the panel behaviour is still set. It is also fully guarded: a top-level
+// throw here (e.g. an API that returns undefined instead of a Promise) would
+// abort the whole service-worker registration — the actual root cause of the
+// "Service worker registration failed. Status code: 2" we kept hitting. So we
+// NEVER assume a Promise is returned and NEVER let anything throw at top level.
+function enableOpenSidePanelOnIconClick() {
   try {
-    // Explicitly enable the panel for this tab before opening — some Chrome
-    // builds require this even when default_path is set in the manifest.
-    if (tab && tab.id != null) {
-      await chrome.sidePanel.setOptions({ tabId: tab.id, enabled: true });
-      console.log('[Suite] setOptions(enabled:true) done for tab', tab.id);
+    // openPanelOnActionClick:true is Chrome's built-in icon-click → side-panel
+    // behaviour, identical to the right-click "Open side panel" menu item.
+    const r = chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    // Some Chrome builds return undefined (callback style) rather than a Promise.
+    if (r && typeof r.catch === 'function') {
+      r.catch(err => console.warn('[Suite] setPanelBehavior rejected:', err && err.message));
     }
-    const opts = tab && tab.windowId != null ? { windowId: tab.windowId } : { tabId: tab && tab.id };
-    await chrome.sidePanel.open(opts);
-    console.log('[Suite] sidePanel.open() resolved', opts);
   } catch (err) {
-    console.error('[Suite] failed to open side panel:', err && err.message, err);
-    // Surface the error as a badge so it's visible without the inspector open.
-    chrome.action.setBadgeText({ text: 'ERR' });
-    chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+    console.warn('[Suite] setPanelBehavior threw:', err && err.message);
+  }
+}
+
+enableOpenSidePanelOnIconClick();
+console.log('[Suite] service worker evaluated; side-panel open-on-click enabled');
+
+// Load shared modules. Service worker is a classic script — importScripts is
+// the way to bring in non-module helpers. Each import is isolated in its own
+// try/catch so one failing module cannot prevent the others (or the rest of the
+// worker) from loading.
+['shared/request-monitor.js',
+ 'shared/update-checker.js',
+ 'shared/popout-manager.js',
+ 'shared/io/practice-profile.js'].forEach(src => {
+  try {
+    importScripts(src);
+  } catch (e) {
+    console.warn('[Suite] importScripts failed for', src, '-', e && e.message);
   }
 });
 
@@ -140,7 +128,7 @@ function runStartupTask(label, fn) {
 
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
-  configureActionClick();   // re-assert openPanelOnActionClick=false on update
+  enableOpenSidePanelOnIconClick();   // re-assert on install/update
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
   runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
@@ -151,7 +139,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  configureActionClick();
+  enableOpenSidePanelOnIconClick();
   runStartupTask('startPolling', startPolling);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
