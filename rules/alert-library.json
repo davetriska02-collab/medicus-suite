@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "lastUpdated": "2026-05-31",
+  "version": "1.0",
+  "lastUpdated": "2026-05-28",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
@@ -536,34 +536,6 @@
         },
         "notes": "Observation history is required for trend analysis. Currently, only the latest PSA value is available via the investigation dashboard API. This rule will show no_data until multi-point history is available. When history is available: a PSA rise >1 ng/mL/year or PSA velocity >0.75 ng/mL/year warrants urology referral (NICE NG12).",
         "source": "NICE NG12"
-      }
-    },
-
-    {
-      "libId": "trend-2",
-      "category": "Clinical review",
-      "subcategory": "Renal",
-      "title": "Falling eGFR trend (≥3 readings, 12 months)",
-      "description": "eGFR values showing a falling trend across ≥3 readings within 12 months with a decline of ≥15 mL/min/1.73m² — suggests accelerated CKD progression; review and consider nephrology referral.",
-      "source": "NICE NG203",
-      "rule": {
-        "type": "qof-indicator",
-        "enabled": true,
-        "indicatorCode": "TREND-EGFR",
-        "indicatorName": "Falling eGFR trend",
-        "sex": "any",
-        "ageRange": { "min": 18 },
-        "useQofYearFloor": false,
-        "check": {
-          "kind": "observation-trend",
-          "observation": ["egfr","estimated glomerular filtration rate"],
-          "direction": "falling",
-          "minPoints": 3,
-          "withinMonths": 12,
-          "minDelta": 15
-        },
-        "notes": "Observation history is required for trend analysis. Currently, only the latest eGFR value is available via the investigation dashboard API. This rule will show no_data until multi-point history is available. NICE NG203 defines accelerated CKD progression as a sustained decrease in eGFR of ≥15 mL/min/1.73m² within 12 months (or ≥25% with a change in GFR category). Confirm a sustained fall on repeat testing and exclude AKI before acting.",
-        "source": "NICE NG203"
       }
     }
 

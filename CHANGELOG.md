@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.0] — 2026-05-31
+### Added
+
+- **Falling eGFR trend monitor (Sentinel, enabled by default)**: fires when eGFR falls >=15 mL/min/1.73m2 across >=3 readings within 12 months for any adult (NICE NG203 accelerated CKD progression). Mirrors the Rising PSA trend mechanism; shows `no_data` until multi-point eGFR history is available. Promoted from the opt-in alert library to a shipped default. (`rules/qof-rules.json`)
+- **Raised potassium / hyperkalaemia alert (Sentinel, enabled by default)**: RAG-banded alert on the latest serum potassium — amber 5.5-5.9 mmol/L (mild; exclude pseudohyperkalaemia, review contributing drugs), red >=6.0 mmol/L (moderate/severe; urgent same-day assessment + ECG, >=6.5 = emergency). NICE CKS / UK Kidney Association advice surfaced in the chip notes. (`rules/qof-rules.json`)
+- **New `observation-alert` check kind** in the rules engine: a clinical-safety threshold that reads the latest matching observation and fires amber/red bands (via `caution`/`alert` statuses), returning no chip when the value is in the safe range, stale, or absent — so safety thresholds don't add green-"MET" noise like QOF achievement indicators. (`engine/rules-engine.js`, `shared/io/sentinel-io.js`)
+
 ## [v3.17.3] — 2026-05-31
 ### Added — Falling eGFR trend sentinel library rule (NICE NG203)
 

@@ -792,6 +792,57 @@
     let dateText = null;
     let days = null;
 
+    // observation-alert: a clinical-safety threshold alert (not a QOF achievement
+    // indicator). Reads the latest matching observation value and fires ONLY when
+    // it crosses a danger band — amber for the lower band, red for the upper band.
+    // Returns no chip when the value is in the safe range, stale, or absent, so it
+    // never adds green "MET" noise. comparator 'above' = high values are dangerous
+    // (e.g. potassium); 'below' = low values are dangerous.
+    if (check.kind === 'observation-alert') {
+      const obs = findLatestObservation(data.observations, { match: check.observation });
+      if (!obs || !obs.date) return [];
+      const v = parseNumeric(obs.value);
+      if (v == null) return [];
+      const _withinDays = check.withinDays || 365;
+      const _cutoff = new Date(now);
+      _cutoff.setDate(_cutoff.getDate() - _withinDays);
+      if (new Date(obs.date) < _cutoff) return []; // stale result — do not alert
+      const cmp = check.comparator || 'above';
+      let sev = null;
+      if (cmp === 'above') {
+        if (check.red != null && v >= check.red) sev = 'red';
+        else if (check.amber != null && v >= check.amber) sev = 'amber';
+      } else if (cmp === 'below') {
+        if (check.red != null && v <= check.red) sev = 'red';
+        else if (check.amber != null && v <= check.amber) sev = 'amber';
+      }
+      if (!sev) return []; // within safe range — no chip
+      const unit = check.unit ? ` ${check.unit}` : '';
+      const alertValueText = `${v}${unit}`;
+      const alertStatus = severityToStatus(sev);
+      const alertDays = daysBetween(obs.date, now);
+      evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
+      return [{
+        type: 'qof-indicator',
+        ruleId: rule.id,
+        indicatorCode: rule.indicatorCode,
+        indicatorName: rule.indicatorName,
+        status: alertStatus,
+        requiresRegister: rule.requiresRegister || null,
+        points: null,
+        thresholds: null,
+        valueText: alertValueText,
+        dateText: obs.date,
+        days: alertDays,
+        qofYear: qofYearLabel(now),
+        qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
+        check: rule.check,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: buildQofIndicatorEvidence(rule, alertStatus, alertValueText, obs.date, alertDays, evidenceCtx)
+      }];
+    }
+
     if (check.kind === 'observation-threshold') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
       if (obs && obs.date) {
