@@ -36,15 +36,24 @@ function configureActionClick() {
 
 configureActionClick();
 
-chrome.action.onClicked.addListener((tab) => {
+chrome.action.onClicked.addListener(async (tab) => {
   console.log('[Suite] toolbar icon clicked — tab', tab && tab.id, 'window', tab && tab.windowId);
-  // The side panel is window-global (single default_path in the manifest), so
-  // open by windowId to mirror the native right-click "Open side panel". Fall
-  // back to tabId if windowId is somehow unavailable.
-  const opts = tab && tab.windowId != null ? { windowId: tab.windowId } : { tabId: tab && tab.id };
-  chrome.sidePanel.open(opts)
-    .then(() => console.log('[Suite] sidePanel.open() resolved', opts))
-    .catch(err => console.warn('[Suite] sidePanel.open() failed:', err && err.message));
+  try {
+    // Explicitly enable the panel for this tab before opening — some Chrome
+    // builds require this even when default_path is set in the manifest.
+    if (tab && tab.id != null) {
+      await chrome.sidePanel.setOptions({ tabId: tab.id, enabled: true });
+      console.log('[Suite] setOptions(enabled:true) done for tab', tab.id);
+    }
+    const opts = tab && tab.windowId != null ? { windowId: tab.windowId } : { tabId: tab && tab.id };
+    await chrome.sidePanel.open(opts);
+    console.log('[Suite] sidePanel.open() resolved', opts);
+  } catch (err) {
+    console.error('[Suite] failed to open side panel:', err && err.message, err);
+    // Surface the error as a badge so it's visible without the inspector open.
+    chrome.action.setBadgeText({ text: 'ERR' });
+    chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+  }
 });
 
 // ── Message router ────────────────────────────────────────────────────────────

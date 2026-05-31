@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.3] — 2026-05-31
+### Fixed
+
+- **Toolbar icon click: add `setOptions(enabled:true)` before `open()`** — some Chrome builds require the panel to be explicitly enabled per-tab even when `default_path` is set in the manifest. If `open()` still fails, a red `ERR` badge appears on the icon so the failure is visible without opening the service-worker inspector. (`service-worker.js`)
+
 ## [v3.19.2] — 2026-05-31
 ### Changed
 
