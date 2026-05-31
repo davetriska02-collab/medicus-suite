@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.17.3] — 2026-05-31
+### Added — Falling eGFR trend sentinel library rule (NICE NG203)
+
+- **Falling eGFR trend (Sentinel alert library)**: new `trend-2` library rule mirroring the Rising PSA trend — fires when eGFR falls ≥15 mL/min/1.73m² across ≥3 readings within 12 months (NICE NG203 accelerated CKD progression). Importable from the Sentinel options Alert Library; uses the existing `observation-trend` engine, so no code changes. Shows `no_data` until multi-point eGFR history is available. (`rules/alert-library.json`)
+
 ## [v3.17.2] — 2026-05-30
 ### Fixed — Wire the extraction-health canary to the side panel + invalidate stale snapshots (H-005, clinical safety)
 
