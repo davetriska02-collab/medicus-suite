@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.10] — 2026-05-31
+### Fixed
+
+- **Restored try/catch around `importScripts` (registration safety)**: the v3.19.9 simplification dropped the try/catch that the last-known-working v3.17.2 had. Without it, an error in any imported module propagates uncaught and fails the whole service-worker registration ("status code: 2"), discarding the worker — and with it the `setPanelBehavior` line. Restored the try/catch and added the documented `onInstalled` re-assertion of `openPanelOnActionClick: true` (belt-and-braces; fires on every reload). The worker now matches the proven-working v3.17.2 structure, minus the popup. (`service-worker.js`)
+
 ## [v3.19.9] — 2026-05-31
 ### Changed
 

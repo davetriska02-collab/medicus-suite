@@ -4,19 +4,28 @@
 'use strict';
 
 // ── Click the toolbar icon → open the side panel ──────────────────────────────
-// This is the whole feature. One declarative line: Chrome opens the side panel
-// (manifest's side_panel.default_path) natively on icon click, exactly like the
-// right-click "Open side panel" menu item. No popup, no click handler needed.
-// It is the FIRST statement in the worker so nothing else can stop it running.
+// Chrome's native mechanism. One line implements the whole feature: with
+// side_panel.default_path in the manifest and no default_popup, this makes a
+// left-click on the icon open the side panel (same as right-click → Open side
+// panel). Called at the top level (runs on every worker start) AND on install
+// (the documented belt-and-braces — onInstalled fires on every reload/update).
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+});
 
-// Load shared modules. Classic service worker → importScripts. These MUST be
-// string literals (Chrome resolves the worker's scripts statically at parse
-// time); a variable argument fails registration with "status code: 2".
-importScripts('shared/request-monitor.js');
-importScripts('shared/update-checker.js');
-importScripts('shared/popout-manager.js');
-importScripts('shared/io/practice-profile.js');
+// Load shared modules. Wrapped in try/catch so that an error in any module can
+// NEVER fail the service-worker registration (which would discard the worker
+// and the line above with it — the cause of "registration failed, status 2").
+// importScripts args must be string literals (Chrome resolves them statically).
+try {
+  importScripts('shared/request-monitor.js');
+  importScripts('shared/update-checker.js');
+  importScripts('shared/popout-manager.js');
+  importScripts('shared/io/practice-profile.js');
+} catch (e) {
+  console.warn('[Suite] importScripts failed:', e && e.message);
+}
 
 // ── Message router ────────────────────────────────────────────────────────────
 
