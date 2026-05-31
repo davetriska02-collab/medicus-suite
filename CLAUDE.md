@@ -58,6 +58,6 @@ Always add a `CHANGELOG.md` entry on the same commit.
 
 ## Git workflow
 
-- Dev branch: `claude/review-chrome-extension-w6moD`
+- Dev branches are created per session and merged to `main` via PR when complete
 - Never force-push main
 - Before commit: check `git status` for patient data files — nothing from `uploads/`, `data/sars/`, or `output/` should ever be committed
