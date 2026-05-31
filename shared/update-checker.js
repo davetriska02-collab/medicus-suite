@@ -190,4 +190,4 @@
   } else {
     global.UpdateChecker = api;
   }
-})(typeof window !== 'undefined' ? window : global);
+})(typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : window);

@@ -16,21 +16,20 @@ try {
 }
 
 // ── Side panel behaviour ─────────────────────────────────────────────────────
-// Open the side panel when the toolbar icon is clicked.
-//
-// We use an EXPLICIT chrome.action.onClicked handler (rather than the
-// declarative openPanelOnActionClick) so the behaviour is fully observable in
-// the service-worker console — open chrome://extensions → Medicus Suite →
-// "Inspect views: service worker" to watch these logs on each click.
-//
-// openPanelOnActionClick MUST be false for action.onClicked to fire. Because
-// that flag is PERSISTED by Chrome across reloads (and earlier builds flipped
-// it both ways), we assert it false at top-level AND in onInstalled/onStartup
-// so the persisted value can never desync from this handler.
+// Explicitly remove any cached popup and arm the action.onClicked handler.
+// chrome.action.onClicked only fires when NO popup is set. The manifest removed
+// default_popup but Chrome can persist the old association across reloads.
+// Calling setPopup('') clears it definitively, so the click always reaches
+// the service worker rather than trying to open a (now missing) popup.
 function configureActionClick() {
+  // Clear any persisted popup — empty string means "no popup".
+  chrome.action.setPopup({ popup: '' })
+    .then(() => console.log('[Suite] popup cleared'))
+    .catch(err => console.warn('[Suite] setPopup clear failed:', err && err.message));
+
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: false })
-    .then(() => console.log('[Suite] action click handler armed (openPanelOnActionClick=false)'))
+    .then(() => console.log('[Suite] openPanelOnActionClick=false set'))
     .catch(err => console.warn('[Suite] setPanelBehavior failed:', err && err.message));
 }
 

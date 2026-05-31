@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.4] — 2026-05-31
+### Fixed
+
+- **Root cause of "service worker registration failed (status 2)"**: `shared/request-monitor.js` and `shared/update-checker.js` both ended their IIFE with `})(typeof window !== 'undefined' ? window : global)`. In a Chrome service worker, `window` is undefined AND `global` does not exist — evaluating `global` throws `ReferenceError: global is not defined`, aborting the import and causing Chrome to mark the service worker registration as failed. Fixed both files to use `globalThis` (universally available in Chrome 71+, service workers, popup pages, and content scripts). This is why clicking the toolbar icon did nothing: the service worker never successfully registered, so no event listeners were ever active. (`shared/request-monitor.js`, `shared/update-checker.js`)
+- **Also**: call `chrome.action.setPopup({ popup: '' })` explicitly on each SW start to clear any cached popup association from older builds. (`service-worker.js`)
+
 ## [v3.19.3] — 2026-05-31
 ### Fixed
 
