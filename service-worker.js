@@ -16,18 +16,10 @@ try {
 }
 
 // ── Side panel behaviour ─────────────────────────────────────────────────────
-// Open the side panel when the toolbar icon is clicked. We handle this
-// explicitly via action.onClicked (rather than relying solely on the
-// declarative openPanelOnActionClick) so a single click reliably opens the
-// panel even if the service worker was restarted before the behaviour was set.
-// openPanelOnActionClick must be false for action.onClicked to fire.
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
-
-chrome.action.onClicked.addListener(tab => {
-  if (tab?.windowId != null) {
-    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
-  }
-});
+// openPanelOnActionClick:true is Chrome's built-in equivalent of the
+// right-click "Open side panel" menu item — the most reliable single-click
+// open mechanism. No action.onClicked listener needed.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 // ── Message router ────────────────────────────────────────────────────────────
 
