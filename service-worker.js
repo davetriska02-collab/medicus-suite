@@ -29,19 +29,21 @@ enableOpenSidePanelOnIconClick();
 console.log('[Suite] service worker evaluated; side-panel open-on-click enabled');
 
 // Load shared modules. Service worker is a classic script — importScripts is
-// the way to bring in non-module helpers. Each import is isolated in its own
-// try/catch so one failing module cannot prevent the others (or the rest of the
-// worker) from loading.
-['shared/request-monitor.js',
- 'shared/update-checker.js',
- 'shared/popout-manager.js',
- 'shared/io/practice-profile.js'].forEach(src => {
-  try {
-    importScripts(src);
-  } catch (e) {
-    console.warn('[Suite] importScripts failed for', src, '-', e && e.message);
-  }
-});
+// the way to bring in non-module helpers.
+//
+// CRITICAL: importScripts() MUST be called with STRING LITERALS, not variables.
+// Chrome statically analyses the worker to determine its script resources; a
+// dynamic argument (e.g. importScripts(someVar)) cannot be resolved and fails
+// the entire service-worker registration with "status code: 2". Each call is in
+// its own try/catch so a single missing/broken module can't stop the others.
+try { importScripts('shared/request-monitor.js'); }
+catch (e) { console.warn('[Suite] import request-monitor failed:', e && e.message); }
+try { importScripts('shared/update-checker.js'); }
+catch (e) { console.warn('[Suite] import update-checker failed:', e && e.message); }
+try { importScripts('shared/popout-manager.js'); }
+catch (e) { console.warn('[Suite] import popout-manager failed:', e && e.message); }
+try { importScripts('shared/io/practice-profile.js'); }
+catch (e) { console.warn('[Suite] import practice-profile failed:', e && e.message); }
 
 // ── Message router ────────────────────────────────────────────────────────────
 

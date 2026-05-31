@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.8] — 2026-05-31
+### Fixed
+
+- **THE service-worker registration failure (status code 2) — dynamic `importScripts`**: v3.19.5 refactored the module loads into `[...].forEach(src => importScripts(src))`. In an MV3 service worker, `importScripts()` must be called with **string literals** — Chrome statically analyses the worker to determine its script resources, and a variable argument can't be resolved, failing the entire registration with "status code: 2" (uncatchable by the surrounding try/catch). This had been masking every other fix since v3.19.5: the worker never registered, so `openPanelOnActionClick` never took effect and the icon did nothing. Reverted to four literal `importScripts('…')` calls, each in its own try/catch. (`service-worker.js`)
+
 ## [v3.19.7] — 2026-05-31
 ### Changed
 
