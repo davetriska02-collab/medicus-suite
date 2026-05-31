@@ -831,6 +831,28 @@
       },
       "source": "NICE CKS Hyperkalaemia / UK Kidney Association (2020)",
       "notes": "Hyperkalaemia clinical-safety alert. AMBER 5.5-5.9 mmol/L (mild): first exclude pseudohyperkalaemia (haemolysed or delayed sample) and recheck; review contributing drugs (ACEi/ARB, MRA/spironolactone, potassium-sparing diuretics, NSAIDs, trimethoprim, potassium supplements) and dietary potassium. RED >=6.0 mmol/L (moderate to severe): arrange urgent same-day clinical assessment and a 12-lead ECG. K+ >=6.5 mmol/L, or any ECG changes (peaked T waves, broadened QRS), is a medical emergency - give IV calcium gluconate for cardioprotection, insulin-glucose +/- salbutamol, continuous ECG monitoring and urgent senior/renal input. Always identify and treat the underlying cause."
+    },
+
+    {
+      "id": "trend-hba1c-rising",
+      "type": "qof-indicator",
+      "enabled": true,
+      "requiresRegister": "DM",
+      "indicatorCode": "TREND-HBA1C",
+      "indicatorName": "Rising HbA1c trend (diabetes)",
+      "sex": "any",
+      "ageRange": { "min": 18 },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "observation-trend",
+        "observation": ["hba1c", "hb a1c", "haemoglobin a1c", "glycated haemoglobin", "ifcc"],
+        "direction": "rising",
+        "minPoints": 3,
+        "withinMonths": 24,
+        "minDelta": 10
+      },
+      "source": "NICE NG28 (type 2 diabetes in adults) / NICE NG17 (type 1 diabetes)",
+      "notes": "Clinical-review trend monitor for worsening glycaemic control in people on the diabetes register (fires only when the patient is on the DM register). Not a QOF claim indicator. Values are in mmol/mol (IFCC units). Multi-point HbA1c history is required: where only the latest result is available the chip shows no_data until history exists. Window is 24 months to capture enough readings (HbA1c is typically checked 3-6 monthly in diabetes). The >=10 mmol/mol rise is a pragmatic review threshold, not a fixed guideline cut-off - adjust to local policy. A sustained rise suggests deteriorating control: review adherence, diet/lifestyle, intercurrent illness or steroids, and consider treatment intensification per NICE NG28/NG17. Confirm on repeat testing and interpret alongside the individualised HbA1c target (commonly 48 mmol/mol, or 53 mmol/mol where treatment carries hypoglycaemia risk)."
     }
   ]
 }

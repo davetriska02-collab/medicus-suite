@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.0] — 2026-05-31
+### Added
+
+- **Rising HbA1c trend monitor (Sentinel, enabled by default, diabetics only)**: mirrors the eGFR/PSA trend mechanism — fires when HbA1c rises ≥10 mmol/mol across ≥3 readings within 24 months, but only for patients on the diabetes (DM) register, so it never fires for non-diabetics. Flags deteriorating glycaemic control for clinical review (adherence, lifestyle, intercurrent illness, treatment intensification per NICE NG28/NG17). The ≥10 mmol/mol rise is a pragmatic, locally-adjustable review threshold; shows `no_data` until multi-point HbA1c history exists. (`rules/qof-rules.json`)
+
 ## [v3.18.5] — 2026-05-31
 ### Fixed
 
