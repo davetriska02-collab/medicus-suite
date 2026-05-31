@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.2] — 2026-05-31
+### Changed
+
+- **Side-panel icon click switched to an explicit, observable handler**: after the declarative `openPanelOnActionClick` approach kept failing on a real install, the toolbar-icon click now uses an explicit `chrome.action.onClicked` → `chrome.sidePanel.open({ windowId })` handler, with `openPanelOnActionClick` asserted `false` at top-level and in `onInstalled`/`onStartup` so the persisted flag can't desync from the handler. Added service-worker console logging on click and open so the behaviour can be diagnosed via chrome://extensions → "Inspect views: service worker". (`service-worker.js`)
+
 ## [v3.19.1] — 2026-05-31
 ### Fixed
 

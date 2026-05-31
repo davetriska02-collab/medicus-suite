@@ -16,23 +16,36 @@ try {
 }
 
 // ── Side panel behaviour ─────────────────────────────────────────────────────
-// Clicking the toolbar icon opens the side panel. This is controlled by the
-// PERSISTED `openPanelOnActionClick` flag (Chrome's built-in equivalent of the
-// right-click "Open side panel" menu item).
+// Open the side panel when the toolbar icon is clicked.
 //
-// IMPORTANT: this flag is persisted by Chrome across reloads. An earlier build
-// set it to `false`; a top-level call alone proved unreliable at overwriting
-// that stale value (the call can race SW cold-start and its rejection was
-// swallowed). So we assert it true here AND in onInstalled/onStartup — the
-// onInstalled handler fires precisely when the extension updates, guaranteeing
-// the stale value is overwritten. Errors are logged, not swallowed.
-function enableOpenOnActionClick() {
+// We use an EXPLICIT chrome.action.onClicked handler (rather than the
+// declarative openPanelOnActionClick) so the behaviour is fully observable in
+// the service-worker console — open chrome://extensions → Medicus Suite →
+// "Inspect views: service worker" to watch these logs on each click.
+//
+// openPanelOnActionClick MUST be false for action.onClicked to fire. Because
+// that flag is PERSISTED by Chrome across reloads (and earlier builds flipped
+// it both ways), we assert it false at top-level AND in onInstalled/onStartup
+// so the persisted value can never desync from this handler.
+function configureActionClick() {
   chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
+    .setPanelBehavior({ openPanelOnActionClick: false })
+    .then(() => console.log('[Suite] action click handler armed (openPanelOnActionClick=false)'))
     .catch(err => console.warn('[Suite] setPanelBehavior failed:', err && err.message));
 }
 
-enableOpenOnActionClick();
+configureActionClick();
+
+chrome.action.onClicked.addListener((tab) => {
+  console.log('[Suite] toolbar icon clicked — tab', tab && tab.id, 'window', tab && tab.windowId);
+  // The side panel is window-global (single default_path in the manifest), so
+  // open by windowId to mirror the native right-click "Open side panel". Fall
+  // back to tabId if windowId is somehow unavailable.
+  const opts = tab && tab.windowId != null ? { windowId: tab.windowId } : { tabId: tab && tab.id };
+  chrome.sidePanel.open(opts)
+    .then(() => console.log('[Suite] sidePanel.open() resolved', opts))
+    .catch(err => console.warn('[Suite] sidePanel.open() failed:', err && err.message));
+});
 
 // ── Message router ────────────────────────────────────────────────────────────
 
@@ -119,7 +132,7 @@ function runStartupTask(label, fn) {
 
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
-  enableOpenOnActionClick();   // overwrite any stale persisted false on update
+  configureActionClick();   // re-assert openPanelOnActionClick=false on update
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
   runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
@@ -130,7 +143,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  enableOpenOnActionClick();
+  configureActionClick();
   runStartupTask('startPolling', startPolling);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
