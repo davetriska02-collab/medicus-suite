@@ -432,6 +432,10 @@ function seedMockFromRule(p, rule, extraRules) {
           const val = ck.direction === 'falling' ? (100 - i * 15) : (i * 15 + 1);
           obs.push(`${term} | ${val} | ${isoDaysAgo(Math.round(months * 30 * (n - 1 - i) / (n - 1)))}`);
         }
+      } else if (ck.kind === 'observation-alert') {
+        const term = ck.observation?.[0] || 'value';
+        const val = ck.red != null ? ck.red : (ck.amber != null ? ck.amber : 1);
+        obs.push(`${term} | ${val} | ${isoDaysAgo(Math.max(1, Math.round((ck.withinDays || 365) / 2)))}`);
       } else { // observation-threshold
         const term = ck.observation?.[0] || 'value';
         let val = '1';
@@ -847,6 +851,23 @@ function ciUpdatePreview() {
   ciPreviewTimer = setTimeout(_ciDoPreview, 300);
 }
 
+// Reads the observation-alert form fields into a check object (shared by the
+// live preview and the save handler).
+function ciBuildAlertCheck() {
+  const observation = (getEl('ciAlertObsMatch')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const comparator = getEl('ciAlertComparator')?.value || 'above';
+  const check = { kind: 'observation-alert', observation, comparator };
+  const amberRaw = (getEl('ciAlertAmber')?.value || '').trim();
+  const redRaw = (getEl('ciAlertRed')?.value || '').trim();
+  const unit = (getEl('ciAlertUnit')?.value || '').trim();
+  const withinRaw = (getEl('ciAlertWithinDays')?.value || '').trim();
+  if (amberRaw !== '' && !isNaN(parseFloat(amberRaw))) check.amber = parseFloat(amberRaw);
+  if (redRaw !== '' && !isNaN(parseFloat(redRaw))) check.red = parseFloat(redRaw);
+  if (unit) check.unit = unit;
+  if (withinRaw !== '' && !isNaN(parseInt(withinRaw, 10))) check.withinDays = parseInt(withinRaw, 10);
+  return check;
+}
+
 // Builds the rule incl. the observation-trend check (which ciGetFormRule omits —
 // it's assembled in the save handler), so the live preview covers all kinds.
 function ciGetFormRuleFull() {
@@ -860,6 +881,8 @@ function ciGetFormRuleFull() {
     const minDeltaRaw = (getEl('ciTrendMinDelta')?.value || '').trim();
     rule.check = { kind: 'observation-trend', observation, direction, minPoints, withinMonths };
     if (minDeltaRaw !== '' && !isNaN(parseFloat(minDeltaRaw))) rule.check.minDelta = parseFloat(minDeltaRaw);
+  } else if (kind === 'observation-alert') {
+    rule.check = ciBuildAlertCheck();
   }
   return rule;
 }
@@ -947,6 +970,7 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') ci
     getEl('ciSectionMedPresent').style.display = kind === 'medication-present'    ? 'block' : 'none';
     getEl('ciSectionObsWithin').style.display  = kind === 'observation-recent'    ? 'block' : 'none';
     getEl('ciSectionTrend').style.display      = kind === 'observation-trend'     ? 'block' : 'none';
+    getEl('ciSectionAlert').style.display      = kind === 'observation-alert'     ? 'block' : 'none';
   };
   // Replace event listeners already bound in the existing code.
   // The existing code binds 'change' on each ciKind radio, so we patch by
@@ -999,6 +1023,12 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') ci
       if (!obsMatch.length) { errEl.textContent = 'Add at least one observation match term.'; return; }
       if (isNaN(minPoints) || minPoints < 2) { errEl.textContent = 'Minimum data points must be 2 or more.'; return; }
       if (isNaN(withinMonths) || withinMonths <= 0) { errEl.textContent = 'Within months must be a positive number.'; return; }
+    }
+    if (kind === 'observation-alert') {
+      const alertCheck = ciBuildAlertCheck();
+      rule.check = alertCheck;
+      if (!alertCheck.observation.length) { errEl.textContent = 'Add at least one observation match term.'; return; }
+      if (alertCheck.amber == null && alertCheck.red == null) { errEl.textContent = 'Set an amber threshold, a red threshold, or both.'; return; }
     }
 
     // Generate ID for new rules
@@ -1056,6 +1086,13 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') ci
     if (getEl('ciTrendMinDelta')) getEl('ciTrendMinDelta').value = '';
     const risingEl = document.querySelector('input[name="ciTrendDirection"][value="rising"]');
     if (risingEl) risingEl.checked = true;
+    // Reset alert fields
+    if (getEl('ciAlertObsMatch')) getEl('ciAlertObsMatch').value = '';
+    if (getEl('ciAlertComparator')) getEl('ciAlertComparator').value = 'above';
+    if (getEl('ciAlertAmber')) getEl('ciAlertAmber').value = '';
+    if (getEl('ciAlertRed')) getEl('ciAlertRed').value = '';
+    if (getEl('ciAlertUnit')) getEl('ciAlertUnit').value = '';
+    if (getEl('ciAlertWithinDays')) getEl('ciAlertWithinDays').value = 180;
 
     if (editId) {
       const res = await chrome.storage.local.get('sentinel.customRules');
@@ -1069,6 +1106,14 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') ci
         if (rule.check.withinMonths != null && getEl('ciTrendWithinMonths')) getEl('ciTrendWithinMonths').value = rule.check.withinMonths;
         if (rule.check.minDelta != null && getEl('ciTrendMinDelta')) getEl('ciTrendMinDelta').value = rule.check.minDelta;
       }
+      if (rule && rule.check?.kind === 'observation-alert') {
+        if (getEl('ciAlertObsMatch')) getEl('ciAlertObsMatch').value = (rule.check.observation || []).join('\n');
+        if (getEl('ciAlertComparator')) getEl('ciAlertComparator').value = rule.check.comparator || 'above';
+        if (rule.check.amber != null && getEl('ciAlertAmber')) getEl('ciAlertAmber').value = rule.check.amber;
+        if (rule.check.red != null && getEl('ciAlertRed')) getEl('ciAlertRed').value = rule.check.red;
+        if (rule.check.unit && getEl('ciAlertUnit')) getEl('ciAlertUnit').value = rule.check.unit;
+        if (rule.check.withinDays != null && getEl('ciAlertWithinDays')) getEl('ciAlertWithinDays').value = rule.check.withinDays;
+      }
     }
     // Re-apply section visibility (trend radio may now be selected)
     window._ciSwitchKindSection && window._ciSwitchKindSection();
@@ -1080,6 +1125,12 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') ci
   getEl(id)?.addEventListener('input', ciUpdatePreview);
 });
 document.querySelectorAll('input[name="ciTrendDirection"]').forEach(r => r.addEventListener('change', ciUpdatePreview));
+
+// Wire alert input changes into preview
+['ciAlertObsMatch','ciAlertAmber','ciAlertRed','ciAlertUnit','ciAlertWithinDays'].forEach(id => {
+  getEl(id)?.addEventListener('input', ciUpdatePreview);
+});
+getEl('ciAlertComparator')?.addEventListener('change', ciUpdatePreview);
 
 // ── Alert Library ─────────────────────────────────────────────────────────
 

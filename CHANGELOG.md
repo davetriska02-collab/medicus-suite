@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.1] — 2026-05-31
+### Added
+
+- **Custom-rule UI for `observation-alert`**: the Sentinel custom-indicator form can now author RAG-banded observation safety alerts (match terms, dangerous direction, amber/red thresholds, unit, recency window), with live engine preview and edit support — mirrors the observation-trend form. (`sentinel-options/options.html`, `sentinel-options/options.js`)
+
 ## [v3.18.0] — 2026-05-31
 ### Added
 
