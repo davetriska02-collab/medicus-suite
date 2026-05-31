@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.5] — 2026-05-31
+### Fixed
+
+- **Trend evidence panel now shows the underlying readings even when a trend can't fire**: previously, when fewer than `minPoints` observations fell inside the trend window (e.g. a falling-eGFR chip with only 2 readings in 24 months), expanding the chip showed a bare "insufficient data" line with no values. The evaluator now populates `trendSeries` with the readings it found — in-window if available, otherwise the most recent few from history — so the evidence panel always shows the dated values (provenance). Direction/Span are shown only when ≥2 points are available; the builder is guarded against null delta/span. Affects all `observation-trend` rules (eGFR, PSA, and any custom trend). (`engine/rules-engine.js`)
+
 ## [v3.18.4] — 2026-05-31
 ### Fixed
 

@@ -324,10 +324,15 @@
       });
     } else if (check.kind === 'observation-trend') {
       const s = ctx.trendSeries;
-      if (s) {
+      if (s && s.points && s.points.length) {
         facts.push({ label: 'Test', value: s.testName, detail: s.unit || null });
-        facts.push({ label: 'Direction', value: `${s.direction} (Δ ${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}${s.unit ? ' ' + s.unit : ''}, min ${s.minDelta})` });
-        facts.push({ label: 'Span', value: `${s.spanMonths} months · ${s.points.length} points` });
+        if (s.insufficient) {
+          facts.push({ label: 'Trend', value: `not enough readings in window — showing ${s.points.length} found (need ${check.minPoints || 2})` });
+        }
+        if (s.delta != null && s.spanMonths != null) {
+          facts.push({ label: 'Direction', value: `${s.direction} (Δ ${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}${s.unit ? ' ' + s.unit : ''}, min ${s.minDelta})` });
+          facts.push({ label: 'Span', value: `${s.spanMonths} months · ${s.points.length} points` });
+        }
         s.points.forEach((p, i) => {
           facts.push({ label: `Point ${i + 1}`, value: `${p.value.toFixed(1)}${s.unit ? ' ' + s.unit : ''}`, date: p.date });
         });
@@ -950,9 +955,36 @@
         });
 
         if (inWindow.length < (check.minPoints || 2)) {
-          // Not enough data points for a meaningful trend
+          // Not enough data points in the window for a meaningful trend.
           status = 'no_data';
           valueText = `${inWindow.length} point${inWindow.length !== 1 ? 's' : ''} in window (need ${check.minPoints || 2})`;
+          // Still surface the readings we DID find so the evidence panel shows the
+          // provenance (what values exist) rather than a bare "insufficient data".
+          // Prefer in-window readings; if none, fall back to the most recent few
+          // from the full history so the clinician can see the actual values.
+          const provenance = (inWindow.length ? inWindow : historyEntry.history.slice(0, 6))
+            .filter(pt => isFinite(pt.value));
+          if (provenance.length) {
+            // history is newest-first; reverse to oldest→newest for display.
+            const ordered = provenance.slice().reverse();
+            const pNewest = ordered[ordered.length - 1].value;
+            const pOldest = ordered[0].value;
+            const pSpan = Math.round(
+              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) /
+              (30.4375 * 24 * 60 * 60 * 1000)
+            );
+            evidenceCtx.trendSeries = {
+              testName: historyEntry.name,
+              unit: historyEntry.unit || '',
+              points: ordered.map(p => ({ date: p.date, value: p.value })),
+              delta: ordered.length >= 2 ? (pNewest - pOldest) : null,
+              direction: check.direction || 'rising',
+              minDelta: check.minDelta != null ? check.minDelta : 0,
+              spanMonths: ordered.length >= 2 ? pSpan : null,
+              fires: false,
+              insufficient: true
+            };
+          }
         } else {
           // History is sorted newest-first; first entry is most recent, last is oldest.
           // Trend direction: compare oldest value to newest value overall.
