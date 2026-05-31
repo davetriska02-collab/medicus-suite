@@ -377,6 +377,10 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <input type="radio" id="ciKindObsTrend" name="ciKind" value="observation-trend" />
           <label for="ciKindObsTrend">Observation is showing a rising or falling trend</label>
         </div>
+        <div class="checkbox-row" style="margin-bottom:6px;">
+          <input type="radio" id="ciKindObsAlert" name="ciKind" value="observation-alert" />
+          <label for="ciKindObsAlert">Latest observation crosses a safety threshold (amber/red bands)</label>
+        </div>
       </div>
 
       <!-- Section C: Observation threshold (visible when kind = observation-threshold) -->
@@ -497,6 +501,46 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <input type="number" id="ciTrendMinDelta" min="0" step="any" placeholder="e.g. 1.0" />
           <div class="form-hint">Minimum total change across data points to qualify as a trend.</div>
         </div>
+      </div>
+
+      <!-- Section E3: Observation safety alert (hidden by default) -->
+      <div id="ciSectionAlert" style="margin-bottom:14px; display:none;">
+        <span class="cr-section-label">Observation alert details</span>
+        <div class="field">
+          <label for="ciAlertObsMatch">Observation match terms (one per line)</label>
+          <textarea id="ciAlertObsMatch" rows="2" style="height:48px;" placeholder="potassium&#10;serum potassium"></textarea>
+        </div>
+        <div class="field">
+          <label for="ciAlertComparator">Dangerous direction</label>
+          <select id="ciAlertComparator" style="width:auto;">
+            <option value="above">High values are dangerous (fires at/above thresholds)</option>
+            <option value="below">Low values are dangerous (fires at/below thresholds)</option>
+          </select>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label for="ciAlertAmber">Amber threshold</label>
+            <input type="number" id="ciAlertAmber" step="any" placeholder="e.g. 5.5" />
+            <div class="form-hint">Lower-severity band. Optional if a red threshold is set.</div>
+          </div>
+          <div class="field">
+            <label for="ciAlertRed">Red threshold</label>
+            <input type="number" id="ciAlertRed" step="any" placeholder="e.g. 6.0" />
+            <div class="form-hint">Higher-severity band. Optional if an amber threshold is set.</div>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label for="ciAlertUnit">Unit (optional)</label>
+            <input type="text" id="ciAlertUnit" placeholder="e.g. mmol/L" />
+          </div>
+          <div class="field">
+            <label for="ciAlertWithinDays">Within days</label>
+            <input type="number" id="ciAlertWithinDays" min="1" max="3650" value="180" />
+            <div class="form-hint">Ignore results older than this.</div>
+          </div>
+        </div>
+        <div class="form-hint">Fires only when the latest matching value crosses a band — no chip when the value is in the safe range, stale, or absent.</div>
       </div>
 
       <!-- Section F: Patient filters -->

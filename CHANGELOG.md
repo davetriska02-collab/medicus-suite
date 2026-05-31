@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.18.1] — 2026-05-31
+### Added
+
+- **Custom-rule UI for `observation-alert`**: the Sentinel custom-indicator form can now author RAG-banded observation safety alerts (match terms, dangerous direction, amber/red thresholds, unit, recency window), with live engine preview and edit support — mirrors the observation-trend form. (`sentinel-options/options.html`, `sentinel-options/options.js`)
+
+## [v3.18.0] — 2026-05-31
+### Added
+
+- **Falling eGFR trend monitor (Sentinel, enabled by default)**: fires when eGFR falls >=15 mL/min/1.73m2 across >=3 readings within 12 months for any adult (NICE NG203 accelerated CKD progression). Mirrors the Rising PSA trend mechanism; shows `no_data` until multi-point eGFR history is available. Promoted from the opt-in alert library to a shipped default. (`rules/qof-rules.json`)
+- **Raised potassium / hyperkalaemia alert (Sentinel, enabled by default)**: RAG-banded alert on the latest serum potassium — amber 5.5-5.9 mmol/L (mild; exclude pseudohyperkalaemia, review contributing drugs), red >=6.0 mmol/L (moderate/severe; urgent same-day assessment + ECG, >=6.5 = emergency). NICE CKS / UK Kidney Association advice surfaced in the chip notes. (`rules/qof-rules.json`)
+- **New `observation-alert` check kind** in the rules engine: a clinical-safety threshold that reads the latest matching observation and fires amber/red bands (via `caution`/`alert` statuses), returning no chip when the value is in the safe range, stale, or absent — so safety thresholds don't add green-"MET" noise like QOF achievement indicators. (`engine/rules-engine.js`, `shared/io/sentinel-io.js`)
+
+## [v3.17.3] — 2026-05-31
+### Added — Falling eGFR trend sentinel library rule (NICE NG203)
+
+- **Falling eGFR trend (Sentinel alert library)**: new `trend-2` library rule mirroring the Rising PSA trend — fires when eGFR falls ≥15 mL/min/1.73m² across ≥3 readings within 12 months (NICE NG203 accelerated CKD progression). Importable from the Sentinel options Alert Library; uses the existing `observation-trend` engine, so no code changes. Shows `no_data` until multi-point eGFR history is available. (`rules/alert-library.json`)
+
 ## [v3.17.2] — 2026-05-30
 ### Fixed — Wire the extraction-health canary to the side panel + invalidate stale snapshots (H-005, clinical safety)
 

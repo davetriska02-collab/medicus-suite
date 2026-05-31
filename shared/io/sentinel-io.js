@@ -120,7 +120,7 @@ function validateDrugMonitoringRule(rule, loc) {
 }
 
 const ALLOWED_QOF_REGISTERS = ['DM','HYP','CHD','HF','STIA','CKD','PAD','ASTHMA','COPD','AF'];
-const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend'];
+const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend','observation-alert'];
 const ALLOWED_SEVERITIES = ['red','amber','info'];
 const ALLOWED_SEX_VALUES = ['any','M','F'];
 const ALLOWED_EVENT_COUNT_OPERATORS = ['>=','>','=','<=','<'];
@@ -180,6 +180,29 @@ function validateQofIndicatorRule(rule, loc) {
     }
     if (rule.check.minDelta != null && (typeof rule.check.minDelta !== 'number' || rule.check.minDelta < 0)) {
       throw new Error(`Custom rule${loc}: check.minDelta must be a non-negative number.`);
+    }
+  }
+  if (rule.check.kind === 'observation-alert') {
+    if (!Array.isArray(rule.check.observation) || rule.check.observation.length === 0) {
+      throw new Error(`Custom rule${loc}: check.observation must be a non-empty array.`);
+    }
+    if (rule.check.comparator !== undefined && !['above','below'].includes(rule.check.comparator)) {
+      throw new Error(`Custom rule${loc}: check.comparator must be "above" or "below".`);
+    }
+    if (rule.check.amber == null && rule.check.red == null) {
+      throw new Error(`Custom rule${loc}: at least one of check.amber or check.red must be present.`);
+    }
+    if (rule.check.amber != null && typeof rule.check.amber !== 'number') {
+      throw new Error(`Custom rule${loc}: check.amber must be a number.`);
+    }
+    if (rule.check.red != null && typeof rule.check.red !== 'number') {
+      throw new Error(`Custom rule${loc}: check.red must be a number.`);
+    }
+    if (rule.check.withinDays != null && (typeof rule.check.withinDays !== 'number' || rule.check.withinDays <= 0)) {
+      throw new Error(`Custom rule${loc}: check.withinDays must be a positive number.`);
+    }
+    if (rule.check.unit != null && typeof rule.check.unit !== 'string') {
+      throw new Error(`Custom rule${loc}: check.unit must be a string.`);
     }
   }
   if (rule.requiresRegister != null && rule.requiresRegister !== '' && !ALLOWED_QOF_REGISTERS.includes(rule.requiresRegister)) {
