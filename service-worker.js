@@ -16,10 +16,23 @@ try {
 }
 
 // ── Side panel behaviour ─────────────────────────────────────────────────────
-// openPanelOnActionClick:true is Chrome's built-in equivalent of the
-// right-click "Open side panel" menu item — the most reliable single-click
-// open mechanism. No action.onClicked listener needed.
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+// Clicking the toolbar icon opens the side panel. This is controlled by the
+// PERSISTED `openPanelOnActionClick` flag (Chrome's built-in equivalent of the
+// right-click "Open side panel" menu item).
+//
+// IMPORTANT: this flag is persisted by Chrome across reloads. An earlier build
+// set it to `false`; a top-level call alone proved unreliable at overwriting
+// that stale value (the call can race SW cold-start and its rejection was
+// swallowed). So we assert it true here AND in onInstalled/onStartup — the
+// onInstalled handler fires precisely when the extension updates, guaranteeing
+// the stale value is overwritten. Errors are logged, not swallowed.
+function enableOpenOnActionClick() {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(err => console.warn('[Suite] setPanelBehavior failed:', err && err.message));
+}
+
+enableOpenOnActionClick();
 
 // ── Message router ────────────────────────────────────────────────────────────
 
@@ -106,6 +119,7 @@ function runStartupTask(label, fn) {
 
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
+  enableOpenOnActionClick();   // overwrite any stale persisted false on update
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
   runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
@@ -116,6 +130,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  enableOpenOnActionClick();
   runStartupTask('startPolling', startPolling);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);

@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.1] — 2026-05-31
+### Fixed
+
+- **Toolbar icon now reliably opens the side panel (root cause fixed)**: `openPanelOnActionClick` is a flag Chrome **persists** across reloads. v3.18.3 had set it to `false`; v3.18.4 set it back to `true` but only via a single top-level call whose rejection was swallowed, so on some installs the stale `false` survived and — with no `onClicked` handler — the icon did nothing (while the native right-click "Open side panel" still worked, since that ignores the flag). The behaviour is now asserted to `true` in `onInstalled` (fires on every update/reload) and `onStartup` as well as at top-level, and errors are logged rather than swallowed, so the stale value is reliably overwritten. Reload the extension once to apply. (`service-worker.js`)
+
 ## [v3.19.0] — 2026-05-31
 ### Added
 
