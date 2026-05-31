@@ -3,47 +3,20 @@
 
 'use strict';
 
-// ── Side panel behaviour (CONFIGURED FIRST, before importScripts) ─────────────
-// This is the single most important line for "click icon → open side panel".
-// It is deliberately placed BEFORE importScripts so that even if a module load
-// fails, the panel behaviour is still set. It is also fully guarded: a top-level
-// throw here (e.g. an API that returns undefined instead of a Promise) would
-// abort the whole service-worker registration — the actual root cause of the
-// "Service worker registration failed. Status code: 2" we kept hitting. So we
-// NEVER assume a Promise is returned and NEVER let anything throw at top level.
-function enableOpenSidePanelOnIconClick() {
-  try {
-    // openPanelOnActionClick:true is Chrome's built-in icon-click → side-panel
-    // behaviour, identical to the right-click "Open side panel" menu item.
-    const r = chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-    // Some Chrome builds return undefined (callback style) rather than a Promise.
-    if (r && typeof r.catch === 'function') {
-      r.catch(err => console.warn('[Suite] setPanelBehavior rejected:', err && err.message));
-    }
-  } catch (err) {
-    console.warn('[Suite] setPanelBehavior threw:', err && err.message);
-  }
-}
+// ── Click the toolbar icon → open the side panel ──────────────────────────────
+// This is the whole feature. One declarative line: Chrome opens the side panel
+// (manifest's side_panel.default_path) natively on icon click, exactly like the
+// right-click "Open side panel" menu item. No popup, no click handler needed.
+// It is the FIRST statement in the worker so nothing else can stop it running.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
-enableOpenSidePanelOnIconClick();
-console.log('[Suite] service worker evaluated; side-panel open-on-click enabled');
-
-// Load shared modules. Service worker is a classic script — importScripts is
-// the way to bring in non-module helpers.
-//
-// CRITICAL: importScripts() MUST be called with STRING LITERALS, not variables.
-// Chrome statically analyses the worker to determine its script resources; a
-// dynamic argument (e.g. importScripts(someVar)) cannot be resolved and fails
-// the entire service-worker registration with "status code: 2". Each call is in
-// its own try/catch so a single missing/broken module can't stop the others.
-try { importScripts('shared/request-monitor.js'); }
-catch (e) { console.warn('[Suite] import request-monitor failed:', e && e.message); }
-try { importScripts('shared/update-checker.js'); }
-catch (e) { console.warn('[Suite] import update-checker failed:', e && e.message); }
-try { importScripts('shared/popout-manager.js'); }
-catch (e) { console.warn('[Suite] import popout-manager failed:', e && e.message); }
-try { importScripts('shared/io/practice-profile.js'); }
-catch (e) { console.warn('[Suite] import practice-profile failed:', e && e.message); }
+// Load shared modules. Classic service worker → importScripts. These MUST be
+// string literals (Chrome resolves the worker's scripts statically at parse
+// time); a variable argument fails registration with "status code: 2".
+importScripts('shared/request-monitor.js');
+importScripts('shared/update-checker.js');
+importScripts('shared/popout-manager.js');
+importScripts('shared/io/practice-profile.js');
 
 // ── Message router ────────────────────────────────────────────────────────────
 
@@ -130,7 +103,6 @@ function runStartupTask(label, fn) {
 
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
-  enableOpenSidePanelOnIconClick();   // re-assert on install/update
   runStartupTask('startPolling', startPolling);
   runStartupTask('runMigration', runMigration);
   runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
@@ -141,7 +113,6 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  enableOpenSidePanelOnIconClick();
   runStartupTask('startPolling', startPolling);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);

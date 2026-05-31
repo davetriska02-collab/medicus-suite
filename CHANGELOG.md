@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.9] — 2026-05-31
+### Changed
+
+- **Side-panel-on-icon-click rewritten from first principles — simple and robust**: the feature is now exactly what Chrome documents and nothing more — `"side_panel": { "default_path": ... }` in the manifest (no `default_popup`) plus a single declarative line as the **first statement** of the service worker: `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`. Chrome opens the panel on icon click natively (same path as the right-click "Open side panel" menu). Removed all the accumulated complexity: the manual `action.onClicked` handler, `setPopup`, per-tab `setOptions`, the guarded wrapper function, lifecycle re-assertions, and diagnostic badges. Module `importScripts` calls remain string literals. (`service-worker.js`, `manifest.json`)
+
 ## [v3.19.8] — 2026-05-31
 ### Fixed
 
