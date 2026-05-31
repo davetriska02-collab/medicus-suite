@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.7] — 2026-05-31
+### Changed
+
+- **Removed the toolbar popup — clicking the icon opens the side panel directly, no popup**: now that the service worker registers correctly again (v3.19.5 fixed the status-2 crash) and asserts `openPanelOnActionClick: true` at top-level, `onInstalled`, and `onStartup` (so the persisted flag can't get stuck), the declarative icon-click → side-panel behaviour finally works. Removed `default_popup` from the manifest. One click on the icon opens the suite side panel; no popup, no chooser. (`manifest.json`)
+
 ## [v3.19.6] — 2026-05-31
 ### Changed
 
