@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.22.0] — 2026-06-01
+### Fixed (custom rule creator ↔ engine parity — from the two-agent review)
+
+The custom rule builder was wired correctly end-to-end (all five types save, merge, evaluate, render, back up) but several builder forms had drifted behind the engine, so some saved rules silently behaved differently than configured. Closed the gaps:
+
+- **qof-indicator cohort fields now reachable**: the builder exposes free-text **`requiresProblem`** (all-of), **`requiresAnyProblem`** (any-of), free-text **`excludeIfProblem`** (alongside the frailty preset), and **`sex`**. Previously a clinician could not build a DM021/DM035-style stratified indicator — any attempt fired for the whole register with the wrong denominator (the over-trigger the engine work had just fixed for canonical rules). `validateQofIndicatorRule` now type-checks all four. (`sentinel-options/options.html`, `sentinel-options/options.js`, `shared/io/sentinel-io.js`)
+- **`medicationExclude` no longer a no-op**: the qof `medication-present` check ignored `medicationExclude` even though the builder saved it. The engine now applies it (an excluded med can't satisfy the indicator). (`engine/rules-engine.js`)
+- **drug-monitoring patient filters + SNOMED**: the builder now exposes `ageRange`, `sex`, `requiresProblem`/`excludesProblem`, and per-test SNOMED codes — the gating/coding the engine already applied but the form couldn't set. Validated in `validateDrugMonitoringRule`. (`sentinel-options/*`, `shared/io/sentinel-io.js`)
+- **drug-combo `mustNotBePresent`**: the "must NOT be co-prescribed" drug-absence gate (engine-supported, validator-allowed) is now a form field. (`sentinel-options/*`)
+- **Rule-builder live preview now matches runtime for trend / event-count(observations)**: the mock patient built a flat `observationHistory`, but the engine reads entries grouped per investigation type with a nested newest-first `history[]`. The preview now mirrors the normaliser shape, so "would this fire?" matches production. (`sentinel-options/options.js`)
+- Extended `test-qof-indicator-filters.js` (now 39 assertions) covering `medicationExclude` and the new validator fields.
+
 ## [v3.21.3] — 2026-06-01
 ### Fixed (cosmetic / dead-code / consistency — from the codebase audit)
 

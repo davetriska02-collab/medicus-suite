@@ -147,5 +147,34 @@ const cholChip = (obs) => engine.evaluateQofIndicatorRule(cholRule,
   check(c && c.status === 'not_met', 'more recent non-HDL still wins by date (date beats term priority)');
 }
 
+// ── medication-present check now honours medicationExclude (builder gap fix) ──
+console.log('\n--- qof medication-present honours medicationExclude ---');
+const medRule = {
+  type: 'qof-indicator', enabled: true, indicatorCode: 'MEDTEST',
+  check: { kind: 'medication-present', medicationMatch: ['insulin'], medicationExclude: ['insulin glargine'] },
+};
+const medStatus = (meds) => engine.evaluateQofIndicatorRule(medRule,
+  { medications: meds, observations: [], problems: [], patientContext: {}, _registerLookup: {} }, NOW)[0]?.status;
+check(medStatus([{ name: 'Insulin aspart 100units/ml' }]) === 'achieved',
+  'matched med (insulin aspart) → achieved');
+check(medStatus([{ name: 'Insulin glargine 100units/ml' }]) === 'not_met',
+  'excluded med (insulin glargine) → not_met (medicationExclude now applied, was ignored)');
+
+// ── validator accepts the newly-reachable qof cohort fields, rejects malformed ─
+console.log('\n--- validateCustomRule: qof cohort fields ---');
+const { validateCustomRule } = require('./shared/io/sentinel-io.js');
+const baseQof = (extra) => ({ id: 'custom-x', type: 'qof-indicator', indicatorCode: 'X', indicatorName: 'X',
+  check: { kind: 'medication-present', medicationMatch: ['statin'] }, ...extra });
+const valid = (rule) => { try { validateCustomRule(rule); return true; } catch (_) { return false; } };
+check(valid(baseQof({ requiresAnyProblem: ['coronary heart disease', 'stroke'], requiresProblem: ['x'], excludeIfProblem: ['y'], sex: 'F' })),
+  'accepts requiresProblem / requiresAnyProblem / excludeIfProblem / sex');
+check(!valid(baseQof({ requiresAnyProblem: 'stroke' })), 'rejects requiresAnyProblem that is not an array');
+check(!valid(baseQof({ sex: 'X' })), 'rejects invalid sex');
+check(!valid(baseQof({ check: { kind: 'medication-present', medicationMatch: ['s'], medicationExclude: 'topical' } })),
+  'rejects non-array medicationExclude');
+check(valid({ id: 'custom-dm', type: 'drug-monitoring', drug: { match: ['x'] },
+  tests: [{ name: 'BP', match: ['bp'], intervalDays: 365, snomed: ['75367002'] }], sex: 'M', ageRange: { min: 18 }, requiresProblem: ['ra'] }),
+  'drug-monitoring accepts snomed / sex / ageRange / requiresProblem');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

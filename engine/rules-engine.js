@@ -961,8 +961,10 @@
       }
     } else if (check.kind === 'medication-present') {
       const matchTerms = check.medicationMatch || [];
+      const excludeTerms = check.medicationExclude || [];
       const foundMed = (data.medications || []).find(m => {
         const norm = normaliseDrugString(m.name);
+        if (excludeTerms.some(t => norm.includes(normaliseDrugString(t)))) return false;
         return matchTerms.some(t => norm.includes(normaliseDrugString(t)));
       });
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;

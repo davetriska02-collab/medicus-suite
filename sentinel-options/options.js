@@ -124,14 +124,17 @@ function getFormRule() {
     const idx = card.dataset.testIdx;
     const name = (document.getElementById(`crTestName_${idx}`)?.value || '').trim();
     const matchRaw = (document.getElementById(`crTestMatch_${idx}`)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const snomedRaw = (document.getElementById(`crTestSnomed_${idx}`)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
     const intervalNum = parseInt(document.getElementById(`crTestIntervalNum_${idx}`)?.value || '84', 10);
     const intervalUnit = document.getElementById(`crTestIntervalUnit_${idx}`)?.value || 'weeks';
     const dueSoonNum = parseInt(document.getElementById(`crTestDueSoon_${idx}`)?.value || '28', 10);
     const intervalDays = unitToDays(intervalNum, intervalUnit);
-    return { name, match: matchRaw.length ? matchRaw : [name.toLowerCase()], intervalDays, dueSoonDays: dueSoonNum };
+    const test = { name, match: matchRaw.length ? matchRaw : [name.toLowerCase()], intervalDays, dueSoonDays: dueSoonNum };
+    if (snomedRaw.length) test.snomed = snomedRaw;
+    return test;
   }).filter(t => t.name);
 
-  return {
+  const rule = {
     type: 'drug-monitoring',
     drug: { match: drugNames, exclude: excludeNames.length ? excludeNames : undefined },
     drugClass,
@@ -141,6 +144,22 @@ function getFormRule() {
     source: source || 'Custom rule (user-authored)',
     enabled: true,
   };
+  // Optional patient filters — the engine gates drug-monitoring rules on these.
+  const dmAgeMin = (getEl('crAgeMin')?.value || '').trim();
+  const dmAgeMax = (getEl('crAgeMax')?.value || '').trim();
+  if (dmAgeMin || dmAgeMax) {
+    rule.ageRange = {};
+    if (dmAgeMin) rule.ageRange.min = parseInt(dmAgeMin, 10);
+    if (dmAgeMax) rule.ageRange.max = parseInt(dmAgeMax, 10);
+  }
+  const dmSex = getEl('crSex')?.value || '';
+  if (dmSex === 'M' || dmSex === 'F') rule.sex = dmSex;
+  const dmLines = id => (getEl(id)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const dmReq = dmLines('crRequiresProblem');
+  const dmExc = dmLines('crExcludesProblem');
+  if (dmReq.length) rule.requiresProblem = dmReq;
+  if (dmExc.length) rule.excludesProblem = dmExc;
+  return rule;
 }
 
 function unitToDays(n, unit) {
@@ -245,6 +264,8 @@ async function openCrForm(editId) {
     getEl('crSharedCare').checked = false;
     getEl('crNotes').value = '';
     getEl('crSource').value = '';
+    ['crAgeMin','crAgeMax','crRequiresProblem','crExcludesProblem'].forEach(id => { const el = getEl(id); if (el) el.value = ''; });
+    if (getEl('crSex')) getEl('crSex').value = '';
     addTestCard();
   }
   updatePreview();
@@ -265,6 +286,11 @@ function populateForm(rule) {
   getEl('crSharedCare').checked = !!rule.sharedCare;
   getEl('crNotes').value = rule.notes || '';
   getEl('crSource').value = rule.source === 'Custom rule (user-authored)' ? '' : (rule.source || '');
+  if (rule.ageRange?.min != null && getEl('crAgeMin')) getEl('crAgeMin').value = rule.ageRange.min;
+  if (rule.ageRange?.max != null && getEl('crAgeMax')) getEl('crAgeMax').value = rule.ageRange.max;
+  if (getEl('crSex')) getEl('crSex').value = (rule.sex === 'M' || rule.sex === 'F') ? rule.sex : '';
+  if (getEl('crRequiresProblem')) getEl('crRequiresProblem').value = (rule.requiresProblem || []).join('\n');
+  if (getEl('crExcludesProblem')) getEl('crExcludesProblem').value = (rule.excludesProblem || []).join('\n');
   (rule.tests || []).forEach(t => addTestCard(t));
   if ((rule.tests || []).length === 0) addTestCard();
 }
@@ -293,6 +319,11 @@ function addTestCard(existing) {
       <label for="crTestMatch_${idx}">Match terms (one per line)</label>
       <textarea id="crTestMatch_${idx}" style="height:48px;" placeholder="fbc&#10;full blood count">${escHtml(matchLines)}</textarea>
       <div class="form-hint">Leave blank to use the test name as the only match term.</div>
+    </div>
+    <div class="field">
+      <label for="crTestSnomed_${idx}">SNOMED codes (optional, one per line)</label>
+      <textarea id="crTestSnomed_${idx}" style="height:40px;" placeholder="26604007">${escHtml((existing?.snomed || []).join('\n'))}</textarea>
+      <div class="form-hint">Matched in addition to the text terms above (codes are more precise).</div>
     </div>
     <div class="interval-row">
       <label>Interval</label>
@@ -325,6 +356,7 @@ function addTestCard(existing) {
   card.querySelector(`#crTestDueSoon_${idx}`)?.addEventListener('input', () => updatePreview());
   card.querySelector(`#crTestName_${idx}`)?.addEventListener('input', () => updatePreview());
   card.querySelector(`#crTestMatch_${idx}`)?.addEventListener('input', () => updatePreview());
+  card.querySelector(`#crTestSnomed_${idx}`)?.addEventListener('input', () => updatePreview());
   card.querySelector('.cr-remove-test')?.addEventListener('click', () => {
     card.remove(); updatePreview();
   });
@@ -368,8 +400,22 @@ function readMockPatient(p) {
   const sex = v('MockSex') || null;
   const dateRaw = v('MockDate');
   const now = dateRaw ? new Date(dateRaw + 'T12:00:00').toISOString() : new Date().toISOString();
-  // observation-trend / event-count(observations) read observationHistory — seed it from the rows.
-  const observationHistory = observations.map(o => ({ name: o.name, testName: o.name, value: o.value, date: o.date }));
+  // observation-trend / event-count(observations) read observationHistory grouped
+  // PER investigation type, each with a nested newest-first history[] of
+  // {date, value, rawValue} — mirror the runtime normaliser shape so the preview
+  // fires the same way production does. (Previously this was a flat array with no
+  // .history, so trend / event-count(observations) previews never fired.)
+  const histByName = {};
+  observations.forEach(o => {
+    const key = String(o.name || '').toLowerCase();
+    if (!histByName[key]) histByName[key] = { name: o.name, unit: '', history: [] };
+    const num = parseFloat(String(o.value).replace(/[^0-9.\-]/g, ''));
+    histByName[key].history.push({ date: o.date, value: isNaN(num) ? o.value : num, rawValue: String(o.value) });
+  });
+  const observationHistory = Object.values(histByName).map(e => ({
+    ...e,
+    history: e.history.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
+  }));
   return { medications, observations, observationHistory, problems, patientContext: { ageYears, sex }, now };
 }
 
@@ -630,6 +676,11 @@ function ciGetFormRule() {
   const ageMinRaw = (getEl('ciAgeMin')?.value || '').trim();
   const ageMaxRaw = (getEl('ciAgeMax')?.value || '').trim();
   const excludeFrailty = getEl('ciExcludeFrailty')?.checked || false;
+  const sex = getEl('ciSex')?.value || '';
+  const linesOf = id => (getEl(id)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const requiresProblem = linesOf('ciRequiresProblem');
+  const requiresAnyProblem = linesOf('ciRequiresAnyProblem');
+  const excludeProblems = linesOf('ciExcludeProblems');
   const notes = (getEl('ciNotes')?.value || '').trim() || null;
   const source = (getEl('ciSource')?.value || '').trim() || null;
 
@@ -696,9 +747,17 @@ function ciGetFormRule() {
     if (ageMinRaw) rule.ageRange.min = parseInt(ageMinRaw, 10);
     if (ageMaxRaw) rule.ageRange.max = parseInt(ageMaxRaw, 10);
   }
+  if (sex === 'M' || sex === 'F') rule.sex = sex;
+  if (requiresProblem.length) rule.requiresProblem = requiresProblem;
+  if (requiresAnyProblem.length) rule.requiresAnyProblem = requiresAnyProblem;
+  // Combine the free-text exclusions with the frailty convenience checkbox.
+  const excludeIfProblem = [...excludeProblems];
   if (excludeFrailty) {
-    rule.excludeIfProblem = ['moderate frailty', 'severe frailty'];
+    for (const t of ['moderate frailty', 'severe frailty']) {
+      if (!excludeIfProblem.includes(t)) excludeIfProblem.push(t);
+    }
   }
+  if (excludeIfProblem.length) rule.excludeIfProblem = excludeIfProblem;
   return rule;
 }
 
@@ -773,9 +832,11 @@ async function ciOpenForm(editId) {
   // Reset all fields
   ['ciIndicatorCode','ciIndicatorName','ciPoints','ciAgeMin','ciAgeMax','ciNotes','ciSource',
    'ciThresholdObsMatch','ciThreshold','ciThresholdSys','ciThresholdDia',
-   'ciMedMatch','ciMedExclude','ciWithinObsMatch'].forEach(id => { const el = getEl(id); if (el) el.value = ''; });
+   'ciMedMatch','ciMedExclude','ciWithinObsMatch',
+   'ciRequiresProblem','ciRequiresAnyProblem','ciExcludeProblems'].forEach(id => { const el = getEl(id); if (el) el.value = ''; });
   getEl('ciDualThreshold').checked = false;
   getEl('ciExcludeFrailty').checked = false;
+  if (getEl('ciSex')) getEl('ciSex').value = '';
   getEl('ciRequiresRegister').value = '';
   getEl('ciOperator').value = '<=';
   getEl('ciKindThreshold').checked = true;
@@ -802,7 +863,18 @@ function ciPopulateForm(rule) {
   getEl('ciRequiresRegister').value = rule.requiresRegister || '';
   if (rule.ageRange?.min != null) getEl('ciAgeMin').value = rule.ageRange.min;
   if (rule.ageRange?.max != null) getEl('ciAgeMax').value = rule.ageRange.max;
-  getEl('ciExcludeFrailty').checked = !!(rule.excludeIfProblem && rule.excludeIfProblem.length);
+  if (getEl('ciSex')) getEl('ciSex').value = (rule.sex === 'M' || rule.sex === 'F') ? rule.sex : '';
+  if (getEl('ciRequiresProblem')) getEl('ciRequiresProblem').value = (rule.requiresProblem || []).join('\n');
+  if (getEl('ciRequiresAnyProblem')) getEl('ciRequiresAnyProblem').value = (rule.requiresAnyProblem || []).join('\n');
+  // The frailty checkbox is just a convenience for the two frailty terms; any
+  // other excludeIfProblem terms populate the free-text box.
+  {
+    const excl = rule.excludeIfProblem || [];
+    const hasFrailty = excl.includes('moderate frailty') && excl.includes('severe frailty');
+    getEl('ciExcludeFrailty').checked = hasFrailty;
+    const rest = hasFrailty ? excl.filter(t => t !== 'moderate frailty' && t !== 'severe frailty') : excl;
+    if (getEl('ciExcludeProblems')) getEl('ciExcludeProblems').value = rest.join('\n');
+  }
   getEl('ciNotes').value = rule.notes || '';
   getEl('ciSource').value = rule.source === 'Custom indicator (user-authored)' ? '' : (rule.source || '');
 
@@ -1432,6 +1504,7 @@ function dcGetFormRule() {
   const ageMaxRaw = (getEl('dcAgeMax')?.value || '').trim();
   const requiresProblem = (getEl('dcRequiresProblem')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
   const excludesProblem = (getEl('dcExcludesProblem')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mustNotBePresent = (getEl('dcMustNotBePresent')?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
 
   const setCards = document.querySelectorAll('.dc-set-card');
   const drugSets = Array.from(setCards).map(card => {
@@ -1459,6 +1532,7 @@ function dcGetFormRule() {
   }
   if (requiresProblem.length) rule.requiresProblem = requiresProblem;
   if (excludesProblem.length) rule.excludesProblem = excludesProblem;
+  if (mustNotBePresent.length) rule.mustNotBePresent = mustNotBePresent;
   return rule;
 }
 
@@ -1543,6 +1617,7 @@ function dcOpenForm(editId) {
   getEl('dcAgeMax').value = '';
   getEl('dcRequiresProblem').value = '';
   getEl('dcExcludesProblem').value = '';
+  if (getEl('dcMustNotBePresent')) getEl('dcMustNotBePresent').value = '';
   document.querySelector('input[name="dcSeverity"][value="red"]').checked = true;
   document.querySelector('input[name="dcSex"][value="any"]').checked = true;
 
@@ -1557,6 +1632,7 @@ function dcOpenForm(editId) {
         if (rule.ageRange?.max != null) getEl('dcAgeMax').value = rule.ageRange.max;
         getEl('dcRequiresProblem').value = (rule.requiresProblem || []).join('\n');
         getEl('dcExcludesProblem').value = (rule.excludesProblem || []).join('\n');
+        if (getEl('dcMustNotBePresent')) getEl('dcMustNotBePresent').value = (rule.mustNotBePresent || []).join('\n');
         const sevEl = document.querySelector(`input[name="dcSeverity"][value="${rule.severity || 'red'}"]`);
         if (sevEl) sevEl.checked = true;
         const sexEl = document.querySelector(`input[name="dcSex"][value="${rule.sex || 'any'}"]`);
