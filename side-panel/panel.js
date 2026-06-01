@@ -823,6 +823,17 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// Tear down all strip poll timers when the panel document goes away. The side
+// panel is normally permanent, but if Chrome re-creates the document (e.g. an
+// extension reload without a browser restart) the old timers would otherwise
+// keep running and a fresh set would stack on top. Only rmPollTimer was cleared
+// before (on config change); wr/subRag ran for the document's whole lifetime.
+window.addEventListener('pagehide', () => {
+  if (wrPollTimer) clearInterval(wrPollTimer);
+  if (rmPollTimer) clearInterval(rmPollTimer);
+  if (subRagPollTimer) clearInterval(subRagPollTimer);
+});
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 // Load and apply display preferences; keep popover state in sync with external changes

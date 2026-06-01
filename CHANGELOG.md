@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.21.2] — 2026-06-01
+### Fixed (robustness / lifecycle — from the codebase audit)
+
+- **Triage-lens route watcher no longer stacks uncancellable re-evaluations (A1)**: the 1200ms "slow rerender" timer in `onRoute` was fire-and-forget, so rapid SPA navigation (journal-search churn, queue scrolling) queued a `run(true)` — and a full 4-endpoint fetch cascade — per change. It's now stored and cleared alongside the 250ms timer. (`content-scripts/triage-lens/content.js`)
+- **Rule edits now take effect immediately in the side panel (A4)**: the `storage.onChanged` handler only watched `sentinel.config` and called the suite-mode no-op `refresh()`, so editing a rule in Options didn't change the panel until the next navigation. It now also watches `sentinel.rules`/`orgRules`/`customRules`, invalidates the rules cache, and re-publishes. (`content-scripts/sentinel.js`)
+- **`loadRules()` is cached (A6)**: it previously did 2× `fetch` + 1× `storage.get` on every evaluation (including the 800ms journal-search re-eval). The canonical ruleset is fetched once and the merged result cached, invalidated on rule-key changes. (`content-scripts/sentinel.js`)
+- **Same-patient nav guard works on DOM-fallback views (A5)**: `patientContext.patientUuid` is now resolved (URL, then single-patient DOM banner) on the DOM-fallback path, so journal searches / tab switches on those views no longer invalidate + re-fetch the snapshot on every URL change. (`engine/data-fetcher.js`)
+- **Pop-out tab switching has a sequence guard (B1)**: `pop-out.js switchModule` now mirrors `panel.js`'s `switchSeq` guard, so a fast tab switch can't leak the previous module's timers/listeners or lose its cleanup. (`pop-out/pop-out.js`)
+- **Sentinel side-panel `refresh()` coalesces concurrent calls (B2)**: it had no in-flight guard despite being driven by the 10s poll, tab events, the snapshot-updated message and the refresh button — concurrent calls raced their round-trips and clobbered each other's DOM. Also removed a duplicate per-render refresh-button listener (the delegated handler already covers it). (`side-panel/modules/sentinel/sentinel.js`)
+- **"No practice code" message now shows (B3)**: `fetchWaitingRoom` called `render({state:'loaded'})` — an unhandled state that threw (swallowed) — instead of updating the pinned waiting-room block. (`side-panel/modules/sentinel/sentinel.js`)
+- **Toolbar badge has a single owner (E1)**: the waiting-room count was written independently by both `panel.js` and the Sentinel module, racing/clobbering each other when the Sentinel tab was active. The badge is now owned solely by `panel.js`'s strip. (`side-panel/modules/sentinel/sentinel.js`)
+- **Strip poll timers are torn down on `pagehide` (E2)**: `wrPollTimer`/`subRagPollTimer` were never cleared, risking duplicate timers if the panel document is recreated. (`side-panel/panel.js`)
+- **Pusher relay releases the old channel handler before rebinding and resets its wait budget (E3)**: prevents a stale closure firing on a dead channel and the relay going permanently silent after a late reconnect. (`content-scripts/pusher-relay.js`)
+
 ## [v3.21.1] — 2026-06-01
 ### Fixed (backup/restore data loss — from the codebase audit)
 

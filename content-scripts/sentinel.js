@@ -115,10 +115,21 @@
     if (snd) snd.checked = !!CONFIG.showNoData;
   }
 
-  // Listen for config changes from the options page
+  // Listen for config + rule changes from the options page.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes["sentinel.config"]) return;
-    const newConfig = changes["sentinel.config"].newValue || {};
+    if (area !== 'local') return;
+    // Rule edits: invalidate the merged-rules cache and re-publish so the side
+    // panel reflects the change immediately. Previously this handler only watched
+    // sentinel.config and called refresh(), which is a no-op in suite mode
+    // (no shadowRoot) — so an edited rule didn't take effect until navigation.
+    if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules']) {
+      _mergedRulesCache = null;
+      if (CONFIG.autoRefresh !== false) {
+        loadRules().then(rules => evaluateAndPublish(rules)).catch(() => {});
+      }
+    }
+    if (!changes['sentinel.config']) return;
+    const newConfig = changes['sentinel.config'].newValue || {};
     CONFIG = { ...DEFAULT_CONFIG, ...newConfig };
     collapsedSections = new Set(CONFIG.collapsedSections || []);
     applyConfigToRoot();
@@ -295,16 +306,28 @@
     }
   }
 
+  // Rule caches. The canonical JSON ships with the extension and never changes at
+  // runtime, so we fetch it once. The merged result (canonical + org + individual
+  // + custom) is cached too and invalidated by the storage.onChanged listener
+  // when any rule key changes — previously loadRules did 2× fetch + 1× storage.get
+  // on EVERY evaluation, including the 800ms journal-search re-eval churn.
+  let _canonicalRulesCache = null;
+  let _mergedRulesCache = null;
+
   async function loadRules() {
+    if (_mergedRulesCache) return _mergedRulesCache;
     // Load both drug-rules.json and qof-rules.json and merge.
     // Three-tier overrides: canonical -> organisational -> individual -> custom appended.
-    const drugUrl = chrome.runtime.getURL('rules/drug-rules.json');
-    const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
-    const [drugDoc, qofDoc] = await Promise.all([
-      fetch(drugUrl).then(r => r.json()),
-      fetch(qofUrl).then(r => r.json())
-    ]);
-    const canonical = [...(drugDoc.rules || []), ...(qofDoc.rules || [])];
+    if (!_canonicalRulesCache) {
+      const drugUrl = chrome.runtime.getURL('rules/drug-rules.json');
+      const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
+      const [drugDoc, qofDoc] = await Promise.all([
+        fetch(drugUrl).then(r => r.json()),
+        fetch(qofUrl).then(r => r.json())
+      ]);
+      _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || [])];
+    }
+    const canonical = _canonicalRulesCache;
 
     // Load org + individual overrides + custom rules
     return new Promise(resolve => {
@@ -326,6 +349,7 @@
         // Append enabled custom rules as additions (not overlays)
         const enabledCustom = customRules.filter(r => r.enabled !== false);
         merged.push(...enabledCustom);
+        _mergedRulesCache = merged;
         resolve(merged);
       });
     });

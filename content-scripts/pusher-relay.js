@@ -43,16 +43,22 @@
     }
 
     // Listen for appointment updates — forward to service worker without patient data
-    ch.bind('appointments-updated', () => {
+    const handler = () => {
       chrome.runtime.sendMessage({ action: 'pusher:scheduling:appointments-updated' }).catch(() => {});
-    });
+    };
+    ch.bind('appointments-updated', handler);
 
     // Re-bind if the page navigates within the SPA and the channel is recreated
     const observer = new MutationObserver(() => {
       const newCh = pusher.channels?.channels?.[channelName];
       if (newCh && newCh !== ch) {
         observer.disconnect();
-        // Re-run after a short delay to let the new channel settle
+        // Release the old channel's handler so a stale closure can't keep firing
+        // on the previous channel, then restore the full wait budget for the new
+        // channel (elapsed is otherwise never reset, so a late reconnect could
+        // exhaust MAX_WAIT_MS and silently stop relaying).
+        try { ch.unbind('appointments-updated', handler); } catch (_) {}
+        elapsed = 0;
         setTimeout(tryBind, 500);
       }
     });
