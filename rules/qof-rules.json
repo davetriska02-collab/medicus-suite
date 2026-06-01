@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-05-31",
+  "lastUpdated": "2026-06-01",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Some 26/27 indicators (DM037 multi-observation bundle, HF009 multi-drug AND logic) require rules-engine extensions and are shipped disabled with placeholder definitions. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes.",
@@ -13,7 +13,7 @@
       "registerCode": "DM",
       "registerName": "Diabetes",
       "problemMatch": ["type 1 diabetes", "type 2 diabetes", "diabetes mellitus", "diabetic"],
-      "problemExclude": ["pre-diabetes", "pre diabetes", "gestational diabetes", "no diabetes", "diabetes insipidus"],
+      "problemExclude": ["pre-diabetes", "pre diabetes", "prediabetes", "prediabetic", "non-diabetic", "gestational diabetes", "no diabetes", "diabetes insipidus"],
       "source": "QOF 26/27 DM register (DM_COD refset approximation)"
     },
 
