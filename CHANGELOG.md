@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.21.0] — 2026-06-01
+### Fixed
+
+- **Journal-coded QOF indicators now fire in the side panel (F1)**: the suite-mode publish path (`evaluateAndPublish`) never augmented observations with consultation/journal-coded entries — that augmentation lived only in the floating HUD's `refresh()`, which is dead in suite mode. So indicators whose evidence lives only in the journal (AST007 asthma review, COPD010, HF007, DM014 structured education, AF006 CHA2DS2-VASc) always read `no_data` in the panel even when done. `evaluateAndPublish` now calls `fetchJournalObservations` (best-effort, generation-guarded so a journal fetch can't publish stale chips after a navigation). Also fixed the patient-id resolution in the HUD path to use the canonical `patientContext.patientUuid` field (it previously looked for `patientId`/`id`/`uuid`, none of which the normaliser sets, so journal augmentation silently skipped on care-record URLs). (`content-scripts/sentinel.js`)
+
 ## [v3.20.0] — 2026-06-01
 ### Fixed (clinical correctness — from the multi-agent codebase audit)
 

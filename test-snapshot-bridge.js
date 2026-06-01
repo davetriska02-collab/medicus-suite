@@ -67,5 +67,13 @@ check(/const gen = \+\+_evalGen/.test(sentinel),
 check(/if \(gen !== _evalGen\) return/.test(sentinel),
   'stale async results are dropped instead of clobbering a newer snapshot');
 
+console.log('\n--- live suite path augments with journal observations (F1) ---');
+
+check(/function evaluateAndPublish/.test(sentinel) &&
+  /fetchJournalObservations\(\s*_patientId/.test(sentinel),
+  'evaluateAndPublish augments observations via fetchJournalObservations (so journal-only QOF indicators fire in the side panel)');
+check(/data\.patientContext\?\.patientUuid/.test(sentinel),
+  'patient id resolution uses the canonical patientContext.patientUuid field');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

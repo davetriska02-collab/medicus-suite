@@ -242,7 +242,8 @@
       // and task resolvers should always populate patientContext correctly anyway).
       const _patientUrlMatch = /\/patient\/patient\/[^/]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
         .exec(location.pathname);
-      const _resolvedPatientId = data.patientContext?.patientId
+      const _resolvedPatientId = data.patientContext?.patientUuid
+        || data.patientContext?.patientId
         || data.patientContext?.id
         || data.patientContext?.uuid
         || (_patientUrlMatch && _patientUrlMatch[1])
@@ -943,13 +944,29 @@
       const fetcher = window.SentinelDataFetcher;
       if (!fetcher) return;
       const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
-      Promise.resolve(result).then(data => {
+      Promise.resolve(result).then(async data => {
         if (gen !== _evalGen) return; // superseded — drop this stale result
         if (!data || !window.SentinelRules) { invalidateSnapshot(); return; }
         // Assess extraction health so publishSnapshot can stamp the degraded flag
         // onto the snapshot the side panel reads (the H-005 canary). Kept local to
         // this call so concurrent evaluations can't cross-contaminate the flag.
         const health = assessExtractionHealth(data);
+        // Augment observations with encounter/journal-coded entries (annual-review
+        // codes, questionnaire scores, CHA2DS2-VASc, etc.) that never appear in the
+        // investigation dashboard, so indicators whose evidence lives only in the
+        // journal (AST007, COPD010, HF007, DM014, AF006…) can fire in the SIDE
+        // PANEL too — previously this augmentation ran only in the now-dead HUD
+        // refresh() path, so these read no_data in suite mode.
+        const _patientId = data.patientContext?.patientUuid
+          || data.patientContext?.patientId || data.patientContext?.id
+          || data.patientContext?.uuid || null;
+        if (currentMode === 'live' && _patientId) {
+          try {
+            const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
+            if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
+            if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
+          } catch (_) { /* journal augmentation is best-effort; never block the chip */ }
+        }
         // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
         // publish them directly. We deliberately do NOT rely on a side effect of
         // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
