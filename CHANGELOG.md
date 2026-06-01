@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.21.1] — 2026-06-01
+### Fixed (backup/restore data loss — from the codebase audit)
+
+- **`suite.display` now survives backup/restore (C3)** and **`suite.*` keys are no longer handled raw in `doFullExport`/`applyEnvelope` (C1)**: added `shared/io/suite-io.js` (`suiteExport`/`suiteImport`) owning `suite.display` (theme / text size / colourblind), `suite.practiceCode` and `suite.feedbackEmail`, per the CLAUDE.md convention. `doFullExport`/`applyEnvelope` now delegate to it instead of reading/writing those keys inline; `suite.display` (previously captured nowhere) is now backed up, and the envelope preview lists it. (`shared/io/suite-io.js`, `options/options.js`, `options/options.html`, `shared/io/suite-envelope.js`)
+- **Sentinel alert-library acknowledgement now backed up (C2)**: `sentinel.alertLibrary.acknowledged` was written by the Sentinel options page but absent from `sentinel-io.js`, so a restore re-locked the alert library and re-prompted the user. Added it to `SENTINEL_KEYS` and the export/import shape. (`shared/io/sentinel-io.js`)
+- **Per-module export cards for Triage Capacity Alerts and Pop-out (C4/C5)**: both scopes were fully wired in the IO/envelope layer but had no card in Options, so their standalone export/import was unreachable. Added the cards. (`options/options.html`)
+- Added `test-backup-keys.js` (round-trip tests with an in-memory `chrome.storage` mock).
+
 ## [v3.21.0] — 2026-06-01
 ### Fixed
 

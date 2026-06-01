@@ -413,9 +413,8 @@ async function doFullExport() {
     referralsExport(),
     requestMonitorExport(),
   ]);
-  const pc = submissions.practiceCode ?? null;
-  const { 'suite.feedbackEmail': feedbackEmail = null } = await chrome.storage.local.get('suite.feedbackEmail');
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite: { practiceCode: pc, feedbackEmail } });
+  const suite = await suiteExport();
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite });
 }
 
 async function doModuleExport(scope) {
@@ -447,8 +446,7 @@ async function applyEnvelope(envelope) {
     mods.popout        && popoutImport(mods.popout),
     mods.referrals     && referralsImport(mods.referrals),
     mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
-    mods.suite?.practiceCode && chrome.storage.local.set({ 'suite.practiceCode': mods.suite.practiceCode }),
-    mods.suite?.feedbackEmail && chrome.storage.local.set({ 'suite.feedbackEmail': mods.suite.feedbackEmail }),
+    mods.suite         && suiteImport(mods.suite),
   ].filter(Boolean));
 }
 

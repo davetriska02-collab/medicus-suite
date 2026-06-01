@@ -9,6 +9,7 @@ const SENTINEL_KEYS = [
   'sentinel.rules',
   'sentinel.orgRules',
   'sentinel.customRules',
+  'sentinel.alertLibrary.acknowledged',
 ];
 
 // Export all Sentinel storage keys into a plain data object.
@@ -19,6 +20,7 @@ async function sentinelExport() {
     rules:       r['sentinel.rules']       ?? {},
     orgRules:    r['sentinel.orgRules']    ?? null,
     customRules: r['sentinel.customRules'] ?? [],
+    alertLibraryAcknowledged: r['sentinel.alertLibrary.acknowledged'] ?? false,
   };
 }
 
@@ -73,6 +75,13 @@ async function sentinelImport(data, { merge = false } = {}) {
     } else {
       toSet['sentinel.customRules'] = data.customRules;
     }
+  }
+
+  if (data.alertLibraryAcknowledged !== undefined) {
+    if (typeof data.alertLibraryAcknowledged !== 'boolean') {
+      throw new Error('sentinel.alertLibrary.acknowledged must be a boolean.');
+    }
+    toSet['sentinel.alertLibrary.acknowledged'] = data.alertLibraryAcknowledged;
   }
 
   if (Object.keys(toSet).length > 0) {
