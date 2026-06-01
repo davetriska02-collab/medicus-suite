@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.13] — 2026-06-01
+### Fixed
+
+- **HRT progestogen context now recognises Mirena/IUS on the problem list**: `buildHrtContext` previously only searched the medications list for IUS coverage, so problem-list entries like "Introduction of Mirena coil" or "Replacement of intrauterine system" were ignored, causing the "No progestogen or hysterectomy recorded" warning to fire incorrectly. The engine now also checks the problems list using `iusProblemTerms` (new field in `hrtContext`) plus the existing `iusTerms`. (`engine/rules-engine.js`, `rules/drug-rules.json`)
+
 ## [v3.19.12] — 2026-06-01
 ### Fixed
 

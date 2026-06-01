@@ -353,6 +353,7 @@
       "hrtContext": {
         "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve"],
         "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
+        "iusProblemTerms": ["intrauterine system", "intrauterine device", "mirena coil", "insertion of mirena", "introduction of mirena", "replacement of intrauterine", "fitting of intrauterine", "iud fitted", "ius fitted", "coil fitted", "coil inserted"],
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
       }
