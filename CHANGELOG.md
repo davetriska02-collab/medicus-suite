@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.21.3] — 2026-06-01
+### Fixed (cosmetic / dead-code / consistency — from the codebase audit)
+
+- **CHOL004 LDL priority (F9)**: `findLatestObservation` now uses a same-date tiebreak that prefers earlier-listed `match`/`observation` terms, and CHOL004 lists LDL before non-HDL — so when both are recorded on the same date, LDL takes priority (as the rule note specifies) instead of depending on dashboard row order. (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **Dead message handlers removed (E4)**: deleted the `openTriageLensOptions` service-worker case (no sender) and the `toggleSidebar` SW→tab round-trip plus its no-op listener in `sentinel.js` (suite mode has no floating sidebar to toggle). (`service-worker.js`, `content-scripts/sentinel.js`)
+- **Triage-lens options fallback path (D1)**: the `openOptionsPage`-unavailable fallback opened `getURL('options.html')`; the file is at `options/options.html`. (`content-scripts/triage-lens/content.js`)
+- **Dead script load removed from pop-out (B5)**: `pop-out.html` loaded `shared/request-monitor.js` but the pop-out never uses `RequestMonitor`. (`pop-out/pop-out.html`)
+- **Submissions date-picker race (B6)**: date-change callbacks are now registered synchronously in a map keyed by input id instead of via `setTimeout(0)`, so a change fired immediately after render can't be dropped. (`side-panel/modules/submissions/submissions.js`)
+- **SubRag strip diagnostics (E5)**: the submissions-RAG strip now fetches via `ApiDiag.fetch`, so its errors/latency appear in the Debug panel like the other strips. (`side-panel/panel.js`)
+- **Docs**: documented that `visualiser`/`about` are intentionally panel-only tabs (not mirrored in the pop-out) and clarified the pop-out message-relay (B4). (`CLAUDE.md`, `pop-out/pop-out.js`)
+
 ## [v3.21.2] — 2026-06-01
 ### Fixed (robustness / lifecycle — from the codebase audit)
 

@@ -1848,7 +1848,7 @@
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.openOptionsPage) {
           chrome.runtime.openOptionsPage();
         } else if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-          window.open(chrome.runtime.getURL('options.html'), '_blank');
+          window.open(chrome.runtime.getURL('options/options.html'), '_blank');
         }
       } catch (e) { console.warn('[TL] settings open failed', e); }
     });

@@ -463,7 +463,7 @@
       "requiresRegister": "CHD",
       "check": {
         "kind": "observation-threshold",
-        "observation": ["non-hdl", "non hdl", "ldl", "ldl cholesterol"],
+        "observation": ["ldl", "ldl cholesterol", "non-hdl", "non hdl"],
         "operator": "<=",
         "threshold": 2.6,
         "unit": "mmol/L",

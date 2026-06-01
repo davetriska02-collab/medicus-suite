@@ -33,15 +33,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.action) return;
 
   switch (msg.action) {
-    // Sentinel: toggle sidebar on the active tab
-    case 'toggleSidebar':
-      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        const tab = tabs[0];
-        if (!tab?.id) return;
-        chrome.tabs.sendMessage(tab.id, { action: 'toggleSidebar' }).catch(() => {});
-      });
-      break;
-
     // Sentinel: open options page
     case 'openOptionsPage':
       chrome.runtime.openOptionsPage();
@@ -51,11 +42,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'pusher:scheduling:appointments-updated':
       broadcastToSidePanel({ type: 'slots:refresh' });
       broadcastToSidePanel({ type: 'waiting:refresh' });
-      break;
-
-    // Triage Lens: open its options (routes to unified options page)
-    case 'openTriageLensOptions':
-      chrome.runtime.openOptionsPage();
       break;
 
     default:

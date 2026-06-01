@@ -121,5 +121,31 @@ check(hrtChips([{ name: 'Tibolone 2.5mg tablets' }]).length === 1,
 check(hrtChips([{ name: 'Oestrogel pump', }, { name: 'Mirena 52mg IUS' }]).length === 1,
   'oestrogen + Mirena raises a single HRT chip (no duplicate)');
 
+// ── F9: same-date observation tiebreak prefers earlier-listed term (LDL) ──────
+console.log('\n--- F9: LDL takes priority over non-HDL on the same date ---');
+const cholRule = {
+  type: 'qof-indicator', enabled: true, indicatorCode: 'CHOLTEST',
+  check: { kind: 'observation-threshold', observation: ['ldl', 'ldl cholesterol', 'non-hdl', 'non hdl'],
+           operator: '<=', threshold: 2.6, unit: 'mmol/L', withinDays: 365 },
+};
+const cholChip = (obs) => engine.evaluateQofIndicatorRule(cholRule,
+  { medications: [], observations: obs, problems: [], patientContext: {}, _registerLookup: {} }, NOW)[0];
+{
+  // LDL 1.8 (meets) + non-HDL 3.1 (fails) on the SAME date → LDL must win → achieved.
+  const c = cholChip([
+    { name: 'Non-HDL cholesterol', value: '3.1', date: '2026-05-01' },
+    { name: 'LDL cholesterol', value: '1.8', date: '2026-05-01' },
+  ]);
+  check(c && c.status === 'achieved', 'same-date LDL preferred over non-HDL (achieved, not not_met)');
+}
+{
+  // A more recent non-HDL still wins by date (tiebreak only applies on equal dates).
+  const c = cholChip([
+    { name: 'LDL cholesterol', value: '1.8', date: '2026-01-01' },
+    { name: 'Non-HDL cholesterol', value: '3.1', date: '2026-05-01' },
+  ]);
+  check(c && c.status === 'not_met', 'more recent non-HDL still wins by date (date beats term priority)');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

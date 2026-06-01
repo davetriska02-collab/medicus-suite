@@ -94,7 +94,21 @@
       return false;
     });
     if (matches.length === 0) return null;
-    matches.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    // Priority = index of the first match term the observation name contains.
+    // Used only as a tiebreak when two observations share the same (latest) date,
+    // so a rule can express precedence by ordering its `match`/`observation`
+    // terms — e.g. CHOL004 lists LDL before non-HDL so LDL wins on the same date.
+    const matchPriority = (obs) => {
+      if (!obs.name || !Array.isArray(testSpec.match)) return 999;
+      const obsLower = String(obs.name).toLowerCase();
+      const idx = testSpec.match.findIndex(m => obsLower.includes(String(m).toLowerCase()));
+      return idx < 0 ? 999 : idx;
+    };
+    matches.sort((a, b) => {
+      const byDate = (b.date || '').localeCompare(a.date || '');
+      if (byDate !== 0) return byDate;
+      return matchPriority(a) - matchPriority(b);
+    });
     return matches[0];
   }
 

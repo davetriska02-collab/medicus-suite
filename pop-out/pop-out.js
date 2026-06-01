@@ -105,6 +105,10 @@ async function switchModule(name) {
 // ── Service worker messages ───────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(msg => {
+  // slots needs the relay because the slots module listens for a DOM CustomEvent
+  // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
+  // own chrome.runtime.onMessage listener in init(), so they receive
+  // waiting:refresh / sentinel:snapshot-updated directly in the pop-out too.
   if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }

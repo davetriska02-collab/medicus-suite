@@ -56,14 +56,6 @@
   // INIT
   // ============================================================
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg?.action === 'toggleSidebar') {
-      // Suite mode: UI now lives in the side panel — toggle is a no-op here.
-      return false;
-    }
-    return false;
-  });
-
   function loadSettings(cb) {
     chrome.storage.local.get(['sentinel.config'], (res) => {
       const stored = res["sentinel.config"] || {};
