@@ -1,199 +1,213 @@
-# Weekly evidence-review prompt
+# Weekly clinical-evidence review prompt
 
 Paste this body into a scheduled trigger in Claude Code on the web. Recommended
-cadence: **weekly** (e.g. Sunday 03:00, after the bug-bash slot). This routine
-**proposes** evidence-backed changes to the suite's clinical rules; it **never**
-edits the live rules on `main`. Every proposed change is independently verified
-by a separate agent, Opus synthesises a build plan, and **you approve** before
-anything is applied.
+cadence: weekly (e.g. Sunday 03:00 in the user's local timezone), after the
+safety-case slot so the rule files are stable when this runs.
 
-> **Read this first.** The rule files are *clinical decision-support content*,
-> not marketing copy. A wrong interval or a dropped monitoring test is a patient
-> -safety hazard. This routine is **conservative and additive in its proposals**:
-> it surfaces discrepancies between the shipped rules and current best evidence,
-> has each one *independently re-checked*, and leaves the live rules untouched
-> until you sign off. When evidence is ambiguous or a verifier disagrees, the
-> change is **dropped to "needs human review", never silently applied**.
+> **Read this first.** This routine **searches for the current best evidence**
+> behind every clinical rule the suite ships (QOF, drug-monitoring, PINCER /
+> prescribing-safety, and the Triage Lens "extended suite") and **proposes**
+> changes where the rule has drifted from the evidence. It is a *proposal*
+> pipeline, not an apply pipeline. It **never edits the live `rules/*.json` (or
+> `defaults.json`) on `main`.** Every proposed change must be **independently
+> re-verified by a separate agent** before it is allowed into the plan, and the
+> final plan + gated per-rule patches are committed to a review branch for the
+> user to approve. Nothing reaches `main` without an explicit human merge.
+>
+> **Network requirement.** This routine needs outbound web access to the
+> authoritative sources below. If the environment's network policy blocks them,
+> the run must say so plainly and stop — it must **not** fabricate evidence or
+> propose changes it could not source. A run that cannot reach the sources is a
+> no-op, not a guess.
 
-## Network prerequisite
+---
 
-This routine needs **outbound web access** to NICE, BNF, NHS England / PCD, the
-PINCER spec, SIGN and MHRA. If the environment's network policy blocks these,
-the run will produce a thin report — note that and stop rather than guessing
-from memory. (See the environment's network-policy docs.)
+## What this covers — the rule inventory (walk all of it; miss nothing)
 
-## The rule surface this routine reviews
+The routine reviews **every** rule in these files. Treat this list as the
+authoritative scope; if a new rule file appears, add it here on the same run and
+flag it in the report.
 
-Walk **every** rule in these files — do not sample. Each already carries a
-`source` / `notes` field; your job is to check that source is still current.
+| File | Rule kinds | Primary evidence source to check against |
+|---|---|---|
+| `rules/qof-rules.json` | `qof-register`, `qof-indicator` | QOF business rules / indicator spec, then NICE |
+| `rules/drug-rules.json` | `drug-monitoring` | BNF / BNFc monitoring, then NICE NG/CKS, BSR/specialty shared-care, MHRA DSU |
+| `rules/alert-library.json` | PINCER + prescribing-safety (`drug-combo`, `drug-problem`, etc.) | PINCER indicator spec, MHRA DSU, SIGN, NICE |
+| `defaults.json` (Triage Lens) | high-acuity pattern detectors + signposting `actions` (CKS / Pharmacy First links) | NICE CKS, NHS Pharmacy First clinical pathways |
 
-| File | What it holds | Count today | Authoritative source(s) |
-|---|---|---|---|
-| `rules/qof-rules.json` | QOF registers + indicators (`type: qof-register` / `qof-indicator`); has `specVersion` (e.g. `QOF 2026/27`) | ~48 entries | **NHS England QOF business rules / indicator spec** for the stated year, NICE indicator menu (NM/IND IDs) |
-| `rules/drug-rules.json` | Drug-monitoring rules (`type: drug-monitoring`): tests + `intervalDays` + `dueSoonDays` per drug/class | ~19 rules | **BNF / BNFc** monitoring requirements, **NICE NG/CKS**, BSR/specialty shared-care, **MHRA Drug Safety Update** |
-| `rules/alert-library.json` | PINCER + prescribing-safety alerts (`drug-combo`, age/problem logic) | ~5 (`pincer-*`) | **PINCER indicator spec** (BMJ 2012 doi:10.1136/bmj.e6501 + updates), **SIGN**, **MHRA** |
-| `defaults.json` (+ `content-scripts/triage-lens/defaults.json`) — the **extended suite** | Triage Lens detection rules: `actions[]` link to **NICE CKS** topics and **NHS Pharmacy First** pathways | ~24 rules | **NICE CKS**, **NHS Pharmacy First** clinical pathways |
+Each rule already carries a `source` (and the files carry `lastUpdated` /
+`specVersion`). Those `source` strings are your **starting hypothesis**, not
+ground truth — the whole point of this routine is to check whether the cited
+source still says what the rule encodes.
 
-If new rule files or rule types have been added since this prompt was written,
-**discover them** (`grep -rl '"type"' rules/`, check `engine/rules-engine.js`
-for the rule-type registry) and review them too. Report any you found that this
-table does not list.
+### Authoritative sources, in ranked order
+
+When two sources disagree, prefer the one higher in this list **for the rule
+kind it governs** (the table above says which governs which):
+
+1. **MHRA Drug Safety Updates** — overrides everything for a safety signal
+   (new monitoring requirement, contraindication, withdrawal). A live MHRA alert
+   is always high priority regardless of what the other sources say.
+2. **NICE** — NG guidelines, CKS (Clinical Knowledge Summaries), Quality
+   Standards.
+3. **QOF business rules** — NHS England / PCD QOF indicator specification and
+   business rules (governs `rules/qof-rules.json` register/indicator logic and
+   windows).
+4. **BNF / BNFc** — monitoring requirements and dosing (governs
+   `rules/drug-rules.json` test panels and intervals).
+5. **PINCER indicator specification** and **SIGN** guidelines (governs
+   `rules/alert-library.json`).
+
+Use the suite's own `engine/rules-engine.js` to understand what each rule field
+actually *does* before proposing a change to it — a proposal that misreads the
+field semantics is worse than no proposal.
 
 ---
 
 ## Prompt to use
 
-You are running the **weekly clinical evidence review** for the Medicus Suite
-Chrome extension. You are acting as a careful Clinical Decision-Support analyst:
-precise, conservative, and evidence-led. The user is **asleep** — this run
-produces a **written report plus gated, ready-to-apply patch files**. It does
-**not** modify the live rules and does **not** open a PR. The user reviews and
-approves each patch in the morning.
+You are running the weekly clinical-evidence review for the Medicus Suite
+clinical rule sets. You are acting as a careful clinical-informatics analyst:
+precise, conservative, and unwilling to propose a change you cannot source.
+The user is asleep. This run produces a **review branch with a report and gated
+patches** — it does **not** modify `main` and does **not** open a PR.
 
 ### Hard rules (non-negotiable)
 
-- **Never edit `rules/*.json`, `defaults.json`, or any shipped rule file in
-  place.** Proposed changes live only as patch files under the dated review
-  folder until the user applies them.
-- **Never push to `main`.** Work on the session's dev branch only.
-- **Never apply a change your verifier did not VERIFY.** A proposal that is
-  REJECTED or UNCERTAIN goes into the report under "Needs human review" with the
-  disagreement spelled out — it does **not** become a patch.
-- **Never weaken a safety control to chase a citation.** Lengthening a
-  monitoring interval, dropping a test, narrowing a register, or downgrading an
-  alert severity requires *two* independent authoritative sources and an
-  explicit, named justification — and even then it is proposed, never applied.
-- **Treat MHRA Drug Safety Updates as the highest-priority signal.** A new MHRA
-  contraindication or monitoring requirement is flagged at the top of the report
-  regardless of how small the rule change looks.
-- **Preserve provenance.** Every proposed change must name its source (title,
-  publisher, year, URL) and the *primary* evidence — not a blog or summary.
-- **This is a clinician memory aid, not a QOF claim engine or a medical device
-  output.** Do not assert it is. Keep the existing hedged framing in `notes`.
+- **Never edit `rules/*.json` or `defaults.json` on `main`.** All output goes to
+  a dated review branch and the `docs/evidence-reviews/` tree only.
+- **Never let an unverified change into the plan.** Every proposed rule change
+  must pass an independent verifier agent (step 4). `REJECTED` and `UNCERTAIN`
+  changes are reported but are **not** turned into patches.
+- **Never fabricate or paraphrase a source from memory.** Every proposed change
+  cites a URL you actually fetched this run, with the quoted sentence(s) that
+  justify it. No fetch, no proposal.
+- **Never widen a clinical-safety net on your own authority.** Loosening a rule
+  (longer monitoring interval, narrower register, removing an alert) requires a
+  *stronger* evidence bar than tightening one, and must be called out
+  explicitly in the report as a loosening with the source that permits it.
+- **Never open a PR and never push to `main`.** The user approves by reviewing
+  the branch and applying patches themselves.
+- **This is a clinician memory aid, not a QOF claim engine nor a medical
+  device.** Keep that framing; do not propose changes that imply otherwise.
 
-### Step 1 — Set up the run
+### Steps
 
-1. Read `manifest.json` → `version` (call it `VER`). Today → `YYYY-MM-DD`.
-2. Confirm you are on the dev branch (not `main`):
-   `git rev-parse --abbrev-ref HEAD`.
-3. Create the dated review workspace:
-   - `docs/evidence-reviews/<YYYY-MM-DD>/report.md` — the human-readable review
-   - `docs/evidence-reviews/<YYYY-MM-DD>/patches/` — one file per VERIFIED change
-4. Read the full rule surface (the table above). Build an in-memory inventory of
-   every rule with its `id`, current `source`/`specVersion`, and the specific
-   clinical claim it encodes (e.g. "methotrexate maintenance FBC every 84 days").
+1. **Set up the run.**
+   - Read `manifest.json` → `version` (call it `VER`). Today → `YYYY-MM-DD`.
+   - Create/checkout review branch `evidence-review/YYYY-MM-DD` from latest
+     `origin/main` (`git fetch origin main` first; branch off `origin/main`, not
+     a local `main`).
+   - Confirm web access by fetching one source index page (e.g. a NICE CKS
+     topic). If it fails, write `docs/evidence-reviews/<YYYY-MM-DD>/BLOCKED.md`
+     stating the network policy blocked the run, commit/push that one file to
+     the review branch, and stop. Do not proceed offline.
 
-### Step 2 — Fan out the evidence search (PROPOSER agents)
+2. **Build the working inventory.** Parse the four rule files and produce a flat
+   list of every reviewable unit with its `id`, kind, the fields that encode
+   clinical content (e.g. `tests[].intervalDays`, register `problemMatch`,
+   indicator windows, `mustNotBePresent`, `ageRange`), and its current `source`
+   string. Read `engine/rules-engine.js` enough to know what each field means.
+   Note in the report the total count reviewed per file (so a dropped rule is
+   visible).
 
-Launch parallel **sonnet** subagents, each scoped to one rule family so they do
-not overlap (suggested: QOF registers, QOF indicators, DMARD monitoring, other
-drug monitoring, PINCER/prescribing-safety, Triage Lens CKS/Pharmacy First).
-Each proposer agent must:
+3. **Propose (fan out).** For each rule, search the ranked sources that govern
+   its kind and decide if the evidence still matches the rule. Launch sonnet
+   subagents in parallel (suggest ≤6 at a time, sharded by rule file / drug
+   class so they don't overlap). Each proposer subagent must, per rule it owns:
+   - Fetch the governing source(s) and locate the specific monitoring interval /
+     register definition / indicator window / contraindication.
+   - Output **either** `NO CHANGE` (with the URL + quote confirming the rule is
+     still correct) **or** a `PROPOSED CHANGE` containing: the rule `id` and
+     file, the exact field + current value + proposed value, the source URL(s)
+     fetched this run, the **quoted** sentence(s) that justify it, whether the
+     change is a *tightening* or *loosening* of a safety net, and a confidence.
+   - Real, sourced changes only. No style nits, no "could be clearer" rewording
+     of `notes`, no speculative changes. Under ~800 words per subagent.
 
-- For each rule in its scope, search the **authoritative source(s)** named for
-  that file (rank them in the order given — primary spec first, never a
-  secondary summary).
-- Compare the *current* guidance to what the rule encodes. Output, per rule, one
-  of: `OK` (matches current evidence), `STALE` (source year/spec is behind),
-  `DISCREPANCY` (a value/term/logic no longer matches), or `NEW-SIGNAL` (e.g. a
-  fresh MHRA contraindication not yet reflected).
-- For each non-`OK` rule, draft a **precise proposed change**: the exact field,
-  the old value, the proposed new value, the source (title/publisher/year/URL),
-  and a one-paragraph clinical justification. Quote the primary source.
-- **Real, sourced discrepancies only.** No "could be tightened" opinions, no
-  reformatting, no SNOMED guesses. Under ~1200 words per agent. file + rule `id`
-  + field + old→new + citation per finding.
+4. **Verify (independent agent per proposed change — MANDATORY).** For **each**
+   `PROPOSED CHANGE` from step 3, launch a **fresh** subagent that has **not**
+   seen the proposer's reasoning. Give it only: the rule's current value, the
+   field, and the proposed new value — and ask it to **independently** find,
+   from the authoritative sources, what the correct value should be, and to
+   return `VERIFIED` / `REJECTED` / `UNCERTAIN` with **its own** freshly-fetched
+   citation and quote. This is adversarial confirmation: the verifier must reach
+   the proposed value *on its own evidence*, not rubber-stamp the proposer.
+   - `VERIFIED` → eligible for the plan.
+   - `REJECTED` (verifier's evidence contradicts the proposal) → excluded from
+     the plan; recorded in the report with both sides.
+   - `UNCERTAIN` (verifier couldn't source it either way) → excluded from the
+     plan; flagged for human clinical review.
+   - A proposal and its verifier **must cite different fetches** (independent
+     confirmation). If they only agree because they read the same cached text,
+     mark it `UNCERTAIN`.
 
-### Step 3 — Independent verification (VERIFIER agents — the gate)
+5. **Synthesise the plan (this is the Opus step — do it yourself, carefully).**
+   From the `VERIFIED` changes only, write the dated review report and the
+   implementation plan. Group changes by file and by risk (safety-tightening
+   first, then neutral corrections, then loosenings last and most scrutinised).
+   For each verified change produce a **gated patch** as a self-contained
+   markdown file under
+   `docs/evidence-reviews/<YYYY-MM-DD>/patches/<rule-id>--<field>.md`, each
+   containing: the target file + rule `id` + field, a **before/after** snippet
+   of the exact value, the risk class (tighten/loosen), and both the proposer
+   and verifier citations (URL + quote). One file per verified change, so the
+   user can apply/reject each individually. Patches are *artifacts for human
+   approval, applied by hand* — never applied by this run.
 
-For **every** proposed change from step 2, spawn a **fresh, separate** subagent
-as an adversarial verifier. Critically:
+6. **Write the report** to `docs/evidence-reviews/<YYYY-MM-DD>/report.md`
+   using the template in `docs/evidence-reviews/README.md`. It must contain:
+   - Run header: `VER`, date, rule counts reviewed per file, sources reachable.
+   - **Verified proposed changes** table (rule id, file, field, current →
+     proposed, tighten/loosen, proposer source, verifier source, patch
+     filename).
+   - **Rejected / uncertain** section (so a future run doesn't re-propose blindly
+     and so the clinician sees the disagreements).
+   - **MHRA / safety-signal** section at the top if any safety alert was found —
+     these jump the queue.
+   - **No-change confirmations** as a compact list (id + source URL) so the user
+     can see the rule was actually checked, not skipped.
+   - A one-line **"Approve by"** instruction pointing at the patches directory.
 
-- The verifier is given **only** the rule `id`, the field, and the *proposed new
-  value* — **not** the proposer's reasoning or citation. It must independently
-  find the current authoritative guidance and decide whether the proposed value
-  is correct.
-- The verifier returns exactly one verdict with its **own** primary citation:
-  - `VERIFIED` — independently confirms the proposed value against an
-    authoritative primary source (and, for any safety-weakening change, finds
-    the *second* required source).
-  - `REJECTED` — the proposed value is wrong or unsupported; states the correct
-    value if known.
-  - `UNCERTAIN` — evidence is ambiguous, conflicting, or behind a paywall it
-    could not confirm.
-- A proposal is promoted to a patch **only** if the verifier returns `VERIFIED`
-  **and** its independently-found value matches the proposer's. Any mismatch
-  between proposer and verifier → treat as `UNCERTAIN` and route to "Needs human
-  review".
+7. **Update the index.** Prepend a row to the table in
+   `docs/evidence-reviews/README.md` linking the new report.
 
-Do not let the same agent both propose and verify a change.
+8. **Commit and push to the review branch (never `main`).**
+   - Stage only `docs/evidence-reviews/**`. Do **not** stage `rules/**` or
+     `defaults.json` — assert this before committing:
+     ```
+     git diff --cached --name-only | grep -E '^(rules/|defaults\.json)' \
+       && { echo "ABORT: rule files staged — this routine must not change them"; exit 1; } \
+       || echo "OK: only review docs staged"
+     ```
+   - Commit `docs: weekly evidence review YYYY-MM-DD (vVER)` and
+     `git push -u origin evidence-review/YYYY-MM-DD`. On network failure, retry
+     up to 4× with exponential backoff (2s, 4s, 8s, 16s).
+   - Do **not** open a PR.
 
-### Step 4 — Opus synthesis (build plan + gated patches)
+9. **No-op guard.** If every rule came back `NO CHANGE` and there were no
+   safety signals, still write the report (it is the audit trail that the review
+   ran) but title it "no changes proposed" and skip the patches directory.
 
-You (Opus) synthesise the verified set into an implementation plan:
-
-1. **Group** verified changes by file and by risk class (mechanical
-   source/date refresh < value change < safety-weakening change).
-2. For each VERIFIED change, write a **patch file** to
-   `docs/evidence-reviews/<date>/patches/<rule-id>--<field>.md` containing:
-   - The target file and rule `id`.
-   - A fenced **before / after** JSON snippet of just the changed fields (a
-     minimal, apply-by-hand diff — do **not** pre-edit the rule file).
-   - Source (title, publisher, year, URL) + the verifier's independent citation.
-   - Risk class and, for any safety-weakening change, the two-source
-     justification.
-   - A one-line `apply:` instruction naming the exact edit.
-3. Order patches by clinical priority: MHRA `NEW-SIGNAL` first, then safety
-   -tightening, then value corrections, then `STALE` source/spec refreshes.
-4. Flag any change that needs a **rules-engine code change** (e.g. a new
-   `type`, multi-observation logic) separately under "Engine work required" —
-   these are not simple JSON patches.
-
-### Step 5 — Write the report
-
-`docs/evidence-reviews/<date>/report.md` (Markdown), with:
-
-- **Header**: date, `VER`, sources consulted (with the spec/guideline versions
-  you actually read), rule counts reviewed per file.
-- **🔴 Priority signals** (MHRA / new contraindications) — top of the report.
-- **Proposed & verified changes** — a table: file · rule `id` · field · old →
-  new · source · verifier verdict · patch filename. Link each to its patch.
-- **Needs human review** — proposals that were REJECTED/UNCERTAIN or where
-  proposer and verifier disagreed, with both positions stated.
-- **Confirmed current** — a short list of rules checked and found `OK` (so the
-  review is auditable and you can see coverage), grouped by file.
-- **Coverage & gaps** — any rule family not fully checked (e.g. paywalled BNF
-  monograph), any new rule file discovered, any source the network blocked.
-- **Footer**: "Proposals only — no live rule was modified. Apply via the patch
-  files after clinical review. Not for QOF claim purposes."
-
-Append a one-line entry to `docs/evidence-reviews/README.md`'s index table
-(date · #verified · #needs-review · priority-signal y/n · link to the report).
-
-### Step 6 — Commit to the dev branch (no PR, no `main`)
-
-- Stage only `docs/evidence-reviews/**`. Commit:
-  `docs(evidence): weekly evidence review <YYYY-MM-DD> (N verified, M for review)`.
-- Push to the dev branch: `git push -u origin HEAD`. On network failure, retry
-  up to 4× with exponential backoff (2s, 4s, 8s, 16s).
-- Do **not** open a PR. Do **not** bump `manifest.json` (no extension code
-  changed — only proposals were written).
-
-### Step 7 — Report back
-
-End with a short summary: how many rules reviewed, how many changes VERIFIED vs
-routed to human review, any 🔴 priority signal, the review-folder path, and the
-pushed commit. If the network blocked key sources or no discrepancies were
-found, say so plainly — a clean week is a valid, valuable result.
+10. **Report back** a short summary: counts reviewed per file, how many changes
+    were proposed vs verified vs rejected/uncertain, any MHRA/safety signal
+    found, the review branch name, and the exact path the user opens to approve.
+    If the run was network-blocked or anything was flagged for human clinical
+    review, say so first.
 
 ### What NOT to do
 
-- Do NOT edit `rules/*.json`, `defaults.json`, or any live rule file.
-- Do NOT push to `main` or open a PR.
-- Do NOT promote a proposal the verifier did not independently VERIFY.
-- Do NOT cite secondary summaries/blogs in place of the primary spec/guideline.
-- Do NOT invent SNOMED codes, interval values, or QOF indicator IDs — if you
-  cannot confirm one, route it to "Needs human review".
-- Do NOT let one agent both propose and verify the same change.
-- Do NOT bump `manifest.json`. Do NOT touch any file outside
-  `docs/evidence-reviews/`.
+- Do NOT modify `rules/*.json`, `defaults.json`, or anything outside
+  `docs/evidence-reviews/`. The live rules change only when the user applies a
+  patch.
+- Do NOT let a proposal into the plan without an independent `VERIFIED` from a
+  separate agent that cited its own fetch.
+- Do NOT propose loosening a monitoring interval, narrowing a register, or
+  removing a safety alert without explicitly flagging it as a loosening and
+  meeting the higher evidence bar.
+- Do NOT invent, paraphrase-from-memory, or cite a URL you did not fetch this
+  run.
+- Do NOT bump `manifest.json` (no extension code changes) and do NOT open a PR
+  or push to `main`.
+- Do NOT treat the rule's existing `source` string as proof — verify it against
+  the live source.
