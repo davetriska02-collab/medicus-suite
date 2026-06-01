@@ -128,6 +128,8 @@
 
     const iusMed = meds.find(m =>
       (hrtConfig.iusTerms || []).some(t => norm(m.name).includes(norm(t)))
+    ) || problems.find(p =>
+      ([...(hrtConfig.iusTerms || []), ...(hrtConfig.iusProblemTerms || [])]).some(t => norm(p.label).includes(norm(t)))
     );
 
     const progestogenMed = meds.find(m =>
@@ -136,8 +138,8 @@
 
     return {
       hasHysterectomy,
-      iusMed:          iusMed          ? iusMed.name          : null,
-      progestogenMed:  progestogenMed  ? progestogenMed.name  : null,
+      iusMed:          iusMed          ? (iusMed.name || iusMed.label) : null,
+      progestogenMed:  progestogenMed  ? progestogenMed.name           : null,
     };
   }
 

@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.13] — 2026-06-01
+### Fixed
+
+- **HRT progestogen context now recognises Mirena/IUS on the problem list**: `buildHrtContext` previously only searched the medications list for IUS coverage, so problem-list entries like "Introduction of Mirena coil" or "Replacement of intrauterine system" were ignored, causing the "No progestogen or hysterectomy recorded" warning to fire incorrectly. The engine now also checks the problems list using `iusProblemTerms` (new field in `hrtContext`) plus the existing `iusTerms`. (`engine/rules-engine.js`, `rules/drug-rules.json`)
+
+## [v3.19.12] — 2026-06-01
+### Fixed
+
+- **Prediabetes / non-diabetic hyperglycaemia no longer triggers QOF diabetes monitoring**: the `qof-reg-dm` register matched the term `"diabetic"` as a substring, which caused "non-diabetic hyperglycaemia" and similar problem-list entries to be treated as diabetes register members. Added `"non-diabetic"`, `"prediabetes"`, and `"prediabetic"` to `problemExclude` in `rules/qof-rules.json`.
+- **Oestrogen pessaries no longer flagged for overdue BP/weight**: the `hrt-systemic` drug rule's exclude list only matched `"vaginal pessary"` as a compound phrase. Prescriptions written as "estradiol 10mcg pessary" (no "vaginal" prefix) bypassed the exclusion. Added standalone `"pessary"` to the drug exclude list in `rules/drug-rules.json`.
+
 ## [v3.19.11] — 2026-05-31
 ### Removed
 

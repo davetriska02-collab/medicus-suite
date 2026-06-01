@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-05-12",
+  "lastUpdated": "2026-06-01",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - May 2026 review",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at May 2026. Includes 13 rules from previous version plus 6 additions (leflunomide, hydroxychloroquine, SGLT2 inhibitors, carbimazole/propylthiouracil, mirabegron, GLP-1 receptor agonists). Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
@@ -340,7 +340,7 @@
       "drugClass": "HRT",
       "drug": {
         "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel"]
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
       },
       "phase": "maintenance",
       "tests": [
@@ -348,11 +348,12 @@
         { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
-      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have different monitoring (no systemic effects). LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) is included as it provides the progestogen component of HRT in perimenopausal women using systemic oestrogen.",
+      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) is included as it provides the progestogen component of HRT in perimenopausal women using systemic oestrogen.",
       "sharedCare": false,
       "hrtContext": {
         "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve"],
         "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
+        "iusProblemTerms": ["intrauterine system", "intrauterine device", "mirena coil", "insertion of mirena", "introduction of mirena", "replacement of intrauterine", "fitting of intrauterine", "iud fitted", "ius fitted", "coil fitted", "coil inserted"],
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
       }
