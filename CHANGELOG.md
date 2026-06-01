@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.14] — 2026-06-01
+### Fixed
+
+- **QOF chips no longer wiped when searching the patient journal**: in suite mode the side-panel snapshot is published by the `bootDataOnly` nav watcher in `content-scripts/sentinel.js`, which invalidated the snapshot on *every* SPA URL change. A patient-journal search (and care-record tab switches / filters) updates the URL while staying on the same patient, so the watcher kept calling `invalidateSnapshot()` — blanking the panel to "Loading…" then re-evaluating — making the QOF rules "flash up briefly then get overwritten" on each keystroke. The watcher now resolves the patient UUID from the new URL (`resolveUrlPatientUuid`, mirroring `detectMedicusContext`) and, when it matches the patient last evaluated (`_lastPatientUuid`), leaves the existing chips untouched. Genuine patient changes (different or unresolvable UUID) still invalidate immediately, preserving the wrong-patient safety guard. (`content-scripts/sentinel.js`)
+
 ## [v3.19.13] — 2026-06-01
 ### Fixed
 

@@ -903,13 +903,27 @@
         // Re-evaluate on URL changes inside the SPA. Single observer per page;
         // the idempotency guard above prevents stacking on re-injection.
         let lastUrl = location.href;
+        let reevalTimer = null;
         const obs = new MutationObserver(() => {
           if (location.href !== lastUrl) {
             lastUrl = location.href;
-            // Invalidate immediately on navigation so the side panel can't show
-            // the previous patient's chips during the debounce/fetch window.
+            // A SPA URL change is EITHER a genuine patient change OR same-patient
+            // sub-navigation (journal search, care-record tab switch, a filter).
+            // Only a genuine patient change should blank the panel. Wiping valid
+            // chips on every journal-search URL update is what made the QOF rules
+            // "flash up then get overwritten": invalidate → "Loading…" → re-eval →
+            // chips → next keystroke → invalidate again.
+            const urlPatient = resolveUrlPatientUuid();
+            if (urlPatient && _lastPatientUuid && urlPatient === _lastPatientUuid) {
+              // Same patient still on screen — keep the existing chips untouched.
+              return;
+            }
+            // Genuine navigation (different patient, or patient not resolvable from
+            // the new URL): invalidate immediately so the side panel can never show
+            // the previous patient's chips during the fetch window, then re-evaluate.
             invalidateSnapshot();
-            setTimeout(async () => {
+            if (reevalTimer) clearTimeout(reevalTimer);
+            reevalTimer = setTimeout(async () => {
               try { evaluateAndPublish(await loadRules()); } catch (e) { invalidateSnapshot(); }
             }, 800);
           }
@@ -955,6 +969,22 @@
   // Health of the in-flight evaluation, computed in evaluateAndPublish and
   // stamped onto the snapshot by the patched evaluatePatient below.
   let _pendingHealth = { degraded: false };
+  // UUID of the patient last successfully evaluated. Persists across snapshot
+  // invalidation (which clears patientContext) so the nav watcher can tell a
+  // same-patient sub-navigation (journal search, tab switch) apart from a real
+  // patient change without blanking valid chips.
+  let _lastPatientUuid = null;
+
+  // Cheap, synchronous "which patient is this URL about?" — used only to decide
+  // whether a SPA URL change is a real patient change or same-patient
+  // sub-navigation. Mirrors the URL-path resolution in detectMedicusContext and
+  // returns null for encounter/task URLs that need async resolution, in which
+  // case we conservatively treat the change as a navigation.
+  function resolveUrlPatientUuid() {
+    try {
+      return window.SentinelApiClient?.detectMedicusContext(location.href)?.patientUuid || null;
+    } catch (_) { return null; }
+  }
 
   // Notify any open side panel that the snapshot changed.
   function notifySnapshotUpdated() {
@@ -979,9 +1009,13 @@
   if (_origEvaluate) {
     window.SentinelRules.evaluatePatient = function(meds, obs, rules, opts) {
       const chips = _origEvaluate.call(this, meds, obs, rules, opts);
+      const pc = (opts && opts.patientContext) || null;
+      // Remember the patient we just evaluated so the nav watcher can recognise
+      // same-patient sub-navigation and avoid blanking these chips.
+      if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
       _lastSnapshot = {
         chips,
-        patientContext: opts && opts.patientContext || null,
+        patientContext: pc,
         evaluatedAt: new Date().toISOString(),
         degraded: !!_pendingHealth.degraded,
         reason: _pendingHealth.reason || null,
