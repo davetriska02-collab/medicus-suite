@@ -144,15 +144,34 @@
   }
 
   // === REGISTER MEMBERSHIP ===
+  // Register-term matcher. For plain alphanumeric/space terms we use a
+  // word-boundary match so a short code like "tia" matches "TIA", "post TIA" or
+  // "TIA 2024" but NOT a substring inside another word (e.g. "iniTIAte"). This
+  // replaces the fragile space-padding hack (" tia ") that missed abbreviations
+  // without surrounding spaces. Terms containing punctuation/operators
+  // (e.g. "lvef <40", "type-2") fall back to substring matching, where \b is
+  // unreliable.
+  function registerTermInLabel(label, term) {
+    const t = String(term || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/^[a-z0-9 ]+$/.test(t)) {
+      const rx = new RegExp('\\b' + t.replace(/\s+/g, '\\s+') + '\\b');
+      return rx.test(label);
+    }
+    return label.includes(t);
+  }
+
   function patientOnRegister(problems, registerRule) {
     if (!Array.isArray(problems) || !registerRule.problemMatch) return null;
     const excluded = registerRule.problemExclude || [];
     for (const p of problems) {
       const label = String(p.label || '').toLowerCase();
-      // Exclusions
+      // Exclusions — kept as broad substring matching (intentionally inclusive;
+      // an exclude term like "non-diabetic"/"pre-diabetic" must catch compound
+      // labels such as "pre-diabetic retinopathy").
       if (excluded.some(e => label.includes(String(e).toLowerCase()))) continue;
-      // Matches
-      if (registerRule.problemMatch.some(m => label.includes(String(m).toLowerCase()))) {
+      // Matches — word-boundary aware (see registerTermInLabel).
+      if (registerRule.problemMatch.some(m => registerTermInLabel(label, m))) {
         return { matched: true, problem: p };
       }
     }
@@ -362,7 +381,20 @@
     if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
     if (!passesSexFilter(rule.sex, data.patientContext)) return [];
     if (!passesProblemFilters(rule, data.problems)) return [];
-    const matchedMeds = (data.medications || []).filter(m => drugMatchesRule(m.name, rule));
+    let matchedMeds = (data.medications || []).filter(m => drugMatchesRule(m.name, rule));
+    // HRT gating: an HRT review only applies to systemic oestrogen / HRT agents
+    // (estradiol, conjugated oestrogens, tibolone, etc.). A progestogen or
+    // LNG-IUS on its own is contraception, not HRT, and must NOT raise an HRT
+    // review chip (false BP+weight alert for, e.g., a 25y-old with a Mirena or a
+    // POP). When a systemic oestrogen IS co-prescribed it is the oestrogen chip
+    // that carries the progestogen-coverage context (built below), so emitting
+    // chips only for the oestrogen component also avoids duplicate HRT chips.
+    if (rule.hrtContext) {
+      const oestrogenTerms = rule.hrtContext.oestrogenTerms || [];
+      const isOestrogen = name => oestrogenTerms.some(
+        t => normaliseDrugString(name).includes(normaliseDrugString(t)));
+      matchedMeds = matchedMeds.filter(m => isOestrogen(m.name));
+    }
     return matchedMeds.map(med => {
       const testEvaluations = (rule.tests || []).map(test => {
         const obs = findLatestObservation(data.observations, test);
@@ -411,11 +443,10 @@
         evidence: buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data)
       };
 
-      // HRT-specific: annotate oestrogen chips with progestogen coverage context.
-      // Only fires when the matched medication is an oestrogen (not the IUS or
-      // oral progestogen, which have their own chip when prescribed standalone).
-      if (rule.hrtContext && (rule.hrtContext.oestrogenTerms || []).some(
-          t => normaliseDrugString(med.name).includes(normaliseDrugString(t)))) {
+      // HRT-specific: annotate the oestrogen chip with progestogen-coverage
+      // context (endometrial protection). matchedMeds is already filtered to
+      // oestrogen/HRT agents above, so every HRT chip here is an oestrogen chip.
+      if (rule.hrtContext) {
         chip.hrtContext = buildHrtContext(rule.hrtContext, data);
       }
 
@@ -774,21 +805,39 @@
       evidenceCtx.matchedRegisterProblem = { label: reg.problem.label, codedDate: reg.problem.codedDate || null, registerName: registerRule.registerName || registerRule.registerCode };
     }
 
-    // Step 2: age + sex constraints
-    const age = data.patientContext?.ageYears;
-    if (rule.ageRange) {
-      if (rule.ageRange.min != null && (age == null || age < rule.ageRange.min)) return [];
-      if (rule.ageRange.max != null && (age == null || age > rule.ageRange.max)) return [];
-    }
+    // Step 2: age + sex constraints. Age is FAIL-OPEN — an unknown/unextractable
+    // age must NOT silently suppress an indicator (a missing chip is a worse
+    // failure than an extra one). This mirrors passesAgeFilter used by the
+    // drug-monitoring and register evaluators; previously this block was
+    // fail-closed (returned [] when age was null), so age-gated indicators
+    // vanished whenever age couldn't be read.
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
     if (!passesSexFilter(rule.sex, data.patientContext)) return [];
 
-    // Step 3: problem-based exclusions (e.g. frailty)
-    if (rule.excludeIfProblem) {
-      const probs = data.problems || [];
-      const hit = probs.some(p => {
-        const label = String(p.label || '').toLowerCase();
-        return rule.excludeIfProblem.some(e => label.includes(String(e).toLowerCase()));
-      });
+    // Step 3: problem-based requirements & exclusions. All matching is
+    // negation-aware (problemLabelMatchesTerm) so "no frailty", "family history
+    // of stroke", "?CVD" etc. neither satisfy a requirement nor trigger an
+    // exclusion. Previously requiresProblem/requiresAnyProblem were ignored here,
+    // so frailty/CVD-stratified indicators (DM021, DM035) fired for every
+    // register member and showed the wrong target.
+    const probs = data.problems || [];
+    // requiresProblem: ALL listed problems must be present (conjunctive).
+    if (Array.isArray(rule.requiresProblem) && rule.requiresProblem.length) {
+      const allMet = rule.requiresProblem.every(req =>
+        probs.some(p => problemLabelMatchesTerm(p.label, req)));
+      if (!allMet) return [];
+    }
+    // requiresAnyProblem: AT LEAST ONE listed problem must be present (disjunctive)
+    // — e.g. the DM035 secondary-prevention cohort = any coded CVD problem.
+    if (Array.isArray(rule.requiresAnyProblem) && rule.requiresAnyProblem.length) {
+      const anyMet = rule.requiresAnyProblem.some(req =>
+        probs.some(p => problemLabelMatchesTerm(p.label, req)));
+      if (!anyMet) return [];
+    }
+    // excludeIfProblem: any negation-aware match disqualifies (e.g. frailty).
+    if (Array.isArray(rule.excludeIfProblem) && rule.excludeIfProblem.length) {
+      const hit = probs.some(p =>
+        rule.excludeIfProblem.some(e => problemLabelMatchesTerm(p.label, e)));
       if (hit) return [];
     }
 

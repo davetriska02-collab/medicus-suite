@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.20.0] — 2026-06-01
+### Fixed (clinical correctness — from the multi-agent codebase audit)
+
+- **QOF indicator age filter now fails OPEN (F2)**: `evaluateQofIndicatorRule` previously returned no chip when a patient's age couldn't be extracted *and* the indicator had an `ageRange` — silently hiding age-gated indicators (HYP010/011, CD001/002, DM034/036, trend rules) whenever DOB scraping failed. It now uses the shared fail-open `passesAgeFilter` (suppress only when the patient is *positively* out of range), consistent with drug-monitoring and register evaluators. (`engine/rules-engine.js`)
+- **`requiresProblem` / `requiresAnyProblem` now honoured by QOF indicators (F3)**: the QOF indicator evaluator ignored both, so **DM021** (frailty-stratified HbA1c) and **DM035** (CVD secondary-prevention statin) fired for *every* diabetic, showing the wrong target. The engine now supports `requiresProblem` (all-of) and a new `requiresAnyProblem` (any-of), both negation-aware. **DM021** migrated from `requiresProblem` → `requiresAnyProblem` (moderate **or** severe frailty); **HF009** (disabled) likewise migrated for its HFrEF synonyms. (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **Problem matching is negation-aware (F6)**: `excludeIfProblem` used naive `.includes()`, so "no evidence of moderate frailty" wrongly excluded a patient. It now uses `problemLabelMatchesTerm`. (`engine/rules-engine.js`)
+- **STIA register matches "TIA" abbreviations (F4)**: the register used space-padded `" tia "`, missing "TIA", "post TIA", "TIA 2024", "history of TIA" → no STIA/CD001/CD002 chips. Register match terms now use word-boundary matching (`registerTermInLabel`), which matches "TIA" without false-matching "iniTIAte". (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **DM register no longer false-positives on "pre-diabetic" (F5)**: added hyphenated `"pre-diabetic"` to the DM register `problemExclude`. (`rules/qof-rules.json`)
+- **HRT review chip gated on co-prescribed oestrogen (F10)**: a standalone progestogen or LNG-IUS (Mirena, Levosert, etc.) used for **contraception** triggered a false "HRT BP+weight review" chip (e.g. a 25-year-old with a Mirena). The chip now fires only when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone…) is prescribed; a co-prescribed LNG-IUS/progestogen is reported as the progestogen-coverage component instead, and duplicate HRT chips are avoided. (`engine/rules-engine.js`, `rules/drug-rules.json`)
+- Added `test-qof-indicator-filters.js` (30 assertions) covering all of the above.
+
 ## [v3.19.15] — 2026-06-01
 ### Fixed
 
