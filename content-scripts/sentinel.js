@@ -935,19 +935,25 @@
   }
 
   function evaluateAndPublish(rules) {
+    // Tag this evaluation so a slow fetch that resolves after a newer evaluation
+    // (or after a navigation) can't publish stale chips over fresh ones — the
+    // journal-search churn fires this repeatedly.
+    const gen = ++_evalGen;
     try {
       const fetcher = window.SentinelDataFetcher;
       if (!fetcher) return;
       const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
       Promise.resolve(result).then(data => {
+        if (gen !== _evalGen) return; // superseded — drop this stale result
         if (!data || !window.SentinelRules) { invalidateSnapshot(); return; }
-        // Assess extraction health BEFORE evaluating so the patched
-        // evaluatePatient can stamp the degraded flag onto the snapshot the side
-        // panel reads. Without this the H-005 canary only guarded the in-page
-        // HUD renderer, never the side-panel UI the suite actually uses.
-        _pendingHealth = assessExtractionHealth(data);
-        // This call triggers the patched evaluatePatient below, which stores the snapshot.
-        window.SentinelRules.evaluatePatient(
+        // Assess extraction health so publishSnapshot can stamp the degraded flag
+        // onto the snapshot the side panel reads (the H-005 canary). Kept local to
+        // this call so concurrent evaluations can't cross-contaminate the flag.
+        const health = assessExtractionHealth(data);
+        // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
+        // publish them directly. We deliberately do NOT rely on a side effect of
+        // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
+        const chips = window.SentinelRules.evaluatePatient(
           data.medications || [],
           data.observations || [],
           rules,
@@ -958,17 +964,26 @@
             observationHistory: data.observationHistory || []
           }
         );
-      }).catch(() => { invalidateSnapshot(); });
-    } catch (e) { invalidateSnapshot(); }
+        if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
+        publishSnapshot(chips, data.patientContext, health);
+      }).catch(() => { if (gen === _evalGen) invalidateSnapshot(); });
+    } catch (e) { if (gen === _evalGen) invalidateSnapshot(); }
   }
 
   // ── Side panel bridge ──────────────────────────────────────────────────────
   // Stores the last evaluated chip snapshot so the suite side panel can read it
-  // without needing a fresh fetch. Updated every time chips are evaluated.
+  // without needing a fresh fetch. Written ONLY by publishSnapshot (called from
+  // evaluateAndPublish with the full merged drug+QOF ruleset). It is deliberately
+  // NOT written as a side effect of window.SentinelRules.evaluatePatient: the
+  // triage-lens HUD (content.js) calls that same global with a drug-rules-only
+  // ruleset on every record/route tick, and a shared side effect let those calls
+  // overwrite the snapshot with QOF-less chips — that was the "QOF rules flash up
+  // then vanish on journal search" bug.
   let _lastSnapshot = null;
-  // Health of the in-flight evaluation, computed in evaluateAndPublish and
-  // stamped onto the snapshot by the patched evaluatePatient below.
-  let _pendingHealth = { degraded: false };
+  // Monotonic evaluation generation. Bumped on every evaluateAndPublish and on
+  // every invalidateSnapshot so a slow/stale async fetch (e.g. mid journal-search
+  // churn) can't publish chips after a newer evaluation or a navigation.
+  let _evalGen = 0;
   // UUID of the patient last successfully evaluated. Persists across snapshot
   // invalidation (which clears patientContext) so the nav watcher can tell a
   // same-patient sub-navigation (journal search, tab switch) apart from a real
@@ -999,32 +1014,33 @@
   // patient's chips as if they belonged to the record now on screen. The panel
   // treats `unavailable` as "refreshing", never as a clinical "all clear".
   function invalidateSnapshot() {
+    // Cancel any in-flight evaluation so its (now stale) chips can't land after us.
+    _evalGen++;
     _lastSnapshot = { chips: null, patientContext: null, evaluatedAt: new Date().toISOString(), unavailable: true };
     notifySnapshotUpdated();
   }
 
-  // Patch into the evaluate-and-render flow by intercepting the storage pattern
-  // via a flag set after the first successful evaluation.
-  const _origEvaluate = window.SentinelRules && window.SentinelRules.evaluatePatient;
-  if (_origEvaluate) {
-    window.SentinelRules.evaluatePatient = function(meds, obs, rules, opts) {
-      const chips = _origEvaluate.call(this, meds, obs, rules, opts);
-      const pc = (opts && opts.patientContext) || null;
-      // Remember the patient we just evaluated so the nav watcher can recognise
-      // same-patient sub-navigation and avoid blanking these chips.
-      if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
-      _lastSnapshot = {
-        chips,
-        patientContext: pc,
-        evaluatedAt: new Date().toISOString(),
-        degraded: !!_pendingHealth.degraded,
-        reason: _pendingHealth.reason || null,
-      };
-      // Notify any open side panel that a fresh snapshot is available so it can
-      // re-render immediately on patient change instead of waiting for its poll.
-      notifySnapshotUpdated();
-      return chips;
+  // Publish a fresh snapshot for the side panel. Called only from
+  // evaluateAndPublish, which always uses the full merged drug+QOF ruleset, so
+  // the panel never sees a partial (e.g. drug-only) evaluation. We intentionally
+  // do NOT monkeypatch window.SentinelRules.evaluatePatient: that global is shared
+  // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
+  // drug-rules-only set and would otherwise clobber the QOF chips on every
+  // record/route tick (e.g. when searching the journal).
+  function publishSnapshot(chips, pc, health) {
+    // Remember the patient we just evaluated so the nav watcher can recognise
+    // same-patient sub-navigation and avoid blanking these chips.
+    if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
+    _lastSnapshot = {
+      chips,
+      patientContext: pc || null,
+      evaluatedAt: new Date().toISOString(),
+      degraded: !!(health && health.degraded),
+      reason: (health && health.reason) || null,
     };
+    // Notify any open side panel that a fresh snapshot is available so it can
+    // re-render immediately on patient change instead of waiting for its poll.
+    notifySnapshotUpdated();
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

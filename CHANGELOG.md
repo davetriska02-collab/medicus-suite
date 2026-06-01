@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.19.15] — 2026-06-01
+### Fixed
+
+- **QOF chips no longer vanish on journal search — the real cause (supersedes v3.19.14)**: the side-panel snapshot was published as a *side effect* of a global monkeypatch on `window.SentinelRules.evaluatePatient`. That engine global is shared with the triage-lens HUD (`content-scripts/triage-lens/content.js:1448`, `:2092`), which re-evaluates with a **drug-rules-only** ruleset on every care-record route tick — including journal searches. Each HUD evaluation overwrote `_lastSnapshot` with QOF-less chips, so the QOF rules flashed up (from the suite's full-ruleset evaluation) then got overwritten (by the HUD's drug-only one). The v3.19.14 `_lastPatientUuid` URL guard couldn't help because triage-lens wrote the snapshot entirely outside that observer. Fix: removed the monkeypatch and made `evaluateAndPublish` capture the chips and publish them directly via a new `publishSnapshot()`, so **only** the suite's full merged drug+QOF evaluation can write the side-panel snapshot. Also added a monotonic evaluation-generation guard (`_evalGen`) so a slow/stale fetch during journal-search churn can't publish chips over a newer evaluation. (`content-scripts/sentinel.js`, `test-snapshot-bridge.js`)
+
 ## [v3.19.14] — 2026-06-01
 ### Fixed
 
