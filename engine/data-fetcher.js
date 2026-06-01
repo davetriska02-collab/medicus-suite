@@ -108,6 +108,20 @@
     const O = global.SentinelObservations;
     const P = global.SentinelProblems;
     const patientContext = PC ? PC.extract(doc, now.toISOString()) : null;
+    // The DOM patient-context extractor doesn't emit a patient UUID. Resolve one
+    // (URL path, then a single-patient DOM banner scan) and attach it so the
+    // side-panel same-patient nav guard (_lastPatientUuid) can recognise
+    // sub-navigation on DOM-fallback views instead of invalidating + re-fetching
+    // on every URL change.
+    if (patientContext && !patientContext.patientUuid) {
+      const API = global.SentinelApiClient;
+      if (API) {
+        const uuid = (API.detectMedicusContext && API.detectMedicusContext(location.href)?.patientUuid)
+          || (API.findPatientUuidFromDom && API.findPatientUuidFromDom(doc))
+          || null;
+        if (uuid) patientContext.patientUuid = uuid;
+      }
+    }
     const medsResult = M ? M.extract(doc) : { medications: [] };
     const obsResult = O ? O.extract(doc) : { observations: [], parseFailures: [] };
     const probResult = P ? P.extract(doc) : { problems: [] };

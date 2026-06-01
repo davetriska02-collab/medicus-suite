@@ -6,6 +6,7 @@ const content    = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
 let activeModule  = null;
 let moduleCleanup = null;
+let switchSeq     = 0;
 
 // ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
 
@@ -60,7 +61,15 @@ settingsBtn?.addEventListener('click', () => {
 });
 
 async function switchModule(name) {
-  if (moduleCleanup) { try { moduleCleanup(); } catch (_) {} moduleCleanup = null; }
+  // Sequence guard (mirrors panel.js): if the user switches tabs again before an
+  // earlier init() finishes, the stale chain must not leak its timers/listeners
+  // or overwrite the newer module's cleanup. Each switch claims a sequence number
+  // and bails (cleaning up) if a newer switch has superseded it.
+  const mySeq = ++switchSeq;
+
+  const prevCleanup = moduleCleanup;
+  moduleCleanup = null;
+  if (prevCleanup) { try { prevCleanup(); } catch (_) {} }
 
   document.querySelectorAll('.nav-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.module === name)
@@ -78,8 +87,17 @@ async function switchModule(name) {
 
   try {
     const mod = await entry.js();
-    if (mod.init) moduleCleanup = await mod.init(content);
+    if (mySeq !== switchSeq) return;
+    if (mod.init) {
+      const cleanup = await mod.init(content);
+      if (mySeq !== switchSeq) {
+        if (typeof cleanup === 'function') try { cleanup(); } catch (_) {}
+        return;
+      }
+      moduleCleanup = cleanup;
+    }
   } catch (err) {
+    if (mySeq !== switchSeq) return;
     content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load: ${err.message}</div></div>`;
   }
 }
@@ -87,6 +105,10 @@ async function switchModule(name) {
 // ── Service worker messages ───────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(msg => {
+  // slots needs the relay because the slots module listens for a DOM CustomEvent
+  // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
+  // own chrome.runtime.onMessage listener in init(), so they receive
+  // waiting:refresh / sentinel:snapshot-updated directly in the pop-out too.
   if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }

@@ -764,14 +764,16 @@ async function fetchAndRenderSubRagStrip() {
     return;
   }
 
-  const { code } = await window.PracticeCode.resolve();
+  const { code, source } = await window.PracticeCode.resolve();
   if (!code) return;
 
   const today = new Date().toISOString().slice(0, 10);
   const results = await Promise.allSettled(
     SUB_RAG_TYPES.map(async tt => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
-      const r = await fetch(url, { credentials: 'include' });
+      // Route through ApiDiag so SubRag errors/latency show in the Debug panel,
+      // consistent with the WR and Request-Monitor strips.
+      const r = await window.ApiDiag.fetch({ module: 'panel-sub-rag-strip', url, code, codeSource: source });
       if (!r.ok) throw new Error(`${tt.label} HTTP ${r.status}`);
       const d = await r.json();
       return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
@@ -821,6 +823,17 @@ document.addEventListener('visibilitychange', () => {
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
   }
+});
+
+// Tear down all strip poll timers when the panel document goes away. The side
+// panel is normally permanent, but if Chrome re-creates the document (e.g. an
+// extension reload without a browser restart) the old timers would otherwise
+// keep running and a fresh set would stack on top. Only rmPollTimer was cleared
+// before (on config change); wr/subRag ran for the document's whole lifetime.
+window.addEventListener('pagehide', () => {
+  if (wrPollTimer) clearInterval(wrPollTimer);
+  if (rmPollTimer) clearInterval(rmPollTimer);
+  if (subRagPollTimer) clearInterval(subRagPollTimer);
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

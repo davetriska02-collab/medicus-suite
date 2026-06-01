@@ -13,7 +13,7 @@
       "registerCode": "DM",
       "registerName": "Diabetes",
       "problemMatch": ["type 1 diabetes", "type 2 diabetes", "diabetes mellitus", "diabetic"],
-      "problemExclude": ["pre-diabetes", "pre diabetes", "prediabetes", "prediabetic", "non-diabetic", "gestational diabetes", "no diabetes", "diabetes insipidus"],
+      "problemExclude": ["pre-diabetes", "pre diabetes", "prediabetes", "prediabetic", "pre-diabetic", "non-diabetic", "gestational diabetes", "no diabetes", "diabetes insipidus"],
       "source": "QOF 26/27 DM register (DM_COD refset approximation)"
     },
 
@@ -73,7 +73,7 @@
       "enabled": true,
       "registerCode": "STIA",
       "registerName": "Stroke / TIA",
-      "problemMatch": ["stroke", "cerebrovascular accident", "cerebral infarction", "transient ischaemic attack", "transient ischemic attack", " tia "],
+      "problemMatch": ["stroke", "cerebrovascular accident", "cerebral infarction", "transient ischaemic attack", "transient ischemic attack", "tia"],
       "problemExclude": ["heat stroke", "sun stroke", "no stroke"],
       "source": "QOF 26/27 STIA register"
     },
@@ -463,7 +463,7 @@
       "requiresRegister": "CHD",
       "check": {
         "kind": "observation-threshold",
-        "observation": ["non-hdl", "non hdl", "ldl", "ldl cholesterol"],
+        "observation": ["ldl", "ldl cholesterol", "non-hdl", "non hdl"],
         "operator": "<=",
         "threshold": 2.6,
         "unit": "mmol/L",
@@ -570,7 +570,7 @@
       "indicatorCode": "DM021",
       "indicatorName": "HbA1c <=75 mmol/mol in DM with moderate/severe frailty",
       "requiresRegister": "DM",
-      "requiresProblem": ["moderate frailty", "severe frailty"],
+      "requiresAnyProblem": ["moderate frailty", "severe frailty"],
       "check": {
         "kind": "observation-threshold",
         "observation": ["hba1c", "haemoglobin a1c"],
@@ -582,7 +582,7 @@
       "thresholds": { "lower": 52, "upper": 92 },
       "points": 10,
       "source": "QOF 26/27 DM021",
-      "notes": "Frailty-stratified replacement for DM008. Fires ONLY for patients on the DM register WITH moderate or severe frailty coded. Uses a new requiresProblem field — needs rules-engine support to inverse-of excludeIfProblem. If engine doesn't yet support requiresProblem, this rule will fire for all DM patients (over-trigger) until engine is updated."
+      "notes": "Frailty-stratified replacement for DM008. Fires ONLY for patients on the DM register WITH moderate OR severe frailty coded — expressed via requiresAnyProblem (disjunctive: any one of the listed frailty levels). The engine now honours requiresAnyProblem (negation-aware), so this no longer over-triggers for all DM patients."
     },
     {
       "id": "qof-dm034",
@@ -618,7 +618,7 @@
       "thresholds": { "lower": 50, "upper": 90 },
       "points": 8,
       "source": "QOF 26/27 DM035",
-      "notes": "Secondary prevention. Uses requiresAnyProblem (new schema field) — fires only if DM register patient has at least one CVD problem coded. Excludes haemorrhagic stroke. Until rules engine supports requiresAnyProblem the rule will fire for all DM patients."
+      "notes": "Secondary prevention. Uses requiresAnyProblem — fires only if a DM register patient has at least one CVD problem coded (negation-aware, so 'family history of stroke' does not qualify). Excludes haemorrhagic stroke. The rules engine now honours requiresAnyProblem."
     },
     {
       "id": "qof-dm036",
@@ -710,7 +710,7 @@
       "indicatorCode": "HF009",
       "indicatorName": "Four-pillar therapy in HFrEF (ACE-I/ARB/ARNI + BB + MRA + SGLT2i)",
       "requiresRegister": "HF",
-      "requiresProblem": ["heart failure with reduced ejection fraction", "hfref", "lvef <40", "reduced ejection fraction"],
+      "requiresAnyProblem": ["heart failure with reduced ejection fraction", "hfref", "lvef <40", "reduced ejection fraction"],
       "check": {
         "kind": "medication-all-of",
         "groups": [
@@ -735,7 +735,7 @@
       "thresholds": { "lower": 20, "upper": 50 },
       "points": 12,
       "source": "QOF 26/27 HF009 (NICE IND317, NG106 Sep 2025 update)",
-      "notes": "NEW 26/27 indicator. Replaces HF003 and HF006. Requires concurrent prescription from all 4 drug classes in HFrEF. DISABLED pending rules engine support for medication-all-of (AND-across-groups) check kind, and for requiresProblem to identify HFrEF subtype (the HF register doesn't distinguish reduced/preserved EF). Worth prioritising — 12 pts and clinically major change."
+      "notes": "NEW 26/27 indicator. Replaces HF003 and HF006. Requires concurrent prescription from all 4 drug classes in HFrEF. DISABLED pending rules engine support for the medication-all-of (AND-across-groups) check kind. HFrEF subtype identification now uses requiresAnyProblem (any of the listed HFrEF synonyms), which the engine honours; the medication-all-of check is still the remaining blocker. Worth prioritising — 12 pts and clinically major change."
     },
 
     {

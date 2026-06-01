@@ -9,6 +9,7 @@ const SENTINEL_KEYS = [
   'sentinel.rules',
   'sentinel.orgRules',
   'sentinel.customRules',
+  'sentinel.alertLibrary.acknowledged',
 ];
 
 // Export all Sentinel storage keys into a plain data object.
@@ -19,6 +20,7 @@ async function sentinelExport() {
     rules:       r['sentinel.rules']       ?? {},
     orgRules:    r['sentinel.orgRules']    ?? null,
     customRules: r['sentinel.customRules'] ?? [],
+    alertLibraryAcknowledged: r['sentinel.alertLibrary.acknowledged'] ?? false,
   };
 }
 
@@ -75,6 +77,13 @@ async function sentinelImport(data, { merge = false } = {}) {
     }
   }
 
+  if (data.alertLibraryAcknowledged !== undefined) {
+    if (typeof data.alertLibraryAcknowledged !== 'boolean') {
+      throw new Error('sentinel.alertLibrary.acknowledged must be a boolean.');
+    }
+    toSet['sentinel.alertLibrary.acknowledged'] = data.alertLibraryAcknowledged;
+  }
+
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
   }
@@ -116,7 +125,27 @@ function validateDrugMonitoringRule(rule, loc) {
     if (t.dueSoonDays !== undefined && (typeof t.dueSoonDays !== 'number' || t.dueSoonDays < 0)) {
       throw new Error(`Custom rule${loc} test[${ti}]: dueSoonDays must be a non-negative number.`);
     }
+    if (t.snomed !== undefined && (!Array.isArray(t.snomed) || t.snomed.some(s => typeof s !== 'string'))) {
+      throw new Error(`Custom rule${loc} test[${ti}]: snomed must be an array of strings.`);
+    }
   });
+  // Optional patient filters (the engine gates drug-monitoring rules on these).
+  if (rule.sex != null && !ALLOWED_SEX_VALUES.includes(rule.sex)) {
+    throw new Error(`Custom rule${loc}: sex must be one of: ${ALLOWED_SEX_VALUES.join(', ')}.`);
+  }
+  if (rule.ageRange) {
+    if (rule.ageRange.min != null && (typeof rule.ageRange.min !== 'number' || rule.ageRange.min < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.min must be a non-negative number.`);
+    }
+    if (rule.ageRange.max != null && (typeof rule.ageRange.max !== 'number' || rule.ageRange.max < 0)) {
+      throw new Error(`Custom rule${loc}: ageRange.max must be a non-negative number.`);
+    }
+  }
+  for (const f of ['requiresProblem', 'excludesProblem']) {
+    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some(t => typeof t !== 'string'))) {
+      throw new Error(`Custom rule${loc}: ${f} must be an array of strings.`);
+    }
+  }
 }
 
 const ALLOWED_QOF_REGISTERS = ['DM','HYP','CHD','HF','STIA','CKD','PAD','ASTHMA','COPD','AF'];
@@ -221,6 +250,18 @@ function validateQofIndicatorRule(rule, loc) {
   }
   if (rule.useQofYearFloor !== undefined && typeof rule.useQofYearFloor !== 'boolean') {
     throw new Error(`Custom rule${loc}: useQofYearFloor must be a boolean.`);
+  }
+  if (rule.sex != null && !['M', 'F', 'any'].includes(rule.sex)) {
+    throw new Error(`Custom rule${loc}: sex must be "M", "F" or "any".`);
+  }
+  for (const f of ['requiresProblem', 'requiresAnyProblem', 'excludeIfProblem']) {
+    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some(t => typeof t !== 'string'))) {
+      throw new Error(`Custom rule${loc}: ${f} must be an array of strings.`);
+    }
+  }
+  if (rule.check.kind === 'medication-present' && rule.check.medicationExclude != null &&
+      (!Array.isArray(rule.check.medicationExclude) || rule.check.medicationExclude.some(t => typeof t !== 'string'))) {
+    throw new Error(`Custom rule${loc}: check.medicationExclude must be an array of strings.`);
   }
 }
 

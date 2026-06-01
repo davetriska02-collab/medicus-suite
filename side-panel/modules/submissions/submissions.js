@@ -153,9 +153,11 @@ function setMode(mode) {
   fetchAndRender();
 }
 
+let _dpCallbacks = {};
 function renderModeControls() {
   const ctr = container?.querySelector('#modeControls');
   if (!ctr) return;
+  _dpCallbacks = {}; // reset per render; datePicker() repopulates synchronously
   if (state.mode === 'today') {
     ctr.innerHTML = datePicker('Date', state.primaryDate, v => { state.primaryDate = v; fetchAndRender(); });
   } else if (state.mode === 'range') {
@@ -190,22 +192,20 @@ function renderModeControls() {
       renderModeControls(); fetchAndRender();
     });
   }
-  // Bind date pickers
+  // Bind date pickers. Callbacks are looked up synchronously from _dpCallbacks
+  // (populated by datePicker during the innerHTML build) — no setTimeout, so a
+  // change fired immediately after render can't be dropped.
   ctr.querySelectorAll('input[type=date]').forEach(input => {
-    input.addEventListener('change', () => {
-      const cb = input._onChange;
-      if (cb) cb(input.value);
-    });
+    const cb = _dpCallbacks[input.id];
+    if (cb) input.addEventListener('change', () => cb(input.value));
   });
 }
 
 function datePicker(label, value, onChange) {
   const id = 'dp_' + Math.random().toString(36).slice(2);
-  // Attach onChange via timeout hack (innerHTML won't preserve function refs)
-  setTimeout(() => {
-    const el = container?.querySelector(`#${id}`);
-    if (el) { el._onChange = onChange; }
-  }, 0);
+  // innerHTML can't preserve function refs, so register the callback in a map
+  // keyed by id; renderModeControls binds it after the DOM is in place.
+  _dpCallbacks[id] = onChange;
   return `<div class="dp-wrap"><span class="dp-label">${label}</span><input id="${id}" type="date" value="${value}" max="${todayISO()}" /></div>`;
 }
 

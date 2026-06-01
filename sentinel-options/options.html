@@ -292,6 +292,30 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
         <button class="ghost" id="crAddTestBtn" style="margin-top:4px;">+ Add test</button>
       </div>
 
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Patient filters (optional)</span>
+        <div class="two-col">
+          <div class="field"><label for="crAgeMin">Min age</label><input type="number" id="crAgeMin" min="0" max="120" /></div>
+          <div class="field"><label for="crAgeMax">Max age</label><input type="number" id="crAgeMax" min="0" max="120" /></div>
+        </div>
+        <div class="field">
+          <label for="crSex">Sex</label>
+          <select id="crSex">
+            <option value="">Any</option>
+            <option value="F">Female only</option>
+            <option value="M">Male only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="crRequiresProblem">Requires problem — ALL must be present (one per line)</label>
+          <textarea id="crRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. rheumatoid arthritis"></textarea>
+        </div>
+        <div class="field">
+          <label for="crExcludesProblem">Exclude if problem present (one per line)</label>
+          <textarea id="crExcludesProblem" rows="2" style="height:44px;" placeholder="e.g. palliative care"></textarea>
+        </div>
+      </div>
+
       <div style="margin-bottom:6px;">
         <span class="cr-section-label">Additional information</span>
         <div class="field">
@@ -570,6 +594,26 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
           <input type="checkbox" id="ciExcludeFrailty" />
           <label for="ciExcludeFrailty">Exclude patients with moderate or severe frailty</label>
         </div>
+        <div class="field">
+          <label for="ciSex">Sex</label>
+          <select id="ciSex">
+            <option value="">Any</option>
+            <option value="F">Female only</option>
+            <option value="M">Male only</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ciRequiresProblem">Requires problem — ALL must be present (one per line)</label>
+          <textarea id="ciRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. heart failure with reduced ejection fraction"></textarea>
+        </div>
+        <div class="field">
+          <label for="ciRequiresAnyProblem">Requires ANY of these problems (one per line)</label>
+          <textarea id="ciRequiresAnyProblem" rows="2" style="height:44px;" placeholder="e.g. coronary heart disease&#10;stroke&#10;peripheral arterial disease"></textarea>
+        </div>
+        <div class="field">
+          <label for="ciExcludeProblems">Exclude if problem present (one per line)</label>
+          <textarea id="ciExcludeProblems" rows="2" style="height:44px;" placeholder="e.g. haemorrhagic stroke"></textarea>
+        </div>
       </div>
 
       <!-- Section G: Source -->
@@ -639,6 +683,14 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
         <div id="dcSetCards"></div>
         <button class="ghost" id="dcAddSetBtn" style="margin-top:4px;">+ Add drug set</button>
         <div class="form-hint" style="margin-top:6px;">Each set defines a drug group. The alert fires only when the patient has at least one drug from every set.</div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <span class="cr-section-label">Must NOT be co-prescribed (optional)</span>
+        <div class="field">
+          <label for="dcMustNotBePresent">Suppress the alert if any of these drugs is also prescribed (one per line)</label>
+          <textarea id="dcMustNotBePresent" rows="2" style="height:44px;" placeholder="e.g. omeprazole&#10;lansoprazole"></textarea>
+        </div>
       </div>
 
       <div style="margin-bottom:14px;">

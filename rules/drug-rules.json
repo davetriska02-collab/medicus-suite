@@ -348,7 +348,7 @@
         { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
-      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) is included as it provides the progestogen component of HRT in perimenopausal women using systemic oestrogen.",
+      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext.",
       "sharedCare": false,
       "hrtContext": {
         "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve"],

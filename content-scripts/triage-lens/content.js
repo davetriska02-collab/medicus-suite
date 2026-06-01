@@ -1848,7 +1848,7 @@
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.openOptionsPage) {
           chrome.runtime.openOptionsPage();
         } else if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-          window.open(chrome.runtime.getURL('options.html'), '_blank');
+          window.open(chrome.runtime.getURL('options/options.html'), '_blank');
         }
       } catch (e) { console.warn('[TL] settings open failed', e); }
     });
@@ -2412,12 +2412,17 @@
 
   // ---- SPA route detection ----
   const setupRouteWatcher = () => {
-    let pending;
+    let pending, pendingSlow;
     const onRoute = () => {
-      // Two-stage: short delay to let SPA swap DOM, longer delay to catch slow rerenders
+      // Two-stage: short delay to let SPA swap DOM, longer delay to catch slow
+      // rerenders. BOTH timers are stored and cleared on each route change —
+      // previously the 1200ms timer was fire-and-forget, so rapid SPA navigation
+      // (journal-search churn, queue scrolling) stacked an uncancellable run(true)
+      // per change, each triggering a full 4-endpoint fetch cascade.
       clearTimeout(pending);
+      clearTimeout(pendingSlow);
       pending = setTimeout(() => run(true), 250);
-      setTimeout(() => run(true), 1200);
+      pendingSlow = setTimeout(() => run(true), 1200);
     };
 
     // 1. <title> changes — most reliable signal in Medicus (title updates per patient)

@@ -2,6 +2,77 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.22.0] — 2026-06-01
+### Fixed (custom rule creator ↔ engine parity — from the two-agent review)
+
+The custom rule builder was wired correctly end-to-end (all five types save, merge, evaluate, render, back up) but several builder forms had drifted behind the engine, so some saved rules silently behaved differently than configured. Closed the gaps:
+
+- **qof-indicator cohort fields now reachable**: the builder exposes free-text **`requiresProblem`** (all-of), **`requiresAnyProblem`** (any-of), free-text **`excludeIfProblem`** (alongside the frailty preset), and **`sex`**. Previously a clinician could not build a DM021/DM035-style stratified indicator — any attempt fired for the whole register with the wrong denominator (the over-trigger the engine work had just fixed for canonical rules). `validateQofIndicatorRule` now type-checks all four. (`sentinel-options/options.html`, `sentinel-options/options.js`, `shared/io/sentinel-io.js`)
+- **`medicationExclude` no longer a no-op**: the qof `medication-present` check ignored `medicationExclude` even though the builder saved it. The engine now applies it (an excluded med can't satisfy the indicator). (`engine/rules-engine.js`)
+- **drug-monitoring patient filters + SNOMED**: the builder now exposes `ageRange`, `sex`, `requiresProblem`/`excludesProblem`, and per-test SNOMED codes — the gating/coding the engine already applied but the form couldn't set. Validated in `validateDrugMonitoringRule`. (`sentinel-options/*`, `shared/io/sentinel-io.js`)
+- **drug-combo `mustNotBePresent`**: the "must NOT be co-prescribed" drug-absence gate (engine-supported, validator-allowed) is now a form field. (`sentinel-options/*`)
+- **Rule-builder live preview now matches runtime for trend / event-count(observations)**: the mock patient built a flat `observationHistory`, but the engine reads entries grouped per investigation type with a nested newest-first `history[]`. The preview now mirrors the normaliser shape, so "would this fire?" matches production. (`sentinel-options/options.js`)
+- Extended `test-qof-indicator-filters.js` (now 39 assertions) covering `medicationExclude` and the new validator fields.
+
+## [v3.21.3] — 2026-06-01
+### Fixed (cosmetic / dead-code / consistency — from the codebase audit)
+
+- **CHOL004 LDL priority (F9)**: `findLatestObservation` now uses a same-date tiebreak that prefers earlier-listed `match`/`observation` terms, and CHOL004 lists LDL before non-HDL — so when both are recorded on the same date, LDL takes priority (as the rule note specifies) instead of depending on dashboard row order. (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **Dead message handlers removed (E4)**: deleted the `openTriageLensOptions` service-worker case (no sender) and the `toggleSidebar` SW→tab round-trip plus its no-op listener in `sentinel.js` (suite mode has no floating sidebar to toggle). (`service-worker.js`, `content-scripts/sentinel.js`)
+- **Triage-lens options fallback path (D1)**: the `openOptionsPage`-unavailable fallback opened `getURL('options.html')`; the file is at `options/options.html`. (`content-scripts/triage-lens/content.js`)
+- **Dead script load removed from pop-out (B5)**: `pop-out.html` loaded `shared/request-monitor.js` but the pop-out never uses `RequestMonitor`. (`pop-out/pop-out.html`)
+- **Submissions date-picker race (B6)**: date-change callbacks are now registered synchronously in a map keyed by input id instead of via `setTimeout(0)`, so a change fired immediately after render can't be dropped. (`side-panel/modules/submissions/submissions.js`)
+- **SubRag strip diagnostics (E5)**: the submissions-RAG strip now fetches via `ApiDiag.fetch`, so its errors/latency appear in the Debug panel like the other strips. (`side-panel/panel.js`)
+- **Docs**: documented that `visualiser`/`about` are intentionally panel-only tabs (not mirrored in the pop-out) and clarified the pop-out message-relay (B4). (`CLAUDE.md`, `pop-out/pop-out.js`)
+
+## [v3.21.2] — 2026-06-01
+### Fixed (robustness / lifecycle — from the codebase audit)
+
+- **Triage-lens route watcher no longer stacks uncancellable re-evaluations (A1)**: the 1200ms "slow rerender" timer in `onRoute` was fire-and-forget, so rapid SPA navigation (journal-search churn, queue scrolling) queued a `run(true)` — and a full 4-endpoint fetch cascade — per change. It's now stored and cleared alongside the 250ms timer. (`content-scripts/triage-lens/content.js`)
+- **Rule edits now take effect immediately in the side panel (A4)**: the `storage.onChanged` handler only watched `sentinel.config` and called the suite-mode no-op `refresh()`, so editing a rule in Options didn't change the panel until the next navigation. It now also watches `sentinel.rules`/`orgRules`/`customRules`, invalidates the rules cache, and re-publishes. (`content-scripts/sentinel.js`)
+- **`loadRules()` is cached (A6)**: it previously did 2× `fetch` + 1× `storage.get` on every evaluation (including the 800ms journal-search re-eval). The canonical ruleset is fetched once and the merged result cached, invalidated on rule-key changes. (`content-scripts/sentinel.js`)
+- **Same-patient nav guard works on DOM-fallback views (A5)**: `patientContext.patientUuid` is now resolved (URL, then single-patient DOM banner) on the DOM-fallback path, so journal searches / tab switches on those views no longer invalidate + re-fetch the snapshot on every URL change. (`engine/data-fetcher.js`)
+- **Pop-out tab switching has a sequence guard (B1)**: `pop-out.js switchModule` now mirrors `panel.js`'s `switchSeq` guard, so a fast tab switch can't leak the previous module's timers/listeners or lose its cleanup. (`pop-out/pop-out.js`)
+- **Sentinel side-panel `refresh()` coalesces concurrent calls (B2)**: it had no in-flight guard despite being driven by the 10s poll, tab events, the snapshot-updated message and the refresh button — concurrent calls raced their round-trips and clobbered each other's DOM. Also removed a duplicate per-render refresh-button listener (the delegated handler already covers it). (`side-panel/modules/sentinel/sentinel.js`)
+- **"No practice code" message now shows (B3)**: `fetchWaitingRoom` called `render({state:'loaded'})` — an unhandled state that threw (swallowed) — instead of updating the pinned waiting-room block. (`side-panel/modules/sentinel/sentinel.js`)
+- **Toolbar badge has a single owner (E1)**: the waiting-room count was written independently by both `panel.js` and the Sentinel module, racing/clobbering each other when the Sentinel tab was active. The badge is now owned solely by `panel.js`'s strip. (`side-panel/modules/sentinel/sentinel.js`)
+- **Strip poll timers are torn down on `pagehide` (E2)**: `wrPollTimer`/`subRagPollTimer` were never cleared, risking duplicate timers if the panel document is recreated. (`side-panel/panel.js`)
+- **Pusher relay releases the old channel handler before rebinding and resets its wait budget (E3)**: prevents a stale closure firing on a dead channel and the relay going permanently silent after a late reconnect. (`content-scripts/pusher-relay.js`)
+
+## [v3.21.1] — 2026-06-01
+### Fixed (backup/restore data loss — from the codebase audit)
+
+- **`suite.display` now survives backup/restore (C3)** and **`suite.*` keys are no longer handled raw in `doFullExport`/`applyEnvelope` (C1)**: added `shared/io/suite-io.js` (`suiteExport`/`suiteImport`) owning `suite.display` (theme / text size / colourblind), `suite.practiceCode` and `suite.feedbackEmail`, per the CLAUDE.md convention. `doFullExport`/`applyEnvelope` now delegate to it instead of reading/writing those keys inline; `suite.display` (previously captured nowhere) is now backed up, and the envelope preview lists it. (`shared/io/suite-io.js`, `options/options.js`, `options/options.html`, `shared/io/suite-envelope.js`)
+- **Sentinel alert-library acknowledgement now backed up (C2)**: `sentinel.alertLibrary.acknowledged` was written by the Sentinel options page but absent from `sentinel-io.js`, so a restore re-locked the alert library and re-prompted the user. Added it to `SENTINEL_KEYS` and the export/import shape. (`shared/io/sentinel-io.js`)
+- **Per-module export cards for Triage Capacity Alerts and Pop-out (C4/C5)**: both scopes were fully wired in the IO/envelope layer but had no card in Options, so their standalone export/import was unreachable. Added the cards. (`options/options.html`)
+- Added `test-backup-keys.js` (round-trip tests with an in-memory `chrome.storage` mock).
+
+## [v3.21.0] — 2026-06-01
+### Fixed
+
+- **Journal-coded QOF indicators now fire in the side panel (F1)**: the suite-mode publish path (`evaluateAndPublish`) never augmented observations with consultation/journal-coded entries — that augmentation lived only in the floating HUD's `refresh()`, which is dead in suite mode. So indicators whose evidence lives only in the journal (AST007 asthma review, COPD010, HF007, DM014 structured education, AF006 CHA2DS2-VASc) always read `no_data` in the panel even when done. `evaluateAndPublish` now calls `fetchJournalObservations` (best-effort, generation-guarded so a journal fetch can't publish stale chips after a navigation). Also fixed the patient-id resolution in the HUD path to use the canonical `patientContext.patientUuid` field (it previously looked for `patientId`/`id`/`uuid`, none of which the normaliser sets, so journal augmentation silently skipped on care-record URLs). (`content-scripts/sentinel.js`)
+
+## [v3.20.0] — 2026-06-01
+### Fixed (clinical correctness — from the multi-agent codebase audit)
+
+- **QOF indicator age filter now fails OPEN (F2)**: `evaluateQofIndicatorRule` previously returned no chip when a patient's age couldn't be extracted *and* the indicator had an `ageRange` — silently hiding age-gated indicators (HYP010/011, CD001/002, DM034/036, trend rules) whenever DOB scraping failed. It now uses the shared fail-open `passesAgeFilter` (suppress only when the patient is *positively* out of range), consistent with drug-monitoring and register evaluators. (`engine/rules-engine.js`)
+- **`requiresProblem` / `requiresAnyProblem` now honoured by QOF indicators (F3)**: the QOF indicator evaluator ignored both, so **DM021** (frailty-stratified HbA1c) and **DM035** (CVD secondary-prevention statin) fired for *every* diabetic, showing the wrong target. The engine now supports `requiresProblem` (all-of) and a new `requiresAnyProblem` (any-of), both negation-aware. **DM021** migrated from `requiresProblem` → `requiresAnyProblem` (moderate **or** severe frailty); **HF009** (disabled) likewise migrated for its HFrEF synonyms. (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **Problem matching is negation-aware (F6)**: `excludeIfProblem` used naive `.includes()`, so "no evidence of moderate frailty" wrongly excluded a patient. It now uses `problemLabelMatchesTerm`. (`engine/rules-engine.js`)
+- **STIA register matches "TIA" abbreviations (F4)**: the register used space-padded `" tia "`, missing "TIA", "post TIA", "TIA 2024", "history of TIA" → no STIA/CD001/CD002 chips. Register match terms now use word-boundary matching (`registerTermInLabel`), which matches "TIA" without false-matching "iniTIAte". (`engine/rules-engine.js`, `rules/qof-rules.json`)
+- **DM register no longer false-positives on "pre-diabetic" (F5)**: added hyphenated `"pre-diabetic"` to the DM register `problemExclude`. (`rules/qof-rules.json`)
+- **HRT review chip gated on co-prescribed oestrogen (F10)**: a standalone progestogen or LNG-IUS (Mirena, Levosert, etc.) used for **contraception** triggered a false "HRT BP+weight review" chip (e.g. a 25-year-old with a Mirena). The chip now fires only when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone…) is prescribed; a co-prescribed LNG-IUS/progestogen is reported as the progestogen-coverage component instead, and duplicate HRT chips are avoided. (`engine/rules-engine.js`, `rules/drug-rules.json`)
+- Added `test-qof-indicator-filters.js` (30 assertions) covering all of the above.
+
+## [v3.19.15] — 2026-06-01
+### Fixed
+
+- **QOF chips no longer vanish on journal search — the real cause (supersedes v3.19.14)**: the side-panel snapshot was published as a *side effect* of a global monkeypatch on `window.SentinelRules.evaluatePatient`. That engine global is shared with the triage-lens HUD (`content-scripts/triage-lens/content.js:1448`, `:2092`), which re-evaluates with a **drug-rules-only** ruleset on every care-record route tick — including journal searches. Each HUD evaluation overwrote `_lastSnapshot` with QOF-less chips, so the QOF rules flashed up (from the suite's full-ruleset evaluation) then got overwritten (by the HUD's drug-only one). The v3.19.14 `_lastPatientUuid` URL guard couldn't help because triage-lens wrote the snapshot entirely outside that observer. Fix: removed the monkeypatch and made `evaluateAndPublish` capture the chips and publish them directly via a new `publishSnapshot()`, so **only** the suite's full merged drug+QOF evaluation can write the side-panel snapshot. Also added a monotonic evaluation-generation guard (`_evalGen`) so a slow/stale fetch during journal-search churn can't publish chips over a newer evaluation. (`content-scripts/sentinel.js`, `test-snapshot-bridge.js`)
+
+## [v3.19.14] — 2026-06-01
+### Fixed
+
+- **QOF chips no longer wiped when searching the patient journal**: in suite mode the side-panel snapshot is published by the `bootDataOnly` nav watcher in `content-scripts/sentinel.js`, which invalidated the snapshot on *every* SPA URL change. A patient-journal search (and care-record tab switches / filters) updates the URL while staying on the same patient, so the watcher kept calling `invalidateSnapshot()` — blanking the panel to "Loading…" then re-evaluating — making the QOF rules "flash up briefly then get overwritten" on each keystroke. The watcher now resolves the patient UUID from the new URL (`resolveUrlPatientUuid`, mirroring `detectMedicusContext`) and, when it matches the patient last evaluated (`_lastPatientUuid`), leaves the existing chips untouched. Genuine patient changes (different or unresolvable UUID) still invalidate immediately, preserving the wrong-patient safety guard. (`content-scripts/sentinel.js`)
+
 ## [v3.19.13] — 2026-06-01
 ### Fixed
 

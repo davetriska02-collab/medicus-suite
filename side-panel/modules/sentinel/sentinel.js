@@ -95,7 +95,14 @@ async function fetchWaitingRoom(bypassCache = false) {
   if (!WR_SITE_ID) {
     wrError = 'No practice code — open a Medicus tab or set it in Options.';
     wrPatients = [];
-    if (container) try { render({ state: 'loaded' }); } catch (e) {}
+    // Update just the pinned waiting-room block (same as the success path).
+    // Previously this called render({state:'loaded'}) — an unhandled state that
+    // fell through to destructuring an undefined snapshot and threw (swallowed),
+    // so the "no practice code" message never showed.
+    if (container) {
+      const wrEl = container.querySelector('.wr-pinned');
+      if (wrEl) updateWrPinned(wrEl);
+    }
     return;
   }
   WR_API_URL = `https://${WR_SITE_ID}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
@@ -120,10 +127,10 @@ async function fetchWaitingRoom(bypassCache = false) {
     })).sort((a,b) => a.start < b.start ? -1 : 1);
     wrError = null;
     wrLastFetch = Date.now();
-    // Update toolbar badge
-    const count = wrPatients.length;
-    chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
-    chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
+    // NB: the toolbar action badge is owned solely by panel.js's waiting-room
+    // strip (updateStripBadge), which polls globally. This module used to set it
+    // too, so the two writers raced and clobbered each other's count whenever the
+    // Sentinel tab was active. Leave the badge to panel.js.
   } catch(e) {
     wrError = e.message;
     wrPatients = wrPatients ?? []; // retain last good state on transient error
@@ -223,14 +230,24 @@ function classifySnapshot(snapshot) {
   return 'data';
 }
 
+let _refreshInFlight = false;
+let _refreshPending = false;
 async function refresh() {
   if (!container) return;
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {
-    render({ state: 'no-medicus' }); return;
-  }
+  // Coalesce concurrent refreshes. refresh() is driven by the 10s poll,
+  // tabs.onActivated, tabs.onUpdated, the sentinel:snapshot-updated message and
+  // the refresh button — several can fire at once. Without this guard their
+  // executeScript/sendMessage round-trips race and each render() replaces the DOM
+  // the others just built (flicker + wasted IPC). If a trigger arrives mid-flight
+  // we run exactly one more refresh afterwards.
+  if (_refreshInFlight) { _refreshPending = true; return; }
+  _refreshInFlight = true;
   try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {
+      render({ state: 'no-medicus' }); return;
+    }
     const mountCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__sentinelMounted });
     if (!mountCheck?.[0]?.result) { render({ state: 'not-mounted' }); return; }
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
@@ -242,6 +259,9 @@ async function refresh() {
     }
   } catch (err) {
     render({ state: 'error', message: err.message });
+  } finally {
+    _refreshInFlight = false;
+    if (_refreshPending) { _refreshPending = false; refresh(); }
   }
 }
 
@@ -335,7 +355,8 @@ function render(payload) {
   });
 
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  container.querySelector('#sentRefreshBtn')?.addEventListener('click', () => refresh());
+  // #sentRefreshBtn is handled by the persistent delegated click handler wired in
+  // init() (_refreshBtnHandler); no per-render listener here (would double-fire).
   container.querySelectorAll('.sent-filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       currentFilter = btn.dataset.filter;
