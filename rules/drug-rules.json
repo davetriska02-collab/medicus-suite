@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-06-01",
+  "lastUpdated": "2026-06-02",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - May 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at May 2026. Includes 13 rules from previous version plus 6 additions (leflunomide, hydroxychloroquine, SGLT2 inhibitors, carbimazole/propylthiouracil, mirabegron, GLP-1 receptor agonists). Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
+  "specVersion": "Sentinel drug rules - June 2026 review",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -378,6 +378,90 @@
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
       }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "adhd-stimulant-paediatric",
+      "drugClass": "ADHD stimulant",
+      "ageRange": { "max": 17 },
+      "sex": "any",
+      "drug": {
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "snomed": ["372574004", "387340002", "31994002"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Height", "match": ["height", "body height"], "snomed": ["248335003"], "intervalDays": 182, "dueSoonDays": 21 }
+      ],
+      "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF for Children; NHS shared care protocols",
+      "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in under-18s: BP, pulse, weight and height every 6 months. Consider 3-monthly in children under 10. Plot height and weight on centile charts — Sentinel confirms the measurement was taken but cannot verify centile position or growth velocity; the clinician must interpret the result. Action if >10% weight loss over weeks or height tracking significantly below the expected centile (consider planned treatment breaks over school holidays). Withhold/refer if sustained resting HR >130 bpm or BP >95th centile for age/height; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "adhd-stimulant-adult",
+      "drugClass": "ADHD stimulant",
+      "ageRange": { "min": 18 },
+      "sex": "any",
+      "drug": {
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "snomed": ["372574004", "387340002", "31994002"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 }
+      ],
+      "source": "NICE NG87 (ADHD diagnosis and management, 2018 updated 2019); BNF; NHS shared care protocols",
+      "notes": "Post-stabilisation shared-care monitoring for ADHD stimulants in adults (18+): BP, pulse and weight every 6 months. Height is not monitored in adults. Withhold/refer if sustained resting HR >130 bpm or BP >140/90 mmHg; review if HR >120 bpm. Refer to cardiology on unexplained syncope, palpitations with dizziness, or QT prolongation. Contraindicated in structural heart disease, uncontrolled hypertension or arrhythmia. Annual formal review of ongoing need. No routine bloods required by NG87; ECG only if cardiac risk factors at baseline.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "atomoxetine-maintenance",
+      "drugClass": "ADHD non-stimulant",
+      "sex": "any",
+      "drug": {
+        "match": ["atomoxetine", "strattera"],
+        "snomed": ["407146000"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "NICE NG87; BNF / atomoxetine SmPC; MHRA hepatic and suicidality warnings",
+      "notes": "Non-stimulant. BP, pulse and weight 6-monthly; annual LFT (hepatotoxicity risk — advise patient to report jaundice, dark urine or unexplained upper abdominal pain; discontinue and refer urgently if liver injury confirmed). Monitor closely for suicidal ideation, agitation or irritability in the first month and after any dose change — this is a clinical review responsibility not enforceable by Sentinel. In children, plot height and weight on centile charts 3-monthly (Sentinel does not enforce height to avoid false alerts in adults). Withhold/refer if resting HR sustained >130 bpm or significant BP rise (6-12% of patients experience clinically significant BP or HR increases). Contraindicated in narrow-angle glaucoma and concurrent MAOI use.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "guanfacine-maintenance",
+      "drugClass": "ADHD non-stimulant",
+      "sex": "any",
+      "drug": {
+        "match": ["guanfacine", "intuniv"],
+        "snomed": ["96308008"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "Pulse / heart rate", "match": ["pulse", "heart rate", "hr", "resting heart rate"], "snomed": ["78564009"], "intervalDays": 84, "dueSoonDays": 14 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 84, "dueSoonDays": 14 }
+      ],
+      "source": "NICE NG87; BNF / guanfacine (Intuniv) SmPC; Sussex ICS shared care protocol",
+      "notes": "Non-stimulant alpha-2A agonist with stricter cardiovascular monitoring than stimulants. BP and pulse 3-monthly (Sentinel enforces 84-day interval as the safer default for year 1; local shared care may permit 6-monthly once stable beyond year 1). Risks: hypotension, bradycardia, syncope, and AV block — check lying and standing BP. Dose must be tapered on discontinuation to avoid rebound hypertension; never abruptly stop. In children, plot height and weight on centile charts 3-monthly (Sentinel confirms measurement recency but cannot verify centile). Contraindicated in significant cardiovascular or cerebrovascular disease and concurrent strong CYP3A4 inhibitors (e.g. ketoconazole, clarithromycin).",
+      "sharedCare": true
     }
   ]
 }

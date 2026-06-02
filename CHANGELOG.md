@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.24.0] — 2026-06-02
+### Added
+- **ADHD stimulant monitoring (paediatric)** (`adhd-stimulant-paediatric`, age ≤17) — 6-monthly BP, pulse/HR, weight, height. Covers methylphenidate (Ritalin/Concerta/Equasym/Medikinet/Xenidate/Delmosart), lisdexamfetamine (Elvanse), dexamfetamine (Dexedrine/Amfexa). First rule to exercise `ageRange` on drug-monitoring rules.
+- **ADHD stimulant monitoring (adult)** (`adhd-stimulant-adult`, age ≥18) — 6-monthly BP, pulse/HR, weight. Same drug match, no height (not clinically indicated in adults).
+- **Atomoxetine monitoring** (`atomoxetine-maintenance`) — 6-monthly BP, pulse/HR, weight; annual LFT (hepatotoxicity). Notes cover MHRA suicidality warning (first month) and paediatric growth.
+- **Guanfacine monitoring** (`guanfacine-maintenance`) — 3-monthly BP, pulse/HR, weight (stricter CV interval vs stimulants; hypotension/bradycardia risk). Notes cover tapering requirement and CYP3A4 interaction.
+- **New test match patterns**: pulse/HR (`["pulse", "heart rate", "hr", "resting heart rate"]`, SNOMED 78564009) and height (`["height", "body height"]`, SNOMED 248335003) — both new to the rule suite.
+
 ## [v3.23.0] — 2026-06-02
 ### Added
 - **Smoking status due chips** — new `observation-recent` QOF indicators for all relevant disease registers: SMI (MH011), Asthma, COPD, Diabetes, CHD, Stroke/TIA, CKD, Heart Failure, PAD (all SMOK001). New SMI register added (`qof-reg-smi`) covering schizophrenia, bipolar disorder, and other psychoses.
