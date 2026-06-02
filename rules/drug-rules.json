@@ -104,6 +104,27 @@
     {
       "type": "drug-monitoring",
       "enabled": true,
+      "id": "carbamazepine-maintenance",
+      "drugClass": "Antiepileptic",
+      "drug": {
+        "match": ["carbamazepine", "tegretol"],
+        "snomed": ["387222003"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "U&E / Sodium", "match": ["u&e", "urea and electrolytes", "renal profile", "sodium"], "snomed": ["1019331000000106"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Carbamazepine level", "match": ["carbamazepine level", "carbamazepine concentration", "serum carbamazepine"], "intervalDays": 182, "dueSoonDays": 21 },
+        { "name": "Lipid profile", "match": ["lipid profile", "cholesterol", "lipids"], "snomed": ["27171005"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "BNF / MHRA / NICE CG137 / shared care",
+      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception.",
+      "sharedCare": true
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
       "id": "lithium-maintenance",
       "drugClass": "Mood stabiliser",
       "drug": {

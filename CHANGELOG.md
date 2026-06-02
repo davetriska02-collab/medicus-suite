@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.23.0] — 2026-06-02
+### Added
+- **Smoking status due chips** — new `observation-recent` QOF indicators for all relevant disease registers: SMI (MH011), Asthma, COPD, Diabetes, CHD, Stroke/TIA, CKD, Heart Failure, PAD (all SMOK001). New SMI register added (`qof-reg-smi`) covering schizophrenia, bipolar disorder, and other psychoses.
+- **Carbamazepine drug monitoring** (`carbamazepine-maintenance`) — 6-monthly FBC, LFT, U&E/Sodium, carbamazepine level; annual lipid profile. Match terms include `tegretol`. Notes cover SIADH/hyponatraemia, enzyme-induction effects on lipids, and contraceptive/teratogenicity considerations.
+- **`observation-bundle` engine support** — new check kind in `rules-engine.js`; evaluates each observation group against the QOF year window and returns `achieved` (all met) / `not_met` (partial) / `no_data` (none found), with a `X/N care processes` value label. `evidenceCtx.bundleResults` carries per-group detail for the chip renderer.
+- **DM037 enabled** — all 8 diabetes care processes indicator now live (was disabled pending engine support).
+
 ## [v3.22.1] — 2026-06-02
 ### Fixed
 - **HRT progestogen context**: added `"hormone releasing intrauterine"` and `"insertion of hormone releasing"` to `iusProblemTerms` so that a problem entry of "Insertion of hormone releasing intrauterine contraceptive device" is now recognised as an IUS for endometrial-protection context on HRT chips.

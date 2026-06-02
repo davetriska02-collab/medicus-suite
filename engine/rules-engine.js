@@ -993,6 +993,46 @@
         if (_inWindow) status = 'achieved';
         else status = 'overdue';
       }
+    } else if (check.kind === 'observation-bundle') {
+      // observation-bundle: checks that EACH observation group (array of name aliases)
+      // has a matching result within the QOF window. Used by DM037 to verify all 8
+      // care processes were recorded this QOF year.
+      const bundleGroups = check.observations || [];
+      const _useFloorB = rule.useQofYearFloor !== false;
+      const _withinDaysB = check.withinDays || 365;
+      const _qofStartB = qofYearStart(now);
+      const _rollingCutoffB = new Date(now);
+      _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
+      const bundleResults = bundleGroups.map(aliases => {
+        const obs = findLatestObservation(data.observations, { match: aliases });
+        if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
+        const obsDate = new Date(obs.date);
+        const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
+        return { aliases, obs, inWindow };
+      });
+      const metCount = bundleResults.filter(r => r.inWindow).length;
+      const totalCount = bundleResults.length;
+      if (check.requireAll) {
+        if (metCount === totalCount) {
+          status = 'achieved';
+        } else if (metCount === 0) {
+          status = 'no_data';
+        } else {
+          status = 'not_met';
+        }
+      } else {
+        status = metCount > 0 ? 'achieved' : 'no_data';
+      }
+      valueText = `${metCount}/${totalCount} care processes`;
+      // Most recent observation date across all matched groups
+      const latestBundleDate = bundleResults
+        .filter(r => r.obs && r.obs.date)
+        .map(r => r.obs.date)
+        .sort()
+        .pop() || null;
+      dateText = latestBundleDate;
+      if (latestBundleDate) days = daysBetween(latestBundleDate, now);
+      evidenceCtx.bundleResults = bundleResults;
     } else if (check.kind === 'observation-trend') {
       // Find matching investigation history entries; multiple substrings may match
       // distinct test types (e.g. "PSA" matches both "PSA" and "PSA free/total ratio").
