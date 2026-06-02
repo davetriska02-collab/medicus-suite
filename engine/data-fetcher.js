@@ -228,6 +228,7 @@
         observations: normalised.observations,
         observationHistory: normalised.observationHistory,
         problems: normalised.problems,
+        pastProblems: normalised.pastProblems || [],
         debug: {
           foundHeadings: [],
           parseFailures: [],

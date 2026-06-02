@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.4] — 2026-06-02
+
+### Fixed
+- **HRT hysterectomy detection**: "Vaginal hysterectomy" (and other procedure-coded hysterectomies stored as ended/past problems) was not detected by the HRT progestogen-coverage check. The normaliser now captures ended problems separately as `pastProblems`; the HRT context builder checks both active and past problems for hysterectomy terms, so the chip correctly shows "Hysterectomy — progestogen not required" instead of the false "No progestogen or hysterectomy recorded" warning.
+
 ## [v3.26.3] — 2026-06-02
 ### Added
 - **Per-rule hide / snooze for monitoring chips** — each chip in the monitoring panel now carries an unobtrusive dismiss (×) button, visible on hover at the top-right, that does not interfere with click-to-expand evidence.
