@@ -307,6 +307,51 @@
         history: historyEntries
       });
     });
+    // Synthesise a combined "Blood pressure" history entry from split systolic/diastolic rows.
+    // The API emits these as separate investigationType rows; parseBp() requires "NNN/NN" slash
+    // format. We build per-date maps then emit a combined entry prepended to out so that any
+    // consumer doing a substring/find match hits "Blood pressure" before "Systolic blood pressure".
+    {
+      const SYS_RE = /systolic\s+blood\s+pressure/i;
+      const DIA_RE = /diastolic\s+blood\s+pressure/i;
+      const sysMap = {};
+      const diaMap = {};
+      dashboard.rowData.forEach(row => {
+        if (!row.investigationType) return;
+        const isSys = SYS_RE.test(row.investigationType);
+        const isDia = DIA_RE.test(row.investigationType);
+        if (!isSys && !isDia) return;
+        const target = isSys ? sysMap : diaMap;
+        Object.keys(row).filter(k => /^data\d{8}$/.test(k)).forEach(key => {
+          const cell = row[key];
+          if (!cell || cell.result == null || cell.result === '') return;
+          const d = keyToIsoDate(key);
+          if (!target[d]) target[d] = String(cell.result);
+        });
+      });
+      const combinedHistory = [];
+      Object.keys(sysMap).forEach(d => {
+        if (!diaMap[d]) return;
+        combinedHistory.push({
+          date: d,
+          value: NaN,
+          rawValue: `${sysMap[d]}/${diaMap[d]}`,
+          isAbove: false,
+          isBelow: false,
+          source: 'API:investigation-dashboard (synthesised)'
+        });
+      });
+      if (combinedHistory.length > 0) {
+        combinedHistory.sort((a, b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+        out.unshift({
+          name: 'Blood pressure',
+          code: null,
+          group: 'Key observations',
+          unit: 'mmHg',
+          history: combinedHistory
+        });
+      }
+    }
     return out;
   }
 
