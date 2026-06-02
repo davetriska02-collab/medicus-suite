@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.1] — 2026-06-02
+### Fixed
+- **Flu chip false positive on all patients** — `matchVaccineEligibility` register clause was calling `patientOnRegister()` which returns `{matched: false}` (a truthy object), not a boolean. The old `.some()` check treated this truthy object as a hit, causing the flu chip to fire for every patient via the "Clinical risk group (QOF register)" clause. Fixed by converting to an explicit loop with `if (res && res.matched)` check. Same fix applied to `conditional-register` clause.
+- **Chip too wordy** — "DOUBLE-CHECK ELIGIBILITY" disclaimer and source text moved into a native `<details>` block collapsed by default. Compact view shows only displayName + status badge + eligibility reason + season. Disclaimer visible on expand (ⓘ Details).
+- **No provenance shown** — `matchVaccineEligibility` now captures and returns the specific matched evidence: which problem, which register + problem, which medication, or which observation value triggered eligibility. Shown in the expanded chip detail.
+
 ## [v3.26.0] — 2026-06-02
 ### Added
 - **Vaccination eligibility alerts** (flu + COVID) — new `vaccine` rule type and `rules/vaccine-rules.json`. The monitoring panel now surfaces a "Vaccinations" group with DUE / GIVEN / DECLINED chips. Eligibility is derived from age, QOF registers, active problems, current medications, and BMI observation using JCVI/UKHSA 2025/26 criteria.

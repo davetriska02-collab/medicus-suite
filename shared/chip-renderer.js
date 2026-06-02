@@ -341,40 +341,58 @@
   }
 
   // Render a vaccine eligibility chip (flu / COVID).
+  // Vaccine chip: compact summary always visible (name + status badge +
+  // eligibility reason + season). A native <details> holds the verbose
+  // disclaimer / source / event detail so it stays collapsed by default and
+  // needs no extra JS wiring. The ⓘ summary toggles it.
   function renderVaccineChip(chip) {
     const col = STATUS_COLOUR[chip.status] || 'neutral';
     const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
-    const dateBit = (chip.status === 'vax_given' || chip.status === 'vax_declined')
-      ? `<div class="sent-chip-obs">${lbl === 'GIVEN' ? 'Given' : 'Declined'}: ${escHtml(formatDate(chip.eventDate) || 'date unknown')}</div>`
+    const reason = chip.eligibilityReason || '';
+    const isGiven = chip.status === 'vax_given';
+    const isDeclined = chip.status === 'vax_declined';
+
+    // Compact sub-line: eligibility reason + inline season.
+    const seasonInline = chip.seasonLabel
+      ? `<span class="sent-vax-season">${escHtml(chip.seasonLabel)}</span>`
       : '';
-    const seasonBit = chip.seasonLabel
-      ? `<div class="sent-chip-cat">Season ${escHtml(chip.seasonLabel)}</div>`
+    const subLine = (reason || seasonInline)
+      ? `<div class="sent-chip-obs sent-vax-sub">${reason ? `<span class="sent-vax-reason">${escHtml(reason)}</span>` : ''}${seasonInline}</div>`
       : '';
+
+    // Expanded detail rows.
+    const detailRows = [];
+    if (reason) {
+      detailRows.push(`<div class="sent-vax-row"><span class="sent-vax-row-label">Eligibility</span><span class="sent-vax-row-val">${escHtml(reason)}</span></div>`);
+    }
+    if (isGiven || isDeclined) {
+      detailRows.push(`<div class="sent-vax-row"><span class="sent-vax-row-label">${isGiven ? 'Given' : 'Declined'}</span><span class="sent-vax-row-val">${escHtml(formatDate(chip.eventDate) || 'date unknown')}</span></div>`);
+    }
+    if (chip.seasonLabel) {
+      detailRows.push(`<div class="sent-vax-row"><span class="sent-vax-row-label">Season</span><span class="sent-vax-row-val">${escHtml(chip.seasonLabel)}</span></div>`);
+    }
     const notesBit = chip.notes
-      ? `<div class="sent-chip-note sent-vax-note">${escHtml(chip.notes)}</div>`
+      ? `<div class="sent-chip-note sent-vax-note">⚠ DOUBLE-CHECK ELIGIBILITY — ${escHtml(chip.notes)}</div>`
       : '';
     const sourceBit = chip.source
       ? `<div class="sent-chip-source">Source: ${escHtml(chip.source)}</div>`
       : '';
-    const tooltipBits = [];
-    if (chip.notes)  tooltipBits.push(chip.notes);
-    if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
-    const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
-      : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+
     return `
-      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+      <div class="sent-chip sent-chip-${col} sent-vax-chip">
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.displayName || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.displayName || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
-        <div class="sent-chip-obs">${escHtml(chip.eligibilityReason || '')}</div>
-        ${dateBit}
-        ${seasonBit}
-        ${notesBit}
-        ${sourceBit}
+        ${subLine}
+        <details class="sent-vax-details">
+          <summary class="sent-vax-summary"><span class="sent-chip-info" aria-hidden="true">ⓘ</span> Details</summary>
+          <div class="sent-vax-detail-body">
+            ${detailRows.join('')}
+            ${notesBit}
+            ${sourceBit}
+          </div>
+        </details>
       </div>`;
   }
 
