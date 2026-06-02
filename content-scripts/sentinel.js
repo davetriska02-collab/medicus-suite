@@ -998,7 +998,7 @@
           }
         );
         if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
-        publishSnapshot(chips, data.patientContext, health);
+        publishSnapshot(chips, data.patientContext, health, data);
       }).catch(() => { if (gen === _evalGen) invalidateSnapshot(); });
     } catch (e) { if (gen === _evalGen) invalidateSnapshot(); }
   }
@@ -1013,6 +1013,11 @@
   // overwrite the snapshot with QOF-less chips — that was the "QOF rules flash up
   // then vanish on journal search" bug.
   let _lastSnapshot = null;
+  // Trend data (observationHistory + problems) cached in lockstep with _lastSnapshot.
+  // Cleared on every invalidation so the trend tabs can never render a previous
+  // patient's readings against the current record. Modules must also assert that
+  // the patientUuid in this payload matches the one in _lastSnapshot before rendering.
+  let _lastTrendData = null;
   // Monotonic evaluation generation. Bumped on every evaluateAndPublish and on
   // every invalidateSnapshot so a slow/stale async fetch (e.g. mid journal-search
   // churn) can't publish chips after a newer evaluation or a navigation.
@@ -1050,6 +1055,7 @@
     // Cancel any in-flight evaluation so its (now stale) chips can't land after us.
     _evalGen++;
     _lastSnapshot = { chips: null, patientContext: null, evaluatedAt: new Date().toISOString(), unavailable: true };
+    _lastTrendData = null;
     notifySnapshotUpdated();
   }
 
@@ -1060,7 +1066,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health) {
+  function publishSnapshot(chips, pc, health, rawData) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1071,6 +1077,14 @@
       degraded: !!(health && health.degraded),
       reason: (health && health.reason) || null,
     };
+    // Cache the raw observation + problem data for the BP/ACR trend tabs.
+    // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,
+    // so the trend data always belongs to the same patient as the chip snapshot.
+    _lastTrendData = rawData ? {
+      observationHistory: rawData.observationHistory || [],
+      problems: rawData.problems || [],
+      patientContext: pc || null,
+    } : null;
     // Notify any open side panel that a fresh snapshot is available so it can
     // re-render immediately on patient change instead of waiting for its poll.
     notifySnapshotUpdated();
@@ -1079,6 +1093,17 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'getSentinelSnapshot') {
       sendResponse(_lastSnapshot || { chips: null, patientContext: null, evaluatedAt: null });
+      return false;
+    }
+    if (msg && msg.action === 'getTrendData') {
+      if (!_lastTrendData) { sendResponse(null); return false; }
+      // Attach achieved register chips so trend modules can determine BP targets
+      // without re-evaluating rules. Includes only qof-register chips to keep the
+      // payload small.
+      const registers = (_lastSnapshot && _lastSnapshot.chips || [])
+        .filter(c => c.type === 'qof-register')
+        .map(c => ({ code: c.registerCode, name: c.registerName, problem: c.matchedProblem }));
+      sendResponse({ ..._lastTrendData, registers });
       return false;
     }
   });
