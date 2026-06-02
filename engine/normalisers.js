@@ -187,6 +187,50 @@
         }
       }
     });
+    // Synthesise combined "Blood pressure" observations from split systolic/diastolic rows.
+    // Medicus API emits these as separate investigationType rows; parseBp() in the rules
+    // engine requires "NNN/NN" slash format, so we pair same-date rows here.
+    {
+      const SYS_RE = /systolic\s+blood\s+pressure/i;
+      const DIA_RE = /diastolic\s+blood\s+pressure/i;
+      // Collect all dated values for systolic and diastolic rows
+      const sysMap = {}; // dateIso -> { result, unit }
+      const diaMap = {};
+      dashboard.rowData.forEach(row => {
+        if (!row.investigationType) return;
+        const dataKeys = Object.keys(row).filter(k => /^data\d{8}$/.test(k));
+        const isSys = SYS_RE.test(row.investigationType);
+        const isDia = DIA_RE.test(row.investigationType);
+        if (!isSys && !isDia) return;
+        const target = isSys ? sysMap : diaMap;
+        dataKeys.forEach(key => {
+          const cell = row[key];
+          if (!cell || cell.result == null || cell.result === '') return;
+          const d = keyToIsoDate(key);
+          if (!target[d]) target[d] = { result: String(cell.result), unit: row.unit || '' };
+        });
+      });
+      // Emit one synthetic "Blood pressure" obs per date where both values are present
+      Object.keys(sysMap).forEach(d => {
+        if (!diaMap[d]) return;
+        const sys = sysMap[d].result;
+        const dia = diaMap[d].result;
+        const unit = sysMap[d].unit || diaMap[d].unit || 'mmHg';
+        const combined = `${sys}/${dia}`;
+        out.push({
+          name: 'Blood pressure',
+          code: null,
+          date: d,
+          value: unit ? `${combined} ${unit}` : combined,
+          rawValue: combined,
+          unit: unit || null,
+          group: 'Key observations',
+          isAbove: false,
+          isBelow: false,
+          source: 'API:investigation-dashboard (synthesised)'
+        });
+      });
+    }
     // Emit synthetic per-group observations. These let panel-level rules match
     // (e.g. "U&E" rule matches "U&Es (Urea and electrolytes)" via substring).
     // Skip the "Key observations" group — its members (BP, BMI, etc.) are

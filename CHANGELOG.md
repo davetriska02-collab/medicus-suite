@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.25.1] — 2026-06-02
+### Fixed
+- **BP chips not surfacing** — Medicus API emits blood pressure as separate "Systolic blood pressure" and "Diastolic blood pressure" investigation rows. `parseBp()` in the rules engine requires combined "NNN/NN" slash format, so it previously returned null for every BP reading and all enabled BP indicators (CD001, CD002, HYP010, HYP011) resolved to `no_data`. Fix: `normaliseObservations` now runs a post-processing pass after the per-row loop that pairs same-date systolic + diastolic rows and injects a synthetic `{ name: "Blood pressure", value: "NNN/NN mmHg", ... }` observation, making existing chip evaluation work with no rules changes.
+
 ## [v3.25.0] — 2026-06-02
 ### Added
 - **BP Trend tab** (`bptrend`) — shows systolic/diastolic history as a dual-line SVG chart with condition-specific target lines (130/80 for CKD+ACR>70, 150/90 for HYP≥80, 140/90 standard). Target derived from achieved QOF register chips. AT TARGET / ABOVE TARGET pill. Paediatric caveat note for under-18s (adult thresholds shown; centile charts required for accurate paediatric assessment).
