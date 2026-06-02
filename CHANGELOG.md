@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.25.2] — 2026-06-02
+### Fixed
+- **BP Trend tab showing "No blood pressure readings found"** — `normaliseObservationHistory` was emitting separate "Systolic blood pressure" / "Diastolic blood pressure" entries with scalar `rawValue` ("120", "80"). The bptrend module matched the systolic row first, `parseBp("120")` failed the slash regex, and all history points filtered to empty. Fix: added same systolic/diastolic date-pairing synthesis to `normaliseObservationHistory`, producing a `"Blood pressure"` entry prepended to `observationHistory` with `rawValue: "120/80"` per date. `unshift` ensures it is found before the raw split rows on substring match.
+
 ## [v3.25.1] — 2026-06-02
 ### Fixed
 - **BP chips not surfacing** — Medicus API emits blood pressure as separate "Systolic blood pressure" and "Diastolic blood pressure" investigation rows. `parseBp()` in the rules engine requires combined "NNN/NN" slash format, so it previously returned null for every BP reading and all enabled BP indicators (CD001, CD002, HYP010, HYP011) resolved to `no_data`. Fix: `normaliseObservations` now runs a post-processing pass after the per-row loop that pairs same-date systolic + diastolic rows and injects a synthetic `{ name: "Blood pressure", value: "NNN/NN mmHg", ... }` observation, making existing chip evaluation work with no rules changes.
