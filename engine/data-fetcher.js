@@ -40,6 +40,13 @@
       { name: 'HbA1c', code: '43396009', date: '2026-02-01', value: '65 mmol/mol', source: 'mock' }
     ],
     observationHistory: [
+      { name: 'Blood pressure', code: null, group: 'Key observations', unit: 'mmHg', history: [
+        { date: '2026-04-27', value: NaN, rawValue: '146/82', isAbove: false, isBelow: false, source: 'mock' },
+        { date: '2025-10-14', value: NaN, rawValue: '152/88', isAbove: true,  isBelow: false, source: 'mock' },
+        { date: '2025-04-03', value: NaN, rawValue: '148/90', isAbove: true,  isBelow: false, source: 'mock' },
+        { date: '2024-10-21', value: NaN, rawValue: '155/92', isAbove: true,  isBelow: false, source: 'mock' },
+        { date: '2024-04-09', value: NaN, rawValue: '162/94', isAbove: true,  isBelow: false, source: 'mock' }
+      ]},
       { name: 'HbA1c', code: '43396009', group: 'HbA1c', unit: 'mmol/mol', history: [
         { date: '2026-02-01', value: 65, rawValue: '65', isAbove: true,  isBelow: false, source: 'mock' },
         { date: '2025-08-15', value: 62, rawValue: '62', isAbove: true,  isBelow: false, source: 'mock' },

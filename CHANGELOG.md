@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.25.3] — 2026-06-02
+### Fixed
+- **BP Trend tab still blank after v3.25.2** — added a fallback path in `bptrend.js` that merges separate "Systolic blood pressure" / "Diastolic blood pressure" entries from `observationHistory` by date when no parseable combined "Blood pressure" entry is found. This handles all API shapes: combined row (primary path), synthesised combined entry from v3.25.2 (primary path), and raw split rows that reach bptrend without synthesis (fallback path). Also added `Blood pressure` history entries to mock data (`engine/data-fetcher.js`) so the trend tab can be verified in mock mode.
+
 ## [v3.25.2] — 2026-06-02
 ### Fixed
 - **BP Trend tab showing "No blood pressure readings found"** — `normaliseObservationHistory` was emitting separate "Systolic blood pressure" / "Diastolic blood pressure" entries with scalar `rawValue` ("120", "80"). The bptrend module matched the systolic row first, `parseBp("120")` failed the slash regex, and all history points filtered to empty. Fix: added same systolic/diastolic date-pairing synthesis to `normaliseObservationHistory`, producing a `"Blood pressure"` entry prepended to `observationHistory` with `rawValue: "120/80"` per date. `unshift` ensures it is found before the raw split rows on substring match.
