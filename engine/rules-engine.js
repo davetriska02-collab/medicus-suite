@@ -138,8 +138,10 @@
     const norm = s => String(s || '').toLowerCase();
     const meds     = data.medications || [];
     const problems = data.problems    || [];
+    // Hysterectomy may be coded as a past/ended problem — check both active and past
+    const allProblems = [...problems, ...(data.pastProblems || [])];
 
-    const hasHysterectomy = problems.some(p =>
+    const hasHysterectomy = allProblems.some(p =>
       (hrtConfig.hysterectomyTerms || []).some(t => norm(p.label).includes(norm(t)))
     );
 

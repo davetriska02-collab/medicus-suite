@@ -96,19 +96,51 @@
   }
 
   // ---- Problems from problem-listing ----
+  // Returns { active, past } — active for QOF/rule matching, past for
+  // procedure-history checks (e.g. hysterectomy coded as a past/ended problem).
+  function normaliseProblemsAll(listing) {
+    if (!listing || !Array.isArray(listing.activeProblems)) return { active: [], past: [] };
+    const active = [], past = [];
+    listing.activeProblems
+      .filter(p => !p.isMarkedAsIncorrect)
+      .forEach(p => {
+        const label = p.problemCodeDescription || null;
+        if (!label) return;
+        const rec = {
+          label,
+          codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
+          significance: p.significance || null,
+          source: 'API:problem-listing',
+          id: p.id || null
+        };
+        if (p.hasEnded) {
+          past.push({ ...rec, status: 'past' });
+        } else {
+          active.push({ ...rec, status: 'active' });
+        }
+      });
+    // Also pull from inactiveProblems if the API returns that array separately
+    if (Array.isArray(listing.inactiveProblems)) {
+      listing.inactiveProblems
+        .filter(p => !p.isMarkedAsIncorrect)
+        .forEach(p => {
+          const label = p.problemCodeDescription || null;
+          if (!label) return;
+          past.push({
+            label,
+            codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
+            significance: p.significance || null,
+            source: 'API:problem-listing',
+            id: p.id || null,
+            status: 'past'
+          });
+        });
+    }
+    return { active, past };
+  }
+
   function normaliseProblems(listing) {
-    if (!listing || !Array.isArray(listing.activeProblems)) return [];
-    return listing.activeProblems
-      .filter(p => !p.hasEnded && !p.isMarkedAsIncorrect)
-      .map(p => ({
-        label: p.problemCodeDescription || null,
-        codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
-        status: 'active',
-        significance: p.significance || null,   // "Major" | "Minor" | "Unknown" — for QOF UI grouping
-        source: 'API:problem-listing',
-        id: p.id || null
-      }))
-      .filter(p => p.label);
+    return normaliseProblemsAll(listing).active;
   }
 
   // ---- Observation value numeric parser ----
@@ -357,12 +389,14 @@
 
   // ---- Combined normalisation ----
   function normaliseAll(apiResults, urlContext) {
+    const allProbs = normaliseProblemsAll(apiResults?.problemListing);
     return {
       patientContext: normaliseBanner(apiResults?.banner, urlContext),
       medications: normaliseMedications(apiResults?.medicationRegimen),
       observations: normaliseObservations(apiResults?.investigationDashboard),
       observationHistory: normaliseObservationHistory(apiResults?.investigationDashboard),
-      problems: normaliseProblems(apiResults?.problemListing),
+      problems: allProbs.active,
+      pastProblems: allProbs.past,
       apiErrors: apiResults?.errors || {}
     };
   }
