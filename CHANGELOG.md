@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.2] — 2026-06-02
+### Fixed
+- **QOF chips missing on care record view** — `detectMedicusContext` had a negative lookahead `(?!.*care-record)` on the `/patient/{uuid}` URL regex that explicitly excluded URLs of the form `/patient/{uuid}/care-record/...`. This meant the care record URL never yielded a `patientUuid` directly, falling through to the DOM banner scraper; if that failed, `dom-fallback` was used with empty `observationHistory`, causing all QOF indicators to resolve as `no_data` and disappear. Document task views worked because they use a separate `resolveTaskToPatient()` path. Fix: removed the negative lookahead — one character change in `engine/api-client.js:45`.
+
 ## [v3.26.1] — 2026-06-02
 ### Fixed
 - **Flu chip false positive on all patients** — `matchVaccineEligibility` register clause was calling `patientOnRegister()` which returns `{matched: false}` (a truthy object), not a boolean. The old `.some()` check treated this truthy object as a hit, causing the flu chip to fire for every patient via the "Clinical risk group (QOF register)" clause. Fixed by converting to an explicit loop with `if (res && res.matched)` check. Same fix applied to `conditional-register` clause.
