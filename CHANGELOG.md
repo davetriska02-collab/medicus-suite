@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.25.0] — 2026-06-02
+### Added
+- **BP Trend tab** (`bptrend`) — shows systolic/diastolic history as a dual-line SVG chart with condition-specific target lines (130/80 for CKD+ACR>70, 150/90 for HYP≥80, 140/90 standard). Target derived from achieved QOF register chips. AT TARGET / ABOVE TARGET pill. Paediatric caveat note for under-18s (adult thresholds shown; centile charts required for accurate paediatric assessment).
+- **ACR Trend tab** (`acrtrend`) — shows ACR history with A1/A2/A3 KDIGO threshold band shading, eGFR co-display with G-stage bands, KDIGO G×A monitoring frequency cell, and action banners for ACR ≥70 (referral), ACR doubling, and category crossing.
+- **`getTrendData` content-script bridge** — new message action in `sentinel.js` exposes `observationHistory`, `problems`, `patientContext`, and achieved register chips to panel modules. `_lastTrendData` is written in lockstep with `_lastSnapshot` and cleared in `invalidateSnapshot` to prevent cross-patient data render.
+- **`shared/trend-chart.js`** — shared SVG line chart utility (`lineChart`, `parseBp`, `bpTarget`, `fmtDate`, `esc`) used by both trend modules. Hand-coded SVG — no Chart.js dependency in panel shells.
+
+### Notes
+- BP `value` in observationHistory is NaN for "120/80" strings; bptrend parses `rawValue` via `parseBp`.
+- Trend data only available after the Medicus investigation dashboard has loaded for the patient.
+- No chrome.storage keys added — no IO backup wiring needed.
+
 ## [v3.24.0] — 2026-06-02
 ### Added
 - **ADHD stimulant monitoring (paediatric)** (`adhd-stimulant-paediatric`, age ≤17) — 6-monthly BP, pulse/HR, weight, height. Covers methylphenidate (Ritalin/Concerta/Equasym/Medikinet/Xenidate/Delmosart), lisdexamfetamine (Elvanse), dexamfetamine (Dexedrine/Amfexa). First rule to exercise `ageRange` on drug-monitoring rules.
