@@ -10,6 +10,7 @@ const SENTINEL_KEYS = [
   'sentinel.orgRules',
   'sentinel.customRules',
   'sentinel.alertLibrary.acknowledged',
+  'sentinel.hiddenRules',
 ];
 
 // Export all Sentinel storage keys into a plain data object.
@@ -21,6 +22,7 @@ async function sentinelExport() {
     orgRules:    r['sentinel.orgRules']    ?? null,
     customRules: r['sentinel.customRules'] ?? [],
     alertLibraryAcknowledged: r['sentinel.alertLibrary.acknowledged'] ?? false,
+    hiddenRules: r['sentinel.hiddenRules'] ?? {},
   };
 }
 
@@ -82,6 +84,13 @@ async function sentinelImport(data, { merge = false } = {}) {
       throw new Error('sentinel.alertLibrary.acknowledged must be a boolean.');
     }
     toSet['sentinel.alertLibrary.acknowledged'] = data.alertLibraryAcknowledged;
+  }
+
+  if (data.hiddenRules !== undefined) {
+    if (typeof data.hiddenRules !== 'object' || Array.isArray(data.hiddenRules) || data.hiddenRules === null) {
+      throw new Error('sentinel.hiddenRules must be an object.');
+    }
+    toSet['sentinel.hiddenRules'] = data.hiddenRules;
   }
 
   if (Object.keys(toSet).length > 0) {

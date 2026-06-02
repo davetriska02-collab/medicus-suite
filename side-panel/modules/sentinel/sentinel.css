@@ -426,3 +426,17 @@
   cursor: pointer;
 }
 .sent-ev-close:hover { background: var(--bg-hover); }
+
+/* ── Per-rule dismiss / snooze button ──────────────────────────────────────── */
+.sent-chip-dismiss {
+  position: absolute;
+  top: 4px; right: 4px;
+  background: none; border: none;
+  color: var(--text-muted); font-size: 11px;
+  cursor: pointer; opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 2px; line-height: 1;
+}
+.sent-chip { position: relative; }
+.sent-chip:hover .sent-chip-dismiss { opacity: 0.6; }
+.sent-chip-dismiss:hover { opacity: 1 !important; color: var(--text); }

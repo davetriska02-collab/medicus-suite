@@ -2111,3 +2111,121 @@ if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') {
   ecRenderList();
   cmRenderList();
 }
+
+// ── Hidden / Snoozed Alerts + Manage Alerts (Display tab) ─────────────────────
+// Hidden Alerts lists everything in sentinel.hiddenRules with an Enable button.
+// Manage Alerts hard-toggles the bundled vaccine rules on/off (a permanent hide
+// recorded in the same sentinel.hiddenRules map, with until: null).
+
+let _vaccineRulesCache = null;
+
+async function loadVaccineRules() {
+  if (_vaccineRulesCache) return _vaccineRulesCache;
+  try {
+    const url = chrome.runtime.getURL('rules/vaccine-rules.json');
+    const res = await fetch(url);
+    const json = await res.json();
+    _vaccineRulesCache = json.rules || [];
+  } catch {
+    _vaccineRulesCache = [];
+  }
+  return _vaccineRulesCache;
+}
+
+// Resolve a friendly display name for a hidden rule id, falling back to the id.
+function ruleDisplayName(ruleId, vaccineRules) {
+  const v = (vaccineRules || []).find(r => r.id === ruleId);
+  return v?.displayName || ruleId;
+}
+
+async function renderHiddenRulesList() {
+  const list = getEl('hiddenRulesList');
+  if (!list) return;
+  const [res, vaccineRules] = await Promise.all([
+    chrome.storage.local.get('sentinel.hiddenRules'),
+    loadVaccineRules(),
+  ]);
+  const hidden = res['sentinel.hiddenRules'] || {};
+  const ids = Object.keys(hidden);
+  if (ids.length === 0) {
+    list.innerHTML = '<div class="cr-empty">No alerts are currently hidden.</div>';
+    return;
+  }
+  list.innerHTML = ids.map(id => {
+    const entry = hidden[id] || {};
+    const untilText = entry.until ? `hidden until ${escHtml(entry.until)}` : 'permanently hidden';
+    return `
+      <div class="cr-card" data-rule-id="${escAttr(id)}">
+        <div class="cr-card-info">
+          <div class="cr-card-name">${escHtml(ruleDisplayName(id, vaccineRules))}</div>
+          <div class="cr-card-meta">${escHtml(id)} · ${untilText}</div>
+        </div>
+        <div class="cr-card-actions">
+          <button class="ghost hidden-enable-btn" data-id="${escAttr(id)}">Enable</button>
+        </div>
+      </div>`;
+  }).join('');
+  list.querySelectorAll('.hidden-enable-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const r = await chrome.storage.local.get('sentinel.hiddenRules');
+      const h = r['sentinel.hiddenRules'] || {};
+      delete h[btn.dataset.id];
+      await chrome.storage.local.set({ 'sentinel.hiddenRules': h });
+      renderHiddenRulesList();
+      renderManageRulesList();
+    });
+  });
+}
+
+async function renderManageRulesList() {
+  const list = getEl('manageRulesList');
+  if (!list) return;
+  const [res, vaccineRules] = await Promise.all([
+    chrome.storage.local.get('sentinel.hiddenRules'),
+    loadVaccineRules(),
+  ]);
+  const hidden = res['sentinel.hiddenRules'] || {};
+  if (vaccineRules.length === 0) {
+    list.innerHTML = '<div class="cr-empty">No bundled alerts found.</div>';
+    return;
+  }
+  // A rule is "off" here only when permanently hidden (until null). A snooze is
+  // managed from the Hidden Alerts section above, not toggled here.
+  list.innerHTML = vaccineRules.map(rule => {
+    const entry = hidden[rule.id];
+    const off = !!entry && entry.until == null;
+    return `
+      <div class="cr-card${off ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
+        <div class="cr-card-info">
+          <div class="cr-card-name">${escHtml(rule.displayName || rule.id)}</div>
+          <div class="cr-card-meta">${escHtml(rule.id)} · ${off ? 'off' : 'on'}</div>
+        </div>
+        <div class="cr-card-actions">
+          <button class="ghost manage-toggle-btn" data-id="${escAttr(rule.id)}">${off ? 'Enable' : 'Disable'}</button>
+        </div>
+      </div>`;
+  }).join('');
+  list.querySelectorAll('.manage-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const r = await chrome.storage.local.get('sentinel.hiddenRules');
+      const h = r['sentinel.hiddenRules'] || {};
+      const id = btn.dataset.id;
+      if (h[id] && h[id].until == null) delete h[id]; // currently off → turn on
+      else h[id] = { until: null };                   // turn permanently off
+      await chrome.storage.local.set({ 'sentinel.hiddenRules': h });
+      renderManageRulesList();
+      renderHiddenRulesList();
+    });
+  });
+}
+
+// Re-render the Display-tab lists whenever hidden rules change elsewhere.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes['sentinel.hiddenRules']) {
+    renderHiddenRulesList();
+    renderManageRulesList();
+  }
+});
+
+renderHiddenRulesList();
+renderManageRulesList();

@@ -12,6 +12,27 @@ let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
+// Per-rule hide/snooze (sentinel.hiddenRules). Cached at init + refreshed on
+// storage change. A rule is suppressed if its key exists AND (until is null OR
+// until is a future ISO date); a past until auto-resurfaces the rule.
+let _hiddenRules = {};
+let _dismissHandler = null;
+let _hiddenStorageListener = null;
+
+function isRuleHidden(ruleId) {
+  if (!ruleId) return false;
+  const entry = _hiddenRules[ruleId];
+  if (!entry) return false;
+  if (entry.until == null) return true; // permanent
+  const today = new Date().toISOString().slice(0, 10);
+  return entry.until > today; // future snooze still active; past => resurface
+}
+
+async function loadHiddenRules() {
+  const r = await chrome.storage.local.get('sentinel.hiddenRules');
+  _hiddenRules = r['sentinel.hiddenRules'] || {};
+}
+
 // Evidence-panel state: track which chip is open by its data-evidence-key so
 // the 10s poll re-render can restore the panel. _evidenceByKey caches the chip
 // objects from the latest snapshot for lookup on click.
@@ -40,6 +61,7 @@ export async function init(el) {
   fetchWaitingRoom();
   wrPollTimer = setInterval(fetchWaitingRoom, WR_POLL_MS);
 
+  await loadHiddenRules();
   await refresh();
   pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
@@ -55,6 +77,36 @@ export async function init(el) {
 
   _refreshBtnHandler = e => { if (e.target?.id === 'sentRefreshBtn') refresh(); };
   document.addEventListener('click', _refreshBtnHandler);
+
+  // Delegated dismiss handler: clicks on a chip's × button add the rule to
+  // sentinel.hiddenRules and re-render. stopPropagation prevents the chip's
+  // own click handler from also toggling its evidence panel.
+  _dismissHandler = async (e) => {
+    const btn = e.target.closest?.('[data-dismiss-rule]');
+    if (!btn || !container || !container.contains(btn)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const ruleId = btn.dataset.dismissRule;
+    if (!ruleId) return;
+    const untilRaw = btn.dataset.dismissUntil;
+    const until = untilRaw ? untilRaw : null;
+    const r = await chrome.storage.local.get('sentinel.hiddenRules');
+    const hidden = r['sentinel.hiddenRules'] || {};
+    hidden[ruleId] = { until };
+    await chrome.storage.local.set({ 'sentinel.hiddenRules': hidden });
+    _hiddenRules = hidden;
+    refresh();
+  };
+  document.addEventListener('click', _dismissHandler, true);
+
+  // Re-render when hidden rules change (e.g. re-enabled from settings).
+  _hiddenStorageListener = (changes, area) => {
+    if (area === 'local' && changes['sentinel.hiddenRules']) {
+      _hiddenRules = changes['sentinel.hiddenRules'].newValue || {};
+      refresh();
+    }
+  };
+  chrome.storage.onChanged.addListener(_hiddenStorageListener);
 
   return () => {
     cleanup();
@@ -73,6 +125,14 @@ async function cleanup() {
   if (_refreshBtnHandler) {
     document.removeEventListener('click', _refreshBtnHandler);
     _refreshBtnHandler = null;
+  }
+  if (_dismissHandler) {
+    document.removeEventListener('click', _dismissHandler, true);
+    _dismissHandler = null;
+  }
+  if (_hiddenStorageListener) {
+    chrome.storage.onChanged.removeListener(_hiddenStorageListener);
+    _hiddenStorageListener = null;
   }
   if (_evidenceKeydownHandler) {
     document.removeEventListener('keydown', _evidenceKeydownHandler);
@@ -287,8 +347,13 @@ function render(payload) {
     return;
   }
 
-  const { chips, patientContext, evaluatedAt } = snapshot;
+  const { chips: allChips, patientContext, evaluatedAt } = snapshot;
   const patient = patientContext;
+
+  // Drop chips for currently-suppressed rules (per-rule hide/snooze) before any
+  // filtering or counting, so hidden alerts vanish entirely and don't skew the
+  // filter-bar tallies.
+  const chips = (allChips || []).filter(c => !isRuleHidden(c.ruleId));
 
   // Filter chips
   let visibleChips = chips;
