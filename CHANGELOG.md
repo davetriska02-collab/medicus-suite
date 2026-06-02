@@ -2,6 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.22.1] — 2026-06-02
+### Fixed
+- **HRT progestogen context**: added `"hormone releasing intrauterine"` and `"insertion of hormone releasing"` to `iusProblemTerms` so that a problem entry of "Insertion of hormone releasing intrauterine contraceptive device" is now recognised as an IUS for endometrial-protection context on HRT chips.
+
 ## [v3.22.0] — 2026-06-01
 ### Fixed (custom rule creator ↔ engine parity — from the two-agent review)
 
