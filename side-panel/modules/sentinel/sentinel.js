@@ -325,8 +325,8 @@ function render(payload) {
       <button class="sent-filter-btn${currentFilter==='clear'?' active clear':''}" data-filter="clear">In date (${clearCount})</button>
     </div>`;
 
-  const typeOrder = ['drug-combo', 'event-count', 'composite', 'drug-monitoring', 'qof-indicator', 'qof-process-indicator', 'qof-register'];
-  const typeLabelMap = { 'drug-combo':'Drug Combinations', 'event-count':'Recurrent Events', 'composite':'Composite Alerts', 'drug-monitoring':'Drug Monitoring', 'qof-indicator':'QOF Indicators', 'qof-process-indicator':'QOF Process', 'qof-register':'Registers' };
+  const typeOrder = ['drug-combo', 'event-count', 'composite', 'drug-monitoring', 'vaccine', 'qof-indicator', 'qof-process-indicator', 'qof-register'];
+  const typeLabelMap = { 'drug-combo':'Drug Combinations', 'event-count':'Recurrent Events', 'composite':'Composite Alerts', 'drug-monitoring':'Drug Monitoring', 'vaccine':'Vaccinations', 'qof-indicator':'QOF Indicators', 'qof-process-indicator':'QOF Process', 'qof-register':'Registers' };
 
   const groupsHtml = typeOrder
     .filter(t => groups[t]?.length)
@@ -484,6 +484,7 @@ function renderChip(chip) {
     if (chip.type === 'drug-combo')       return CR.renderDrugComboChip(chip);
     if (chip.type === 'event-count')      return CR.renderEventCountChip(chip);
     if (chip.type === 'composite')        return CR.renderCompositeChip(chip);
+    if (chip.type === 'vaccine')          return CR.renderVaccineChip(chip);
   }
 
   if (chip.type === 'drug-monitoring') {

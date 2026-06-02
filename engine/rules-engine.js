@@ -36,7 +36,10 @@
     noted: 3,
     recently_initiated: 4,
     achieved: 5,
-    in_date: 5
+    in_date: 5,
+    vax_given: 5,
+    vax_declined: 3,
+    vax_due: 1
   };
 
   // === DRUG MATCHING ===
@@ -1193,6 +1196,7 @@
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
       else if (type === 'drug-combo')    out = evaluateDrugComboRule(rule, data);
       else if (type === 'event-count')   out = evaluateEventCountRule(rule, data, now);
+      else if (type === 'vaccine')       out = evaluateVaccineRule(rule, data, now);
       chips.push(...out);
       if (rule.id) evaluatedById.set(rule.id, out);
     });
@@ -1217,6 +1221,164 @@
     return chips;
   }
 
+  function seasonStart(nowIso, startMonth, startDay) {
+    const now = new Date(nowIso);
+    let year = now.getFullYear();
+    const candidate = new Date(year, startMonth - 1, startDay);
+    if (candidate > now) year -= 1;
+    const d = new Date(year, startMonth - 1, startDay);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function matchesAnyTerm(str, terms) {
+    const s = String(str || '').toLowerCase();
+    return terms.some(t => s.includes(t.toLowerCase()));
+  }
+
+  function vaccineEventInWindow(rule, data, seasonStartIso) {
+    const givenTerms = rule.statusTerms?.given || [];
+    const declinedTerms = rule.statusTerms?.declined || [];
+    // Search problems
+    for (const p of (data.problems || [])) {
+      if (!p.label) continue;
+      const d = p.codedDate || '';
+      if (d && d < seasonStartIso) continue;
+      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
+      if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
+    }
+    // Search observations (name and value)
+    for (const o of (data.observations || [])) {
+      const d = o.date || '';
+      if (d && d < seasonStartIso) continue;
+      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
+      if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
+    }
+    // Search observationHistory (journal entries in history)
+    for (const h of (data.observationHistory || [])) {
+      if (matchesAnyTerm(h.name, givenTerms)) {
+        const latest = (h.history || []).find(pt => !pt.date || pt.date >= seasonStartIso);
+        if (latest) return { type: 'given', date: latest.date, source: 'history' };
+      }
+      if (matchesAnyTerm(h.name, declinedTerms)) {
+        const latest = (h.history || []).find(pt => !pt.date || pt.date >= seasonStartIso);
+        if (latest) return { type: 'declined', date: latest.date, source: 'history' };
+      }
+    }
+    return null;
+  }
+
+  function matchVaccineEligibility(rule, data) {
+    const ctx = data.patientContext || {};
+    const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : (Number.isFinite(ctx.age) ? ctx.age : null);
+    const sex = (ctx.sex || ctx.gender || '').toLowerCase();
+
+    for (const clause of (rule.eligibility?.anyOf || [])) {
+      const k = clause.kind;
+
+      if (k === 'age') {
+        if (age == null) continue;
+        const ok = (clause.ageMin == null || age >= clause.ageMin) &&
+                   (clause.ageMax == null || age <= clause.ageMax);
+        if (ok) return clause;
+      }
+
+      if (k === 'problem') {
+        if (clause.sex && clause.sex !== sex[0]) continue;
+        const terms = clause.match || [];
+        const hit = (data.problems || []).find(p =>
+          p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
+        if (hit) return clause;
+      }
+
+      if (k === 'register') {
+        const regs = clause.registers || [];
+        const hit = regs.some(code => {
+          const regRule = (data._registerLookup || {})[code];
+          return regRule && patientOnRegister(data.problems, regRule);
+        });
+        if (hit) return { ...clause, label: clause.label };
+      }
+
+      if (k === 'medication') {
+        const terms = clause.match || [];
+        const hit = (data.medications || []).find(m => matchesAnyTerm(m.name, terms));
+        if (hit) return clause;
+      }
+
+      if (k === 'observation-threshold') {
+        const obsNames = clause.observation || [];
+        const obs = (data.observations || []).find(o =>
+          obsNames.some(n => (o.name || '').toLowerCase().includes(n.toLowerCase())));
+        if (obs) {
+          const val = parseNumeric(obs.value);
+          const op = clause.operator || '>=';
+          const threshold = clause.value;
+          const met = op === '>=' ? val >= threshold :
+                      op === '>'  ? val >  threshold :
+                      op === '<=' ? val <= threshold :
+                      op === '<'  ? val <  threshold : false;
+          if (met) return clause;
+        }
+      }
+
+      if (k === 'conditional-register') {
+        // Register must be active
+        const regRule = (data._registerLookup || {})[clause.register];
+        if (!regRule || !patientOnRegister(data.problems, regRule)) continue;
+        // AND any of the sub-conditions
+        const subHit = (clause.andAnyOf || []).some(sub => {
+          if (sub.medication) {
+            return (data.medications || []).some(m => matchesAnyTerm(m.name, sub.medication));
+          }
+          if (sub.problem) {
+            return (data.problems || []).some(p =>
+              p.status !== 'inactive' && matchesAnyTerm(p.label, sub.problem));
+          }
+          return false;
+        });
+        if (subHit) return clause;
+      }
+    }
+    return null;
+  }
+
+  function evaluateVaccineRule(rule, data, nowIso) {
+    if (rule.enabled === false) return [];
+    const matchedClause = matchVaccineEligibility(rule, data);
+    if (!matchedClause) return [];
+
+    const startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+    const evt = vaccineEventInWindow(rule, data, startIso);
+
+    const status = evt ? (evt.type === 'given' ? 'vax_given' : 'vax_declined') : 'vax_due';
+
+    const seasonYear = startIso.slice(0, 4);
+    const seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
+
+    const evidenceParts = [`${rule.displayName} — ${matchedClause.label}`];
+    if (evt) evidenceParts.push(`${evt.type === 'given' ? 'Given' : 'Declined'}: ${evt.date || 'date unknown'}`);
+    else evidenceParts.push(`No record in ${seasonLabel} season (from ${startIso})`);
+    if (rule.notes) evidenceParts.push(rule.notes);
+
+    return [{
+      type: 'vaccine',
+      ruleId: rule.id,
+      vaccine: rule.vaccine,
+      displayName: rule.displayName,
+      status,
+      eligibilityReason: matchedClause.label,
+      eventDate: evt ? evt.date : null,
+      seasonLabel,
+      seasonStartIso: startIso,
+      evidence: {
+        summary: `${rule.displayName} · ${matchedClause.label}`,
+        facts: evidenceParts
+      },
+      source: rule.source || '',
+      notes: rule.notes || ''
+    }];
+  }
+
   const api = {
     evaluatePatient,
     drugMatchesRule,
@@ -1233,6 +1395,7 @@
     evaluateDrugComboRule,
     evaluateEventCountRule,
     evaluateCompositeRule,
+    evaluateVaccineRule,
     severityToStatus,
     STATUS_RANK
   };
