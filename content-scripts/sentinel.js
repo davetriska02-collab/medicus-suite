@@ -313,11 +313,13 @@
     if (!_canonicalRulesCache) {
       const drugUrl = chrome.runtime.getURL('rules/drug-rules.json');
       const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
-      const [drugDoc, qofDoc] = await Promise.all([
+      const vaccineUrl = chrome.runtime.getURL('rules/vaccine-rules.json');
+      const [drugDoc, qofDoc, vaccineDoc] = await Promise.all([
         fetch(drugUrl).then(r => r.json()),
-        fetch(qofUrl).then(r => r.json())
+        fetch(qofUrl).then(r => r.json()),
+        fetch(vaccineUrl).then(r => r.json())
       ]);
-      _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || [])];
+      _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || []), ...(vaccineDoc.rules || [])];
     }
     const canonical = _canonicalRulesCache;
 

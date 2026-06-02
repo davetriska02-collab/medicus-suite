@@ -15,7 +15,9 @@
     no_data: 'neutral', recently_initiated: 'neutral',
     achieved: 'green', in_date: 'green',
     // Non-time-based alert statuses (drug-combo / event-count / composite)
-    alert: 'red', caution: 'amber', noted: 'neutral'
+    alert: 'red', caution: 'amber', noted: 'neutral',
+    // Vaccine statuses
+    vax_due: 'amber', vax_given: 'green', vax_declined: 'neutral'
   };
 
   const STATUS_LABEL = {
@@ -24,7 +26,9 @@
     no_data: 'NO DATA', recently_initiated: 'NEW',
     achieved: 'MET', in_date: 'IN DATE',
     // Non-time-based alert statuses (drug-combo / event-count / composite)
-    alert: 'ALERT', caution: 'CAUTION', noted: 'NOTED'
+    alert: 'ALERT', caution: 'CAUTION', noted: 'NOTED',
+    // Vaccine statuses
+    vax_due: 'DUE', vax_given: 'GIVEN', vax_declined: 'DECLINED'
   };
 
   function escHtml(s) {
@@ -336,6 +340,44 @@
       </div>`;
   }
 
+  // Render a vaccine eligibility chip (flu / COVID).
+  function renderVaccineChip(chip) {
+    const col = STATUS_COLOUR[chip.status] || 'neutral';
+    const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
+    const dateBit = (chip.status === 'vax_given' || chip.status === 'vax_declined')
+      ? `<div class="sent-chip-obs">${lbl === 'GIVEN' ? 'Given' : 'Declined'}: ${escHtml(formatDate(chip.eventDate) || 'date unknown')}</div>`
+      : '';
+    const seasonBit = chip.seasonLabel
+      ? `<div class="sent-chip-cat">Season ${escHtml(chip.seasonLabel)}</div>`
+      : '';
+    const notesBit = chip.notes
+      ? `<div class="sent-chip-note sent-vax-note">${escHtml(chip.notes)}</div>`
+      : '';
+    const sourceBit = chip.source
+      ? `<div class="sent-chip-source">Source: ${escHtml(chip.source)}</div>`
+      : '';
+    const tooltipBits = [];
+    if (chip.notes)  tooltipBits.push(chip.notes);
+    if (chip.source) tooltipBits.push('Source: ' + chip.source);
+    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const evAttrs = chip.evidence
+      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      : '';
+    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    return `
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+        <div class="sent-chip-head">
+          <span class="sent-chip-name">${escHtml(chip.displayName || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+        </div>
+        <div class="sent-chip-obs">${escHtml(chip.eligibilityReason || '')}</div>
+        ${dateBit}
+        ${seasonBit}
+        ${notesBit}
+        ${sourceBit}
+      </div>`;
+  }
+
   // === EVIDENCE PANEL ===
   // Renders the click-to-detail panel for a chip's evidence object.
   // Shape: { summary, facts: [{label, value, date?, detail?}], refs?, series? }
@@ -407,7 +449,7 @@
     </div>`;
   }
 
-  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, renderEvidencePanel, renderSparkline, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
+  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, renderVaccineChip, renderEvidencePanel, renderSparkline, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

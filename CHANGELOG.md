@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.0] — 2026-06-02
+### Added
+- **Vaccination eligibility alerts** (flu + COVID) — new `vaccine` rule type and `rules/vaccine-rules.json`. The monitoring panel now surfaces a "Vaccinations" group with DUE / GIVEN / DECLINED chips. Eligibility is derived from age, QOF registers, active problems, current medications, and BMI observation using JCVI/UKHSA 2025/26 criteria.
+  - **Flu**: age 65+, all 2–17yo, pregnancy, clinical risk registers (DM/CKD/COPD/CHD/HF/Stroke-TIA/AF/PAD), asthma on inhaled/systemic steroids, chronic liver/neurological disease, immunosuppression, asplenia, BMI ≥40 (Green Book Chapter 19).
+  - **COVID**: age 75+, care home residents, and immunosuppressed only — clinical risk groups are no longer eligible as of 2025/26.
+  - Status (DUE/GIVEN/DECLINED) is inferred from coded problems, observations, and journal entries within the current season window (flu from 1 Sep, COVID autumn from 1 Oct). All chips carry a prominent "DOUBLE-CHECK ELIGIBILITY" note as status may be incomplete if vaccination was given outside the practice.
+
 ## [v3.25.3] — 2026-06-02
 ### Fixed
 - **BP Trend tab still blank after v3.25.2** — added a fallback path in `bptrend.js` that merges separate "Systolic blood pressure" / "Diastolic blood pressure" entries from `observationHistory` by date when no parseable combined "Blood pressure" entry is found. This handles all API shapes: combined row (primary path), synthesised combined entry from v3.25.2 (primary path), and raw split rows that reach bptrend without synthesis (fallback path). Also added `Blood pressure` history entries to mock data (`engine/data-fetcher.js`) so the trend tab can be verified in mock mode.

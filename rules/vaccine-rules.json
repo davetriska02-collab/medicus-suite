@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "vax-flu",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "flu",
+      "displayName": "Flu vaccine",
+      "season": { "startMonth": 9, "startDay": 1 },
+      "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2025)",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
+      "eligibility": {
+        "anyOf": [
+          { "kind": "age", "ageMin": 65, "label": "Age 65+" },
+          { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
+          { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
+          { "kind": "register", "registers": ["DM","DM1","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
+          { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
+          { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
+          { "kind": "observation-threshold", "observation": ["bmi","body mass index"], "operator": ">=", "value": 40, "label": "BMI ≥40 kg/m²" },
+          { "kind": "conditional-register", "register": "ASTHMA", "andAnyOf": [{ "medication": ["beclometasone","budesonide","fluticasone","mometasone","ciclesonide","seretide","symbicort","fostair","clenil","relvar","trimbow"] },{ "problem": ["brittle asthma","severe asthma","admission for asthma","hospitalisation for asthma"] }], "label": "Asthma on inhaled/systemic steroids" }
+        ]
+      },
+      "statusTerms": {
+        "given": ["influenza vaccination given","influenza vaccine given","flu vaccin","seasonal influenza vaccin","influenza immunisation given"],
+        "declined": ["influenza vaccination declined","flu vaccine declined","influenza immunisation declined","influenza vaccination not given","flu vaccination not given"]
+      }
+    },
+    {
+      "id": "vax-covid",
+      "type": "vaccine",
+      "enabled": true,
+      "vaccine": "covid",
+      "displayName": "COVID vaccine",
+      "season": { "startMonth": 10, "startDay": 1 },
+      "source": "JCVI COVID-19 autumn 2025 eligibility",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
+      "eligibility": {
+        "anyOf": [
+          { "kind": "age", "ageMin": 75, "label": "Age 75+" },
+          { "kind": "problem", "match": ["care home resident","nursing home resident","residential care"], "label": "Care home resident" },
+          { "kind": "problem", "match": ["transplant","stem cell","bone marrow","leukaemia","lymphoma","myeloma","hiv","aids","primary immunodeficiency","severe combined immunodeficiency","scid","chronic leukaemia","hodgkin"], "label": "Immunosuppressed (problem)" },
+          { "kind": "medication", "match": ["rituximab","ciclosporin","mycophenolate","tacrolimus","azathioprine","methotrexate","cyclophosphamide","chemotherapy","alemtuzumab","ofatumumab","ibrutinib","venetoclax"], "label": "Immunosuppressed (medication)" }
+        ]
+      },
+      "statusTerms": {
+        "given": ["covid-19 vaccination","covid vaccination","sars-cov-2 vaccin","covid booster","covid-19 booster","covid vaccine given"],
+        "declined": ["covid-19 vaccination declined","covid vaccine declined","covid vaccination declined"]
+      }
+    }
+  ]
+}
