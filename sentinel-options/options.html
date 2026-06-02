@@ -214,6 +214,18 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
     <button class="primary" id="saveBtn">Save settings</button>
     <span class="saved" id="savedMsg">Saved ✓</span>
   </div>
+
+  <h2>Hidden / Snoozed Alerts</h2>
+  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
+    Alerts you have dismissed from the monitoring panel. Snoozed alerts reappear automatically once their date passes. Click <strong>Enable</strong> to bring an alert back immediately.
+  </p>
+  <div class="cr-list" id="hiddenRulesList"><div class="cr-empty">No alerts are currently hidden.</div></div>
+
+  <h2>Manage Alerts</h2>
+  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
+    Permanently turn the bundled vaccination alerts on or off. Switching one off hides it for every patient until you turn it back on.
+  </p>
+  <div class="cr-list" id="manageRulesList"><div class="cr-empty">Loading…</div></div>
 </div>
 
 <!-- Custom Rules tab -->

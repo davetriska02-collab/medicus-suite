@@ -23,4 +23,3 @@ output/
 # Cowork skill staging — for the medicus-suite-deploy skill, copied to
 # /mnt/skills/user/ during repo setup. Not part of the repo itself.
 _skill/
-.claude/worktrees/

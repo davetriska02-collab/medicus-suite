@@ -35,6 +35,23 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function escAttr(s) {
+    return escHtml(s).replace(/"/g, '&quot;');
+  }
+
+  // Per-rule dismiss button rendered top-right of a chip. `untilIso` empty/null
+  // means a permanent hide; a date snoozes until that date. The button carries
+  // the ruleId + until via data-* attrs; the side-panel delegates clicks on
+  // [data-dismiss-rule] to write sentinel.hiddenRules. stopPropagation in that
+  // handler keeps this from also toggling the chip's evidence panel.
+  function renderDismissBtn(ruleId, untilIso) {
+    if (!ruleId) return '';
+    if (untilIso) {
+      return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until="${escAttr(untilIso)}" title="Snooze until season (${escAttr(untilIso)})" aria-label="Snooze this alert until season">×</button>`;
+    }
+    return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until="" title="Hide this alert" aria-label="Hide this alert">×</button>`;
+  }
+
   function formatDate(s) {
     if (!s) return '';
     try { return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -99,6 +116,7 @@
     const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+        ${renderDismissBtn(chip.ruleId, null)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -148,6 +166,7 @@
     const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+        ${renderDismissBtn(chip.ruleId, null)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${pointsText}</span>
@@ -380,6 +399,7 @@
 
     return `
       <div class="sent-chip sent-chip-${col} sent-vax-chip">
+        ${renderDismissBtn(chip.ruleId, chip.seasonStartIso || null)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.displayName || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -467,7 +487,7 @@
     </div>`;
   }
 
-  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, renderVaccineChip, renderEvidencePanel, renderSparkline, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
+  const api = { renderDrugChip, buildPreviewChip, renderQofIndicatorChip, buildQofPreviewChip, renderDrugComboChip, renderEventCountChip, renderCompositeChip, renderVaccineChip, renderEvidencePanel, renderSparkline, renderDismissBtn, STATUS_COLOUR, STATUS_LABEL, escHtml, formatDate };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

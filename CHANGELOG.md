@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.3] — 2026-06-02
+### Added
+- **Per-rule hide / snooze for monitoring chips** — each chip in the monitoring panel now carries an unobtrusive dismiss (×) button, visible on hover at the top-right, that does not interfere with click-to-expand evidence.
+  - **Vaccine chips** snooze until the season start (`seasonStartIso`) and auto-resurface once that date passes.
+  - **Drug-monitoring and QOF indicator chips** hide permanently (until cleared).
+  - Suppressions are stored in `chrome.storage.local` under `sentinel.hiddenRules` (`{ ruleId: { until: ISODate|null } }`); a rule is hidden while the key exists and `until` is null or a future date.
+  - Sentinel settings (Display tab) gains a **Hidden / Snoozed Alerts** section listing every suppressed rule with an Enable button, plus a **Manage Alerts** section that hard-toggles the bundled vaccine rules on/off.
+  - The panel re-renders live on `sentinel.hiddenRules` changes, and `sentinel.hiddenRules` is now included in suite backups (`sentinel-io.js`).
+
 ## [v3.26.2] — 2026-06-02
 ### Fixed
 - **QOF chips missing on care record view** — `detectMedicusContext` had a negative lookahead `(?!.*care-record)` on the `/patient/{uuid}` URL regex that explicitly excluded URLs of the form `/patient/{uuid}/care-record/...`. This meant the care record URL never yielded a `patientUuid` directly, falling through to the DOM banner scraper; if that failed, `dom-fallback` was used with empty `observationHistory`, causing all QOF indicators to resolve as `no_data` and disappear. Document task views worked because they use a separate `resolveTaskToPatient()` path. Fix: removed the negative lookahead — one character change in `engine/api-client.js:45`.
