@@ -117,6 +117,16 @@
       "problemExclude": [],
       "source": "QOF 26/27 COPD register. Underlying business rules amended for 26/27 to address potential under/over-recording; the SNOMED refset has been refined but Sentinel's substring match is unchanged."
     },
+    {
+      "id": "qof-reg-smi",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "SMI",
+      "registerName": "Severe Mental Illness",
+      "problemMatch": ["schizophrenia", "bipolar disorder", "bipolar affective disorder", "psychosis", "schizoaffective", "delusional disorder", "first episode psychosis", "fep", "severe mental illness", "smi"],
+      "problemExclude": ["drug-induced psychosis", "organic psychosis", "family history of schizophrenia"],
+      "source": "QOF 26/27 MH register (SMI_COD refset approximation — schizophrenia, bipolar disorder, other psychoses)"
+    },
 
     {
       "id": "qof-hyp008",
@@ -644,7 +654,7 @@
     {
       "id": "qof-dm037",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "DM037",
       "indicatorName": "Eight diabetes care processes in preceding 12 months",
       "requiresRegister": "DM",
@@ -666,7 +676,161 @@
       "thresholds": { "lower": 35, "upper": 75 },
       "points": 10,
       "source": "QOF 26/27 DM037",
-      "notes": "NEW 26/27 indicator. Requires all 8 care processes in preceding 12 months: BMI, BP, HbA1c, cholesterol, smoking status, foot exam, ACR, eGFR/creatinine. DISABLED pending rules engine support for observation-bundle / requireAll check kind. High-value indicator (10 pts) — worth prioritising for engine update."
+      "notes": "NEW 26/27 indicator. Requires all 8 care processes in preceding 12 months: BMI, BP, HbA1c, cholesterol, smoking status, foot exam, ACR, eGFR/creatinine. Chip shows 'X/8 care processes' and is not_met until all 8 are recorded this QOF year. Smoking status is also surfaced separately via the qof-smok-dm chip. QOF year floor applies."
+    },
+
+    {
+      "id": "qof-smok-smi",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "MH011",
+      "indicatorName": "Smoking status recorded in SMI (preceding 12 months)",
+      "requiresRegister": "SMI",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 5,
+      "source": "QOF 26/27 MH011 (NICE IND201)",
+      "notes": "Smoking rates in SMI are 2–3× the general population; cessation is the single highest-impact modifiable cardiovascular risk factor in this group. The QOF window uses the 1 Apr – 31 Mar QOF year floor. An encounter-coded journal entry is the typical evidence source; relies on Sentinel's journal endpoint fetch (v0.3.6+)."
+    },
+    {
+      "id": "qof-smok-asthma",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in Asthma (preceding 12 months)",
+      "requiresRegister": "ASTHMA",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112 / multiple disease registers)",
+      "notes": "Smoking is a major trigger and modifier of asthma; recording status annually enables cessation support. QOF year floor (1 Apr – 31 Mar) applies."
+    },
+    {
+      "id": "qof-smok-copd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in COPD (preceding 12 months)",
+      "requiresRegister": "COPD",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "Smoking cessation is the most effective COPD disease-modifying intervention available. QOF year floor applies. NRT and pharmacotherapy (varenicline, bupropion) should be offered."
+    },
+    {
+      "id": "qof-smok-dm",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in Diabetes (preceding 12 months)",
+      "requiresRegister": "DM",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 / DM037 (NICE IND112)",
+      "notes": "Also one of the eight DM037 care processes (currently disabled pending observation-bundle engine support). Annual recording drives cessation support and cardiovascular risk stratification. QOF year floor applies."
+    },
+    {
+      "id": "qof-smok-chd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in CHD (preceding 12 months)",
+      "requiresRegister": "CHD",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "Secondary prevention: cessation after MI/ACS significantly reduces reinfarction risk. QOF year floor applies."
+    },
+    {
+      "id": "qof-smok-stia",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in Stroke/TIA (preceding 12 months)",
+      "requiresRegister": "STIA",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "Smoking is an independent risk factor for recurrent stroke. QOF year floor applies."
+    },
+    {
+      "id": "qof-smok-ckd",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in CKD (preceding 12 months)",
+      "requiresRegister": "CKD",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "Smoking accelerates CKD progression and amplifies cardiovascular risk. QOF year floor applies."
+    },
+    {
+      "id": "qof-smok-hf",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in Heart Failure (preceding 12 months)",
+      "requiresRegister": "HF",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "QOF year floor applies."
+    },
+    {
+      "id": "qof-smok-pad",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "SMOK001",
+      "indicatorName": "Smoking status recorded in PAD (preceding 12 months)",
+      "requiresRegister": "PAD",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["smoking status", "tobacco use", "smoking cessation", "nicotine dependence"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 4,
+      "source": "QOF 26/27 SMOK001 (NICE IND112)",
+      "notes": "Smoking cessation is the most important intervention in PAD — it halves the rate of progression to critical limb ischaemia. QOF year floor applies."
     },
 
     {
