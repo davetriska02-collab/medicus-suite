@@ -1287,22 +1287,35 @@
         const terms = clause.match || [];
         const hit = (data.problems || []).find(p =>
           p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
-        if (hit) return clause;
+        if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
       }
 
       if (k === 'register') {
         const regs = clause.registers || [];
-        const hit = regs.some(code => {
+        let matchedReg = null;
+        for (const code of regs) {
           const regRule = (data._registerLookup || {})[code];
-          return regRule && patientOnRegister(data.problems, regRule);
-        });
-        if (hit) return { ...clause, label: clause.label };
+          if (!regRule) continue;
+          const res = patientOnRegister(data.problems, regRule);
+          if (res && res.matched) {
+            matchedReg = { regRule, problem: res.problem };
+            break;
+          }
+        }
+        if (matchedReg) {
+          const regName = matchedReg.regRule.registerName || matchedReg.regRule.registerCode;
+          const probLabel = matchedReg.problem && matchedReg.problem.label;
+          const detail = probLabel
+            ? `${clause.label}: ${probLabel} (${regName} register)`
+            : `${clause.label}: ${regName} register`;
+          return { ...clause, matchedEvidence: detail };
+        }
       }
 
       if (k === 'medication') {
         const terms = clause.match || [];
         const hit = (data.medications || []).find(m => matchesAnyTerm(m.name, terms));
-        if (hit) return clause;
+        if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.name}` };
       }
 
       if (k === 'observation-threshold') {
@@ -1317,26 +1330,36 @@
                       op === '>'  ? val >  threshold :
                       op === '<=' ? val <= threshold :
                       op === '<'  ? val <  threshold : false;
-          if (met) return clause;
+          if (met) {
+            const unit = obs.unit ? ` ${obs.unit}` : '';
+            return { ...clause, matchedEvidence: `${clause.label}: ${obs.name} ${val}${unit}` };
+          }
         }
       }
 
       if (k === 'conditional-register') {
         // Register must be active
         const regRule = (data._registerLookup || {})[clause.register];
-        if (!regRule || !patientOnRegister(data.problems, regRule)) continue;
-        // AND any of the sub-conditions
-        const subHit = (clause.andAnyOf || []).some(sub => {
+        if (!regRule) continue;
+        const regRes = patientOnRegister(data.problems, regRule);
+        if (!regRes || !regRes.matched) continue;
+        // AND any of the sub-conditions — capture which one hit
+        let subDetail = null;
+        for (const sub of (clause.andAnyOf || [])) {
           if (sub.medication) {
-            return (data.medications || []).some(m => matchesAnyTerm(m.name, sub.medication));
+            const m = (data.medications || []).find(med => matchesAnyTerm(med.name, sub.medication));
+            if (m) { subDetail = m.name; break; }
           }
           if (sub.problem) {
-            return (data.problems || []).some(p =>
-              p.status !== 'inactive' && matchesAnyTerm(p.label, sub.problem));
+            const p = (data.problems || []).find(pr =>
+              pr.status !== 'inactive' && matchesAnyTerm(pr.label, sub.problem));
+            if (p) { subDetail = p.label; break; }
           }
-          return false;
-        });
-        if (subHit) return clause;
+        }
+        if (subDetail) {
+          const regName = regRule.registerName || regRule.registerCode;
+          return { ...clause, matchedEvidence: `${clause.label}: ${subDetail} (${regName} register)` };
+        }
       }
     }
     return null;
@@ -1355,7 +1378,8 @@
     const seasonYear = startIso.slice(0, 4);
     const seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
 
-    const evidenceParts = [`${rule.displayName} — ${matchedClause.label}`];
+    const eligibilityDetail = matchedClause.matchedEvidence || matchedClause.label;
+    const evidenceParts = [`${rule.displayName} — ${eligibilityDetail}`];
     if (evt) evidenceParts.push(`${evt.type === 'given' ? 'Given' : 'Declined'}: ${evt.date || 'date unknown'}`);
     else evidenceParts.push(`No record in ${seasonLabel} season (from ${startIso})`);
     if (rule.notes) evidenceParts.push(rule.notes);
@@ -1367,11 +1391,12 @@
       displayName: rule.displayName,
       status,
       eligibilityReason: matchedClause.label,
+      matchedEvidence: matchedClause.matchedEvidence || null,
       eventDate: evt ? evt.date : null,
       seasonLabel,
       seasonStartIso: startIso,
       evidence: {
-        summary: `${rule.displayName} · ${matchedClause.label}`,
+        summary: `${rule.displayName} · ${eligibilityDetail}`,
         facts: evidenceParts
       },
       source: rule.source || '',

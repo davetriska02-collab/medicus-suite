@@ -273,6 +273,49 @@
 .sent-chip-clickable:hover .sent-chip-info,
 .sent-chip-clickable.sent-chip-open .sent-chip-info { opacity: 1; }
 
+/* === Vaccine chip (compact + expandable) === */
+.sent-vax-sub {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+}
+.sent-vax-reason { flex: 1; min-width: 0; }
+.sent-vax-season {
+  font-size: 10px; color: var(--text-4); font-family: var(--mono);
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.sent-vax-details { margin-top: 6px; }
+.sent-vax-summary {
+  list-style: none; cursor: pointer; user-select: none;
+  font-size: 10px; color: var(--text-4); display: inline-flex;
+  align-items: center; gap: 2px;
+}
+.sent-vax-summary::-webkit-details-marker { display: none; }
+.sent-vax-summary:hover { color: var(--text-2); }
+.sent-vax-summary .sent-chip-info { opacity: 0.7; margin-left: 0; }
+.sent-vax-summary:hover .sent-chip-info { opacity: 1; }
+.sent-vax-details[open] .sent-vax-summary { color: var(--text-2); }
+.sent-vax-detail-body {
+  margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border, #2a3146);
+  animation: sent-ev-fade 120ms ease;
+}
+.sent-vax-row {
+  display: flex; gap: 8px; font-size: 11px; line-height: 1.5;
+  font-family: var(--mono); color: var(--text-3);
+}
+.sent-vax-row-label {
+  color: var(--text-4); min-width: 72px; text-transform: uppercase;
+  font-size: 10px; letter-spacing: 0.04em; flex-shrink: 0;
+}
+.sent-vax-row-val { color: var(--text-2); }
+.sent-vax-note {
+  margin-top: 8px; font-size: 11px; line-height: 1.45;
+  color: var(--amber, #e0a23b);
+  background: rgba(224, 162, 59, 0.08);
+  border-left: 2px solid var(--amber, #e0a23b);
+  border-radius: 0 4px 4px 0; padding: 6px 8px;
+}
+.sent-chip-source { font-size: 10px; color: var(--text-4); margin-top: 4px; }
+
 .sent-evidence-wrapper { margin: 0 0 8px 0; }
 .sent-evidence-panel {
   background: var(--bg-elev);
