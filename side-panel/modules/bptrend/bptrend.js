@@ -47,15 +47,34 @@ async function refresh() {
 }
 
 function buildModel(data) {
-  const row = (data.observationHistory || []).find(o =>
+  const history = data.observationHistory || [];
+  const row = history.find(o =>
     BP_NAMES.some(n => (o.name || '').toLowerCase().includes(n)));
 
   // BP values are stored as "120/80" strings; the numeric `value` field is NaN.
   // Parse rawValue for each history point to extract systolic/diastolic pairs.
-  const pairs = (row?.history || [])
+  let pairs = (row?.history || [])
     .map(h => ({ date: h.date, bp: parseBp(h.rawValue) }))
     .filter(p => p.bp)
     .reverse(); // oldest → newest for chart
+
+  // Fallback: if no combined entry was found (or it yielded no parseable points),
+  // merge separate "Systolic blood pressure" / "Diastolic blood pressure" entries
+  // directly. This handles API shapes where the synthesis in normaliseObservationHistory
+  // did not produce a combined entry (e.g. Key observations row only has latest reading).
+  if (pairs.length === 0) {
+    const sysRow = history.find(o => /systolic\s+blood\s+pressure/i.test(o.name || ''));
+    const diaRow = history.find(o => /diastolic\s+blood\s+pressure/i.test(o.name || ''));
+    if (sysRow && diaRow) {
+      const diaByDate = {};
+      (diaRow.history || []).forEach(h => { diaByDate[h.date] = h.rawValue; });
+      pairs = (sysRow.history || [])
+        .filter(h => diaByDate[h.date] != null)
+        .map(h => ({ date: h.date, bp: parseBp(`${h.rawValue}/${diaByDate[h.date]}`) }))
+        .filter(p => p.bp)
+        .reverse();
+    }
+  }
 
   const age = computeAge(data.patientContext);
   const registers = data.registers || [];
