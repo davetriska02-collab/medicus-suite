@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.7] — 2026-06-03
+
+### Added
+- **Brand-coverage regression test** (`test-drug-brand-coverage.js`) asserting, via the real `drugMatchesRule`, that every monitored generic/brand fires its rule (and unrelated drugs don't). Guards against the *silent* under-matching failure mode where a brand-prescribed med never triggers its alert.
+- **CLAUDE.md SOP** — new "Editing drug-monitoring rules" section: substring-match semantics, list-all-UK-brands expectation, `exclude` caution, and the requirement to extend the coverage test when adding drugs/brands.
+
 ## [v3.26.6] — 2026-06-03
 
 ### Changed

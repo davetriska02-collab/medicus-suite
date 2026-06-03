@@ -49,6 +49,16 @@ Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled 
 
 Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
 
+## Editing drug-monitoring rules (`rules/drug-rules.json`)
+
+Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensitive substring** matching against the `drug.match` list. Two consequences you must keep in mind, because the failure mode is **silent** — a med that doesn't match simply never fires its alert; there is no error, just a missing chip (a patient-safety risk, not a cosmetic one):
+
+- A **generic** term auto-covers its qualified generic forms — `"lithium"` already matches `"lithium carbonate"` / `"lithium citrate"`, so those don't need listing.
+- Every **distinct brand** must be listed explicitly or it will never match. When adding or editing a rule, enumerate the *complete* current UK brand set (check the BNF / dm+d), not just the generic plus a couple of common brands. Brand-list completeness is the default expectation.
+- **`drug.exclude` is sharp.** An exclude string silently drops *every* med whose name contains it, including legitimate ones. Use it only to suppress genuine false positives, and whenever you add one ask: "could a real patient who *needs* this monitoring match this string?" (e.g. the injectable-methotrexate exclusion was dropping valid parenteral-MTX patients.)
+
+After changing `match`/`exclude`, run `node test-drug-brand-coverage.js` and add the new drug/brands to its `EXPECTED` map so the coverage is regression-guarded. This converts "a clinician notices a missing alert months later" into "CI fails on the PR".
+
 ## Version bumping
 
 Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
