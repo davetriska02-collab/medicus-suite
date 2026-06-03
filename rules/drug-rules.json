@@ -29,7 +29,7 @@
       "id": "leflunomide-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["leflunomide"],
+        "match": ["leflunomide", "arava"],
         "snomed": ["386982008"]
       },
       "phase": "maintenance",
@@ -50,7 +50,7 @@
       "id": "hydroxychloroquine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["hydroxychloroquine", "chloroquine"],
+        "match": ["hydroxychloroquine", "chloroquine", "quinoric", "plaquenil", "avloclor"],
         "snomed": ["387397007"]
       },
       "phase": "maintenance",
@@ -69,7 +69,7 @@
       "id": "azathioprine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["azathioprine"],
+        "match": ["azathioprine", "imuran"],
         "snomed": ["372574004"]
       },
       "phase": "maintenance",
@@ -88,7 +88,7 @@
       "id": "sulfasalazine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["sulfasalazine", "sulphasalazine"],
+        "match": ["sulfasalazine", "sulphasalazine", "salazopyrin"],
         "snomed": ["387308006"]
       },
       "phase": "maintenance",
@@ -106,7 +106,7 @@
       "id": "carbamazepine-maintenance",
       "drugClass": "Antiepileptic",
       "drug": {
-        "match": ["carbamazepine", "tegretol"],
+        "match": ["carbamazepine", "tegretol", "carbagen"],
         "snomed": ["387222003"]
       },
       "phase": "maintenance",
@@ -166,7 +166,7 @@
       "id": "carbimazole-propylthiouracil",
       "drugClass": "Antithyroid",
       "drug": {
-        "match": ["carbimazole", "propylthiouracil"],
+        "match": ["carbimazole", "propylthiouracil", "neo-mercazole", "neomercazole"],
         "snomed": ["387534003"]
       },
       "phase": "maintenance",
@@ -185,7 +185,7 @@
       "id": "ace-arb",
       "drugClass": "RAAS blocker",
       "drug": {
-        "match": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "fosinopril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "olmesartan", "azilsartan", "sacubitril", "entresto"]
+        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto"]
       },
       "phase": "maintenance",
       "tests": [
@@ -202,7 +202,7 @@
       "id": "spironolactone",
       "drugClass": "Aldosterone antagonist",
       "drug": {
-        "match": ["spironolactone", "eplerenone"],
+        "match": ["spironolactone", "aldactone", "eplerenone", "inspra"],
         "snomed": ["387078006"]
       },
       "phase": "maintenance",
@@ -219,7 +219,7 @@
       "id": "sglt2-inhibitor",
       "drugClass": "SGLT2 inhibitor",
       "drug": {
-        "match": ["dapagliflozin", "empagliflozin", "canagliflozin", "ertugliflozin"],
+        "match": ["dapagliflozin", "forxiga", "xigduo", "qtern", "empagliflozin", "jardiance", "synjardy", "glyxambi", "canagliflozin", "invokana", "vokanamet", "ertugliflozin", "steglatro", "segluromet", "steglujan"],
         "snomed": ["703674001"]
       },
       "phase": "maintenance",
@@ -236,7 +236,7 @@
       "id": "glp1-receptor-agonist",
       "drugClass": "GLP-1 receptor agonist",
       "drug": {
-        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "lixisenatide", "exenatide"]
+        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
       },
       "phase": "maintenance",
       "tests": [
@@ -253,7 +253,7 @@
       "id": "doac",
       "drugClass": "DOAC",
       "drug": {
-        "match": ["apixaban", "rivaroxaban", "edoxaban", "dabigatran"]
+        "match": ["apixaban", "eliquis", "rivaroxaban", "xarelto", "edoxaban", "lixiana", "dabigatran", "pradaxa"]
       },
       "phase": "maintenance",
       "tests": [
@@ -271,7 +271,7 @@
       "id": "statin",
       "drugClass": "Statin",
       "drug": {
-        "match": ["atorvastatin", "simvastatin", "rosuvastatin", "pravastatin", "fluvastatin", "pitavastatin"]
+        "match": ["atorvastatin", "lipitor", "atozet", "simvastatin", "inegy", "rosuvastatin", "crestor", "enebium", "pravastatin", "lipostat", "fluvastatin", "lescol", "pitavastatin", "livazo"]
       },
       "phase": "maintenance",
       "tests": [
@@ -287,7 +287,7 @@
       "id": "allopurinol",
       "drugClass": "Xanthine oxidase inhibitor",
       "drug": {
-        "match": ["allopurinol", "febuxostat"],
+        "match": ["allopurinol", "zyloric", "febuxostat", "adenuric"],
         "snomed": ["387481004"]
       },
       "phase": "maintenance",
@@ -305,7 +305,7 @@
       "id": "antipsychotic",
       "drugClass": "Antipsychotic",
       "drug": {
-        "match": ["olanzapine", "risperidone", "quetiapine", "aripiprazole", "haloperidol", "chlorpromazine", "amisulpride", "paliperidone", "lurasidone", "asenapine", "cariprazine"],
+        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila"],
         "exclude": ["clozapine"]
       },
       "phase": "maintenance",
@@ -326,7 +326,7 @@
       "id": "mirabegron",
       "drugClass": "Beta-3 agonist",
       "drug": {
-        "match": ["mirabegron"]
+        "match": ["mirabegron", "betmiga"]
       },
       "phase": "maintenance",
       "tests": [
@@ -342,7 +342,7 @@
       "id": "levothyroxine",
       "drugClass": "Thyroid hormone",
       "drug": {
-        "match": ["levothyroxine", "liothyronine"],
+        "match": ["levothyroxine", "eltroxin", "euthyrox", "liothyronine", "tertroxin"],
         "snomed": ["10049011000001109"]
       },
       "phase": "maintenance",
@@ -359,7 +359,7 @@
       "id": "hrt-systemic",
       "drugClass": "HRT",
       "drug": {
-        "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
+        "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
         "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
       },
       "phase": "maintenance",
@@ -371,7 +371,7 @@
       "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext.",
       "sharedCare": false,
       "hrtContext": {
-        "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve"],
+        "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve", "progynova", "zumenon", "climaval", "estraderm", "nuvelle"],
         "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
         "iusProblemTerms": ["intrauterine system", "intrauterine device", "mirena coil", "insertion of mirena", "introduction of mirena", "replacement of intrauterine", "fitting of intrauterine", "iud fitted", "ius fitted", "coil fitted", "coil inserted", "hormone releasing intrauterine", "insertion of hormone releasing"],
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],

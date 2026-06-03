@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.27.0] — 2026-06-03
+
+### Changed
+- **Suite-wide UK brand-name coverage for built-in drug-monitoring rules.** Following the lithium/methylphenidate/methotrexate fixes, every remaining monitored drug class was researched against the BNF / dm+d / emc and its current UK proprietary brands added to `drug.match`, so brand-prescribed items fire the same monitoring as their generics. Only UK-marketed brands were added (legacy/discontinued ones retained, since repeat prescriptions persist); non-UK names were deliberately excluded. Highlights:
+  - **DMARDs**: leflunomide (`arava`); hydroxychloroquine (`quinoric`, `plaquenil`) / chloroquine (`avloclor`); azathioprine (`imuran`); sulfasalazine (`salazopyrin`).
+  - **Carbamazepine**: `carbagen`. **Carbimazole**: `neo-mercazole` / `neomercazole`.
+  - **ACE inhibitors / ARBs**: full set incl. `tritace`, `zestril`, `carace`, `coversyl`, `innovace`, `capoten`, `noyada`, `gopten`, `staril`, `cozaar`, `hyzaar`, `arbli`, `amias`, `diovan`, `exforge`, `aprovel`, `karvea`, `micardis`, `pritor`, `tolura`, `olmetec`, `sevikar`, `edarbi`, plus thiazide-combination brands (`zestoretic`, `innozide`, `triapin`).
+  - **SGLT2 inhibitors** incl. metformin/DPP-4 combinations: `forxiga`, `xigduo`, `qtern`, `jardiance`, `synjardy`, `glyxambi`, `invokana`, `vokanamet`, `steglatro`, `segluromet`, `steglujan`.
+  - **DOACs**: `eliquis`, `xarelto`, `lixiana`, `pradaxa`.
+  - **Statins**: `lipitor`, `atozet`, `inegy`, `crestor`, `enebium`, `lipostat`, `lescol`, `livazo`.
+  - **Antipsychotics** incl. long-acting depots: `zyprexa`, `zalasta`, `zypadhera`, `risperdal`, `okedi`, `seroquel`, `atrolak`, `biquelle`, `zaluron`, `abilify`, `serenace`, `dozic`, `haldol`, `largactil`, `solian`, `invega`, `xeplion`, `trevicta`, `byannli`, `latuda`, `sycrest`, `reagila`. (Clozapine remains excluded — national CPMS protocol.)
+  - **Others**: spironolactone/eplerenone (`aldactone`, `inspra`); allopurinol/febuxostat (`zyloric`, `adenuric`); mirabegron (`betmiga`); levothyroxine/liothyronine (`eltroxin`, `euthyrox`, `tertroxin`); GLP-1 legacy brands (`xultophy`, `lyxumia`, `byetta`, `bydureon`); systemic HRT (`progynova`, `zumenon`, `climaval`, `estraderm`, `nuvelle`) — local vaginal oestrogens still excluded.
+
+### Added
+- **`test-drug-brand-coverage.js` extended to every drug-monitoring rule** (258 assertions): each monitored generic/brand must fire its rule, plus negative controls (clozapine must not match the antipsychotic rule, vaginal oestrogens must not match systemic HRT, unrelated drugs must not match). A cross-rule collision check confirms no added brand token fires an unrelated rule.
+
 ## [v3.26.7] — 2026-06-03
 
 ### Added
