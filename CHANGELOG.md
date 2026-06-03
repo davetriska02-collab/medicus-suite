@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.5] — 2026-06-03
+
+### Changed
+- **Expanded brand-name coverage for built-in drug-monitoring rules** so that proprietary/brand prescriptions trigger the same monitoring as their generic names:
+  - **Lithium**: added `priadel`, `camcolit`, `liskonum`, `li-liquid`. (`lithium carbonate` / `lithium citrate` were already matched via the `lithium` substring.)
+  - **Methylphenidate (ADHD stimulant, paediatric + adult rules)**: added `tranquilyn`, `affenid`, `atenza`, `kixel`, `matoride`, `xaggitin`, `focusim`, `meflynate`, `metyrol` (joining the existing `ritalin`, `concerta`, `equasym`, `medikinet`, `xenidate`, `delmosart`).
+  - **Methotrexate**: added `metoject`, `jylamvo`, `nordimet`, `zlatal`, `methofill` (oral and shared-care brands). Injectable high-dose exclusions (`methotrexate 50mg/2ml`, `methotrexate injection`) are unchanged.
+
 ## [v3.26.4] — 2026-06-02
 
 ### Fixed

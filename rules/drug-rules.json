@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-02",
+  "lastUpdated": "2026-06-03",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
@@ -10,7 +10,7 @@
       "id": "methotrexate-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["methotrexate"],
+        "match": ["methotrexate", "metoject", "jylamvo", "nordimet", "zlatal", "methofill"],
         "snomed": ["387381009"],
         "exclude": ["methotrexate 50mg/2ml", "methotrexate injection"]
       },
@@ -128,7 +128,7 @@
       "id": "lithium-maintenance",
       "drugClass": "Mood stabiliser",
       "drug": {
-        "match": ["lithium"],
+        "match": ["lithium", "priadel", "camcolit", "liskonum", "li-liquid"],
         "snomed": ["73572009"]
       },
       "phase": "maintenance",
@@ -387,7 +387,7 @@
       "ageRange": { "max": 17 },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
@@ -409,7 +409,7 @@
       "ageRange": { "min": 18 },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
