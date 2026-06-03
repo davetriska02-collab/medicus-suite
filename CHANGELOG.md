@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.7] — 2026-06-03
+
+### Added
+- **Brand-coverage regression test** (`test-drug-brand-coverage.js`) asserting, via the real `drugMatchesRule`, that every monitored generic/brand fires its rule (and unrelated drugs don't). Guards against the *silent* under-matching failure mode where a brand-prescribed med never triggers its alert.
+- **CLAUDE.md SOP** — new "Editing drug-monitoring rules" section: substring-match semantics, list-all-UK-brands expectation, `exclude` caution, and the requirement to extend the coverage test when adding drugs/brands.
+
+## [v3.26.6] — 2026-06-03
+
+### Changed
+- **Methotrexate monitoring now also covers injectable forms.** Removed the `methotrexate 50mg/2ml` / `methotrexate injection` exclusions from the `methotrexate-maintenance` rule so that any patient on parenteral methotrexate (uncommon in primary care, but possible) still gets FBC/U&E/LFT monitoring rather than being silently skipped.
+
+## [v3.26.5] — 2026-06-03
+
+### Changed
+- **Expanded brand-name coverage for built-in drug-monitoring rules** so that proprietary/brand prescriptions trigger the same monitoring as their generic names:
+  - **Lithium**: added `priadel`, `camcolit`, `liskonum`, `li-liquid`. (`lithium carbonate` / `lithium citrate` were already matched via the `lithium` substring.)
+  - **Methylphenidate (ADHD stimulant, paediatric + adult rules)**: added `tranquilyn`, `affenid`, `atenza`, `kixel`, `matoride`, `xaggitin`, `focusim`, `meflynate`, `metyrol` (joining the existing `ritalin`, `concerta`, `equasym`, `medikinet`, `xenidate`, `delmosart`).
+  - **Methotrexate**: added `metoject`, `jylamvo`, `nordimet`, `zlatal`, `methofill` (oral and shared-care brands). Injectable high-dose exclusions (`methotrexate 50mg/2ml`, `methotrexate injection`) are unchanged.
+
 ## [v3.26.4] — 2026-06-02
 
 ### Fixed
