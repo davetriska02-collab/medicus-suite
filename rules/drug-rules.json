@@ -11,8 +11,7 @@
       "drugClass": "DMARD",
       "drug": {
         "match": ["methotrexate", "metoject", "jylamvo", "nordimet", "zlatal", "methofill"],
-        "snomed": ["387381009"],
-        "exclude": ["methotrexate 50mg/2ml", "methotrexate injection"]
+        "snomed": ["387381009"]
       },
       "phase": "maintenance",
       "tests": [

@@ -2,6 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.6] — 2026-06-03
+
+### Changed
+- **Methotrexate monitoring now also covers injectable forms.** Removed the `methotrexate 50mg/2ml` / `methotrexate injection` exclusions from the `methotrexate-maintenance` rule so that any patient on parenteral methotrexate (uncommon in primary care, but possible) still gets FBC/U&E/LFT monitoring rather than being silently skipped.
+
 ## [v3.26.5] — 2026-06-03
 
 ### Changed
