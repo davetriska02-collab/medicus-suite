@@ -734,7 +734,7 @@ html, body {
 .rm-strip-hidden { display: none; }
 
 .rm-strip-icon  { font-size: 15px; flex-shrink: 0; }
-.rm-strip-label { color: var(--t4); font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; flex-shrink: 0; }
+.rm-strip-label { color: var(--text-4); font-family: var(--mono); font-size: 13px; letter-spacing: 0.04em; flex-shrink: 0; }
 
 .rm-pill {
   display: inline-flex;
@@ -745,14 +745,14 @@ html, body {
   font-family: var(--mono);
   font-size: 13px;
   background: rgba(255,255,255,0.04);
-  color: var(--t3);
+  color: var(--text-3);
   border: 1px solid rgba(255,255,255,0.06);
   cursor: pointer;
   user-select: none;
   flex-shrink: 0;
 }
 .rm-pill:hover { background: rgba(255,255,255,0.08); }
-.rm-pill-count { color: var(--t1); font-weight: 600; min-width: 15px; text-align: right; }
+.rm-pill-count { color: var(--text-1); font-weight: 600; min-width: 15px; text-align: right; }
 
 /* Highlight pills with any items */
 .rm-pill-active { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); }
@@ -797,7 +797,7 @@ html, body {
 .sub-rag-strip--red   { background: rgba(248,113,113,0.08); border-bottom-color: rgba(248,113,113,0.25); }
 
 .sub-rag-icon  { font-size: 12px; flex-shrink: 0; }
-.sub-rag-label { color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; flex-shrink: 0; }
+.sub-rag-label { color: var(--text-4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; flex-shrink: 0; }
 
 .sub-rag-pill {
   display: inline-flex;
@@ -816,7 +816,7 @@ html, body {
   margin-left: auto;
   background: none;
   border: 1px solid transparent;
-  color: var(--t4);
+  color: var(--text-4);
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.04em;
@@ -826,7 +826,7 @@ html, body {
   flex-shrink: 0;
   transition: color 0.1s, border-color 0.1s;
 }
-.sub-rag-goto:hover { color: var(--t2); border-color: var(--t4); }
+.sub-rag-goto:hover { color: var(--text-2); border-color: var(--text-4); }
 
 /* ── Display preferences ─────────────────────────────────────────────────── */
 

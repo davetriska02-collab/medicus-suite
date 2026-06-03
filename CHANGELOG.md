@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.26.5] — 2026-06-03
+
+### Fixed
+- **Demand-strip text colours**: the Request Monitor strip (`.rm-strip-label`, `.rm-pill`, `.rm-pill-count`) and Submissions demand strip (`.sub-rag-label`, `.sub-rag-goto`) referenced undefined CSS custom properties (`--t1`…`--t4`) instead of the defined theme tokens (`--text-1`…`--text-4`). Because `color` is inherited, the affected text silently fell back to the inherited colour rather than the intended muted tone on both light and dark themes. Renamed the references to the correct tokens.
+
+### Changed
+- **Backup ownership of `suite.practiceCode`**: this global storage key was exported/imported by both `submissions-io.js` and `suite-io.js`. Removed it from `submissions-io.js` so the `suite.*` namespace is owned solely by `suite-io.js`. Full-suite backups are unaffected (the key still round-trips via the suite scope); a submissions-only restore no longer clobbers the practice code. The nested `submissions.config.practiceCode` field is unchanged and still round-trips via the submissions config object.
+
 ## [v3.26.4] — 2026-06-02
 
 ### Fixed
