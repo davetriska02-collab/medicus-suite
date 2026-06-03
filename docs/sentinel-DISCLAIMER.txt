@@ -359,6 +359,71 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.26.4 addendum ---
+
+This addendum records the state of the software at Medicus Suite v3.26.4. The
+following features have been added or expanded since the v3.4.1 addendum. In
+each case the feature remains within the intended purpose at section 3 and does
+not alter the nature of the software, its regulatory status, or its data-handling
+characteristics.
+
+BP Trend and ACR Trend (v3.25.0) are new side-panel display modules that render
+graphical trend charts of blood pressure and albumin-creatinine ratio (ACR)
+history, drawing exclusively on observation data already fetched by the Monitoring
+module from the Medicus investigation dashboard. The ACR Trend module displays
+threshold-based action banners (e.g. "ACR ≥70 mg/mmol — consider nephrology
+referral per NICE NG203") that are arithmetic comparisons against published
+guidance, worded as prompts to consider and verify, not clinical decisions made by
+the software. No new external endpoints are called; no data is transmitted
+externally.
+
+Falling eGFR trend and hyperkalaemia (K⁺) alerts (v3.18.0) and a rising HbA1c
+trend monitor (v3.19.0) use the existing observation-trend engine and a new
+observation-alert check kind to surface threshold-based and trend-based prompts
+against observations already fetched from Medicus. These follow the same passive
+display model as existing drug-monitoring and QOF rules: they re-display a value
+or trend already in the patient record against a published threshold (NICE NG203,
+UK Kidney Association guidance, NICE NG28/NG17); they make no clinical
+recommendation and produce no output that constitutes a diagnosis.
+
+ADHD medication monitoring rules, smoking status indicators, and carbamazepine
+monitoring (v3.26.x) follow the same passive drug-monitoring model as existing
+bundled rules. They use the existing engine without modification to intended
+purpose.
+
+Flu and COVID-19 vaccination eligibility alerts (v3.26.0) infer eligibility and
+vaccination status (DUE / GIVEN / DECLINED) from coded problems, observations,
+medications, QOF register membership, and BMI already present in the patient's
+Medicus record, using JCVI/UKHSA 2025/26 published criteria. The inferred status
+is not authoritative: vaccination administered outside the practice may not be
+recorded locally. The user must verify vaccination status against the Medicus
+record and, where applicable, national vaccination records before taking any
+clinical action. Every chip carries a "DOUBLE-CHECK ELIGIBILITY" notice. This
+feature does not connect to the National Immunisation Management Service (NIMS)
+or any external data source; no data is transmitted externally.
+
+Per-rule hide/snooze (v3.26.3) allows a user to permanently suppress individual
+drug-monitoring or QOF indicator chips on their workstation, or to snooze a
+vaccine chip until the season end. Suppression stores only rule identifiers in
+chrome.storage.local, which contains no patient data. The user must understand
+that a suppressed chip does not indicate that the monitoring has been completed:
+the obligation at section 5 to verify every displayed value against the source
+record applies with equal force to chips that are suppressed as to chips that
+are active. Hiding a chip is not a substitute for completing the monitoring.
+
+The Custom Alert Builder (v3.22.0) now exposes full parity with the rules engine,
+adding the observation-alert check kind and additional filter fields
+(requiresProblem, requiresAnyProblem, excludeIfProblem, sex, age range,
+mustNotBePresent, per-test SNOMED aliases). These fields expose no capability
+beyond the existing intended purpose; all obligations in the v1.1.0 and v1.2.0
+addenda apply without modification to rules authored using these fields.
+
+Journal-coded observations (v3.21.0) are now included in the side-panel
+evaluation path. This extends the data source consulted by the Monitoring module
+to include consultation and journal-coded entries already present in Medicus;
+it does not consume any new API endpoint or transmit any data externally.
+
+
 --- v3.4.1 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.4.1. The

@@ -83,12 +83,31 @@ careful Clinical Safety Officer's assistant: precise, conservative, additive.
      a substantive content change (a new hazard, a new control, a corrected
      scope). A pure version/date refresh does not bump the document version.
 
-5. **Add new hazards only (additive)**: if step 3 found a genuinely new risk,
-   append a new hazard entry to `HAZARD-LOG.md` following the **exact existing
-   table/format** (new sequential Hazard ID, description, causes, effect,
-   existing controls/mitigations, residual risk rating). Mirror any user-facing
-   consequence into `CLINICAL-SAFETY-NOTICE.md` if the existing notice would
-   otherwise be silent on it. Do not restructure neighbouring entries.
+5. **Add new hazards and update linked documents (additive only)**:
+
+   5a. If step 3 found a genuinely new risk, append a new hazard entry to
+   `HAZARD-LOG.md` following the **exact existing table/format** (new sequential
+   Hazard ID, description, causes, effect, existing controls/mitigations, residual
+   risk rating). Mirror any user-facing consequence into `CLINICAL-SAFETY-NOTICE.md`
+   if the existing notice would otherwise be silent on it. Do not restructure
+   neighbouring entries.
+
+   5b. **Disclaimer addendum**: if step 3 found any new feature surface (a new
+   module, a new outbound call, a new data source, a new user-facing control, or
+   a new check kind), add a new dated addendum to `docs/sentinel-DISCLAIMER.txt`
+   at the **top** of the addendum stack (above the previous addendum). The addendum
+   must:
+   - State the version (e.g. `--- v3.X.Y addendum ---`)
+   - Confirm each new surface still falls within the intended purpose at section 3
+   - State any new user obligation arising from the new surface (e.g. "the user
+     must verify vaccination status against national records")
+   - Be strictly additive — no existing section of the disclaimer may be shortened
+     or weakened
+   
+   5c. **Known limitations in the Clinical Safety Notice (section 7)**: if any new
+   hazard or new feature surface changes what users need to understand, add a new
+   numbered limitation item (do not renumber existing items). Group new items under
+   a labelled subsection if they relate to a new module (see existing structure).
 
 6. **No-op guard (run before committing)**: if the only differences across all
    four docs are the `Date` lines, AND all four docs already exist on
@@ -120,14 +139,21 @@ careful Clinical Safety Officer's assistant: precise, conservative, additive.
    additive content (a new hazard, a new control, a new clarifying sentence) may
    proceed.
 
-8. **Commit and push to `main`**:
+8. **Commit and push to `main`** (the in-app links in `options/options.html`
+   point to `https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/<file>`
+   — the documents **must land on `main`** for the links to resolve correctly):
    - Operate against `origin/main`, never a local `main` (this workspace has
      been seen with a stale, unrelated-history local `main`). `git fetch origin
      main` first.
-   - Stage only the changed docs, commit
-     `docs: weekly safety-case sync to vVER (YYYY-MM-DD)`, and push:
-     `git push origin HEAD:main`. On network failure, retry up to 4× with
-     exponential backoff (2s, 4s, 8s, 16s).
+   - Stage only the four changed docs files:
+     `git add docs/INTENDED-PURPOSE.md docs/CLINICAL-SAFETY-NOTICE.md docs/HAZARD-LOG.md docs/sentinel-DISCLAIMER.txt`
+   - Commit: `docs: weekly safety-case sync to vVER (YYYY-MM-DD)`
+   - Push **directly to `main`** (not to a feature branch — the links on `main`
+     must resolve immediately, not after a PR review):
+     `git push origin HEAD:main`
+   - On network failure, retry up to 4× with exponential backoff (2s, 4s, 8s, 16s).
+   - Do NOT bump `manifest.json`. Do NOT open a PR. Do NOT touch any file outside
+     `docs/` in this commit.
 
 9. **Verify the push landed** (the in-app links must not 404 and must reflect
    `VER` after this):
