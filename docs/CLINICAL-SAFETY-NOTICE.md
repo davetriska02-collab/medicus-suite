@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.16.0  
-**Document version:** 3.2  
-**Date issued:** 2026-05-30  
+**Product version:** 3.26.4  
+**Document version:** 3.3  
+**Date issued:** 2026-06-03  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -28,7 +28,9 @@ Medicus Suite is a passive, read-only Google Chrome extension that operates alon
 
 From v1.6 onwards, the extension additionally includes the **Patient Record Visualiser** — a full-page dashboard that processes a locally-held Medicus EPR export PDF to produce summary analytics. These include continuity-of-care indices, investigation trend charts with clinical zone bands, high-risk drug monitoring compliance, a computed Electronic Frailty Index (eFI), PINCER-style prescribing safety prompts, and QOF register review status. All Visualiser processing occurs locally in the user's browser; no patient data is transmitted externally at any stage.
 
-From v3.13.0–v3.14.0 the live Triage Lens side panel additionally surfaces, on the record/medications view, **deterministic prescribing-combination prompts** (STOPP/START-style: NSAID + anticoagulant/antiplatelet, "triple whammy" NSAID + ACEi/ARB + diuretic, benzodiazepine/Z-drug in age ≥80), a **risk-tool signpost chip** that links to the official QRISK3 / QCancer / eFI calculators (it computes no score), and **NHS Pharmacy First pathway signposting** snippets. These are supplementary prompts to *review and verify*, framed in the same way as the Visualiser's PINCER prompts — they are not clinical recommendations, diagnoses, or triage decisions. The practice-facing **Custom Alert Builder** also gained (v3.15.0–v3.16.0) an engine-backed live preview and save-time schema validation, so an author can see whether a rule they are building would fire against a test patient before saving it.
+From v3.13.0–v3.14.0 the live Triage Lens side panel additionally surfaces, on the record/medications view, **deterministic prescribing-combination prompts** (STOPP/START-style: NSAID + anticoagulant/antiplatelet, "triple whammy" NSAID + ACEi/ARB + diuretic, benzodiazepine/Z-drug in age ≥80), a **risk-tool signpost chip** that links to the official QRISK3 / QCancer / eFI calculators (it computes no score), and **NHS Pharmacy First pathway signposting** snippets. These are supplementary prompts to *review and verify*, framed in the same way as the Visualiser's PINCER prompts — they are not clinical recommendations, diagnoses, or triage decisions. The practice-facing **Custom Alert Builder** also gained (v3.15.0–v3.16.0) an engine-backed live preview and save-time schema validation, so an author can see whether a rule they are building would fire against a test patient before saving it; from v3.22.0 the builder exposes full engine parity including `requiresProblem`/`requiresAnyProblem`, `excludeIfProblem`, sex, age range, `mustNotBePresent` drug-absence gate, and per-test SNOMED aliases.
+
+Since v3.16.0 the Monitoring (Sentinel) module has been extended with: **falling eGFR trend** (≥15 mL/min/1.73m² fall across ≥3 readings within 12 months, NICE NG203) and **hyperkalaemia (K⁺) RAG-banded alerts** (amber 5.5–5.9 mmol/L, red ≥6.0 mmol/L, NICE/UK Kidney Association) using a new `observation-alert` check kind (v3.18.0); a **rising HbA1c trend** rule scoped to the DM register (v3.19.0); **ADHD medication monitoring** rules (stimulants paediatric/adult, atomoxetine, guanfacine — NICE NG87/BNF), **smoking status indicators** across 9 QOF registers, **carbamazepine monitoring**, and an `observation-bundle` check kind enabling DM037 (v3.26.x); and **flu and COVID-19 vaccination eligibility alerts** (v3.26.0), which infer eligibility from demographic data, QOF register membership, problem-list entries, medications, and BMI using JCVI/UKHSA 2025/26 criteria, and infer vaccination status (DUE / GIVEN / DECLINED) from coded data — see limitation 23. A **per-rule hide/snooze** control (v3.26.3) allows vaccine chips to be snoozed until the season end and drug-monitoring/QOF chips to be permanently suppressed on a user's workstation — see limitation 22. Two new graphical trend modules were added: **BP Trend** (dual-line systolic/diastolic chart with condition-specific target lines and AT TARGET / ABOVE TARGET status) and **ACR Trend** (KDIGO A1/A2/A3 band shading, eGFR co-display, monitoring frequency cell, and threshold-based action banners including an ACR ≥70 referral prompt per NICE NG203) (v3.25.0) — see limitations 24–25.
 
 ## 3. Intended users
 
@@ -65,6 +67,9 @@ The author asserts, on a good-faith reading of MHRA guidance on Software as a Me
 - The live Triage Lens prescribing-combination prompts (STOPP/START-style) are deterministic, name-based detections of co-prescribed drug classes, surfaced as prompts to review against the source record. They recommend no drug, dose, or change and are supplementary to Medicus's own prescribing-safety systems.
 - The risk-tool chip provides hyperlinks to externally-hosted, independently-validated calculators (QRISK3, QCancer, eFI) together with a list of the inputs each requires; the software computes no risk score itself.
 - The Pharmacy First signposting snippets are pre-written reference text and hyperlinks surfaced for the clinician's consideration. The clinician makes any signposting decision; the snippets state the pathway's eligibility gateway and red-flag safety-netting. They do not constitute a triage decision made by the software.
+- The hyperkalaemia and falling eGFR trend alerts (v3.18.0) are arithmetic threshold and trend comparisons against NICE/KDIGO criteria — they surface a coded observation value against a published threshold; they do not diagnose acute kidney injury or hyperkalaemia, and they do not replace the clinician's direct review of the result in the Medicus record.
+- The ACR Trend action banners, including the ACR ≥70 referral-trigger banner (v3.25.0), are threshold-based prompts to *consider* a referral per NICE NG203; the software makes no referral and does not assess whether a referral has already been made or is appropriate for the individual patient.
+- The vaccination eligibility chips (v3.26.0) infer eligibility and status from coded data as a prompt to check — they do not interact with the National Immunisation Management Service (NIMS) or any external vaccination record.
 
 Consistent with this position:
 
@@ -145,6 +150,20 @@ The user and the deploying practice must understand and accept the following kno
 
 21. **Demographic-gated rules fire when age or sex is unknown (fail-open, v3.12.1).** A rule restricted to a sex or age band will still fire when the patient's age/sex cannot be read from the page. This is deliberate, so that safety-critical alerts (for example the MHRA valproate alert) are not silently suppressed when the banner cannot be scraped; the consequence is that such a rule may occasionally appear for a patient who is in fact outside its intended scope. A rule is suppressed only when the patient is positively known to be out of scope. As always, verify against the source record.
 
+### Per-rule hide/snooze (v3.26.3)
+
+22. **Permanently hidden chips do not resurface if the clinical picture changes.** A drug-monitoring or QOF indicator chip that has been permanently suppressed on a user's workstation (via the × dismiss button) will not re-appear when monitoring later becomes overdue or the indicator becomes unachieved. The "no chip ≠ all clear" principle applies with equal force to suppressed chips: their absence is not evidence that the monitoring has been done. Users must be briefed that hiding a chip does not mean the monitoring has been completed. The rules owner should review the suppression list periodically via the "Hidden / Snoozed Alerts" section in sentinel settings. Vaccine chip snoozes auto-expire at the season end and are not covered by this limitation.
+
+### Vaccination eligibility alerts (v3.26.0)
+
+23. **Vaccination eligibility and status are inferred from coded data.** Flu and COVID-19 eligibility chips are derived from QOF register membership, problem-list entries, medications, BMI, and age using JCVI/UKHSA 2025/26 criteria. DUE / GIVEN / DECLINED status is inferred from coded problems, observations, and journal entries within the current season window. Vaccinations administered outside the practice (pharmacy, community hub, hospital, other practice) may not be recorded locally, so a DUE chip may appear for a patient who is already vaccinated. Every vaccine chip carries a "DOUBLE-CHECK ELIGIBILITY" note and matched evidence; vaccination status must be verified against the Medicus record and, where relevant, national vaccination records (NIMS/PCSE) before any clinical action.
+
+### BP Trend and ACR Trend modules (v3.25.0)
+
+24. **Trend data is available only after the Medicus investigation dashboard has loaded.** The BP Trend and ACR Trend modules source data from the Medicus investigation dashboard endpoint; if the investigation dashboard has not yet loaded in the current session, the tab will show no data. Trends require multiple historical readings — a patient with only one recorded value will show no trend. Trend data is cleared on every patient navigation (cross-patient guard) and therefore requires re-loading when switching between patients.
+
+25. **ACR Trend action banners are threshold comparisons, not individualised clinical assessments.** The ACR ≥70 referral-trigger banner ("consider nephrology referral — NICE NG203"), the ACR doubling banner, and the KDIGO category-crossing banner are arithmetic comparisons against published NICE NG203 and KDIGO criteria. They do not account for individual patient context — existing specialist involvement, dialysis, recent biopsy, patient preference, or whether a referral has already been made. They are prompts to *consider and verify*, not referral recommendations. Verify against the full Medicus record and any active correspondence before acting.
+
 ## 8. The single most important safety rule
 
 > **Do not take a clinical action — ordering a test, making a referral, adjusting a medication, coding a QOF indicator, modifying a treatment plan — on the basis of what the extension shows without first checking the underlying Medicus record.**
@@ -218,7 +237,7 @@ The CSO will:
 | Item | Mechanism |
 |------|-----------|
 | **Versioning** | Semantic versioning (`MAJOR.MINOR.PATCH`) recorded in `manifest.json` and surfaced in the Options page, popup and side panel. |
-| **Release gating** | GitHub Actions release workflow runs the full automated test suite (320+ automated checks at v3.16.0, including applicability-filter, STOPP/START prescribing-flag, and custom-rule-builder round-trip tests) and fails closed on any test failure. A release is cut only by pushing a signed tag. |
+| **Release gating** | GitHub Actions release workflow runs the full automated test suite (440+ automated checks at v3.26.4 across 17 test files, including applicability-filter, STOPP/START prescribing-flag, QOF indicator filters, extraction-health, sentinel panel-state, and custom-rule-builder round-trip tests) and fails closed on any test failure. A dedicated `test.yml` CI workflow also runs the full suite on every push and pull request (v3.17.0). A release is cut only by pushing a signed tag. |
 | **Changelog** | Every release is documented in `CHANGELOG.md` including any safety-relevant change. |
 | **Auto-update notification** | The extension checks `api.github.com` once a day and surfaces a banner in the Options page when a newer version exists. The user controls when to install the update. |
 | **Hazard log review** | Reviewed at every minor or major release; recorded in `docs/HAZARD-LOG.md` section 8. |
@@ -264,12 +283,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.16.0; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.26.4; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-05-30
+**Date:** 2026-06-03
 
 ---
 
@@ -282,6 +301,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 | 2026-05-22 | 3.0 | DT | Updated to v1.8.1; added Patient Record Visualiser to intended purpose, DOES, DOES NOT, and known limitations; added Visualiser-specific safety conditions; expanded known limitations to 17 items; updated test count; aligned with `HAZARD-LOG.md` v3.0 |
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added user instruction on the feedback channel (no patient data in feedback) |
 | 2026-05-30 | 3.2 | DT | Synchronised to v3.16.0. Added the live Triage Lens prescribing prompts and signposting to intended purpose, regulatory status, and known limitations (items 18–20: STOPP/START subset, Pharmacy First eligibility, risk-tool signpost-only). Added limitation 21 (applicability filters fail open on unknown demographics, v3.12.1). Updated the custom-rules limitation for the five rule types and the v3.15.0–v3.16.0 engine-backed live preview / validate-on-save. Updated test count. Aligned with `HAZARD-LOG.md` v3.2 (incl. new H-019) and `INTENDED-PURPOSE.md` v3.16.0. |
+| 2026-06-03 | 3.3 | DT | Synchronised to v3.26.4. Updated intended purpose (section 2) to describe new features since v3.16.0: falling eGFR trend and hyperkalaemia alerts (v3.18.0); rising HbA1c trend (v3.19.0); ADHD monitoring, smoking status, carbamazepine, observation-bundle (v3.26.x); vaccination eligibility alerts (v3.26.0); per-rule hide/snooze (v3.26.3); BP Trend and ACR Trend modules (v3.25.0); Custom Alert Builder full engine parity (v3.22.0). Updated regulatory status (section 4) to confirm new features remain outside medical-device scope. Added known limitations 22 (hidden chips — false reassurance), 23 (vaccination eligibility — inferred status), 24 (BP/ACR Trend data availability), 25 (ACR Trend referral-trigger banner — threshold only). Updated test count to 440+ (17 files, continuous CI). Updated sign-off. Aligned with `HAZARD-LOG.md` v3.3 (new H-020, H-021; updated H-001 to H-007, H-012). |
 
 ---
 
