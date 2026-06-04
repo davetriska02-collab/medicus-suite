@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-06-03",
+  "lastUpdated": "2026-06-04",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule.",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -10,7 +10,7 @@
       "id": "methotrexate-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["methotrexate", "metoject", "jylamvo", "nordimet", "zlatal", "methofill"],
+        "match": ["methotrexate", "maxtrex", "metoject", "jylamvo", "nordimet", "zlatal", "methofill"],
         "snomed": ["387381009"]
       },
       "phase": "maintenance",
@@ -69,7 +69,7 @@
       "id": "azathioprine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["azathioprine", "imuran"],
+        "match": ["azathioprine", "imuran", "azapress"],
         "snomed": ["372574004"]
       },
       "phase": "maintenance",
@@ -88,7 +88,7 @@
       "id": "sulfasalazine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["sulfasalazine", "sulphasalazine", "salazopyrin"],
+        "match": ["sulfasalazine", "sulphasalazine", "salazopyrin", "sulazine"],
         "snomed": ["387308006"]
       },
       "phase": "maintenance",
@@ -147,7 +147,7 @@
       "id": "amiodarone-maintenance",
       "drugClass": "Antiarrhythmic",
       "drug": {
-        "match": ["amiodarone"],
+        "match": ["amiodarone", "cordarone"],
         "snomed": ["372813003"]
       },
       "phase": "maintenance",
@@ -287,7 +287,7 @@
       "id": "allopurinol",
       "drugClass": "Xanthine oxidase inhibitor",
       "drug": {
-        "match": ["allopurinol", "zyloric", "febuxostat", "adenuric"],
+        "match": ["allopurinol", "zyloric", "caplenal", "uricto", "febuxostat", "adenuric"],
         "snomed": ["387481004"]
       },
       "phase": "maintenance",

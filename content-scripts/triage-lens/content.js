@@ -1005,7 +1005,7 @@
   // well-established, low-false-positive combinations and is worded as a review
   // prompt — decision support, verify against the record.
   function evaluatePrescribingFlags(meds, age) {
-    const NSAIDS = /ibuprofen|naproxen|diclofenac|celecoxib|etoricoxib|meloxicam|piroxicam|indometh?acin|ketoprofen|mefenamic|aceclofenac|nabumetone/i;
+    const NSAIDS = /ibuprofen|naproxen|diclofenac|celecoxib|etoricoxib|meloxicam|piroxicam|tenoxicam|indometh?acin|sulindac|ketoprofen|dexketoprofen|tiaprofenic|mefenamic|tolfenamic|fenoprofen|aceclofenac|nabumetone/i;
     const TOPICAL = /gel|cream|ointment|topical|patch|spray|eye ?drop|ear ?drop|foam/i;
     const ANTICOAG = /warfarin|apixaban|rivaroxaban|edoxaban|dabigatran|acenocoumarol|phenindione|enoxaparin|dalteparin|tinzaparin|heparin/i;
     const ANTIPLATELET = /aspirin|clopidogrel|ticagrelor|prasugrel|dipyridamole/i;

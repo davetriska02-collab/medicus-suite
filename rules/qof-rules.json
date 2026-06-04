@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-01",
+  "lastUpdated": "2026-06-04",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Some 26/27 indicators (DM037 multi-observation bundle, HF009 multi-drug AND logic) require rules-engine extensions and are shipped disabled with placeholder definitions. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Some 26/27 indicators (DM037 multi-observation bundle, HF009 multi-drug AND logic) require rules-engine extensions and are shipped disabled with placeholder definitions. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356.",
   "rules": [
 
     {
@@ -126,6 +126,17 @@
       "problemMatch": ["schizophrenia", "bipolar disorder", "bipolar affective disorder", "psychosis", "schizoaffective", "delusional disorder", "first episode psychosis", "fep", "severe mental illness", "smi"],
       "problemExclude": ["drug-induced psychosis", "organic psychosis", "family history of schizophrenia"],
       "source": "QOF 26/27 MH register (SMI_COD refset approximation — schizophrenia, bipolar disorder, other psychoses)"
+    },
+    {
+      "id": "qof-reg-ob",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "OB",
+      "registerName": "Obesity",
+      "problemMatch": ["obesity", "obese", "morbid obesity", "severe obesity"],
+      "problemExclude": ["no obesity", "not obese", "family history", "maternal obesity", "history of obesity in family"],
+      "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
+      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
     },
 
     {
@@ -1017,6 +1028,40 @@
       },
       "source": "NICE NG28 (type 2 diabetes in adults) / NICE NG17 (type 1 diabetes)",
       "notes": "Clinical-review trend monitor for worsening glycaemic control in people on the diabetes register (fires only when the patient is on the DM register). Not a QOF claim indicator. Values are in mmol/mol (IFCC units). Multi-point HbA1c history is required: where only the latest result is available the chip shows no_data until history exists. Window is 24 months to capture enough readings (HbA1c is typically checked 3-6 monthly in diabetes). The >=10 mmol/mol rise is a pragmatic review threshold, not a fixed guideline cut-off - adjust to local policy. A sustained rise suggests deteriorating control: review adherence, diet/lifestyle, intercurrent illness or steroids, and consider treatment intensification per NICE NG28/NG17. Confirm on repeat testing and interpret alongside the individualised HbA1c target (commonly 48 mmol/mol, or 53 mmol/mol where treatment carries hypoglycaemia risk)."
+    },
+
+    {
+      "id": "qof-ob004",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "OB004",
+      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "requiresRegister": "OB",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["weight management referral", "tier 2 weight management", "tier 3 weight management", "structured weight management programme", "weight management service", "referral to weight management"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 10, "upper": 30 },
+      "points": 5,
+      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
+      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+    },
+    {
+      "id": "qof-ob005",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "OB005",
+      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "requiresRegister": "OB",
+      "check": {
+        "kind": "medication-present",
+        "medicationMatch": ["orlistat", "liraglutide", "saxenda", "semaglutide", "wegovy", "tirzepatide", "mounjaro"]
+      },
+      "thresholds": { "lower": 50, "upper": 80 },
+      "points": 13,
+      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
+      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
     }
   ]
 }

@@ -2,6 +2,71 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.1] — 2026-06-04
+
+### Prescribing safety — completed the UK oral NSAID set (The Keeper)
+
+The Keeper run found the NSAID drug lists were missing several UK-marketed oral NSAIDs, so a patient
+on one of them **silently never fired any NSAID prescribing flag** (gastroprotection, NSAID +
+anticoagulant/antiplatelet, triple-whammy/AKI). Completed the set in **both** places that matter:
+
+- **`content-scripts/triage-lens/content.js`** — the `NSAIDS` regex in `evaluatePrescribingFlags`,
+  which fires the *built-in* prescribing-flag chips. Added tenoxicam, sulindac, dexketoprofen,
+  tiaprofenic acid, tolfenamic acid and fenoprofen (nabumetone was already present).
+- **`rules/alert-library.json`** — the shared NSAID `drugSet` used by all NSAID-combo starter rules
+  (PINCER #1–#4, #6, #12). All six sets are now the complete, uniform UK oral NSAID list (also adding
+  dexibuprofen where it was missing).
+
+Regression-locked with seven new assertions in `test-prescribing-flags.js` (22 pass). NSAID list
+corroborated via search; pending primary-source confirmation. Verification note: the *shipping* gap
+was in `content.js`, not just the JSON library the scan first flagged — both are now fixed.
+
+## [v3.29.0] — 2026-06-04
+
+### QOF — new 2026/27 Obesity clinical area (The Keeper, DRAFT pending confirmation)
+
+The Keeper rule-currency run found that `rules/qof-rules.json` was missing the **new Obesity
+clinical area introduced in QOF 2026/27** (NHS England PRN02356), despite the file claiming full
+26/27 coverage. Added:
+
+- **OB register** (`qof-reg-ob`, enabled) — Obesity register, approximated by substring
+  problem-matching. The true QOF register is BMI-driven (BMI ≥30, or ≥27.5 for listed ethnic
+  backgrounds, recorded in the last 12 months), so this approximation will miss obese patients who
+  have a recorded BMI but no `obesity` problem label; proper membership needs a BMI-observation
+  register (engine extension). Excludes family-history / negated labels.
+- **OB004 and OB005 indicators** — shipped **disabled** as drafts, mirroring the existing
+  placeholder convention (DM037/HF009). OB004 (offer of weight-management referral) and OB005
+  (weight-management pharmacotherapy / shared decision-making) carry corroborated points/thresholds
+  (5 pts @ 10–30%; 13 pts @ 50–80%) that are **pending confirmation against PRN02356** before being
+  enabled. OB005 is relevant to this dispensing practice's GLP-1 weight-loss prescribing.
+
+OB register membership is regression-tested in `test-qof-indicator-filters.js`. Values were
+corroborated via search only (primary NHS England guidance was not fetchable in the run environment)
+— the Clinical Safety Officer should confirm OB004/OB005 points and thresholds against PRN02356 and
+flip them enabled.
+
+## [v3.28.1] — 2026-06-04
+
+### Drug-monitoring rules — brand-completeness pass (The Keeper)
+
+First run of the new **The Keeper** rule-currency skill (`.claude/skills/the-keeper/`). A
+brand-completeness sweep of `rules/drug-rules.json` against dm+d/emc found monitored drugs whose
+`drug.match` lists were missing currently- or recently-marketed UK brands. Because matching is
+case-insensitive substring (`engine/rules-engine.js`), a prescription written under a missing brand
+**silently never fires its monitoring alert** — a patient-safety gap, not a cosmetic one. Added:
+
+- **amiodarone** — `cordarone` (the rule previously listed *no* brand, so "Cordarone X" never fired
+  TFT/LFT/CXR monitoring for a drug with thyroid/hepatic/pulmonary toxicity).
+- **allopurinol** — `caplenal`, `uricto` (previously only `zyloric`). `hamarin` was investigated but
+  held out pending confirmation of current UK marketing.
+- **azathioprine** — `azapress` (Ennogen).
+- **sulfasalazine** — `sulazine` (Sulazine EC, Teva).
+- **methotrexate** — `maxtrex` (discontinued Pfizer oral brand that persists on repeats).
+
+All additions are regression-locked in `test-drug-brand-coverage.js` (264 assertions pass). Brands
+were corroborated via dm+d/emc search; the source citations in the rule file note they are pending
+primary-source (BNF/dm+d) confirmation by the Clinical Safety Officer.
+
 ## [v3.28.0] — 2026-06-04
 
 ### Security

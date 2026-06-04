@@ -32,7 +32,7 @@ const ruleById = (id) => ruleset.rules.find(r => r.id === id);
 // case-insensitive substring matching in engine/rules-engine.js.
 const EXPECTED = {
   'methotrexate-maintenance': [
-    'Methotrexate 2.5mg tablets', 'Metoject 15mg/0.3ml injection',
+    'Methotrexate 2.5mg tablets', 'Maxtrex 2.5mg tablets', 'Metoject 15mg/0.3ml injection',
     'Jylamvo 2mg/ml oral solution', 'Nordimet 12.5mg injection',
     'Zlatal 2.5mg tablets', 'Methofill 17.5mg injection',
     // exclusions were removed — injectable/parenteral forms must fire too
@@ -43,9 +43,10 @@ const EXPECTED = {
     'Hydroxychloroquine 200mg tablets', 'Quinoric 200mg tablets',
     'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets'
   ],
-  'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets'],
+  'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets', 'Azapress 50mg tablets'],
   'sulfasalazine-maintenance': [
-    'Sulfasalazine 500mg tablets', 'Sulphasalazine 500mg', 'Salazopyrin EN-Tabs 500mg'
+    'Sulfasalazine 500mg tablets', 'Sulphasalazine 500mg', 'Salazopyrin EN-Tabs 500mg',
+    'Sulazine EC 500mg tablets'
   ],
   'carbamazepine-maintenance': [
     'Carbamazepine 200mg tablets', 'Tegretol Prolonged Release 200mg', 'Carbagen SR 200mg'
@@ -55,7 +56,7 @@ const EXPECTED = {
     'Priadel 400mg modified-release tablets', 'Camcolit 250mg tablets',
     'Liskonum 450mg MR tablets', 'Li-Liquid 509mg/5ml'
   ],
-  'amiodarone-maintenance': ['Amiodarone 200mg tablets'],
+  'amiodarone-maintenance': ['Amiodarone 200mg tablets', 'Cordarone X 200mg tablets'],
   'carbimazole-propylthiouracil': [
     'Carbimazole 5mg tablets', 'Neo-Mercazole 5mg tablets',
     'Neomercazole 20mg', 'Propylthiouracil 50mg tablets'
@@ -101,7 +102,8 @@ const EXPECTED = {
     'Pitavastatin 2mg', 'Livazo 2mg'
   ],
   'allopurinol': [
-    'Allopurinol 100mg', 'Zyloric 100mg', 'Febuxostat 80mg', 'Adenuric 80mg'
+    'Allopurinol 100mg', 'Zyloric 100mg', 'Caplenal 100mg tablets', 'Uricto 100mg tablets',
+    'Febuxostat 80mg', 'Adenuric 80mg'
   ],
   'antipsychotic': [
     'Olanzapine 10mg', 'Zyprexa 10mg', 'Zalasta 10mg', 'ZypAdhera 300mg depot',

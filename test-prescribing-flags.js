@@ -39,6 +39,15 @@ check(r.every(i => i.severity === 'amber'), 'flagged amber');
 r = evaluate(['Naproxen 500mg', 'Warfarin 3mg'], 72);
 check(texts(r).includes('NSAID + anticoagulant'), 'fires for naproxen + warfarin');
 
+console.log('\n--- extended UK oral NSAID coverage (The Keeper completion) ---');
+// Previously-missing UK oral NSAIDs must now fire the NSAID combos, else a
+// patient on one silently never triggers any NSAID prescribing flag.
+for (const nsaid of ['Tiaprofenic acid 300mg', 'Tolfenamic acid 200mg', 'Dexketoprofen 25mg',
+                     'Fenoprofen 300mg', 'Tenoxicam 20mg', 'Sulindac 200mg', 'Nabumetone 500mg']) {
+  r = evaluate([nsaid, 'Apixaban 5mg tablets'], 60);
+  check(texts(r).includes('NSAID + anticoagulant'), `fires for ${nsaid.split(' ')[0]} + apixaban`);
+}
+
 console.log('\n--- topical NSAID should NOT count ---');
 r = evaluate(['Ibuprofen gel', 'Apixaban 5mg tablets'], 60);
 check(!texts(r).includes('NSAID + anticoagulant'), 'topical ibuprofen gel + anticoagulant does NOT fire');
