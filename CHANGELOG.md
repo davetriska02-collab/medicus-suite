@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.1] — 2026-06-04
+
+### Prescribing safety — completed the UK oral NSAID set (The Keeper)
+
+The Keeper run found the NSAID drug lists were missing several UK-marketed oral NSAIDs, so a patient
+on one of them **silently never fired any NSAID prescribing flag** (gastroprotection, NSAID +
+anticoagulant/antiplatelet, triple-whammy/AKI). Completed the set in **both** places that matter:
+
+- **`content-scripts/triage-lens/content.js`** — the `NSAIDS` regex in `evaluatePrescribingFlags`,
+  which fires the *built-in* prescribing-flag chips. Added tenoxicam, sulindac, dexketoprofen,
+  tiaprofenic acid, tolfenamic acid and fenoprofen (nabumetone was already present).
+- **`rules/alert-library.json`** — the shared NSAID `drugSet` used by all NSAID-combo starter rules
+  (PINCER #1–#4, #6, #12). All six sets are now the complete, uniform UK oral NSAID list (also adding
+  dexibuprofen where it was missing).
+
+Regression-locked with seven new assertions in `test-prescribing-flags.js` (22 pass). NSAID list
+corroborated via search; pending primary-source confirmation. Verification note: the *shipping* gap
+was in `content.js`, not just the JSON library the scan first flagged — both are now fixed.
+
 ## [v3.29.0] — 2026-06-04
 
 ### QOF — new 2026/27 Obesity clinical area (The Keeper, DRAFT pending confirmation)

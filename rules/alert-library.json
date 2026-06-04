@@ -1,6 +1,7 @@
 {
-  "version": "1.0",
-  "lastUpdated": "2026-05-28",
+  "version": "1.1",
+  "lastUpdated": "2026-06-04",
+  "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source confirmation.",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
@@ -16,7 +17,7 @@
         "enabled": true,
         "label": "NSAID without gastroprotection (≥65)",
         "drugSets": [
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac","dexibuprofen"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine","cimetidine"],
         "ageRange": { "min": 65 },
@@ -42,7 +43,7 @@
         "label": "Anticoagulant + NSAID concurrent",
         "drugSets": [
           { "name": "Anticoagulant", "match": ["warfarin","apixaban","rivaroxaban","dabigatran","edoxaban"] },
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -66,7 +67,7 @@
         "label": "Aspirin + NSAID concurrent (no PPI)",
         "drugSets": [
           { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","low-dose aspirin","aspirin tablet"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine"],
         "sex": "any",
@@ -91,7 +92,7 @@
         "label": "ACEi/ARB + NSAID concurrent",
         "drugSets": [
           { "name": "ACEi/ARB", "match": ["ramipril","lisinopril","perindopril","enalapril","captopril","trandolapril","fosinopril","losartan","candesartan","valsartan","irbesartan","telmisartan","olmesartan","azilsartan","sacubitril"] },
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -138,7 +139,7 @@
         "enabled": true,
         "label": "NSAID in heart failure",
         "drugSets": [
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": ["heart failure"],
@@ -284,7 +285,7 @@
         "label": "Lithium + NSAID concurrent",
         "drugSets": [
           { "name": "Lithium", "match": ["lithium"], "exclude": ["shampoo","topical","gel","cream"] },
-          { "name": "NSAID", "match": ["ibuprofen","naproxen","diclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","indomethacin","ketoprofen","mefenamic acid","aceclofenac"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
