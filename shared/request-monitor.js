@@ -15,6 +15,11 @@
 //
 // Practice code is resolved at fetch time via PracticeCode.resolve() — never
 // duplicated in this module's config.
+//
+// DATA-MINIMISATION (F2): chrome.storage.local is plaintext on disk. Patient
+// names are never persisted in full. Only initials (e.g. "J.S.") are stored
+// in items[].patient so that task deduplication and notification counts work
+// without exposing PHI at rest. The strip UI only uses counts, not names.
 
 (function(global) {
   'use strict';
@@ -28,6 +33,30 @@
   };
   const STATE_KEY     = 'suite.requestMonitor.state';
   const AUTH_ERR_KEY  = 'suite.requestMonitor.authError';
+
+  // ── Practice code format validator ──────────────────────────────────────────
+  // Matches the short hex site ID used in Medicus URLs and API subdomains.
+  // Reuses the same pattern as practice-code.js (SITE_CODE_RE) so the
+  // definition stays in one place and cannot drift. (F8)
+  const PRACTICE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+
+  function isValidPracticeCode(code) {
+    return typeof code === 'string' && PRACTICE_CODE_RE.test(code);
+  }
+
+  // ── PHI minimisation helper ──────────────────────────────────────────────────
+  // Reduces a full patient name to initials before persisting to storage.
+  // "John Smith" → "J.S."  |  "Mary O'Brien" → "M.O."  |  "" → ""
+  // This ensures chrome.storage.local (plaintext on disk) never holds full names.
+  function toInitials(fullName) {
+    if (!fullName || typeof fullName !== 'string') return '';
+    return fullName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(word => word[0].toUpperCase() + '.')
+      .join('');
+  }
 
   // ── In-flight deduplication ─────────────────────────────────────────────────
   // A single Promise shared across concurrent callers (SW alarm + panel strip).
@@ -110,6 +139,11 @@
   // ── Bucket fetch ────────────────────────────────────────────────────────────
 
   async function fetchBucket(practiceCode, assigneeId, bucket, fetchImpl, signal) {
+    // F8: Validate practice code format before interpolating into fetch URL.
+    // Abort with a safe error rather than building a request to an unexpected host.
+    if (!isValidPracticeCode(practiceCode)) {
+      return { count: 0, taskIds: [], items: [], error: 'Invalid practice code format' };
+    }
     const url = buildApiUrl(practiceCode, bucket.taskType, bucket.status, assigneeId);
     const _fetch = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     if (!_fetch) return { count: 0, taskIds: [], items: [], error: 'No fetch impl' };
@@ -128,9 +162,11 @@
       return {
         count: tasks.length,
         taskIds: tasks.map(t => t.id),
+        // F2 DATA-MINIMISATION: store only initials, never the full patient name.
+        // chrome.storage.local is plaintext on disk; the strip UI only uses counts.
         items: tasks.map(t => ({
           id: t.id,
-          patient: t.patientName,
+          patient: toInitials(t.patientName),
           summary: t.summary || t.summaryLabel,
           priority: t.priority,
           createdAt: t.createdAt,
@@ -283,6 +319,9 @@
     CFG_KEYS,
     STATE_KEY,
     AUTH_ERR_KEY,
+    PRACTICE_CODE_RE,
+    isValidPracticeCode,
+    toInitials,
     getConfig,
     setConfig,
     buildApiUrl,

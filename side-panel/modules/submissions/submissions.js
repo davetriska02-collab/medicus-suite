@@ -5,6 +5,12 @@
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
+// F8: Practice code format guard — same 4–8 hex-char pattern as practice-code.js.
+// Validated before interpolating into fetch URLs to prevent requests to unexpected
+// hosts. Definition mirrors practice-code.js (SITE_CODE_RE / isValidPracticeCode).
+const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+function _isValidPracticeCode(code) { return typeof code === 'string' && _SITE_CODE_RE.test(code); }
+
 const TASK_TYPES = [
   { key: 'medical',       label: 'Medical',      shortLabel: 'Medical',   type: 'medical_patient_request_task',          color: '#ef4444' },
   { key: 'admin',         label: 'Admin',        shortLabel: 'Admin',     type: 'admin_patient_request_task',            color: '#3b82f6' },
@@ -249,6 +255,10 @@ async function fetchAndRender(force = false) {
 }
 
 async function fetchDay(dateISO) {
+  // F8: Validate practice code before interpolating into the fetch URL.
+  if (!_isValidPracticeCode(state.config.practiceCode)) {
+    throw new Error('Invalid practice code format — cannot fetch');
+  }
   const result = {};
   await Promise.all(TASK_TYPES.map(async tt => {
     const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${dateISO}&createdAt_endDate=${dateISO}`;
@@ -261,6 +271,10 @@ async function fetchDay(dateISO) {
 }
 
 async function fetchRange(startISO, endISO) {
+  // F8: Validate practice code before interpolating into the fetch URL.
+  if (!_isValidPracticeCode(state.config.practiceCode)) {
+    throw new Error('Invalid practice code format — cannot fetch');
+  }
   const result = {};
   await Promise.all(TASK_TYPES.map(async tt => {
     const url = `https://${state.config.practiceCode}.api.england.medicus.health/tasks/data/${tt.type}/task-list?createdAt_startDate=${startISO}&createdAt_endDate=${endISO}`;

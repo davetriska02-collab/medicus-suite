@@ -110,6 +110,15 @@ function previewEnvelope(envelope) {
     const customCount = (mods.sentinel.customRules || []).length;
     const overrideCount = Object.keys(mods.sentinel.rules || {}).length;
     lines.push(`Sentinel (Monitoring): ${overrideCount} rule override(s), ${customCount} custom rule(s)`);
+    // Warn when any rule overrides explicitly disable a monitoring rule — silent
+    // disablement is a patient-safety concern and must be surfaced at preview time.
+    const rules = mods.sentinel.rules || {};
+    const disabledIds = Object.entries(rules)
+      .filter(([, ov]) => ov && ov.enabled === false)
+      .map(([id]) => id);
+    if (disabledIds.length > 0) {
+      lines.push(`WARNING: Disables ${disabledIds.length} monitoring rule(s): ${disabledIds.join(', ')}`);
+    }
   } else { const m = missing('Sentinel (Monitoring)'); if (m) lines.push(m); }
 
   if (mods.capacity) {

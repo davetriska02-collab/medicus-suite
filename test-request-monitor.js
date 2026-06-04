@@ -148,6 +148,42 @@ global.chrome = {
   const cfg3 = await RM.getConfig();
   assert(cfg3.enabled === true && cfg3.assigneeId === 'uuid' && cfg3.pollSeconds === 120, 'setConfig: persists values correctly');
 
+  // ── F2: toInitials ────────────────────────────────────────────────────────
+  console.log('\n--- F2: toInitials (PHI minimisation) ---');
+  assert(RM.toInitials('John Smith') === 'J.S.', 'toInitials: "John Smith" → "J.S."');
+  assert(RM.toInitials('Mary O\'Brien') === 'M.O.', 'toInitials: "Mary O\'Brien" → "M.O."');
+  assert(RM.toInitials('Alice') === 'A.', 'toInitials: single name → single initial');
+  assert(RM.toInitials('') === '', 'toInitials: empty string → empty');
+  assert(RM.toInitials(null) === '', 'toInitials: null → empty');
+  assert(RM.toInitials(undefined) === '', 'toInitials: undefined → empty');
+  assert(RM.toInitials('A. Patient') === 'A.P.', 'toInitials: "A. Patient" → "A.P."');
+
+  // Verify stored items carry initials, not full names
+  const mockFetchNames = async (url) => ({
+    ok: true, json: async () => ({ tasks: [{ id: 'id-1', patientName: 'John Smith', summary: 's', priority: 'normal', createdAt: '2026-06-01' }] })
+  });
+  const rNames = await RM.pollAll('a3f2b1', 'team-uuid', { fetch: mockFetchNames });
+  const firstItem = Object.values(rNames.freshByBucket)[0]?.items[0];
+  assert(firstItem?.patient === 'J.S.', 'pollAll: stored item.patient is initials, not full name');
+
+  // ── F8: isValidPracticeCode ───────────────────────────────────────────────
+  console.log('\n--- F8: isValidPracticeCode ---');
+  assert(RM.isValidPracticeCode('a3f2b1') === true, 'isValidPracticeCode: valid 6-char hex');
+  assert(RM.isValidPracticeCode('abcd') === true, 'isValidPracticeCode: valid 4-char hex');
+  assert(RM.isValidPracticeCode('A3F2B1') === true, 'isValidPracticeCode: uppercase hex accepted');
+  assert(RM.isValidPracticeCode('12345678') === true, 'isValidPracticeCode: valid 8-char hex');
+  assert(RM.isValidPracticeCode('xyz') === false, 'isValidPracticeCode: non-hex rejects');
+  assert(RM.isValidPracticeCode('') === false, 'isValidPracticeCode: empty string rejects');
+  assert(RM.isValidPracticeCode(null) === false, 'isValidPracticeCode: null rejects');
+  assert(RM.isValidPracticeCode('a3f2b1; DROP') === false, 'isValidPracticeCode: injection string rejects');
+  assert(RM.isValidPracticeCode('../../etc') === false, 'isValidPracticeCode: path traversal rejects');
+  assert(RM.isValidPracticeCode('123456789') === false, 'isValidPracticeCode: 9-char rejects (too long)');
+  assert(RM.isValidPracticeCode('abc') === false, 'isValidPracticeCode: 3-char rejects (too short)');
+
+  // F8: fetchBucket should return safe error for invalid practice code
+  const rInvalid = await RM.pollAll('../../evil', 'team-uuid', { fetch: mockFetch });
+  assert(rInvalid.ok === false, 'pollAll: invalid practiceCode (path traversal) rejected before fetch');
+
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

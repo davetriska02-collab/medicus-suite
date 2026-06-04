@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.28.0] — 2026-06-04
+
+### Security
+
+Hardening pass from an adversarial code review (red-team audit). Full write-up in
+`SECURITY-AUDIT.md`. No evidence of any active compromise or data exfiltration was found;
+these changes close latent weaknesses, the most important being a patient-safety one.
+
+- **Ruleset import can no longer silently weaken clinical safety alerts (F1, High).**
+  `engine/ruleset-io.js` now hard-validates imported override objects: every numeric `check.*`
+  threshold (`red`/`amber`/`threshold`/`thresholdSystolic`/`thresholdDiastolic`/`minDelta`/
+  `minPoints`/`withinDays`/`withinMonths`) must be a finite number (`Number.isFinite`), array
+  fields must be arrays, and `kind`/`operator`/`comparator`/`direction` must be in their known
+  enum sets. `intervalDays`/`dueSoonDays` now reject `NaN`/`Infinity`. Previously a malformed or
+  malicious backup could set a string threshold, causing `NaN` comparisons that silently
+  suppressed an alert. `mergeRules` also strips `__proto__`/`constructor`/`prototype` keys before
+  merging (defence-in-depth). The import **preview now warns** when a file disables monitoring
+  rules ("Disables N monitoring rule(s): …"). New regression suite `test-import-hardening.js`.
+- **Patient data minimised at rest (F2, Medium).** `shared/request-monitor.js` no longer
+  persists full patient names to `chrome.storage.local` (plaintext on disk) — only initials are
+  stored. Desktop notifications (`service-worker.js`) now show counts/initials rather than full
+  names.
+- **Tightened extension resource exposure (F3, Medium).** `web_accessible_resources` trimmed from
+  17 broad globs to the 5 files content scripts actually load (`sidebar/*`, the three
+  `rules/*.json`), so the engine code and shared utilities are no longer readable by Medicus-page
+  scripts. (The rule JSON must remain accessible because content scripts fetch it; moving rule
+  loading to the service worker is a tracked follow-up.)
+- **Untrusted MAIN-world bridge hardened (F4/F5, Low–Med).** The `ch-task-list-data` bridge in
+  `content-scripts/triage-lens/content.js` now bounds row counts, validates row/UUID shape, and
+  rate-limits (sliding window + debounce) so a compromised page can't fan forged events out into
+  unbounded API calls. `chrome.runtime.onMessage` handlers in `service-worker.js`, `sentinel.js`,
+  `panel.js` and `pop-out.js` now reject messages where `sender.id !== chrome.runtime.id`.
+- **Supply-chain & permission hygiene (F6/F7/F8, Low).** Added `vendor-versions.json` (library
+  versions + SHA-256 for the vendored PDF.js/Chart.js/D3 bundles); import now rejects files
+  >10 MB before parsing; the GitHub host permission narrowed from `api.github.com/*` to the
+  single repo path used by the update checker; practice-code/site-ID values are format-validated
+  before being interpolated into fetch URLs.
+
 ## [v3.27.0] — 2026-06-03
 
 ### Changed

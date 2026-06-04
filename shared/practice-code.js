@@ -115,7 +115,24 @@
     });
   }
 
-  const api = { getPracticeCode, getPracticeCodeSync, getLastSource, resolve, apiBaseFor, onPracticeCodeChange, detectFromTab };
+  // ── Practice code format validator (F8) ─────────────────────────────────────
+  // Exported so other modules can reuse the same pattern without duplicating it.
+  // Matches the 4–8 hex-char site ID extracted from Medicus URLs.
+  // Use this instead of hand-rolling a local regex — a single definition here
+  // prevents the pattern from drifting across files over time.
+  const SITE_CODE_RE_EXPORT = /^[a-f0-9]{4,8}$/i;
+
+  function isValidPracticeCode(code) {
+    return typeof code === 'string' && SITE_CODE_RE_EXPORT.test(code);
+  }
+
+  const api = {
+    getPracticeCode, getPracticeCodeSync, getLastSource, resolve, apiBaseFor,
+    onPracticeCodeChange, detectFromTab,
+    // F8: exported for use by fetch-URL-building modules
+    SITE_CODE_RE: SITE_CODE_RE_EXPORT,
+    isValidPracticeCode,
+  };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

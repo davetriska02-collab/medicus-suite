@@ -41,6 +41,60 @@
 
   // ---- Validate an imported document ----
   // Returns { valid: bool, errors: [strings], warnings: [strings] }
+
+  // Known valid string sets for check object fields.
+  const VALID_CHECK_KINDS = [
+    'observation-threshold', 'observation-recent', 'observation-alert',
+    'observation-bundle', 'observation-trend', 'medication-present'
+  ];
+  const VALID_CHECK_OPERATORS = ['<=', '<', '>=', '>'];
+  const VALID_CHECK_COMPARATORS = ['above', 'below'];
+  const VALID_CHECK_DIRECTIONS = ['rising', 'falling'];
+
+  // Numeric fields in a check object — must satisfy Number.isFinite() if present.
+  const CHECK_NUMERIC_FIELDS = [
+    'threshold', 'red', 'amber', 'thresholdSystolic', 'thresholdDiastolic',
+    'minDelta', 'minPoints', 'withinDays', 'withinMonths'
+  ];
+  // Array fields in a check object — must be arrays if present.
+  const CHECK_ARRAY_FIELDS = ['observation', 'observations', 'medicationMatch', 'medicationExclude'];
+
+  function validateCheckObject(check, path, errors, warnings) {
+    if (check.kind != null) {
+      if (typeof check.kind !== 'string' || !VALID_CHECK_KINDS.includes(check.kind)) {
+        errors.push(`${path}.kind: must be one of ${VALID_CHECK_KINDS.join(', ')}`);
+      }
+    }
+    if (check.operator != null) {
+      if (!VALID_CHECK_OPERATORS.includes(check.operator)) {
+        errors.push(`${path}.operator: must be one of ${VALID_CHECK_OPERATORS.join(', ')}`);
+      }
+    }
+    if (check.comparator != null) {
+      if (!VALID_CHECK_COMPARATORS.includes(check.comparator)) {
+        errors.push(`${path}.comparator: must be one of ${VALID_CHECK_COMPARATORS.join(', ')}`);
+      }
+    }
+    if (check.direction != null) {
+      if (!VALID_CHECK_DIRECTIONS.includes(check.direction)) {
+        errors.push(`${path}.direction: must be one of ${VALID_CHECK_DIRECTIONS.join(', ')}`);
+      }
+    }
+    if (check.unit != null && typeof check.unit !== 'string') {
+      errors.push(`${path}.unit: must be a string`);
+    }
+    CHECK_NUMERIC_FIELDS.forEach(field => {
+      if (check[field] != null && !Number.isFinite(check[field])) {
+        errors.push(`${path}.${field}: must be a finite number (got ${JSON.stringify(check[field])})`);
+      }
+    });
+    CHECK_ARRAY_FIELDS.forEach(field => {
+      if (check[field] != null && !Array.isArray(check[field])) {
+        errors.push(`${path}.${field}: must be an array`);
+      }
+    });
+  }
+
   function validateImport(doc) {
     const errors = [];
     const warnings = [];
@@ -77,14 +131,32 @@
           errors.push(`${key}.${ruleId}: override must be an object`);
           return;
         }
-        // Field whitelist - reject unknown fields with warning
+        // Field whitelist - unknown fields raise a warning so unexpected/malicious
+        // override keys are surfaced to the user on import. (Known typed fields below
+        // - check/enabled/intervals - are hard-validated and reject the import on error.)
         const allowed = ['enabled', 'tests', 'thresholds', 'check', 'ageRange', 'excludeIfProblem',
                          'problemMatch', 'problemExclude', 'intervalDays', 'dueSoonDays', 'notes'];
         Object.keys(override).forEach(field => {
           if (!allowed.includes(field)) {
-            warnings.push(`${key}.${ruleId}.${field}: unknown override field, will be applied as-is.`);
+            warnings.push(`${key}.${ruleId}.${field}: unknown override field, ignored.`);
           }
         });
+        // Validate intervalDays / dueSoonDays at override level with Number.isFinite
+        // (rejects NaN and Infinity in addition to non-numbers)
+        if (override.intervalDays != null && (!Number.isFinite(override.intervalDays) || override.intervalDays <= 0 || override.intervalDays > 3650)) {
+          errors.push(`${key}.${ruleId}.intervalDays: must be a finite positive number <= 3650`);
+        }
+        if (override.dueSoonDays != null && (!Number.isFinite(override.dueSoonDays) || override.dueSoonDays < 0)) {
+          errors.push(`${key}.${ruleId}.dueSoonDays: must be a finite non-negative number`);
+        }
+        // Validate nested check object — clinical thresholds must be finite numbers
+        if (override.check != null) {
+          if (typeof override.check !== 'object' || Array.isArray(override.check)) {
+            errors.push(`${key}.${ruleId}.check: must be an object`);
+          } else {
+            validateCheckObject(override.check, `${key}.${ruleId}.check`, errors, warnings);
+          }
+        }
         // Validate tests array if present
         if (override.tests != null) {
           if (!Array.isArray(override.tests)) {
@@ -94,11 +166,12 @@
               if (!t || typeof t !== 'object') {
                 errors.push(`${key}.${ruleId}.tests[${i}]: not an object`);
               } else {
-                if (t.intervalDays != null && (typeof t.intervalDays !== 'number' || t.intervalDays <= 0 || t.intervalDays > 3650)) {
-                  errors.push(`${key}.${ruleId}.tests[${i}].intervalDays: must be a positive number <= 3650 (10 years)`);
+                // Use Number.isFinite — rejects NaN and Infinity in addition to non-numbers
+                if (t.intervalDays != null && (!Number.isFinite(t.intervalDays) || t.intervalDays <= 0 || t.intervalDays > 3650)) {
+                  errors.push(`${key}.${ruleId}.tests[${i}].intervalDays: must be a finite positive number <= 3650 (10 years)`);
                 }
-                if (t.dueSoonDays != null && (typeof t.dueSoonDays !== 'number' || t.dueSoonDays < 0)) {
-                  errors.push(`${key}.${ruleId}.tests[${i}].dueSoonDays: must be a non-negative number`);
+                if (t.dueSoonDays != null && (!Number.isFinite(t.dueSoonDays) || t.dueSoonDays < 0)) {
+                  errors.push(`${key}.${ruleId}.tests[${i}].dueSoonDays: must be a finite non-negative number`);
                 }
               }
             });
@@ -134,6 +207,21 @@
   // Given canonical rules from JSON files, apply org and individual overrides in order.
   // Returns merged rules array. Also annotates each rule with _orgOverridden / _personalOverridden flags
   // for UI display.
+
+  // Dangerous keys that must never be copied from untrusted override objects.
+  const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+  // Return a shallow copy of obj containing only own, safe, enumerable keys.
+  // This prevents prototype-pollution attacks from override objects.
+  function safeCopy(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const result = {};
+    Object.keys(obj).forEach(k => {
+      if (!DANGEROUS_KEYS.includes(k)) result[k] = obj[k];
+    });
+    return result;
+  }
+
   function mergeRules(canonicalRules, orgOverrides, individualOverrides) {
     const orgMap = (orgOverrides && orgOverrides.drugRuleOverrides) || {};
     const orgQofMap = (orgOverrides && orgOverrides.qofRuleOverrides) || {};
@@ -142,14 +230,15 @@
       const fromOrg = orgMap[rule.id] || orgQofMap[rule.id] || null;
       const fromInd = indMap[rule.id] || null;
       if (!fromOrg && !fromInd) return rule;
-      // Apply in order: canonical -> org -> individual
+      // Apply in order: canonical -> org -> individual.
+      // safeCopy strips dangerous keys (e.g. __proto__) before Object.assign.
       const merged = { ...rule };
       if (fromOrg) {
-        Object.assign(merged, fromOrg);
+        Object.assign(merged, safeCopy(fromOrg));
         merged._orgOverridden = true;
       }
       if (fromInd) {
-        Object.assign(merged, fromInd);
+        Object.assign(merged, safeCopy(fromInd));
         merged._personalOverridden = true;
       }
       return merged;
