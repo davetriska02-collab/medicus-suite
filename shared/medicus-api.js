@@ -7,12 +7,22 @@
 const _cache = new Map(); // dateISO -> { data, fetchedAt }
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+// F8: Practice code format guard — must match the same 4–8 hex-char pattern as
+// practice-code.js (SITE_CODE_RE). Defined here as a local constant because
+// medicus-api.js is an ES module and cannot use the global PracticeCode object.
+// If the canonical pattern ever changes, update practice-code.js first, then here.
+const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+function _isValidSiteId(id) { return typeof id === 'string' && _SITE_CODE_RE.test(id); }
+
 function apiBase(siteId) {
   return `https://${siteId}.api.england.medicus.health`;
 }
 
 export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = false } = {}) {
   if (!siteId) throw new Error('Practice code not set');
+  // F8: Abort if siteId doesn't match the expected Medicus hex site-ID format to
+  // prevent building fetch requests to unexpected hosts.
+  if (!_isValidSiteId(siteId)) throw new Error(`Invalid practice code format: ${siteId}`);
   const cacheKey = `${siteId}|${dateISO}`;
   const cached = _cache.get(cacheKey);
   if (!bypassCache && cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {

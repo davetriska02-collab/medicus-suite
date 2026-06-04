@@ -1093,6 +1093,8 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // F5: Only accept messages from this extension's own contexts.
+    if (!sender || sender.id !== chrome.runtime.id) return;
     if (msg && msg.action === 'getSentinelSnapshot') {
       sendResponse(_lastSnapshot || { chips: null, patientContext: null, evaluatedAt: null });
       return false;

@@ -490,6 +490,11 @@ document.getElementById('importSuiteFile')?.addEventListener('change', async (e)
   const file = e.target.files?.[0];
   if (!file) return;
   e.target.value = '';
+  const MAX_BACKUP_BYTES = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_BACKUP_BYTES) {
+    setBackupStatus('Backup file is too large (max 10 MB). Import cancelled.', true);
+    return;
+  }
   try {
     const text = await file.text();
     const raw = JSON.parse(text);

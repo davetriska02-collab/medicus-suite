@@ -31,6 +31,13 @@
     { key: 'investigationReportTasks',           short: 'Results',      long: 'Investigation report tasks (Results)', colour: '#4ade80' }, // green
   ];
 
+  // F8: Practice code format guard — same 4–8 hex-char pattern as practice-code.js.
+  // Centralised definition lives in practice-code.js (SITE_CODE_RE / isValidPracticeCode);
+  // this local copy exists because activity-api.js is an IIFE that may run before
+  // PracticeCode is available (e.g. during unit tests). Keep in sync with practice-code.js.
+  const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+  function _isValidPracticeCode(code) { return typeof code === 'string' && _SITE_CODE_RE.test(code); }
+
   function buildApiUrl(practiceCode, startDate, endDate) {
     const base = `https://${practiceCode}.api.england.medicus.health/reporting/data/activity/report`;
     const params = new URLSearchParams();
@@ -44,6 +51,9 @@
     const fetchImpl = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
     if (!fetchImpl) throw new Error('No fetch impl');
     if (!practiceCode) throw new Error('No practice code');
+    // F8: Abort if practiceCode doesn't match expected format — prevents fetch to
+    // an unexpected host if an injected or malformed value reaches this function.
+    if (!_isValidPracticeCode(practiceCode)) throw new Error(`Invalid practice code format: ${practiceCode}`);
     if (!startDate || !endDate) throw new Error('Date range required');
 
     const url = buildApiUrl(practiceCode, startDate, endDate);

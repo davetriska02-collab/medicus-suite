@@ -106,7 +106,9 @@ async function switchModule(name) {
 
 // ── Service worker messages ───────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener(msg => {
+// F5: Sender guard — only accept messages from intra-extension contexts.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
   // slots needs the relay because the slots module listens for a DOM CustomEvent
   // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
   // own chrome.runtime.onMessage listener in init(), so they receive

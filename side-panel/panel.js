@@ -460,7 +460,9 @@ function renderAbout() {
 
 // ── Service worker messages ────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  // F5: Only accept messages from this extension's own contexts.
+  if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'slots:refresh' && activeModule === 'slots') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }
@@ -576,7 +578,12 @@ function escStrip(s) {
 }
 
 // Listen for Pusher-triggered refresh from service worker
-chrome.runtime.onMessage.addListener(msg => {
+// F5: Sender guard — only accept messages from intra-extension contexts.
+// Light coalescing: fetchAndRenderStrip / fetchAndRenderRmStrip are already
+// guarded by document.visibilityState and their own fetch-in-flight logic,
+// so duplicate refreshes within the same tick are absorbed naturally.
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
   if (msg?.type === 'requestMonitor:refresh') fetchAndRenderRmStrip();
 });

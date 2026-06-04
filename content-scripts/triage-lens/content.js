@@ -2044,6 +2044,13 @@
   // ---- Queue monitoring chips (fetch-intercepted UUIDs) ----
   // The task-list fetch/XHR interception runs in the MAIN world (page-world.js);
   // it re-dispatches 'ch-task-list-data' to the listener below.
+  //
+  // SECURITY: 'ch-task-list-data' is a window CustomEvent that crosses the
+  // MAIN-world / isolated-world boundary. Any script on the Medicus page —
+  // including XSS payloads — can forge these events. The bridged data is
+  // therefore UNTRUSTED and is validated and capped below before use.
+  // It is ONLY used to trigger re-fetches from the authenticated Medicus API;
+  // row UUIDs are never rendered into the DOM or trusted as authoritative data.
 
   // rowIndex → taskUuid for the current queue load
   const _queueRowUuids = new Map();
@@ -2053,16 +2060,62 @@
   let _queueMonRunning = false;
   let _queueMonGeneration = 0; // incremented on each new data arrival
 
+  // Rate-limit constants for ch-task-list-data: max events acted on per window,
+  // and the reset period. Defends against a forged-event flood fanning out into
+  // unbounded authenticated API calls.
+  const _BRIDGE_MAX_EVENTS_PER_WINDOW = 10;
+  const _BRIDGE_WINDOW_MS = 5000;
+  let _bridgeEventCount = 0;
+  let _bridgeWindowTimer = null;
+
+  // UUID shape: 8-4-4-4-12 hex, case-insensitive
+  const _BRIDGE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // taskTypeSlug: alphanumeric + underscores/hyphens, reasonable length
+  const _BRIDGE_SLUG_RE = /^[a-zA-Z0-9_-]{1,80}$/;
+  // Maximum rows processed from a single event (cap to prevent fan-out DoS)
+  const _BRIDGE_MAX_ROWS = 500;
+
+  // Debounce timer for scheduleQueueMonitoring to coalesce rapid event bursts.
+  let _bridgeMonDebounceTimer = null;
+  const _BRIDGE_DEBOUNCE_MS = 150;
+
   window.addEventListener('ch-task-list-data', (e) => {
+    // --- Rate-limit: count events in a rolling window ---
+    _bridgeEventCount++;
+    if (!_bridgeWindowTimer) {
+      _bridgeWindowTimer = setTimeout(() => {
+        _bridgeEventCount = 0;
+        _bridgeWindowTimer = null;
+      }, _BRIDGE_WINDOW_MS);
+    }
+    if (_bridgeEventCount > _BRIDGE_MAX_EVENTS_PER_WINDOW) {
+      log('ch-task-list-data: rate limit exceeded, ignoring event');
+      return;
+    }
+
+    // --- Type/shape validation (bridged data is UNTRUSTED) ---
     const { rows, taskTypeSlug } = e.detail || {};
-    if (!Array.isArray(rows) || !taskTypeSlug) return;
+    if (!Array.isArray(rows) || typeof taskTypeSlug !== 'string') return;
+    if (!_BRIDGE_SLUG_RE.test(taskTypeSlug)) return;
     if (pageType() !== 'queue') return;
+
     _queueRowUuids.clear();
-    for (const { rowIndex, taskUuid } of rows) {
+    // Cap rows processed and validate each entry's shape before acting on it
+    const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
+    for (const row of cappedRows) {
+      if (!row || typeof row !== 'object') continue;
+      const { rowIndex, taskUuid } = row;
+      // rowIndex must be a non-negative integer
+      if (typeof rowIndex !== 'number' || !Number.isFinite(rowIndex) || rowIndex < 0 || (rowIndex | 0) !== rowIndex) continue;
+      // taskUuid must be a plausible UUID string
+      if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
       _queueRowUuids.set(rowIndex, taskUuid);
       if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug });
     }
-    scheduleQueueMonitoring();
+
+    // Debounce the monitoring trigger to coalesce event bursts into a single pass
+    clearTimeout(_bridgeMonDebounceTimer);
+    _bridgeMonDebounceTimer = setTimeout(scheduleQueueMonitoring, _BRIDGE_DEBOUNCE_MS);
   });
 
   const computeQueueRowMonitoring = async (taskTypeSlug, taskUuid) => {

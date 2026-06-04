@@ -30,6 +30,12 @@ try {
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // F5 DEFENCE-IN-DEPTH: reject messages from outside this extension.
+  // Only intra-extension contexts (content scripts, panels, options) should
+  // be able to trigger service-worker actions; external pages cannot spoof
+  // sender.id, so this prevents cross-extension or web-page message injection.
+  if (sender.id !== chrome.runtime.id) return;
+
   if (!msg || !msg.action) return;
 
   switch (msg.action) {
@@ -366,8 +372,19 @@ async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
     const verb = bucket.status === 'new-request' ? 'new request' : 'reply received';
     const title = `${kind}: ${count} ${verb}${count > 1 ? 's' : ''}`;
 
-    const sample = items.slice(0, 3).map(it => it.patient || 'Unknown patient').join(', ');
-    const more = items.length > 3 ? ` +${items.length - 3} more` : '';
+    // F2 DATA-MINIMISATION: never reveal full patient names in desktop notifications.
+    // Notifications are visible in the OS notification centre (outside the extension
+    // sandbox) and may be seen by bystanders. Show counts only; initials are used
+    // sparingly (items[].patient already holds initials, not full names).
+    let message;
+    if (count === 1) {
+      // Single item: show initials if available, otherwise just "1 item"
+      const initials = items[0].patient || '';
+      message = initials ? `${initials} — 1 ${verb}` : `1 ${verb}`;
+    } else {
+      // Multiple items: count only — e.g. "3 new requests"
+      message = `${count} ${verb}s`;
+    }
 
     const clickUrl = self.RequestMonitor.buildClickUrl(practiceCode, bucket.taskType, bucket.status, cfg.assigneeId);
     const notifId = `mrm_${bucket.key}_${Date.now()}`;
@@ -377,7 +394,7 @@ async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
       type: 'basic',
       iconUrl: 'icons/icon-128.png',
       title,
-      message: `${sample}${more}`,
+      message,
       priority: bucket.status === 'new-request' ? 2 : 1,
       requireInteraction: bucket.status === 'new-request',
       silent: !cfg.notifySound,
