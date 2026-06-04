@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.28.1] — 2026-06-04
+
+### Drug-monitoring rules — brand-completeness pass (The Keeper)
+
+First run of the new **The Keeper** rule-currency skill (`.claude/skills/the-keeper/`). A
+brand-completeness sweep of `rules/drug-rules.json` against dm+d/emc found monitored drugs whose
+`drug.match` lists were missing currently- or recently-marketed UK brands. Because matching is
+case-insensitive substring (`engine/rules-engine.js`), a prescription written under a missing brand
+**silently never fires its monitoring alert** — a patient-safety gap, not a cosmetic one. Added:
+
+- **amiodarone** — `cordarone` (the rule previously listed *no* brand, so "Cordarone X" never fired
+  TFT/LFT/CXR monitoring for a drug with thyroid/hepatic/pulmonary toxicity).
+- **allopurinol** — `caplenal`, `uricto` (previously only `zyloric`). `hamarin` was investigated but
+  held out pending confirmation of current UK marketing.
+- **azathioprine** — `azapress` (Ennogen).
+- **sulfasalazine** — `sulazine` (Sulazine EC, Teva).
+- **methotrexate** — `maxtrex` (discontinued Pfizer oral brand that persists on repeats).
+
+All additions are regression-locked in `test-drug-brand-coverage.js` (264 assertions pass). Brands
+were corroborated via dm+d/emc search; the source citations in the rule file note they are pending
+primary-source (BNF/dm+d) confirmation by the Clinical Safety Officer.
+
 ## [v3.28.0] — 2026-06-04
 
 ### Security
