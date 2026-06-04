@@ -1,0 +1,123 @@
+name: Weekly Security Audit
+
+# Automated red-team / adversarial code review of Medicus Suite, run on a schedule.
+#
+# What it does each week:
+#   1. Runs the normal test suite as a sanity gate.
+#   2. Launches Claude Code in agent mode with a red-team prompt that fans out
+#      across the extension's attack surfaces (manifest/permissions, content-script
+#      DOM injection, cross-context messaging, storage/PII, backup-restore import,
+#      network/exfiltration, visualiser/PDF, rules/clinical-safety logic), verifies
+#      each finding against source, and writes a single ranked report.
+#   3. Opens a GitHub *issue* with the report (label: security-audit).
+#
+# Deliberately does NOT auto-fix or auto-merge: security changes to a clinical tool
+# must be human-reviewed (mirrors docs/CLINICAL-SAFETY-NOTICE.md release gating).
+# To remediate, a maintainer triages the issue and asks Claude Code to fix it on a
+# branch + PR, as was done for the v3.28.0 hardening pass (see SECURITY-AUDIT.md).
+#
+# SETUP REQUIRED (one-time, by a repo admin):
+#   - Add a repository secret named ANTHROPIC_API_KEY (or swap to
+#     claude_code_oauth_token + CLAUDE_CODE_OAUTH_TOKEN below).
+#   - Confirm Actions has permission to create issues (Settings → Actions →
+#     Workflow permissions → Read and write).
+
+on:
+  schedule:
+    # 06:00 UTC every Monday. Adjust the cron to taste (https://crontab.guru).
+    - cron: '0 6 * * 1'
+  # Allow running it by hand from the Actions tab as well.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  # Never let two audits overlap; cancel an in-progress one if a new run starts.
+  group: weekly-security-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Sanity gate: if the suite is already red, surface that first — an audit on
+      # top of failing tests is noise.
+      - name: Run automated test suite
+        run: |
+          fail=0
+          for t in test-*.js; do
+            echo "── $t"
+            node "$t" || fail=1
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::warning::Test suite is failing; the audit will still run but fix tests first."
+          fi
+
+      - name: Red-team audit (Claude Code, agent mode)
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Swap to claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # if you authenticate with an OAuth token instead of an API key.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Give the agent room to fan out subagents and read across the codebase,
+          # plus the GitHub tools needed to file the issue.
+          claude_args: >-
+            --max-turns 60
+            --allowedTools "Read,Grep,Glob,Bash,Agent,mcp__github__issue_write,mcp__github__list_issues,mcp__github__search_issues"
+          prompt: |
+            You are performing an AUTHORIZED weekly red-team / adversarial security
+            review of this Chrome MV3 medical extension (Medicus Suite), which handles
+            UK GP patient data. This is the maintainer's own repository. Do NOT modify
+            any code, do NOT open pull requests — your only write action is creating a
+            single GitHub issue with your findings.
+
+            METHOD:
+            1. Read CLAUDE.md and SECURITY-AUDIT.md first for context and to see what
+               was previously found/fixed (avoid re-reporting already-fixed items;
+               note any regressions).
+            2. Launch parallel subagents (Agent tool), one per attack surface:
+               (a) manifest / permissions / CSP / web_accessible_resources;
+               (b) content-script DOM injection / XSS (innerHTML, etc.);
+               (c) cross-context messaging & the MAIN-world<->isolated bridge
+                   (sender validation, postMessage/CustomEvent trust);
+               (d) storage & PII/PHI handling (chrome.storage, console logging,
+                   secrets, data minimisation);
+               (e) backup/restore import (prototype pollution, schema validation,
+                   imports that could silently disable clinical safety alerts);
+               (f) network/API, SSRF, exfiltration, update-checker supply chain;
+               (g) visualiser & vendored libs (pdf.js/d3/chart.js versions vs known CVEs);
+               (h) rules/triage engine & clinical-safety logic (ReDoS, type coercion,
+                   false-negative suppression of monitoring alerts).
+            3. CRITICALLY VERIFY every subagent finding against the actual source
+               before reporting — automated agents over-rate severity. For each claim
+               confirm exploitability and the real attacker reachability (remember:
+               no externally_connectable means web pages cannot reach
+               chrome.runtime.onMessage). Downgrade or discard claims that don't hold,
+               and say why.
+            4. Rank surviving findings by verified severity with file:line, a concrete
+               attacker scenario, and a recommendation. Treat a silently-suppressed
+               drug-monitoring alert as a patient-safety (High) issue, not cosmetic.
+
+            OUTPUT:
+            - Search existing issues for an open one titled like "Weekly security audit"
+              from the last 10 days; if one exists, add a comment instead of a duplicate.
+            - Otherwise create ONE issue titled
+              "Weekly security audit — <YYYY-MM-DD>" labelled "security-audit",
+              containing: an executive summary (overall posture + count by severity),
+              a ranked findings table, detail for each High/Critical finding, a list of
+              claims you verified-and-downgraded (for transparency), and a "confirmed
+              safe / good practices" section.
+            - If there are NO new findings, still create the issue stating the audit ran
+              clean, so there's a visible heartbeat that the routine is working.
