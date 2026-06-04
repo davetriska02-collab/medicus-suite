@@ -106,6 +106,17 @@ check(!onDm('Pre-diabetic retinopathy'), 'excludes hyphenated "pre-diabetic"');
 check(!onDm('Non-diabetic hyperglycaemia'), 'still excludes "non-diabetic"');
 check(onDm('Type 2 diabetes mellitus'), 'still matches genuine diabetes');
 
+// ── OB register (NEW 26/27) substring membership ─────────────────────────────
+console.log('\n--- OB register (Obesity, new 26/27) ---');
+const ob = qof.rules.find(r => r.registerCode === 'OB');
+const onOb = label => engine.patientOnRegister([{ label }], ob).matched === true;
+check(!!ob, 'OB register exists in qof-rules.json');
+check(onOb('Obesity'), 'matches bare "Obesity"');
+check(onOb('Morbid obesity'), 'matches "Morbid obesity"');
+check(onOb('Obese (clinical finding)'), 'matches "Obese..."');
+check(!onOb('Family history of obesity'), 'excludes "Family history of obesity"');
+check(!onOb('No obesity'), 'excludes "No obesity"');
+
 // ── F10: HRT review chip gated on co-prescribed oestrogen ────────────────────
 console.log('\n--- F10: HRT chip requires systemic oestrogen ---');
 const hrt = drug.rules.find(r => r.id === 'hrt-systemic');

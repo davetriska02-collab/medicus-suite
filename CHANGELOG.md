@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.0] — 2026-06-04
+
+### QOF — new 2026/27 Obesity clinical area (The Keeper, DRAFT pending confirmation)
+
+The Keeper rule-currency run found that `rules/qof-rules.json` was missing the **new Obesity
+clinical area introduced in QOF 2026/27** (NHS England PRN02356), despite the file claiming full
+26/27 coverage. Added:
+
+- **OB register** (`qof-reg-ob`, enabled) — Obesity register, approximated by substring
+  problem-matching. The true QOF register is BMI-driven (BMI ≥30, or ≥27.5 for listed ethnic
+  backgrounds, recorded in the last 12 months), so this approximation will miss obese patients who
+  have a recorded BMI but no `obesity` problem label; proper membership needs a BMI-observation
+  register (engine extension). Excludes family-history / negated labels.
+- **OB004 and OB005 indicators** — shipped **disabled** as drafts, mirroring the existing
+  placeholder convention (DM037/HF009). OB004 (offer of weight-management referral) and OB005
+  (weight-management pharmacotherapy / shared decision-making) carry corroborated points/thresholds
+  (5 pts @ 10–30%; 13 pts @ 50–80%) that are **pending confirmation against PRN02356** before being
+  enabled. OB005 is relevant to this dispensing practice's GLP-1 weight-loss prescribing.
+
+OB register membership is regression-tested in `test-qof-indicator-filters.js`. Values were
+corroborated via search only (primary NHS England guidance was not fetchable in the run environment)
+— the Clinical Safety Officer should confirm OB004/OB005 points and thresholds against PRN02356 and
+flip them enabled.
+
 ## [v3.28.1] — 2026-06-04
 
 ### Drug-monitoring rules — brand-completeness pass (The Keeper)
