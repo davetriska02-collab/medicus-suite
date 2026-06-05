@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.2] — 2026-06-05
+
+### Tab order and rename
+
+Renamed "ACR Trend" tab to "Renal Monitoring" (module key `acrtrend` unchanged). Reordered nav tabs in both panel and pop-out to: Slots → Monitoring → Renal → BP Trend → Forecast → Submissions → Activity → Referrals.
+
 ## [v3.29.1] — 2026-06-04
 
 ### Prescribing safety — completed the UK oral NSAID set (The Keeper)
