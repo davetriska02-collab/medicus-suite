@@ -520,9 +520,8 @@ document.getElementById('confirmImportBtn')?.addEventListener('click', async () 
     pendingEnvelope = null;
     const previewWrap = document.getElementById('importPreviewWrap');
     if (previewWrap) previewWrap.style.display = 'none';
-    setBackupStatus('Restore complete. Reload any open Medicus tabs to pick up changes.');
-    // Re-render capacity presets if on that tab
-    renderPresetEditor();
+    setBackupStatus('Restore complete — reloading settings page…');
+    setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
     setBackupStatus('Restore failed: ' + err.message, true);
   }
@@ -580,8 +579,8 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       const msg = `Import ${scope}?\n\n${lines.join('\n')}${warnings.length ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`;
       if (!confirm(msg)) return;
       await applyEnvelope(envelope);
-      setBackupStatus(`${scope} restored. Reload Medicus tabs to apply.`);
-      if (scope === 'capacity') renderPresetEditor();
+      setBackupStatus(`${scope} restored — reloading settings page…`);
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       setBackupStatus('Import failed: ' + err.message, true);
     }
