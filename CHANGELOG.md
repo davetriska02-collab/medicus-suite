@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.3] — 2026-06-05
+
+### Fix: options page now reloads after import so restored settings are visible
+
+After confirming a backup restore (suite-wide or per-module), the options page now reloads itself after 1.5 s. Previously the form kept displaying pre-import values even though the data was correctly written to storage — causing the triage monitor UUID, slot alert rules, and all other restored settings to appear missing until the page was manually reloaded.
+
+## [v3.29.2] — 2026-06-05
+
+### Tab order and rename
+
+Renamed "ACR Trend" tab to "Renal Monitoring" (module key `acrtrend` unchanged). Reordered nav tabs in both panel and pop-out to: Slots → Monitoring → Renal → BP Trend → Forecast → Submissions → Activity → Referrals.
+
 ## [v3.29.1] — 2026-06-04
 
 ### Prescribing safety — completed the UK oral NSAID set (The Keeper)
