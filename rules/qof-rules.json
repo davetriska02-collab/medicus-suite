@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-04",
+  "lastUpdated": "2026-06-06",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Some 26/27 indicators (DM037 multi-observation bundle, HF009 multi-drug AND logic) require rules-engine extensions and are shipped disabled with placeholder definitions. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. HF009 (multi-drug AND logic) requires a rules-engine extension and is shipped disabled with a placeholder definition. DM037 (observation-bundle) is enabled and supported by the engine (observation-bundle check kind implemented). Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-06 (The Keeper): OB004/OB005 points and thresholds corroborated via multiple secondary QOF 2026/27 guides (Medacy, My Practice Manager, Insight Solutions: OB004 = 5 pts/10-30%, OB005 = 13 pts/50-80%); values match current encoding; primary PRN02356 document inaccessible in remote scan environment — Dave should confirm against PRN02356 and flip enabled:true when satisfied.",
   "rules": [
 
     {
@@ -756,7 +756,7 @@
       "thresholds": { "lower": 40, "upper": 90 },
       "points": 4,
       "source": "QOF 26/27 SMOK001 / DM037 (NICE IND112)",
-      "notes": "Also one of the eight DM037 care processes (currently disabled pending observation-bundle engine support). Annual recording drives cessation support and cardiovascular risk stratification. QOF year floor applies."
+      "notes": "Also one of the eight DM037 care processes. Annual recording drives cessation support and cardiovascular risk stratification. QOF year floor applies."
     },
     {
       "id": "qof-smok-chd",
@@ -1044,8 +1044,8 @@
       },
       "thresholds": { "lower": 10, "upper": 30 },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 26/27 OB004 (NHS England PRN02356). Points (5) and thresholds (10-30%) corroborated across multiple secondary QOF 2026/27 guides — values match current encoding. Primary PRN02356 document inaccessible in remote scan environment; Dave should confirm against PRN02356 and flip enabled:true when satisfied.",
+      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO sign-off. The Keeper 2026-06-06 run corroborated 5 points and 10-30% thresholds via Medacy, My Practice Manager and Insight Solutions QOF 2026/27 guides — these match the current encoding. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once PRN02356 is confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
     },
     {
       "id": "qof-ob005",
@@ -1060,8 +1060,8 @@
       },
       "thresholds": { "lower": 50, "upper": 80 },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026. Points (13) and thresholds (50-80%) corroborated across multiple secondary QOF 2026/27 guides — values match current encoding. Primary PRN02356 document inaccessible in remote scan environment; Dave should confirm against PRN02356 and flip enabled:true when satisfied.",
+      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO sign-off. The Keeper 2026-06-06 run corroborated 13 points and 50-80% thresholds via Medacy, My Practice Manager and Insight Solutions QOF 2026/27 guides — these match the current encoding. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once PRN02356 is confirmed."
     }
   ]
 }

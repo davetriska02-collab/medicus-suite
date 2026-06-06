@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.31.3] — 2026-06-06
+
+### The Keeper — Sentinel rule currency run (2026-06-06)
+
+Periodic rules-currency scan against authoritative UK sources. All 577 regression assertions
+pass. No match/exclude behaviour changes this run — source/notes housekeeping only.
+
+**Applied (Green — source citations and notes):**
+- `rules/vaccine-rules.json`: flu source updated to Green Book May 2026 (was May 2025); 2026/27
+  flu letter confirms no eligibility changes. COVID source citation updated to the JCVI statement
+  of 16 July 2025 for autumn 2026 and spring 2027 (government accepted 23 March 2026; Green Book
+  Chapter 14a updated 17 March 2026) — eligibility unchanged (75+, care home, immunosuppressed).
+- `rules/qof-rules.json`: removed stale "pending observation-bundle engine extension" caveat from
+  file-level notes and from qof-smok-dm notes — the engine fully implements `observation-bundle`
+  (confirmed in rules-engine.js). OB004/OB005 source/notes updated from "DRAFT pending
+  confirmation" to reflect secondary-source corroboration of their values (OB004: 5 pts/10-30%;
+  OB005: 13 pts/50-80%); both remain disabled pending Dave's primary PRN02356 confirmation.
+- `rules/alert-library.json`: valproate PPP notes reference MHRA June 2025 updated safety
+  materials; isotretinoin notes reference MHRA Jan 2026 regulatory changes (GPs may now prescribe
+  to <18s without second prescriber agreement; remote follow-up permitted).
+
+**Proposed but not applied (require primary-source verification + CSO sign-off):**
+- **OB004/OB005 (QOF Obesity)**: values confirmed by multiple secondary sources; flip
+  `enabled:true` after confirming against PRN02356.
+- **New GLP-1 pancreatitis alert** (MHRA DSU 29 Jan 2026): 1,296 Yellow Card reports, 19 fatal.
+  See the-keeper-report for draft rule definition. Requires MHRA DSU primary verification.
+- **New semaglutide NAION alert** (MHRA DSU 5 Feb 2026): ~1/10,000 patients per year; sudden
+  irreversible monocular vision loss. Requires MHRA DSU primary verification.
+
+**Source gaps this run:** Primary UK health sources (BNF, NHS England, MHRA DSU pages, emc)
+returned HTTP 403 in the remote execution environment. Drug brand verification (5 brands from
+2026-06-04 run) and NSAID set completeness remain pending BNF primary confirmation.
+
+Sources: UKHSA Green Book Ch.19 (May 2026); JCVI autumn 2026 COVID statement (16 Jul 2025);
+NHS England PRN02356 (via secondary QOF guides); MHRA DSU (valproate Jun 2025, isotretinoin
+Jan 2026, GLP-1 pancreatitis Jan 2026, semaglutide NAION Feb 2026); engine code inspection.
+
 ## [v3.31.2] — 2026-06-06
 
 ### Add proprietary copyright header to source files

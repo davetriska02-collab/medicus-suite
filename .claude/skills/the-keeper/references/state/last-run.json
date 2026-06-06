@@ -1,0 +1,37 @@
+{
+  "run_date": "2026-06-06",
+  "manifest_version": "3.31.3",
+  "rule_files_last_updated": {
+    "drug-rules.json": "2026-06-04",
+    "qof-rules.json": "2026-06-06",
+    "vaccine-rules.json": "vax-flu source May2026, vax-covid source Jul2025-JCVI",
+    "alert-library.json": "2026-06-06"
+  },
+  "source_urls_checked": [
+    "https://www.gov.uk/government/collections/immunisation-against-infectious-disease-the-green-book",
+    "https://www.gov.uk/government/publications/covid-19-vaccination-in-autumn-2026-and-spring-2027-jcvi-advice-16-july-2025/jcvi-statement-on-covid-19-vaccination-in-autumn-2026-and-spring-2027",
+    "https://www.england.nhs.uk/publication/quality-and-outcomes-framework-guidance/",
+    "https://www.nice.org.uk/standards-and-indicators/qofindicators",
+    "https://www.gov.uk/drug-safety-update/valproate-belvo-convulex-depakote-dyzantil-epilim-epilim-chrono-or-chronosphere-episenta-epival-and-syonellv-updated-safety-and-educational-materials-to-support-patient-discussion-on-reproductive-risks",
+    "https://www.gov.uk/drug-safety-update/isotretinoin-roaccutanev-introduction-of-new-safety-measures-including-additional-oversight-of-the-initiation-of-treatment-for-patients-under-18-years-of-age",
+    "https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-dual-glp-1-slash-gip-receptor-agonists-strengthened-warnings-on-acute-pancreatitis-including-necrotising-and-fatal-cases",
+    "https://www.gov.uk/drug-safety-update/semaglutide-wegovy-ozempic-and-rybelsus-risk-of-non-arteritic-anterior-ischemic-optic-neuropathy-naion",
+    "https://www.nottingham.ac.uk/primis/",
+    "https://www.nice.org.uk/guidance/published?type=ktt"
+  ],
+  "open_items": [
+    "OB004: enable when PRN02356 confirmed (values corroborated: 5 pts/10-30%)",
+    "OB005: enable when PRN02356 confirmed (values corroborated: 13 pts/50-80%)",
+    "GLP-1 pancreatitis alert: add when MHRA DSU 29 Jan 2026 primary-source verified",
+    "Semaglutide NAION alert: add when MHRA DSU 5 Feb 2026 primary-source verified",
+    "5 drug brands from 2026-06-04 run: verify against BNF/dm+d/emc primary source (maxtrex, sulazine, azapress, cordarone, caplenal, uricto)",
+    "NSAID set: verify 19-drug set completeness against primary BNF source"
+  ],
+  "source_gaps_this_run": [
+    "BNF (bnf.nice.org.uk) — HTTP 403",
+    "NHS England QOF guidance (england.nhs.uk) — HTTP 403",
+    "MHRA DSU pages (gov.uk) — HTTP 403",
+    "emc/dm+d (medicines.org.uk) — HTTP 403",
+    "SPS (sps.nhs.uk) — HTTP 403"
+  ]
+}

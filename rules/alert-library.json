@@ -1,7 +1,7 @@
 {
   "version": "1.1",
-  "lastUpdated": "2026-06-04",
-  "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source confirmation.",
+  "lastUpdated": "2026-06-06",
+  "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source BNF confirmation. 2026-06-06 (The Keeper): updated valproate notes (MHRA June 2025 updated PPP materials) and isotretinoin notes (MHRA Jan 2026 GP prescribing regulatory changes — GPs may now prescribe to <18s without second prescriber agreement). Two new MHRA DSU alerts proposed but not yet applied pending primary-source confirmation: GLP-1 pancreatitis alert (MHRA DSU 29 Jan 2026) and semaglutide NAION alert (MHRA DSU 5 Feb 2026) — see The Keeper change-proposal report for details.",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
@@ -341,7 +341,7 @@
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "red",
-        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
+        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). June 2025: MHRA issued updated PPP safety materials and educational resources; hard copies distributed from July 2025. Rule logic unchanged. Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
         "source": "MHRA Drug Safety Update"
       }
     },
@@ -415,7 +415,7 @@
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "amber",
-        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
+        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. January 2026: GPs may now prescribe isotretinoin to patients under 18 without a second prescriber's agreement (regulatory update, MHRA Jan 2026); remote follow-up consultations and remotely-supervised pregnancy testing are now permitted. Alert logic unchanged: rule fires for all female patients aged 12-55 on isotretinoin. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
         "source": "MHRA Pregnancy Prevention Programme"
       }
     },

@@ -7,7 +7,7 @@
       "vaccine": "flu",
       "displayName": "Flu vaccine",
       "season": { "startMonth": 9, "startDay": 1 },
-      "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2025)",
+      "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2026; 2026/27 flu letter confirms no changes to eligible cohorts)",
       "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
       "eligibility": {
         "anyOf": [
@@ -33,8 +33,8 @@
       "vaccine": "covid",
       "displayName": "COVID vaccine",
       "season": { "startMonth": 10, "startDay": 1 },
-      "source": "JCVI COVID-19 autumn 2025 eligibility",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
+      "source": "JCVI COVID-19 autumn 2026 and spring 2027 (JCVI statement 16 July 2025; government accepted 23 March 2026; Green Book Chapter 14a updated 17 March 2026)",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster since 2025/26. JCVI confirmed the same cohorts for autumn 2026 and spring 2027 (statement 16 July 2025): age 75+, care home residents, and immunosuppressed only. Status inferred from coded records only — vaccination given elsewhere may not appear.",
       "eligibility": {
         "anyOf": [
           { "kind": "age", "ageMin": 75, "label": "Age 75+" },
