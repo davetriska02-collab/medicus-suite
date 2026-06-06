@@ -812,6 +812,42 @@ html, body {
 .sub-rag-pill--amber { background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.4); color: #fbbf24; }
 .sub-rag-pill--red   { background: rgba(248,113,113,0.18); border: 1px solid rgba(248,113,113,0.4); color: #f87171; }
 
+/* ── Medicus UI-change canary strip (global) ──────────────────────────────────
+   Amber banner shown when a patient record is on screen but the extension could
+   extract nothing from it — i.e. Medicus likely changed its layout. NOT a
+   clinical signal: it tells the clinician to verify in Medicus and check for an
+   extension update. Mirrors the sub-rag strip but allows the text to wrap. */
+.ui-health-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(245,158,11,0.08);
+  border-bottom-color: rgba(245,158,11,0.25);
+  min-height: 28px;
+}
+.ui-health-strip-hidden { display: none; }
+.ui-health-icon  { font-size: 12px; flex-shrink: 0; color: var(--amber); }
+.ui-health-text  { color: var(--text-2); flex: 1 1 auto; line-height: 1.35; }
+.ui-health-btn {
+  flex-shrink: 0;
+  background: rgba(245,158,11,0.18);
+  border: 1px solid rgba(245,158,11,0.4);
+  color: #fbbf24;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ui-health-btn:disabled { opacity: .6; cursor: default; }
+.ui-health-status   { flex-shrink: 0; color: var(--text-3); font-family: var(--mono); font-size: 10px; }
+.ui-health-status a { color: var(--accent); }
+
 .sub-rag-goto {
   margin-left: auto;
   background: none;

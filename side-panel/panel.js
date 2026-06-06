@@ -586,6 +586,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
   if (msg?.type === 'requestMonitor:refresh') fetchAndRenderRmStrip();
+  // Re-check the UI-change canary the instant Sentinel re-evaluates, so the
+  // banner appears/clears on patient navigation without waiting for the poll.
+  if (msg?.type === 'sentinel:snapshot-updated') fetchAndRenderUiHealth();
 });
 
 // Boot the strip — initial fetch + poll
@@ -825,12 +828,95 @@ async function fetchAndRenderSubRagStrip() {
 fetchAndRenderSubRagStrip();
 let subRagPollTimer = setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
 
-// Refresh all three strips immediately when the panel becomes visible again
+// ── Medicus UI-change canary strip (global) ───────────────────────────────────
+// Surfaces the Sentinel extraction-health signal (the `degraded` flag stamped on
+// the snapshot by assessExtractionHealth) as a banner visible on EVERY module,
+// not just the Monitoring tab. `degraded` means: a patient record is on screen
+// but no medications, problems, observations or demographics could be extracted —
+// i.e. Medicus likely changed its layout and the extension's selectors are stale.
+// This is a silent-failure guard: without it a clinician could read an empty
+// Monitoring panel as an "all clear". It is NOT a clinical signal — only a
+// "the extension may be broken; verify in Medicus and check for an update" prompt.
+
+const uiHealthStripEl = document.getElementById('uiHealthStrip');
+const UI_HEALTH_POLL_MS = 30 * 1000;
+let uiHealthPollTimer = null;
+
+function hideUiHealth() {
+  if (!uiHealthStripEl) return;
+  if (uiHealthStripEl.dataset.shown !== '1' && uiHealthStripEl.classList.contains('ui-health-strip-hidden')) return;
+  uiHealthStripEl.dataset.shown = '0';
+  uiHealthStripEl.className = 'ui-health-strip ui-health-strip-hidden';
+  uiHealthStripEl.innerHTML = '';
+}
+
+function renderUiHealth() {
+  if (!uiHealthStripEl) return;
+  // Don't churn the DOM (which would reset an in-progress update check) if the
+  // banner is already shown — the degraded message is generic, not patient-specific.
+  if (uiHealthStripEl.dataset.shown === '1') return;
+  uiHealthStripEl.dataset.shown = '1';
+  uiHealthStripEl.className = 'ui-health-strip';
+  uiHealthStripEl.innerHTML = `
+    <span class="ui-health-icon">⚠</span>
+    <span class="ui-health-text">Medicus may have changed — the extension extracted nothing from this record. Verify the patient directly in Medicus; this is <strong>not</strong> an &ldquo;all clear&rdquo;.</span>
+    <button class="ui-health-btn" type="button">Check for update</button>
+    <span class="ui-health-status"></span>
+  `;
+  uiHealthStripEl.querySelector('.ui-health-btn')?.addEventListener('click', runUiHealthUpdateCheck);
+}
+
+async function runUiHealthUpdateCheck() {
+  const btn = uiHealthStripEl?.querySelector('.ui-health-btn');
+  const status = uiHealthStripEl?.querySelector('.ui-health-status');
+  if (!btn || !status || !window.UpdateChecker) return;
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  status.textContent = '';
+  try {
+    const result = await window.UpdateChecker.checkForUpdate({ force: true });
+    const installed = window.UpdateChecker.getInstalledVersion();
+    if (!result.ok) {
+      status.textContent = result.error || 'Check failed';
+    } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
+      // Validate releaseUrl is a github.com https URL before injecting (defends
+      // against a spoofed GitHub API response delivering a javascript: URL).
+      const safeUrl = /^https:\/\/github\.com\//.test(result.releaseUrl || '') ? result.releaseUrl : '#';
+      status.innerHTML = `v${escStrip(result.latestVersion)} available — <a href="${escStrip(safeUrl)}" target="_blank" rel="noopener noreferrer">view release ↗</a>`;
+    } else {
+      status.textContent = `v${installed} is up to date`;
+    }
+  } catch (e) {
+    status.textContent = e.message || 'Check failed';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Check for update';
+}
+
+async function fetchAndRenderUiHealth() {
+  if (document.visibilityState !== 'visible') return;
+  if (!uiHealthStripEl) return;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url || !/medicus\.health/.test(tab.url)) { hideUiHealth(); return; }
+    const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' }).catch(() => null);
+    if (snap && snap.degraded) renderUiHealth();
+    else hideUiHealth();
+  } catch (_) {
+    hideUiHealth();
+  }
+}
+
+fetchAndRenderUiHealth();
+uiHealthPollTimer = setInterval(fetchAndRenderUiHealth, UI_HEALTH_POLL_MS);
+
+// Refresh all strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
+    fetchAndRenderUiHealth();
   }
 });
 
@@ -843,6 +929,7 @@ window.addEventListener('pagehide', () => {
   if (wrPollTimer) clearInterval(wrPollTimer);
   if (rmPollTimer) clearInterval(rmPollTimer);
   if (subRagPollTimer) clearInterval(subRagPollTimer);
+  if (uiHealthPollTimer) clearInterval(uiHealthPollTimer);
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

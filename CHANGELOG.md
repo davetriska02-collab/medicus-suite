@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.30.0] — 2026-06-06
+
+### Reliability: global "Medicus UI changed?" canary banner
+
+The Sentinel extraction-health signal (`assessExtractionHealth` → the `degraded`
+flag on the snapshot) is now surfaced as a **global amber banner across every
+side-panel module**, not just the Monitoring tab. When a patient record is on
+screen but the extension can extract no medications, problems, observations or
+demographics — the signature of a Medicus layout change — the banner appears and
+warns that this is **not** an "all clear" and that the patient must be verified
+directly in Medicus. It includes a one-click **Check for update** button (reuses
+the existing `UpdateChecker`, with the same `https://github.com/` release-URL
+validation used on the About tab).
+
+This converts a silent failure mode (an empty Monitoring panel read as "nothing
+to flag") into a visible prompt no matter which tab the clinician is on. The
+banner polls every 30 s, refreshes immediately on `sentinel:snapshot-updated`,
+and clears automatically once extraction recovers. No new storage keys; no change
+to the underlying clinical signal (already regression-tested by
+`test-extraction-health.js`).
+
 ## [v3.29.3] — 2026-06-05
 
 ### Fix: options page now reloads after import so restored settings are visible
