@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — API Normalisers
 // Convert raw Medicus API responses to Sentinel's internal data shapes.
 

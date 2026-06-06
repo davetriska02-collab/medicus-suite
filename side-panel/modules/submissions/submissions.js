@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Submissions Tracker module v1.0
 // Lifted from standalone extension; MWChart re-implemented for side panel context.
 

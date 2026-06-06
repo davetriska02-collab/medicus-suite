@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Triage Alert Engine
 // Stateless evaluator: compares bucket counts against user-defined rules.
 

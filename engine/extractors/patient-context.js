@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Patient Context Extractor
 // Extracts patient identity from the page so chips can be verified against a
 // changing patient context (wrong-patient hazard mitigation).

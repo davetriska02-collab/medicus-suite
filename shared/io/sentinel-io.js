@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Sentinel IO helpers
 // Exports and imports all Sentinel storage keys as a plain object.
 // Used by suite-wide backup and by the Sentinel options page.

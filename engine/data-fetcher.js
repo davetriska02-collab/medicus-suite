@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Data Fetcher (v0.3)
 //
 // API-first: hits the four Medicus REST endpoints when on a Medicus page.

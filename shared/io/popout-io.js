@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Popout IO (backup/restore support)
 //
 // popout.windowId is excluded — it is the OS window handle and is session-transient.

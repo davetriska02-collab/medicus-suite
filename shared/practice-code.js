@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Practice Code Resolver
 //
 // Resolves the practice's Medicus site ID (e.g. "a3f2b1") needed to build

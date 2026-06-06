@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Triage Lens — options page logic
 
 (function applyDisplayPrefs() {

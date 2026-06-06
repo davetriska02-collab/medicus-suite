@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Suite-level IO helpers
 // Owns the cross-cutting `suite.*` preference keys that don't belong to any one
 // module: display preferences (theme / text size / colourblind mode), the

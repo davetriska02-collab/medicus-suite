@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 
 // ══ DISPLAY PREFERENCES ════════════════════════════════════════════════════

@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Medicus API Client
 //
 // Hits the four Medicus REST endpoints that back the patient care record UI.

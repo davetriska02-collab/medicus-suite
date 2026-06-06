@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Request Monitor (v1.4)
 //
 // Polls Medicus task-list API for new/replied medical and admin requests

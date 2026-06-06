@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Update Checker (v1.3.1)
 //
 // Polls the GitHub releases API once a day to detect new versions.

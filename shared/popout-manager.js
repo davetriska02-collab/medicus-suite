@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Popout Window Manager
 // Manages a single floating chrome.windows.create popup showing pop-out/pop-out.html.
 // Exposes window.PopoutManager.

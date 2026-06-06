@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Service Worker v1.1.0
 // Handles: Sentinel sidebar toggle, options page, Pusher relay, slot polling, storage migration, popout window.
 

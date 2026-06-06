@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel options page — v1.2.0
 // Tabs: Display | Custom Rules | Rule Overrides
 'use strict';

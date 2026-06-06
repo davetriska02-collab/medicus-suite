@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Activity Report module v1.0
 //
 // Fetches /reporting/data/activity/report for a configurable date range,

@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Sentinel side panel module
 // Polls the Sentinel content script for its chip snapshot and renders it here.
 

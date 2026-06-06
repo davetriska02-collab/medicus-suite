@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Request Monitor IO (backup/restore support)
 //
 // Only user-configurable settings are round-tripped.

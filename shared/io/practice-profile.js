@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Practice Profile
 //
 // Reads practice-profile.json from the extension folder (when the practice admin

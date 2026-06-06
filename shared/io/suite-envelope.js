@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Backup Envelope Helpers
 //
 // Single envelope format for all per-module and suite-wide backups:

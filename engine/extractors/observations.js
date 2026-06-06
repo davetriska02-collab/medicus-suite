@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Observations Extractor
 // Reads observation values (BP, weight, HbA1c, ...) from the patient view.
 // Multi-strategy: DL/dt/dd pairs (Medicus standard), then generic row walker.

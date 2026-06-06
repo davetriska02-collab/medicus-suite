@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Active Problems Extractor
 // Extracts the active problem list from the patient view.
 // Used for QOF register membership detection.

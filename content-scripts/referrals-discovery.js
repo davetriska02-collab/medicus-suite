@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Referrals Discovery
 //
 // Runs on all Medicus pages but activates only on the referrals

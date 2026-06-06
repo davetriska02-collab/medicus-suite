@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Capacity Forecast module
 // Calendar view of available appointment capacity vs user-defined daily minimums.
 

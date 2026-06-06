@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Shared Drug-Monitoring Chip Renderer
 // Used by:
 //   side-panel/modules/sentinel/sentinel.js  (live chip rendering)

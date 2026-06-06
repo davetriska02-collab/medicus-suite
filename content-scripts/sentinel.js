@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel v0.2 — Content Script
 // Mounts sidebar, fetches data, evaluates rules, renders grouped chip UI.
 

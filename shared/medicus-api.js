@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — shared API helper
 // Used by Slot Counter and Capacity Forecast.
 // Provides fetch, caching, and a concurrency-limited multi-day fetcher.

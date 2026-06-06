@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Triage Lens page-world interceptors
 //
 // Runs in the PAGE'S MAIN WORLD (declared with "world":"MAIN" in manifest.json,

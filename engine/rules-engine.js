@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Rules Engine
 // Evaluates three rule types against extracted patient data:
 //   1. drug-monitoring  : drug X -> tests at intervals

@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Medications Extractor
 // Multi-view, multi-pattern medication extraction.
 // Heading variants and DOM patterns differ across Medicus views.

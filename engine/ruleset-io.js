@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Sentinel — Ruleset Import / Export
 //
 // Supports two-tier rule overrides:

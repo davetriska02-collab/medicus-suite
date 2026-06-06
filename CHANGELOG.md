@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.31.2] — 2026-06-06
+
+### Add proprietary copyright header to source files
+
+Prepended a one-line `© 2026 Graysbrook Ltd. Proprietary — all rights reserved.
+See LICENSE.` notice to the shipping first-party source (67 JS/CSS files across
+side-panel, pop-out, shared, engine, content-scripts, options, sentinel-options,
+sidebar, plus `service-worker.js` and `visualiser-core.js`). Vendored third-party
+files, JSON/rule files, test harnesses, and build scripts were deliberately left
+untouched. Comment-only change — no functional effect; full test suite green.
+
 ## [v3.31.1] — 2026-06-06
 
 ### Add explicit proprietary LICENCE

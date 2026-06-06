@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Pusher relay content script
 // Also permanently suppresses the Triage Lens floating HUD —
 // its data is surfaced in the suite's Signals panel instead.

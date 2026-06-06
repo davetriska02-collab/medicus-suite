@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 /* Triage Lens - content script
  * v0.1.0
  * Runs entirely client-side. Scrapes the existing Care Record DOM,

@@ -1,3 +1,4 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — API Diagnostics
 //
 // Records every API fetch attempt with full context so we can diagnose
