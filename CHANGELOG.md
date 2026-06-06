@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.31.1] — 2026-06-06
+
+### Add explicit proprietary LICENCE
+
+Added a root `LICENSE` file: strict proprietary, all-rights-reserved. No grant of
+any right to use, copy, modify, redistribute, fork, or make commercial use of the
+code; explicit clauses that public GitHub visibility is not a waiver or a release
+to the public domain, that no commercial entity (including any EPR provider) may
+use it, and that the code may not be used to train machine-learning models.
+Third-party components (e.g. PDF.js, Apache-2.0, per `vendor-versions.json`)
+retain their own upstream licences. The README licence section now points to it.
+Previously the repository had only informal licence statements in the README and
+disclaimer and no top-level LICENSE file.
+
 ## [v3.31.0] — 2026-06-06
 
 ### New module: Observation Trends (HbA1c / cholesterol / weight)

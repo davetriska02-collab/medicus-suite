@@ -59,5 +59,12 @@ patient data is included in those requests.
 
 ## Licence
 
-Internal practice tool. Not for redistribution outside collaborating GP
-practices. Contact Dave Triska for usage queries.
+**Proprietary — all rights reserved.** Copyright © 2026 Dr Dave Triska /
+Graysbrook Ltd. See [`LICENSE`](LICENSE) for the full terms.
+
+No licence to use, copy, modify, redistribute, fork, or make any commercial use
+of this Software is granted. Public visibility of this repository is for
+transparency only and does not place the code in the public domain or waive any
+right. Deployed instances are made available to named clinical users under
+`docs/sentinel-DISCLAIMER.txt` and `docs/INTENDED-PURPOSE.md`. Contact Dave
+Triska (davetriska02@gmail.com) for any usage or licensing query.
