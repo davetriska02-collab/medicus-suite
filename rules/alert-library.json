@@ -1,6 +1,6 @@
 {
   "version": "1.1",
-  "lastUpdated": "2026-06-04",
+  "lastUpdated": "2026-06-06",
   "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source confirmation.",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
@@ -19,7 +19,7 @@
         "drugSets": [
           { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
-        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine","cimetidine"],
+        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","famotidine","cimetidine"],
         "ageRange": { "min": 65 },
         "sex": "any",
         "requiresProblem": [],
@@ -69,7 +69,7 @@
           { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","low-dose aspirin","aspirin tablet"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
           { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
-        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine"],
+        "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","famotidine"],
         "sex": "any",
         "requiresProblem": [],
         "excludesProblem": [],
@@ -370,6 +370,55 @@
         ],
         "notes": "NICE CG185. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
         "source": "NICE CG185"
+      }
+    },
+
+    {
+      "libId": "doac-renal-review",
+      "category": "Prescribing safety",
+      "subcategory": "Renal",
+      "title": "DOAC – renal function review needed",
+      "description": "Patient on a DOAC (apixaban, rivaroxaban, edoxaban, dabigatran) without eGFR/U&E in the last 6 months. DOAC safety and dose thresholds depend on renal clearance; 6-monthly monitoring is the minimum for patients at risk. Clinician must interpret the eGFR against drug-specific dose-reduction criteria.",
+      "source": "EHRA DOAC guideline 2024 / BNF / NICE NG196",
+      "rule": {
+        "type": "drug-monitoring",
+        "enabled": true,
+        "id": "custom-doac-renal-review",
+        "label": "DOAC – renal function review needed",
+        "drug": {
+          "match": ["apixaban","eliquis","rivaroxaban","xarelto","edoxaban","lixiana","dabigatran","pradaxa"],
+          "exclude": []
+        },
+        "tests": [
+          { "name": "eGFR / U&E", "match": ["u&e","urea and electrolytes","renal profile","egfr","creatinine"], "intervalDays": 182, "dueSoonDays": 21 }
+        ],
+        "severity": "amber",
+        "notes": "Check eGFR every 6 months if eGFR 30–50 mL/min, every 3 months if eGFR <30. Drug-specific thresholds: dabigatran contraindicated at eGFR <30; edoxaban dose-halved at CrCl <50; apixaban and rivaroxaban reduced at CrCl <15 (or per SmPC). An eGFR fall >15 mL/min over 12 months warrants urgent review of DOAC appropriateness and dose. This rule fires on all DOAC patients and uses a 6-month interval — the annual Sentinel drug-monitoring rule (id: doac) remains the baseline; this alert-library rule supplements it for patients with known or suspected renal impairment.",
+        "source": "EHRA DOAC guideline 2024 / BNF / NICE NG196"
+      }
+    },
+
+    {
+      "libId": "doac-dose-appropriateness",
+      "category": "Prescribing safety",
+      "subcategory": "Anticoagulation",
+      "title": "DOAC dose appropriateness check (age ≥80 or high-risk criteria)",
+      "description": "Patient aged ≥80 on a DOAC — dose may need reduction. Standard dose-reduction criteria: age ≥80, weight ≤60 kg, creatinine ≥133 µmol/L (or CrCl threshold per drug). Apixaban: reduce to 2.5 mg bd if ≥2 criteria met. Edoxaban: halve dose if CrCl 15–50 or weight ≤60 kg. Dabigatran: 110 mg bd if age ≥80 or high bleeding risk (contraindicated at CrCl <30). Rivaroxaban: 15 mg od (AF) if CrCl 15–49.",
+      "source": "EHRA DOAC guideline 2024 / BNF / NICE NG196",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "DOAC dose may need adjustment (age ≥80)",
+        "drugSets": [
+          { "name": "DOAC", "match": ["apixaban","eliquis","rivaroxaban","xarelto","edoxaban","lixiana","dabigatran","pradaxa"] }
+        ],
+        "ageRange": { "min": 80 },
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "Dose-reduction criteria (confirm current eGFR/CrCl and weight before acting):\n• Apixaban: reduce to 2.5 mg bd if ≥2 of: age ≥80, weight ≤60 kg, creatinine ≥133 µmol/L.\n• Edoxaban: halve dose (30 mg od) if CrCl 15–50 mL/min or body weight ≤60 kg.\n• Dabigatran: consider 110 mg bd (from 150 mg bd) if age ≥80 or high bleeding risk; contraindicated at CrCl <30.\n• Rivaroxaban: 15 mg od (AF indication) if CrCl 15–49 mL/min.\nThis rule triggers on age ≥80 alone — weight and creatinine thresholds cannot be automatically evaluated. Always confirm current renal function and weight. See EHRA 2024 practical guide for complete dose tables.",
+        "source": "EHRA DOAC guideline 2024 / BNF / NICE NG196"
       }
     },
 

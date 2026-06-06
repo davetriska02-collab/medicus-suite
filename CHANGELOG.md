@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.4] — 2026-06-06
+
+### Clinical rules — ranitidine removal + DOAC renal monitoring
+
+- **Fixed:** Removed withdrawn ranitidine from all gastroprotection rules. Ranitidine was recalled and withdrawn globally in 2020 (MHRA/FDA). It has been removed from the `mustNotBePresent` lists in `pincer-1` (NSAID without gastroprotection ≥65) and `pincer-3` (aspirin + NSAID without PPI). Famotidine and cimetidine remain listed as current H2-blockers; PPIs remain the preferred agent.
+- **Added:** `doac-renal-review` — new prescribing-safety rule (drug-monitoring type, amber) that checks eGFR/U&E is current every 6 months in patients on any DOAC (apixaban, rivaroxaban, edoxaban, dabigatran + UK brands). Supplements the existing annual Sentinel monitoring rule with a tighter interval for renal-risk patients. Available in the Sentinel alert library.
+- **Added:** `doac-dose-appropriateness` — new prescribing-safety rule (drug-combo type, amber) that fires on DOAC patients aged ≥80 and prompts review of dose-reduction criteria (age ≥80, weight ≤60 kg, creatinine ≥133 µmol/L / CrCl thresholds per drug). Includes drug-specific dose tables in the rule notes (apixaban, edoxaban, dabigatran, rivaroxaban). Available in the Sentinel alert library.
+
 ## [v3.29.3] — 2026-06-05
 
 ### Fix: options page now reloads after import so restored settings are visible
