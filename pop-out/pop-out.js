@@ -19,6 +19,7 @@ const MODULES = {
   referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
   bptrend:     { js: () => import('../side-panel/modules/bptrend/bptrend.js'),       css: '../side-panel/modules/bptrend/bptrend.css' },
   acrtrend:    { js: () => import('../side-panel/modules/acrtrend/acrtrend.js'),     css: '../side-panel/modules/acrtrend/acrtrend.css' },
+  trends:      { js: () => import('../side-panel/modules/trends/trends.js'),         css: '../side-panel/modules/trends/trends.css' },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────

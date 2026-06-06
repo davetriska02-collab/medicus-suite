@@ -1,0 +1,41 @@
+/* Medicus Suite — Observation Trends module (HbA1c / cholesterol / weight).
+   Passive display: line chart + latest value only. Delta arrows use neutral
+   colours (no RAG) so the module implies no clinical judgement. */
+
+.trends-module { font-family: var(--sans); }
+
+.trends-msg { font-family: var(--sans); color: var(--text-3); padding: 20px 16px; font-size: 13px; line-height: 1.5; }
+.trends-hint { font-size: 11px; }
+.trends-msg-inline { padding: 16px 12px; }
+
+/* Metric picker */
+.trends-picker { display: flex; gap: 6px; padding: 10px 12px 4px; flex-wrap: wrap; }
+.trends-tab {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  background: rgba(127,127,127,0.08);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+.trends-tab:hover { color: var(--text-2); }
+.trends-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Latest value head */
+.trends-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 4px; flex-wrap: wrap; }
+.trends-val { display: flex; align-items: baseline; gap: 6px; }
+.trends-num { font-size: 22px; font-weight: 700; color: var(--t1); }
+.trends-unit { font-size: 11px; color: var(--text-3); }
+.trends-delta { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(127,127,127,0.1); }
+.trends-up, .trends-down { color: var(--text-2); }
+.trends-flat { color: var(--text-3); }
+.trends-latest-date { font-size: 10px; color: var(--text-3); }
+
+.trends-section-lbl { font-size: 10px; color: var(--text-3); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.trends-count { font-size: 10px; color: var(--text-3); padding: 4px 12px 12px; }
+
+/* Series colour for the shared lineChart */
+.tc-trend { stroke: var(--accent); }

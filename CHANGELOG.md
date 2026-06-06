@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.31.0] — 2026-06-06
+
+### New module: Observation Trends (HbA1c / cholesterol / weight)
+
+Adds a single **Trends** tab (side panel + pop-out) with a metric picker for
+HbA1c, total cholesterol and weight. Reuses the shared `lineChart` and the
+existing `getTrendData` bridge — the same `observationHistory` already powering
+the BP and Renal trend tabs — so no new data path or storage key is introduced.
+
+Strictly **display only**, consistent with the suite's passive intended purpose:
+it plots recorded values with the latest reading, a neutral (non-RAG) change
+arrow, and the reading count/date range. It renders **no clinical thresholds,
+target zones, or interpretation text**. Metric selection is in-memory (no
+storage key → no backup/IO changes). Each metric isolates its observation row by
+name substring with look-alike exclusions (e.g. cholesterol excludes HDL/LDL/
+ratio/non-HDL).
+
 ## [v3.30.0] — 2026-06-06
 
 ### Reliability: global "Medicus UI changed?" canary banner

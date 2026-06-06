@@ -94,6 +94,7 @@ const MODULES = {
   referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
   bptrend:     { js: () => import('./modules/bptrend/bptrend.js'),       css: './modules/bptrend/bptrend.css' },
   acrtrend:    { js: () => import('./modules/acrtrend/acrtrend.js'),     css: './modules/acrtrend/acrtrend.css' },
+  trends:      { js: () => import('./modules/trends/trends.js'),         css: './modules/trends/trends.css' },
   about:       null,
 };
 
