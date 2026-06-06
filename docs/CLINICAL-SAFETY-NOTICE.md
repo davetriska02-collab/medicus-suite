@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.26.4  
-**Document version:** 3.3  
-**Date issued:** 2026-06-03  
+**Product version:** 3.29.3  
+**Document version:** 3.4  
+**Date issued:** 2026-06-06  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
 **Status:** Live — must be read before installation or use  
@@ -30,7 +30,7 @@ From v1.6 onwards, the extension additionally includes the **Patient Record Visu
 
 From v3.13.0–v3.14.0 the live Triage Lens side panel additionally surfaces, on the record/medications view, **deterministic prescribing-combination prompts** (STOPP/START-style: NSAID + anticoagulant/antiplatelet, "triple whammy" NSAID + ACEi/ARB + diuretic, benzodiazepine/Z-drug in age ≥80), a **risk-tool signpost chip** that links to the official QRISK3 / QCancer / eFI calculators (it computes no score), and **NHS Pharmacy First pathway signposting** snippets. These are supplementary prompts to *review and verify*, framed in the same way as the Visualiser's PINCER prompts — they are not clinical recommendations, diagnoses, or triage decisions. The practice-facing **Custom Alert Builder** also gained (v3.15.0–v3.16.0) an engine-backed live preview and save-time schema validation, so an author can see whether a rule they are building would fire against a test patient before saving it; from v3.22.0 the builder exposes full engine parity including `requiresProblem`/`requiresAnyProblem`, `excludeIfProblem`, sex, age range, `mustNotBePresent` drug-absence gate, and per-test SNOMED aliases.
 
-Since v3.16.0 the Monitoring (Sentinel) module has been extended with: **falling eGFR trend** (≥15 mL/min/1.73m² fall across ≥3 readings within 12 months, NICE NG203) and **hyperkalaemia (K⁺) RAG-banded alerts** (amber 5.5–5.9 mmol/L, red ≥6.0 mmol/L, NICE/UK Kidney Association) using a new `observation-alert` check kind (v3.18.0); a **rising HbA1c trend** rule scoped to the DM register (v3.19.0); **ADHD medication monitoring** rules (stimulants paediatric/adult, atomoxetine, guanfacine — NICE NG87/BNF), **smoking status indicators** across 9 QOF registers, **carbamazepine monitoring**, and an `observation-bundle` check kind enabling DM037 (v3.26.x); and **flu and COVID-19 vaccination eligibility alerts** (v3.26.0), which infer eligibility from demographic data, QOF register membership, problem-list entries, medications, and BMI using JCVI/UKHSA 2025/26 criteria, and infer vaccination status (DUE / GIVEN / DECLINED) from coded data — see limitation 23. A **per-rule hide/snooze** control (v3.26.3) allows vaccine chips to be snoozed until the season end and drug-monitoring/QOF chips to be permanently suppressed on a user's workstation — see limitation 22. Two new graphical trend modules were added: **BP Trend** (dual-line systolic/diastolic chart with condition-specific target lines and AT TARGET / ABOVE TARGET status) and **ACR Trend** (KDIGO A1/A2/A3 band shading, eGFR co-display, monitoring frequency cell, and threshold-based action banners including an ACR ≥70 referral prompt per NICE NG203) (v3.25.0) — see limitations 24–25.
+Since v3.16.0 the Monitoring (Sentinel) module has been extended with: **falling eGFR trend** (≥15 mL/min/1.73m² fall across ≥3 readings within 12 months, NICE NG203) and **hyperkalaemia (K⁺) RAG-banded alerts** (amber 5.5–5.9 mmol/L, red ≥6.0 mmol/L, NICE/UK Kidney Association) using a new `observation-alert` check kind (v3.18.0); a **rising HbA1c trend** rule scoped to the DM register (v3.19.0); **ADHD medication monitoring** rules (stimulants paediatric/adult, atomoxetine, guanfacine — NICE NG87/BNF), **smoking status indicators** across 9 QOF registers, **carbamazepine monitoring**, and an `observation-bundle` check kind enabling DM037 (v3.26.x); **flu and COVID-19 vaccination eligibility alerts** (v3.26.0), which infer eligibility from demographic data, QOF register membership, problem-list entries, medications, and BMI using JCVI/UKHSA 2025/26 criteria, and infer vaccination status (DUE / GIVEN / DECLINED) from coded data — see limitation 23; and a **per-rule hide/snooze** control (v3.26.3) allowing vaccine chips to be snoozed until the season end and drug-monitoring/QOF chips to be permanently suppressed on a user's workstation — see limitation 22. Since v3.26.4: **comprehensive UK brand-name coverage** has been added to all 24 built-in drug-monitoring rules (v3.26.7–v3.28.1), so brand-prescribed items fire the same monitoring alerts as their generic equivalents; a **QOF Obesity 2026/27 area** (OB register) has been added with OB004/OB005 indicators shipped disabled pending CSO review (v3.29.0); and the **NSAID detection set** for prescribing-combination flags has been extended to the complete current UK oral list (v3.29.1). Two graphical trend modules are included: **BP Trend** (dual-line systolic/diastolic chart with condition-specific target lines and AT TARGET / ABOVE TARGET status) and **Renal Monitoring** (formerly ACR Trend, renamed v3.29.2; KDIGO A1/A2/A3 band shading, eGFR co-display, monitoring frequency cell, and threshold-based action banners including an ACR ≥70 referral prompt per NICE NG203) (v3.25.0) — see limitations 24–25.
 
 ## 3. Intended users
 
@@ -283,12 +283,12 @@ This form should be retained in the practice's clinical safety records.
 
 ### Clinical Safety Officer sign-off
 
-I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.26.4; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
+I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.29.3; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-06-03
+**Date:** 2026-06-06
 
 ---
 
@@ -302,6 +302,7 @@ I confirm that this notice fairly represents the clinical safety position of Med
 | 2026-05-29 | 3.1 | DT | Synchronised to v3.4.1; added user instruction on the feedback channel (no patient data in feedback) |
 | 2026-05-30 | 3.2 | DT | Synchronised to v3.16.0. Added the live Triage Lens prescribing prompts and signposting to intended purpose, regulatory status, and known limitations (items 18–20: STOPP/START subset, Pharmacy First eligibility, risk-tool signpost-only). Added limitation 21 (applicability filters fail open on unknown demographics, v3.12.1). Updated the custom-rules limitation for the five rule types and the v3.15.0–v3.16.0 engine-backed live preview / validate-on-save. Updated test count. Aligned with `HAZARD-LOG.md` v3.2 (incl. new H-019) and `INTENDED-PURPOSE.md` v3.16.0. |
 | 2026-06-03 | 3.3 | DT | Synchronised to v3.26.4. Updated intended purpose (section 2) to describe new features since v3.16.0: falling eGFR trend and hyperkalaemia alerts (v3.18.0); rising HbA1c trend (v3.19.0); ADHD monitoring, smoking status, carbamazepine, observation-bundle (v3.26.x); vaccination eligibility alerts (v3.26.0); per-rule hide/snooze (v3.26.3); BP Trend and ACR Trend modules (v3.25.0); Custom Alert Builder full engine parity (v3.22.0). Updated regulatory status (section 4) to confirm new features remain outside medical-device scope. Added known limitations 22 (hidden chips — false reassurance), 23 (vaccination eligibility — inferred status), 24 (BP/ACR Trend data availability), 25 (ACR Trend referral-trigger banner — threshold only). Updated test count to 440+ (17 files, continuous CI). Updated sign-off. Aligned with `HAZARD-LOG.md` v3.3 (new H-020, H-021; updated H-001 to H-007, H-012). |
+| 2026-06-06 | 3.4 | DT | Synchronised to v3.29.3. Updated intended purpose (section 2): drug brand-name coverage for all 24 monitoring rules (v3.26.7–v3.28.1); QOF Obesity area OB register with OB004/OB005 draft indicators (v3.29.0); NSAID set completion (v3.29.1); ACR Trend renamed Renal Monitoring (v3.29.2). Updated test count to 570+ (20 files). Updated sign-off. Aligned with `HAZARD-LOG.md` v3.4 (new H-022 — malicious/malformed import; updated H-002, H-006, H-009, H-016, H-019). |
 
 ---
 
