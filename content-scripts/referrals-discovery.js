@@ -155,7 +155,7 @@
       if (!API_PATTERN.test(e.name)) continue;
       // Only capture data endpoint after config is done; config URL often
       // omits query params so exact matching isn't reliable — use heuristic.
-      if (dataCaptured) continue;
+      if (dataCaptured && configCaptured) continue;
       captureUrl(e.name);
     }
   }

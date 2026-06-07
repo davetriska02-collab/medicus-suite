@@ -1954,8 +1954,9 @@ function renderAnalyteTrend(analytes, name) {
   const pts = analytes[name];
   const labels = pts.map(p => p.date ? p.date.toLocaleDateString('en-GB',{month:'short',year:'numeric'}) : '?');
   const vals   = pts.map(p => p.value);
-  const low    = pts[0]?.low  != null ? parseFloat(pts[0].low)  : null;
-  const high   = pts[0]?.high != null ? parseFloat(pts[0].high) : null;
+  const lastPt = pts[pts.length - 1];
+  const low    = lastPt?.low  != null ? parseFloat(lastPt.low)  : null;
+  const high   = lastPt?.high != null ? parseFloat(lastPt.high) : null;
 
   const zones = zonesFor(name);
 

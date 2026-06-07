@@ -1435,8 +1435,10 @@ getEl('ciAlertComparator')?.addEventListener('change', ciUpdatePreview);
         newRules.push(rule);
       } catch (_) { /* skip invalid */ }
     }
+    const skipped = toAdd.length - newRules.length;
     await chrome.storage.local.set({ 'sentinel.customRules': [...existing, ...newRules] });
-    showToast(`Added ${newRules.length} alert${newRules.length !== 1 ? 's' : ''} — edit in the sections below`);
+    const skippedNote = skipped > 0 ? `, ${skipped} skipped (invalid)` : '';
+    showToast(`Added ${newRules.length} alert${newRules.length !== 1 ? 's' : ''}${skippedNote} — edit in the sections below`);
     await renderLibrary();
     await renderCrList();
     await ciRenderList();
@@ -1602,7 +1604,7 @@ async function dcRenderList() {
   }));
 }
 
-function dcOpenForm(editId) {
+async function dcOpenForm(editId) {
   dcEditingId = editId || null;
   dcSetCount = 0;
   getEl('dcListView').style.display = 'none';
@@ -1623,25 +1625,24 @@ function dcOpenForm(editId) {
   document.querySelector('input[name="dcSex"][value="any"]').checked = true;
 
   if (editId) {
-    chrome.storage.local.get('sentinel.customRules', res => {
-      const rule = (res['sentinel.customRules'] || []).find(r => r.id === editId);
-      if (rule) {
-        getEl('dcLabel').value = rule.label || '';
-        getEl('dcNotes').value = rule.notes || '';
-        getEl('dcSource').value = rule.source === 'Custom rule (user-authored)' ? '' : (rule.source || '');
-        if (rule.ageRange?.min != null) getEl('dcAgeMin').value = rule.ageRange.min;
-        if (rule.ageRange?.max != null) getEl('dcAgeMax').value = rule.ageRange.max;
-        getEl('dcRequiresProblem').value = (rule.requiresProblem || []).join('\n');
-        getEl('dcExcludesProblem').value = (rule.excludesProblem || []).join('\n');
-        if (getEl('dcMustNotBePresent')) getEl('dcMustNotBePresent').value = (rule.mustNotBePresent || []).join('\n');
-        const sevEl = document.querySelector(`input[name="dcSeverity"][value="${rule.severity || 'red'}"]`);
-        if (sevEl) sevEl.checked = true;
-        const sexEl = document.querySelector(`input[name="dcSex"][value="${rule.sex || 'any'}"]`);
-        if (sexEl) sexEl.checked = true;
-        (rule.drugSets || []).forEach(s => dcAddSetCard(s));
-      }
-      if (!getEl('dcSetCards').children.length) dcAddSetCard();
-    });
+    const res = await chrome.storage.local.get('sentinel.customRules');
+    const rule = (res['sentinel.customRules'] || []).find(r => r.id === editId);
+    if (rule) {
+      getEl('dcLabel').value = rule.label || '';
+      getEl('dcNotes').value = rule.notes || '';
+      getEl('dcSource').value = rule.source === 'Custom rule (user-authored)' ? '' : (rule.source || '');
+      if (rule.ageRange?.min != null) getEl('dcAgeMin').value = rule.ageRange.min;
+      if (rule.ageRange?.max != null) getEl('dcAgeMax').value = rule.ageRange.max;
+      getEl('dcRequiresProblem').value = (rule.requiresProblem || []).join('\n');
+      getEl('dcExcludesProblem').value = (rule.excludesProblem || []).join('\n');
+      if (getEl('dcMustNotBePresent')) getEl('dcMustNotBePresent').value = (rule.mustNotBePresent || []).join('\n');
+      const sevEl = document.querySelector(`input[name="dcSeverity"][value="${rule.severity || 'red'}"]`);
+      if (sevEl) sevEl.checked = true;
+      const sexEl = document.querySelector(`input[name="dcSex"][value="${rule.sex || 'any'}"]`);
+      if (sexEl) sexEl.checked = true;
+      (rule.drugSets || []).forEach(s => dcAddSetCard(s));
+    }
+    if (!getEl('dcSetCards').children.length) dcAddSetCard();
   } else {
     dcAddSetCard();
     dcAddSetCard();

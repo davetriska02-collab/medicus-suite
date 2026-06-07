@@ -1259,11 +1259,11 @@
     // Search observationHistory (journal entries in history)
     for (const h of (data.observationHistory || [])) {
       if (matchesAnyTerm(h.name, givenTerms)) {
-        const latest = (h.history || []).find(pt => !pt.date || pt.date >= seasonStartIso);
+        const latest = (h.history || []).find(pt => pt.date && pt.date >= seasonStartIso);
         if (latest) return { type: 'given', date: latest.date, source: 'history' };
       }
       if (matchesAnyTerm(h.name, declinedTerms)) {
-        const latest = (h.history || []).find(pt => !pt.date || pt.date >= seasonStartIso);
+        const latest = (h.history || []).find(pt => pt.date && pt.date >= seasonStartIso);
         if (latest) return { type: 'declined', date: latest.date, source: 'history' };
       }
     }
@@ -1286,7 +1286,7 @@
       }
 
       if (k === 'problem') {
-        if (clause.sex && clause.sex !== sex[0]) continue;
+        if (clause.sex && sex && clause.sex !== sex[0]) continue;
         const terms = clause.match || [];
         const hit = (data.problems || []).find(p =>
           p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
