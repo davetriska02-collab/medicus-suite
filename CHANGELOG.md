@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.33.0] — 2026-06-07
+
+### Per-module extraction breakdown + SOUP register
+
+Two transparency/robustness improvements; no change to clinical rule logic, data flow, permissions, or network behaviour.
+
+**Per-module extraction health (H-005 detection improvement).** The Sentinel side panel now shows what the extension actually read from the current record — `Extracted: N meds · N obs · N problems` — with any zero count amber-flagged for verification.
+
+- `content-scripts/sentinel.js` — `assessExtractionHealth()` now returns a `modules: { medications, observations, problems, demographics }` breakdown alongside the existing `degraded`/`reason` signal. The hard `degraded` semantics are unchanged byte-for-byte (the across-the-board blank that means our scrapers stopped matching the page); the breakdown is published on the snapshot via `publishSnapshot()`.
+- `side-panel/modules/sentinel/sentinel.js` — renders the breakdown in the `data` state only (the `degraded`/`unavailable` warning paths and `classifySnapshot` are untouched). This is **informational only**: a per-module zero is amber-tinted to prompt a manual check but is *never* treated as an alarm, since a record can legitimately have no observations or no problems. It narrows the gap between the whole-record `degraded` banner and a *partial* scraper failure (e.g. meds populated but observations silently empty after a Medicus change) without adding false-reassurance or alert-fatigue risk.
+- Tests: `test-extraction-health.js` gains six checks for the `modules` shape/counts and the "per-module zero never alarms" contract; `test-sentinel-panel-state.js` gains two checks confirming the new field does not perturb snapshot classification. Full `node test-*.js` suite green.
+- `docs/HAZARD-LOG.md` — H-005 updated with control (j); document synchronised to v3.33.0 (doc v3.4).
+
+**SOUP register (`docs/SOUP.md`).** New IEC 62304-style Software of Unknown Provenance register for the vendored visualiser libraries (PDF.js 3.11.174 + worker, Chart.js 4.4.1, D3.js 7.8.5). Records each item's function in the product, known anomalies (incl. CVE-2024-4367 and its `isEvalSupported:false` mitigation, and the deferred NF6 PDF.js upgrade), and risk disposition. References `vendor-versions.json` as the checksum-of-record so the two cannot drift, and is cross-linked from `docs/HAZARD-LOG.md`.
+
 ## [v3.32.1] — 2026-06-07
 
 ### Fix six bugs found in weekly bug bash

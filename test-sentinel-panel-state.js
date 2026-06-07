@@ -43,6 +43,10 @@ check(classify({ chips: [{ status: 'overdue' }], patientContext: {} }) === 'data
   'real chips → data');
 check(classify({ chips: [], degraded: false }) === 'data',
   'genuinely empty (extraction healthy, no matched rules) → data (panel shows "no chips")');
+check(classify({ chips: [{ status: 'overdue' }], degraded: false, modules: { medications: 3, observations: 0, problems: 1, demographics: true } }) === 'data',
+  'per-module breakdown on a healthy snapshot does not change classification (informational only, not an alarm)');
+check(classify({ degraded: true, chips: [], modules: { medications: 0, observations: 0, problems: 0, demographics: false } }) === 'degraded',
+  'a degraded snapshot is still degraded even though it now also carries a (zeroed) modules breakdown');
 check(classify({ chips: null }) === 'no-chips', 'no snapshot chips yet → no-chips');
 check(classify(null) === 'no-chips', 'null snapshot → no-chips (no crash)');
 check(classify(undefined) === 'no-chips', 'undefined snapshot → no-chips (no crash)');

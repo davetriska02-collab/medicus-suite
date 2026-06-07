@@ -441,3 +441,9 @@
 .sent-chip { position: relative; }
 .sent-chip:hover .sent-chip-dismiss { opacity: 0.6; }
 .sent-chip-dismiss:hover { opacity: 1 !important; color: var(--text); }
+
+/* Per-module extraction breakdown (H-005 transparency, informational only) */
+.sent-extraction { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.03em; }
+.sent-ext-label { color: var(--text-5); text-transform: uppercase; letter-spacing: 0.06em; }
+.sent-ext-item { color: var(--text-3); }
+.sent-ext-zero { color: var(--amber); }

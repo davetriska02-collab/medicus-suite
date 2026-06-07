@@ -613,16 +613,28 @@
   // demographics — a real record virtually always has at least demographics, so
   // an across-the-board blank means our scrapers stopped matching the page.
   function assessExtractionHealth(data) {
-    if (!data || data.mode !== 'live') return { degraded: false };
+    if (!data || data.mode !== 'live') return { degraded: false, modules: null };
     const pc = data.patientContext || {};
     const onPatientView = !!(pc.patientId || pc.id || pc.uuid || pc.patientName);
-    if (!onPatientView) return { degraded: false };
-    const clinical = (data.medications || []).length + (data.observations || []).length + (data.problems || []).length;
-    if (clinical > 0) return { degraded: false };
-    const noDemographics = !pc.dob && !pc.dobRaw && pc.ageYears == null && !pc.sex && !pc.nhsNumber;
-    if (!noDemographics) return { degraded: false };
+    if (!onPatientView) return { degraded: false, modules: null };
+    const medCount = (data.medications || []).length;
+    const obsCount = (data.observations || []).length;
+    const probCount = (data.problems || []).length;
+    const demographics = !!(pc.dob || pc.dobRaw || pc.ageYears != null || pc.sex || pc.nhsNumber);
+    // Per-module extraction breakdown surfaced (informationally) in the side panel.
+    // A zero count is amber-flagged for the clinician to sanity-check against
+    // Medicus, but is deliberately NOT treated as a failure: real records
+    // legitimately have e.g. no problems or no observations, so per-module zeros
+    // must never raise an alarm on their own. The hard `degraded` signal below —
+    // the across-the-board blank that means our scrapers stopped matching the
+    // page — remains the only thing that must never read as an "all clear".
+    const modules = { medications: medCount, observations: obsCount, problems: probCount, demographics };
+    const clinical = medCount + obsCount + probCount;
+    if (clinical > 0) return { degraded: false, modules };
+    if (demographics) return { degraded: false, modules };
     return {
       degraded: true,
+      modules,
       reason: 'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.'
     };
   }
@@ -1079,6 +1091,7 @@
       evaluatedAt: new Date().toISOString(),
       degraded: !!(health && health.degraded),
       reason: (health && health.reason) || null,
+      modules: (health && health.modules) || null,
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,
