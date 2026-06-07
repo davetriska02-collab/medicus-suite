@@ -1,158 +1,174 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.17.2
-**Generated:** 2026-05-31 (automated)
+**Version:** v3.31.2  
+**Generated:** 2026-06-07 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome side-panel companion for the Medicus electronic
-patient record (EPR). It sits alongside the clinical system and surfaces
-practice demand, capacity, and activity at a glance, adds clinical-context
-overlays on patient records and triage queues, and lets the practice track
-referrals and daily submissions — all drawn from API data the clinician is
-already authorised to see. It is a passive display and memory aid: it never
-writes to the record, never makes clinical decisions, and keeps all data inside
-the browser.
+Medicus Suite is a Chrome side-panel companion for the Medicus electronic patient record system, built for UK GP practices. It works alongside Medicus in the browser, surfacing appointment demand, capacity, QOF and drug-monitoring status, clinical trends, referral audits, and activity reports without interrupting the clinical workflow. When a patient record is open it surfaces monitoring alerts, prescribing-safety prompts, and observation trend charts drawn from data the clinician already has access to. It is a passive display tool: it never writes to the record, never makes clinical decisions, and processes all patient data locally in the browser.
 
 ## At a glance
 
-- **6 side-panel modules** — Slot Counter, Capacity Forecast, Submissions Tracker, Sentinel, Activity Report, Referrals Tracker
-- **4 in-page features** — Triage Lens, Sentinel HUD, Referrals discovery, live Pusher updates
+- **9 side-panel modules** — Slots, Capacity Forecast, Submissions, Monitoring (Sentinel), Activity, Referrals, BP Trend, Renal Monitoring, Observation Trends
+- **4 in-page features** — Triage Lens queue overlay, Sentinel monitoring, Referrals discovery, live Pusher demand updates
 - **7 rule types** in the alert engine
-- **22 bundled starter alerts** in the library (19 prescribing-safety, 3 clinical-review)
+- **22 bundled starter alerts** in the importable library (prescribing safety and clinical review)
 
 ## Side-panel modules
 
-### Slot Counter v2.2
-Shows available appointment slots by type for any date, direct from the
-scheduling API — no need to open the appointment book. Updates live via Pusher
-whenever a Medicus tab is open.
-- Per-type slot counts for any chosen date
-- Live refresh triggered by scheduling changes
-- Hide slot types you don't want counted; choices are saved
-- Configurable per-type alert thresholds with a nav-strip badge
+### Slot Counter
+Fetches live appointment slot availability from the Medicus scheduling API for any date. Displays available slots broken down by appointment type, with configurable threshold alerts.
+
+- Live slot count per appointment type for any selected date
+- Configurable amber/red threshold alerts by appointment type
+- Type filter to hide irrelevant session types
+- Polls on load; manual refresh available
 
 ### Capacity Forecast
-Turns the live slot picture into a forward view of capacity against
-practice-defined daily targets, so you can see where the week is tight before
-it bites.
-- Reusable named presets — each bundles a set of appointment types and a daily minimum
-- Colour-coded RAG status per day and per preset
-- Week and month calendar views; weekend suppression option
-- Multiple presets for different staff groups or session types
+A calendar view of appointment capacity against user-defined daily minimums. Shows each date as Sufficient / Tight / Low / Critical / Closed at a glance.
 
-### Submissions Tracker v1.0
-Daily inbound task counts across medical, admin, investigation, and
-prescription-request categories.
-- Today view, custom date range, and same-day-last-week comparison
-- Stacked bar chart for week-on-week pattern recognition
-- Optional RAG thresholds (amber / red) per task type; breaches shown as a persistent global strip at the top of the panel
+- Day, week, or month calendar modes
+- Per-weekday minimum slot thresholds
+- RAG status (Sufficient to Critical) against configurable minimums
+- Appointment-type presets; weekends toggleable
+- Named presets for quick switching
 
-### Sentinel
-Clinical-context display for the open patient record, covering drug monitoring,
-QOF 2025/26 indicators, and the practice waiting room. Chips are colour-coded
-(red / amber / green / grey) and sorted worst-first; each chip links through to
-the exact evidence the engine matched — the medication, test, value, date, and
-threshold.
-- Drug-monitoring recall: shows whether each high-risk medication's monitoring tests are in date, due soon, overdue, or absent
-- QOF indicator status: checks whether targets are met for the current QOF year against the patient's registers and observations
-- Register membership: identifies which QOF registers the patient's coded problems place them on
-- Inline evidence panel: click any chip to see the matched value, date, reference range, and which part of the rule fired
-- Waiting-room list: patients currently checked in, polled every 30 seconds in real time
-- Extraction-health warning: if the page layout has drifted and no patient data can be read, shows a prominent warning rather than a misleading empty state
-- Filter by action-needed vs clear; refresh on demand or automatically on tab navigation
+### Submissions Tracker
+Displays QOF and enhanced service submission task counts, drawn from the Medicus task API. Compare today against a previous date, or view a date range.
 
-### Activity Report v1.0
-Practice activity data per staff member across a configurable date range.
-- Period totals and a stacked horizontal bar chart by consultations, prescription requests, medication reviews, document tasks, and investigation results
-- Configurable date presets (today, this week, custom range)
-- Auto-refreshes when the configured practice code changes
+- Task counts by type: Medical, Admin, Investigation, Routine Rx, Non-routine Rx
+- Today view, date comparison, and date-range modes
+- Configurable amber/red thresholds for Medical and Admin queues
+- Global demand strip in the panel header warns when thresholds are crossed
 
-### Referrals Tracker v1.0
-Referral audit data across a configurable date range, sourced from the
-practice's Medicus referrals endpoint.
-- Total referral count with Routine / Urgent / Two-Week-Wait priority and Completed / Incomplete / Cancelled status breakdowns
-- Bar charts by referring clinician, specialty, and hospital (top 15 per view)
-- Referral rate per clinician (referrals ÷ consultations) when activity data is also available
-- Filter by priority and status chips; staleness warning after 30 minutes
+### Monitoring (Sentinel)
+The clinical heart of the suite. When a patient record is open in Medicus, this tab shows a set of chips — colour-coded cards — representing drug-monitoring recall status, QOF indicator achievement, vaccination eligibility, and prescribing-safety alerts for that patient. Evaluation runs in real time against data extracted from the current record.
+
+- Drug-monitoring chips for lithium, methotrexate, DMARDs, antipsychotics, anticonvulsants, ACE inhibitors, statins, ADHD medications, carbamazepine, and more, with overdue/due-soon/in-date/stale status and last-checked evidence
+- QOF indicator chips (HbA1c, BP, lipids, eGFR, smoking status, diabetes care processes) for patients on relevant disease registers
+- Vaccination eligibility chips (flu, COVID) derived from age, QOF registers, current medications, and recorded problems per JCVI/UKHSA 2025/26 seasonal criteria
+- Prescribing-safety chips: NSAID+anticoagulant (GI bleed risk), triple whammy (NSAID+ACEi/ARB+diuretic, AKI risk), benzodiazepine/Z-drug in patients aged 80 or over (falls risk)
+- Observation safety alerts: hyperkalaemia (amber 5.5–5.9, red 6.0+ mmol/L), rising HbA1c trend, falling eGFR trend (NICE NG203)
+- Per-chip expand view showing evidence (observation values, dates, sources)
+- Per-chip dismiss (permanent) or snooze (vaccine chips snooze until season start and auto-resurface)
+- Global amber banner if the record cannot be read, prompting the clinician to check directly in Medicus
+- Custom alert builder (five rule types) with live engine-backed preview; importable starter library of 22 PINCER/clinical rules
+- Filter chips by status: All / Action needed / Clear
+
+### Activity Report
+Shows practice activity data for a configurable date range, drawn from the Medicus reporting API.
+
+- Period totals for consultations, home visits, calls, and other activity types
+- Stacked horizontal bar chart broken down by clinician
+- Presets: today, yesterday, last 7 days, last 30 days, custom range
+- Toggle between stacked overview and single-metric drill-down
+
+### Referrals Tracker
+Displays referral audit data for a configurable date window, aggregated by specialty, clinician, priority, and status.
+
+- Referral counts by priority (Routine, Urgent, 2WW) and status (Completed, Incomplete, Cancelled)
+- Charts switchable between by-clinician and by-specialty views
+- Top-N specialty and clinician breakdowns
+- Date presets: last 3 months, 6 months, 12 months, custom range
+- Priority and status filters
+
+### BP Trend
+Shows a patient's blood pressure history as a dual-line chart (systolic and diastolic), with a target line derived from the patient's QOF register membership.
+
+- Systolic and diastolic lines over the full available history
+- Condition-specific target lines (CKD+ACR above 70: 130/80; HYP aged 80 or over: 150/90; standard: 140/90)
+- AT TARGET / ABOVE TARGET status pill
+- Paediatric caveat: adult targets shown; centile charts required for accurate under-18 assessment
+
+### Renal Monitoring
+Shows ACR and eGFR history with KDIGO staging.
+
+- ACR history with A1/A2/A3 KDIGO threshold band shading
+- eGFR co-display with G-stage bands
+- KDIGO G x A monitoring frequency cell (recommended checks per year)
+- Action banners for ACR 70 or above (referral threshold), ACR doubling, and category crossing
+
+### Observation Trends
+Plots serial readings for HbA1c, total cholesterol, and weight. Display only — no clinical thresholds or target zones.
+
+- Selectable metrics: HbA1c (mmol/mol), Total Cholesterol (mmol/L), Weight (kg)
+- Latest reading, change arrow, reading count and date range
+- Look-alike exclusions (e.g. cholesterol excludes HDL/LDL/ratio/non-HDL)
+- Passive display only: no thresholds, interpretation text, or advice rendered
 
 ## In-page features (content scripts)
 
-These run automatically on Medicus pages (`*.medicus.health`) when the
-extension is installed:
+These activate automatically on Medicus pages.
 
-**Triage Lens** — an overlay on the triage queue and patient records that
-applies up to 20 configurable detection rules to incoming patient request text
-and surfaces severity chips directly in the task row:
-- 20 built-in rules covering chest pain, red-flag headache, GI bleed, sepsis, mental-health crisis, medication reviews, and more; 620+ detection patterns covering lay, clinical, and abbreviated phrasings
-- NHS Pharmacy First signposting for all 7 national pathways (UTI, sore throat, otitis media, sinusitis, insect bite, impetigo, shingles): eligibility notes and safety-netting displayed per pathway
-- STOPP/START-style prescribing-safety flags on individual patient records: NSAID + anticoagulant, triple whammy (NSAID + ACEi/ARB + diuretic), benzodiazepine or Z-drug in patients aged ≥80
-- Risk-tool signpost chip (adults ≥25) with links to QRISK3, QCancer, and eFI calculators
-- Configurable match thresholds, rule priorities, and per-rule enable/disable
-- Draggable HUD overlay; position is remembered per session
+**Triage Lens** — activates on any Medicus page. In the task/appointment queue it adds a structured overlay alongside each patient row with triage flags. On the patient record view it additionally surfaces:
 
-**Sentinel HUD** — the same drug-monitoring and QOF chip display rendered
-directly in the page, alongside the patient record, without opening the side
-panel.
+- Prescribing-safety review prompts: NSAID+anticoagulant, triple whammy, benzodiazepine/Z-drug in patients aged 80 or over
+- NHS Pharmacy First pathway signposting for all 7 clinical pathways (UTI, sore throat, otitis, sinusitis, impetigo, insect bite, shingles) with eligibility notes and red-flag safety-netting
+- Risk-tool signpost chip: one-click links to QRISK3, QCancer, and eFI calculators (no score is computed by the extension)
+- 20 built-in triage detection rules with 620+ lay and clinical match patterns
 
-**Referrals discovery** — listens for referral data loaded during normal
-Medicus navigation and forwards it to the Referrals Tracker.
+**Sentinel** — activates on any Medicus patient record page. Extracts medications, observations, problems, and demographics from the record and evaluates the configured rules; results appear in the Monitoring tab.
 
-**Live updates (Pusher relay)** — intercepts Medicus scheduling events and
-forwards them so the Slot Counter and demand strips refresh without a manual
-reload.
+**Referrals Discovery** — detects the practice-specific API endpoint required by the Referrals Tracker.
+
+**Pusher Relay** — relays live Pusher demand-update events to the side panel, keeping waiting-room and new-request counts current without polling.
 
 ## Alert engine
 
-The Sentinel display and the custom-alert builder are both driven by the same
-rules engine, which supports seven rule types. Each type can be used standalone
-or mixed in a single ruleset:
+The Sentinel engine evaluates seven rule types against the patient's extracted data:
 
-- **Drug monitoring** — a medication triggers a recall requirement; the engine checks whether the required test was recorded within the configured interval. Fires as overdue, due soon, severely overdue, recently-initiated (grace period), or no data found.
-- **QOF register** — confirms whether the patient belongs to a QOF register based on their active coded problems. Supports all major QOF 2025/26 registers including Dementia (DEM).
-- **QOF indicator** — checks whether an observation or medication meets the QOF target threshold within the current QOF year or a rolling window, with register-membership preconditions.
-- **Drug combo** — detects combinations of two or more drug classes (optionally gated on age range, sex, or problem list). Used for prescribing-safety patterns such as PINCER, interaction risks, and STOPP/START criteria. Supports exclusion lists (e.g. topical NSAIDs, co-prescribed gastroprotection).
-- **Event count** — counts occurrences of matching observations or coded events within a time window and fires above a configurable threshold (e.g. three or more UTIs in 12 months).
-- **Composite** — combines any number of other rules with AND / OR logic. Each component rule's own evidence remains drillable in the evidence panel.
-- **Observation trend** — evaluates the direction and magnitude of change across a series of observations within a configurable window.
+### drug-monitoring
+Matches prescribed medications by generic name or UK brand name, then checks whether required monitoring tests have been done within the configured interval. Returns overdue / due-soon / in-date / stale / recently-initiated status. Supports age and sex gating and SNOMED test codes.
 
-The bundled **alert library** ships 22 starter alerts based on PINCER (BMJ
-2012) and standard UK prescribing-safety guidelines, designed as editable
-starting points for local review: 19 prescribing-safety alerts (GI bleed risk,
-anticoagulation interactions, cardiac and renal drug combinations, NSAIDs in the
-elderly, valproate monitoring, and others) and 3 clinical-review alerts.
+### qof-register
+Derives register membership from the problem list using configurable match and exclude terms. The resulting on-register status gates which indicator chips fire.
 
-Practices can extend the ruleset with the **Custom Alert Builder** in Settings,
-which provides an engine-backed "would this fire?" live preview across all five
-non-composite rule types, driven by an editable mock patient. An Auto-fill
-button seeds a firing example from the rule under construction.
+### qof-indicator
+Checks QOF achievement for register members. Four check modes: threshold (latest observation vs target), recency (last observation within QOF year), observation bundle (sets of care processes, e.g. all 8 diabetes care processes), and observation trend (rising or falling threshold across a minimum number of readings).
+
+### drug-combo
+Fires when two or more specified drug groups are co-prescribed, with optional age gating and a must-not-be-present exclusion list. Used for PINCER prescribing-safety rules.
+
+### event-count
+Counts matching events (observations or journal entries) in a configurable time window and fires when the count meets a threshold.
+
+### composite
+Combines other rules with AND or OR logic. Fires when its child rules meet the configured condition.
+
+### vaccine
+Evaluates eligibility for flu and COVID vaccination against JCVI/UKHSA 2025/26 seasonal criteria (age, QOF registers, medications, BMI), then checks for GIVEN/DECLINED coding in the current season window.
+
+The **Alert Library** contains 22 importable starter rules in two categories:
+
+- **Prescribing safety** (19 rules): PINCER indicators 1–12, NSAID combinations, DOAC interactions, valproate teratogenicity, and others
+- **Clinical review** (3 rules): eGFR trend, PSA trend, and additional observation monitors
 
 ## Settings & customisation
 
-- **Practice Profile** — shared-folder managed deployment of practice-wide settings (rules, Triage Lens config, thresholds), so the suite admin can push a consistent configuration to all staff
-- **Backup / restore** — a single suite-wide backup envelope or per-module export; covers all storage keys including custom rules, capacity presets, and display preferences
-- **Display preferences** — theme (light / dark / system), density, and a colourblind-friendly palette
-- **Custom Alert Builder** — create and edit Sentinel alerts for all seven rule types with live engine preview and validation
-- **Feedback** — an in-panel feedback and bug-report button (About tab)
-- **Clinical Safety** — an in-app tab linking the full safety case documents
+- **Practice Profile** — one-time practice API code setup; shared-folder managed deployment supported
+- **Custom Alert Builder** — form-based builder for all five rule types with live engine preview and validate-on-save
+- **Backup / restore** — suite-wide JSON backup envelope covering all module settings, custom rules, thresholds, and display preferences; per-module export/import also available
+- **Display preferences** — light/dark theme, small/medium/large text size, colour-blind mode
+- **Hidden/snoozed alerts** — management panel to re-enable dismissed chips or cancel an active vaccine snooze
 
 ## Recent additions (last 4 weeks)
 
-- **v3.17.2 (2026-05-30)** — Sentinel now shows an explicit warning when the extraction canary detects a degraded snapshot; stale previous-patient snapshots are invalidated on navigation (wrong-patient risk fix)
-- **v3.17.1 (2026-05-30)** — Security: `web_accessible_resources` restricted to `*.medicus.health` only
-- **v3.17.0 (2026-05-30)** — Silent-failure detection for DOM/API drift; CI now runs the full test suite and defaults drift-check on every push
-- **v3.16.0 (2026-05-30)** — Custom Alert Builder: engine-backed live preview for all five rule types (drug-combo, event-count, qof-indicator, composite, drug-monitoring)
-- **v3.14.0 (2026-05-30)** — STOPP/START prescribing-safety flags and risk-tool signpost chips on patient records
-- **v3.13.0 (2026-05-30)** — NHS Pharmacy First signposting for all 7 clinical pathways added to Triage Lens
-- **v3.12.x (2026-05-30)** — Triage Lens detection expanded 5.8× (106 → 620 patterns); applicability-filter fix (demographic-gated alerts now fail open on unknown demographics)
-- **v3.11.x (2026-05-30)** — Bug fixes: capacity backup data-loss, display-popover listener leak, wrong-patient snapshot guard, submissions NaN display, Triage Lens drag handler lingering after alt-tab
+- **v3.31.0 (2026-06-06)** — New Observation Trends tab: HbA1c, cholesterol, and weight chart viewer
+- **v3.30.0 (2026-06-06)** — Global extraction-health banner: surfaces Medicus layout changes across every tab, with one-click update check
+- **v3.29.x (2026-06-04–05)** — QOF 2026/27 Obesity clinical area (draft, pending confirmation); NSAID drug set completed; Renal Monitoring tab renamed; options page auto-reloads after backup import
+- **v3.28.x (2026-06-04)** — Security hardening (ruleset import validation, patient data minimisation, tightened extension resource exposure, message-sender validation); drug-monitoring brand-completeness pass for amiodarone, allopurinol, azathioprine, sulfasalazine, and methotrexate brands
+- **v3.27.0 (2026-06-03)** — Comprehensive UK brand coverage for all monitored drug classes (DMARDs, antihypertensives, statins, antipsychotics, DOACs, SGLT2 inhibitors, GLP-1 agents, systemic HRT)
+- **v3.26.x (2026-06-02)** — Vaccination eligibility alerts (flu/COVID per JCVI 2025/26); per-chip dismiss and vaccine snooze; QOF chip fixes on care-record views
+- **v3.25.x (2026-06-02)** — BP Trend and Renal Monitoring tabs added
+- **v3.24.0 (2026-06-02)** — ADHD stimulant monitoring rules for methylphenidate, lisdexamfetamine, dexamfetamine, atomoxetine, and guanfacine (paediatric and adult)
+- **v3.23.0 (2026-06-02)** — Smoking status recall chips for disease registers; carbamazepine drug monitoring added
+- **v3.22.0 (2026-06-01)** — Custom Alert Builder: cohort fields exposed, medication-exclude fix, drug-monitoring patient filters, live preview for all five rule types
+- **v3.20–v3.21.x (2026-06-01)** — QOF clinical-correctness fixes (age filter fail-open, negation-aware problem matching, STIA register, DM register false-positive fix); backup/restore data-loss fixes; lifecycle and race-condition reliability fixes
+- **v3.18–v3.19.x (2026-05-31)** — Service worker fixed (icon reliably opens side panel); falling eGFR and hyperkalaemia alerts shipped as defaults; extraction-health canary wired to side panel
+- **v3.13–v3.17.x (2026-05-30)** — Triage Lens pattern expansion (106 to 620 patterns); Pharmacy First signposting for all 7 pathways; STOPP/START prescribing-safety flags; CI test suite added; eGFR trend and PSA trend monitors
 
 ## Safety posture
 
-Medicus Suite is a passive display tool and memory aid. It does not write to
-the patient record, does not order investigations, does not modify QOF claims
-data, performs no AI inference, and transmits no patient data outside the
-user's browser. It is not a medical device and does not constitute clinical
-decision support; all clinical decisions, including verification of any
-displayed value against the source record, remain the responsibility of the
-clinician. See `INTENDED-PURPOSE.md` and `CLINICAL-SAFETY-NOTICE.md`.
+Medicus Suite is a passive display tool. It reads data the clinician is already authorised to see in Medicus, processes everything locally in the browser, and writes nothing to any patient record or external system. No patient data is transmitted outside the browser. It does not produce clinical diagnoses or recommendations; all displayed values are drawn from the source record and all clinical decisions remain solely with the clinician.
+
+For a full statement, see INTENDED-PURPOSE.md and HAZARD-LOG.md.
