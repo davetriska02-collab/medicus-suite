@@ -120,6 +120,14 @@ function previewEnvelope(envelope) {
     if (disabledIds.length > 0) {
       lines.push(`WARNING: Disables ${disabledIds.length} monitoring rule(s): ${disabledIds.join(', ')}`);
     }
+    // NF1: also warn when hiddenRules will suppress chips — same patient-safety
+    // concern as enabled:false but via the per-chip snooze/dismiss pathway.
+    const hiddenCount = Object.keys(mods.sentinel.hiddenRules || {}).length;
+    if (hiddenCount > 0) {
+      const hiddenIds = Object.keys(mods.sentinel.hiddenRules).slice(0, 5).join(', ');
+      const more = hiddenCount > 5 ? ` … +${hiddenCount - 5} more` : '';
+      lines.push(`WARNING: Suppresses ${hiddenCount} hidden/snoozed alert chip(s): ${hiddenIds}${more}`);
+    }
   } else { const m = missing('Sentinel (Monitoring)'); if (m) lines.push(m); }
 
   if (mods.capacity) {

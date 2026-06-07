@@ -1,5 +1,44 @@
 # Security Audit — Medicus Suite
 
+## Second Pass — v3.31.2 (2026-06-07)
+
+**Version audited:** 3.31.2 (commit e73eb0e)
+**Remediated in:** 3.32.0
+**Date:** 2026-06-07
+**Type:** Red-team / adversarial code review (authorised, developer-initiated)
+**Method:** 8 parallel automated agents swept all 8 attack surfaces; every finding
+verified by the orchestrator against source before rating.
+
+### Overall posture
+
+All F1–F8 fixes from the first pass verified as still holding. Four new findings
+(NF1–NF5, NF6 deferred), all remediated in v3.32.0 except NF6 (tracked follow-up).
+
+### Findings (second pass)
+
+| ID | Severity | Finding | Location | Status |
+|---|---|---|---|---|
+| NF1 | **High** | `sentinel.hiddenRules` backup import had no preview warning — a crafted backup could silence all drug-monitoring chips with no visible indication. | `shared/io/suite-envelope.js:110–122`, `shared/io/sentinel-io.js:90–94` | Fixed v3.32.0 |
+| NF2 | **Medium** | OB register (`qof-reg-ob`) enabled by default but silently under-counts (BMI-driven, not problem-label driven). | `rules/qof-rules.json` | Fixed v3.32.0 — disabled |
+| NF3 | **Medium** | `sentinelImport()` accepted any object for `hiddenRules` entries without validating `{until: ISO\|null}` structure. | `shared/io/sentinel-io.js:90–94` | Fixed v3.32.0 |
+| NF4 | **Low** | `popout:closed` `onMessage` handler lacked `sender.id` guard (defence-in-depth gap). | `side-panel/panel.js:192` | Fixed v3.32.0 |
+| NF5 | **Low** | `activeTab` permission declared but never exercised (`tabs` permission covers all use). | `manifest.json` | Fixed v3.32.0 — removed |
+| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Tracked follow-up |
+
+### Verified-and-downgraded (second pass)
+
+- **`alert-library.json` missing from `web_accessible_resources`** → Not an issue. Extension pages (sentinel-options) access extension resources via `chrome.runtime.getURL()` without needing `web_accessible_resources`; that manifest key only restricts external web-page access.
+
+### Confirmed safe (second pass additions)
+
+- New Trends module (v3.31.0): display-only, in-memory, all patient data escaped.
+- Canary banner (v3.30.0): no patient data in banner; update button uses validated `UpdateChecker`.
+- F1–F8 from first pass: all verified still holding at e73eb0e.
+
+---
+
+## First Pass — v3.27.0 (2026-06-04)
+
 **Version audited:** 3.27.0
 **Date:** 2026-06-04
 **Type:** Red-team / adversarial code review (authorised, developer-initiated)
@@ -128,14 +167,14 @@ Recorded for transparency — two were initially rated "critical" and do not hol
   `chrome.runtime.onMessage`. The residual risk is forced refreshes via the F4 bridge — a
   nuisance, not PHI exfiltration.
 
-## 7. Remediation status
+## 7. Remediation status (first pass)
 
 | ID | Action | Status |
 |---|---|---|
-| F1 | Type-validate `check.*` numerics; reject/strip unknown override fields; `Number.isFinite` on intervals; surface "disables N rules" in import preview; defensive proto-key strip in merge; regression tests. | See CHANGELOG |
-| F2 | Stop persisting full patient names; minimise notification text. | See CHANGELOG |
-| F3 | Trim `web_accessible_resources` to least privilege. | See CHANGELOG |
-| F4/F5 | Defensive validation + rate-limiting of the bridge; `sender.id` guards on message handlers. | See CHANGELOG |
-| F6 | `vendor-versions.json` checksum manifest. | See CHANGELOG |
-| F7 | Import file-size cap before parse. | See CHANGELOG |
-| F8 | Narrow GitHub host permission; validate practice-code at fetch time. | See CHANGELOG |
+| F1 | Type-validate `check.*` numerics; reject/strip unknown override fields; `Number.isFinite` on intervals; surface "disables N rules" in import preview; defensive proto-key strip in merge; regression tests. | Fixed v3.28.0 — verified still holding |
+| F2 | Stop persisting full patient names; minimise notification text. | Fixed v3.28.0 — verified still holding |
+| F3 | Trim `web_accessible_resources` to least privilege. | Fixed v3.28.0 — verified still holding |
+| F4/F5 | Defensive validation + rate-limiting of the bridge; `sender.id` guards on message handlers. | Fixed v3.28.0 — verified still holding |
+| F6 | `vendor-versions.json` checksum manifest. | Fixed v3.28.0 — verified still holding |
+| F7 | Import file-size cap before parse. | Fixed v3.28.0 — verified still holding |
+| F8 | Narrow GitHub host permission; validate practice-code at fetch time. | Fixed v3.28.0 — verified still holding |

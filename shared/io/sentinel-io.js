@@ -91,6 +91,18 @@ async function sentinelImport(data, { merge = false } = {}) {
     if (typeof data.hiddenRules !== 'object' || Array.isArray(data.hiddenRules) || data.hiddenRules === null) {
       throw new Error('sentinel.hiddenRules must be an object.');
     }
+    // NF3: validate each entry is {until: ISO-date-string | null} to prevent
+    // malformed values causing unpredictable hide/show behaviour at runtime.
+    const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    for (const [ruleId, entry] of Object.entries(data.hiddenRules)) {
+      if (typeof entry !== 'object' || Array.isArray(entry) || entry === null) {
+        throw new Error(`sentinel.hiddenRules["${ruleId}"]: entry must be an object.`);
+      }
+      if (entry.until !== null && entry.until !== undefined &&
+          (typeof entry.until !== 'string' || !ISO_DATE_RE.test(entry.until))) {
+        throw new Error(`sentinel.hiddenRules["${ruleId}"].until: must be null or a YYYY-MM-DD date string.`);
+      }
+    }
     toSet['sentinel.hiddenRules'] = data.hiddenRules;
   }
 
