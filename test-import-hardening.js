@@ -433,7 +433,154 @@ console.log('\n--- (d) previewEnvelope disabled-rule warning ---');
   assert(!hasHtml, 'previewEnvelope: output lines contain no HTML (safe for textContent rendering)');
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// ── (e) previewEnvelope hidden-rules warning (NF1) ────────────────────────────
 
-console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
-if (failed > 0) process.exit(1);
+console.log('\n--- (e) previewEnvelope hidden-rules warning (NF1) ---');
+
+{
+  const envelope = suiteEnv.wrap('suite', {
+    sentinel: {
+      config: {},
+      customRules: [],
+      rules: {},
+      hiddenRules: { 'mtx-001': { until: null }, 'aza-001': { until: null } },
+    }
+  });
+  const lines = suiteEnv.previewEnvelope(envelope);
+  const warnLine = lines.find(l => l.includes('WARNING') && l.toLowerCase().includes('suppress'));
+  assert(!!warnLine, 'previewEnvelope: WARNING line present when hiddenRules is non-empty');
+  assert(!!(warnLine && warnLine.includes('2')), 'previewEnvelope: warning mentions count of 2 suppressed rules');
+  assert(!!(warnLine && warnLine.includes('mtx-001')), 'previewEnvelope: warning lists a sample rule id');
+}
+
+{
+  // Only 7 hidden rules — all IDs should appear (cap is 5, so last 2 should be in "more")
+  const hiddenRules = {};
+  for (let i = 1; i <= 7; i++) hiddenRules[`rule-${i}`] = { until: null };
+  const envelope = suiteEnv.wrap('suite', {
+    sentinel: { config: {}, customRules: [], rules: {}, hiddenRules }
+  });
+  const lines = suiteEnv.previewEnvelope(envelope);
+  const warnLine = lines.find(l => l.includes('WARNING') && l.toLowerCase().includes('suppress'));
+  assert(!!(warnLine && warnLine.includes('7')), 'previewEnvelope: warning shows correct count for 7 hidden rules');
+  assert(!!(warnLine && warnLine.includes('+2 more')), 'previewEnvelope: warning shows "+N more" when ids truncated');
+}
+
+{
+  // Empty hiddenRules — no warning
+  const envelope = suiteEnv.wrap('suite', {
+    sentinel: { config: {}, customRules: [], rules: {}, hiddenRules: {} }
+  });
+  const lines = suiteEnv.previewEnvelope(envelope);
+  const warnLine = lines.find(l => l.includes('WARNING') && l.toLowerCase().includes('suppress'));
+  assert(!warnLine, 'previewEnvelope: no hidden-rules warning when hiddenRules is empty');
+}
+
+{
+  // hiddenRules absent — no warning
+  const envelope = suiteEnv.wrap('suite', {
+    sentinel: { config: {}, customRules: [], rules: {} }
+  });
+  const lines = suiteEnv.previewEnvelope(envelope);
+  const warnLine = lines.find(l => l.includes('WARNING') && l.toLowerCase().includes('suppress'));
+  assert(!warnLine, 'previewEnvelope: no hidden-rules warning when hiddenRules key absent');
+}
+
+// ── (f) sentinelImport hiddenRules entry validation (NF3) ────────────────────
+
+console.log('\n--- (f) sentinelImport hiddenRules entry validation (NF3) ---');
+
+// Minimal chrome.storage mock so sentinelImport can run in Node.
+if (typeof global.chrome === 'undefined') {
+  const _store = {};
+  global.chrome = {
+    storage: {
+      local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+          const out = {};
+          ks.forEach(k => { if (k in _store) out[k] = _store[k]; });
+          return out;
+        },
+        async set(obj) { Object.assign(_store, obj); },
+      },
+    },
+  };
+}
+
+const { sentinelImport } = require('./shared/io/sentinel-io.js');
+
+(async () => {
+  async function expectReject(data, msgFragment, label) {
+    try {
+      await sentinelImport(data);
+      assert(false, `${label}: should have thrown`);
+    } catch (e) {
+      assert(e.message.includes(msgFragment), `${label}: error mentions "${msgFragment}"`);
+    }
+  }
+  async function expectResolve(data, label) {
+    try {
+      await sentinelImport(data);
+      assert(true, `${label}: valid data accepted without error`);
+    } catch (e) {
+      assert(false, `${label}: unexpectedly threw: ${e.message}`);
+    }
+  }
+
+  // Valid: {until: null}
+  await expectResolve(
+    { hiddenRules: { 'mtx-001': { until: null } } },
+    'hiddenRules valid: entry {until:null}'
+  );
+
+  // Valid: {until: ISO date}
+  await expectResolve(
+    { hiddenRules: { 'flu-01': { until: '2026-09-01' } } },
+    'hiddenRules valid: entry {until:"YYYY-MM-DD"}'
+  );
+
+  // Valid: empty object
+  await expectResolve(
+    { hiddenRules: {} },
+    'hiddenRules valid: empty object'
+  );
+
+  // Invalid: entry is not an object
+  await expectReject(
+    { hiddenRules: { 'mtx-001': 'permanent' } },
+    'entry must be an object',
+    'hiddenRules invalid: entry is a string'
+  );
+
+  // Invalid: entry is an array
+  await expectReject(
+    { hiddenRules: { 'mtx-001': [] } },
+    'entry must be an object',
+    'hiddenRules invalid: entry is an array'
+  );
+
+  // Invalid: until is a number
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: 12345 } } },
+    'must be null or a YYYY-MM-DD date string',
+    'hiddenRules invalid: until is a number'
+  );
+
+  // Invalid: until is not ISO format
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: '01/06/2026' } } },
+    'must be null or a YYYY-MM-DD date string',
+    'hiddenRules invalid: until is non-ISO date string'
+  );
+
+  // Invalid: hiddenRules itself is an array
+  await expectReject(
+    { hiddenRules: ['mtx-001'] },
+    'sentinel.hiddenRules must be an object',
+    'hiddenRules invalid: array instead of object'
+  );
+
+  console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
+  if (failed > 0) process.exit(1);
+})();

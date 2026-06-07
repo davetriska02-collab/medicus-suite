@@ -189,7 +189,8 @@ popoutBtn?.addEventListener('click', async () => {
   await updatePopoutBtn();
 });
 
-chrome.runtime.onMessage.addListener(msg => {
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'popout:closed') updatePopoutBtn();
 });
 

@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.32.0] — 2026-06-07
+
+### Security hardening — second pass (NF1–NF5 from the 2026-06-07 red-team audit)
+
+Full write-up in `SECURITY-AUDIT.md`. No evidence of active exploitation; these
+changes close latent weaknesses found in the second scheduled audit pass. The most
+important fix closes a patient-safety gap where a crafted backup file could silently
+suppress all drug-monitoring chips without any preview warning.
+
+- **NF1 + NF3 (High / Medium) — `sentinel.hiddenRules` backup import hardened.**
+  The per-chip hide/snooze feature (v3.26.3) stores suppressions in
+  `sentinel.hiddenRules`. The import path previously accepted any object for this
+  key without validating entry structure, and `previewEnvelope()` had no logic to
+  warn about suppressed chips — so a crafted backup could silently hide all
+  drug-monitoring alerts with no visible indication before or after import.
+  Two fixes:
+  1. `shared/io/sentinel-io.js` — `sentinelImport()` now validates each entry is
+     `{ until: null | "YYYY-MM-DD" }` and rejects malformed values.
+  2. `shared/io/suite-envelope.js` — `previewEnvelope()` now emits a `WARNING`
+     line listing the count and a sample of hidden rule IDs when a backup contains
+     suppressed alerts, mirroring the existing `enabled:false` rule warning.
+
+- **NF2 (Medium) — OB register disabled pending engine support.**
+  The QOF Obesity register (`qof-reg-ob`, v3.29.0) was enabled by default but
+  documented in its own rule comment as a BMI-problem-label approximation that
+  "will miss obese patients who have a recorded BMI but no obesity problem label".
+  An enabled-by-default register that silently under-counts is a false-confidence
+  baseline. Set `enabled: false` until the engine supports observation-based
+  register membership (BMI observation lookup). The two dependent indicators
+  (OB004, OB005) remain disabled pending CSO confirmation regardless.
+
+- **NF4 (Low) — `popout:closed` message handler gains `sender.id` guard.**
+  `side-panel/panel.js` — the one `chrome.runtime.onMessage` listener without a
+  `sender.id !== chrome.runtime.id` check now has it, consistent with the two
+  other listeners in the same file and the service-worker/sentinel handlers.
+
+- **NF5 (Low) — `activeTab` permission removed.**
+  `manifest.json` — `activeTab` was declared but never exercised: all tab queries
+  use `chrome.tabs.query()`, which requires only the `tabs` permission (already
+  present). Removing `activeTab` reduces the declared permission surface.
+
+- **NF6 (tracked follow-up) — PDF.js 3.11.174 upgrade deferred.**
+  CVE-2024-4367 (arbitrary JS via PDF FontMatrix) affects PDF.js < 4.2.67;
+  the exploit is mitigated by the existing `isEvalSupported: false` setting
+  (`visualiser-core.js:640`). Upgrading the vendored binary is tracked as a
+  follow-up (requires downloading and verifying the new build).
+
 ## [v3.31.2] — 2026-06-06
 
 ### Add proprietary copyright header to source files

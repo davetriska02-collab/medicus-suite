@@ -130,7 +130,7 @@
     {
       "id": "qof-reg-ob",
       "type": "qof-register",
-      "enabled": true,
+      "enabled": false,
       "registerCode": "OB",
       "registerName": "Obesity",
       "problemMatch": ["obesity", "obese", "morbid obesity", "severe obesity"],
