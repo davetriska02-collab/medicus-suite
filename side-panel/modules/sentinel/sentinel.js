@@ -348,7 +348,7 @@ function render(payload) {
     return;
   }
 
-  const { chips: allChips, patientContext, evaluatedAt } = snapshot;
+  const { chips: allChips, patientContext, evaluatedAt, modules } = snapshot;
   const patient = patientContext;
 
   // Drop chips for currently-suppressed rules (per-rule hide/snooze) before any
@@ -405,7 +405,20 @@ function render(payload) {
   const ts = evaluatedAt ? new Date(evaluatedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
   const emptyMsg = visibleChips.length === 0 ? `<div class="sent-empty">${currentFilter==='action'?'No items needing action.':currentFilter==='clear'?'No items in date.':'No chips for this patient.'}</div>` : '';
 
-  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + `
+  // Per-module extraction breakdown (informational, H-005 transparency). Shows
+  // what the extension actually read from this record so a clinician can spot a
+  // partial scraper failure (e.g. meds populated but observations silently empty)
+  // that isn't blank enough to trip the degraded banner. A zero count is
+  // amber-flagged to prompt verification — it is NOT an error on its own.
+  const extractionHtml = modules ? `
+    <div class="sent-extraction" title="What the extension read from this record. A zero count is flagged for you to verify directly in Medicus — a record can legitimately have none, so this is not necessarily an error.">
+      <span class="sent-ext-label">Extracted</span>
+      <span class="sent-ext-item${modules.medications===0?' sent-ext-zero':''}">${modules.medications} meds</span>
+      <span class="sent-ext-item${modules.observations===0?' sent-ext-zero':''}">${modules.observations} obs</span>
+      <span class="sent-ext-item${modules.problems===0?' sent-ext-zero':''}">${modules.problems} problems</span>
+    </div>` : '';
+
+  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + extractionHtml + `
     <div class="sent-footer">
       <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>

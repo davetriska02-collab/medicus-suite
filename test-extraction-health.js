@@ -50,5 +50,19 @@ check(assess(null).degraded === false, 'null data → not degraded (no crash)');
 check(assess({ mode: 'live', patientContext: { patientName: 'X', sex: 'female' }, medications: [], observations: [], problems: [] }).degraded === false,
   'identity + at least one demographic field present → genuine empty, not degraded');
 
+console.log('\n--- per-module breakdown (informational; never an alarm on its own) ---');
+const mods = assess({ mode: 'live', patientContext: pc(), medications: [{ name: 'a' }, { name: 'b' }], observations: [{ name: 'o' }], problems: [] }).modules;
+check(mods && mods.medications === 2 && mods.observations === 1 && mods.problems === 0,
+  'modules carries exact per-extractor counts');
+check(mods && mods.demographics === true, 'modules.demographics reflects whether any demographic field was extracted');
+check(assess({ mode: 'live', patientContext: pc(), medications: [{ name: 'a' }], observations: [], problems: [] }).degraded === false,
+  'a zero count in one module (obs/problems empty) is NOT degraded while other data extracted — per-module zeros never alarm on their own');
+check(assess({ mode: 'live', patientContext: pc(), medications: [], observations: [], problems: [] }).modules?.medications === 0,
+  'modules present even on a sparse-but-genuine record (demographics carry it)');
+check(assess({ mode: 'live', patientContext: { patientName: 'X' }, medications: [], observations: [], problems: [] }).modules?.medications === 0,
+  'degraded result still carries a modules breakdown (all zeros) for the panel');
+check(assess({ mode: 'mock', patientContext: { patientName: 'X' }, medications: [], observations: [], problems: [] }).modules === null,
+  'non-live / not-a-patient-view returns modules:null (nothing to show)');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
