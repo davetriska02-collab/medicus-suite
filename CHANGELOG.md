@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.32.1] — 2026-06-07
+
+### Fix six bugs found in weekly bug bash
+
+**`engine/rules-engine.js`** — two fixes:
+- Vaccine history filter: changed `!pt.date || pt.date >= seasonStartIso` to `pt.date && pt.date >= seasonStartIso` in both the `given` and `declined` branches of `matchVaccineHistory`. Undated history entries (data-quality gaps) were previously treated as in-season, potentially suppressing a current-season vaccine alert for patients whose old undated record was found first.
+- Vaccine sex-eligibility check: added a `sex &&` guard before `clause.sex !== sex[0]` so patients with an empty-string sex field are no longer silently excluded from female-specific eligibility clauses (e.g. cervical-cancer-screening, HPV).
+
+**`content-scripts/referrals-discovery.js`** — changed `if (dataCaptured)` to `if (dataCaptured && configCaptured)` in `scanEntries`. If a data URL resolved before the config URL appeared in a later PerformanceObserver callback, the config was permanently skipped, silently breaking referrals discovery on cache-ordered page loads.
+
+**`visualiser-core.js`** — analyte trend reference band now uses the most-recent data point's `low`/`high` values (`pts[pts.length-1]`) instead of the oldest (`pts[0]`), so age-adjusted or lab-updated reference intervals are reflected correctly.
+
+**`sentinel-options/options.js`** — two fixes:
+- `addAllLibraryEntries`: tracks the count of rules dropped by `validateCustomRule` and appends `, N skipped (invalid)` to the completion toast so the user knows if any library entries were rejected.
+- `dcOpenForm`: converted the `chrome.storage.local.get` callback to `async/await` so form fields are fully populated before control returns to the user, eliminating a narrow race where typing could begin before stored rule values were loaded.
+
 ## [v3.32.0] — 2026-06-07
 
 ### Security hardening — second pass (NF1–NF5 from the 2026-06-07 red-team audit)
