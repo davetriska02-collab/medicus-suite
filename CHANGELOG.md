@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.34.1] — 2026-06-08
+
+### Condor — fix code-review findings in workload.js
+
+Four robustness fixes in `side-panel/modules/condor/cards/workload.js`:
+
+- **Finding 1 (null rows crash):** `data.activity.rows` is now safely defaulted to `[]` via `rawRows ?? []` before spreading, preventing a throw when the field is null/undefined.
+- **Finding 2 (document guard):** `ensureStyles()` now checks `typeof document !== 'undefined'` before calling `document.createElement`, making it safe in a service-worker context.
+- **Finding 3 (data=null guard):** The top-level guard is now `if (data == null || !data.activity)` (loose equality) so both `null` and `undefined` are caught before any property access.
+- **Finding 4 (segment width overflow):** Named bar segments are clamped via `Math.min(100, Math.max(0, v))`, and the final segment (admin) is derived as `100 - sumOfPrevious` to prevent floating-point overflow.
+
 ## [v3.34.0] — 2026-06-08
 
 ### Merge Renal and BP Trend tabs into unified Trends tab
