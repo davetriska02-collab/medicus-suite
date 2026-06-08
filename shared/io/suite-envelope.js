@@ -5,7 +5,8 @@
 //   format: "medicus-suite-backup"
 //   formatVersion: 1
 //   scope: "suite" | "sentinel" | "capacity" | "triage" | "triageAlerts" |
-//           "slots" | "submissions" | "popout" | "referrals" | "requestMonitor"
+//           "slots" | "submissions" | "popout" | "referrals" | "requestMonitor" |
+//           "condor"
 //   modules: { [scope]: { ...module data } }
 //
 // A scoped export (e.g. just Capacity) includes only that module's key under
@@ -29,7 +30,7 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
