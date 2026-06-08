@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.2] — 2026-06-08
+
+### Fix: address code review findings in demand-gap.js (Condor card)
+
+- **Strict null check** (`=== null`) replaced with loose equality (`== null`) in the null/empty data guard of `renderDemandGap`, so both `null` and `undefined` are caught for `data`, `data.submissions`, and `data.slots`.
+- **Redundant `Infinity` check** removed from the ratio colour-class branch: `ratio === Infinity || ratio >= 1.5` simplified to `ratio >= 1.5` (since `Infinity >= 1.5` is already `true`).
+
 ## [v3.29.1] — 2026-06-04
 
 ### Prescribing safety — completed the UK oral NSAID set (The Keeper)
