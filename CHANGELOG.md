@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.34.1] — 2026-06-08
+
+### fix: address code review findings in referral-rate.js
+
+Four confirmed bugs corrected in `side-panel/modules/condor/cards/referral-rate.js`:
+
+- **Finding 1** — `ensureStyles()` not called in the unavail path: `.condor-rr-unavail` CSS was never injected in production (where referrals are always unavailable). `ensureStyles()` is now called before the early return.
+- **Finding 2** — False-positive amber flag when `practiceAvgRate === 0`: the flag condition `r.rate > practiceAvgRate * 1.5` reduced to `r.rate > 0`, firing the ⚠ flag on every clinician with any referrals. Guarded with `practiceAvgRate > 0 &&` so the flag only fires when a meaningful average exists.
+- **Finding 3** — `Math.max(...spread)` on an unbounded array: replaced with `sorted.reduce((m, r) => Math.max(m, r.rate), 0.001)` to avoid `RangeError: Maximum call stack size exceeded` on large datasets.
+- **Finding 4** — Negative/NaN CSS width: bar width now clamped via `Math.min(100, Math.max(0, isFinite(r.rate) ? r.rate / maxRate * 100 : 0))` to prevent invalid CSS.
+
 ## [v3.34.0] — 2026-06-08
 
 ### Merge Renal and BP Trend tabs into unified Trends tab
