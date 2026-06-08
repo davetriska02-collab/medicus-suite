@@ -59,6 +59,17 @@ Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensit
 
 After changing `match`/`exclude`, run `node test-drug-brand-coverage.js` and add the new drug/brands to its `EXPECTED` map so the coverage is regression-guarded. This converts "a clinician notices a missing alert months later" into "CI fails on the PR".
 
+## Automated loops
+
+Scheduled Claude Code routines live in `.claude/scheduled-tasks/` and invoke the
+skill library in `.claude/skills/`. Before adding or editing one, read
+`.claude/scheduled-tasks/README.md` — it defines the loop anatomy every routine
+must satisfy (schedule, skill, tools, feedback gate, no-op condition, durable
+state, hard limits) and catalogs the loops we already run. Prefer invoking a
+**skill** over inlining logic, and always make the feedback gate, the no-op exit,
+and the hard limits explicit (report-only vs writes-code; never auto-merge a
+clinical-rule change without CSO sign-off).
+
 ## Version bumping
 
 Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
