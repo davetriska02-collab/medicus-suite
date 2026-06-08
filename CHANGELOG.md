@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.34.0] — 2026-06-08
+
+### Merge Renal and BP Trend tabs into unified Trends tab
+
+The three separate navigation tabs (Renal, BP Trend, Trends) have been consolidated into a single **Trends** tab with an in-module picker: **BP | Renal | HbA1c | Cholesterol | Weight**.
+
+- `side-panel/modules/trends/trends.js` — merged BP and Renal logic in; picker now offers all five views. BP and Renal logic is identical to the removed modules — no behavioural change. `selectedView` state is in-memory only (no storage key).
+- `side-panel/modules/trends/trends.css` — merged in all CSS from `bptrend.css` and `acrtrend.css`, including the shared `tc-*` chart primitives.
+- `side-panel/panel.html` / `pop-out/pop-out.html` — removed `acrtrend` and `bptrend` nav tab buttons.
+- `side-panel/panel.js` / `pop-out/pop-out.js` — removed `acrtrend` and `bptrend` from MODULES registry.
+- `side-panel/modules/bptrend/` and `side-panel/modules/acrtrend/` — source files retained on disk but no longer registered or loaded.
+
 ## [v3.33.0] — 2026-06-07
 
 ### Per-module extraction breakdown + SOUP register
