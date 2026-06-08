@@ -1,4 +1,3 @@
-// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Pop-out window controller
 
 'use strict';
@@ -18,7 +17,9 @@ const MODULES = {
   sentinel:    { js: () => import('../side-panel/modules/sentinel/sentinel.js'),      css: '../side-panel/modules/sentinel/sentinel.css' },
   activity:    { js: () => import('../side-panel/modules/activity/activity.js'),     css: '../side-panel/modules/activity/activity.css' },
   referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
-  trends:      { js: () => import('../side-panel/modules/trends/trends.js'),         css: '../side-panel/modules/trends/trends.css' },
+  condor:      { js: () => import('../side-panel/modules/condor/condor.js'),         css: '../side-panel/modules/condor/condor.css' },
+  bptrend:     { js: () => import('../side-panel/modules/bptrend/bptrend.js'),       css: '../side-panel/modules/bptrend/bptrend.css' },
+  acrtrend:    { js: () => import('../side-panel/modules/acrtrend/acrtrend.js'),     css: '../side-panel/modules/acrtrend/acrtrend.css' },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────
