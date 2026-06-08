@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.35.0] — 2026-06-08
+
+### Condor: core shell, data layer, CSS, nav registration
+
+Introduces the Condor tab — a new practice operational intelligence module.
+
+- `side-panel/modules/condor/condor-data.js` — parallel data fetch layer (slots, waiting room, submissions, request monitor, activity, capacity preset)
+- `side-panel/modules/condor/condor.js` — orchestrator: init/cleanup pattern, 15-second poll, dynamic card loading via Promise.allSettled imports
+- `side-panel/modules/condor/condor.css` — full layout and component styles (card, pill, bar, SVG helpers)
+- `side-panel/panel.html` / `pop-out/pop-out.html` — Condor nav tab added
+- `side-panel/panel.js` / `pop-out/pop-out.js` — MODULES registry entries added
+
+
 ## [v3.34.0] — 2026-06-08
 
 ### Merge Renal and BP Trend tabs into unified Trends tab
