@@ -154,7 +154,18 @@ so the side-panel "About" tab can hotlink to them.
    - Always operate against `origin/main`, never a local `main` branch — this
      workspace has been seen with a stale, unrelated-history local `main`.
      `git fetch origin main` first.
-   - Stage **both** files (`git add docs/feature-list.md docs/feature-list.docx`),
+   - **Stamp durable state.** This loop pushes to the repo, so it uses the
+     committed-file transport: record this run in its `last-run.json` so the
+     committed history doubles as a loop-health log.
+     ```
+     SHA=$(git rev-parse --short origin/main)
+     echo "{\"lastRunMainSha\":\"$SHA\",\"outcome\":\"pushed\",\"output\":\"docs/feature-list.docx\",\"window\":{\"regenerated\":true}}" \
+       | node .claude/scheduled-tasks/scripts/loop-state.js update weekly-feature-list
+     ```
+     Use `"outcome":"no-op"` if the run hit the step-7 no-op guard and didn't
+     regenerate (then there's no commit — skip staging the stamp too).
+   - Stage the docs **and** the state stamp
+     (`git add docs/feature-list.md docs/feature-list.docx .claude/scheduled-tasks/state/weekly-feature-list.last-run.json`),
      commit `docs: weekly feature-list refresh (YYYY-MM-DD)`, and push to `main`.
      A fast-forward push of your working ref to main is fine:
      `git push origin HEAD:main`. On network failure, retry up to 4× with
@@ -172,7 +183,8 @@ so the side-panel "About" tab can hotlink to them.
 
 ### What NOT to do
 
-- Do NOT modify any code outside `docs/`.
+- Do NOT modify any code outside `docs/` (the one allowed exception is staging
+  this loop's own `state/weekly-feature-list.last-run.json` stamp in step 9).
 - Do NOT include implementation details, file paths, or function names in
   the output — this is a user-facing document.
 - Do NOT exceed 2500 words; trim aggressively.

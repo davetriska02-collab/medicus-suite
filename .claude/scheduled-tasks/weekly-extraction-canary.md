@@ -46,9 +46,17 @@ Chrome extension. Work on a branch; open a PR/issue, do not push to `main`.
    is still called in the zero-result render path and that the degraded banner is
    reachable. If a refactor has disconnected it, that is a P1 finding.
 
-4. **Diff since last run.** Summarise any commits in the past week that touched
-   the extraction surface or Medicus selectors, and whether they added or removed
-   a fallback/guard.
+4. **Diff since last run.** Recover durable state first — this loop is
+   report-only, so its state rides in the last canary artefact's body as a
+   `loop-state` footer. Parse the most recent `weekly extraction canary` PR/issue
+   to learn `lastRunMainSha`:
+   ```
+   node .claude/scheduled-tasks/scripts/loop-state.js parse < /tmp/last-canary.md
+   ```
+   Then summarise commits **since `lastRunMainSha`** (`git log
+   <lastRunMainSha>..origin/main` — on bootstrap fall back to the past week) that
+   touched the extraction surface or Medicus selectors, and whether they added or
+   removed a fallback/guard.
 
 5. **Output.** Open a short PR or issue titled `weekly extraction canary <date>`
    with: test/`--check` status, a prioritised list of fragile selectors/guards
@@ -58,6 +66,16 @@ Chrome extension. Work on a branch; open a PR/issue, do not push to `main`.
    banner or a blank panel on a real record, treat as a Medicus drift incident
    and report to the CSO." If everything is clean, say so plainly — a green week
    is a valid result, not a no-op.
+
+   Append the durable-state footer as the last line of the PR/issue body
+   (invisible in the render, parsed by step 4 next week):
+   ```
+   SHA=$(git rev-parse --short origin/main)
+   echo "{\"lastRunMainSha\":\"$SHA\",\"outcome\":\"issue-opened\",\"output\":\"<PR/issue ref>\",\"window\":{\"testsGreen\":true}}" \
+     | node .claude/scheduled-tasks/scripts/loop-state.js footer weekly-extraction-canary
+   ```
+   Set `"testsGreen":false` and `"outcome":"tests-red"` if the guards in step 1
+   failed, so a red week is visible in the next run's state read.
 
 Do **not** assert that extraction works on live Medicus; only the human
 spot-check in step 5 can establish that.

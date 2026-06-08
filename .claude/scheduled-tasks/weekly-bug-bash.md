@@ -15,10 +15,25 @@ changes.
 
 ### What to do
 
-1. **Scope**: review code changed on `main` in the last 7 days (`git log
-   --since="7 days ago" --name-only --pretty=format:` to get the file list).
-   If fewer than 5 files changed, broaden to 14 days. If still trivial, skip
-   the run and open no issue.
+0. **Read durable state** (so you review exactly what's new since the last run,
+   not a fixed window that loses a week whenever a run slips). This loop is
+   report-only and must not write to the repo, so its durable state rides in the
+   **last bug-bash issue's body** — an invisible `loop-state` footer. Fetch the
+   most recent issue labelled `bug-bash` and parse it:
+   ```
+   # paste the latest bug-bash issue body on stdin:
+   node .claude/scheduled-tasks/scripts/loop-state.js parse < /tmp/last-bug-bash-issue.md
+   ```
+   Note `lastRunMainSha` (the `origin/main` SHA the last run reviewed up to) and
+   `openItems` (findings flagged before that may still be unfixed). If no prior
+   issue/footer exists, treat it as bootstrap.
+
+1. **Scope**: review code changed on `main` **since `lastRunMainSha`**
+   (`git log <lastRunMainSha>..origin/main --name-only --pretty=format:` for the
+   file list). On bootstrap (`lastRunMainSha` is null) fall back to the last 7
+   days; if that's fewer than 5 files, broaden to 14 days. If the window is
+   still trivial, **skip the run, open no issue, and do not stamp state** (leave
+   `lastRunMainSha` intact so next week still sees these commits).
 
 2. **Fan out**: launch up to 6 sonnet subagents in parallel, each scoped to a
    distinct area so they don't overlap. Suggested split (adapt to what
@@ -53,7 +68,7 @@ changes.
 
    ```
    ## Summary
-   N findings across M files. Window: last 7 days.
+   N findings across M files. Window: <lastRunMainSha>..<current sha>.
 
    ## Critical (crash / wrong clinical output)
    - **`path/to/file.js:42`** — one-sentence bug.
@@ -70,13 +85,31 @@ changes.
 
    ## Rejected during verification (kept for transparency)
    - Brief note on what was rejected and why.
+
+   <!-- loop-state footer goes here (step 5) -->
    ```
 
    Label the issue `bug-bash` and `automated`. Don't open fix PRs — the user
    triages and decides.
 
-5. **No issue if no findings**: if every finding is rejected during
-   verification, do not open an issue. Just end the session.
+5. **Embed durable state in the issue body** (this loop can't write to the repo,
+   so the issue *is* the state store). Generate a `loop-state` footer recording
+   the SHA you reviewed up to, the outcome, the issue ref, and any findings still
+   open, and append it as the last line of the issue body:
+   ```
+   SHA=$(git rev-parse --short origin/main)
+   echo "{\"lastRunMainSha\":\"$SHA\",\"outcome\":\"issue-opened\",\"output\":\"issue #<n>\",\"window\":{\"filesReviewed\":<M>},\"openItems\":[{\"id\":\"<file:line>\",\"summary\":\"<one-line>\",\"firstFlagged\":\"<YYYY-MM-DD>\"}]}" \
+     | node .claude/scheduled-tasks/scripts/loop-state.js footer weekly-bug-bash
+   ```
+   The footer is an HTML comment — invisible in the rendered issue, parsed by
+   step 0 next week. Carry forward any still-unfixed entry from the prior run's
+   `openItems` (keeping its original `firstFlagged`) so a lingering bug shows its
+   age.
+
+6. **No issue if no findings**: if every finding is rejected during
+   verification, do not open an issue — and therefore do not advance state.
+   Next week's window will simply re-include this clean stretch (safe: a clean
+   stretch re-reviews to clean). Just end the session.
 
 ### What NOT to do
 

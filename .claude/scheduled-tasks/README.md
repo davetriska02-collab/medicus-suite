@@ -49,19 +49,26 @@ can't name all seven for a new loop, it isn't finished.
 
 | Loop | Cadence | Skill / body | Feedback gate | Durable state | Writes to | Mode |
 |---|---|---|---|---|---|---|
-| [`weekly-bug-bash`](weekly-bug-bash.md) | Weekly, Sun 02:00 | inline (6 sonnet subagents) | verify every finding against `main` tip (reject unreal/fixed/dupe) | git diff window; no-issue-if-no-findings | GitHub issue | report-only |
-| [`weekly-security-audit`](weekly-security-audit.md) | Weekly, Sun 03:00 | `security-audit` skill (8 surfaces) | verify each finding against `main`, downgrade over-rated | lookback for an open audit issue (<10 days) | GitHub issue (or heartbeat) | report-only |
-| [`weekly-extraction-canary`](weekly-extraction-canary.md) | Weekly, Mon 05:00 | inline | full `test-*.js` suite + `regen-defaults --check` + fragility review | diff since last week | PR/issue + **human spot-check** | report-only |
-| [`weekly-feature-list`](weekly-feature-list.md) | Weekly, Sun 03:00 | inline | docx is a valid OOXML zip; push-landed verify | `origin/main` md/docx compare | `docs/feature-list.{md,docx}` on `main` | writes docs |
+| [`weekly-bug-bash`](weekly-bug-bash.md) | Weekly, Sun 02:00 | inline (6 sonnet subagents) | verify every finding against `main` tip (reject unreal/fixed/dupe) | **issue footer** (`lastRunMainSha`) | GitHub issue | report-only |
+| [`weekly-security-audit`](weekly-security-audit.md) | Weekly, Sun 03:00 | `security-audit` skill (8 surfaces) | verify each finding against `main`, downgrade over-rated | **issue footer** (+ <10-day lookback) | GitHub issue (or heartbeat) | report-only |
+| [`weekly-extraction-canary`](weekly-extraction-canary.md) | Weekly, Mon 05:00 | inline | full `test-*.js` suite + `regen-defaults --check` + fragility review | **PR/issue footer** (`lastRunMainSha`) | PR/issue + **human spot-check** | report-only |
+| [`weekly-feature-list`](weekly-feature-list.md) | Weekly, Sun 03:00 | inline | docx is a valid OOXML zip; push-landed verify | **committed `state/…last-run.json`** + `origin/main` compare | `docs/feature-list.{md,docx}` on `main` | writes docs |
 | [`weekly-safety-case`](weekly-safety-case.md) | Weekly, Sun 04:00 | inline | destructive-change self-audit (abort on any weakening) | `origin/main` doc compare | 4 safety docs on `main` | writes docs (additive only) |
 | [`monthly-rule-currency`](monthly-rule-currency.md) | Monthly, first Sun 03:00 | `the-keeper` skill | per-change verifier + rule test suite + CSO sign-off box | `the-keeper/references/state/last-run.json` | rule files on **dev branch** | writes code, no auto-merge |
 
-> **Known unevenness (good first improvement):** durable state is the least
-> consistent column. Only `the-keeper` keeps an explicit `last-run.json`; the
-> others reconstruct state from `git`/`origin/main` each run. That's fine today,
-> but if a loop ever starts re-reporting or missing a window, give it a small
-> `references/state/last-run.json` (the schema The Keeper uses is a good model)
-> rather than widening the git lookback.
+> **Durable state is now standardized** ([`state/`](state/README.md)). One schema,
+> two transports, because the container is ephemeral and report-only loops must
+> not write to the repo:
+> - **Report-only loops** (bug-bash, security-audit, extraction-canary) carry
+>   state in an invisible `loop-state` footer inside the issue/PR they already
+>   create — read back next run via `loop-state.js parse`. This replaces the old
+>   fixed-week git window that silently lost a week whenever a run slipped.
+> - **Push-loops** stamp a committed `state/<loop>.last-run.json` via
+>   `loop-state.js update` (feature-list does this). The Keeper keeps its own
+>   richer state; safety-case uses its `origin/main` content compare.
+>
+> Use the `scripts/loop-state.js` helper (`read`/`update`/`footer`/`parse`,
+> `selftest`) so the schema never drifts loop-to-loop.
 
 ## Adding a new loop
 
@@ -79,12 +86,19 @@ can't name all seven for a new loop, it isn't finished.
    whether it may touch `main`, and the non-negotiables (for any clinical-rule
    loop: never silently weaken monitoring/alerting; never auto-merge — CSO
    sign-off only, per `CLAUDE.md`).
-5. **Add a row to the catalog table above** so the loop is discoverable.
-6. Register the trigger in Claude Code on the web at the chosen cadence/slot,
+5. **Wire durable state** through `scripts/loop-state.js` ([`state/`](state/README.md)):
+   pick the transport that matches the loop's contract — the committed-file
+   (`read`/`update`) for a loop that pushes, or the issue/PR footer
+   (`footer`/`parse`) for a report-only loop — and read state at the start to
+   scope off `lastRunMainSha` instead of a fixed time window.
+6. **Add a row to the catalog table above** so the loop is discoverable.
+7. Register the trigger in Claude Code on the web at the chosen cadence/slot,
    spacing it so it doesn't contend with the existing slots.
 
 ## See also
 
+- [`state/`](state/README.md) — durable run-state: schema, the two transports,
+  and the `loop-state.js` helper.
 - `.claude/skills/` — the skill library the loops invoke (`the-keeper`,
   `security-audit`).
 - `CLAUDE.md` → *Automated loops* — the one-line pointer back here.
