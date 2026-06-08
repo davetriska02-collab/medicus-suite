@@ -32,32 +32,29 @@ async function loadCards() {
     renderReferralRate: get(mods[5], 'renderReferralRate'),
     renderWaitingRoom:  get(mods[6], 'renderWaitingRoom'),
     renderDayScore:     get(mods[7], 'renderDayScore'),
+    saveDayScore:       mods[7].status === 'fulfilled' ? (mods[7].value.saveDayScore || (async () => {})) : (async () => {}),
     renderActivity:     get(mods[8], 'renderActivity'),
   };
-}
-
-async function loadAndRender(data) {
-  if (!_container) return;
-  const cards = await loadCards();
-  if (!_container) return;
-  _container.innerHTML = `
-    <div class="condor-wrap">
-      <div class="condor-hero">${cards.renderPpi(data)}</div>
-      <div class="condor-grid">
-        <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
-        <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>
-        <div class="condor-col">${cards.renderWorkload(data)}${cards.renderReferralRate(data)}</div>
-      </div>
-      <div class="condor-footer">${cards.renderDayScore(data)}${cards.renderActivity(data)}</div>
-    </div>
-  `;
 }
 
 async function poll() {
   if (!_container) return;
   try {
     const data = await fetchAllStreams();
-    await loadAndRender(data);
+    const cards = await loadCards();
+    if (!_container) return;
+    _container.innerHTML = `
+      <div class="condor-wrap">
+        <div class="condor-hero">${cards.renderPpi(data)}</div>
+        <div class="condor-grid">
+          <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
+          <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>
+          <div class="condor-col">${cards.renderWorkload(data)}${cards.renderReferralRate(data)}</div>
+        </div>
+        <div class="condor-footer">${cards.renderDayScore(data)}${cards.renderActivity(data)}</div>
+      </div>
+    `;
+    cards.saveDayScore(data).catch(() => {});
   } catch (e) {
     if (_container) {
       _container.innerHTML = `<div class="condor-placeholder">Failed to load: ${esc(e.message || e)}</div>`;
