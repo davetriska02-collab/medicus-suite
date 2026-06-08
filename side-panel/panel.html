@@ -23,10 +23,6 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           <span>Monitoring</span>
         </button>
-        <button class="nav-tab" data-module="trends"     aria-label="Trends">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><polyline points="7 14 11 9 14 12 20 5"/></svg>
-          <span>Trends</span>
-        </button>
         <button class="nav-tab" data-module="capacity"    aria-label="Capacity Forecast">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
           <span>Forecast</span>
@@ -42,6 +38,18 @@
         <button class="nav-tab" data-module="referrals"   aria-label="Referrals Tracker">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.27 16z"/><path d="M14 2a8 8 0 0 1 8 8"/><path d="M14 6a4 4 0 0 1 4 4"/></svg>
           <span>Referrals</span>
+        </button>
+        <button class="nav-tab" data-module="condor" aria-label="Condor Dashboard">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 12l4-6 4 4 4-8"/></svg>
+          <span>Condor</span>
+        </button>
+        <button class="nav-tab" data-module="bptrend"    aria-label="BP Trend">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/><line x1="2" y1="18" x2="22" y2="18"/></svg>
+          <span>BP Trend</span>
+        </button>
+        <button class="nav-tab" data-module="acrtrend"   aria-label="ACR Trend">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><circle cx="9" cy="15" r="2"/><circle cx="15" cy="9" r="2"/><line x1="9" y1="13" x2="15" y2="11"/></svg>
+          <span>ACR Trend</span>
         </button>
         <button class="nav-tab" data-module="visualiser"  aria-label="Patient Record Visualiser">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -73,7 +81,6 @@
     <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
     <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
     <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
-    <div id="uiHealthStrip" class="ui-health-strip ui-health-strip-hidden" role="alert" aria-live="assertive"></div>
     <main class="suite-content" id="suiteContent">
       <!-- Modules load here -->
     </main>
