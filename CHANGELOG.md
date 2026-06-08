@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.29.2] — 2026-06-08
+
+### Fix: Condor PPI Gauge — SVG text clipping and arc overflow at PPI=100
+
+- Moved the large PPI number text from `y="96"` to `y="88"` and the "CONDOR PPI" subtitle from
+  `y="110"` to `y="104"` so both sit clearly within the 110px-tall arc viewport without clipping.
+- Capped the filled-arc dash length to `arcLength − 2px` so the `stroke-linecap="round"` rounded
+  cap never overshoots the arc end when PPI reaches 100.
+
 ## [v3.29.1] — 2026-06-04
 
 ### Prescribing safety — completed the UK oral NSAID set (The Keeper)
