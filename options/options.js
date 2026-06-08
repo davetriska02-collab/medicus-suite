@@ -403,7 +403,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 //     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor] = await Promise.all([
+  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor] = await Promise.all([
     sentinelExport(),
     capacityExport(),
     triageExport(),
@@ -413,9 +413,10 @@ async function doFullExport() {
     popoutExport(),
     referralsExport(),
     requestMonitorExport(),
+    condorExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, suite });
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, suite });
 }
 
 async function doModuleExport(scope) {
@@ -429,6 +430,7 @@ async function doModuleExport(scope) {
     popout:        () => popoutExport(),
     referrals:     () => referralsExport(),
     requestMonitor: () => requestMonitorExport(),
+    condor:        () => condorExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -447,6 +449,7 @@ async function applyEnvelope(envelope) {
     mods.popout        && popoutImport(mods.popout),
     mods.referrals     && referralsImport(mods.referrals),
     mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
+    mods.condor        && condorImport(mods.condor),
     mods.suite         && suiteImport(mods.suite),
   ].filter(Boolean));
 }
