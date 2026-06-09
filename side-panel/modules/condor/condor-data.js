@@ -2,7 +2,11 @@
 'use strict';
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  // Local calendar date (NOT UTC) — toISOString() would roll to the next/previous
+  // day in the early/late hours and query the wrong day's tasks.
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function initials(name) {
@@ -77,7 +81,10 @@ async function fetchSubmissions(base) {
   ];
 
   const results = await Promise.allSettled(TASK_TYPES.map(async tt => {
-    const url = `${base}/tasks/data/${tt.apiType}/task-list?startDate=${today}&endDate=${today}`;
+    // The task-list endpoint filters by `createdAt_startDate` / `createdAt_endDate`.
+    // Using plain `startDate` / `endDate` is silently ignored and returns the entire
+    // open-task backlog — which is what inflated demand/velocity/PPI to tens of thousands.
+    const url = `${base}/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
     const r = await fetch(url, { credentials: 'include' });
     if (!r.ok) throw new Error(`${tt.key} HTTP ${r.status}`);
     const d = await r.json();
@@ -193,7 +200,6 @@ export async function fetchAllStreams() {
     'suite.practiceCode',
     'capacity.presets',
     'capacity.activePresetId',
-    'referrals.config',
     'suite.requestMonitor.config',
   ];
 
@@ -209,7 +215,6 @@ export async function fetchAllStreams() {
       submissions: null,
       requestMonitor: null,
       activity: null,
-      referrals: { available: false, rows: [], practiceAvgRate: 0 },
       capacityPreset: null,
       fetchErrors: ['No practice code configured'],
     };
@@ -257,7 +262,6 @@ export async function fetchAllStreams() {
     submissions,
     requestMonitor,
     activity,
-    referrals: { available: false, rows: [], practiceAvgRate: 0 },
     capacityPreset,
     fetchErrors,
   };

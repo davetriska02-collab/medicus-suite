@@ -17,7 +17,6 @@ async function loadCards() {
     import('./cards/velocity.js'),
     import('./cards/task-age.js'),
     import('./cards/workload.js'),
-    import('./cards/referral-rate.js'),
     import('./cards/waiting-room.js'),
     import('./cards/day-score.js'),
     import('./cards/activity.js'),
@@ -29,11 +28,10 @@ async function loadCards() {
     renderVelocity:     get(mods[2], 'renderVelocity'),
     renderTaskAge:      get(mods[3], 'renderTaskAge'),
     renderWorkload:     get(mods[4], 'renderWorkload'),
-    renderReferralRate: get(mods[5], 'renderReferralRate'),
-    renderWaitingRoom:  get(mods[6], 'renderWaitingRoom'),
-    renderDayScore:     get(mods[7], 'renderDayScore'),
-    saveDayScore:       mods[7].status === 'fulfilled' ? (mods[7].value.saveDayScore || (async () => {})) : (async () => {}),
-    renderActivity:     get(mods[8], 'renderActivity'),
+    renderWaitingRoom:  get(mods[5], 'renderWaitingRoom'),
+    renderDayScore:     get(mods[6], 'renderDayScore'),
+    saveDayScore:       mods[6].status === 'fulfilled' ? (mods[6].value.saveDayScore || (async () => {})) : (async () => {}),
+    renderActivity:     get(mods[7], 'renderActivity'),
   };
 }
 
@@ -49,7 +47,7 @@ async function poll() {
         <div class="condor-grid">
           <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
           <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>
-          <div class="condor-col">${cards.renderWorkload(data)}${cards.renderReferralRate(data)}</div>
+          <div class="condor-col">${cards.renderWorkload(data)}</div>
         </div>
         <div class="condor-footer">${cards.renderDayScore(data)}${cards.renderActivity(data)}</div>
       </div>

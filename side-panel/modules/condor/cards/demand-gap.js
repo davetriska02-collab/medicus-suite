@@ -32,14 +32,14 @@ export function renderDemandGap(data) {
 
   const medical       = data.submissions?.totals?.medical ?? 0;
   const admin         = data.submissions?.totals?.admin ?? 0;
-  const openRequests  = medical + admin;
+  const requestsToday = medical + admin;
   const slotsRemaining = data.slots?.totalRemaining ?? 0;
   const amRemaining   = data.slots?.amRemaining ?? 0;
   const pmRemaining   = data.slots?.pmRemaining ?? 0;
 
   const ratio = slotsRemaining === 0
-    ? (openRequests > 0 ? Infinity : 0)
-    : openRequests / slotsRemaining;
+    ? (requestsToday > 0 ? Infinity : 0)
+    : requestsToday / slotsRemaining;
 
   let colorClass;
   if (ratio >= 1.5) {
@@ -55,7 +55,7 @@ export function renderDemandGap(data) {
   return `<div class="condor-card condor-dg">
   <div class="condor-card-title">Demand / Capacity</div>
   <div class="condor-dg-ratio ${colorClass}">${ratioDisplay}&times;</div>
-  <div class="condor-dg-detail">${openRequests} open requests &middot; ${slotsRemaining} slots remaining</div>
+  <div class="condor-dg-detail">${requestsToday} requests today &middot; ${slotsRemaining} slots remaining</div>
   <div class="condor-dg-breakdown">
     <span>Medical: ${medical}</span>
     <span>Admin: ${admin}</span>

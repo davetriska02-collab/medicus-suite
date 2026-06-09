@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.35.2] — 2026-06-09
+
+### Fix: Condor demand/velocity/PPI showed the entire task backlog
+
+`fetchSubmissions` in `condor-data.js` queried the task-list endpoint with
+`startDate`/`endDate`, but that endpoint filters on `createdAt_startDate`/
+`createdAt_endDate`. The wrong parameter names were silently ignored, so the
+API returned the **entire open-task backlog** instead of today's submissions.
+This single bug inflated three places at once:
+
+- **Demand / Capacity** — "open requests" showed tens of thousands (e.g. 42495)
+  and an absurd ratio (354.1×).
+- **Submission Velocity** — "Total today" showed the whole backlog (e.g. 83019),
+  with the histogram smeared across every hour of the day regardless of date.
+- **Practice Pressure Index** — the queue component saturated, so the PPI value
+  was driven almost entirely by the bogus backlog count.
+
+Fixes:
+- Use `createdAt_startDate` / `createdAt_endDate` (matching the working
+  Submissions module) so only today's submissions are counted.
+- `todayISO()` now uses the **local** calendar date instead of UTC
+  (`toISOString()` would query the wrong day in the early/late hours).
+- Relabelled the Demand/Capacity figure from "open requests" to "requests today"
+  to reflect what it actually measures.
+
+### Removed: Condor referral-rate card
+
+Removed the per-clinician referral-rate card and its data plumbing from the
+Condor dashboard (low signal). The standalone Referrals tab is unchanged.
+
 ## [v3.35.1] — 2026-06-09
 
 ### Fix: restore unified Trends tab
