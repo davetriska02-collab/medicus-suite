@@ -177,7 +177,7 @@ async function fetchWaitingRoom(bypassCache = false) {
     const raw = await r.json();
     const entries = (raw?.schedule?.schedule ?? [])
       .flatMap(d => d.entries ?? [])
-      .filter(e => e?.displayStatus?.isArrived === true);
+      .filter(e => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
     wrPatients = entries.map(e => ({
       name:          e.patient?.name ?? 'Unknown',
       start:         e.start ?? '',

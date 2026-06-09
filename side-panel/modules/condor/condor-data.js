@@ -64,13 +64,15 @@ async function fetchWaitingRoom(base) {
   const raw = await r.json();
 
   const list = Array.isArray(raw) ? raw : (raw.schedule?.schedule?.flatMap(d => d.entries || []) || []);
-  const appointments = list.map(e => ({
-    patientName:  e.patient?.name || 'Unknown',
-    start:        e.startDateTime || '',
-    reason:       e.compiledReasonForAppointment || '',
-    deliveryMode: e.deliveryMode || '',
-    isArrived:    !!e.displayStatus?.isArrived,
-  }));
+  const appointments = list
+    .filter(e => e.diaryEntryType?.value === 'appointment')
+    .map(e => ({
+      patientName:  e.patient?.name || 'Unknown',
+      start:        e.startDateTime || '',
+      reason:       e.compiledReasonForAppointment || '',
+      deliveryMode: e.deliveryMode?.value || e.deliveryMode || '',
+      isArrived:    e.displayStatus?.value === 'arrived',
+    }));
   const arrivedCount = appointments.filter(a => a.isArrived).length;
   return { appointments, arrivedCount };
 }

@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.1] — 2026-06-09
+
+### Fix: waiting-room arrived detection was always returning zero
+
+`displayStatus.isArrived` does not exist on the Medicus API response. The actual
+field is `displayStatus.value`, which equals `"arrived"` when a patient has
+checked in. The old check (`displayStatus?.isArrived === true`) was silently
+false for every entry, so arrived counts were always 0 across Condor, the panel
+WR strip, and the Sentinel waiting-room block.
+
+Additionally, the entry list was not filtered by `diaryEntryType`, so slot entries
+(which carry no patient or displayStatus) were included in the appointment set,
+making the pending count wrong.
+
+Fixed in `condor-data.js`, `panel.js`, and `sentinel.js`:
+- Filter entries to `diaryEntryType.value === 'appointment'` before mapping
+- Check `displayStatus.value === 'arrived'` instead of `displayStatus.isArrived`
+- Also corrected `deliveryMode` extraction in condor to unwrap `.value` consistently
+
+Note: `my-appointments` is per-clinician. Condor's waiting room card shows the
+logged-in user's patients only — a practice-wide view requires a different
+endpoint (under investigation).
+
 ## [v3.36.0] — 2026-06-09
 
 ### Condor UX: clearer Demand/Capacity card, live WR appointments, refresh timestamp
