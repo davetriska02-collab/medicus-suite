@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.35.3] — 2026-06-09
+
+### Fix: Condor slots-remaining ignored the Slots tab's hidden types
+
+Condor's Demand/Capacity card counted *every* future slot type, so triage and
+holding slots inflated "slots remaining" (e.g. 123) well above the bookable
+count the user actually tracks in the Slots tab (e.g. 36).
+
+`fetchSlots` now reads `slots.hiddenTypes` (the same key the Slots tab writes
+when you untick a type) and excludes those appointment types from the AM/PM
+remaining counts, so the figure — and the Demand/Capacity ratio derived from
+it — matches the ticked slots in the Slots counter.
+
 ## [v3.35.2] — 2026-06-09
 
 ### Fix: Condor demand/velocity/PPI showed the entire task backlog

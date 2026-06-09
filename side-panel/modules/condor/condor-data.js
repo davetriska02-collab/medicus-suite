@@ -16,7 +16,7 @@ function initials(name) {
   return (first + last).toUpperCase() || '??';
 }
 
-async function fetchSlots(base) {
+async function fetchSlots(base, hiddenTypes = new Set()) {
   const today = todayISO();
   const now = new Date();
   const url = `${base}/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false`;
@@ -35,11 +35,16 @@ async function fetchSlots(base) {
       (session.entries || []).forEach(entry => {
         if (entry.diaryEntryType?.value !== 'slot') return;
         if (entry.startDateTime && new Date(entry.startDateTime) <= now) return;
+        // Mirror the Slots tab: exclude appointment types the user has unticked
+        // (triage / holding / etc. via slots.hiddenTypes) so the count reflects
+        // the bookable slots they actually care about.
+        const type = entry.appointmentType?.name || 'Unknown';
+        if (hiddenTypes.has(type)) return;
         const hour = entry.startDateTime ? new Date(entry.startDateTime).getHours() : 0;
         const isAm = hour < 12;
         entries.push({
           staff: staffName,
-          type: entry.appointmentType?.name || 'Unknown',
+          type,
           startDateTime: entry.startDateTime || '',
         });
         if (!byStaff[staffName]) byStaff[staffName] = { amRemaining: 0, pmRemaining: 0 };
@@ -201,10 +206,12 @@ export async function fetchAllStreams() {
     'capacity.presets',
     'capacity.activePresetId',
     'suite.requestMonitor.config',
+    'slots.hiddenTypes',
   ];
 
   const storage = await chrome.storage.local.get(storageKeys);
   const siteId  = storage['suite.practiceCode'] || null;
+  const hiddenTypes = new Set(storage['slots.hiddenTypes'] || []);
   const fetchErrors = [];
 
   if (!siteId) {
@@ -225,7 +232,7 @@ export async function fetchAllStreams() {
   const rmEnabled = rmConfig?.enabled && rmConfig?.assigneeId;
 
   const [slotsRes, wrRes, subRes, rmRes, actRes] = await Promise.allSettled([
-    fetchSlots(base),
+    fetchSlots(base, hiddenTypes),
     fetchWaitingRoom(base),
     fetchSubmissions(base),
     rmEnabled ? fetchRequestMonitor(base, rmConfig) : Promise.resolve(null),
