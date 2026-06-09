@@ -153,5 +153,20 @@ if (selectMonitoringDue) {
 }
 
 // ============================================================
+// NULL-DATE REGRESSION (Task 1a / 1d)
+// A drug-monitoring observation whose date cannot be parsed must surface as
+// 'no_data', never as 'in_date'. Previously the null > x comparison silently
+// fell through to 'in_date', masking a missing-monitoring situation.
+// ============================================================
+console.log('Layer 3: null-date guard — garbage obs.date → no_data');
+
+const obsGarbageDate = [{ name: 'FBC', code: '26604007', date: 'not-a-date', value: 'normal' }];
+const chipsGarbage = engine.evaluatePatient(meds, obsGarbageDate, [mtxRule], { now: NOW, problems: [] });
+const mtxGarbage = chipsGarbage.find(c => c.type === 'drug-monitoring' && c.ruleId === 'test-methotrexate');
+check(!!mtxGarbage, 'garbage-date case: a drug-monitoring chip is still produced');
+check(mtxGarbage && mtxGarbage.status === 'no_data',
+  `garbage-date case: status is 'no_data', not 'in_date' (got '${mtxGarbage && mtxGarbage.status}')`);
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

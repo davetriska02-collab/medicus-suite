@@ -172,5 +172,31 @@ for (const [id, med] of MUST_NOT) {
   check(!engine.drugMatchesRule(med, ruleById(id)), `"${med}" does NOT match ${id}`);
 }
 
+// === DASH FOLDING ===
+// normaliseDrugString() folds dashes and underscores to spaces before the
+// whitespace collapse, so dashed brand forms match spaced rule terms and vice versa.
+console.log('\n--- dash folding (dashes ↔ spaces) ---');
+{
+  const carbRule = ruleById('carbimazole-propylthiouracil');
+  // Dashed brand form matches spaced rule term: "Neo-Mercazole" → "neo mercazole"
+  // rule match "neo-mercazole" → also "neo mercazole" after normalisation
+  check(engine.drugMatchesRule('Neo-Mercazole 5mg tablets', carbRule),
+    'dashed brand "Neo-Mercazole" matches rule term "neo-mercazole" after dash fold');
+  // Reverse: a hypothetically spaced prescription "neo mercazole" also matches
+  check(engine.drugMatchesRule('neo mercazole 20mg', carbRule),
+    'spaced prescription "neo mercazole" matches dashed rule term "neo-mercazole" after dash fold');
+}
+
+// === INVERSE COVERAGE CHECK ===
+// Every enabled drug-monitoring rule must have at least one EXPECTED entry.
+// A new rule with no entry would pass the forward loop silently — this catches it.
+console.log('\n--- inverse coverage: every enabled drug-monitoring rule has an EXPECTED entry ---');
+const drugMonitoringRules = (ruleset.rules || []).filter(r => r.type === 'drug-monitoring' && r.enabled !== false);
+for (const rule of drugMonitoringRules) {
+  check(Object.prototype.hasOwnProperty.call(EXPECTED, rule.id) && EXPECTED[rule.id].length > 0,
+    `rule "${rule.id}" has at least one EXPECTED entry`);
+}
+console.log(`(${drugMonitoringRules.length} enabled drug-monitoring rules audited)`);
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

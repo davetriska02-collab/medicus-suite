@@ -2,6 +2,133 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.4] — 2026-06-09
+
+### Fix: seasonStart() UTC safety (engine/rules-engine.js)
+
+Rewritten to compare date-part strings instead of constructing `new Date(year,
+month-1, day)` in local time — under BST (or any non-UTC host timezone) the
+vaccine season start could drift a day early. Season-start dates are now exactly
+the configured month/day regardless of timezone. Regression tests added to
+`test-qof-year.js`.
+
+### Fix: BP pairing ±1-day tolerance (engine/normalisers.js)
+
+Split systolic/diastolic readings recorded a day apart (common when a practice
+workflow records results on different days) now synthesise a "Blood pressure"
+observation, taking the systolic reading's date. Same-date pairs are still
+preferred (pass 1); ±1-day fallback only used for unpaired systolic readings;
+each diastolic may pair at most once. Regression tests added to
+`test-extraction-health.js`.
+
+### Fix: Dash folding in normaliseDrugString (engine/rules-engine.js)
+
+Dashes and underscores in drug names and match/exclude terms are now normalised
+to spaces before whitespace collapse, so "Neo-Mercazole" matches the exclude
+term "neo mercazole" and vice versa. No MUST_NOT collision detected. Two new
+test cases added to `test-drug-brand-coverage.js`.
+
+### Test: test-rule-schema.js — rule-file structural integrity guard
+
+New test validates all four bundled rule files: check.kind against the
+implemented set, vaccine statusTerms.given and season.startMonth, event-count
+windowMonths positivity, observation-bundle non-empty observations, and no
+duplicate IDs across files. All 47 assertions pass against current rules.
+
+### Safety: custom-rule validation extended (shared/io/sentinel-io.js)
+
+`observation-bundle` added to `ALLOWED_CHECK_KINDS` for custom QOF indicator
+rules; validation rejects an empty `check.observations` array (vacuously
+"achieved"). Unknown check.kind and empty-bundle cases covered by new tests in
+`test-custom-rules.js`.
+
+### Security: update-checker downloadUrl host validation (shared/update-checker.js)
+
+`allowGithubUrl()` helper added; both `downloadUrl` and `releaseUrl` from GitHub
+releases are now rejected unless the URL parses as https with hostname
+`github.com`, `api.github.com`, or `*.githubusercontent.com`. New tests in
+`test-update-checker.js`.
+
+### Chore: submissions-io practiceCode single ownership
+
+`suite.practiceCode` is now exported only by `shared/io/suite-io.js`.
+`submissions-io.js` no longer exports it; legacy standalone submissions backups
+that carry `practiceCode` are still imported (with a one-line comment). Tests
+updated in `test-suite-io.js`. Backup coverage still passes.
+
+### Chore: vaccine-rules.json — remove dead DM1 register token
+
+No `DM1` QOF register exists; diabetics are covered by `DM`. The dead token was
+removed from the flu-vaccine eligibility registers array.
+
+### Chore: qof-rules.json — stale DM037 cross-reference note
+
+The smoking-status indicator's notes claimed DM037 was "currently disabled
+pending observation-bundle engine support"; DM037 is enabled and the engine
+supports observation-bundle. Note updated.
+
+### Chore: cross-reference comments for site-code regex
+
+One-line `// keep in sync with ...` comments added at the `PRACTICE_CODE_RE`
+definition in `shared/request-monitor.js` and `_SITE_CODE_RE` in
+`shared/medicus-api.js` to make the two independent definitions visible to
+future editors.
+
+## [v3.36.3] — 2026-06-09
+
+### Safety: null-date fail-safe in Sentinel rules engine
+
+`daysBetween()` returns `null` for unparseable dates. Downstream comparisons
+(`null > x`) are always false, so a malformed observation date would silently
+fall through to the safest-looking status (`in_date` / no chip) — masking a
+missing-monitoring situation as "all good". Guards added:
+
+- Drug-monitoring test evaluation: garbage `obs.date` now returns `status:
+  'no_data'` (same as a missing observation), never `in_date`.
+- `observation-alert` QOF indicator: unparseable date now returns `[]` (consistent
+  with the existing stale-gate and the "do not alert on bad data" design).
+
+Regression tests added to `test-monitoring-chip.js` and `test-alert-builder.js`.
+
+### Test: inverse brand-coverage check in test-drug-brand-coverage.js
+
+The existing test only iterated the `EXPECTED` map forward, so a new
+drug-monitoring rule with no `EXPECTED` entry would pass silently. Added an
+inverse check: every enabled `drug-monitoring` rule in `drug-rules.json` must
+have at least one entry in `EXPECTED`. All 24 current rules are covered.
+
+### Safety: transactional backup restore with rollback
+
+`applyEnvelope()` previously used `Promise.all`, so a failure in one module
+import left partially-written storage. Rewritten to use `applyWithRollback()`
+(added to `shared/io/suite-envelope.js`): tasks run sequentially; on any throw,
+keys written during the run are removed and the pre-import snapshot is restored.
+The error message includes the original cause and states "no changes were applied"
+(surfaced verbatim by the options-page status banner).
+
+Rollback scenario regression test added to `test-suite-io.js`.
+
+### Test: test-backup-coverage.js — storage key-coverage guard
+
+New static analysis test: scans app source for `chrome.storage.local` string
+literals and verifies every key is captured by a `shared/io/*-io.js` file or an
+explicit allowlist. Guards against keys silently disappearing from backups when a
+module is added or a key renamed. Prints audited key counts on each run.
+
+### Fix: Condor request-monitor stream was silently dead
+
+`condor-data.js` read `suite.requestMonitor.config` as a single object key, but
+request-monitor settings are stored as individual keys
+(`suite.requestMonitor.enabled` / `.assigneeId` / …), so the config was always
+`undefined` and the Condor dashboard never fetched the request-monitor stream.
+Found by the new backup key-coverage audit. Now reads the real keys.
+
+### Chore: remove orphaned acrtrend / bptrend modules
+
+`side-panel/modules/acrtrend` and `side-panel/modules/bptrend` were not
+registered in any `MODULES` map or nav tab in `panel.js` or `pop-out.js`.
+Dead code removed (`git rm -r`).
+
 ## [v3.36.2] — 2026-06-09
 
 ### Condor: practice-wide waiting room via appointment-book endpoint

@@ -439,19 +439,23 @@ async function doModuleExport(scope) {
 
 async function applyEnvelope(envelope) {
   const mods = envelope.modules || {};
-  await Promise.all([
-    mods.sentinel      && sentinelImport(mods.sentinel),
-    mods.capacity      && capacityImport(mods.capacity),
-    mods.triage        && triageImport(mods.triage),
-    mods.triageAlerts  && TriageAlertIO.importData(mods.triageAlerts),
-    mods.slots         && slotCounterImport(mods.slots),
-    mods.submissions   && submissionsImport(mods.submissions),
-    mods.popout        && popoutImport(mods.popout),
-    mods.referrals     && referralsImport(mods.referrals),
-    mods.requestMonitor && requestMonitorImport(mods.requestMonitor),
-    mods.condor        && condorImport(mods.condor),
-    mods.suite         && suiteImport(mods.suite),
-  ].filter(Boolean));
+  // Build task list in the same order as doFullExport to make auditing straightforward.
+  // Only include modules that are present in this backup (same mods.X && gating).
+  // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
+  const tasks = [
+    mods.sentinel      && (() => sentinelImport(mods.sentinel)),
+    mods.capacity      && (() => capacityImport(mods.capacity)),
+    mods.triage        && (() => triageImport(mods.triage)),
+    mods.triageAlerts  && (() => TriageAlertIO.importData(mods.triageAlerts)),
+    mods.slots         && (() => slotCounterImport(mods.slots)),
+    mods.submissions   && (() => submissionsImport(mods.submissions)),
+    mods.popout        && (() => popoutImport(mods.popout)),
+    mods.referrals     && (() => referralsImport(mods.referrals)),
+    mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
+    mods.condor        && (() => condorImport(mods.condor)),
+    mods.suite         && (() => suiteImport(mods.suite)),
+  ].filter(Boolean);
+  await window.SuiteEnvelope.applyWithRollback(tasks);
 }
 
 function downloadJson(obj, filename) {

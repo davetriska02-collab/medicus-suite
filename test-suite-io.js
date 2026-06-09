@@ -251,7 +251,157 @@ console.log('\n--- Triage Lens migration logic ---');
   assert(state4['triagelens.config'] === undefined, 'migration: no-op when no config key exists');
 }
 
-// ── Summary ───────────────────────────────────────────────────────────────────
+// ── applyWithRollback ────────────────────────────────────────────────────────
+// Tests the transactional restore helper: a failing task must not leave partial
+// writes. Requires chrome.storage.local mock with get/set/remove.
 
-console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
-if (failed > 0) process.exit(1);
+console.log('\n--- applyWithRollback rollback ---');
+
+(async () => {
+  // Minimal chrome.storage.local mock (get/set/remove) if not already defined.
+  if (typeof global.chrome === 'undefined') {
+    const _store = {};
+    global.chrome = {
+      storage: {
+        local: {
+          async get(keys) {
+            if (keys === null || keys === undefined) {
+              return { ..._store };
+            }
+            const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+            const out = {};
+            ks.forEach(k => { if (k in _store) out[k] = _store[k]; });
+            return out;
+          },
+          async set(obj) { Object.assign(_store, obj); },
+          async remove(keys) {
+            const ks = Array.isArray(keys) ? keys : [keys];
+            ks.forEach(k => { delete _store[k]; });
+          },
+        },
+      },
+    };
+  } else {
+    // Extend the existing mock with remove() if it doesn't have it.
+    const loc = global.chrome.storage.local;
+    if (!loc.remove) {
+      const _store = loc._store || {};
+      loc._store = _store;
+      const origGet = loc.get.bind(loc);
+      const origSet = loc.set.bind(loc);
+      loc.get = async (keys) => {
+        if (keys === null || keys === undefined) return { ..._store };
+        return origGet(keys);
+      };
+      loc.set = async (obj) => { Object.assign(_store, obj); return origSet(obj); };
+      loc.remove = async (keys) => {
+        const ks = Array.isArray(keys) ? keys : [keys];
+        ks.forEach(k => { delete _store[k]; });
+      };
+    }
+  }
+
+  // Seed storage with a known value.
+  await chrome.storage.local.set({ 'test.existing': 'seed-value' });
+  const seed = await chrome.storage.local.get(null);
+
+  // Task 1: writes a new key. Task 2: throws. After rollback, storage must equal seed.
+  let threw = false;
+  let errorMsg = '';
+  try {
+    await suiteEnv.applyWithRollback([
+      async () => { await chrome.storage.local.set({ 'test.written-by-task1': 'temporary' }); },
+      async () => { throw new Error('deliberate-failure'); },
+    ]);
+  } catch (e) {
+    threw = true;
+    errorMsg = e.message || '';
+  }
+
+  assert(threw, 'applyWithRollback: throws when a task fails');
+  assert(errorMsg.includes('deliberate-failure'), `applyWithRollback: error includes original message (got: "${errorMsg}")`);
+  assert(errorMsg.includes('no changes were applied'), `applyWithRollback: error states no changes were applied (got: "${errorMsg}")`);
+
+  const after = await chrome.storage.local.get(null);
+  assert(!('test.written-by-task1' in after), 'applyWithRollback: new key written by task1 is removed after rollback');
+  assert(after['test.existing'] === 'seed-value', 'applyWithRollback: pre-existing key restored to seed value');
+
+  // Verify that a successful run does NOT roll back.
+  let successWrote = false;
+  await suiteEnv.applyWithRollback([
+    async () => { await chrome.storage.local.set({ 'test.success-key': 'written' }); successWrote = true; },
+  ]);
+  const afterSuccess = await chrome.storage.local.get(null);
+  assert(successWrote && afterSuccess['test.success-key'] === 'written',
+    'applyWithRollback: successful tasks are NOT rolled back');
+
+  // Tidy up test keys.
+  await chrome.storage.local.remove(['test.existing', 'test.success-key']);
+
+  // ── Task 6: submissions-io practiceCode ownership ─────────────────────────
+  // suite.practiceCode is owned by suite-io.js; submissions-io must NOT export
+  // it (removing the dual-ownership). Legacy import still tolerates it.
+
+  console.log('\n--- submissions-io: practiceCode ownership ---');
+
+  const _resetStore = () => { for (const k of Object.keys(chrome.storage.local._store || {})) delete (chrome.storage.local._store || {})[k]; };
+
+  // Use a simple in-memory store for this section
+  const subStore = {};
+  const origGet = chrome.storage.local.get.bind(chrome.storage.local);
+  const origSet = chrome.storage.local.set.bind(chrome.storage.local);
+  // Temporarily redirect storage to subStore for clean isolation
+  const subChrome = {
+    storage: {
+      local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+          const out = {};
+          ks.forEach(k => { if (k in subStore) out[k] = subStore[k]; });
+          return out;
+        },
+        async set(obj) { Object.assign(subStore, obj); },
+      },
+    },
+  };
+
+  // Temporarily override global chrome for the submissions IO calls
+  const origChrome = global.chrome;
+  global.chrome = subChrome;
+
+  subStore['submissions.config'] = { teamId: 'abc' };
+  subStore['submissions.thresholds'] = { red: 5 };
+  subStore['suite.practiceCode'] = 'a1b2c3';
+
+  const subExp = await subIo.submissionsExport();
+  assert(!Object.prototype.hasOwnProperty.call(subExp, 'practiceCode'),
+    'submissions export does NOT contain practiceCode (owned by suite-io)');
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'config'),
+    'submissions export still contains config');
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'),
+    'submissions export still contains thresholds');
+
+  // Legacy import: a payload WITH practiceCode (e.g. old standalone backup) is still applied
+  const subStoreLegacy = {};
+  global.chrome = {
+    storage: { local: {
+      async get(keys) {
+        const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+        const out = {};
+        ks.forEach(k => { if (k in subStoreLegacy) out[k] = subStoreLegacy[k]; });
+        return out;
+      },
+      async set(obj) { Object.assign(subStoreLegacy, obj); },
+    }},
+  };
+  await subIo.submissionsImport({ practiceCode: 'legacy1' });
+  assert(subStoreLegacy['suite.practiceCode'] === 'legacy1',
+    'submissionsImport: legacy payload with practiceCode still applied');
+
+  global.chrome = origChrome;
+
+  // ── Summary ───────────────────────────────────────────────────────────────────
+
+  console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
+  if (failed > 0) process.exit(1);
+})();

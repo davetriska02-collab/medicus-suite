@@ -12,6 +12,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 // practice-code.js (SITE_CODE_RE). Defined here as a local constant because
 // medicus-api.js is an ES module and cannot use the global PracticeCode object.
 // If the canonical pattern ever changes, update practice-code.js first, then here.
+// keep in sync with PRACTICE_CODE_RE in shared/request-monitor.js
 const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
 function _isValidSiteId(id) { return typeof id === 'string' && _SITE_CODE_RE.test(id); }
 

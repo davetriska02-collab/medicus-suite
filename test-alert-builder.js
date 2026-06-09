@@ -120,5 +120,42 @@ check(fires(cmRule, bothMock, [dcRule, ecRule]), 'AND-composite fires when both 
 const oneMock = parseMock({ meds: ['Ibuprofen 400mg', 'Warfarin 3mg'], age: 70, now: NOW });
 check(!fires(cmRule, oneMock, [dcRule, ecRule]), 'AND-composite does not fire when only one child fires');
 
+// ── observation-alert: garbage date must produce no chip (Task 1b / 1d) ────────
+console.log('\n--- observation-alert: garbage obs.date → no chip ---');
+const alertRule = {
+  id: 'custom-alert-test',
+  type: 'qof-indicator',
+  indicatorCode: 'TEST01',
+  indicatorName: 'Potassium alert',
+  check: {
+    kind: 'observation-alert',
+    observation: ['potassium'],
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    withinDays: 365,
+  },
+};
+// Dangerous value (above red threshold) but with an unparseable date.
+// Must return no chip — the invalid date is treated as a missing/stale result.
+const garbageDateMock = parseMock({
+  obs: ['Potassium | 6.5 | not-a-date'],
+  age: 60,
+  now: NOW,
+});
+const alertChips = run(alertRule, garbageDateMock);
+check(alertChips.filter(c => c.ruleId === alertRule.id).length === 0,
+  'observation-alert with garbage date and dangerous value produces no chip');
+
+// Sanity check: the same value with a valid date DOES produce a chip.
+const validDateMock = parseMock({
+  obs: [`Potassium | 6.5 | ${isoDaysAgo(10)}`],
+  age: 60,
+  now: NOW,
+});
+const alertChipsValid = run(alertRule, validDateMock);
+check(alertChipsValid.filter(c => c.ruleId === alertRule.id).length === 1,
+  'observation-alert with valid date and dangerous value produces a chip (sanity check)');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

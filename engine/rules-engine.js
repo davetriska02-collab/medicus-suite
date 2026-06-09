@@ -45,7 +45,7 @@
 
   // === DRUG MATCHING ===
   function normaliseDrugString(s) {
-    return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    return String(s || '').toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   function drugMatchesRule(medName, rule) {
@@ -422,6 +422,11 @@
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
         const days = daysBetween(obs.date, now);
+        // Malformed obs.date → null; null comparisons always false → would silently
+        // fall through to 'in_date'. Surface as no_data (same as missing obs).
+        if (days == null) {
+          return { ...test, status: 'no_data', latestObs: obs, days: null };
+        }
         const intervalDays = test.intervalDays || 365;
         const dueSoonDays = test.dueSoonDays || 30;
         const staleDays = intervalDays * 2;
@@ -877,6 +882,10 @@
     if (check.kind === 'observation-alert') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
       if (!obs || !obs.date) return [];
+      // Unparseable date: new Date(invalid) gives NaN; the stale check `< _cutoff`
+      // is false for NaN so an invalid date would pass the stale gate and fire.
+      // Treat the same as a missing date — stale result, do not alert.
+      if (isNaN(new Date(obs.date).getTime())) return [];
       const v = parseNumeric(obs.value);
       if (v == null) return [];
       const _withinDays = check.withinDays || 365;
@@ -921,7 +930,9 @@
 
     if (check.kind === 'observation-threshold') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (obs && obs.date) {
+      // Reject unparseable dates: NaN < _qofStart is false so an invalid date
+      // would bypass the window check and surface a spurious 'achieved'/'not_met'.
+      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
         evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
@@ -977,7 +988,9 @@
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (obs && obs.date) {
+      // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
+      // would produce 'overdue' (conservative but misleading — treat as no data).
+      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
         evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
@@ -1225,12 +1238,17 @@
   }
 
   function seasonStart(nowIso, startMonth, startDay) {
-    const now = new Date(nowIso);
-    let year = now.getFullYear();
-    const candidate = new Date(year, startMonth - 1, startDay);
-    if (candidate > now) year -= 1;
-    const d = new Date(year, startMonth - 1, startDay);
-    return d.toISOString().slice(0, 10);
+    // Use Date.UTC throughout so the returned YYYY-MM-DD is exactly the
+    // configured month/day regardless of the browser/host timezone (BST would
+    // shift a local-midnight Date into the previous UTC day).
+    const nowDatePart = String(nowIso).slice(0, 10); // "YYYY-MM-DD"
+    let year = parseInt(nowDatePart.slice(0, 4), 10);
+    // Build the candidate season start as a UTC date string for comparison.
+    const pad2 = n => String(n).padStart(2, '0');
+    const candidateStr = `${year}-${pad2(startMonth)}-${pad2(startDay)}`;
+    // If the candidate is in the future (relative to now's date part), use last year.
+    if (candidateStr > nowDatePart) year -= 1;
+    return `${year}-${pad2(startMonth)}-${pad2(startDay)}`;
   }
 
   function matchesAnyTerm(str, terms) {
@@ -1425,7 +1443,8 @@
     evaluateCompositeRule,
     evaluateVaccineRule,
     severityToStatus,
-    STATUS_RANK
+    STATUS_RANK,
+    seasonStart
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

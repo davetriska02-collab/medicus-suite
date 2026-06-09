@@ -118,11 +118,11 @@ assert(UC.isNewer('', '1.3.0') === false, 'empty latest never newer');
   const rNet = await UC.checkForUpdate({ force: true, fetchImpl: mockFetchThrows });
   assert(rNet.ok === false && rNet.error.includes('DNS'), 'checkForUpdate: network error captured');
 
-  // No zip asset — falls back to zipball_url
+  // No zip asset — falls back to zipball_url (must be a github.com URL to pass host validation)
   for (const k of Object.keys(mockStore)) delete mockStore[k];
-  const responseNoAssets = { ...mockReleaseResponse, assets: [], zipball_url: 'https://fallback.zip' };
+  const responseNoAssets = { ...mockReleaseResponse, assets: [], zipball_url: 'https://api.github.com/repos/davetriska02-collab/medicus-suite/zipball/v1.4.0' };
   const rFallback = await UC.checkForUpdate({ fetchImpl: async () => ({ ok: true, json: async () => responseNoAssets }) });
-  assert(rFallback.downloadUrl === 'https://fallback.zip', 'checkForUpdate: falls back to zipball_url when no zip asset');
+  assert(rFallback.downloadUrl.includes('api.github.com'), 'checkForUpdate: falls back to zipball_url when no zip asset (github host passes)');
 
   // ── isUpdateAvailable ─────────────────────────────────────────────────────
   console.log('\n--- isUpdateAvailable ---');
@@ -148,6 +148,43 @@ assert(UC.isNewer('', '1.3.0') === false, 'empty latest never newer');
   assert(state.latestVersion === '1.4.0', 'getState: returns stored latestVersion');
   assert(state.releaseUrl?.includes('github.com'), 'getState: returns stored releaseUrl');
   assert(state.checkedAt > 0, 'getState: checkedAt is a timestamp');
+
+  // ── allowGithubUrl: host validation ──────────────────────────────────────
+  console.log('\n--- allowGithubUrl: host validation ---');
+  // Evil URL must be blocked
+  assert(UC.allowGithubUrl('https://evil.example/x.zip') === '',
+    'allowGithubUrl: evil host → empty string');
+  // github.com passes
+  assert(UC.allowGithubUrl('https://github.com/davetriska02-collab/medicus-suite/releases/tag/v1.4.0')
+    .includes('github.com'),
+    'allowGithubUrl: github.com host passes through');
+  // api.github.com passes
+  assert(UC.allowGithubUrl('https://api.github.com/repos/foo/bar/zipball/v1.0.0')
+    .includes('api.github.com'),
+    'allowGithubUrl: api.github.com host passes through');
+  // githubusercontent.com subdomain passes
+  assert(UC.allowGithubUrl('https://objects.githubusercontent.com/foo.zip')
+    .includes('githubusercontent.com'),
+    'allowGithubUrl: *.githubusercontent.com passes through');
+  // HTTP (not HTTPS) must be blocked
+  assert(UC.allowGithubUrl('http://github.com/foo.zip') === '',
+    'allowGithubUrl: http:// (not https) → empty string');
+  // Empty and null inputs
+  assert(UC.allowGithubUrl('') === '', 'allowGithubUrl: empty string → empty string');
+  assert(UC.allowGithubUrl(null) === '', 'allowGithubUrl: null → empty string');
+
+  // ── checkForUpdate: evil asset URL → downloadUrl is blocked ──────────────
+  console.log('\n--- checkForUpdate: evil downloadUrl blocked ---');
+  for (const k of Object.keys(mockStore)) delete mockStore[k];
+  const evilAssetResponse = {
+    tag_name: 'v1.5.0',
+    html_url: 'https://github.com/davetriska02-collab/medicus-suite/releases/tag/v1.5.0',
+    body: 'notes',
+    assets: [{ name: 'medicus-suite.zip', browser_download_url: 'https://evil.example/x.zip' }],
+    zipball_url: 'https://api.github.com/repos/foo/bar/zipball/v1.5.0',
+  };
+  const rEvil = await UC.checkForUpdate({ force: true, fetchImpl: async () => ({ ok: true, json: async () => evilAssetResponse }) });
+  assert(rEvil.downloadUrl === '', 'checkForUpdate: evil asset URL → downloadUrl is empty string');
 
   // ── Hardcoded URL sanity ──────────────────────────────────────────────────
   console.log('\n--- Hardcoded constants ---');

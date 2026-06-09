@@ -36,6 +36,22 @@
     etag:          'suite.update.etag',
   };
 
+  // ── URL allowlist guard ─────────────────────────────────────────────────────
+  // Accepts only HTTPS URLs whose hostname is github.com, api.github.com, or
+  // any *.githubusercontent.com subdomain. Returns '' for anything else.
+  function allowGithubUrl(raw) {
+    if (!raw) return '';
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== 'https:') return '';
+      const h = u.hostname;
+      if (h === 'github.com' || h === 'api.github.com' || h.endsWith('.githubusercontent.com')) {
+        return raw;
+      }
+    } catch (_) { /* unparseable */ }
+    return '';
+  }
+
   // ── Semver comparison ───────────────────────────────────────────────────────
   // Returns 1 if a > b, -1 if a < b, 0 if equal. Strips leading "v". Treats
   // missing segments as 0. Does not handle prerelease tags (we don't use them).
@@ -121,11 +137,13 @@
 
     const tag = raw?.tag_name || '';
     const latestVersion = normaliseVersion(tag);
-    const releaseUrl = raw?.html_url || '';
+    // allowGithubUrl guards both URLs — releaseUrl is rendered as a clickable link,
+    // downloadUrl is stored and offered for download; both must come from GitHub.
+    const releaseUrl = allowGithubUrl(raw?.html_url || '');
     const releaseNotes = raw?.body || '';
     // Prefer a zip asset if one is attached; fall back to the auto-generated source zip
     const zipAsset = (raw?.assets || []).find(a => /\.zip$/i.test(a?.name || ''));
-    const downloadUrl = zipAsset?.browser_download_url || raw?.zipball_url || '';
+    const downloadUrl = allowGithubUrl(zipAsset?.browser_download_url || raw?.zipball_url || '');
 
     await chrome.storage.local.set({
       [STORAGE_KEYS.latestVersion]: latestVersion,
@@ -177,6 +195,7 @@
     REPO_NAME,
     RELEASES_URL,
     STORAGE_KEYS,
+    allowGithubUrl,
     normaliseVersion,
     compareVersions,
     isNewer,
