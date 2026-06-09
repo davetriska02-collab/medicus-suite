@@ -164,7 +164,10 @@ const MUST_NOT = [
   // local vaginal oestrogens are excluded (no systemic effect)
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],
-  ['hrt-systemic', 'Estring 7.5mcg vaginal ring']
+  ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
+  // ethinylestradiol (combined contraceptives) must not match via the 'estradiol' substring
+  ['hrt-systemic', 'Ethinylestradiol 30mcg / Levonorgestrel 150mcg tablets'],
+  ['hrt-systemic', 'Ethinylestradiol / Norelgestromin transdermal patch']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');

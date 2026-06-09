@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.3] — 2026-06-09
+
+### Fix: combined contraceptive pills falsely flagging as HRT
+
+`ethinylestradiol` (used in combined oral contraceptives e.g. Microgynon,
+Rigevidon, and the Evra patch) contains `estradiol` as a substring, causing
+it to match the `hrt-systemic` drug-monitoring rule. This produced a false
+"No progestogen or hysterectomy recorded" warning on drugs that are themselves
+combined oestrogen + progestogen preparations and have nothing to do with HRT.
+
+Added `ethinylestradiol` to the `exclude` list of the `hrt-systemic` rule.
+Two new negative-control test cases added to `test-drug-brand-coverage.js`.
+
 ## [v3.36.2] — 2026-06-09
 
 ### Condor: practice-wide waiting room via appointment-book endpoint

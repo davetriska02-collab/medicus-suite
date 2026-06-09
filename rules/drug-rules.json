@@ -360,7 +360,7 @@
       "drugClass": "HRT",
       "drug": {
         "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary", "ethinylestradiol"]
       },
       "phase": "maintenance",
       "tests": [
