@@ -212,7 +212,8 @@ export async function fetchAllStreams() {
     'suite.practiceCode',
     'capacity.presets',
     'capacity.activePresetId',
-    'suite.requestMonitor.config',
+    'suite.requestMonitor.enabled',
+    'suite.requestMonitor.assigneeId',
     'slots.hiddenTypes',
   ];
 
@@ -235,8 +236,11 @@ export async function fetchAllStreams() {
   }
 
   const base = `https://${siteId}.api.england.medicus.health`;
-  const rmConfig  = storage['suite.requestMonitor.config'];
-  const rmEnabled = rmConfig?.enabled && rmConfig?.assigneeId;
+  const rmConfig  = {
+    enabled:    storage['suite.requestMonitor.enabled'],
+    assigneeId: storage['suite.requestMonitor.assigneeId'],
+  };
+  const rmEnabled = rmConfig.enabled && rmConfig.assigneeId;
 
   const [slotsAndWrRes, subRes, rmRes, actRes] = await Promise.allSettled([
     fetchSlotsAndWaitingRoom(base, hiddenTypes),

@@ -422,6 +422,11 @@
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
         const days = daysBetween(obs.date, now);
+        // Malformed obs.date → null; null comparisons always false → would silently
+        // fall through to 'in_date'. Surface as no_data (same as missing obs).
+        if (days == null) {
+          return { ...test, status: 'no_data', latestObs: obs, days: null };
+        }
         const intervalDays = test.intervalDays || 365;
         const dueSoonDays = test.dueSoonDays || 30;
         const staleDays = intervalDays * 2;
@@ -877,6 +882,10 @@
     if (check.kind === 'observation-alert') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
       if (!obs || !obs.date) return [];
+      // Unparseable date: new Date(invalid) gives NaN; the stale check `< _cutoff`
+      // is false for NaN so an invalid date would pass the stale gate and fire.
+      // Treat the same as a missing date — stale result, do not alert.
+      if (isNaN(new Date(obs.date).getTime())) return [];
       const v = parseNumeric(obs.value);
       if (v == null) return [];
       const _withinDays = check.withinDays || 365;
@@ -921,7 +930,9 @@
 
     if (check.kind === 'observation-threshold') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (obs && obs.date) {
+      // Reject unparseable dates: NaN < _qofStart is false so an invalid date
+      // would bypass the window check and surface a spurious 'achieved'/'not_met'.
+      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
         evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
@@ -977,7 +988,9 @@
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (obs && obs.date) {
+      // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
+      // would produce 'overdue' (conservative but misleading — treat as no data).
+      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
         evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
         days = daysBetween(obs.date, now);
         dateText = obs.date;

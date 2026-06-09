@@ -172,5 +172,16 @@ for (const [id, med] of MUST_NOT) {
   check(!engine.drugMatchesRule(med, ruleById(id)), `"${med}" does NOT match ${id}`);
 }
 
+// === INVERSE COVERAGE CHECK ===
+// Every enabled drug-monitoring rule must have at least one EXPECTED entry.
+// A new rule with no entry would pass the forward loop silently — this catches it.
+console.log('\n--- inverse coverage: every enabled drug-monitoring rule has an EXPECTED entry ---');
+const drugMonitoringRules = (ruleset.rules || []).filter(r => r.type === 'drug-monitoring' && r.enabled !== false);
+for (const rule of drugMonitoringRules) {
+  check(Object.prototype.hasOwnProperty.call(EXPECTED, rule.id) && EXPECTED[rule.id].length > 0,
+    `rule "${rule.id}" has at least one EXPECTED entry`);
+}
+console.log(`(${drugMonitoringRules.length} enabled drug-monitoring rules audited)`);
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

@@ -190,7 +190,44 @@ function suggestFilename(scope) {
   return `medicus-${scope}-backup-${stamp}.json`;
 }
 
-const api = { FORMAT, FORMAT_VERSION, EXTENSION_VERSION, VALID_SCOPES, wrap, unwrap, previewEnvelope, suggestFilename };
+// Transactional restore helper.
+// Takes an array of async task functions (each writes to chrome.storage.local).
+// Snapshots all storage before running; if any task throws, rolls back every key
+// written during the run and re-throws an error that includes the original message
+// and states that no changes were applied (surfaced verbatim by setBackupStatus).
+async function applyWithRollback(taskFns) {
+  // Snapshot: capture the full storage state before any write.
+  const snapshot = await chrome.storage.local.get(null);
+
+  try {
+    // Run tasks SEQUENTIALLY so a failure at task N means tasks 0…N-1 have written
+    // but task N and beyond have not. On success we're done.
+    for (const fn of taskFns) {
+      await fn();
+    }
+  } catch (originalErr) {
+    // Determine which keys exist now that were absent in the snapshot — these were
+    // written by tasks that ran before the failure and must be removed first.
+    let currentKeys;
+    try {
+      currentKeys = Object.keys(await chrome.storage.local.get(null));
+    } catch (_) {
+      currentKeys = [];
+    }
+    const newKeys = currentKeys.filter(k => !(k in snapshot));
+    if (newKeys.length > 0) {
+      try { await chrome.storage.local.remove(newKeys); } catch (_) { /* best-effort */ }
+    }
+    // Restore the snapshot (overwrites anything tasks may have changed).
+    if (Object.keys(snapshot).length > 0) {
+      try { await chrome.storage.local.set(snapshot); } catch (_) { /* best-effort */ }
+    }
+    const msg = originalErr && originalErr.message ? originalErr.message : String(originalErr);
+    throw new Error(`${msg} — no changes were applied`);
+  }
+}
+
+const api = { FORMAT, FORMAT_VERSION, EXTENSION_VERSION, VALID_SCOPES, wrap, unwrap, previewEnvelope, suggestFilename, applyWithRollback };
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;

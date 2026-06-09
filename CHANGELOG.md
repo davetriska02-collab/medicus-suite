@@ -2,6 +2,61 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.3] — 2026-06-09
+
+### Safety: null-date fail-safe in Sentinel rules engine
+
+`daysBetween()` returns `null` for unparseable dates. Downstream comparisons
+(`null > x`) are always false, so a malformed observation date would silently
+fall through to the safest-looking status (`in_date` / no chip) — masking a
+missing-monitoring situation as "all good". Guards added:
+
+- Drug-monitoring test evaluation: garbage `obs.date` now returns `status:
+  'no_data'` (same as a missing observation), never `in_date`.
+- `observation-alert` QOF indicator: unparseable date now returns `[]` (consistent
+  with the existing stale-gate and the "do not alert on bad data" design).
+
+Regression tests added to `test-monitoring-chip.js` and `test-alert-builder.js`.
+
+### Test: inverse brand-coverage check in test-drug-brand-coverage.js
+
+The existing test only iterated the `EXPECTED` map forward, so a new
+drug-monitoring rule with no `EXPECTED` entry would pass silently. Added an
+inverse check: every enabled `drug-monitoring` rule in `drug-rules.json` must
+have at least one entry in `EXPECTED`. All 24 current rules are covered.
+
+### Safety: transactional backup restore with rollback
+
+`applyEnvelope()` previously used `Promise.all`, so a failure in one module
+import left partially-written storage. Rewritten to use `applyWithRollback()`
+(added to `shared/io/suite-envelope.js`): tasks run sequentially; on any throw,
+keys written during the run are removed and the pre-import snapshot is restored.
+The error message includes the original cause and states "no changes were applied"
+(surfaced verbatim by the options-page status banner).
+
+Rollback scenario regression test added to `test-suite-io.js`.
+
+### Test: test-backup-coverage.js — storage key-coverage guard
+
+New static analysis test: scans app source for `chrome.storage.local` string
+literals and verifies every key is captured by a `shared/io/*-io.js` file or an
+explicit allowlist. Guards against keys silently disappearing from backups when a
+module is added or a key renamed. Prints audited key counts on each run.
+
+### Fix: Condor request-monitor stream was silently dead
+
+`condor-data.js` read `suite.requestMonitor.config` as a single object key, but
+request-monitor settings are stored as individual keys
+(`suite.requestMonitor.enabled` / `.assigneeId` / …), so the config was always
+`undefined` and the Condor dashboard never fetched the request-monitor stream.
+Found by the new backup key-coverage audit. Now reads the real keys.
+
+### Chore: remove orphaned acrtrend / bptrend modules
+
+`side-panel/modules/acrtrend` and `side-panel/modules/bptrend` were not
+registered in any `MODULES` map or nav tab in `panel.js` or `pop-out.js`.
+Dead code removed (`git rm -r`).
+
 ## [v3.36.2] — 2026-06-09
 
 ### Condor: practice-wide waiting room via appointment-book endpoint
