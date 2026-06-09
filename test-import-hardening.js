@@ -581,6 +581,69 @@ const { sentinelImport } = require('./shared/io/sentinel-io.js');
     'hiddenRules invalid: array instead of object'
   );
 
+  // ── New optional fields: statusAtDismissal and dismissedAt ──────────────────
+
+  console.log('\n--- (f2) hiddenRules new optional fields (status-escalation) ---');
+
+  // Valid: entry with statusAtDismissal and dismissedAt
+  await expectResolve(
+    { hiddenRules: { 'mtx-001': { until: null, statusAtDismissal: 'overdue', dismissedAt: '2026-01-15' } } },
+    'hiddenRules valid: entry with statusAtDismissal + dismissedAt'
+  );
+
+  // Valid: statusAtDismissal present, dismissedAt absent (optional)
+  await expectResolve(
+    { hiddenRules: { 'mtx-001': { until: null, statusAtDismissal: 'in_date' } } },
+    'hiddenRules valid: statusAtDismissal only'
+  );
+
+  // Valid: dismissedAt present, statusAtDismissal absent
+  await expectResolve(
+    { hiddenRules: { 'mtx-001': { until: null, dismissedAt: '2026-03-01' } } },
+    'hiddenRules valid: dismissedAt only'
+  );
+
+  // Valid: statusAtDismissal is null (explicitly null)
+  await expectResolve(
+    { hiddenRules: { 'mtx-001': { until: null, statusAtDismissal: null } } },
+    'hiddenRules valid: statusAtDismissal: null'
+  );
+
+  // Invalid: statusAtDismissal is a number
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: null, statusAtDismissal: 42 } } },
+    'statusAtDismissal: must be a string or null',
+    'hiddenRules invalid: statusAtDismissal is a number'
+  );
+
+  // Invalid: statusAtDismissal is an object
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: null, statusAtDismissal: { status: 'overdue' } } } },
+    'statusAtDismissal: must be a string or null',
+    'hiddenRules invalid: statusAtDismissal is an object'
+  );
+
+  // Invalid: dismissedAt is a number
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: null, dismissedAt: 20260115 } } },
+    'dismissedAt: must be null or a YYYY-MM-DD date string',
+    'hiddenRules invalid: dismissedAt is a number'
+  );
+
+  // Invalid: dismissedAt is not ISO format
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: null, dismissedAt: '15/01/2026' } } },
+    'dismissedAt: must be null or a YYYY-MM-DD date string',
+    'hiddenRules invalid: dismissedAt is non-ISO date string'
+  );
+
+  // Invalid: dismissedAt is invalid date string (right format, wrong date)
+  await expectReject(
+    { hiddenRules: { 'mtx-001': { until: null, dismissedAt: 'not-a-date' } } },
+    'dismissedAt: must be null or a YYYY-MM-DD date string',
+    'hiddenRules invalid: dismissedAt is an arbitrary string'
+  );
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

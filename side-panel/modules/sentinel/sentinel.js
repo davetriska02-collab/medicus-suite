@@ -8,25 +8,65 @@ const STATUS_RANK   = { overdue:0, not_met:0, alert:0, stale:1, due_soon:2, caut
 const STATUS_COLOUR = { overdue:'red', not_met:'red', alert:'red', stale:'amber', due_soon:'amber', caution:'amber', no_data:'neutral', noted:'neutral', recently_initiated:'neutral', achieved:'green', in_date:'green' };
 const STATUS_LABEL  = { overdue:'OVERDUE', not_met:'NOT MET', alert:'ALERT', stale:'SEVERELY OVERDUE', due_soon:'DUE SOON', caution:'CAUTION', no_data:'NO DATA', noted:'NOTED', recently_initiated:'NEW', achieved:'MET', in_date:'IN DATE' };
 
+// Colour → severity rank for dismissal escalation. Red=3, amber=2, neutral=1, green=0.
+// Unknown colours (or statuses not in STATUS_COLOUR) rank as red (fail-safe: resurface).
+// keep in sync with shared/chip-renderer.js STATUS_COLOUR
+const COLOUR_RANK = { red: 3, amber: 2, neutral: 1, green: 0 };
+
+// Returns the numeric severity rank for a status string.
+// Unknown statuses rank as red (3) — fail-safe, resurfaces the chip.
+function statusSeverityRank(status) {
+  const colour = STATUS_COLOUR[status];
+  return colour !== undefined ? (COLOUR_RANK[colour] ?? 3) : 3;
+}
+
 let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
 // Per-rule hide/snooze (sentinel.hiddenRules). Cached at init + refreshed on
-// storage change. A rule is suppressed if its key exists AND (until is null OR
-// until is a future ISO date); a past until auto-resurfaces the rule.
+// storage change.
 let _hiddenRules = {};
 let _dismissHandler = null;
 let _hiddenStorageListener = null;
 
-function isRuleHidden(ruleId) {
-  if (!ruleId) return false;
+// Pure suppression check. Exported so node tests can import it without chrome APIs.
+// Returns { hidden: bool, resurfaced: bool }.
+//   - Snoozed (until is a future date): hidden regardless of current status.
+//   - Permanent (until null) WITH statusAtDismissal: hidden only while current
+//     severity is NOT worse than the recorded severity. If current rank > recorded
+//     rank the chip shows again (resurfaced: true).
+//   - Legacy permanent entries WITHOUT statusAtDismissal: always hidden (backward
+//     compatible — avoids flooding existing users whose entries have no status).
+//   - A past until (snooze expired): resurfaces normally (hidden: false).
+export function chipSuppressionResult(entry, currentStatus, todayIso) {
+  if (!entry) return { hidden: false, resurfaced: false };
+  if (entry.until != null) {
+    // Snoozed: hidden only while the snooze is still active
+    return { hidden: entry.until > todayIso, resurfaced: false };
+  }
+  // Permanent hide
+  if (entry.statusAtDismissal == null) {
+    // Legacy entry (no statusAtDismissal recorded) — keep old behaviour: always hidden.
+    // Existing users dismissed under the old scheme; don't flood them on upgrade.
+    return { hidden: true, resurfaced: false };
+  }
+  const recordedRank = statusSeverityRank(entry.statusAtDismissal);
+  const currentRank  = statusSeverityRank(currentStatus);
+  if (currentRank > recordedRank) {
+    // Status has worsened since dismissal — resurface the chip
+    return { hidden: false, resurfaced: true };
+  }
+  return { hidden: true, resurfaced: false };
+}
+
+function isRuleHiddenResult(ruleId, currentStatus) {
+  if (!ruleId) return { hidden: false, resurfaced: false };
   const entry = _hiddenRules[ruleId];
-  if (!entry) return false;
-  if (entry.until == null) return true; // permanent
+  if (!entry) return { hidden: false, resurfaced: false };
   const today = new Date().toISOString().slice(0, 10);
-  return entry.until > today; // future snooze still active; past => resurface
+  return chipSuppressionResult(entry, currentStatus, today);
 }
 
 async function loadHiddenRules() {
@@ -91,9 +131,12 @@ export async function init(el) {
     if (!ruleId) return;
     const untilRaw = btn.dataset.dismissUntil;
     const until = untilRaw ? untilRaw : null;
+    // Record the chip's current status so a later status-escalation can resurface it.
+    const statusAtDismissal = btn.dataset.dismissStatus || null;
+    const dismissedAt = new Date().toISOString().slice(0, 10);
     const r = await chrome.storage.local.get('sentinel.hiddenRules');
     const hidden = r['sentinel.hiddenRules'] || {};
-    hidden[ruleId] = { until };
+    hidden[ruleId] = { until, statusAtDismissal, dismissedAt };
     await chrome.storage.local.set({ 'sentinel.hiddenRules': hidden });
     _hiddenRules = hidden;
     refresh();
@@ -348,13 +391,18 @@ function render(payload) {
     return;
   }
 
-  const { chips: allChips, patientContext, evaluatedAt, modules } = snapshot;
+  const { chips: allChips, patientContext, evaluatedAt, modules, unmatchedMeds } = snapshot;
   const patient = patientContext;
 
   // Drop chips for currently-suppressed rules (per-rule hide/snooze) before any
   // filtering or counting, so hidden alerts vanish entirely and don't skew the
-  // filter-bar tallies.
-  const chips = (allChips || []).filter(c => !isRuleHidden(c.ruleId));
+  // filter-bar tallies. Resurfaced chips (status has worsened since dismissal) are
+  // kept and annotated so they render with a visible RESURFACED badge.
+  const chips = (allChips || []).map(c => {
+    const { hidden, resurfaced } = isRuleHiddenResult(c.ruleId, c.status);
+    if (hidden) return null;
+    return resurfaced ? { ...c, _resurfaced: true } : c;
+  }).filter(Boolean);
 
   // Filter chips
   let visibleChips = chips;
@@ -418,7 +466,9 @@ function render(payload) {
       <span class="sent-ext-item${modules.problems===0?' sent-ext-zero':''}">${modules.problems} problems</span>
     </div>` : '';
 
-  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + extractionHtml + `
+  const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds);
+
+  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + `
     <div class="sent-footer">
       <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
@@ -550,6 +600,15 @@ function closeOpenEvidence() {
   _openEvidenceKey = null;
 }
 
+// Inject a RESURFACED banner into a rendered chip HTML string. Inserted after
+// the opening <div class="sent-chip ..."> tag so it appears at the top of the chip.
+function injectResurfacedBanner(html) {
+  return html.replace(
+    /(<div\s[^>]*class="[^"]*sent-chip[^"]*"[^>]*>)/,
+    `$1<div class="sent-chip-resurfaced" title="Status has worsened since this alert was dismissed">RESURFACED</div>`
+  );
+}
+
 function renderChip(chip) {
   const col = STATUS_COLOUR[chip.status] || 'neutral';
   const lbl = STATUS_LABEL[chip.status] || (chip.status || '').toUpperCase();
@@ -558,13 +617,20 @@ function renderChip(chip) {
   // to the shared renderer to keep side-panel rendering in sync with previews.
   const CR = (typeof window !== 'undefined') ? window.ChipRenderer : null;
   if (CR) {
-    if (chip.type === 'drug-monitoring')  return CR.renderDrugChip(chip);
-    if (chip.type === 'qof-indicator')    return CR.renderQofIndicatorChip(chip);
-    if (chip.type === 'drug-combo')       return CR.renderDrugComboChip(chip);
-    if (chip.type === 'event-count')      return CR.renderEventCountChip(chip);
-    if (chip.type === 'composite')        return CR.renderCompositeChip(chip);
-    if (chip.type === 'vaccine')          return CR.renderVaccineChip(chip);
+    let html = null;
+    if (chip.type === 'drug-monitoring')  html = CR.renderDrugChip(chip);
+    if (chip.type === 'qof-indicator')    html = CR.renderQofIndicatorChip(chip);
+    if (chip.type === 'drug-combo')       html = CR.renderDrugComboChip(chip);
+    if (chip.type === 'event-count')      html = CR.renderEventCountChip(chip);
+    if (chip.type === 'composite')        html = CR.renderCompositeChip(chip);
+    if (chip.type === 'vaccine')          html = CR.renderVaccineChip(chip);
+    if (html != null) return chip._resurfaced ? injectResurfacedBanner(html) : html;
   }
+
+  // Resurfaced banner for fallback renderers
+  const resurfacedHtml = chip._resurfaced
+    ? `<div class="sent-chip-resurfaced" title="Status has worsened since this alert was dismissed">RESURFACED</div>`
+    : '';
 
   if (chip.type === 'drug-monitoring') {
     const testLines = (chip.tests || []).map(t => {
@@ -582,6 +648,7 @@ function renderChip(chip) {
     }).join('');
     return `
       <div class="sent-chip sent-chip-${col}">
+        ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -603,6 +670,7 @@ function renderChip(chip) {
     const yearTag = chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}">
+        ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${chip.points ? ` · ${chip.points}pt` : ''}</span>
@@ -615,6 +683,7 @@ function renderChip(chip) {
   if (chip.type === 'qof-register') {
     return `
       <div class="sent-chip sent-chip-${col}">
+        ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.registerName || chip.registerCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -625,6 +694,7 @@ function renderChip(chip) {
 
   return `
     <div class="sent-chip sent-chip-${col}">
+      ${resurfacedHtml}
       <div class="sent-chip-head">
         <span class="sent-chip-name">${escHtml(chip.ruleName || chip.ruleId || '')}</span>
         <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -664,4 +734,50 @@ function formatDate(s) {
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// Cached feedback email (suite.feedbackEmail) loaded at render time.
+// Undefined = not yet attempted; null = loaded, not set; string = address.
+let _feedbackEmail;
+function ensureFeedbackEmailLoaded() {
+  if (_feedbackEmail !== undefined) return;
+  _feedbackEmail = null; // mark as load-attempted
+  chrome.storage.local.get('suite.feedbackEmail', r => {
+    const addr = (r['suite.feedbackEmail'] || '').trim();
+    if (addr) {
+      _feedbackEmail = addr;
+      // Trigger a re-render if container is active so the link appears
+      if (container) refresh();
+    }
+  });
+}
+
+// Render the collapsed-by-default "Meds without a monitoring rule" section in
+// the side panel. Informational only — neutral, not red/amber.
+// Surfaces the key silent-failure mode (unlisted brand → no alert) without noise.
+// Most medicines need no monitoring — this list exists to spot brand names that
+// SHOULD have matched a monitoring rule but didn't. A "Report a possible missing
+// brand" mailto link is included when a feedback email address is configured.
+function renderUnmatchedMedsSection(meds) {
+  ensureFeedbackEmailLoaded();
+  if (!meds || meds.length === 0) return '';
+  const items = meds.map(n => `<li>${escHtml(n)}</li>`).join('');
+  let mailtoLink = '';
+  if (_feedbackEmail) {
+    const subject = encodeURIComponent('Possible missing monitoring rule brand');
+    const body = encodeURIComponent(
+      'The following medication(s) appeared in a patient record without matching a monitoring rule. Please check whether a brand name should be added:\n\n' +
+      meds.join('\n')
+    );
+    mailtoLink = ` <a class="sent-unmatched-report" href="mailto:${escHtml(_feedbackEmail)}?subject=${subject}&body=${body}">Report a possible missing brand</a>`;
+  }
+  return `
+    <details class="sent-unmatched-section">
+      <summary class="sent-unmatched-summary">Meds without a monitoring rule (${meds.length})</summary>
+      <div class="sent-unmatched-body">
+        <p class="sent-unmatched-note">Most medicines need no routine monitoring — this list exists to spot brand names that SHOULD have matched a monitoring rule but didn't.${mailtoLink}</p>
+        <ul class="sent-unmatched-list">${items}</ul>
+      </div>
+    </details>`;
+}
+
 

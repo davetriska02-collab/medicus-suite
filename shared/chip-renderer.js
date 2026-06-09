@@ -42,15 +42,19 @@
 
   // Per-rule dismiss button rendered top-right of a chip. `untilIso` empty/null
   // means a permanent hide; a date snoozes until that date. The button carries
-  // the ruleId + until via data-* attrs; the side-panel delegates clicks on
-  // [data-dismiss-rule] to write sentinel.hiddenRules. stopPropagation in that
-  // handler keeps this from also toggling the chip's evidence panel.
-  function renderDismissBtn(ruleId, untilIso) {
+  // the ruleId, until, and the chip's current status via data-* attrs; the
+  // side-panel delegates clicks on [data-dismiss-rule] to write sentinel.hiddenRules.
+  // data-dismiss-status lets the dismiss handler record statusAtDismissal so a later
+  // status-escalation can resurface the chip (HAZARD-LOG H-021 mitigation).
+  // stopPropagation in that handler keeps this from also toggling the chip's
+  // evidence panel.
+  function renderDismissBtn(ruleId, untilIso, statusAtDismissal) {
     if (!ruleId) return '';
+    const statusAttr = statusAtDismissal ? ` data-dismiss-status="${escAttr(statusAtDismissal)}"` : '';
     if (untilIso) {
-      return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until="${escAttr(untilIso)}" title="Snooze until season (${escAttr(untilIso)})" aria-label="Snooze this alert until season">×</button>`;
+      return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until="${escAttr(untilIso)}"${statusAttr} title="Snooze until season (${escAttr(untilIso)})" aria-label="Snooze this alert until season">×</button>`;
     }
-    return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until="" title="Hide this alert" aria-label="Hide this alert">×</button>`;
+    return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until=""${statusAttr} title="Hide this alert" aria-label="Hide this alert">×</button>`;
   }
 
   function formatDate(s) {
@@ -117,7 +121,7 @@
     const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
-        ${renderDismissBtn(chip.ruleId, null)}
+        ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
@@ -167,7 +171,7 @@
     const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
-        ${renderDismissBtn(chip.ruleId, null)}
+        ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}${evHint}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${pointsText}</span>
@@ -400,7 +404,7 @@
 
     return `
       <div class="sent-chip sent-chip-${col} sent-vax-chip">
-        ${renderDismissBtn(chip.ruleId, chip.seasonStartIso || null)}
+        ${renderDismissBtn(chip.ruleId, chip.seasonStartIso || null, chip.status)}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.displayName || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>

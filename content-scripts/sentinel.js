@@ -282,6 +282,11 @@
 
       renderPatientBanner(data, allChips);
       renderGroupedChips(allChips, data);
+      // Meds without a monitoring rule (informational, collapsed by default).
+      const _unmatchedForHud = window.SentinelRules.listUnmatchedMedications
+        ? window.SentinelRules.listUnmatchedMedications(data.medications || [], rules)
+        : [];
+      renderUnmatchedMedsHud(_unmatchedForHud);
       renderDebugPanel(data);
 
       // Status line: show data source
@@ -659,6 +664,27 @@
     }
   }
 
+  // Render collapsed-by-default "Meds without a monitoring rule" section in HUD.
+  // Informational only — not red/amber. Surfaces the silent-failure mode (unlisted
+  // brand → no alert) for clinicians who inspect the sidebar.
+  function renderUnmatchedMedsHud(unmatchedMeds) {
+    const list = shadowRoot?.querySelector('.chip-list');
+    if (!list) return;
+    // Remove previous section if any (re-renders on refresh)
+    list.querySelector('.unmatched-meds-section')?.remove();
+    if (!unmatchedMeds || unmatchedMeds.length === 0) return;
+    const section = document.createElement('details');
+    section.className = 'unmatched-meds-section';
+    const items = unmatchedMeds.map(n => `<li>${escapeHtml(n)}</li>`).join('');
+    section.innerHTML = `
+      <summary class="unmatched-meds-summary">Meds without a monitoring rule (${unmatchedMeds.length})</summary>
+      <div class="unmatched-meds-body">
+        <p class="unmatched-meds-note">Most medicines need no routine monitoring. This list exists to spot brand names that SHOULD have matched a monitoring rule but didn't.</p>
+        <ul class="unmatched-meds-list">${items}</ul>
+      </div>`;
+    list.appendChild(section);
+  }
+
   function updateSummary(chips) {
     const summary = shadowRoot.querySelector('.summary');
     if (!summary) return;
@@ -1013,7 +1039,12 @@
           }
         );
         if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
-        publishSnapshot(chips, data.patientContext, health, data);
+        // Compute medications with no matching drug-monitoring rule. Surfaces the
+        // key silent-failure mode (unlisted brand → no alert) without adding noise.
+        const unmatchedMeds = window.SentinelRules.listUnmatchedMedications
+          ? window.SentinelRules.listUnmatchedMedications(data.medications || [], rules)
+          : [];
+        publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds);
       }).catch(() => { if (gen === _evalGen) invalidateSnapshot(); });
     } catch (e) { if (gen === _evalGen) invalidateSnapshot(); }
   }
@@ -1081,7 +1112,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData) {
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1092,6 +1123,7 @@
       degraded: !!(health && health.degraded),
       reason: (health && health.reason) || null,
       modules: (health && health.modules) || null,
+      unmatchedMeds: unmatchedMeds || [],
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,

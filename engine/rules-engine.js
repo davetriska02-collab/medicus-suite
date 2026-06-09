@@ -1425,8 +1425,34 @@
     }];
   }
 
+  // Returns a deduplicated, alphabetically-sorted list of medication names from
+  // `medications` that are NOT matched by any ENABLED drug-monitoring rule in
+  // `rules`. Uses the engine's existing drugMatchesRule semantics (case-insensitive
+  // substring; exclude terms disqualify). A med suppressed by an exclude term counts
+  // as unmatched — it has no monitoring rule covering it. This is the key silent-
+  // failure surface: an unlisted brand silently produces no alert.
+  function listUnmatchedMedications(medications, rules) {
+    const drugMonitoringRules = (rules || []).filter(r => r.enabled !== false && r.type === 'drug-monitoring');
+    // Deduplication: track seen names case-insensitively, keep original display name.
+    const seenLower = new Map(); // lowerName → displayName
+    (medications || []).forEach(med => {
+      if (!med || !med.name) return;
+      const lower = String(med.name).toLowerCase();
+      if (!seenLower.has(lower)) seenLower.set(lower, med.name);
+    });
+    // Filter to only names not covered by any enabled drug-monitoring rule.
+    const unmatched = [];
+    seenLower.forEach((displayName, lower) => {
+      const covered = drugMonitoringRules.some(rule => drugMatchesRule(lower, rule));
+      if (!covered) unmatched.push(displayName);
+    });
+    unmatched.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    return unmatched;
+  }
+
   const api = {
     evaluatePatient,
+    listUnmatchedMedications,
     drugMatchesRule,
     findLatestObservation,
     daysBetween,

@@ -93,6 +93,7 @@ async function sentinelImport(data, { merge = false } = {}) {
     }
     // NF3: validate each entry is {until: ISO-date-string | null} to prevent
     // malformed values causing unpredictable hide/show behaviour at runtime.
+    // Optional new fields: statusAtDismissal (string) and dismissedAt (YYYY-MM-DD).
     const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     for (const [ruleId, entry] of Object.entries(data.hiddenRules)) {
       if (typeof entry !== 'object' || Array.isArray(entry) || entry === null) {
@@ -101,6 +102,14 @@ async function sentinelImport(data, { merge = false } = {}) {
       if (entry.until !== null && entry.until !== undefined &&
           (typeof entry.until !== 'string' || !ISO_DATE_RE.test(entry.until))) {
         throw new Error(`sentinel.hiddenRules["${ruleId}"].until: must be null or a YYYY-MM-DD date string.`);
+      }
+      if (entry.statusAtDismissal !== undefined && entry.statusAtDismissal !== null &&
+          typeof entry.statusAtDismissal !== 'string') {
+        throw new Error(`sentinel.hiddenRules["${ruleId}"].statusAtDismissal: must be a string or null.`);
+      }
+      if (entry.dismissedAt !== undefined && entry.dismissedAt !== null &&
+          (typeof entry.dismissedAt !== 'string' || !ISO_DATE_RE.test(entry.dismissedAt))) {
+        throw new Error(`sentinel.hiddenRules["${ruleId}"].dismissedAt: must be null or a YYYY-MM-DD date string.`);
       }
     }
     toSet['sentinel.hiddenRules'] = data.hiddenRules;

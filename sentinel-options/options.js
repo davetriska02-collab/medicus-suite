@@ -2140,6 +2140,15 @@ function ruleDisplayName(ruleId, vaccineRules) {
   return v?.displayName || ruleId;
 }
 
+// Human-readable label for a statusAtDismissal value (mirrors STATUS_LABEL in sentinel.js
+// and shared/chip-renderer.js). Used in the hidden-alerts review screen.
+const HIDDEN_STATUS_LABEL = {
+  overdue: 'OVERDUE', not_met: 'NOT MET', alert: 'ALERT', stale: 'SEVERELY OVERDUE',
+  due_soon: 'DUE SOON', caution: 'CAUTION', no_data: 'NO DATA', noted: 'NOTED',
+  recently_initiated: 'NEW', achieved: 'MET', in_date: 'IN DATE',
+  vax_due: 'DUE', vax_given: 'GIVEN', vax_declined: 'DECLINED',
+};
+
 async function renderHiddenRulesList() {
   const list = getEl('hiddenRulesList');
   if (!list) return;
@@ -2153,14 +2162,30 @@ async function renderHiddenRulesList() {
     list.innerHTML = '<div class="cr-empty">No alerts are currently hidden.</div>';
     return;
   }
+  const today = new Date().toISOString().slice(0, 10);
   list.innerHTML = ids.map(id => {
     const entry = hidden[id] || {};
     const untilText = entry.until ? `hidden until ${escHtml(entry.until)}` : 'permanently hidden';
+    // Dismissal date and age
+    let dismissMeta = '';
+    if (entry.dismissedAt) {
+      const daysDiff = Math.round((new Date(today) - new Date(entry.dismissedAt)) / 86400000);
+      const ageText = daysDiff === 0 ? 'today' : daysDiff === 1 ? '1 day ago' : `${daysDiff} days ago`;
+      dismissMeta = ` · dismissed ${escHtml(entry.dismissedAt)} (${ageText})`;
+    } else {
+      dismissMeta = ' · dismissed before v3.37';
+    }
+    // Status at dismissal
+    let statusMeta = '';
+    if (entry.statusAtDismissal) {
+      const lbl = HIDDEN_STATUS_LABEL[entry.statusAtDismissal] || escHtml(entry.statusAtDismissal.toUpperCase());
+      statusMeta = ` · was ${escHtml(lbl)}`;
+    }
     return `
       <div class="cr-card" data-rule-id="${escAttr(id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(ruleDisplayName(id, vaccineRules))}</div>
-          <div class="cr-card-meta">${escHtml(id)} · ${untilText}</div>
+          <div class="cr-card-meta">${escHtml(id)} · ${untilText}${dismissMeta}${statusMeta}</div>
         </div>
         <div class="cr-card-actions">
           <button class="ghost hidden-enable-btn" data-id="${escAttr(id)}">Enable</button>
