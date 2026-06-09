@@ -73,3 +73,23 @@ Always add a `CHANGELOG.md` entry on the same commit.
 - Dev branches are created per session and merged to `main` via PR when complete
 - Never force-push main
 - Before commit: check `git status` for patient data files — nothing from `uploads/`, `data/sars/`, or `output/` should ever be committed
+
+## Project stack
+
+- **Language:** JavaScript (ES modules throughout; no TypeScript, no bundler)
+- **Runtime context:** Chrome MV3 extension — service worker, side panel, content scripts, options page; no Node globals available in extension code
+- **Tests:** Node.js test scripts (`node test-*.js`) — run all before committing
+- **Storage:** `chrome.storage.local` only — never `localStorage`
+- **Styling:** CSS variables (`--accent`, `--red`, `--amber`, `--green`, `--border`, `--text-3`, `--t4`, `--t1`, `--sans`) — no external CSS frameworks
+
+## Integration workflow
+
+When merging a batch of feature branches (e.g. after a `/batch` run):
+
+1. **Check open PRs** — list all open PRs targeting the integration branch; note any that stopped at code-review without pushing
+2. **Recover stalled agents** — for each stalled branch, spawn a recovery agent that goes to the existing worktree, fixes findings, and pushes
+3. **Merge in dependency order** — foundational branches first (shell/data layer), then card/feature branches, then IO/backup last
+4. **Resolve version conflicts in favour of the highest version** — recovery agents often start from an old base and bump to a stale version; always keep the canonical version set by the main branch agent
+5. **Wire cross-module integration points** — after merging, check for any exports that need to be called from an orchestrator (e.g. `saveDayScore` from `day-score.js` wired into `condor.js`'s poll loop)
+6. **Run full test suite** (`node test-*.js`) before pushing the integration branch
+7. **Push integration branch → PR to `main` → merge**
