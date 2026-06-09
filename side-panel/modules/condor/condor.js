@@ -41,9 +41,11 @@ async function poll() {
     const data = await fetchAllStreams();
     const cards = await loadCards();
     if (!_container) return;
+    const updatedAt = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     _container.innerHTML = `
       <div class="condor-wrap">
         <div class="condor-hero">${cards.renderPpi(data)}</div>
+        <div class="condor-ts">Live · updated ${esc(updatedAt)}</div>
         <div class="condor-grid">
           <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
           <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>

@@ -2,6 +2,60 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.2] — 2026-06-09
+
+### Condor: practice-wide waiting room via appointment-book endpoint
+
+Condor's waiting room now sources its data from the `appointment-book/embedded-overview`
+endpoint (already fetched for slot counts) rather than `my-appointments`.
+`my-appointments` is per-clinician only, so arrived counts were always 0 for
+users with no personally-booked clinic.
+
+`fetchSlots` and `fetchWaitingRoom` are merged into a single `fetchSlotsAndWaitingRoom`
+function — one fetch, two data extractions, no extra API call. The waiting room
+card now shows the responsible clinician's surname alongside each patient row.
+
+## [v3.36.1] — 2026-06-09
+
+### Fix: waiting-room arrived detection was always returning zero
+
+`displayStatus.isArrived` does not exist on the Medicus API response. The actual
+field is `displayStatus.value`, which equals `"arrived"` when a patient has
+checked in. The old check (`displayStatus?.isArrived === true`) was silently
+false for every entry, so arrived counts were always 0 across Condor, the panel
+WR strip, and the Sentinel waiting-room block.
+
+Additionally, the entry list was not filtered by `diaryEntryType`, so slot entries
+(which carry no patient or displayStatus) were included in the appointment set,
+making the pending count wrong.
+
+Fixed in `condor-data.js`, `panel.js`, and `sentinel.js`:
+- Filter entries to `diaryEntryType.value === 'appointment'` before mapping
+- Check `displayStatus.value === 'arrived'` instead of `displayStatus.isArrived`
+- Also corrected `deliveryMode` extraction in condor to unwrap `.value` consistently
+
+Note: `my-appointments` is per-clinician. Condor's waiting room card shows the
+logged-in user's patients only — a practice-wide view requires a different
+endpoint (under investigation).
+
+## [v3.36.0] — 2026-06-09
+
+### Condor UX: clearer Demand/Capacity card, live WR appointments, refresh timestamp
+
+**Demand / Capacity card** — replaced the confusing `26.2×` ratio (requests ÷
+remaining slots) with a plain-English status: "Over capacity", "At capacity",
+"Capacity sufficient", or "No slots left". The request and slot counts are shown
+in a sub-line; the Medical/Admin/AM/PM breakdown is preserved below a divider.
+
+**Waiting Room card** — when no patients have arrived yet the card was a dead
+`0 arrived` number with no context. It now falls through to a "Booked today"
+list showing the next booked appointments (name, mode, scheduled time) so the
+card is useful at the start of a session before anyone has checked in.
+
+**Practice Pressure freshness** — added a `Live · updated HH:MM:SS` timestamp
+below the PPI gauge so it is obvious the data is actively refreshing even when
+the PPI score itself is stable.
+
 ## [v3.35.3] — 2026-06-09
 
 ### Fix: Condor slots-remaining ignored the Slots tab's hidden types

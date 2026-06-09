@@ -16,7 +16,9 @@ function initials(name) {
   return (first + last).toUpperCase() || '??';
 }
 
-async function fetchSlots(base, hiddenTypes = new Set()) {
+// Fetches the appointment-book once and extracts both slot counts and the
+// practice-wide waiting room in a single request.
+async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
   const today = todayISO();
   const now = new Date();
   const url = `${base}/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false`;
@@ -24,55 +26,60 @@ async function fetchSlots(base, hiddenTypes = new Set()) {
   if (!r.ok) throw new Error(`Slots HTTP ${r.status}`);
   const raw = await r.json();
 
+  // ── Slots ─────────────────────────────────────────────────────────────────
   const entries = [];
   const byStaff = {};
   let amRemaining = 0;
   let pmRemaining = 0;
 
+  // ── Waiting room (practice-wide) ───────────────────────────────────────────
+  const wrAppointments = [];
+
   (raw.staffSchedules || []).forEach(staff => {
     const staffName = staff.name || 'Unknown';
     (staff.schedule || []).forEach(session => {
       (session.entries || []).forEach(entry => {
-        if (entry.diaryEntryType?.value !== 'slot') return;
-        if (entry.startDateTime && new Date(entry.startDateTime) <= now) return;
-        // Mirror the Slots tab: exclude appointment types the user has unticked
-        // (triage / holding / etc. via slots.hiddenTypes) so the count reflects
-        // the bookable slots they actually care about.
-        const type = entry.appointmentType?.name || 'Unknown';
-        if (hiddenTypes.has(type)) return;
-        const hour = entry.startDateTime ? new Date(entry.startDateTime).getHours() : 0;
-        const isAm = hour < 12;
-        entries.push({
-          staff: staffName,
-          type,
-          startDateTime: entry.startDateTime || '',
-        });
-        if (!byStaff[staffName]) byStaff[staffName] = { amRemaining: 0, pmRemaining: 0 };
-        if (isAm) { byStaff[staffName].amRemaining++; amRemaining++; }
-        else      { byStaff[staffName].pmRemaining++; pmRemaining++; }
+        const entryType = entry.diaryEntryType?.value;
+
+        if (entryType === 'slot') {
+          if (entry.startDateTime && new Date(entry.startDateTime) <= now) return;
+          // Mirror the Slots tab: exclude appointment types the user has unticked
+          // (triage / holding / etc. via slots.hiddenTypes) so the count reflects
+          // the bookable slots they actually care about.
+          const type = entry.appointmentType?.name || 'Unknown';
+          if (hiddenTypes.has(type)) return;
+          const hour = entry.startDateTime ? new Date(entry.startDateTime).getHours() : 0;
+          const isAm = hour < 12;
+          entries.push({ staff: staffName, type, startDateTime: entry.startDateTime || '' });
+          if (!byStaff[staffName]) byStaff[staffName] = { amRemaining: 0, pmRemaining: 0 };
+          if (isAm) { byStaff[staffName].amRemaining++; amRemaining++; }
+          else      { byStaff[staffName].pmRemaining++; pmRemaining++; }
+          return;
+        }
+
+        if (entryType === 'appointment') {
+          const status = entry.displayStatus?.value;
+          // Include arrived (in waiting room) and booked (upcoming) only.
+          if (status !== 'arrived' && status !== 'booked') return;
+          wrAppointments.push({
+            patientName:  entry.patient?.name || 'Unknown',
+            staffName,
+            start:        entry.startDateTime || '',
+            reason:       entry.compiledReasonForAppointment || '',
+            deliveryMode: entry.deliveryMode?.value || '',
+            isArrived:    status === 'arrived',
+          });
+        }
       });
     });
   });
 
-  return { entries, amRemaining, pmRemaining, totalRemaining: amRemaining + pmRemaining, byStaff };
-}
+  const arrivedCount = wrAppointments.filter(a => a.isArrived).length;
 
-async function fetchWaitingRoom(base) {
-  const url = `${base}/scheduling/data/homepage/my-appointments`;
-  const r = await fetch(url, { credentials: 'include' });
-  if (!r.ok) throw new Error(`WaitingRoom HTTP ${r.status}`);
-  const raw = await r.json();
-
-  const list = Array.isArray(raw) ? raw : (raw.schedule?.schedule?.flatMap(d => d.entries || []) || []);
-  const appointments = list.map(e => ({
-    patientName:  e.patient?.name || 'Unknown',
-    start:        e.startDateTime || '',
-    reason:       e.compiledReasonForAppointment || '',
-    deliveryMode: e.deliveryMode || '',
-    isArrived:    !!e.displayStatus?.isArrived,
-  }));
-  const arrivedCount = appointments.filter(a => a.isArrived).length;
-  return { appointments, arrivedCount };
+  return {
+    slots:       { entries, amRemaining, pmRemaining, totalRemaining: amRemaining + pmRemaining, byStaff },
+    waitingRoom: { appointments: wrAppointments, arrivedCount },
+  };
 }
 
 async function fetchSubmissions(base) {
@@ -231,19 +238,16 @@ export async function fetchAllStreams() {
   const rmConfig  = storage['suite.requestMonitor.config'];
   const rmEnabled = rmConfig?.enabled && rmConfig?.assigneeId;
 
-  const [slotsRes, wrRes, subRes, rmRes, actRes] = await Promise.allSettled([
-    fetchSlots(base, hiddenTypes),
-    fetchWaitingRoom(base),
+  const [slotsAndWrRes, subRes, rmRes, actRes] = await Promise.allSettled([
+    fetchSlotsAndWaitingRoom(base, hiddenTypes),
     fetchSubmissions(base),
     rmEnabled ? fetchRequestMonitor(base, rmConfig) : Promise.resolve(null),
     fetchActivity(base),
   ]);
 
-  const slots = slotsRes.status === 'fulfilled' ? slotsRes.value : null;
-  if (slotsRes.status === 'rejected') fetchErrors.push(`slots: ${slotsRes.reason?.message || slotsRes.reason}`);
-
-  const waitingRoom = wrRes.status === 'fulfilled' ? wrRes.value : null;
-  if (wrRes.status === 'rejected') fetchErrors.push(`waitingRoom: ${wrRes.reason?.message || wrRes.reason}`);
+  const slots       = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.slots       : null;
+  const waitingRoom = slotsAndWrRes.status === 'fulfilled' ? slotsAndWrRes.value.waitingRoom  : null;
+  if (slotsAndWrRes.status === 'rejected') fetchErrors.push(`slots: ${slotsAndWrRes.reason?.message || slotsAndWrRes.reason}`);
 
   const submissions = subRes.status === 'fulfilled' ? subRes.value : null;
   if (subRes.status === 'rejected') fetchErrors.push(`submissions: ${subRes.reason?.message || subRes.reason}`);
