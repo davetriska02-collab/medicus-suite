@@ -30,6 +30,11 @@ function waitMins(start) {
   return String(mins);
 }
 
+function lastName(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : name || '—';
+}
+
 function apptTime(start) {
   if (!start) return '?';
   const d = new Date(start);
@@ -53,6 +58,7 @@ function ensureStyles() {
 .condor-wr-empty { font-size:11px; color:var(--text-3); padding:2px 0 6px; }
 .condor-wr-pending-hdr { font-size:9px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-3); padding:6px 0 2px; border-top:1px solid var(--border); margin-top:2px; }
 .condor-wr-time { font-size:10px; color:var(--text-3); width:32px; text-align:right; flex-shrink:0; }
+.condor-wr-staff { font-size:9px; color:var(--text-3); flex-shrink:0; max-width:52px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .condor-num-lg { font-size:24px; font-weight:700; color:var(--t1); }
   `.trim();
   document.head.appendChild(style);
@@ -86,6 +92,7 @@ export function renderWaitingRoom(data) {
     const rows = arrivedAppts.slice(0, 6).map(a => `
     <div class="condor-wr-row">
       <span class="condor-wr-name">${anonymise(a.patientName)}</span>
+      <span class="condor-wr-staff">${esc(lastName(a.staffName))}</span>
       <span class="condor-wr-mode">${esc(modeIcon(a.deliveryMode))}</span>
       <span class="condor-wr-wait">${waitMins(a.start)}m</span>
     </div>`).join('');
@@ -97,6 +104,7 @@ export function renderWaitingRoom(data) {
     const upNext = pendingAppts.slice(0, 5).map(a => `
     <div class="condor-wr-row">
       <span class="condor-wr-name">${anonymise(a.patientName)}</span>
+      <span class="condor-wr-staff">${esc(lastName(a.staffName))}</span>
       <span class="condor-wr-mode">${esc(modeIcon(a.deliveryMode))}</span>
       <span class="condor-wr-time">${apptTime(a.start)}</span>
     </div>`).join('');

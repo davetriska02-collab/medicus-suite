@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.2] — 2026-06-09
+
+### Condor: practice-wide waiting room via appointment-book endpoint
+
+Condor's waiting room now sources its data from the `appointment-book/embedded-overview`
+endpoint (already fetched for slot counts) rather than `my-appointments`.
+`my-appointments` is per-clinician only, so arrived counts were always 0 for
+users with no personally-booked clinic.
+
+`fetchSlots` and `fetchWaitingRoom` are merged into a single `fetchSlotsAndWaitingRoom`
+function — one fetch, two data extractions, no extra API call. The waiting room
+card now shows the responsible clinician's surname alongside each patient row.
+
 ## [v3.36.1] — 2026-06-09
 
 ### Fix: waiting-room arrived detection was always returning zero
