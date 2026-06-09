@@ -14,7 +14,7 @@
           { "kind": "age", "ageMin": 65, "label": "Age 65+" },
           { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
           { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
-          { "kind": "register", "registers": ["DM","DM1","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
+          { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
           { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
           { "kind": "observation-threshold", "observation": ["bmi","body mass index"], "operator": ">=", "value": 40, "label": "BMI ≥40 kg/m²" },

@@ -4,11 +4,11 @@
 'use strict';
 
 async function submissionsExport() {
-  const r = await chrome.storage.local.get(['submissions.config', 'submissions.thresholds', 'suite.practiceCode']);
+  const r = await chrome.storage.local.get(['submissions.config', 'submissions.thresholds']);
+  // suite.practiceCode is owned by shared/io/suite-io.js — not exported here.
   return {
-    config:       r['submissions.config']     ?? {},
-    thresholds:   r['submissions.thresholds'] ?? null,
-    practiceCode: r['suite.practiceCode']     ?? null,
+    config:     r['submissions.config']     ?? {},
+    thresholds: r['submissions.thresholds'] ?? null,
   };
 }
 
@@ -27,6 +27,7 @@ async function submissionsImport(data, _opts = {}) {
     }
     toSet['submissions.thresholds'] = data.thresholds;
   }
+  // Legacy-tolerated: standalone submissions backups carried practiceCode; owner is suite-io.
   if (data.practiceCode != null) {
     if (typeof data.practiceCode !== 'string') throw new Error('practiceCode must be a string.');
     toSet['suite.practiceCode'] = data.practiceCode;

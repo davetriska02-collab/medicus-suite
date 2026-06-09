@@ -214,6 +214,32 @@ console.log('\n=== drug-monitoring: rolling window unchanged ===');
   assert(chips2[0].tests[0].status === 'stale', 'FBC 306d ago for 90d interval → stale (correct rolling window — worse than overdue)');
 }
 
+// ── seasonStart() UTC fix ─────────────────────────────────────────────────────
+// Regression guard for the Date.UTC rewrite (Task 1).
+// A local-time Date() for e.g. 2026-09-01 at midnight BST (UTC+1) would produce
+// 2026-08-31T23:00:00Z → toISOString().slice(0,10) = "2026-08-31" (one day early).
+
+console.log('\n=== seasonStart() UTC boundary ===');
+{
+  // now = 2026-07-15 (summer, BST territory) — season starts Sep 1
+  // Candidate 2026-09-01 is in the future → use 2025-09-01
+  assert(engine.seasonStart('2026-07-15T12:00:00Z', 9, 1) === '2025-09-01',
+    'seasonStart: Jul now, Sep season → 2025-09-01 (not 2026)');
+
+  // now = 2026-10-02T00:30:00Z — season starts Oct 1
+  // Candidate 2026-10-01 < 2026-10-02 → use 2026-10-01
+  assert(engine.seasonStart('2026-10-02T00:30:00Z', 10, 1) === '2026-10-01',
+    'seasonStart: Oct 2 now, Oct 1 season → 2026-10-01');
+
+  // now exactly on season start date
+  assert(engine.seasonStart('2026-09-01T00:00:00Z', 9, 1) === '2026-09-01',
+    'seasonStart: now === season start → current year');
+
+  // now one day before season start
+  assert(engine.seasonStart('2025-08-31T23:59:59Z', 9, 1) === '2024-09-01',
+    'seasonStart: one day before Sep 1 → previous year');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(50)}`);

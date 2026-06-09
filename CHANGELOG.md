@@ -2,6 +2,78 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.4] — 2026-06-09
+
+### Fix: seasonStart() UTC safety (engine/rules-engine.js)
+
+Rewritten to compare date-part strings instead of constructing `new Date(year,
+month-1, day)` in local time — under BST (or any non-UTC host timezone) the
+vaccine season start could drift a day early. Season-start dates are now exactly
+the configured month/day regardless of timezone. Regression tests added to
+`test-qof-year.js`.
+
+### Fix: BP pairing ±1-day tolerance (engine/normalisers.js)
+
+Split systolic/diastolic readings recorded a day apart (common when a practice
+workflow records results on different days) now synthesise a "Blood pressure"
+observation, taking the systolic reading's date. Same-date pairs are still
+preferred (pass 1); ±1-day fallback only used for unpaired systolic readings;
+each diastolic may pair at most once. Regression tests added to
+`test-extraction-health.js`.
+
+### Fix: Dash folding in normaliseDrugString (engine/rules-engine.js)
+
+Dashes and underscores in drug names and match/exclude terms are now normalised
+to spaces before whitespace collapse, so "Neo-Mercazole" matches the exclude
+term "neo mercazole" and vice versa. No MUST_NOT collision detected. Two new
+test cases added to `test-drug-brand-coverage.js`.
+
+### Test: test-rule-schema.js — rule-file structural integrity guard
+
+New test validates all four bundled rule files: check.kind against the
+implemented set, vaccine statusTerms.given and season.startMonth, event-count
+windowMonths positivity, observation-bundle non-empty observations, and no
+duplicate IDs across files. All 47 assertions pass against current rules.
+
+### Safety: custom-rule validation extended (shared/io/sentinel-io.js)
+
+`observation-bundle` added to `ALLOWED_CHECK_KINDS` for custom QOF indicator
+rules; validation rejects an empty `check.observations` array (vacuously
+"achieved"). Unknown check.kind and empty-bundle cases covered by new tests in
+`test-custom-rules.js`.
+
+### Security: update-checker downloadUrl host validation (shared/update-checker.js)
+
+`allowGithubUrl()` helper added; both `downloadUrl` and `releaseUrl` from GitHub
+releases are now rejected unless the URL parses as https with hostname
+`github.com`, `api.github.com`, or `*.githubusercontent.com`. New tests in
+`test-update-checker.js`.
+
+### Chore: submissions-io practiceCode single ownership
+
+`suite.practiceCode` is now exported only by `shared/io/suite-io.js`.
+`submissions-io.js` no longer exports it; legacy standalone submissions backups
+that carry `practiceCode` are still imported (with a one-line comment). Tests
+updated in `test-suite-io.js`. Backup coverage still passes.
+
+### Chore: vaccine-rules.json — remove dead DM1 register token
+
+No `DM1` QOF register exists; diabetics are covered by `DM`. The dead token was
+removed from the flu-vaccine eligibility registers array.
+
+### Chore: qof-rules.json — stale DM037 cross-reference note
+
+The smoking-status indicator's notes claimed DM037 was "currently disabled
+pending observation-bundle engine support"; DM037 is enabled and the engine
+supports observation-bundle. Note updated.
+
+### Chore: cross-reference comments for site-code regex
+
+One-line `// keep in sync with ...` comments added at the `PRACTICE_CODE_RE`
+definition in `shared/request-monitor.js` and `_SITE_CODE_RE` in
+`shared/medicus-api.js` to make the two independent definitions visible to
+future editors.
+
 ## [v3.36.3] — 2026-06-09
 
 ### Safety: null-date fail-safe in Sentinel rules engine

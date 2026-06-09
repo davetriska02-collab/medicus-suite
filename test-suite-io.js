@@ -338,6 +338,68 @@ console.log('\n--- applyWithRollback rollback ---');
   // Tidy up test keys.
   await chrome.storage.local.remove(['test.existing', 'test.success-key']);
 
+  // ── Task 6: submissions-io practiceCode ownership ─────────────────────────
+  // suite.practiceCode is owned by suite-io.js; submissions-io must NOT export
+  // it (removing the dual-ownership). Legacy import still tolerates it.
+
+  console.log('\n--- submissions-io: practiceCode ownership ---');
+
+  const _resetStore = () => { for (const k of Object.keys(chrome.storage.local._store || {})) delete (chrome.storage.local._store || {})[k]; };
+
+  // Use a simple in-memory store for this section
+  const subStore = {};
+  const origGet = chrome.storage.local.get.bind(chrome.storage.local);
+  const origSet = chrome.storage.local.set.bind(chrome.storage.local);
+  // Temporarily redirect storage to subStore for clean isolation
+  const subChrome = {
+    storage: {
+      local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+          const out = {};
+          ks.forEach(k => { if (k in subStore) out[k] = subStore[k]; });
+          return out;
+        },
+        async set(obj) { Object.assign(subStore, obj); },
+      },
+    },
+  };
+
+  // Temporarily override global chrome for the submissions IO calls
+  const origChrome = global.chrome;
+  global.chrome = subChrome;
+
+  subStore['submissions.config'] = { teamId: 'abc' };
+  subStore['submissions.thresholds'] = { red: 5 };
+  subStore['suite.practiceCode'] = 'a1b2c3';
+
+  const subExp = await subIo.submissionsExport();
+  assert(!Object.prototype.hasOwnProperty.call(subExp, 'practiceCode'),
+    'submissions export does NOT contain practiceCode (owned by suite-io)');
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'config'),
+    'submissions export still contains config');
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'),
+    'submissions export still contains thresholds');
+
+  // Legacy import: a payload WITH practiceCode (e.g. old standalone backup) is still applied
+  const subStoreLegacy = {};
+  global.chrome = {
+    storage: { local: {
+      async get(keys) {
+        const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+        const out = {};
+        ks.forEach(k => { if (k in subStoreLegacy) out[k] = subStoreLegacy[k]; });
+        return out;
+      },
+      async set(obj) { Object.assign(subStoreLegacy, obj); },
+    }},
+  };
+  await subIo.submissionsImport({ practiceCode: 'legacy1' });
+  assert(subStoreLegacy['suite.practiceCode'] === 'legacy1',
+    'submissionsImport: legacy payload with practiceCode still applied');
+
+  global.chrome = origChrome;
+
   // ── Summary ───────────────────────────────────────────────────────────────────
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

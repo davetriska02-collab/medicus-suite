@@ -39,6 +39,7 @@
   // Matches the short hex site ID used in Medicus URLs and API subdomains.
   // Reuses the same pattern as practice-code.js (SITE_CODE_RE) so the
   // definition stays in one place and cannot drift. (F8)
+  // keep in sync with _SITE_CODE_RE in shared/medicus-api.js
   const PRACTICE_CODE_RE = /^[a-f0-9]{4,8}$/i;
 
   function isValidPracticeCode(code) {

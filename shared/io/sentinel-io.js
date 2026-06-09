@@ -171,7 +171,8 @@ function validateDrugMonitoringRule(rule, loc) {
 }
 
 const ALLOWED_QOF_REGISTERS = ['DM','HYP','CHD','HF','STIA','CKD','PAD','ASTHMA','COPD','AF'];
-const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend','observation-alert'];
+// Keep in sync with IMPLEMENTED_KINDS in test-rule-schema.js and check.kind === guards in engine/rules-engine.js.
+const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend','observation-alert','observation-bundle'];
 const ALLOWED_SEVERITIES = ['red','amber','info'];
 const ALLOWED_SEX_VALUES = ['any','M','F'];
 const ALLOWED_EVENT_COUNT_OPERATORS = ['>=','>','=','<=','<'];
@@ -231,6 +232,12 @@ function validateQofIndicatorRule(rule, loc) {
     }
     if (rule.check.minDelta != null && (typeof rule.check.minDelta !== 'number' || rule.check.minDelta < 0)) {
       throw new Error(`Custom rule${loc}: check.minDelta must be a non-negative number.`);
+    }
+  }
+  if (rule.check.kind === 'observation-bundle') {
+    // An empty observations array is vacuously "achieved" — not a useful rule.
+    if (!Array.isArray(rule.check.observations) || rule.check.observations.length === 0) {
+      throw new Error(`Custom rule${loc}: check.observations must be a non-empty array for observation-bundle.`);
     }
   }
   if (rule.check.kind === 'observation-alert') {

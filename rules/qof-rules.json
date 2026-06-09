@@ -756,7 +756,7 @@
       "thresholds": { "lower": 40, "upper": 90 },
       "points": 4,
       "source": "QOF 26/27 SMOK001 / DM037 (NICE IND112)",
-      "notes": "Also one of the eight DM037 care processes (currently disabled pending observation-bundle engine support). Annual recording drives cessation support and cardiovascular risk stratification. QOF year floor applies."
+      "notes": "Also one of the eight DM037 care processes (see qof-dm037, evaluated via observation-bundle). Annual recording drives cessation support and cardiovascular risk stratification. QOF year floor applies."
     },
     {
       "id": "qof-smok-chd",

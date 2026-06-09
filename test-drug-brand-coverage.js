@@ -172,6 +172,21 @@ for (const [id, med] of MUST_NOT) {
   check(!engine.drugMatchesRule(med, ruleById(id)), `"${med}" does NOT match ${id}`);
 }
 
+// === DASH FOLDING ===
+// normaliseDrugString() folds dashes and underscores to spaces before the
+// whitespace collapse, so dashed brand forms match spaced rule terms and vice versa.
+console.log('\n--- dash folding (dashes ↔ spaces) ---');
+{
+  const carbRule = ruleById('carbimazole-propylthiouracil');
+  // Dashed brand form matches spaced rule term: "Neo-Mercazole" → "neo mercazole"
+  // rule match "neo-mercazole" → also "neo mercazole" after normalisation
+  check(engine.drugMatchesRule('Neo-Mercazole 5mg tablets', carbRule),
+    'dashed brand "Neo-Mercazole" matches rule term "neo-mercazole" after dash fold');
+  // Reverse: a hypothetically spaced prescription "neo mercazole" also matches
+  check(engine.drugMatchesRule('neo mercazole 20mg', carbRule),
+    'spaced prescription "neo mercazole" matches dashed rule term "neo-mercazole" after dash fold');
+}
+
 // === INVERSE COVERAGE CHECK ===
 // Every enabled drug-monitoring rule must have at least one EXPECTED entry.
 // A new rule with no entry would pass the forward loop silently — this catches it.

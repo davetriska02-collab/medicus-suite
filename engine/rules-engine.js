@@ -45,7 +45,7 @@
 
   // === DRUG MATCHING ===
   function normaliseDrugString(s) {
-    return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    return String(s || '').toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   function drugMatchesRule(medName, rule) {
@@ -1238,12 +1238,17 @@
   }
 
   function seasonStart(nowIso, startMonth, startDay) {
-    const now = new Date(nowIso);
-    let year = now.getFullYear();
-    const candidate = new Date(year, startMonth - 1, startDay);
-    if (candidate > now) year -= 1;
-    const d = new Date(year, startMonth - 1, startDay);
-    return d.toISOString().slice(0, 10);
+    // Use Date.UTC throughout so the returned YYYY-MM-DD is exactly the
+    // configured month/day regardless of the browser/host timezone (BST would
+    // shift a local-midnight Date into the previous UTC day).
+    const nowDatePart = String(nowIso).slice(0, 10); // "YYYY-MM-DD"
+    let year = parseInt(nowDatePart.slice(0, 4), 10);
+    // Build the candidate season start as a UTC date string for comparison.
+    const pad2 = n => String(n).padStart(2, '0');
+    const candidateStr = `${year}-${pad2(startMonth)}-${pad2(startDay)}`;
+    // If the candidate is in the future (relative to now's date part), use last year.
+    if (candidateStr > nowDatePart) year -= 1;
+    return `${year}-${pad2(startMonth)}-${pad2(startDay)}`;
   }
 
   function matchesAnyTerm(str, terms) {
@@ -1438,7 +1443,8 @@
     evaluateCompositeRule,
     evaluateVaccineRule,
     severityToStatus,
-    STATUS_RANK
+    STATUS_RANK,
+    seasonStart
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

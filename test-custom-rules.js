@@ -287,6 +287,53 @@ console.log('\n--- severityToStatus (non-time-based alerts) ---');
   assert(engine.STATUS_RANK.caution === engine.STATUS_RANK.due_soon, 'STATUS_RANK: caution ranks with due_soon');
 }
 
+// ── Custom-rule validation: check.kind and observation-bundle (Task 4b) ──────
+// Exercises the extended validateCustomRule guards added to sentinel-io.js.
+
+console.log('\n--- validateCustomRule: check.kind and observation-bundle ---');
+
+function assertThrows(fn, msgPart, label) {
+  let threw = false, errMsg = '';
+  try { fn(); } catch (e) { threw = true; errMsg = e.message || ''; }
+  assert(threw, `${label} (expected throw)`);
+  if (threw && msgPart) {
+    assert(errMsg.toLowerCase().includes(msgPart.toLowerCase()), `${label} error mentions "${msgPart}" (got: "${errMsg}")`);
+  }
+}
+
+{
+  // Unknown check.kind must be rejected
+  assertThrows(
+    () => validateCustomRule({ id: 'custom-test-1', type: 'qof-indicator',
+      indicatorCode: 'LOC001', indicatorName: 'Test',
+      check: { kind: 'unknown-kind', observation: ['bp'], threshold: 140, operator: '<=' } }),
+    'check.kind',
+    'validateCustomRule: unknown check.kind rejected'
+  );
+}
+
+{
+  // observation-bundle with empty observations must be rejected
+  assertThrows(
+    () => validateCustomRule({ id: 'custom-test-2', type: 'qof-indicator',
+      indicatorCode: 'LOC002', indicatorName: 'Bundle test',
+      check: { kind: 'observation-bundle', observations: [], withinDays: 365 } }),
+    'non-empty',
+    'validateCustomRule: observation-bundle with empty observations rejected'
+  );
+}
+
+{
+  // observation-bundle with non-empty observations must be accepted
+  let threw = false;
+  try {
+    validateCustomRule({ id: 'custom-test-3', type: 'qof-indicator',
+      indicatorCode: 'LOC003', indicatorName: 'Bundle valid',
+      check: { kind: 'observation-bundle', observations: [['hba1c'], ['bmi']], withinDays: 365 } });
+  } catch (e) { threw = true; }
+  assert(!threw, 'validateCustomRule: valid observation-bundle accepted');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

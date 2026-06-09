@@ -243,17 +243,26 @@
           if (!target[d]) target[d] = { result: String(cell.result), unit: row.unit || '' };
         });
       });
-      // Emit one synthetic "Blood pressure" obs per date where both values are present
-      Object.keys(sysMap).forEach(d => {
-        if (!diaMap[d]) return;
-        const sys = sysMap[d].result;
-        const dia = diaMap[d].result;
-        const unit = sysMap[d].unit || diaMap[d].unit || 'mmHg';
+      // Emit one synthetic "Blood pressure" obs per same-date pair (exact match first),
+      // then pair remaining systolic readings with a diastolic within ±1 day.
+      // Each diastolic date may pair at most once. The synthesised observation takes
+      // the systolic reading's date (clinical convention: record on the measurement day).
+      const usedDiaDates = new Set();
+      // Helper: add ISO date string offset by ±1 day
+      function adjacentDates(d) {
+        const ms = new Date(d).getTime();
+        const fmt = t => new Date(t).toISOString().slice(0, 10);
+        return [fmt(ms - 86400000), fmt(ms + 86400000)];
+      }
+      function emitBp(sysDate, diaDate) {
+        const sys = sysMap[sysDate].result;
+        const dia = diaMap[diaDate].result;
+        const unit = sysMap[sysDate].unit || diaMap[diaDate].unit || 'mmHg';
         const combined = `${sys}/${dia}`;
         out.push({
           name: 'Blood pressure',
           code: null,
-          date: d,
+          date: sysDate,
           value: unit ? `${combined} ${unit}` : combined,
           rawValue: combined,
           unit: unit || null,
@@ -262,6 +271,23 @@
           isBelow: false,
           source: 'API:investigation-dashboard (synthesised)'
         });
+      }
+      // Pass 1: exact same-date pairs
+      Object.keys(sysMap).forEach(d => {
+        if (!diaMap[d]) return;
+        usedDiaDates.add(d);
+        emitBp(d, d);
+      });
+      // Pass 2: ±1-day pairs for unpaired systolic readings
+      Object.keys(sysMap).forEach(d => {
+        if (diaMap[d]) return; // already paired in pass 1
+        const [prev, next] = adjacentDates(d);
+        const diaDate = (diaMap[prev] && !usedDiaDates.has(prev)) ? prev
+                      : (diaMap[next] && !usedDiaDates.has(next)) ? next
+                      : null;
+        if (!diaDate) return;
+        usedDiaDates.add(diaDate);
+        emitBp(d, diaDate);
       });
     }
     // Emit synthetic per-group observations. These let panel-level rules match
