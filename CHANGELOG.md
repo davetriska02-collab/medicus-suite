@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.37.0] — 2026-06-09
+
+### New: COCP and POP drug-monitoring rules (FSRH / UKMEC 2025)
+
+Two new drug-monitoring rules for hormonal contraception:
+
+**`cocp`** — Combined Oral Contraceptive Pill (and Evra patch, NuvaRing, Qlaira).
+Annual review triggers for: BP (≥365 days) and Weight (≥365 days). Stop threshold:
+BP ≥160/100 mmHg (UKMEC 4). Review threshold: BP 140–159/90–99 or BMI ≥35 (UKMEC 3).
+No routine blood tests required per FSRH CHC Guideline (Jan 2019, amended Oct 2023).
+Covers all UK-marketed COCP brands: Microgynon, Rigevidon, Levest, Ovranette, Maexeni,
+Logynon, Brevinor, Synphase, Mercilon, Marvelon, Gedarel, Femodette, Femodene, Katya,
+Millinette, Yasmin, Lucette, Dretine, Yacella, Elnanite, Eloine, Cilique, Evra, NuvaRing,
+Qlaira.
+
+**`pop`** — Progestogen-Only Pill. Annual review proxy via BP (≥365 days). FSRH POP
+Guideline (Aug 2022, amended Apr 2026) mandates no routine tests for standard POPs, but
+annual review is recommended. Covers UK brands: Cerazette, Cerelle, Aizea, Desorex,
+Desomono, Feanolla, Zelleta, Moonia, Hana, Lovima, Noriday, Norgeston.
+
+**`hrt-systemic` fix**: Added `qlaira` to the HRT exclude list. Qlaira contains estradiol
+valerate which matches `estradiol` via substring — it should fire `cocp`, not `hrt-systemic`.
+
+Test suite: 313/313 passing (up from 266). New COCP/POP positive tests and 4 new negative
+controls added to `test-drug-brand-coverage.js`.
+
 ## [v3.36.3] — 2026-06-09
 
 ### Fix: combined contraceptive pills falsely flagging as HRT

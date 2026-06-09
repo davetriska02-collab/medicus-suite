@@ -139,7 +139,25 @@ const EXPECTED = {
     'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg'
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
-  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg']
+  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
+  'cocp': [
+    'Ethinylestradiol 30mcg / Levonorgestrel 150mcg tablets', 'Microgynon 30', 'Rigevidon 30/150mcg',
+    'Levest 30/150mcg', 'Ovranette 30/150mcg', 'Maexeni 30/150mcg', 'Logynon tablets',
+    'Brevinor 1/35 tablets', 'Synphase tablets',
+    'Mercilon 20/150mcg', 'Marvelon 30/150mcg', 'Gedarel 20/150mcg',
+    'Femodette 20mcg', 'Femodene 30mcg', 'Katya 30/75 tablets', 'Millinette 20/75mcg',
+    'Yasmin 30mcg/3mg', 'Lucette 30mcg/3mg', 'Dretine 30mcg/3mg', 'Yacella 30mcg/3mg',
+    'Elnanite 20mcg/3mg', 'Eloine 20mcg/3mg', 'Cilique 35/250mcg',
+    'Evra transdermal patch', 'Norelgestromin / Ethinylestradiol patch',
+    'NuvaRing vaginal ring', 'Qlaira tablets'
+  ],
+  'pop': [
+    'Cerazette 75mcg tablets', 'Cerelle 75mcg tablets', 'Aizea 75mcg', 'Desorex 75mcg',
+    'Desomono 75mcg', 'Feanolla 75mcg', 'Zelleta 75mcg', 'Moonia 75mcg',
+    'Hana 75mcg tablets', 'Lovima 75mcg tablets',
+    'Noriday 350mcg tablets', 'Norgeston 30mcg tablets',
+    'Desogestrel 75mcg tablets'
+  ]
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {
@@ -167,7 +185,14 @@ const MUST_NOT = [
   ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
   // ethinylestradiol (combined contraceptives) must not match via the 'estradiol' substring
   ['hrt-systemic', 'Ethinylestradiol 30mcg / Levonorgestrel 150mcg tablets'],
-  ['hrt-systemic', 'Ethinylestradiol / Norelgestromin transdermal patch']
+  ['hrt-systemic', 'Ethinylestradiol / Norelgestromin transdermal patch'],
+  // Qlaira is a COCP (contains estradiol valerate) — must NOT fire the systemic HRT rule
+  ['hrt-systemic', 'Qlaira tablets'],
+  // unrelated drugs must not fire COCP or POP
+  ['cocp', 'Cerazette 75mcg tablets'],
+  ['cocp', 'Sertraline 50mg tablets'],
+  ['pop', 'Microgynon 30'],
+  ['pop', 'Paracetamol 500mg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');

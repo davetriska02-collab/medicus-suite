@@ -360,7 +360,7 @@
       "drugClass": "HRT",
       "drug": {
         "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary", "ethinylestradiol"]
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary", "ethinylestradiol", "qlaira"]
       },
       "phase": "maintenance",
       "tests": [
@@ -377,6 +377,52 @@
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
         "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
       }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "cocp",
+      "drugClass": "COCP",
+      "drug": {
+        "match": [
+          "ethinylestradiol", "norelgestromin", "evra", "nuvaring",
+          "microgynon", "rigevidon", "levest", "ovranette", "maexeni", "logynon",
+          "brevinor", "synphase",
+          "mercilon", "marvelon", "gedarel",
+          "femodette", "femodene", "katya", "millinette",
+          "yasmin", "lucette", "dretine", "yacella", "elnanite", "eloine",
+          "cilique", "qlaira"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "FSRH CHC Guideline (January 2019, amended October 2023); UKMEC 2025",
+      "notes": "Annual contraceptive review: BP and weight/BMI. Stop threshold: BP ≥160/100 mmHg (UKMEC 4). Flag for reassessment: BP 140–159/90–99 mmHg (UKMEC 3) or BMI ≥35 kg/m² (UKMEC 3). At each annual review also screen for: new-onset migraine with aura (UKMEC 4 — stop immediately), smoking status (age ≥35 + ≥15 cigarettes/day = UKMEC 4), VTE symptoms. No routine blood tests required. Applies to combined oral contraceptive pills, Evra patch, NuvaRing, and Qlaira.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "pop",
+      "drugClass": "POP",
+      "drug": {
+        "match": [
+          "cerazette", "cerelle", "aizea", "desorex", "desomono", "feanolla", "zelleta", "moonia", "hana", "lovima",
+          "noriday", "norgeston", "desogestrel 75"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "FSRH POP Guideline (August 2022, amended April 2026); UKMEC 2025",
+      "notes": "Annual contraceptive review. FSRH 2022: no routine BP, weight, or blood tests are mandated for standard POPs (desogestrel, norethisterone, levonorgestrel). BP is flagged here as a proxy for the annual review — document baseline and check annually per good practice. Reassess UKMEC criteria annually. Note: drospirenone 4mg POP (Slynd) requires U&E monitoring at 6 weeks then 3–12 monthly — a separate rule may be warranted if prescribed in this practice.",
+      "sharedCare": false
     },
     {
       "type": "drug-monitoring",
