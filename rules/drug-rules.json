@@ -10,7 +10,7 @@
       "id": "methotrexate-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["methotrexate", "maxtrex", "metoject", "jylamvo", "nordimet", "zlatal", "methofill"],
+        "match": ["methotrexate", "maxtrex", "metoject", "jylamvo", "nordimet", "zlatal", "methofill", "novatrex"],
         "snomed": ["387381009"]
       },
       "phase": "maintenance",
@@ -50,7 +50,7 @@
       "id": "hydroxychloroquine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["hydroxychloroquine", "chloroquine", "quinoric", "plaquenil", "avloclor"],
+        "match": ["hydroxychloroquine", "chloroquine", "quinoric", "plaquenil", "avloclor", "nivaquine"],
         "snomed": ["387397007"]
       },
       "phase": "maintenance",
@@ -185,7 +185,7 @@
       "id": "ace-arb",
       "drugClass": "RAAS blocker",
       "drug": {
-        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto"]
+        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto", "tarka"]
       },
       "phase": "maintenance",
       "tests": [
@@ -202,7 +202,7 @@
       "id": "spironolactone",
       "drugClass": "Aldosterone antagonist",
       "drug": {
-        "match": ["spironolactone", "aldactone", "eplerenone", "inspra"],
+        "match": ["spironolactone", "aldactone", "aldactide", "co-flumactone", "eplerenone", "inspra", "finerenone", "kerendia"],
         "snomed": ["387078006"]
       },
       "phase": "maintenance",
@@ -210,7 +210,7 @@
         { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 120, "dueSoonDays": 21 }
       ],
       "source": "BNF / NICE NG106 heart failure",
-      "notes": "Hyperkalaemia is the principal monitoring concern. Staged monitoring schedule (1 week, 4 weeks, 8 weeks, 12 weeks, then 4-monthly) for new starts. Now part of HF four-pillar therapy (QOF HF009).",
+      "notes": "Hyperkalaemia is the principal monitoring concern. Staged monitoring schedule (1 week, 4 weeks, 8 weeks, 12 weeks, then 4-monthly) for new starts. Now part of HF four-pillar therapy (QOF HF009). Finerenone (Kerendia) is a non-steroidal MRA, NICE-approved for CKD with type 2 diabetes (TA877, 2024) — included here because the hyperkalaemia and renal monitoring requirement is the same class concern.",
       "sharedCare": false
     },
     {
@@ -219,7 +219,7 @@
       "id": "sglt2-inhibitor",
       "drugClass": "SGLT2 inhibitor",
       "drug": {
-        "match": ["dapagliflozin", "forxiga", "xigduo", "qtern", "empagliflozin", "jardiance", "synjardy", "glyxambi", "canagliflozin", "invokana", "vokanamet", "ertugliflozin", "steglatro", "segluromet", "steglujan"],
+        "match": ["dapagliflozin", "forxiga", "xigduo", "qtern", "empagliflozin", "jardiance", "synjardy", "glyxambi", "trijardy", "canagliflozin", "invokana", "vokanamet", "ertugliflozin", "steglatro", "segluromet", "steglujan"],
         "snomed": ["703674001"]
       },
       "phase": "maintenance",
@@ -236,7 +236,7 @@
       "id": "glp1-receptor-agonist",
       "drugClass": "GLP-1 receptor agonist",
       "drug": {
-        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
+        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "suliqua", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
       },
       "phase": "maintenance",
       "tests": [
@@ -305,7 +305,7 @@
       "id": "antipsychotic",
       "drugClass": "Antipsychotic",
       "drug": {
-        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila"],
+        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila", "zuclopenthixol", "clopixol", "flupentixol", "depixol", "fluphenazine", "modecate", "pipothiazine", "piportil", "trifluoperazine", "stelazine", "sulpiride", "dolmatil", "pimozide", "orap", "promazine", "brexpiprazole", "rexulti", "droperidol"],
         "exclude": ["clozapine"]
       },
       "phase": "maintenance",
@@ -387,7 +387,7 @@
         "match": [
           "ethinylestradiol", "norelgestromin", "evra", "nuvaring",
           "microgynon", "rigevidon", "levest", "ovranette", "maexeni", "logynon",
-          "brevinor", "synphase",
+          "brevinor", "synphase", "loestrin",
           "mercilon", "marvelon", "gedarel",
           "femodette", "femodene", "katya", "millinette",
           "yasmin", "lucette", "dretine", "yacella", "elnanite", "eloine",
@@ -412,7 +412,8 @@
       "drug": {
         "match": [
           "cerazette", "cerelle", "aizea", "desorex", "desomono", "feanolla", "zelleta", "moonia", "hana", "lovima",
-          "noriday", "norgeston", "desogestrel 75"
+          "noriday", "norethisterone 350", "norgeston", "levonorgestrel 30", "desogestrel 75",
+          "slynd", "drospirenone 4"
         ],
         "exclude": []
       },
@@ -421,7 +422,7 @@
         { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "FSRH POP Guideline (August 2022, amended April 2026); UKMEC 2025",
-      "notes": "Annual contraceptive review. FSRH 2022: no routine BP, weight, or blood tests are mandated for standard POPs (desogestrel, norethisterone, levonorgestrel). BP is flagged here as a proxy for the annual review — document baseline and check annually per good practice. Reassess UKMEC criteria annually. Note: drospirenone 4mg POP (Slynd) requires U&E monitoring at 6 weeks then 3–12 monthly — a separate rule may be warranted if prescribed in this practice.",
+      "notes": "Annual contraceptive review. FSRH 2022: no routine BP, weight, or blood tests are mandated for standard POPs (desogestrel, norethisterone, levonorgestrel). BP is flagged here as a proxy for the annual review — document baseline and check annually per good practice. Reassess UKMEC criteria annually. Drospirenone 4mg POP (Slynd, UK-licensed 2023) is included in this rule; however it has an additional requirement for U&E at 6 weeks then 3–12 monthly (antimineralocorticoid activity, hyperkalaemia risk) — flag this manually at annual review if Slynd is prescribed.",
       "sharedCare": false
     },
     {

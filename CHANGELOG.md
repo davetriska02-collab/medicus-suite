@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.38.0] — 2026-06-09
+
+### Fix: 35 drug-monitoring coverage gaps found by /redteam-rules
+
+Mechanical red-team run (23 Haiku adversary agents → real-engine verification)
+identified 35 confirmed gaps across 10 rules. All applied. 351/351 tests passing.
+
+**`methotrexate-maintenance`** — Added: `novatrex` (UK SC/IM injection brand).
+
+**`hydroxychloroquine-maintenance`** — Added: `nivaquine` (discontinued chloroquine
+UK brand; legacy repeat prescriptions persist).
+
+**`ace-arb`** — Added: `tarka` (trandolapril+verapamil UK combination product;
+brand name contained neither 'trandolapril' nor any match substring).
+
+**`spironolactone`** — Added: `aldactide`, `co-flumactone` (spironolactone+
+hydroflumethiazide combination products); `finerenone`, `kerendia` (Kerendia,
+NICE TA877 2024 — non-steroidal MRA for CKD+T2DM; same hyperkalaemia monitoring
+rationale as steroidal MRAs). Updated notes.
+
+**`sglt2-inhibitor`** — Added: `trijardy` (empagliflozin+linagliptin+metformin
+triple combination; UK-licensed; brand name had no SGLT2 substring).
+
+**`glp1-receptor-agonist`** — Added: `suliqua` (insulin glargine+lixisenatide;
+lixisenatide is a GLP-1 RA already in the rule but the combination brand was not).
+
+**`antipsychotic`** — Added 18 terms covering the entire first-generation and depot
+class that was previously absent. These patients were receiving no metabolic
+monitoring chip whatsoever:
+- Zuclopenthixol: `zuclopenthixol`, `clopixol`
+- Flupentixol: `flupentixol`, `depixol`
+- Fluphenazine: `fluphenazine`, `modecate`
+- Pipothiazine: `pipothiazine`, `piportil`
+- Trifluoperazine: `trifluoperazine`, `stelazine`
+- Sulpiride: `sulpiride`, `dolmatil`
+- Pimozide: `pimozide`, `orap`
+- Promazine: `promazine`
+- Brexpiprazole: `brexpiprazole`, `rexulti`
+- Droperidol: `droperidol`
+
+**`cocp`** — Added: `loestrin` (Loestrin 20/30 — norethisterone acetate+
+ethinylestradiol; brand-name-only prescriptions were not matched).
+
+**`pop`** — Added: `norethisterone 350` (generic norethisterone POP prescriptions;
+note: dose-specific string avoids matching norethisterone 5mg for menorrhagia);
+`levonorgestrel 30` (generic levonorgestrel POP; avoids Levonelle EC at 1500mcg);
+`slynd`, `drospirenone 4` (Slynd 4mg drospirenone POP, UK-licensed 2023; requires
+U&E per FSRH — note flagged in updated rule notes). Updated notes.
+
 ## [v3.37.0] — 2026-06-09
 
 ### New: COCP and POP drug-monitoring rules (FSRH / UKMEC 2025)

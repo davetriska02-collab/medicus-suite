@@ -36,12 +36,14 @@ const EXPECTED = {
     'Jylamvo 2mg/ml oral solution', 'Nordimet 12.5mg injection',
     'Zlatal 2.5mg tablets', 'Methofill 17.5mg injection',
     // exclusions were removed — injectable/parenteral forms must fire too
-    'Methotrexate 50mg/2ml injection', 'Methotrexate injection'
+    'Methotrexate 50mg/2ml injection', 'Methotrexate injection',
+    'Novatrex 10mg/0.2ml solution for injection'
   ],
   'leflunomide-maintenance': ['Leflunomide 20mg tablets', 'Arava 20mg tablets'],
   'hydroxychloroquine-maintenance': [
     'Hydroxychloroquine 200mg tablets', 'Quinoric 200mg tablets',
-    'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets'
+    'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets',
+    'Nivaquine 250mg tablets'
   ],
   'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets', 'Azapress 50mg tablets'],
   'sulfasalazine-maintenance': [
@@ -74,22 +76,27 @@ const EXPECTED = {
     'Co-Aprovel 150/12.5', 'Karvea 150mg', 'Telmisartan 40mg', 'Micardis 40mg',
     'Micardis Plus 40/12.5', 'Pritor 40mg', 'Tolura 40mg', 'Olmesartan 20mg',
     'Olmetec 20mg', 'Sevikar 20mg/5mg', 'Azilsartan 40mg', 'Edarbi 40mg',
-    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg'
+    'Sacubitril/valsartan 49mg/51mg', 'Entresto 49mg/51mg',
+    'Tarka 2mg/180mg modified-release tablets'
   ],
   'spironolactone': [
-    'Spironolactone 25mg tablets', 'Aldactone 25mg', 'Eplerenone 25mg', 'Inspra 25mg'
+    'Spironolactone 25mg tablets', 'Aldactone 25mg', 'Aldactide 25/25 tablets',
+    'Co-flumactone 25mg/25mg tablets',
+    'Eplerenone 25mg', 'Inspra 25mg',
+    'Finerenone 10mg tablets', 'Kerendia 10mg tablets'
   ],
   'sglt2-inhibitor': [
     'Dapagliflozin 10mg', 'Forxiga 10mg', 'Xigduo 5mg/1000mg', 'Qtern 5mg/10mg',
     'Empagliflozin 10mg', 'Jardiance 10mg', 'Synjardy 5mg/850mg', 'Glyxambi 10mg/5mg',
     'Canagliflozin 100mg', 'Invokana 100mg', 'Vokanamet 50mg/850mg',
-    'Ertugliflozin 5mg', 'Steglatro 5mg', 'Segluromet 2.5mg/850mg', 'Steglujan 5mg/100mg'
+    'Ertugliflozin 5mg', 'Steglatro 5mg', 'Segluromet 2.5mg/850mg', 'Steglujan 5mg/100mg',
+    'Trijardy 10mg/5mg/850mg tablets', 'Trijardy 25mg/5mg/1000mg tablets'
   ],
   'glp1-receptor-agonist': [
     'Ozempic 1mg', 'Wegovy 2.4mg', 'Rybelsus 7mg', 'Semaglutide injection',
     'Mounjaro 5mg', 'Tirzepatide injection', 'Trulicity 1.5mg', 'Victoza 1.2mg',
-    'Saxenda 3mg', 'Xultophy 100/3.6', 'Lyxumia 20mcg', 'Byetta 10mcg',
-    'Bydureon BCise 2mg'
+    'Saxenda 3mg', 'Xultophy 100/3.6', 'Suliqua 100 units/ml + 50 mcg/ml solution for injection',
+    'Lyxumia 20mcg', 'Byetta 10mcg', 'Bydureon BCise 2mg'
   ],
   'doac': [
     'Apixaban 5mg', 'Eliquis 5mg', 'Rivaroxaban 20mg', 'Xarelto 20mg',
@@ -114,7 +121,18 @@ const EXPECTED = {
     'Chlorpromazine 25mg', 'Largactil 25mg', 'Amisulpride 200mg', 'Solian 200mg',
     'Paliperidone 6mg', 'Invega 6mg', 'Xeplion 75mg', 'Trevicta 175mg', 'Byannli 700mg',
     'Lurasidone 37mg', 'Latuda 37mg', 'Asenapine 10mg', 'Sycrest 10mg',
-    'Cariprazine 3mg', 'Reagila 3mg'
+    'Cariprazine 3mg', 'Reagila 3mg',
+    // first-generation / depot antipsychotics (red-team gaps fixed 2026-06-09)
+    'Zuclopenthixol 10mg tablets', 'Clopixol 200mg/ml solution for injection',
+    'Flupentixol 3mg tablets', 'Depixol 20mg/ml solution for injection',
+    'Fluphenazine 1mg tablets', 'Modecate 25mg/ml solution for injection',
+    'Pipothiazine palmitate 50mg/ml injection', 'Piportil 50mg/ml solution for injection',
+    'Trifluoperazine 5mg tablets', 'Stelazine 1mg tablets',
+    'Sulpiride 200mg tablets', 'Dolmatil 200mg tablets',
+    'Pimozide 2mg tablets', 'Orap 2mg tablets',
+    'Promazine 25mg tablets',
+    'Brexpiprazole 1mg tablets', 'Rexulti 1mg tablets',
+    'Droperidol 2.5mg tablets'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -149,14 +167,17 @@ const EXPECTED = {
     'Yasmin 30mcg/3mg', 'Lucette 30mcg/3mg', 'Dretine 30mcg/3mg', 'Yacella 30mcg/3mg',
     'Elnanite 20mcg/3mg', 'Eloine 20mcg/3mg', 'Cilique 35/250mcg',
     'Evra transdermal patch', 'Norelgestromin / Ethinylestradiol patch',
-    'NuvaRing vaginal ring', 'Qlaira tablets'
+    'NuvaRing vaginal ring', 'Qlaira tablets',
+    'Loestrin 30 tablets', 'Loestrin 20 tablets'
   ],
   'pop': [
     'Cerazette 75mcg tablets', 'Cerelle 75mcg tablets', 'Aizea 75mcg', 'Desorex 75mcg',
     'Desomono 75mcg', 'Feanolla 75mcg', 'Zelleta 75mcg', 'Moonia 75mcg',
     'Hana 75mcg tablets', 'Lovima 75mcg tablets',
-    'Noriday 350mcg tablets', 'Norgeston 30mcg tablets',
-    'Desogestrel 75mcg tablets'
+    'Noriday 350mcg tablets', 'Norethisterone 350mcg tablets',
+    'Norgeston 30mcg tablets', 'Levonorgestrel 30mcg tablets',
+    'Desogestrel 75mcg tablets',
+    'Slynd 4mg tablets', 'Drospirenone 4mg tablets'
   ]
 };
 
@@ -192,7 +213,14 @@ const MUST_NOT = [
   ['cocp', 'Cerazette 75mcg tablets'],
   ['cocp', 'Sertraline 50mg tablets'],
   ['pop', 'Microgynon 30'],
-  ['pop', 'Paracetamol 500mg tablets']
+  ['pop', 'Paracetamol 500mg tablets'],
+  // norethisterone 5mg (menorrhagia/endometriosis) must NOT fire the pop rule
+  ['pop', 'Norethisterone 5mg tablets'],
+  // levonorgestrel EC (Levonelle) must NOT fire the pop rule — dose too high
+  ['pop', 'Levonorgestrel 1500mcg tablets'],
+  // clozapine exclusion still holds after antipsychotic rule expansion
+  ['antipsychotic', 'Clozapine 100mg tablets'],
+  ['antipsychotic', 'Clozaril 100mg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');
