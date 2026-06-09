@@ -18,8 +18,7 @@ const MODULES = {
   activity:    { js: () => import('../side-panel/modules/activity/activity.js'),     css: '../side-panel/modules/activity/activity.css' },
   referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
   condor:      { js: () => import('../side-panel/modules/condor/condor.js'),         css: '../side-panel/modules/condor/condor.css' },
-  bptrend:     { js: () => import('../side-panel/modules/bptrend/bptrend.js'),       css: '../side-panel/modules/bptrend/bptrend.css' },
-  acrtrend:    { js: () => import('../side-panel/modules/acrtrend/acrtrend.js'),     css: '../side-panel/modules/acrtrend/acrtrend.css' },
+  trends:      { js: () => import('../side-panel/modules/trends/trends.js'),         css: '../side-panel/modules/trends/trends.css' },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────

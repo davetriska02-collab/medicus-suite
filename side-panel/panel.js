@@ -93,8 +93,7 @@ const MODULES = {
   activity:    { js: () => import('./modules/activity/activity.js'),     css: './modules/activity/activity.css' },
   referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
   condor:      { js: () => import('./modules/condor/condor.js'),         css: './modules/condor/condor.css' },
-  bptrend:     { js: () => import('./modules/bptrend/bptrend.js'),       css: './modules/bptrend/bptrend.css' },
-  acrtrend:    { js: () => import('./modules/acrtrend/acrtrend.js'),     css: './modules/acrtrend/acrtrend.css' },
+  trends:      { js: () => import('./modules/trends/trends.js'),         css: './modules/trends/trends.css' },
   about:       null,
 };
 

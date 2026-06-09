@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.35.1] — 2026-06-09
+
+### Fix: restore unified Trends tab
+
+The v3.35.0 Condor merge was branched from a base predating the v3.34.0
+trends unification, so merging it reverted the side-panel/pop-out nav back to
+the pre-unification layout — the amalgamated **Trends** tab disappeared and the
+old separate **BP Trend** and **ACR Trend** tabs reappeared, dropping the
+HbA1c, Cholesterol and Weight toggle views in the process.
+
+- Re-registered the unified `trends` module and removed the orphaned
+  `bptrend` / `acrtrend` nav entries in `side-panel/panel.html`,
+  `side-panel/panel.js`, `pop-out/pop-out.html` and `pop-out/pop-out.js`.
+- The `trends` module itself was untouched by the regression — all five views
+  (BP, Renal, HbA1c, Cholesterol, Weight) are restored by re-wiring the nav.
+
 ## [v3.35.0] — 2026-06-08
 
 ### Condor: core shell, data layer, CSS, nav registration
