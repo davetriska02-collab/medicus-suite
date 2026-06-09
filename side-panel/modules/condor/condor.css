@@ -14,6 +14,14 @@
   padding: 12px 12px 0;
 }
 
+.condor-ts {
+  font-size: 9px;
+  color: var(--text-3);
+  text-align: right;
+  padding: 2px 12px 0;
+  letter-spacing: 0.02em;
+}
+
 .condor-grid {
   display: flex;
   flex-direction: row;

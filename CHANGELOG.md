@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.36.0] — 2026-06-09
+
+### Condor UX: clearer Demand/Capacity card, live WR appointments, refresh timestamp
+
+**Demand / Capacity card** — replaced the confusing `26.2×` ratio (requests ÷
+remaining slots) with a plain-English status: "Over capacity", "At capacity",
+"Capacity sufficient", or "No slots left". The request and slot counts are shown
+in a sub-line; the Medical/Admin/AM/PM breakdown is preserved below a divider.
+
+**Waiting Room card** — when no patients have arrived yet the card was a dead
+`0 arrived` number with no context. It now falls through to a "Booked today"
+list showing the next booked appointments (name, mode, scheduled time) so the
+card is useful at the start of a session before anyone has checked in.
+
+**Practice Pressure freshness** — added a `Live · updated HH:MM:SS` timestamp
+below the PPI gauge so it is obvious the data is actively refreshing even when
+the PPI score itself is stable.
+
 ## [v3.35.3] — 2026-06-09
 
 ### Fix: Condor slots-remaining ignored the Slots tab's hidden types
