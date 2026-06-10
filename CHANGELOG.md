@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.42.1] — 2026-06-10
+
+### Knowledge: create a single card from pasted text via LLM (on the tab)
+
+The **+ Add** form now has a collapsible **"Create from text with an LLM…"**
+block: copy a single-card prompt (`kbSingleEntryPrompt()` in
+`shared/knowledge-utils.js`), paste it into any external LLM followed by your
+copied text / screenshot transcript, then paste the JSON reply back — it
+**pre-fills the add form** rather than importing directly, so:
+
+- the near-duplicate title check fires before anything is saved (anti-bloat),
+- the user sees and can correct every field, and
+- on Save the entry keeps AI provenance (`source: llm, reviewed: false`) and
+  is badged **Unreviewed — AI-generated** until marked reviewed — the same
+  rule as the Options starter-pack import.
+
+A PHI heuristic warns at fill time if the JSON contains NHS-number/DOB-shaped
+content. Arrays / `{ entries: [...] }` replies are tolerated by taking the
+first entry (packs belong in Options → Knowledge).
+
 ## [v3.42.0] — 2026-06-10
 
 ### Feature: Knowledge tab — practice-owned reference base

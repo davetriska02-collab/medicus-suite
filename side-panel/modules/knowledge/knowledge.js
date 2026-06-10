@@ -24,6 +24,7 @@ let _activeCat = 'all';          // 'all' | category id
 let _editingId = null;           // null | 'new' | entry id
 let _expandedId = null;          // entry id with detail open, or null
 let _similarTimer = null;
+let _formSource = null;          // 'llm' when the open form was filled from LLM JSON
 
 const KU = (typeof window !== 'undefined') ? window.KnowledgeUtils : null;
 
@@ -207,6 +208,21 @@ function renderForm() {
   return `
     <div class="kb-form">
       <div class="kb-form-title">${editing ? 'Edit entry' : 'New entry'}</div>
+      ${editing ? '' : `
+      <details class="kb-llm-block">
+        <summary>Create from text with an LLM…</summary>
+        <div class="kb-llm-inner">
+          <p class="kb-llm-help">Copied some text or a screenshot transcript? Copy the prompt, paste it into any LLM
+          (ChatGPT, Claude, etc.) followed by your material, then paste the JSON reply below — it fills in this form
+          for you to check and save.</p>
+          <button class="kb-btn kb-btn-sm" data-act="copy-llm-prompt">Copy prompt</button>
+          <textarea id="kbFmLlmJson" class="kb-input" rows="4" placeholder="Paste the JSON reply from the LLM here…"></textarea>
+          <div class="kb-llm-row">
+            <button class="kb-btn kb-btn-sm" data-act="fill-from-llm">Fill form from JSON</button>
+            <span id="kbFmLlmStatus" class="kb-llm-status"></span>
+          </div>
+        </div>
+      </details>`}
       <label class="kb-label">Title</label>
       <input type="text" id="kbFmTitle" class="kb-input" maxlength="120" value="${esc(e.title)}" placeholder="e.g. Dermatology — 2WW suspected melanoma" />
       <div id="kbSimilar"></div>
@@ -300,6 +316,7 @@ function onClick(ev) {
   switch (act) {
     case 'add':
       _editingId = 'new';
+      _formSource = null;
       render();
       container.querySelector('#kbFmTitle')?.focus();
       break;
@@ -310,11 +327,19 @@ function onClick(ev) {
     case 'edit':
       _editingId = actEl.dataset.id;
       _expandedId = null;
+      _formSource = null;
       render();
       break;
     case 'cancel':
       _editingId = null;
+      _formSource = null;
       render();
+      break;
+    case 'copy-llm-prompt':
+      copyText(KU.kbSingleEntryPrompt(), actEl);
+      break;
+    case 'fill-from-llm':
+      fillFromLlm();
       break;
     case 'save':
       saveForm();
@@ -336,6 +361,69 @@ function onClick(ev) {
       chrome.runtime.openOptionsPage();
       break;
   }
+}
+
+// Parse the pasted LLM JSON and pre-fill the add form. The entry is NOT saved
+// here — the user checks it (and the near-duplicate panel fires on the title)
+// before clicking Save, where it is tagged source:'llm', reviewed:false.
+function fillFromLlm() {
+  const statusEl = container.querySelector('#kbFmLlmStatus');
+  const jsonEl = container.querySelector('#kbFmLlmJson');
+  if (!statusEl || !jsonEl) return;
+  const fail = msg => { statusEl.className = 'kb-llm-status kb-llm-status-err'; statusEl.textContent = msg; };
+
+  const raw = (jsonEl.value || '').trim();
+  if (!raw) return fail('Paste the LLM JSON reply first.');
+
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { return fail('Could not parse JSON: ' + e.message); }
+
+  // Accept a single object; tolerate an array or { entries: [...] } by taking
+  // the first entry (packs belong in Options → Knowledge).
+  let entry = parsed, extra = 0;
+  if (Array.isArray(parsed)) { entry = parsed[0]; extra = parsed.length - 1; }
+  else if (parsed && Array.isArray(parsed.entries)) { entry = parsed.entries[0]; extra = parsed.entries.length - 1; }
+  if (!entry) return fail('No entry found in the pasted JSON.');
+
+  const errs = KU.validateEntry(entry);
+  if (errs.length > 0) return fail(errs[0]);
+  const clean = KU.sanitiseEntry(entry);
+
+  const set = (id, v) => { const el = container.querySelector('#' + id); if (el) el.value = v; };
+  set('kbFmTitle', clean.title);
+  set('kbFmBody', clean.body);
+  set('kbFmPhone', clean.phone);
+  set('kbFmUrl', clean.url);
+  set('kbFmTags', clean.tags.join(', '));
+  set('kbFmReview', clean.reviewBy || '');
+
+  const catSel = container.querySelector('#kbFmCat');
+  const newCatInput = container.querySelector('#kbFmNewCat');
+  if (catSel) {
+    if (_categories.some(c => c.id === clean.category)) {
+      catSel.value = clean.category;
+      newCatInput?.classList.add('kb-hidden');
+    } else {
+      catSel.value = '__new__';
+      if (newCatInput) {
+        newCatInput.classList.remove('kb-hidden');
+        newCatInput.value = clean.category.replace(/-/g, ' ').replace(/^./, ch => ch.toUpperCase());
+      }
+    }
+  }
+
+  _formSource = 'llm';
+  renderSimilarPanel();
+
+  const phi = KU.phiWarnings([clean]);
+  if (phi.length > 0) {
+    statusEl.className = 'kb-llm-status kb-llm-status-warn';
+    statusEl.textContent = 'Form filled — but check it: ' + phi[0];
+    return;
+  }
+  statusEl.className = 'kb-llm-status kb-llm-status-ok';
+  statusEl.textContent = 'Form filled — check the content, then Save.'
+    + (extra > 0 ? ` (Used the first of ${extra + 1} entries — import packs via Options → Knowledge.)` : '');
 }
 
 function selectedCategory() {
@@ -376,6 +464,9 @@ async function saveForm() {
 
   if (_editingId === 'new') {
     clean.id = KU.generateEntryId(clean.title, new Set(_items.map(e => e.id)));
+    // A form filled from LLM JSON keeps AI provenance and stays badged until
+    // explicitly marked reviewed — same rule as the Options starter-pack import.
+    if (_formSource === 'llm') { clean.source = 'llm'; clean.reviewed = false; }
     _items.push(clean);
   } else {
     const idx = _items.findIndex(e => e.id === _editingId);
@@ -393,6 +484,7 @@ async function saveForm() {
   }
   await persistItems();
   _editingId = null;
+  _formSource = null;
   _expandedId = clean.id;
   render();
 }

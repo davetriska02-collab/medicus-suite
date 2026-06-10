@@ -108,5 +108,20 @@ check(/Output ONLY a valid JSON/i.test(prompt), 'prompt demands JSON-only output
 check(/NEVER include any patient details/i.test(prompt), 'prompt forbids patient details');
 check(/placeholder in square brackets/i.test(prompt), 'prompt forbids invented local numbers (placeholders instead)');
 
+// ── kbSingleEntryPrompt (one card from pasted text) ───────────────────────────
+console.log('\n--- kbSingleEntryPrompt ---');
+const single = KU.kbSingleEntryPrompt();
+check(/ONLY a single valid JSON object/i.test(single), 'single prompt demands one JSON object (no array)');
+check(/NEVER include any patient details/i.test(single), 'single prompt forbids patient details');
+const sm = single.match(/--- EXAMPLE JSON ---\n([\s\S]*?)\n--- END EXAMPLE ---/);
+check(!!sm, 'single prompt contains delimited example JSON');
+if (sm) {
+  let ex = null;
+  try { ex = JSON.parse(sm[1]); } catch (_) {}
+  check(!!ex && !Array.isArray(ex) && typeof ex === 'object', 'single example is one object, not an array');
+  check(!!ex && KU.validateEntry(ex).length === 0, 'single example validates against the schema');
+  check(!!ex && new Set(KU.KB_DEFAULT_CATEGORIES.map(c => c.id)).has(ex.category), 'single example uses a default category id');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

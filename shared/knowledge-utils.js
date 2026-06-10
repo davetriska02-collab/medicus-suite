@@ -180,18 +180,17 @@ function phiWarnings(entries) {
   return warnings;
 }
 
-// ── LLM starter-pack prompt ───────────────────────────────────────────────────
+// ── LLM prompts ───────────────────────────────────────────────────────────────
 // Same convention as pathwaySchemaPrompt() / customRuleSchemaPrompt(): a single
 // self-contained prompt the user copies into any external LLM, with the example
 // JSON delimited by --- EXAMPLE JSON --- markers (extracted and validated by
 // test-knowledge-utils.js).
+//
+// kbSchemaPrompt()      — starter pack: { "entries": [ ... ] } (Options page)
+// kbSingleEntryPrompt() — one card from pasted text/a screenshot (the tab's
+//                         + Add form), output is a single entry object.
 
-function kbSchemaPrompt() {
-  return `You are helping a UK NHS GP practice build its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
-
-Output ONLY a valid JSON object of the form { "entries": [ ... ] } — no markdown fences, no commentary.
-
-ENTRY SCHEMA (every entry):
+const KB_PROMPT_SCHEMA = `ENTRY SCHEMA:
 - "title"    (required) — short descriptive title, max 120 chars, e.g. "Dermatology — 2WW suspected melanoma".
 - "category" (required) — exactly one of: "referrals", "contacts", "pathways", "templates".
 - "body"     — the reference content as plain text, max 4000 chars. Use short lines and simple dashes for lists. No markdown syntax.
@@ -200,12 +199,21 @@ ENTRY SCHEMA (every entry):
 - "tags"     — up to 10 short lowercase tags, e.g. ["2ww", "dermatology"].
 - "reviewBy" — a YYYY-MM-DD date roughly 6 months from now, so the practice is prompted to re-check the entry.
 
-Do NOT include "id", "source", "reviewed" or "updatedAt" — the extension sets those.
+Do NOT include "id", "source", "reviewed" or "updatedAt" — the extension sets those.`;
+
+const KB_PROMPT_RULES = `1. Use UK general-practice terminology (2WW, e-RS, ICB, DN, ARRS, Pharmacy First).
+2. Be factual and conservative. Where a detail is practice- or area-specific (a phone number, a named provider, a local threshold), write it as an obvious placeholder in square brackets, e.g. "[local dermatology 2WW phone]" — never invent a real-looking number or address.
+3. NEVER include any patient details, real or invented. If the pasted material contains patient details, leave them out.`;
+
+function kbSchemaPrompt() {
+  return `You are helping a UK NHS GP practice build its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
+
+Output ONLY a valid JSON object of the form { "entries": [ ... ] } — no markdown fences, no commentary.
+
+${KB_PROMPT_SCHEMA}
 
 CONTENT INSTRUCTIONS:
-1. Use UK general-practice terminology (2WW, e-RS, ICB, DN, ARRS, Pharmacy First).
-2. Be factual and conservative. Where a detail is practice- or area-specific (a phone number, a named provider, a local threshold), write it as an obvious placeholder in square brackets, e.g. "[local dermatology 2WW phone]" — never invent a real-looking number or address.
-3. NEVER include any patient details, real or invented.
+${KB_PROMPT_RULES}
 4. Each entry must cover ONE distinct topic. Do not produce two entries for the same topic with reworded titles.
 5. Prefer 10–20 genuinely useful entries over padding.
 
@@ -238,10 +246,36 @@ After this line, the practice may paste local documents, rota emails or guidelin
 `;
 }
 
+function kbSingleEntryPrompt() {
+  return `You are helping a UK NHS GP practice turn a piece of pasted material (an email, a screenshot transcript, a guideline extract, a letter) into ONE reference entry for its Practice Knowledge base.
+
+Output ONLY a single valid JSON object for one entry — no markdown fences, no commentary, no wrapping array.
+
+${KB_PROMPT_SCHEMA}
+
+CONTENT INSTRUCTIONS:
+${KB_PROMPT_RULES}
+4. Summarise faithfully — capture what the pasted material says, do not embellish or pad. One entry, one topic.
+
+--- EXAMPLE JSON ---
+{
+  "title": "MSK physio — self-referral",
+  "category": "pathways",
+  "body": "Patients 16+ with simple MSK problems can self-refer to [local MSK provider].\\n- Online form: see link\\n- Exclusions: red-flag back pain, post-op, under 16s — these need a GP referral via e-RS",
+  "url": "https://example.nhs.uk/msk-self-referral",
+  "tags": ["msk", "physio", "self-referral"],
+  "reviewBy": "2026-12-01"
+}
+--- END EXAMPLE ---
+
+After this line, the practice pastes the material to turn into the entry:
+`;
+}
+
 const KnowledgeUtilsApi = {
   KB_ID_RE, KB_DEFAULT_CATEGORIES, KB_SOURCES, KB_LIMITS,
   validateEntry, sanitiseEntry, sanitiseCategories, generateEntryId,
-  normaliseTitle, findSimilar, phiWarnings, kbSchemaPrompt,
+  normaliseTitle, findSimilar, phiWarnings, kbSchemaPrompt, kbSingleEntryPrompt,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
