@@ -68,6 +68,30 @@ Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
 
 Always add a `CHANGELOG.md` entry on the same commit.
 
+## Running the tests
+
+- **Run all tests:** `npm test` (or `node --test --test-concurrency=1 test-*.js`)
+- **Run one test file:** `node test-foo.js` — direct invocation still works unchanged
+- The test suite uses `node --test`; each file is an independent exit-code-driven script (no `node:test` API required). The test job in CI is npm-free.
+
+## Tooling (ESLint / Prettier / pre-commit hook)
+
+Run once after cloning (or when `package.json` changes):
+```
+npm install
+```
+This installs ESLint + Prettier devDeps and activates the `.githooks/pre-commit` hook
+(`git config core.hooksPath .githooks`) which lints and format-checks staged JS files only.
+
+- **Lint:** `npm run lint` (or `npx eslint .`)
+- **Format check:** `npm run format:check` (or `npx prettier --check .`)
+- **Format a file:** `npx prettier --write <file>` then re-stage
+
+**The lint config is intentionally lenient** — several rules are set to `'off'` for
+existing code. Do not reformat whole files with Prettier; the two `defaults.json` copies
+and `content-scripts/triage-lens/content.js` are excluded because tests match their
+exact content. `node_modules/` is never committed (excluded from the release zip).
+
 ## Git workflow
 
 - Dev branches are created per session and merged to `main` via PR when complete

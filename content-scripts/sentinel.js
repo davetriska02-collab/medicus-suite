@@ -2,7 +2,7 @@
 // Sentinel v0.2 — Content Script
 // Mounts sidebar, fetches data, evaluates rules, renders grouped chip UI.
 
-(function() {
+(function () {
   'use strict';
 
   if (window.__sentinelMounted) return;
@@ -19,12 +19,12 @@
   // Default config; user overrides loaded from chrome.storage.local.sentinelConfig
   const DEFAULT_CONFIG = {
     // Colours
-    chipStyle: 'subtle',           // subtle | bold | minimal
+    chipStyle: 'subtle', // subtle | bold | minimal
     // Density
-    density: 'normal',             // compact | normal | spacious
-    fontSize: 'medium',            // small | medium | large
-    sidebarWidth: 380,             // 320 | 380 | 440 | 520
-    sidebarSide: 'right',          // left | right
+    density: 'normal', // compact | normal | spacious
+    fontSize: 'medium', // small | medium | large
+    sidebarWidth: 380, // 320 | 380 | 440 | 520
+    sidebarSide: 'right', // left | right
     // Content visibility
     showAchieved: true,
     showNoData: true,
@@ -34,15 +34,15 @@
     showViewLabel: true,
     expandChipsByDefault: false,
     // Sorting & grouping
-    chipSort: 'status',            // status | name | points
-    chipGrouping: 'by-type',       // by-type | flat
+    chipSort: 'status', // status | name | points
+    chipGrouping: 'by-type', // by-type | flat
     collapsedSections: [],
     // Behaviour
     autoRefresh: true,
     refreshDebounceMs: 600,
-    defaultMode: 'live',           // live | mock
+    defaultMode: 'live', // live | mock
     // Chip style cycle order (used by the sidebar quick-toggle)
-    _chipStyleCycle: ['subtle', 'bold', 'minimal']
+    _chipStyleCycle: ['subtle', 'bold', 'minimal'],
   };
   let CONFIG = { ...DEFAULT_CONFIG };
   let collapsedSections = new Set();
@@ -50,7 +50,7 @@
   const SECTION_LABELS = {
     'drug-monitoring': 'Drug Monitoring',
     'qof-register': 'QOF Registers',
-    'qof-indicator': 'QOF Indicators'
+    'qof-indicator': 'QOF Indicators',
   };
 
   // ============================================================
@@ -59,7 +59,7 @@
 
   function loadSettings(cb) {
     chrome.storage.local.get(['sentinel.config'], (res) => {
-      const stored = res["sentinel.config"] || {};
+      const stored = res['sentinel.config'] || {};
       CONFIG = { ...DEFAULT_CONFIG, ...stored };
       collapsedSections = new Set(CONFIG.collapsedSections || []);
       currentMode = CONFIG.defaultMode || 'live';
@@ -71,7 +71,7 @@
   function saveSettings() {
     const toSave = { ...CONFIG, collapsedSections: Array.from(collapsedSections) };
     delete toSave._chipStyleCycle;
-    chrome.storage.local.set({ "sentinel.config": toSave });
+    chrome.storage.local.set({ 'sentinel.config': toSave });
   }
 
   // Apply config to root element via data attributes (CSS targets these)
@@ -118,7 +118,9 @@
     if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules']) {
       _mergedRulesCache = null;
       if (CONFIG.autoRefresh !== false) {
-        loadRules().then(rules => evaluateAndPublish(rules)).catch(() => {});
+        loadRules()
+          .then((rules) => evaluateAndPublish(rules))
+          .catch(() => {});
       }
     }
     if (!changes['sentinel.config']) return;
@@ -144,8 +146,8 @@
     const cssUrl = chrome.runtime.getURL('sidebar/sidebar.css');
     const htmlUrl = chrome.runtime.getURL('sidebar/sidebar.html');
     const [cssText, htmlText] = await Promise.all([
-      fetch(cssUrl).then(r => r.text()),
-      fetch(htmlUrl).then(r => r.text())
+      fetch(cssUrl).then((r) => r.text()),
+      fetch(htmlUrl).then((r) => r.text()),
     ]);
     const styleEl = document.createElement('style');
     styleEl.textContent = cssText;
@@ -166,7 +168,7 @@
   }
 
   function bindControls() {
-    shadowRoot.querySelector('#mode-select')?.addEventListener('change', e => {
+    shadowRoot.querySelector('#mode-select')?.addEventListener('change', (e) => {
       currentMode = e.target.value;
       refresh();
     });
@@ -175,12 +177,12 @@
     shadowRoot.querySelector('#settings-btn')?.addEventListener('click', () => {
       chrome.runtime.sendMessage({ action: 'openOptionsPage' });
     });
-    shadowRoot.querySelector('#show-achieved-toggle')?.addEventListener('change', e => {
+    shadowRoot.querySelector('#show-achieved-toggle')?.addEventListener('change', (e) => {
       CONFIG.showAchieved = e.target.checked;
       saveSettings();
       refresh();
     });
-    shadowRoot.querySelector('#show-no-data-toggle')?.addEventListener('change', e => {
+    shadowRoot.querySelector('#show-no-data-toggle')?.addEventListener('change', (e) => {
       CONFIG.showNoData = e.target.checked;
       saveSettings();
       refresh();
@@ -216,7 +218,10 @@
       if (currentMode === 'live' && onMedicus && isFallback && !sameUrlAsLastRetry) {
         lastRetryUrl = location.href;
         if (pendingBannerRetry) clearTimeout(pendingBannerRetry);
-        pendingBannerRetry = setTimeout(() => { pendingBannerRetry = null; refresh(); }, 1500);
+        pendingBannerRetry = setTimeout(() => {
+          pendingBannerRetry = null;
+          refresh();
+        }, 1500);
       } else if (!isFallback) {
         // Reset retry latch on successful resolution so a subsequent navigation can retry
         lastRetryUrl = null;
@@ -244,41 +249,36 @@
       // URL regex fallback is restricted to /patient/patient/ paths so we never
       // accidentally extract an encounter or task UUID on those views (encounter
       // and task resolvers should always populate patientContext correctly anyway).
-      const _patientUrlMatch = /\/patient\/patient\/[^/]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-        .exec(location.pathname);
-      const _resolvedPatientId = data.patientContext?.patientUuid
-        || data.patientContext?.patientId
-        || data.patientContext?.id
-        || data.patientContext?.uuid
-        || (_patientUrlMatch && _patientUrlMatch[1])
-        || null;
-      if (currentMode === 'live' && _resolvedPatientId) {
-        const journalObs = await fetchJournalObservations(
-          _resolvedPatientId,
-          data.observations || []
+      const _patientUrlMatch =
+        /\/patient\/patient\/[^/]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
+          location.pathname
         );
+      const _resolvedPatientId =
+        data.patientContext?.patientUuid ||
+        data.patientContext?.patientId ||
+        data.patientContext?.id ||
+        data.patientContext?.uuid ||
+        (_patientUrlMatch && _patientUrlMatch[1]) ||
+        null;
+      if (currentMode === 'live' && _resolvedPatientId) {
+        const journalObs = await fetchJournalObservations(_resolvedPatientId, data.observations || []);
         if (journalObs.length > 0) {
           data.observations = [...(data.observations || []), ...journalObs];
           if (data.debug) {
             data.debug.counts = {
               ...(data.debug.counts || {}),
-              observations: (data.observations || []).length
+              observations: (data.observations || []).length,
             };
           }
         }
       }
 
-      const allChips = window.SentinelRules.evaluatePatient(
-        data.medications || [],
-        data.observations || [],
-        rules,
-        {
-          now: new Date().toISOString(),
-          problems: data.problems || [],
-          patientContext: data.patientContext,
-          observationHistory: data.observationHistory || []
-        }
-      );
+      const allChips = window.SentinelRules.evaluatePatient(data.medications || [], data.observations || [], rules, {
+        now: new Date().toISOString(),
+        problems: data.problems || [],
+        patientContext: data.patientContext,
+        observationHistory: data.observationHistory || [],
+      });
 
       renderPatientBanner(data, allChips);
       renderGroupedChips(allChips, data);
@@ -311,6 +311,10 @@
   // on EVERY evaluation, including the 800ms journal-search re-eval churn.
   let _canonicalRulesCache = null;
   let _mergedRulesCache = null;
+  // Rule file metadata (lastUpdated, specVersion) captured from the canonical
+  // JSON at load time. Used by buildTraceEnvelope to stamp the export header.
+  // In-memory only — never written to storage.
+  let _ruleFileMeta = null;
 
   async function loadRules() {
     if (_mergedRulesCache) return _mergedRulesCache;
@@ -321,19 +325,25 @@
       const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
       const vaccineUrl = chrome.runtime.getURL('rules/vaccine-rules.json');
       const [drugDoc, qofDoc, vaccineDoc] = await Promise.all([
-        fetch(drugUrl).then(r => r.json()),
-        fetch(qofUrl).then(r => r.json()),
-        fetch(vaccineUrl).then(r => r.json())
+        fetch(drugUrl).then((r) => r.json()),
+        fetch(qofUrl).then((r) => r.json()),
+        fetch(vaccineUrl).then((r) => r.json()),
       ]);
       _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || []), ...(vaccineDoc.rules || [])];
+      // Capture rule file metadata for trace envelope stamping.
+      _ruleFileMeta = [
+        { id: 'drug', lastUpdated: drugDoc.lastUpdated || null, specVersion: drugDoc.specVersion || null },
+        { id: 'qof', lastUpdated: qofDoc.lastUpdated || null, specVersion: qofDoc.specVersion || null },
+        { id: 'vaccine', lastUpdated: vaccineDoc.lastUpdated || null, specVersion: vaccineDoc.specVersion || null },
+      ];
     }
     const canonical = _canonicalRulesCache;
 
     // Load org + individual overrides + custom rules
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       chrome.storage.local.get(['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'], (res) => {
-        const individual  = res['sentinel.rules']       || {};
-        const org         = res['sentinel.orgRules']    || null;
+        const individual = res['sentinel.rules'] || {};
+        const org = res['sentinel.orgRules'] || null;
         const customRules = res['sentinel.customRules'] || [];
         const RIO = window.SentinelRulesetIo;
         let merged;
@@ -341,13 +351,13 @@
           merged = RIO.mergeRules(canonical, org, individual);
         } else {
           // Fallback: apply individual overrides only
-          merged = canonical.map(rule => {
+          merged = canonical.map((rule) => {
             if (individual[rule.id]) return Object.assign({}, rule, individual[rule.id]);
             return rule;
           });
         }
         // Append enabled custom rules as additions (not overlays)
-        const enabledCustom = customRules.filter(r => r.enabled !== false);
+        const enabledCustom = customRules.filter((r) => r.enabled !== false);
         merged.push(...enabledCustom);
         _mergedRulesCache = merged;
         resolve(merged);
@@ -384,22 +394,35 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const resp = await fetch(
-        `${apiOrigin}/clinical/data/patient-journal/overview/${patientId}`,
-        { credentials: 'include', signal: ctrl.signal }
-      );
+      const resp = await fetch(`${apiOrigin}/clinical/data/patient-journal/overview/${patientId}`, {
+        credentials: 'include',
+        signal: ctrl.signal,
+      });
       if (!resp.ok) return [];
       const d = await resp.json();
 
-      const monthIndex = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+      const monthIndex = {
+        Jan: 0,
+        Feb: 1,
+        Mar: 2,
+        Apr: 3,
+        May: 4,
+        Jun: 5,
+        Jul: 6,
+        Aug: 7,
+        Sep: 8,
+        Oct: 9,
+        Nov: 10,
+        Dec: 11,
+      };
 
       // Parse "DD Mon YYYY" (entry.observationDate) or "DayName DD Mon YYYY" (record.title)
       function parseDisplayDate(str) {
         if (!str) return null;
         const parts = str.trim().split(' ').filter(Boolean);
         // "20 Apr 2026" → [20, Apr, 2026]  or  "Mon 11 May 2026" → [Mon, 11, May, 2026]
-        const dayStr  = parts.length === 3 ? parts[0] : parts[1];
-        const monStr  = parts.length === 3 ? parts[1] : parts[2];
+        const dayStr = parts.length === 3 ? parts[0] : parts[1];
+        const monStr = parts.length === 3 ? parts[1] : parts[2];
         const yearStr = parts.length === 3 ? parts[2] : parts[3];
         if (!dayStr || !monStr || !yearStr) return null;
         const mon = monthIndex[monStr];
@@ -409,19 +432,17 @@
       }
 
       // Build a Set of "name|date" keys already present in the investigation dashboard
-      const existingKeys = new Set(
-        (existingObs || []).map(o => `${(o.name||'').toLowerCase()}|${o.date||''}`)
-      );
+      const existingKeys = new Set((existingObs || []).map((o) => `${(o.name || '').toLowerCase()}|${o.date || ''}`));
 
       const result = [];
-      for (const record of (d.patientJournalRecords || [])) {
+      for (const record of d.patientJournalRecords || []) {
         const groupDate = parseDisplayDate(record.title);
-        for (const item of (record.items || [])) {
+        for (const item of record.items || []) {
           // Only encounter items contain consultation-coded observations
           if (item.type !== 'encounter') continue;
-          for (const topic of (item.data?.consultationTopics || [])) {
-            for (const heading of (topic.headings || [])) {
-              for (const entry of (heading.entries || [])) {
+          for (const topic of item.data?.consultationTopics || []) {
+            for (const heading of topic.headings || []) {
+              for (const entry of heading.entries || []) {
                 // Skip entries missing a type name, or entries that aren't observations (e.g. medications, problems).
                 if (!entry.type || entry.entryType !== 'observation') continue;
                 const entryDate = parseDisplayDate(entry.observationDate) || groupDate;
@@ -431,10 +452,10 @@
                 if (existingKeys.has(nameKey)) continue; // already in investigation dashboard
                 existingKeys.add(nameKey); // de-dupe within journal results too
                 result.push({
-                  name:   entry.type,
-                  value:  typeof entry.value === 'string' ? entry.value : '',
-                  date:   isoDate,
-                  source: 'journal'
+                  name: entry.type,
+                  value: typeof entry.value === 'string' ? entry.value : '',
+                  date: isoDate,
+                  source: 'journal',
                 });
               }
             }
@@ -451,8 +472,6 @@
     }
   }
 
-
-
   function renderPatientBanner(data, allChips) {
     const banner = shadowRoot.querySelector('.patient-banner');
     if (!banner) return;
@@ -464,14 +483,16 @@
     banner.style.display = 'block';
 
     const registerPills = allChips
-      .filter(c => c.type === 'qof-register' && c.status === 'achieved')
-      .map(c => `<span class="register-pill" title="${escapeHtml(c.matchedProblem)}">${escapeHtml(c.registerCode)}</span>`)
+      .filter((c) => c.type === 'qof-register' && c.status === 'achieved')
+      .map(
+        (c) =>
+          `<span class="register-pill" title="${escapeHtml(c.matchedProblem)}">${escapeHtml(c.registerCode)}</span>`
+      )
       .join('');
 
-    const ageSex = [
-      pc.ageYears != null ? `Age ${pc.ageYears}` : null,
-      pc.sex || null
-    ].filter(Boolean).join(' &middot; ');
+    const ageSex = [pc.ageYears != null ? `Age ${pc.ageYears}` : null, pc.sex || null]
+      .filter(Boolean)
+      .join(' &middot; ');
 
     banner.innerHTML = `
       <div class="patient-name">${escapeHtml(pc.patientName)}</div>
@@ -494,14 +515,14 @@
     if (!list) return;
 
     // Filter out dismissed
-    let chips = allChips.filter(c => !dismissedRules.has(c.ruleId));
+    let chips = allChips.filter((c) => !dismissedRules.has(c.ruleId));
 
     // Apply config filters
     if (!CONFIG.showAchieved) {
-      chips = chips.filter(c => !(c.status === 'achieved' || c.status === 'in_date'));
+      chips = chips.filter((c) => !(c.status === 'achieved' || c.status === 'in_date'));
     }
     if (!CONFIG.showNoData) {
-      chips = chips.filter(c => c.status !== 'no_data');
+      chips = chips.filter((c) => c.status !== 'no_data');
     }
 
     // Sort
@@ -518,7 +539,7 @@
 
     // Group by type (default) or flat list
     const groups = { 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
-    chips.forEach(c => {
+    chips.forEach((c) => {
       const t = c.type || 'drug-monitoring';
       if (!groups[t]) groups[t] = [];
       groups[t].push(c);
@@ -546,16 +567,21 @@
         </div>
       `;
       renderViewHint(data, list);
+      // Drift banner: render even when chip list is empty — drift means chips may
+      // be silently missing and this must NOT read as an all-clear.
+      renderDriftBanner(list, data);
       updateSummary(allChips);
       return;
     }
 
     list.innerHTML = '';
     renderViewHint(data, list);
+    // Drift banner: prepend before chips so clinician sees the warning immediately.
+    renderDriftBanner(list, data);
 
     if (CONFIG.chipGrouping === 'flat') {
       // One flat list
-      chips.forEach(chip => {
+      chips.forEach((chip) => {
         const el = document.createElement('article');
         el.className = `chip chip-${chip.status}`;
         el.innerHTML = chipHtml(chip);
@@ -564,7 +590,7 @@
       });
     } else {
       // Grouped sections (default)
-      ['drug-monitoring', 'qof-indicator'].forEach(type => {
+      ['drug-monitoring', 'qof-indicator'].forEach((type) => {
         const groupChips = groups[type] || [];
         if (groupChips.length === 0) return;
         const sectionEl = document.createElement('section');
@@ -579,7 +605,7 @@
           <div class="chip-section-body" ${collapsed ? 'hidden' : ''}></div>
         `;
         const body = sectionEl.querySelector('.chip-section-body');
-        groupChips.forEach(chip => {
+        groupChips.forEach((chip) => {
           const el = document.createElement('article');
           el.className = `chip chip-${chip.status}`;
           el.innerHTML = chipHtml(chip);
@@ -604,7 +630,7 @@
     el.querySelector('.chip-dismiss')?.addEventListener('click', () => {
       dismissedRules.add(chip.ruleId);
       el.remove();
-      updateSummary(allChips.filter(c => !dismissedRules.has(c.ruleId)));
+      updateSummary(allChips.filter((c) => !dismissedRules.has(c.ruleId)));
     });
     el.querySelector('.chip-expand')?.addEventListener('click', () => {
       el.classList.toggle('expanded');
@@ -640,7 +666,8 @@
     return {
       degraded: true,
       modules,
-      reason: 'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.'
+      reason:
+        'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.',
     };
   }
 
@@ -675,7 +702,7 @@
     if (!unmatchedMeds || unmatchedMeds.length === 0) return;
     const section = document.createElement('details');
     section.className = 'unmatched-meds-section';
-    const items = unmatchedMeds.map(n => `<li>${escapeHtml(n)}</li>`).join('');
+    const items = unmatchedMeds.map((n) => `<li>${escapeHtml(n)}</li>`).join('');
     section.innerHTML = `
       <summary class="unmatched-meds-summary">Meds without a monitoring rule (${unmatchedMeds.length})</summary>
       <div class="unmatched-meds-body">
@@ -683,6 +710,39 @@
         <ul class="unmatched-meds-list">${items}</ul>
       </div>`;
     list.appendChild(section);
+  }
+
+  // Render an amber drift-warning banner at the top of the chip list.
+  // Called only when _lastDrift is set and not muted. Harmlessly skips if
+  // window.ExtractionHealth is not available (e.g. classic-script not loaded yet).
+  function renderDriftBanner(list, data) {
+    // Remove any stale banner from a previous render
+    list.querySelector('.drift-banner')?.remove();
+    if (!_lastDrift || !_lastDrift.drifted) return;
+    const EH = window.ExtractionHealth;
+    if (!EH) return;
+    const banner = document.createElement('div');
+    banner.className = 'drift-banner';
+    banner.innerHTML = `
+      &#x26A0; <strong>Extraction quality has dropped.</strong>
+      <p>${escapeHtml(_lastDrift.reason)} Alerts on this panel may be incomplete — this is NOT an all-clear. Verify in Medicus.</p>
+      <button class="drift-dismiss" type="button">Dismiss for 24h</button>
+    `;
+    // Dismiss handler: mute for 24h via storage key, then remove banner.
+    banner.querySelector('.drift-dismiss')?.addEventListener('click', async () => {
+      try {
+        const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+        const nowIso = new Date().toISOString();
+        const muted = EH.muteBaseline(r['sentinel.extractionBaseline'] || null, nowIso);
+        await chrome.storage.local.set({ 'sentinel.extractionBaseline': muted });
+        _lastDrift = null;
+        banner.remove();
+      } catch (_) {
+        banner.remove();
+      }
+    });
+    // Prepend: drift warning must appear before any chips
+    list.prepend(banner);
   }
 
   function updateSummary(chips) {
@@ -716,21 +776,23 @@
     if (chip.type === 'qof-indicator') return qofIndicatorChipHtml(chip);
     if (chip.type === 'qof-register') return qofRegisterChipHtml(chip);
     // v3 custom-alert chip types delegate to the shared renderer.
-    const CR = (typeof window !== 'undefined') ? window.ChipRenderer : null;
+    const CR = typeof window !== 'undefined' ? window.ChipRenderer : null;
     if (CR) {
-      if (chip.type === 'drug-combo')  return CR.renderDrugComboChip(chip);
+      if (chip.type === 'drug-combo') return CR.renderDrugComboChip(chip);
       if (chip.type === 'event-count') return CR.renderEventCountChip(chip);
-      if (chip.type === 'composite')   return CR.renderCompositeChip(chip);
+      if (chip.type === 'composite') return CR.renderCompositeChip(chip);
     }
     return '<div>Unknown chip type</div>';
   }
 
   function drugChipHtml(chip) {
     const statusLabel = labelFor(chip.status);
-    const testsLine = (chip.tests || []).map(t => {
-      const dateStr = t.latestObs?.date ? ` (${formatDate(t.latestObs.date)}, ${t.days}d)` : '';
-      return `<li class="test-${t.status}">${escapeHtml(t.name)}: ${labelFor(t.status)}${dateStr}</li>`;
-    }).join('');
+    const testsLine = (chip.tests || [])
+      .map((t) => {
+        const dateStr = t.latestObs?.date ? ` (${formatDate(t.latestObs.date)}, ${t.days}d)` : '';
+        return `<li class="test-${t.status}">${escapeHtml(t.name)}: ${labelFor(t.status)}${dateStr}</li>`;
+      })
+      .join('');
     return `
       <header class="chip-header chip-expand" role="button">
         <div class="chip-title">
@@ -757,7 +819,9 @@
     const statusLabel = labelFor(chip.status);
     const valueDate = chip.valueText
       ? `<p class="qof-value">${escapeHtml(chip.valueText)} on ${chip.dateText ? formatDate(chip.dateText) : '?'} (${chip.days}d ago)</p>`
-      : (chip.status === 'no_data' ? `<p class="qof-value qof-nodata">No matching observation on this view.</p>` : '');
+      : chip.status === 'no_data'
+        ? `<p class="qof-value qof-nodata">No matching observation on this view.</p>`
+        : '';
     const thresholds = chip.thresholds
       ? `<p><strong>Achievement band:</strong> ${chip.thresholds.lower}-${chip.thresholds.upper}% / ${chip.points} pts</p>`
       : '';
@@ -845,21 +909,29 @@
     const probs = data.problems || [];
     const fails = data.debug?.parseFailures || [];
 
-    const renderList = (items, fmt, empty) => items.length === 0
-      ? `<p class="debug-empty">${empty}</p>`
-      : '<ul class="debug-list">' + items.map(fmt).join('') + '</ul>';
+    const renderList = (items, fmt, empty) =>
+      items.length === 0
+        ? `<p class="debug-empty">${empty}</p>`
+        : '<ul class="debug-list">' + items.map(fmt).join('') + '</ul>';
 
     const debugHtml = `
       <details class="debug-panel">
         <summary>Show extracted data (${meds.length} meds &middot; ${obs.length} obs &middot; ${probs.length} problems${fails.length ? ` &middot; ${fails.length} fails` : ''})</summary>
         <div class="debug-content">
           <h4>Medications</h4>
-          ${renderList(meds, m => `<li><strong>${escapeHtml(m.name)}</strong> <small>[${escapeHtml(m.source || '?')}]</small></li>`, 'None extracted.')}
+          ${renderList(meds, (m) => `<li><strong>${escapeHtml(m.name)}</strong> <small>[${escapeHtml(m.source || '?')}]</small></li>`, 'None extracted.')}
           <h4>Observations</h4>
-          ${renderList(obs, o => `<li><strong>${escapeHtml(o.name)}</strong> = ${escapeHtml(o.value || '-')} <span class="debug-date">(${escapeHtml(o.date || '-')})</span> <small>[${escapeHtml(o.source || '?')}]</small></li>`, 'None extracted.')}
+          ${renderList(obs, (o) => `<li><strong>${escapeHtml(o.name)}</strong> = ${escapeHtml(o.value || '-')} <span class="debug-date">(${escapeHtml(o.date || '-')})</span> <small>[${escapeHtml(o.source || '?')}]</small></li>`, 'None extracted.')}
           <h4>Problems</h4>
-          ${renderList(probs, p => `<li><strong>${escapeHtml(p.label)}</strong>${p.codedDate ? ` <span class="debug-date">(${escapeHtml(p.codedDate)})</span>` : ''} <small>[${escapeHtml(p.source || '?')}]</small></li>`, 'None extracted.')}
-          ${fails.length ? `<h4>Parse failures (${fails.length})</h4><ul class="debug-list">${fails.slice(0, 20).map(f => `<li><small>[${escapeHtml(f.section)}]</small> ${escapeHtml(f.text)}</li>`).join('')}</ul>` : ''}
+          ${renderList(probs, (p) => `<li><strong>${escapeHtml(p.label)}</strong>${p.codedDate ? ` <span class="debug-date">(${escapeHtml(p.codedDate)})</span>` : ''} <small>[${escapeHtml(p.source || '?')}]</small></li>`, 'None extracted.')}
+          ${
+            fails.length
+              ? `<h4>Parse failures (${fails.length})</h4><ul class="debug-list">${fails
+                  .slice(0, 20)
+                  .map((f) => `<li><small>[${escapeHtml(f.section)}]</small> ${escapeHtml(f.text)}</li>`)
+                  .join('')}</ul>`
+              : ''
+          }
           <button class="debug-copy" type="button">Copy debug JSON</button>
         </div>
       </details>
@@ -867,14 +939,20 @@
     list.insertAdjacentHTML('beforeend', debugHtml);
     list.querySelector('.debug-copy')?.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(JSON.stringify({
-          mode: data.mode,
-          patientContext: data.patientContext,
-          medications: meds,
-          observations: obs,
-          problems: probs,
-          parseFailures: fails
-        }, null, 2));
+        await navigator.clipboard.writeText(
+          JSON.stringify(
+            {
+              mode: data.mode,
+              patientContext: data.patientContext,
+              medications: meds,
+              observations: obs,
+              problems: probs,
+              parseFailures: fails,
+            },
+            null,
+            2
+          )
+        );
         setStatus('Debug data copied');
       } catch (e) {
         setStatus('Clipboard failed: ' + e.message);
@@ -893,9 +971,15 @@
     const titleEl = document.querySelector('title');
     if (titleEl) titleObserver.observe(titleEl, { childList: true });
     const pushState = history.pushState;
-    history.pushState = function() { pushState.apply(this, arguments); window.dispatchEvent(new Event('locationchange')); };
+    history.pushState = function () {
+      pushState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+    };
     const replaceState = history.replaceState;
-    history.replaceState = function() { replaceState.apply(this, arguments); window.dispatchEvent(new Event('locationchange')); };
+    history.replaceState = function () {
+      replaceState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+    };
     window.addEventListener('popstate', () => debouncedRefresh());
     window.addEventListener('hashchange', () => debouncedRefresh());
     window.addEventListener('locationchange', () => debouncedRefresh());
@@ -917,14 +1001,17 @@
   }
 
   function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
   }
 
   function formatNhs(n) {
     if (!n) return '';
     const d = String(n).replace(/\D/g, '');
     if (d.length !== 10) return n;
-    return `${d.slice(0,3)} ${d.slice(3,6)} ${d.slice(6)}`;
+    return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
   }
 
   function formatDate(iso) {
@@ -932,16 +1019,23 @@
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
     const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
   }
 
   function labelFor(status) {
     const map = {
-      overdue: 'OVERDUE', stale: 'SEVERELY OVERDUE', due_soon: 'DUE SOON',
-      no_data: 'NO DATA', recently_initiated: 'NEW', in_date: 'IN DATE',
-      achieved: 'MET', not_met: 'NOT MET',
-      alert: 'ALERT', caution: 'CAUTION', noted: 'NOTED'
+      overdue: 'OVERDUE',
+      stale: 'SEVERELY OVERDUE',
+      due_soon: 'DUE SOON',
+      no_data: 'NO DATA',
+      recently_initiated: 'NEW',
+      in_date: 'IN DATE',
+      achieved: 'MET',
+      not_met: 'NOT MET',
+      alert: 'ALERT',
+      caution: 'CAUTION',
+      noted: 'NOTED',
     };
     return map[status] || String(status).toUpperCase();
   }
@@ -982,7 +1076,11 @@
             invalidateSnapshot();
             if (reevalTimer) clearTimeout(reevalTimer);
             reevalTimer = setTimeout(async () => {
-              try { evaluateAndPublish(await loadRules()); } catch (e) { invalidateSnapshot(); }
+              try {
+                evaluateAndPublish(await loadRules());
+              } catch (e) {
+                invalidateSnapshot();
+              }
             }, 800);
           }
         });
@@ -1001,52 +1099,87 @@
       const fetcher = window.SentinelDataFetcher;
       if (!fetcher) return;
       const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
-      Promise.resolve(result).then(async data => {
-        if (gen !== _evalGen) return; // superseded — drop this stale result
-        if (!data || !window.SentinelRules) { invalidateSnapshot(); return; }
-        // Assess extraction health so publishSnapshot can stamp the degraded flag
-        // onto the snapshot the side panel reads (the H-005 canary). Kept local to
-        // this call so concurrent evaluations can't cross-contaminate the flag.
-        const health = assessExtractionHealth(data);
-        // Augment observations with encounter/journal-coded entries (annual-review
-        // codes, questionnaire scores, CHA2DS2-VASc, etc.) that never appear in the
-        // investigation dashboard, so indicators whose evidence lives only in the
-        // journal (AST007, COPD010, HF007, DM014, AF006…) can fire in the SIDE
-        // PANEL too — previously this augmentation ran only in the now-dead HUD
-        // refresh() path, so these read no_data in suite mode.
-        const _patientId = data.patientContext?.patientUuid
-          || data.patientContext?.patientId || data.patientContext?.id
-          || data.patientContext?.uuid || null;
-        if (currentMode === 'live' && _patientId) {
-          try {
-            const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
-            if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
-            if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
-          } catch (_) { /* journal augmentation is best-effort; never block the chip */ }
-        }
-        // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
-        // publish them directly. We deliberately do NOT rely on a side effect of
-        // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
-        const chips = window.SentinelRules.evaluatePatient(
-          data.medications || [],
-          data.observations || [],
-          rules,
-          {
-            now: new Date().toISOString(),
-            problems: data.problems || [],
-            patientContext: data.patientContext,
-            observationHistory: data.observationHistory || []
+      Promise.resolve(result)
+        .then(async (data) => {
+          if (gen !== _evalGen) return; // superseded — drop this stale result
+          if (!data || !window.SentinelRules) {
+            invalidateSnapshot();
+            return;
           }
-        );
-        if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
-        // Compute medications with no matching drug-monitoring rule. Surfaces the
-        // key silent-failure mode (unlisted brand → no alert) without adding noise.
-        const unmatchedMeds = window.SentinelRules.listUnmatchedMedications
-          ? window.SentinelRules.listUnmatchedMedications(data.medications || [], rules)
-          : [];
-        publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds);
-      }).catch(() => { if (gen === _evalGen) invalidateSnapshot(); });
-    } catch (e) { if (gen === _evalGen) invalidateSnapshot(); }
+          // Assess extraction health so publishSnapshot can stamp the degraded flag
+          // onto the snapshot the side panel reads (the H-005 canary). Kept local to
+          // this call so concurrent evaluations can't cross-contaminate the flag.
+          const health = assessExtractionHealth(data);
+          // Augment observations with encounter/journal-coded entries (annual-review
+          // codes, questionnaire scores, CHA2DS2-VASc, etc.) that never appear in the
+          // investigation dashboard, so indicators whose evidence lives only in the
+          // journal (AST007, COPD010, HF007, DM014, AF006…) can fire in the SIDE
+          // PANEL too — previously this augmentation ran only in the now-dead HUD
+          // refresh() path, so these read no_data in suite mode.
+          const _patientId =
+            data.patientContext?.patientUuid ||
+            data.patientContext?.patientId ||
+            data.patientContext?.id ||
+            data.patientContext?.uuid ||
+            null;
+          if (currentMode === 'live' && _patientId) {
+            try {
+              const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
+              if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
+              if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
+            } catch (_) {
+              /* journal augmentation is best-effort; never block the chip */
+            }
+          }
+          // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
+          // publish them directly. We deliberately do NOT rely on a side effect of
+          // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
+          // options.trace:true produces { chips, trace } instead of a plain array;
+          // the trace is in-memory only and never written to chrome.storage.local.
+          const evalResult = window.SentinelRules.evaluatePatient(
+            data.medications || [],
+            data.observations || [],
+            rules,
+            {
+              now: new Date().toISOString(),
+              problems: data.problems || [],
+              patientContext: data.patientContext,
+              observationHistory: data.observationHistory || [],
+              trace: true,
+            }
+          );
+          if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
+          const chips = evalResult.chips || evalResult; // back-compat guard
+          const rawTrace = evalResult.trace || null;
+          // Compute medications with no matching drug-monitoring rule. The detailed
+          // variant explains WHY each med is unmatched (no-rule vs. excluded).
+          const unmatchedMedsDetailed = window.SentinelRules.listUnmatchedMedicationsDetailed
+            ? window.SentinelRules.listUnmatchedMedicationsDetailed(data.medications || [], rules)
+            : [];
+          const unmatchedMeds = unmatchedMedsDetailed.map((u) => u.name);
+          // Stamp rule file metadata onto the trace envelope (captured once at loadRules time).
+          let trace = rawTrace;
+          if (trace && trace.ruleset) {
+            trace.ruleset.files = _ruleFileMeta || trace.ruleset.files || [];
+            // Count custom rules (those appended beyond the canonical set)
+            const customRuleCount = (rules || []).filter((r) => r.id && r.id.startsWith('custom-')).length;
+            trace.ruleset.customRuleCount = customRuleCount;
+          }
+          // Attach unmatched meds detail to trace envelope
+          if (trace) {
+            trace.unmatchedMedications = unmatchedMedsDetailed;
+          }
+          // Assess extraction drift (best-effort — never blocks chip publication).
+          const drift = await recordAndAssessDrift(data);
+          if (gen !== _evalGen) return; // navigation superseded us during drift assess
+          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift);
+        })
+        .catch(() => {
+          if (gen === _evalGen) invalidateSnapshot();
+        });
+    } catch (e) {
+      if (gen === _evalGen) invalidateSnapshot();
+    }
   }
 
   // ── Side panel bridge ──────────────────────────────────────────────────────
@@ -1074,6 +1207,13 @@
   // patient change without blanking valid chips.
   let _lastPatientUuid = null;
 
+  // ── Extraction-drift detection (in-memory state) ───────────────────────────
+  // The UUID/name+bucket key is in-memory only — never written to storage.
+  // Storage only holds integer counts + ISO timestamps (zero PII).
+  let _lastSampleKey = null; // `${patientId}|${bucket}` — in-memory only, never persisted
+  let _lastSampleAt = 0;
+  let _lastDrift = null; // cached so re-renders don't re-read storage
+
   // Cheap, synchronous "which patient is this URL about?" — used only to decide
   // whether a SPA URL change is a real patient change or same-patient
   // sub-navigation. Mirrors the URL-path resolution in detectMedicusContext and
@@ -1082,7 +1222,9 @@
   function resolveUrlPatientUuid() {
     try {
       return window.SentinelApiClient?.detectMedicusContext(location.href)?.patientUuid || null;
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   // Notify any open side panel that the snapshot changed.
@@ -1091,6 +1233,51 @@
       const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (_) {}
+  }
+
+  // Assess extraction drift and update the per-view baseline in storage.
+  // Entirely wrapped in try/catch — drift detection must NEVER break chip publication.
+  // Returns the drift object if drifted and not muted, otherwise null.
+  async function recordAndAssessDrift(data) {
+    try {
+      const EH = window.ExtractionHealth;
+      if (!EH) return null;
+      const nowIso = new Date().toISOString();
+      const summary = EH.summariseExtraction(data, nowIso);
+      if (!summary) return null;
+
+      const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+      const stored = r['sentinel.extractionBaseline'] || null;
+
+      const drift = EH.assessDrift(stored, summary.bucket, summary.sample);
+
+      // Sample throttle: don't flood storage on every keypress / rapid re-eval.
+      // The in-memory key includes the patient id/name so a patient change always
+      // records immediately.
+      const pc = data.patientContext || {};
+      const patientId = pc.patientUuid || pc.patientId || pc.id || pc.uuid || pc.patientName || '?';
+      const sampleKey = patientId + '|' + summary.bucket;
+      if (EH.shouldRecordSample(_lastSampleKey, _lastSampleAt, sampleKey, Date.now())) {
+        // Read-modify-write. Last-writer-wins across tabs is acceptable for
+        // this telemetry — occasional sample loss does not affect safety.
+        let updated = EH.updateBaseline(stored, summary.bucket, summary.sample);
+        if (drift.drifted) updated = EH.markWarned(updated, nowIso);
+        chrome.storage.local.set({ 'sentinel.extractionBaseline': updated });
+        _lastSampleKey = sampleKey;
+        _lastSampleAt = Date.now();
+      }
+
+      // Only surface drift when not muted.
+      if (drift.drifted && !EH.isMuted(stored, nowIso)) {
+        _lastDrift = drift;
+        return drift;
+      }
+      _lastDrift = null;
+      return null;
+    } catch (_) {
+      // Drift detection must never break chip publication.
+      return null;
+    }
   }
 
   // Drop any prior patient's snapshot. Called the instant the SPA navigates and
@@ -1112,7 +1299,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds) {
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1124,15 +1311,24 @@
       reason: (health && health.reason) || null,
       modules: (health && health.modules) || null,
       unmatchedMeds: unmatchedMeds || [],
+      unmatchedMedsDetailed: unmatchedMedsDetailed || [],
+      // trace is in-memory only — never written to chrome.storage.local.
+      // It is invalidated with the snapshot on navigation (invalidateSnapshot).
+      trace: trace || null,
+      // drift is in-memory only — extraction drift assessment, null when no drift
+      // or when muted by the clinician. Never written to chrome.storage.local.
+      drift: drift || null,
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,
     // so the trend data always belongs to the same patient as the chip snapshot.
-    _lastTrendData = rawData ? {
-      observationHistory: rawData.observationHistory || [],
-      problems: rawData.problems || [],
-      patientContext: pc || null,
-    } : null;
+    _lastTrendData = rawData
+      ? {
+          observationHistory: rawData.observationHistory || [],
+          problems: rawData.problems || [],
+          patientContext: pc || null,
+        }
+      : null;
     // Notify any open side panel that a fresh snapshot is available so it can
     // re-render immediately on patient change instead of waiting for its poll.
     notifySnapshotUpdated();
@@ -1146,13 +1342,16 @@
       return false;
     }
     if (msg && msg.action === 'getTrendData') {
-      if (!_lastTrendData) { sendResponse(null); return false; }
+      if (!_lastTrendData) {
+        sendResponse(null);
+        return false;
+      }
       // Attach achieved register chips so trend modules can determine BP targets
       // without re-evaluating rules. Includes only qof-register chips to keep the
       // payload small.
-      const registers = (_lastSnapshot && _lastSnapshot.chips || [])
-        .filter(c => c.type === 'qof-register')
-        .map(c => ({ code: c.registerCode, name: c.registerName, problem: c.matchedProblem }));
+      const registers = ((_lastSnapshot && _lastSnapshot.chips) || [])
+        .filter((c) => c.type === 'qof-register')
+        .map((c) => ({ code: c.registerCode, name: c.registerName, problem: c.matchedProblem }));
       sendResponse({ ..._lastTrendData, registers });
       return false;
     }

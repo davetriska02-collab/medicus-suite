@@ -4,9 +4,34 @@
 
 'use strict';
 
-const STATUS_RANK   = { overdue:0, not_met:0, alert:0, stale:1, due_soon:2, caution:2, no_data:3, noted:3, recently_initiated:4, achieved:5, in_date:5 };
-const STATUS_COLOUR = { overdue:'red', not_met:'red', alert:'red', stale:'amber', due_soon:'amber', caution:'amber', no_data:'neutral', noted:'neutral', recently_initiated:'neutral', achieved:'green', in_date:'green' };
-const STATUS_LABEL  = { overdue:'OVERDUE', not_met:'NOT MET', alert:'ALERT', stale:'SEVERELY OVERDUE', due_soon:'DUE SOON', caution:'CAUTION', no_data:'NO DATA', noted:'NOTED', recently_initiated:'NEW', achieved:'MET', in_date:'IN DATE' };
+import { STATUS_RANK, buildAdminSummaryText } from './sentinel-core.js';
+
+const STATUS_COLOUR = {
+  overdue: 'red',
+  not_met: 'red',
+  alert: 'red',
+  stale: 'amber',
+  due_soon: 'amber',
+  caution: 'amber',
+  no_data: 'neutral',
+  noted: 'neutral',
+  recently_initiated: 'neutral',
+  achieved: 'green',
+  in_date: 'green',
+};
+const STATUS_LABEL = {
+  overdue: 'OVERDUE',
+  not_met: 'NOT MET',
+  alert: 'ALERT',
+  stale: 'SEVERELY OVERDUE',
+  due_soon: 'DUE SOON',
+  caution: 'CAUTION',
+  no_data: 'NO DATA',
+  noted: 'NOTED',
+  recently_initiated: 'NEW',
+  achieved: 'MET',
+  in_date: 'IN DATE',
+};
 
 // Colour → severity rank for dismissal escalation. Red=3, amber=2, neutral=1, green=0.
 // Unknown colours (or statuses not in STATUS_COLOUR) rank as red (fail-safe: resurface).
@@ -18,118 +43,6 @@ const COLOUR_RANK = { red: 3, amber: 2, neutral: 1, green: 0 };
 function statusSeverityRank(status) {
   const colour = STATUS_COLOUR[status];
   return colour !== undefined ? (COLOUR_RANK[colour] ?? 3) : 3;
-}
-
-// ── Admin appointments-summary helpers ────────────────────────────────────────
-// Converts a single chip into a plain-English booking instruction for admin
-// (mirrors sweep-core.js chipInstruction — kept local to avoid cross-module
-// coupling; if the two diverge, sync them deliberately).
-
-function _isChipActionNeeded(status) { return (STATUS_RANK[status] ?? 99) <= 2; }
-
-const _QOF_ACTION_BY_PREFIX = [
-  ['HYP',  'Book a blood pressure check'],
-  ['DM',   'Book a diabetes review'],
-  ['AST',  'Book an asthma review'],
-  ['COPD', 'Book a COPD review'],
-  ['CHD',  'Book a heart disease review'],
-  ['AF',   'Book an atrial fibrillation review'],
-  ['CKD',  'Book a kidney disease review'],
-  ['HF',   'Book a heart failure review'],
-  ['MH',   'Book a mental health review'],
-  ['DEP',  'Book a depression review'],
-  ['EP',   'Book an epilepsy review'],
-  ['PAD',  'Book a peripheral arterial disease review'],
-  ['STIA', 'Book a stroke/TIA review'],
-  ['RA',   'Book a rheumatoid arthritis review'],
-  ['OB',   'Book an obesity review'],
-  ['SMOK', 'Book a smoking cessation review'],
-  ['LD',   'Book an annual health check'],
-];
-const _NON_BLOOD_TEST_RE = /\b(b\.?p\.?|blood pressure|pulse|heart rate|weight|height|bmi|ecg|cxr|chest x-?ray|waist|peak flow|spirometr|annual review)\b/i;
-
-function _chipInstruction(chip) {
-  if (!chip || !_isChipActionNeeded(chip.status)) return null;
-
-  if (chip.type === 'drug-monitoring') {
-    const dueTests = (chip.tests || [])
-      .filter(t => t && _isChipActionNeeded(t.status))
-      .map(t => t.name || t.testName)
-      .filter(Boolean);
-    const drug = chip.drugName || 'monitored medication';
-    const detail = `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`;
-    if (dueTests.length === 0) return { action: 'Book a monitoring appointment', detail };
-    const bloods = dueTests.filter(n => !_NON_BLOOD_TEST_RE.test(String(n)));
-    const checks = dueTests.filter(n => _NON_BLOOD_TEST_RE.test(String(n)));
-    let action;
-    if (bloods.length && checks.length) action = `Book a blood test and check: ${[...bloods, ...checks].join(', ')}`;
-    else if (bloods.length)             action = `Book a blood test: ${bloods.join(', ')}`;
-    else                                action = `Book a check-up: ${checks.join(', ')}`;
-    return { action, detail };
-  }
-
-  if (chip.type === 'qof-indicator') {
-    const code = String(chip.indicatorCode || '').toUpperCase();
-    const hit = _QOF_ACTION_BY_PREFIX.find(([prefix]) => code.startsWith(prefix));
-    return {
-      action: hit ? hit[1] : 'Book a review appointment',
-      detail: `${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}`,
-    };
-  }
-
-  if (chip.type === 'vaccine') {
-    return {
-      action: `Offer to book: ${chip.displayName || 'vaccination'}`,
-      detail: 'eligible this season — double-check eligibility on the record',
-    };
-  }
-
-  // Alerts, combos, event-counts, composites → clinical judgement only
-  const label = chip.drugName || chip.indicatorCode || chip.label || chip.displayName || chip.registerName || chip.ruleId || 'alert';
-  return { action: 'Flag to duty clinician', detail: String(label) };
-}
-
-function buildAdminSummaryText(chips, patient) {
-  const actionChips = (chips || []).filter(c => _isChipActionNeeded(c.status));
-  const rawName = patient ? (patient.displayName || patient.name || null) : null;
-  // Use NHS number as fallback identifier so the header is never "Unknown patient"
-  // when we have enough to identify the record.
-  const namePart = rawName || (patient?.nhsNumber ? `NHS ${patient.nhsNumber}` : 'Unknown patient');
-  const metaParts = patient ? [
-    // Only show NHS in the meta line when the name is already in the header
-    (rawName && patient.nhsNumber) ? `NHS ${patient.nhsNumber}` : '',
-    patient.dateOfBirth ? `DOB ${patient.dateOfBirth}`   : '',
-    patient.age         ? `Age ${patient.age}`           : '',
-    patient.gender      ? patient.gender                 : '',
-  ].filter(Boolean) : [];
-  const dateLine = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-
-  if (actionChips.length === 0) {
-    return `No monitoring appointments needed — ${namePart}\n${dateLine}`;
-  }
-
-  // Deduplicate by booking action (same logic as sweep-core buildHandout)
-  const byAction = new Map();
-  for (const chip of actionChips) {
-    const instr = _chipInstruction(chip);
-    if (!instr) continue;
-    if (!byAction.has(instr.action)) byAction.set(instr.action, []);
-    const details = byAction.get(instr.action);
-    if (instr.detail && !details.includes(instr.detail)) details.push(instr.detail);
-  }
-
-  if (byAction.size === 0) {
-    return `No monitoring appointments needed — ${namePart}\n${dateLine}`;
-  }
-
-  const lines = [...byAction.entries()].map(([action, details]) =>
-    `• ${action}${details.length ? ' (' + details.join('; ') + ')' : ''}`
-  );
-
-  const header = [`Appointments needed — ${namePart}`];
-  if (metaParts.length) header.push(metaParts.join(' · '));
-  header.push(dateLine);
-  return header.join('\n') + '\n\n' + lines.join('\n');
 }
 
 function showAdminSummaryModal(text) {
@@ -154,14 +67,18 @@ function showAdminSummaryModal(text) {
   moduleEl.appendChild(modal);
 
   modal.querySelector('#sentApptModalClose').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
 
   const copyBtn = modal.querySelector('#sentApptModalCopy');
   copyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(text);
       copyBtn.textContent = 'Copied!';
-      setTimeout(() => { if (copyBtn.isConnected) copyBtn.textContent = 'Copy to clipboard'; }, 2000);
+      setTimeout(() => {
+        if (copyBtn.isConnected) copyBtn.textContent = 'Copy to clipboard';
+      }, 2000);
     } catch (_) {
       modal.querySelector('#sentApptModalText')?.select();
     }
@@ -212,7 +129,7 @@ export function chipSuppressionResult(entry, currentStatus, todayIso) {
     return { hidden: true, resurfaced: false };
   }
   const recordedRank = statusSeverityRank(entry.statusAtDismissal);
-  const currentRank  = statusSeverityRank(currentStatus);
+  const currentRank = statusSeverityRank(currentStatus);
   if (currentRank > recordedRank) {
     // Status has worsened since dismissal — resurface the chip
     return { hidden: false, resurfaced: true };
@@ -238,20 +155,25 @@ async function loadHiddenRules() {
 // objects from the latest snapshot for lookup on click.
 let _openEvidenceKey = null;
 let _evidenceByKey = new Map();
+// Trace entry lookup: ruleId → trace entry (for the "Why?" block). Populated
+// from snapshot.trace.entries alongside _evidenceByKey. Keyed by ruleId; for
+// multi-med drug-monitoring rules also keyed by ruleId|drugName (chipRef).
+// In-memory only; cleared in cleanup().
+let _traceByKey = new Map();
+let _currentSnapshot = null; // reference to last rendered snapshot for export
 let _evidenceKeydownHandler = null;
 let _evidenceHandlersAttached = false;
 
 // ── Waiting room state ────────────────────────────────────────────────────────
 // Practice code resolved at fetch time from PracticeCode helper. No default.
-let WR_SITE_ID     = null;
-let WR_API_URL     = null;
-const WR_POLL_MS   = 30 * 1000;
+let WR_SITE_ID = null;
+let WR_API_URL = null;
+const WR_POLL_MS = 30 * 1000;
 
-let wrPatients     = null;  // null = not loaded yet, [] = loaded (empty), [...] = loaded
-let wrError        = null;
-let wrLastFetch    = null;
-let wrPollTimer    = null;
-
+let wrPatients = null; // null = not loaded yet, [] = loaded (empty), [...] = loaded
+let wrError = null;
+let wrLastFetch = null;
+let wrPollTimer = null;
 
 export async function init(el) {
   container = el;
@@ -278,7 +200,9 @@ export async function init(el) {
   };
   chrome.runtime.onMessage.addListener(onMsg);
 
-  _refreshBtnHandler = e => { if (e.target?.id === 'sentRefreshBtn') refresh(); };
+  _refreshBtnHandler = (e) => {
+    if (e.target?.id === 'sentRefreshBtn') refresh();
+  };
   document.addEventListener('click', _refreshBtnHandler);
 
   // Delegated dismiss handler: clicks on a chip's × button add the rule to
@@ -321,7 +245,9 @@ export async function init(el) {
   };
 }
 
-function onUpdated(tabId, info) { if (info.status === 'complete') refresh(); }
+function onUpdated(tabId, info) {
+  if (info.status === 'complete') refresh();
+}
 
 async function cleanup() {
   clearInterval(pollTimer);
@@ -347,12 +273,13 @@ async function cleanup() {
   _evidenceHandlersAttached = false;
   _openEvidenceKey = null;
   _evidenceByKey.clear();
+  _traceByKey.clear();
+  _currentSnapshot = null;
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
   container = null;
 }
-
 
 // ── Rule currency footer ──────────────────────────────────────────────────────
 // Loaded once per module init. Renders a one-line footer beneath the chip area.
@@ -365,24 +292,24 @@ async function loadRuleCurrencyFooter() {
   try {
     const base = chrome.runtime.getURL('rules/');
     const [drug, qof, vax, alert] = await Promise.all([
-      fetch(base + 'drug-rules.json').then(r => r.json()),
-      fetch(base + 'qof-rules.json').then(r => r.json()),
-      fetch(base + 'vaccine-rules.json').then(r => r.json()),
-      fetch(base + 'alert-library.json').then(r => r.json()),
+      fetch(base + 'drug-rules.json').then((r) => r.json()),
+      fetch(base + 'qof-rules.json').then((r) => r.json()),
+      fetch(base + 'vaccine-rules.json').then((r) => r.json()),
+      fetch(base + 'alert-library.json').then((r) => r.json()),
     ]);
 
     const files = [
-      { id: 'drug',    lastUpdated: drug.lastUpdated,  specVersion: drug.specVersion },
-      { id: 'qof',     lastUpdated: qof.lastUpdated,   specVersion: qof.specVersion },
-      { id: 'vaccine', lastUpdated: vax.lastUpdated,   specVersion: vax.specVersion },
-      { id: 'alert',   lastUpdated: alert.lastUpdated, specVersion: alert.specVersion },
+      { id: 'drug', lastUpdated: drug.lastUpdated, specVersion: drug.specVersion },
+      { id: 'qof', lastUpdated: qof.lastUpdated, specVersion: qof.specVersion },
+      { id: 'vaccine', lastUpdated: vax.lastUpdated, specVersion: vax.specVersion },
+      { id: 'alert', lastUpdated: alert.lastUpdated, specVersion: alert.specVersion },
     ];
 
     const today = new Date().toISOString().slice(0, 10);
 
     // RuleCurrency is loaded as a classic script by the panel/pop-out shells.
     // If it's not available (e.g. test env), show nothing.
-    const RC = (typeof window !== 'undefined') ? window.RuleCurrency : null;
+    const RC = typeof window !== 'undefined' ? window.RuleCurrency : null;
     if (!RC) return;
 
     const result = RC.assessRuleCurrency(files, today);
@@ -396,15 +323,21 @@ async function loadRuleCurrencyFooter() {
 
     const summaryText = [qofLabel, drugDateLabel ? `drug rules ${drugDateLabel}` : ''].filter(Boolean).join(' · ');
 
-    if (result.overall === 'amber') {
-      _ruleCurrencyFooter = `<div class="sent-rules-footer sent-rules-footer-amber" title="${escHtml(result.warnings.join(' | '))}">` +
+    if (result.overall === 'red') {
+      _ruleCurrencyFooter =
+        `<div class="sent-rules-footer sent-rules-footer-red" title="${escHtml(result.warnings.join(' | '))}">` +
+        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}` +
+        `</div>`;
+    } else if (result.overall === 'amber') {
+      _ruleCurrencyFooter =
+        `<div class="sent-rules-footer sent-rules-footer-amber" title="${escHtml(result.warnings.join(' | '))}">` +
         `<span class="sent-rules-footer-icon">&#9888;</span> ` +
         `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}` +
         `</div>`;
     } else {
-      _ruleCurrencyFooter = `<div class="sent-rules-footer sent-rules-footer-green">` +
-        `Rules: ${escHtml(summaryText)}` +
-        `</div>`;
+      _ruleCurrencyFooter =
+        `<div class="sent-rules-footer sent-rules-footer-green">` + `Rules: ${escHtml(summaryText)}` + `</div>`;
     }
   } catch (_) {
     // Non-critical: suppress errors in currency footer silently
@@ -415,7 +348,7 @@ async function loadRuleCurrencyFooter() {
 // ── Waiting room ─────────────────────────────────────────────────────────────
 
 async function fetchWaitingRoom(bypassCache = false) {
-  if (!bypassCache && wrLastFetch && (Date.now() - wrLastFetch) < WR_POLL_MS) return;
+  if (!bypassCache && wrLastFetch && Date.now() - wrLastFetch < WR_POLL_MS) return;
   // Resolve practice code on every fetch so user changes take effect immediately.
   const { code, source } = await window.PracticeCode.resolve();
   WR_SITE_ID = code;
@@ -442,23 +375,25 @@ async function fetchWaitingRoom(bypassCache = false) {
     });
     const raw = await r.json();
     const entries = (raw?.schedule?.schedule ?? [])
-      .flatMap(d => d.entries ?? [])
-      .filter(e => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
-    wrPatients = entries.map(e => ({
-      name:          e.patient?.name ?? 'Unknown',
-      start:         e.start ?? '',
-      startDateTime: e.startDateTime ?? null,
-      reason:        (e.compiledReasonForAppointment ?? '').replace(/^GP Appointment\s*/i,'').trim(),
-      deliveryMode:  e.deliveryMode?.value ?? '',
-      minutesWaiting: calcWrWait(e.startDateTime),
-    })).sort((a,b) => a.start < b.start ? -1 : 1);
+      .flatMap((d) => d.entries ?? [])
+      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived');
+    wrPatients = entries
+      .map((e) => ({
+        name: e.patient?.name ?? 'Unknown',
+        start: e.start ?? '',
+        startDateTime: e.startDateTime ?? null,
+        reason: (e.compiledReasonForAppointment ?? '').replace(/^GP Appointment\s*/i, '').trim(),
+        deliveryMode: e.deliveryMode?.value ?? '',
+        minutesWaiting: calcWrWait(e.startDateTime),
+      }))
+      .sort((a, b) => (a.start < b.start ? -1 : 1));
     wrError = null;
     wrLastFetch = Date.now();
     // NB: the toolbar action badge is owned solely by panel.js's waiting-room
     // strip (updateStripBadge), which polls globally. This module used to set it
     // too, so the two writers raced and clobbered each other's count whenever the
     // Sentinel tab was active. Leave the badge to panel.js.
-  } catch(e) {
+  } catch (e) {
     wrError = e.message;
     wrPatients = wrPatients ?? []; // retain last good state on transient error
   }
@@ -503,23 +438,25 @@ function renderWaitingRoomBlock() {
       <div class="wr-pin-row">
         <span class="wr-pin-icon">✓</span>
         <span class="wr-pin-label">Waiting room clear</span>
-        <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+        <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
       </div>
     </div>`;
   }
 
-  const maxWait = Math.max(...patients.map(p => p.minutesWaiting ?? 0));
-  const urgent  = patients.filter(p => (p.minutesWaiting ?? 0) >= 15);
-  const rows    = patients.map(p => {
-    const mins = p.minutesWaiting;
-    const waitClass = mins == null ? '' : mins >= 20 ? 'wr-row-red' : mins >= 10 ? 'wr-row-amber' : '';
-    const waitStr   = mins != null ? `${mins}m` : '';
-    return `<div class="wr-row ${waitClass}">
+  const maxWait = Math.max(...patients.map((p) => p.minutesWaiting ?? 0));
+  const urgent = patients.filter((p) => (p.minutesWaiting ?? 0) >= 15);
+  const rows = patients
+    .map((p) => {
+      const mins = p.minutesWaiting;
+      const waitClass = mins == null ? '' : mins >= 20 ? 'wr-row-red' : mins >= 10 ? 'wr-row-amber' : '';
+      const waitStr = mins != null ? `${mins}m` : '';
+      return `<div class="wr-row ${waitClass}">
       <span class="wr-row-time">${escHtml(p.start)}</span>
       <span class="wr-row-name">${escHtml(p.name)}</span>
       ${waitStr ? `<span class="wr-row-wait">${waitStr}</span>` : ''}
     </div>`;
-  }).join('');
+    })
+    .join('');
 
   const urgentNote = urgent.length > 0 ? ` · ${urgent.length} &gt;15m` : '';
 
@@ -527,7 +464,7 @@ function renderWaitingRoomBlock() {
     <div class="wr-pin-row wr-pin-head">
       <span class="wr-pin-icon">🚶</span>
       <span class="wr-pin-label"><strong>${patients.length}</strong> waiting${urgentNote}</span>
-      <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}</span>
+      <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
     </div>
     <div class="wr-rows">${rows}</div>
   </div>`;
@@ -567,31 +504,52 @@ async function refresh() {
   // executeScript/sendMessage round-trips race and each render() replaces the DOM
   // the others just built (flicker + wasted IPC). If a trigger arrives mid-flight
   // we run exactly one more refresh afterwards.
-  if (_refreshInFlight) { _refreshPending = true; return; }
+  if (_refreshInFlight) {
+    _refreshPending = true;
+    return;
+  }
   _refreshInFlight = true;
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
     if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) {
-      render({ state: 'no-medicus' }); return;
+      render({ state: 'no-medicus' });
+      return;
     }
-    const mountCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__sentinelMounted });
-    if (!mountCheck?.[0]?.result) { render({ state: 'not-mounted' }); return; }
+    const mountCheck = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => !!window.__sentinelMounted,
+    });
+    if (!mountCheck?.[0]?.result) {
+      render({ state: 'not-mounted' });
+      return;
+    }
     // Store snapshot tab identity for the "Verify in Medicus" affordance.
     _snapshotTabId = tab.id;
     _snapshotTabWindowId = tab.windowId;
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
     switch (classifySnapshot(snapshot)) {
-      case 'degraded':    render({ state: 'degraded', snapshot }); return;
-      case 'unavailable': render({ state: 'no-chips' }); return;
-      case 'no-chips':    render({ state: 'no-chips' }); return;
-      default:            render({ state: 'data', snapshot }); return;
+      case 'degraded':
+        render({ state: 'degraded', snapshot });
+        return;
+      case 'unavailable':
+        render({ state: 'no-chips' });
+        return;
+      case 'no-chips':
+        render({ state: 'no-chips' });
+        return;
+      default:
+        render({ state: 'data', snapshot });
+        return;
     }
   } catch (err) {
     render({ state: 'error', message: err.message });
   } finally {
     _refreshInFlight = false;
-    if (_refreshPending) { _refreshPending = false; refresh(); }
+    if (_refreshPending) {
+      _refreshPending = false;
+      refresh();
+    }
   }
 }
 
@@ -600,62 +558,104 @@ function render(payload) {
   const { state, snapshot, message } = payload;
 
   if (state === 'loading') {
-    container.innerHTML = shell('', `<div class="sent-skeleton">${Array(4).fill('<div class="sent-skel-chip"></div>').join('')}</div>`);
+    container.innerHTML = shell(
+      '',
+      `<div class="sent-skeleton">${Array(4).fill('<div class="sent-skel-chip"></div>').join('')}</div>`
+    );
     return;
   }
-  if (state === 'no-medicus') { container.innerHTML = shell('', statusBlock('idle', 'No Medicus tab active', 'Open Medicus to use Sentinel.')); return; }
-  if (state === 'not-mounted') { container.innerHTML = shell('', statusBlock('idle', 'Navigate to a patient record', 'Sentinel activates on patient record and triage task pages.')); return; }
-  if (state === 'no-chips') { container.innerHTML = shell('', statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.')); return; }
-  if (state === 'error') { container.innerHTML = shell('', statusBlock('error', 'Could not connect to Sentinel', message || '')); return; }
+  if (state === 'no-medicus') {
+    container.innerHTML = shell('', statusBlock('idle', 'No Medicus tab active', 'Open Medicus to use Sentinel.'));
+    return;
+  }
+  if (state === 'not-mounted') {
+    container.innerHTML = shell(
+      '',
+      statusBlock('idle', 'Navigate to a patient record', 'Sentinel activates on patient record and triage task pages.')
+    );
+    return;
+  }
+  if (state === 'no-chips') {
+    container.innerHTML = shell(
+      '',
+      statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.')
+    );
+    return;
+  }
+  if (state === 'error') {
+    container.innerHTML = shell('', statusBlock('error', 'Could not connect to Sentinel', message || ''));
+    return;
+  }
   if (state === 'degraded') {
     // H-005: a patient was identified but nothing could be extracted. This must
     // be surfaced as a warning, never as a benign empty — see classifySnapshot.
-    const reason = (snapshot && snapshot.reason) ||
+    const reason =
+      (snapshot && snapshot.reason) ||
       'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.';
-    container.innerHTML = shell('', statusBlock('error', "⚠ Couldn't read this record",
-      `${reason} This is NOT an "all clear" — verify the patient directly in Medicus, and the extension may need updating.`));
+    container.innerHTML = shell(
+      '',
+      statusBlock(
+        'error',
+        "⚠ Couldn't read this record",
+        `${reason} This is NOT an "all clear" — verify the patient directly in Medicus, and the extension may need updating.`
+      )
+    );
     return;
   }
 
-  const { chips: allChips, patientContext, evaluatedAt, modules, unmatchedMeds } = snapshot;
+  const {
+    chips: allChips,
+    patientContext,
+    evaluatedAt,
+    modules,
+    unmatchedMeds,
+    unmatchedMedsDetailed,
+    trace,
+    drift,
+  } = snapshot;
   const patient = patientContext;
+  _currentSnapshot = snapshot;
 
   // Drop chips for currently-suppressed rules (per-rule hide/snooze) before any
   // filtering or counting, so hidden alerts vanish entirely and don't skew the
   // filter-bar tallies. Resurfaced chips (status has worsened since dismissal) are
   // kept and annotated so they render with a visible RESURFACED badge.
-  const chips = (allChips || []).map(c => {
-    const { hidden, resurfaced } = isRuleHiddenResult(c.ruleId, c.status);
-    if (hidden) return null;
-    return resurfaced ? { ...c, _resurfaced: true } : c;
-  }).filter(Boolean);
+  const chips = (allChips || [])
+    .map((c) => {
+      const { hidden, resurfaced } = isRuleHiddenResult(c.ruleId, c.status);
+      if (hidden) return null;
+      return resurfaced ? { ...c, _resurfaced: true } : c;
+    })
+    .filter(Boolean);
 
   // Filter chips
   let visibleChips = chips;
-  if (currentFilter === 'action') visibleChips = chips.filter(c => STATUS_RANK[c.status] <= 2);
-  if (currentFilter === 'clear')  visibleChips = chips.filter(c => STATUS_RANK[c.status] >= 5);
+  if (currentFilter === 'action') visibleChips = chips.filter((c) => STATUS_RANK[c.status] <= 2);
+  if (currentFilter === 'clear') visibleChips = chips.filter((c) => STATUS_RANK[c.status] >= 5);
 
-  const actionCount = chips.filter(c => STATUS_RANK[c.status] <= 2).length;
-  const clearCount  = chips.filter(c => STATUS_RANK[c.status] >= 5).length;
+  const actionCount = chips.filter((c) => STATUS_RANK[c.status] <= 2).length;
+  const clearCount = chips.filter((c) => STATUS_RANK[c.status] >= 5).length;
 
   // Group by type
   const groups = {};
-  visibleChips.forEach(chip => {
+  visibleChips.forEach((chip) => {
     const g = chip.type || 'other';
     if (!groups[g]) groups[g] = [];
     groups[g].push(chip);
   });
-  Object.values(groups).forEach(g => g.sort((a, b) => (STATUS_RANK[a.status] ?? 3) - (STATUS_RANK[b.status] ?? 3)));
+  Object.values(groups).forEach((g) => g.sort((a, b) => (STATUS_RANK[a.status] ?? 3) - (STATUS_RANK[b.status] ?? 3)));
 
   // "Verify in Medicus" button — focuses the source tab so the clinician can
   // check the live record before acting (H-007 anti-automation-bias mitigation).
   // Rendered next to the patient name banner and again inside each chip's evidence
   // panel. Only shown when we have a known snapshot tab.
-  const verifyBtn = _snapshotTabId != null
-    ? `<button class="sent-verify-btn" id="sentVerifyBannerBtn" title="Check the source record before acting on this alert">Verify in Medicus &#x2197;</button>`
-    : '';
+  const verifyBtn =
+    _snapshotTabId != null
+      ? `<button class="sent-verify-btn" id="sentVerifyBannerBtn" title="Check the source record before acting on this alert">Verify in Medicus &#x2197;</button>`
+      : '';
 
-  const patientHtml = patient ? `
+  const patientHtml = patient
+    ? `
     <div class="sent-patient-banner">
       <div class="sent-patient-banner-row">
         <div class="sent-patient-name">${escHtml(patient.displayName || patient.name || '')}</div>
@@ -666,75 +666,184 @@ function render(payload) {
         patient.dateOfBirth ? `DOB ${escHtml(patient.dateOfBirth)}` : '',
         patient.age ? `Age ${patient.age}` : '',
         patient.gender ? escHtml(patient.gender) : '',
-      ].filter(Boolean).join(' · ')}</div>
-    </div>` : '';
+      ]
+        .filter(Boolean)
+        .join(' · ')}</div>
+    </div>`
+    : '';
+
+  // Amber drift banner — shown when the content script detected a sustained
+  // extraction quality drop on this view. Amber (not red) because degraded (total
+  // blank) is already handled by classifySnapshot → 'degraded' state above.
+  // Placed between patient header and filter bar so the clinician sees it
+  // immediately without it blocking the chip list.
+  const driftHtml =
+    drift && drift.drifted
+      ? `
+     <div class="sent-drift-banner" role="alert">
+       <div class="sent-drift-head"><span class="sent-drift-icon">&#9888;</span>
+         <strong>Extraction quality has dropped</strong>
+         <button class="sent-drift-dismiss" id="sentDriftDismiss" title="Hide this warning for 24 hours">Dismiss 24h</button>
+       </div>
+       <p class="sent-drift-body">${escHtml(drift.reason)} Alerts below may be incomplete — this is NOT an all-clear. Verify directly in Medicus; the extension may need updating.</p>
+     </div>`
+      : '';
 
   const filterHtml = `
     <div class="sent-filter-bar">
-      <button class="sent-filter-btn${currentFilter==='all'?' active':''}" data-filter="all">All (${chips.length})</button>
-      <button class="sent-filter-btn${currentFilter==='action'?' active action':''}" data-filter="action">Needs action (${actionCount})</button>
-      <button class="sent-filter-btn${currentFilter==='clear'?' active clear':''}" data-filter="clear">In date (${clearCount})</button>
+      <button class="sent-filter-btn${currentFilter === 'all' ? ' active' : ''}" data-filter="all">All (${chips.length})</button>
+      <button class="sent-filter-btn${currentFilter === 'action' ? ' active action' : ''}" data-filter="action">Needs action (${actionCount})</button>
+      <button class="sent-filter-btn${currentFilter === 'clear' ? ' active clear' : ''}" data-filter="clear">In date (${clearCount})</button>
     </div>`;
 
-  const typeOrder = ['drug-combo', 'event-count', 'composite', 'drug-monitoring', 'vaccine', 'qof-indicator', 'qof-process-indicator', 'qof-register'];
-  const typeLabelMap = { 'drug-combo':'Drug Combinations', 'event-count':'Recurrent Events', 'composite':'Composite Alerts', 'drug-monitoring':'Drug Monitoring', 'vaccine':'Vaccinations', 'qof-indicator':'QOF Indicators', 'qof-process-indicator':'QOF Process', 'qof-register':'Registers' };
+  const typeOrder = [
+    'drug-combo',
+    'event-count',
+    'composite',
+    'drug-monitoring',
+    'vaccine',
+    'qof-indicator',
+    'qof-process-indicator',
+    'qof-register',
+  ];
+  const typeLabelMap = {
+    'drug-combo': 'Drug Combinations',
+    'event-count': 'Recurrent Events',
+    composite: 'Composite Alerts',
+    'drug-monitoring': 'Drug Monitoring',
+    vaccine: 'Vaccinations',
+    'qof-indicator': 'QOF Indicators',
+    'qof-process-indicator': 'QOF Process',
+    'qof-register': 'Registers',
+  };
 
   const groupsHtml = typeOrder
-    .filter(t => groups[t]?.length)
-    .map(t => `
-      <section class="sent-group${t==='qof-register'?' sent-group-dim':''}">
+    .filter((t) => groups[t]?.length)
+    .map(
+      (t) => `
+      <section class="sent-group${t === 'qof-register' ? ' sent-group-dim' : ''}">
         <div class="sent-group-label">${typeLabelMap[t] || t}</div>
         <div class="sent-chip-list">${groups[t].map(renderChip).join('')}</div>
-      </section>`).join('');
+      </section>`
+    )
+    .join('');
 
-  const ts = evaluatedAt ? new Date(evaluatedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
-  const emptyMsg = visibleChips.length === 0 ? `<div class="sent-empty">${currentFilter==='action'?'No items needing action.':currentFilter==='clear'?'No items in date.':'No chips for this patient.'}</div>` : '';
+  const ts = evaluatedAt
+    ? new Date(evaluatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  const emptyMsg =
+    visibleChips.length === 0
+      ? `<div class="sent-empty">${currentFilter === 'action' ? 'No items needing action.' : currentFilter === 'clear' ? 'No items in date.' : 'No chips for this patient.'}</div>`
+      : '';
 
   // Per-module extraction breakdown (informational, H-005 transparency). Shows
   // what the extension actually read from this record so a clinician can spot a
   // partial scraper failure (e.g. meds populated but observations silently empty)
   // that isn't blank enough to trip the degraded banner. A zero count is
   // amber-flagged to prompt verification — it is NOT an error on its own.
-  const extractionHtml = modules ? `
+  const extractionHtml = modules
+    ? `
     <div class="sent-extraction" title="What the extension read from this record. A zero count is flagged for you to verify directly in Medicus — a record can legitimately have none, so this is not necessarily an error.">
       <span class="sent-ext-label">Extracted</span>
-      <span class="sent-ext-item${modules.medications===0?' sent-ext-zero':''}">${modules.medications} meds</span>
-      <span class="sent-ext-item${modules.observations===0?' sent-ext-zero':''}">${modules.observations} obs</span>
-      <span class="sent-ext-item${modules.problems===0?' sent-ext-zero':''}">${modules.problems} problems</span>
-    </div>` : '';
+      <span class="sent-ext-item${modules.medications === 0 ? ' sent-ext-zero' : ''}">${modules.medications} meds</span>
+      <span class="sent-ext-item${modules.observations === 0 ? ' sent-ext-zero' : ''}">${modules.observations} obs</span>
+      <span class="sent-ext-item${modules.problems === 0 ? ' sent-ext-zero' : ''}">${modules.problems} problems</span>
+    </div>`
+    : '';
 
-  const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds);
+  const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
 
   // Rule currency footer (one line, neutral if green, amber with first warning if amber).
   const currencyFooterHtml = _ruleCurrencyFooter || '';
 
-  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + currencyFooterHtml + `
+  container.innerHTML = shell(
+    patientHtml + driftHtml + filterHtml,
+    groupsHtml +
+      emptyMsg +
+      unmatchedHtml +
+      extractionHtml +
+      currencyFooterHtml +
+      `
     <div class="sent-footer">
       <div class="sent-footer-left">
         <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
         <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
+        <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
       </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
-    </div>`);
+    </div>`
+  );
 
   // Build evidence-key → chip lookup for this render so the click handler can
   // find the chip object without re-parsing DOM.
   _evidenceByKey = new Map();
-  visibleChips.forEach(chip => {
+  visibleChips.forEach((chip) => {
     if (!chip.evidence) return;
     const key = (chip.ruleId || '') + (chip.type === 'drug-monitoring' ? '|' + (chip.drugName || '') : '');
     _evidenceByKey.set(key, chip);
   });
 
+  // Build trace-key → trace entry lookup. Drug-monitoring entries are keyed by
+  // chipRef (ruleId|drugName); all other types are keyed by ruleId.
+  _traceByKey = new Map();
+  if (trace && Array.isArray(trace.entries)) {
+    trace.entries.forEach((entry) => {
+      if (!entry) return;
+      if (entry.chipRef) _traceByKey.set(entry.chipRef, entry);
+      if (entry.ruleId) _traceByKey.set(entry.ruleId, entry);
+    });
+  }
+
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  container.querySelector('#sentApptSummaryBtn')?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+  container
+    .querySelector('#sentApptSummaryBtn')
+    ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+
+  // Drift banner dismiss: mute for 24h via shared storage key. The content
+  // script's next publish reads mutedUntil and stops stamping drift, so the
+  // 10s poll will not resurrect the banner once dismissed.
+  container.querySelector('#sentDriftDismiss')?.addEventListener('click', async () => {
+    const EH = window.ExtractionHealth;
+    if (!EH) {
+      container.querySelector('.sent-drift-banner')?.remove();
+      return;
+    }
+    const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+    const muted = EH.muteBaseline(r['sentinel.extractionBaseline'] || null, new Date().toISOString());
+    await chrome.storage.local.set({ 'sentinel.extractionBaseline': muted });
+    container.querySelector('.sent-drift-banner')?.remove();
+  });
+
+  // Export evaluation log button: download the trace as a JSON file.
+  const exportLogBtn = container.querySelector('#sentExportLogBtn');
+  if (exportLogBtn) {
+    if (trace) {
+      exportLogBtn.disabled = false;
+      exportLogBtn.addEventListener('click', () => {
+        const pc = _currentSnapshot && _currentSnapshot.patientContext;
+        const id = (pc && (pc.nhsNumber || pc.patientUuid || pc.uuid)) || 'unknown';
+        const safeId = String(id).replace(/[^a-zA-Z0-9-]/g, '');
+        const today = new Date().toISOString().slice(0, 10);
+        const filename = `sentinel-evaluation-log-${safeId}-${today}.json`;
+        const blob = new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    } else {
+      exportLogBtn.disabled = true;
+    }
+  }
 
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
 
   // #sentRefreshBtn is handled by the persistent delegated click handler wired in
   // init() (_refreshBtnHandler); no per-render listener here (would double-fire).
-  container.querySelectorAll('.sent-filter-btn').forEach(btn => {
+  container.querySelectorAll('.sent-filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       currentFilter = btn.dataset.filter;
       _openEvidenceKey = null; // filter change closes any open panel
@@ -782,7 +891,7 @@ async function focusMedicusTab() {
     }
     // Also handle any evidence-panel verify buttons that were clicked.
     const evVerifyBtns = container?.querySelectorAll('.sent-ev-verify-btn');
-    evVerifyBtns?.forEach(btn => {
+    evVerifyBtns?.forEach((btn) => {
       btn.textContent = 'Medicus tab not found';
       btn.disabled = true;
     });
@@ -815,7 +924,10 @@ function onEvidenceClick(e) {
     // include the drug name). Picks the first match — sufficient for v1.
     let targetKey = null;
     for (const k of _evidenceByKey.keys()) {
-      if (k === refId || k.startsWith(refId + '|')) { targetKey = k; break; }
+      if (k === refId || k.startsWith(refId + '|')) {
+        targetKey = k;
+        break;
+      }
     }
     if (!targetKey) return;
     closeOpenEvidence();
@@ -860,7 +972,10 @@ function onEvidenceKeydown(e) {
   e.preventDefault();
   const key = chipEl.dataset.evidenceKey;
   if (_openEvidenceKey === key) closeOpenEvidence();
-  else { closeOpenEvidence(); openEvidenceFor(chipEl, key); }
+  else {
+    closeOpenEvidence();
+    openEvidenceFor(chipEl, key);
+  }
 }
 
 function openEvidenceFor(chipEl, key) {
@@ -871,6 +986,21 @@ function openEvidenceFor(chipEl, key) {
   const panel = document.createElement('div');
   panel.className = 'sent-evidence-wrapper';
   panel.innerHTML = CR.renderEvidencePanel(chip.evidence);
+
+  // Inject "Why?" block from trace entry before the footer.
+  // Look up by chipRef (ruleId|drugName for drug-monitoring) first, then ruleId.
+  if (CR.renderWhyBlock && _traceByKey.size > 0) {
+    const traceEntry = _traceByKey.get(key) || _traceByKey.get(chip.ruleId);
+    if (traceEntry) {
+      const foot = panel.querySelector('.sent-ev-foot');
+      if (foot) {
+        const whyEl = document.createElement('div');
+        whyEl.innerHTML = CR.renderWhyBlock(traceEntry);
+        foot.insertAdjacentElement('beforebegin', whyEl);
+      }
+    }
+  }
+
   // Inject "Verify in Medicus" button into the evidence panel footer.
   // This appears in addition to the banner button so the clinician can verify
   // directly from the expanded evidence view without scrolling up.
@@ -881,7 +1011,10 @@ function openEvidenceFor(chipEl, key) {
       verifyEv.className = 'sent-ev-verify-btn';
       verifyEv.title = 'Check the source record before acting on this alert';
       verifyEv.textContent = 'Verify in Medicus ↗';
-      verifyEv.addEventListener('click', (e) => { e.stopPropagation(); focusMedicusTab(); });
+      verifyEv.addEventListener('click', (e) => {
+        e.stopPropagation();
+        focusMedicusTab();
+      });
       foot.prepend(verifyEv);
     }
   }
@@ -918,15 +1051,15 @@ function renderChip(chip) {
 
   // Drug-monitoring, qof-indicator, and the v3 custom-alert chip types delegate
   // to the shared renderer to keep side-panel rendering in sync with previews.
-  const CR = (typeof window !== 'undefined') ? window.ChipRenderer : null;
+  const CR = typeof window !== 'undefined' ? window.ChipRenderer : null;
   if (CR) {
     let html = null;
-    if (chip.type === 'drug-monitoring')  html = CR.renderDrugChip(chip);
-    if (chip.type === 'qof-indicator')    html = CR.renderQofIndicatorChip(chip);
-    if (chip.type === 'drug-combo')       html = CR.renderDrugComboChip(chip);
-    if (chip.type === 'event-count')      html = CR.renderEventCountChip(chip);
-    if (chip.type === 'composite')        html = CR.renderCompositeChip(chip);
-    if (chip.type === 'vaccine')          html = CR.renderVaccineChip(chip);
+    if (chip.type === 'drug-monitoring') html = CR.renderDrugChip(chip);
+    if (chip.type === 'qof-indicator') html = CR.renderQofIndicatorChip(chip);
+    if (chip.type === 'drug-combo') html = CR.renderDrugComboChip(chip);
+    if (chip.type === 'event-count') html = CR.renderEventCountChip(chip);
+    if (chip.type === 'composite') html = CR.renderCompositeChip(chip);
+    if (chip.type === 'vaccine') html = CR.renderVaccineChip(chip);
     if (html != null) return chip._resurfaced ? injectResurfacedBanner(html) : html;
   }
 
@@ -936,19 +1069,22 @@ function renderChip(chip) {
     : '';
 
   if (chip.type === 'drug-monitoring') {
-    const testLines = (chip.tests || []).map(t => {
-      const tCol = STATUS_COLOUR[t.status] || 'neutral';
-      const tLbl = STATUS_LABEL[t.status] || '';
-      const dateStr = t.latestObs ? formatDate(t.latestObs.date) : '';
-      const valStr  = t.latestObs && t.latestObs.value != null
-        ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
-        : '';
-      const dayStr  = t.days != null ? ` · ${t.days}d` : '';
-      return `<div class="sent-test-row">
+    const testLines = (chip.tests || [])
+      .map((t) => {
+        const tCol = STATUS_COLOUR[t.status] || 'neutral';
+        const tLbl = STATUS_LABEL[t.status] || '';
+        const dateStr = t.latestObs ? formatDate(t.latestObs.date) : '';
+        const valStr =
+          t.latestObs && t.latestObs.value != null
+            ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
+            : '';
+        const dayStr = t.days != null ? ` · ${t.days}d` : '';
+        return `<div class="sent-test-row">
         <span class="sent-test-name">${escHtml(t.testName || t.name || '')}</span>
         <span class="sent-test-status sent-test-${tCol}">${tLbl}${valStr}${dateStr ? ` · ${dateStr}${dayStr}` : ''}</span>
       </div>`;
-    }).join('');
+      })
+      .join('');
     return `
       <div class="sent-chip sent-chip-${col}">
         ${resurfacedHtml}
@@ -964,12 +1100,16 @@ function renderChip(chip) {
   if (chip.type === 'qof-indicator') {
     // Show the value + date. For overdue chips, flag that the result predates the QOF year start.
     const isOverdue = chip.status === 'overdue' || chip.status === 'not_met';
-    const datePart  = chip.dateText
-      ? (isOverdue && chip.qofYearStart && chip.dateText < chip.qofYearStart
-          ? ` · ${escHtml(chip.dateText)} ⚠ before ${escHtml(chip.qofYearStart)}`
-          : ` · ${escHtml(chip.dateText)}${chip.days != null ? ` (${chip.days}d ago)` : ''}`)
+    const datePart = chip.dateText
+      ? isOverdue && chip.qofYearStart && chip.dateText < chip.qofYearStart
+        ? ` · ${escHtml(chip.dateText)} ⚠ before ${escHtml(chip.qofYearStart)}`
+        : ` · ${escHtml(chip.dateText)}${chip.days != null ? ` (${chip.days}d ago)` : ''}`
       : '';
-    const obs = chip.valueText ? `${escHtml(chip.valueText)}${datePart}` : (chip.dateText ? datePart.replace(/^ · /, '') : '');
+    const obs = chip.valueText
+      ? `${escHtml(chip.valueText)}${datePart}`
+      : chip.dateText
+        ? datePart.replace(/^ · /, '')
+        : '';
     const yearTag = chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}">
@@ -1030,12 +1170,18 @@ function statusBlock(level, heading, body) {
 
 function formatDate(s) {
   if (!s) return '';
-  try { return new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
-  catch { return s; }
+  try {
+    return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return s;
+  }
 }
 
 function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // Cached feedback email (suite.feedbackEmail) loaded at render time.
@@ -1044,7 +1190,7 @@ let _feedbackEmail;
 function ensureFeedbackEmailLoaded() {
   if (_feedbackEmail !== undefined) return;
   _feedbackEmail = null; // mark as load-attempted
-  chrome.storage.local.get('suite.feedbackEmail', r => {
+  chrome.storage.local.get('suite.feedbackEmail', (r) => {
     const addr = (r['suite.feedbackEmail'] || '').trim();
     if (addr) {
       _feedbackEmail = addr;
@@ -1060,16 +1206,34 @@ function ensureFeedbackEmailLoaded() {
 // Most medicines need no monitoring — this list exists to spot brand names that
 // SHOULD have matched a monitoring rule but didn't. A "Report a possible missing
 // brand" mailto link is included when a feedback email address is configured.
-function renderUnmatchedMedsSection(meds) {
+// When unmatchedDetailed is provided, excluded meds are annotated in amber.
+function renderUnmatchedMedsSection(meds, unmatchedDetailed) {
   ensureFeedbackEmailLoaded();
   if (!meds || meds.length === 0) return '';
-  const items = meds.map(n => `<li>${escHtml(n)}</li>`).join('');
+
+  // Build item list. Use detailed data when available for exclude annotations.
+  const detailedMap = new Map();
+  if (unmatchedDetailed && unmatchedDetailed.length > 0) {
+    unmatchedDetailed.forEach((u) => detailedMap.set(u.name, u));
+  }
+
+  const items = meds
+    .map((n) => {
+      const detail = detailedMap.get(n);
+      if (detail && detail.reason === 'excluded' && detail.excludedBy) {
+        const annotation = escHtml(`excluded by '${detail.excludedBy.term}' (rule ${detail.excludedBy.ruleId})`);
+        return `<li>${escHtml(n)} <span class="sent-unmatched-excluded">${annotation}</span></li>`;
+      }
+      return `<li>${escHtml(n)}</li>`;
+    })
+    .join('');
+
   let mailtoLink = '';
   if (_feedbackEmail) {
     const subject = encodeURIComponent('Possible missing monitoring rule brand');
     const body = encodeURIComponent(
       'The following medication(s) appeared in a patient record without matching a monitoring rule. Please check whether a brand name should be added:\n\n' +
-      meds.join('\n')
+        meds.join('\n')
     );
     mailtoLink = ` <a class="sent-unmatched-report" href="mailto:${escHtml(_feedbackEmail)}?subject=${subject}&body=${body}">Report a possible missing brand</a>`;
   }
@@ -1082,5 +1246,3 @@ function renderUnmatchedMedsSection(meds) {
       </div>
     </details>`;
 }
-
-

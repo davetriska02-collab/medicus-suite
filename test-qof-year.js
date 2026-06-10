@@ -57,7 +57,7 @@ function evaluate(obsDate, value, nowIso, ruleOverrides = {}) {
       patientContext: null,
       _registerLookup: {},
     },
-    nowIso,
+    nowIso
   );
   return chips[0] || null;
 }
@@ -118,7 +118,10 @@ console.log('\n=== observation-threshold: QOF year boundary ===');
   // 15 Jan 2025 — within 365d of 15 Jan 2026, but BEFORE 1 Apr 2025 QOF start → overdue
   const rollingWouldPass = evaluate('2025-01-15', '138/78', NOW);
   assert(rollingWouldPass !== null, 'chip returned for obs at 15 Jan 2025');
-  assert(rollingWouldPass.status === 'overdue', '15 Jan 2025 result: within 365d rolling but outside QOF year → overdue');
+  assert(
+    rollingWouldPass.status === 'overdue',
+    '15 Jan 2025 result: within 365d rolling but outside QOF year → overdue'
+  );
 }
 
 console.log('\n=== observation-threshold: new QOF year just started ===');
@@ -153,20 +156,22 @@ console.log('\n=== observation-recent: QOF year boundary ===');
   });
 
   function evalRecent(dateIso) {
-    return engine.evaluateQofIndicatorRule(
-      recentRule,
-      {
-        medications: [],
-        observations: [{ name: 'HbA1c', code: null, date: dateIso, value: '52' }],
-        problems: [],
-        patientContext: null,
-        _registerLookup: {},
-      },
-      NOW,
-    )[0] || null;
+    return (
+      engine.evaluateQofIndicatorRule(
+        recentRule,
+        {
+          medications: [],
+          observations: [{ name: 'HbA1c', code: null, date: dateIso, value: '52' }],
+          problems: [],
+          patientContext: null,
+          _registerLookup: {},
+        },
+        NOW
+      )[0] || null
+    );
   }
 
-  const inYear    = evalRecent('2025-06-01');
+  const inYear = evalRecent('2025-06-01');
   const beforeYear = evalRecent('2025-03-01');
 
   assert(inYear !== null, 'chip returned for HbA1c in QOF year');
@@ -184,9 +189,7 @@ console.log('\n=== drug-monitoring: rolling window unchanged ===');
     type: 'drug-monitoring',
     enabled: true,
     drug: { match: ['methotrexate'] },
-    tests: [
-      { name: 'FBC', match: ['fbc', 'full blood count'], intervalDays: 90, dueSoonDays: 14 }
-    ],
+    tests: [{ name: 'FBC', match: ['fbc', 'full blood count'], intervalDays: 90, dueSoonDays: 14 }],
   };
 
   // FBC done 1 November 2025 — 75 days ago — within 90d interval → in_date
@@ -196,7 +199,7 @@ console.log('\n=== drug-monitoring: rolling window unchanged ===');
       medications: [{ name: 'methotrexate 10mg', startDate: '2022-01-01' }],
       observations: [{ name: 'FBC', code: null, date: '2025-11-01', value: 'normal' }],
     },
-    NOW,
+    NOW
   );
   assert(chips.length === 1, 'drug chip returned');
   assert(chips[0].tests[0].status === 'in_date', 'FBC 75d ago for 90d interval → in_date (drug rolling window)');
@@ -208,10 +211,13 @@ console.log('\n=== drug-monitoring: rolling window unchanged ===');
       medications: [{ name: 'methotrexate 10mg', startDate: '2022-01-01' }],
       observations: [{ name: 'FBC', code: null, date: '2025-03-15', value: 'normal' }],
     },
-    NOW,
+    NOW
   );
   // 306d > 2x intervalDays (180d) → stale (not just overdue), which is still correctly flagged
-  assert(chips2[0].tests[0].status === 'stale', 'FBC 306d ago for 90d interval → stale (correct rolling window — worse than overdue)');
+  assert(
+    chips2[0].tests[0].status === 'stale',
+    'FBC 306d ago for 90d interval → stale (correct rolling window — worse than overdue)'
+  );
 }
 
 // ── seasonStart() UTC fix ─────────────────────────────────────────────────────
@@ -223,21 +229,29 @@ console.log('\n=== seasonStart() UTC boundary ===');
 {
   // now = 2026-07-15 (summer, BST territory) — season starts Sep 1
   // Candidate 2026-09-01 is in the future → use 2025-09-01
-  assert(engine.seasonStart('2026-07-15T12:00:00Z', 9, 1) === '2025-09-01',
-    'seasonStart: Jul now, Sep season → 2025-09-01 (not 2026)');
+  assert(
+    engine.seasonStart('2026-07-15T12:00:00Z', 9, 1) === '2025-09-01',
+    'seasonStart: Jul now, Sep season → 2025-09-01 (not 2026)'
+  );
 
   // now = 2026-10-02T00:30:00Z — season starts Oct 1
   // Candidate 2026-10-01 < 2026-10-02 → use 2026-10-01
-  assert(engine.seasonStart('2026-10-02T00:30:00Z', 10, 1) === '2026-10-01',
-    'seasonStart: Oct 2 now, Oct 1 season → 2026-10-01');
+  assert(
+    engine.seasonStart('2026-10-02T00:30:00Z', 10, 1) === '2026-10-01',
+    'seasonStart: Oct 2 now, Oct 1 season → 2026-10-01'
+  );
 
   // now exactly on season start date
-  assert(engine.seasonStart('2026-09-01T00:00:00Z', 9, 1) === '2026-09-01',
-    'seasonStart: now === season start → current year');
+  assert(
+    engine.seasonStart('2026-09-01T00:00:00Z', 9, 1) === '2026-09-01',
+    'seasonStart: now === season start → current year'
+  );
 
   // now one day before season start
-  assert(engine.seasonStart('2025-08-31T23:59:59Z', 9, 1) === '2024-09-01',
-    'seasonStart: one day before Sep 1 → previous year');
+  assert(
+    engine.seasonStart('2025-08-31T23:59:59Z', 9, 1) === '2024-09-01',
+    'seasonStart: one day before Sep 1 → previous year'
+  );
 }
 
 // ── Vaccine campaign window (season.endMonth) ─────────────────────────────────
@@ -249,7 +263,10 @@ console.log('\n=== seasonStart() UTC boundary ===');
 console.log('\n=== vaccine campaign window ===');
 {
   const fluRule = {
-    id: 'vax-flu', type: 'vaccine', enabled: true, vaccine: 'flu',
+    id: 'vax-flu',
+    type: 'vaccine',
+    enabled: true,
+    vaccine: 'flu',
     displayName: 'Flu vaccine',
     season: { startMonth: 9, startDay: 1, endMonth: 3, endDay: 31 },
     eligibility: { anyOf: [{ kind: 'age', ageMin: 65, label: 'Age 65+' }] },
@@ -283,11 +300,15 @@ console.log('\n=== vaccine campaign window ===');
   chips = engine.evaluateVaccineRule(yearRound, eligible, '2026-06-10T08:00:00Z');
   assert(chips.length === 1 && chips[0].status === 'vax_due', 'rule without endMonth still fires year-round');
 
-  // The shipped rules file carries campaign ends for both vaccines
+  // The shipped seasonal rules carry campaign ends (endMonth 3, endDay 31).
+  // One-off rules (schedule:"once") have no season and are skipped here.
   const vaxDoc = require('./rules/vaccine-rules.json');
   for (const r of vaxDoc.rules) {
-    assert(r.season && r.season.endMonth === 3 && r.season.endDay === 31,
-      `${r.id}: shipped rule has campaign end 31 Mar`);
+    if (r.schedule === 'once') continue; // one-off rules have no season — skip
+    assert(
+      r.season && r.season.endMonth === 3 && r.season.endDay === 31,
+      `${r.id}: shipped seasonal rule has campaign end 31 Mar`
+    );
   }
 }
 

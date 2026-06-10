@@ -16,6 +16,40 @@
 .sent-patient-name { font-weight: 600; font-size: 13px; color: var(--text-1); margin-bottom: 3px; }
 .sent-patient-meta { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.03em; }
 
+/* Extraction drift banner (amber — distinct from red degraded state) */
+.sent-drift-banner {
+  border-left: 3px solid #b45309;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sent-drift-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.sent-drift-icon { color: #b45309; font-size: 14px; flex-shrink: 0; }
+.sent-drift-head strong { flex: 1; font-size: 12px; color: var(--text-1); }
+.sent-drift-dismiss {
+  background: transparent;
+  border: 1px solid rgba(180, 83, 9, 0.4);
+  border-radius: 4px;
+  color: #b45309;
+  font-size: 10px;
+  font-family: var(--mono);
+  cursor: pointer;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sent-drift-dismiss:hover { background: rgba(180, 83, 9, 0.1); }
+.sent-drift-body { margin: 0; font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
 /* Filter bar */
 .sent-filter-bar {
   display: flex;
@@ -505,6 +539,11 @@
   background: rgba(180,83,9,0.06);
   border: 1px solid rgba(180,83,9,0.2);
 }
+.sent-rules-footer-red {
+  color: var(--red, #d4351c);
+  background: rgba(212,53,28,0.07);
+  border: 1px solid rgba(212,53,28,0.25);
+}
 .sent-rules-footer-icon { margin-right: 4px; }
 
 /* ── Appointments summary modal ─────────────────────────────────────────────── */
@@ -584,3 +623,43 @@
   transition: opacity 0.1s;
 }
 .sent-appt-modal-copy:hover { opacity: 0.85; }
+
+/* ── Evaluation audit trail: "Why?" block inside evidence panel ─────────────── */
+.sent-ev-why {
+  margin: 8px 0 6px;
+  padding: 7px 10px;
+  background: rgba(74, 127, 184, 0.07);
+  border-left: 3px solid var(--accent, #4a7fb8);
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.sent-ev-why-label {
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent, #4a7fb8);
+  margin-bottom: 3px;
+}
+.sent-ev-why-text {
+  color: var(--text-2, #c8d0e0);
+}
+.sent-ev-why-source {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-5, #3d5070);
+  font-family: var(--mono, monospace);
+}
+
+/* ── Unmatched meds: excluded-by annotation ───────────────────────────────── */
+/* Amber inline annotation shown next to meds silently suppressed by an
+   exclude term — surfaces the "wrong injection suppresses everything" class of
+   silent failure without being alarming (it's informational, not an error). */
+.sent-unmatched-excluded {
+  font-size: 10px;
+  font-family: var(--mono, monospace);
+  color: var(--amber, #b45309);
+  margin-left: 4px;
+  opacity: 0.85;
+}

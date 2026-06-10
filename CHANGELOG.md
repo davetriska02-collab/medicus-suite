@@ -2,6 +2,111 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.47.0] — 2026-06-10
+
+Four workstreams landed together: extraction-drift detection, clinical-coverage
+expansion, a per-patient evaluation audit trail, and engineering hygiene.
+
+### Feature: Live extraction-health drift detection
+
+The extension now self-detects when Medicus UI changes silently degrade DOM
+extraction — previously a missing-chip failure mode with no warning.
+
+- New `shared/extraction-health.js`: pure drift-detection module. Keeps a
+  rolling per-view baseline (40 samples) of medication/observation/problem/
+  demographic **counts** in `chrome.storage.local` (`sentinel.extractionBaseline`
+  — zero PII by schema, enforced by test; deliberately excluded from backups
+  as machine-local telemetry).
+- Drift fires only on a sustained signature (≥4 of last 5 samples zero on a
+  metric whose historical median ≥3, after a 10-sample cold-start gate) — a
+  single sparse patient never alarms.
+- Amber dismissible banner ("Alerts may be incomplete — this is NOT an
+  all-clear") in both the in-page Sentinel HUD and the side-panel Sentinel
+  module; dismissal mutes both surfaces for 24h. Drift detection can never
+  break chip publication (fail-safe wrapped).
+
+### Feature: Per-patient evaluation audit trail ("Why?" + exportable log)
+
+- `engine/rules-engine.js` gains an opt-in trace sink (`options.trace`): for
+  every rule considered it records fired/skipped, the skip reason
+  (age/sex/problem filter, no drug match, register precondition, disabled…),
+  the exact matched med/problem string and match term, the interval arithmetic
+  (last test date + interval → due date), and the rule's source citation.
+  Hot path is byte-identical when tracing is off.
+- New `drugMatchDetail` and `listUnmatchedMedicationsDetailed`: unmatched meds
+  now distinguish "no rule covers this" from "suppressed by an exclude term",
+  shown with an amber annotation in the panel — exclude-term suppression is
+  no longer silent.
+- Evidence panel gains a plain-language "Why?" block per chip (e.g. matched
+  term, last test date, interval, due date) plus the rule's source.
+- New "Export evaluation log" button produces a per-patient JSON trace for
+  audit/assurance (DCB0129/0160-style). The trace lives in memory per
+  snapshot only — patient-identifiable data is never written to storage;
+  export is an explicit user action.
+
+### Clinical: QOF HF009 enabled (four-pillar HFrEF therapy)
+
+- New `medication-all-of` indicator kind in the rules engine; `qof-hf009`
+  flipped to enabled. Empty med list → `no_data` (extraction failure is not
+  "not on therapy"); populated list missing a pillar → `not_met` with the
+  missing class named.
+- First engine-level regression tests for `observation-bundle` (DM037 8/8
+  care processes) included.
+
+### Clinical: Vaccine rules — bug fix + Green Book adult schedule expansion
+
+- **Bug fix (safety):** vaccine status terms are now checked
+  declined-before-given per record — previously a coded "Influenza
+  vaccination declined" matched the given-stem "flu vaccin" and showed as
+  GIVEN. Regression-tested.
+- New `schedule: "once"` support for one-off (non-seasonal) vaccines, and a
+  fail-closed `bornOnOrAfter` eligibility gate.
+- New rules: pneumococcal PPV23 (65+, one-off), shingles/Shingrix (70–79 plus
+  the phased born-on/after-1-Sept-1958 cohort; cannot verify 2-dose
+  completion — noted), RSV (75–79, one-off). Pertussis-in-pregnancy
+  deliberately omitted (engine has no per-pregnancy/gestation gate; omission
+  documented in the rule file so it isn't "helpfully" added later).
+
+### Clinical: Visualiser PINCER expansion
+
+- `computePINCER` extended toward the classic PINCER indicator set: NSAID or
+  antiplatelet with peptic-ulcer/GI-bleed history without gastroprotection,
+  NSAID ≥65 without gastroprotection (PINCER #1), anticoagulant+antiplatelet
+  without gastroprotection (PINCER #13), dual antiplatelet without PPI
+  (PINCER #8), and ACEi/ARB or loop diuretic at ≥75 without recent U&E.
+  Age-gated flags fail closed when age is unknown. Every flag now carries a
+  `source` citation. LABA-without-ICS and COCP+VTE deferred pending complete
+  UK brand lists; oestrogen-HRT/intact-uterus permanently omitted
+  (undetectable from the record).
+
+### Feature: Rule-currency automation
+
+- `shared/rule-currency.js` gains a **red** level (QOF-year mismatch, ended
+  vaccine season, >540 days old) alongside amber; Options card and Sentinel
+  footer show it.
+- New `scripts/check-rule-currency.js` + weekly GitHub Actions workflow
+  (`rule-currency.yml`, Mondays 06:00 UTC + manual dispatch): 120-day early
+  warning that opens/updates a single `rule-currency` tracking issue and
+  closes it when rules are current again.
+
+### Engineering hygiene
+
+- **Vendor integrity:** `scripts/verify-vendor.js` verifies sha256 of every
+  `vendor/` lib against `vendor-versions.json` in CI (plus uncatalogued-file
+  and pdf.js/worker version-pairing checks).
+- **Test runner:** CI migrated to `node --test` (fail-closed, zero test-file
+  rewrites; `node test-foo.js` still works). `npm test` added.
+- **Lint/format:** ESLint flat config + Prettier, tuned so existing code
+  passes (no reformatting); pre-commit hook on staged files; lint CI job.
+- **Drift-guards for duplicated logic:** characterisation tests pin the
+  KDIGO/NICE thresholds duplicated between Trends and the visualiser, and
+  the deliberately-divergent sweep/sentinel instruction wording.
+- **Dedup:** identical chip-instruction helpers extracted to
+  `side-panel/modules/shared/chip-instructions.js`; sentinel summary logic
+  moved to a pure, Node-testable `sentinel-core.js`.
+
+Test suite: 42 files, all passing (7 new test files; ~460 new assertions).
+
 ## [v3.46.0] — 2026-06-10
 
 ### Feature: Triage Lens — major baseline-rule expansion (52 new rules) + defaults migration

@@ -8,7 +8,7 @@
 // Returns an array of chips. Each chip has type, ruleId, status, displayName,
 // notes, and a payload of evaluation detail for the UI to render.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   // === STATUS RANK (worst-first ordering) ===
@@ -40,20 +40,73 @@
     in_date: 5,
     vax_given: 5,
     vax_declined: 3,
-    vax_due: 1
+    vax_due: 1,
   };
 
   // === DRUG MATCHING ===
   function normaliseDrugString(s) {
-    return String(s || '').toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   function drugMatchesRule(medName, rule) {
     if (!rule.drug || !rule.drug.match) return false;
     const norm = normaliseDrugString(medName);
-    const excluded = (rule.drug.exclude || []).some(e => norm.includes(normaliseDrugString(e)));
+    const excluded = (rule.drug.exclude || []).some((e) => norm.includes(normaliseDrugString(e)));
     if (excluded) return false;
-    return rule.drug.match.some(m => norm.includes(normaliseDrugString(m)));
+    return rule.drug.match.some((m) => norm.includes(normaliseDrugString(m)));
+  }
+
+  // Returns { matched, matchedTerm, excludedBy } — which match term hit, or
+  // which exclude term suppressed the medication. Used only when tracing is
+  // active (data._trace is set) so there is zero cost on the hot path.
+  function drugMatchDetail(medName, rule) {
+    if (!rule.drug || !rule.drug.match) return { matched: false, matchedTerm: null, excludedBy: null };
+    const norm = normaliseDrugString(medName);
+    const excludedBy = (rule.drug.exclude || []).find((e) => norm.includes(normaliseDrugString(e)));
+    if (excludedBy != null) return { matched: false, matchedTerm: null, excludedBy };
+    const matchedTerm = rule.drug.match.find((m) => norm.includes(normaliseDrugString(m)));
+    if (matchedTerm != null) return { matched: true, matchedTerm, excludedBy: null };
+    return { matched: false, matchedTerm: null, excludedBy: null };
+  }
+
+  // Returns [{ name, reason: 'no-rule' | 'excluded', excludedBy: { ruleId, term } | null }]
+  // Sibling of listUnmatchedMedications that explains WHY each med is unmatched.
+  // listUnmatchedMedications is kept exactly as-is (existing callers unchanged).
+  function listUnmatchedMedicationsDetailed(medications, rules) {
+    const drugMonitoringRules = (rules || []).filter((r) => r.enabled !== false && r.type === 'drug-monitoring');
+    const seenLower = new Map(); // lowerName → displayName
+    (medications || []).forEach((med) => {
+      if (!med || !med.name) return;
+      const lower = String(med.name).toLowerCase();
+      if (!seenLower.has(lower)) seenLower.set(lower, med.name);
+    });
+    const result = [];
+    seenLower.forEach((displayName, lower) => {
+      // Check if any rule fully matches (match term hit, not excluded)
+      for (const rule of drugMonitoringRules) {
+        const detail = drugMatchDetail(lower, rule);
+        if (detail.matched) return; // covered — skip
+      }
+      // Not matched by any rule. Find the first exclude suppression for the reason.
+      for (const rule of drugMonitoringRules) {
+        const detail = drugMatchDetail(lower, rule);
+        if (detail.excludedBy != null) {
+          result.push({
+            name: displayName,
+            reason: 'excluded',
+            excludedBy: { ruleId: rule.id, term: detail.excludedBy },
+          });
+          return;
+        }
+      }
+      result.push({ name: displayName, reason: 'no-rule', excludedBy: null });
+    });
+    result.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    return result;
   }
 
   // === DATE HELPERS ===
@@ -74,7 +127,7 @@
     // near-midnight local timestamp can misclassify the year boundary by one day.
     const datePart = String(nowIso).slice(0, 10); // "YYYY-MM-DD"
     const month = parseInt(datePart.slice(5, 7), 10); // 1-indexed
-    const year  = parseInt(datePart.slice(0, 4), 10);
+    const year = parseInt(datePart.slice(0, 4), 10);
     const qofYear = month < 4 ? year - 1 : year; // before April → previous QOF year
     return new Date(Date.UTC(qofYear, 3, 1)); // 1 Apr, midnight UTC
   }
@@ -89,11 +142,11 @@
   // === OBSERVATION LOOKUP ===
   function findLatestObservation(observations, testSpec) {
     if (!Array.isArray(observations)) return null;
-    const matches = observations.filter(obs => {
+    const matches = observations.filter((obs) => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
-        return testSpec.match.some(m => obsLower.includes(String(m).toLowerCase()));
+        return testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()));
       }
       return false;
     });
@@ -105,7 +158,7 @@
     const matchPriority = (obs) => {
       if (!obs.name || !Array.isArray(testSpec.match)) return 999;
       const obsLower = String(obs.name).toLowerCase();
-      const idx = testSpec.match.findIndex(m => obsLower.includes(String(m).toLowerCase()));
+      const idx = testSpec.match.findIndex((m) => obsLower.includes(String(m).toLowerCase()));
       return idx < 0 ? 999 : idx;
     };
     matches.sort((a, b) => {
@@ -136,30 +189,32 @@
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
   // at a glance whether progestogen coverage is documented or missing.
   function buildHrtContext(hrtConfig, data) {
-    const norm = s => String(s || '').toLowerCase();
-    const meds     = data.medications || [];
-    const problems = data.problems    || [];
+    const norm = (s) => String(s || '').toLowerCase();
+    const meds = data.medications || [];
+    const problems = data.problems || [];
     // Hysterectomy may be coded as a past/ended problem — check both active and past
     const allProblems = [...problems, ...(data.pastProblems || [])];
 
-    const hasHysterectomy = allProblems.some(p =>
-      (hrtConfig.hysterectomyTerms || []).some(t => norm(p.label).includes(norm(t)))
+    const hasHysterectomy = allProblems.some((p) =>
+      (hrtConfig.hysterectomyTerms || []).some((t) => norm(p.label).includes(norm(t)))
     );
 
-    const iusMed = meds.find(m =>
-      (hrtConfig.iusTerms || []).some(t => norm(m.name).includes(norm(t)))
-    ) || problems.find(p =>
-      ([...(hrtConfig.iusTerms || []), ...(hrtConfig.iusProblemTerms || [])]).some(t => norm(p.label).includes(norm(t)))
-    );
+    const iusMed =
+      meds.find((m) => (hrtConfig.iusTerms || []).some((t) => norm(m.name).includes(norm(t)))) ||
+      problems.find((p) =>
+        [...(hrtConfig.iusTerms || []), ...(hrtConfig.iusProblemTerms || [])].some((t) =>
+          norm(p.label).includes(norm(t))
+        )
+      );
 
-    const progestogenMed = meds.find(m =>
-      (hrtConfig.progestogenTerms || []).some(t => norm(m.name).includes(norm(t)))
+    const progestogenMed = meds.find((m) =>
+      (hrtConfig.progestogenTerms || []).some((t) => norm(m.name).includes(norm(t)))
     );
 
     return {
       hasHysterectomy,
-      iusMed:          iusMed          ? (iusMed.name || iusMed.label) : null,
-      progestogenMed:  progestogenMed  ? progestogenMed.name           : null,
+      iusMed: iusMed ? iusMed.name || iusMed.label : null,
+      progestogenMed: progestogenMed ? progestogenMed.name : null,
     };
   }
 
@@ -172,7 +227,9 @@
   // (e.g. "lvef <40", "type-2") fall back to substring matching, where \b is
   // unreliable.
   function registerTermInLabel(label, term) {
-    const t = String(term || '').toLowerCase().trim();
+    const t = String(term || '')
+      .toLowerCase()
+      .trim();
     if (!t) return false;
     if (/^[a-z0-9 ]+$/.test(t)) {
       const rx = new RegExp('\\b' + t.replace(/\s+/g, '\\s+') + '\\b');
@@ -189,9 +246,9 @@
       // Exclusions — kept as broad substring matching (intentionally inclusive;
       // an exclude term like "non-diabetic"/"pre-diabetic" must catch compound
       // labels such as "pre-diabetic retinopathy").
-      if (excluded.some(e => label.includes(String(e).toLowerCase()))) continue;
+      if (excluded.some((e) => label.includes(String(e).toLowerCase()))) continue;
       // Matches — word-boundary aware (see registerTermInLabel).
-      if (registerRule.problemMatch.some(m => registerTermInLabel(label, m))) {
+      if (registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) {
         return { matched: true, problem: p };
       }
     }
@@ -203,13 +260,22 @@
   // shape consumed by ChipRenderer.renderEvidencePanel.
 
   const STATUS_PHRASE = {
-    overdue: 'overdue', not_met: 'not met', stale: 'severely overdue',
-    due_soon: 'due soon', no_data: 'no data', recently_initiated: 'recently initiated',
-    achieved: 'in date', in_date: 'in date',
-    alert: 'alert', caution: 'caution', noted: 'noted'
+    overdue: 'overdue',
+    not_met: 'not met',
+    stale: 'severely overdue',
+    due_soon: 'due soon',
+    no_data: 'no data',
+    recently_initiated: 'recently initiated',
+    achieved: 'in date',
+    in_date: 'in date',
+    alert: 'alert',
+    caution: 'caution',
+    noted: 'noted',
   };
 
-  function fmt(v) { return v == null || v === '' ? '—' : String(v); }
+  function fmt(v) {
+    return v == null || v === '' ? '—' : String(v);
+  }
 
   function buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data) {
     const facts = [];
@@ -222,31 +288,32 @@
     if (pat.sex) patBits.push(String(pat.sex));
     if (patBits.length) facts.push({ label: 'Patient', value: patBits.join(' · ') });
 
-    testEvaluations.forEach(te => {
+    testEvaluations.forEach((te) => {
       const tName = te.testName || te.name || '';
       if (te.latestObs && te.latestObs.date) {
         const valPart = te.latestObs.value != null ? String(te.latestObs.value).trim() : '';
-        const dueBit = (te.status === 'overdue' || te.status === 'stale') && te.days != null && te.intervalDays
-          ? `due ${te.days - te.intervalDays}d ago`
-          : (te.status === 'due_soon' && te.days != null && te.intervalDays
+        const dueBit =
+          (te.status === 'overdue' || te.status === 'stale') && te.days != null && te.intervalDays
+            ? `due ${te.days - te.intervalDays}d ago`
+            : te.status === 'due_soon' && te.days != null && te.intervalDays
               ? `due in ${te.intervalDays - te.days}d`
-              : `${te.days}d since`);
+              : `${te.days}d since`;
         facts.push({
           label: tName,
           value: valPart || STATUS_PHRASE[te.status] || te.status,
           date: te.latestObs.date,
-          detail: `${dueBit} · interval ${te.intervalDays || 365}d · ${STATUS_PHRASE[te.status] || te.status}`
+          detail: `${dueBit} · interval ${te.intervalDays || 365}d · ${STATUS_PHRASE[te.status] || te.status}`,
         });
       } else {
         facts.push({
           label: tName,
           value: 'not found in record',
-          detail: `we looked for: ${(te.match || []).slice(0, 4).join(', ')}${(te.match || []).length > 4 ? '…' : ''} · interval ${te.intervalDays || 365}d`
+          detail: `we looked for: ${(te.match || []).slice(0, 4).join(', ')}${(te.match || []).length > 4 ? '…' : ''} · interval ${te.intervalDays || 365}d`,
         });
       }
     });
 
-    if (med.startDate && testEvaluations.some(te => te.status === 'recently_initiated')) {
+    if (med.startDate && testEvaluations.some((te) => te.status === 'recently_initiated')) {
       facts.push({ label: 'Note', value: 'within recently-initiated grace window — monitoring not yet due' });
     }
 
@@ -260,7 +327,7 @@
       const set = rule.drugSets[i] || {};
       facts.push({
         label: set.name || `Drug set ${i + 1}`,
-        value: matched.map(m => m.name).join(', ')
+        value: matched.map((m) => m.name).join(', '),
       });
     });
     const pat = data.patientContext || {};
@@ -276,7 +343,7 @@
     }
     if (rule.sex && rule.sex !== 'any') facts.push({ label: 'Sex required', value: String(rule.sex) });
 
-    matchedRequiredProblems.forEach(p => {
+    matchedRequiredProblems.forEach((p) => {
       facts.push({ label: 'Required problem', value: p.label, date: p.codedDate });
     });
     if ((rule.excludesProblem || []).length) {
@@ -286,14 +353,19 @@
       facts.push({ label: 'Drugs that would block this rule (none present)', value: rule.mustNotBePresent.join(', ') });
     }
 
-    const summary = matchedPerSet.map(matched => matched.map(m => m.name).join('/')).join(' + ');
+    const summary = matchedPerSet.map((matched) => matched.map((m) => m.name).join('/')).join(' + ');
     return { summary, facts };
   }
 
   function buildEventCountEvidence(rule, items, count, threshold, op, cutoffISO) {
     const facts = [];
     facts.push({ label: 'Count', value: `${count} ${op} ${threshold} (${rule.sourceKind || 'observations'})` });
-    facts.push({ label: 'Window', value: `last ${rule.windowMonths || 12} months`, date: cutoffISO, detail: `from ${cutoffISO}` });
+    facts.push({
+      label: 'Window',
+      value: `last ${rule.windowMonths || 12} months`,
+      date: cutoffISO,
+      detail: `from ${cutoffISO}`,
+    });
     if ((rule.match || []).length) facts.push({ label: 'Match terms', value: rule.match.join(', ') });
     if ((rule.exclude || []).length) facts.push({ label: 'Exclude terms', value: rule.exclude.join(', ') });
     items.slice(0, 15).forEach((it, i) => {
@@ -306,11 +378,11 @@
 
   function buildCompositeEvidence(rule, ruleIds, firedIds, evaluatedById, allRules) {
     const labelById = {};
-    (allRules || []).forEach(r => {
+    (allRules || []).forEach((r) => {
       if (!r.id) return;
       labelById[r.id] = r.label || r.indicatorName || r.drug?.match?.[0] || r.registerName || r.id;
     });
-    const refs = ruleIds.map(id => {
+    const refs = ruleIds.map((id) => {
       const fired = firedIds.includes(id);
       const chips = evaluatedById.get(id) || [];
       const labelFromChip = chips[0]?.label || chips[0]?.indicatorName || chips[0]?.drugName || chips[0]?.registerName;
@@ -318,9 +390,13 @@
     });
     const facts = [
       { label: 'Operator', value: rule.operator || 'AND' },
-      { label: 'Fired', value: `${firedIds.length} of ${ruleIds.length}` }
+      { label: 'Fired', value: `${firedIds.length} of ${ruleIds.length}` },
     ];
-    return { summary: `${rule.operator || 'AND'}: ${firedIds.length} of ${ruleIds.length} sub-rules fired`, facts, refs };
+    return {
+      summary: `${rule.operator || 'AND'}: ${firedIds.length} of ${ruleIds.length} sub-rules fired`,
+      facts,
+      refs,
+    };
   }
 
   function buildQofIndicatorEvidence(rule, status, valueText, dateText, days, ctx) {
@@ -331,7 +407,7 @@
       facts.push({
         label: 'Register precondition',
         value: `${ctx.matchedRegisterProblem.registerName} (${ctx.matchedRegisterProblem.label})`,
-        date: ctx.matchedRegisterProblem.codedDate
+        date: ctx.matchedRegisterProblem.codedDate,
       });
     }
 
@@ -341,19 +417,22 @@
           label: 'Observation',
           value: valueText || String(ctx.matchedObs.value || ''),
           date: ctx.matchedObs.date,
-          detail: days != null ? `${days}d ago` : null
+          detail: days != null ? `${days}d ago` : null,
         });
       } else {
         facts.push({
           label: 'Observation',
           value: 'not found in record',
-          detail: `we looked for: ${(check.observation || []).slice(0, 4).join(', ')}`
+          detail: `we looked for: ${(check.observation || []).slice(0, 4).join(', ')}`,
         });
       }
       if (check.thresholdSystolic && check.thresholdDiastolic) {
         facts.push({ label: 'Threshold', value: `≤ ${check.thresholdSystolic}/${check.thresholdDiastolic}` });
       } else if (check.threshold != null && check.operator) {
-        facts.push({ label: 'Threshold', value: `${check.operator} ${check.threshold}${check.unit ? ' ' + check.unit : ''}` });
+        facts.push({
+          label: 'Threshold',
+          value: `${check.operator} ${check.threshold}${check.unit ? ' ' + check.unit : ''}`,
+        });
       }
       const useFloor = rule.useQofYearFloor !== false;
       facts.push({ label: 'Window', value: useFloor ? 'QOF year floor (1 Apr)' : `last ${check.withinDays || 365}d` });
@@ -361,21 +440,47 @@
       facts.push({
         label: 'Medication',
         value: ctx.matchedMed || 'not prescribed',
-        detail: `we looked for: ${(check.medicationMatch || []).slice(0, 4).join(', ')}`
+        detail: `we looked for: ${(check.medicationMatch || []).slice(0, 4).join(', ')}`,
+      });
+    } else if (check.kind === 'medication-all-of') {
+      (ctx.allOfResults || []).forEach((g) => {
+        facts.push({
+          label: g.name,
+          value: g.med || 'not prescribed',
+          detail: g.med ? null : 'no matching medication found',
+        });
+      });
+    } else if (check.kind === 'observation-bundle') {
+      (ctx.bundleResults || []).forEach((r) => {
+        facts.push({
+          label: (r.aliases || [])[0] || 'care process',
+          value: r.inWindow ? (r.obs ? r.obs.value || 'recorded' : 'recorded') : 'not in window',
+          date: r.obs ? r.obs.date : null,
+        });
       });
     } else if (check.kind === 'observation-trend') {
       const s = ctx.trendSeries;
       if (s && s.points && s.points.length) {
         facts.push({ label: 'Test', value: s.testName, detail: s.unit || null });
         if (s.insufficient) {
-          facts.push({ label: 'Trend', value: `not enough readings in window — showing ${s.points.length} found (need ${check.minPoints || 2})` });
+          facts.push({
+            label: 'Trend',
+            value: `not enough readings in window — showing ${s.points.length} found (need ${check.minPoints || 2})`,
+          });
         }
         if (s.delta != null && s.spanMonths != null) {
-          facts.push({ label: 'Direction', value: `${s.direction} (Δ ${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}${s.unit ? ' ' + s.unit : ''}, min ${s.minDelta})` });
+          facts.push({
+            label: 'Direction',
+            value: `${s.direction} (Δ ${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}${s.unit ? ' ' + s.unit : ''}, min ${s.minDelta})`,
+          });
           facts.push({ label: 'Span', value: `${s.spanMonths} months · ${s.points.length} points` });
         }
         s.points.forEach((p, i) => {
-          facts.push({ label: `Point ${i + 1}`, value: `${p.value.toFixed(1)}${s.unit ? ' ' + s.unit : ''}`, date: p.date });
+          facts.push({
+            label: `Point ${i + 1}`,
+            value: `${p.value.toFixed(1)}${s.unit ? ' ' + s.unit : ''}`,
+            date: p.date,
+          });
         });
       } else {
         facts.push({ label: 'Trend', value: valueText || 'insufficient data' });
@@ -396,12 +501,42 @@
 
   // === EVALUATORS ===
 
+  // Shared trace-entry base: record a base entry into data._trace when tracing.
+  // Returns the entry object (or null when tracing is off) so evaluators can fill it in.
+  function _traceBase(data, rule) {
+    if (!data._trace) return null;
+    const entry = {
+      ruleId: rule.id,
+      ruleType: rule.type || 'drug-monitoring',
+      label:
+        rule.label || rule.drug?.match?.[0] || rule.registerName || rule.indicatorName || rule.displayName || rule.id,
+      fired: false,
+      status: null,
+      skipReason: null,
+      source: rule.source || null,
+      sharedCare: rule.sharedCare != null ? !!rule.sharedCare : undefined,
+      notes: rule.notes || null,
+    };
+    data._trace.push(entry);
+    return entry;
+  }
+
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
-    if (!passesProblemFilters(rule, data.problems)) return [];
-    let matchedMeds = (data.medications || []).filter(m => drugMatchesRule(m.name, rule));
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
+    if (!passesProblemFilters(rule, data.problems)) {
+      if (traceEntry) traceEntry.skipReason = 'problem-filter';
+      return [];
+    }
+    let matchedMeds = (data.medications || []).filter((m) => drugMatchesRule(m.name, rule));
     // HRT gating: an HRT review only applies to systemic oestrogen / HRT agents
     // (estradiol, conjugated oestrogens, tibolone, etc.). A progestogen or
     // LNG-IUS on its own is contraception, not HRT, and must NOT raise an HRT
@@ -411,12 +546,18 @@
     // chips only for the oestrogen component also avoids duplicate HRT chips.
     if (rule.hrtContext) {
       const oestrogenTerms = rule.hrtContext.oestrogenTerms || [];
-      const isOestrogen = name => oestrogenTerms.some(
-        t => normaliseDrugString(name).includes(normaliseDrugString(t)));
-      matchedMeds = matchedMeds.filter(m => isOestrogen(m.name));
+      const isOestrogen = (name) =>
+        oestrogenTerms.some((t) => normaliseDrugString(name).includes(normaliseDrugString(t)));
+      matchedMeds = matchedMeds.filter((m) => isOestrogen(m.name));
     }
-    return matchedMeds.map(med => {
-      const testEvaluations = (rule.tests || []).map(test => {
+    if (matchedMeds.length === 0) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
+    // Trace entry was created for the rule; for multi-med rules we emit one entry per med.
+    // The base entry already pushed above becomes the first med's entry (or we create extras).
+    return matchedMeds.map((med, idx) => {
+      const testEvaluations = (rule.tests || []).map((test) => {
         const obs = findLatestObservation(data.observations, test);
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
@@ -442,9 +583,14 @@
       let suppressedNoData = false;
       if (med.startDate && rule.tests && rule.tests.length > 0) {
         const daysSinceStart = daysBetween(med.startDate, now);
-        const minInterval = Math.min(...rule.tests.map(t => t.intervalDays || 365));
+        const minInterval = Math.min(...rule.tests.map((t) => t.intervalDays || 365));
         if (daysSinceStart != null && daysSinceStart < minInterval / 2) {
-          testEvaluations.forEach(te => { if (te.status === 'no_data') { te.status = 'recently_initiated'; suppressedNoData = true; } });
+          testEvaluations.forEach((te) => {
+            if (te.status === 'no_data') {
+              te.status = 'recently_initiated';
+              suppressedNoData = true;
+            }
+          });
         }
       }
 
@@ -465,7 +611,7 @@
         sharedCare: !!rule.sharedCare,
         suppressedNoData,
         notes: rule.notes || null,
-        evidence: buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data)
+        evidence: buildDrugMonitoringEvidence(rule, med, testEvaluations, worstStatus, data),
       };
 
       // HRT-specific: annotate the oestrogen chip with progestogen-coverage
@@ -475,34 +621,111 @@
         chip.hrtContext = buildHrtContext(rule.hrtContext, data);
       }
 
+      // Populate trace entry. For idx>0 we need a new entry (multi-med rule).
+      if (data._trace) {
+        const te =
+          idx === 0
+            ? traceEntry
+            : (() => {
+                const e = {
+                  ruleId: rule.id,
+                  ruleType: 'drug-monitoring',
+                  label: traceEntry ? traceEntry.label : rule.id,
+                  fired: false,
+                  status: null,
+                  skipReason: null,
+                  source: rule.source || null,
+                  sharedCare: rule.sharedCare != null ? !!rule.sharedCare : undefined,
+                  notes: rule.notes || null,
+                };
+                data._trace.push(e);
+                return e;
+              })();
+        if (te) {
+          const detail = drugMatchDetail(med.name, rule);
+          te.fired = true;
+          te.status = worstStatus;
+          te.chipRef = rule.id + '|' + med.name;
+          te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
+          te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
+            const lastDate = tv.latestObs ? tv.latestObs.date : null;
+            const intDays = tv.intervalDays || 365;
+            let dueDate = null;
+            if (lastDate) {
+              const d = new Date(lastDate);
+              d.setDate(d.getDate() + intDays);
+              dueDate = d.toISOString().slice(0, 10);
+            }
+            return {
+              test: tv.testName || tv.name || '',
+              observation: tv.latestObs
+                ? {
+                    name: tv.latestObs.name || tv.testName || '',
+                    code: tv.latestObs.code || null,
+                    date: tv.latestObs.date,
+                    value: tv.latestObs.value != null ? tv.latestObs.value : null,
+                  }
+                : null,
+              lastDate,
+              intervalDays: intDays,
+              dueSoonDays: tv.dueSoonDays || 30,
+              daysSince: tv.days,
+              dueDate,
+              status: tv.status,
+            };
+          });
+        }
+      }
+
       return chip;
     });
   }
 
   // QOF register rule evaluator -> chip if patient is on register
   function evaluateQofRegisterRule(rule, data) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
     const result = patientOnRegister(data.problems, rule);
-    if (!result || !result.matched) return [];
-    return [{
-      type: 'qof-register',
-      ruleId: rule.id,
-      registerCode: rule.registerCode,
-      registerName: rule.registerName,
-      status: 'achieved',  // membership = "on register" — neutral but rendered green
-      matchedProblem: result.problem.label,
-      codedDate: result.problem.codedDate,
-      source: rule.source || null,
-      notes: rule.notes || null,
-      evidence: {
-        summary: `On ${rule.registerName || rule.registerCode || 'register'} (matched: ${result.problem.label})`,
-        facts: [
-          { label: 'Register', value: rule.registerName || rule.registerCode || '' },
-          { label: 'Matched problem', value: result.problem.label, date: result.problem.codedDate || null }
-        ]
-      }
-    }];
+    if (!result || !result.matched) {
+      if (traceEntry) traceEntry.skipReason = 'not-on-register';
+      return [];
+    }
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = 'achieved';
+      // Find which problemMatch term actually hit
+      const matchedLabel = result.problem.label.toLowerCase();
+      const matchedTerm = (rule.problemMatch || []).find((m) => registerTermInLabel(matchedLabel, m)) || null;
+      traceEntry.matchedProblem = { label: result.problem.label, codedDate: result.problem.codedDate || null };
+      traceEntry.matchedTerm = matchedTerm;
+    }
+    return [
+      {
+        type: 'qof-register',
+        ruleId: rule.id,
+        registerCode: rule.registerCode,
+        registerName: rule.registerName,
+        status: 'achieved', // membership = "on register" — neutral but rendered green
+        matchedProblem: result.problem.label,
+        codedDate: result.problem.codedDate,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: {
+          summary: `On ${rule.registerName || rule.registerCode || 'register'} (matched: ${result.problem.label})`,
+          facts: [
+            { label: 'Register', value: rule.registerName || rule.registerCode || '' },
+            { label: 'Matched problem', value: result.problem.label, date: result.problem.codedDate || null },
+          ],
+        },
+      },
+    ];
   }
 
   // === SEVERITY → STATUS MAPPING ===
@@ -514,7 +737,7 @@
   // map to alert / caution / noted, which carry the same red / amber / neutral
   // colour and ranking but read correctly for a flag.
   function severityToStatus(severity) {
-    if (severity === 'red')   return 'alert';
+    if (severity === 'red') return 'alert';
     if (severity === 'amber') return 'caution';
     return 'noted';
   }
@@ -550,9 +773,19 @@
   // requiresProblem: ["heart failure"]. We check whether the match falls within
   // a negating context in the label.
   const PROBLEM_NEGATION_PATTERNS = [
-    /\bno\s+/, /\bnot\s+/, /\bfamily history\s+of\s+/, /\bfh\s+of\s+/,
-    /\bhistory of\s+/, /\bh\/?o\s+/, /\bpast\s+/, /\bprevious\s+/,
-    /\bresolved\s+/, /\bat risk of\s+/, /\brisk of\s+/, /\bquery\s+/, /\b\?/
+    /\bno\s+/,
+    /\bnot\s+/,
+    /\bfamily history\s+of\s+/,
+    /\bfh\s+of\s+/,
+    /\bhistory of\s+/,
+    /\bh\/?o\s+/,
+    /\bpast\s+/,
+    /\bprevious\s+/,
+    /\bresolved\s+/,
+    /\bat risk of\s+/,
+    /\brisk of\s+/,
+    /\bquery\s+/,
+    /\b\?/,
   ];
   function problemLabelMatchesTerm(label, term) {
     const l = String(label || '').toLowerCase();
@@ -562,7 +795,7 @@
     if (idx < 0) return false;
     // Strip everything from the match onward; check the prefix for negation.
     const prefix = l.slice(0, idx);
-    return !PROBLEM_NEGATION_PATTERNS.some(rx => rx.test(prefix));
+    return !PROBLEM_NEGATION_PATTERNS.some((rx) => rx.test(prefix));
   }
 
   // Shared problem-include / problem-exclude filter. Used by drug-monitoring,
@@ -572,14 +805,10 @@
     const requiresProblems = rule.requiresProblem || [];
     const excludesProblems = rule.excludesProblem || [];
     if (requiresProblems.length > 0) {
-      const allMet = requiresProblems.every(req =>
-        probs.some(p => problemLabelMatchesTerm(p.label, req))
-      );
+      const allMet = requiresProblems.every((req) => probs.some((p) => problemLabelMatchesTerm(p.label, req)));
       if (!allMet) return false;
     }
-    if (excludesProblems.some(exc =>
-      probs.some(p => problemLabelMatchesTerm(p.label, exc))
-    )) return false;
+    if (excludesProblems.some((exc) => probs.some((p) => problemLabelMatchesTerm(p.label, exc)))) return false;
     return true;
   }
 
@@ -588,39 +817,53 @@
   // AND the patient passes age/sex/problem filters.
   // Optional mustNotBePresent: any match in that list disqualifies the rule.
   function evaluateDrugComboRule(rule, data) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
     const meds = data.medications || [];
-    const norm = s => String(s || '').toLowerCase();
+    const norm = (s) => String(s || '').toLowerCase();
 
     // Problem filters (shared helper applies negation-aware substring matching:
     // "no heart failure" / "family history of HF" no longer satisfy requiresProblem)
-    if (!passesProblemFilters(rule, data.problems)) return [];
+    if (!passesProblemFilters(rule, data.problems)) {
+      if (traceEntry) traceEntry.skipReason = 'problem-filter';
+      return [];
+    }
 
     // mustNotBePresent: single-drug absence check (e.g. "no PPI prescribed")
     const mustNotBePresent = rule.mustNotBePresent || [];
     if (mustNotBePresent.length > 0) {
-      const anyForbiddenPresent = mustNotBePresent.some(term =>
-        meds.some(m => norm(m.name).includes(norm(term)))
-      );
-      if (anyForbiddenPresent) return [];
+      const anyForbiddenPresent = mustNotBePresent.some((term) => meds.some((m) => norm(m.name).includes(norm(term))));
+      if (anyForbiddenPresent) {
+        if (traceEntry) traceEntry.skipReason = 'blocked-by-must-not-present';
+        return [];
+      }
     }
 
     // Each drugSet must have at least one matching active medication
     if (!rule.drugSets || rule.drugSets.length === 0) return [];
-    const matchedPerSet = (rule.drugSets || []).map(set => {
+    const matchedPerSet = (rule.drugSets || []).map((set) => {
       if (!Array.isArray(set.match) || set.match.length === 0) return [];
-      return meds.filter(m => {
+      return meds.filter((m) => {
         const n = norm(m.name);
-        const excluded = (set.exclude || []).some(e => n.includes(norm(e)));
+        const excluded = (set.exclude || []).some((e) => n.includes(norm(e)));
         if (excluded) return false;
-        return set.match.some(term => n.includes(norm(term)));
+        return set.match.some((term) => n.includes(norm(term)));
       });
     });
 
     // All sets must have at least one match
-    if (matchedPerSet.some(matched => matched.length === 0)) return [];
+    if (matchedPerSet.some((matched) => matched.length === 0)) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
 
     // Distinct-drug guard: when drugSets overlap (e.g. QTc-prolonging A vs B
     // are the same list), a single matched med can satisfy every set. Require
@@ -635,8 +878,11 @@
         .sort((a, b) => a.matched.length - b.matched.length);
       let ok = true;
       for (const { matched } of setsByPoolSize) {
-        const pick = matched.find(m => !used.has(m.name));
-        if (!pick) { ok = false; break; }
+        const pick = matched.find((m) => !used.has(m.name));
+        if (!pick) {
+          ok = false;
+          break;
+        }
         used.add(pick.name);
       }
       if (!ok) return [];
@@ -644,26 +890,37 @@
 
     const matchSummary = matchedPerSet.map((matched, i) => ({
       setName: (rule.drugSets[i] || {}).name || `Set ${i + 1}`,
-      drugs:   matched.map(m => m.name)
+      drugs: matched.map((m) => m.name),
     }));
 
     // Capture which required problems matched (for evidence panel)
-    const matchedRequiredProblems = (rule.requiresProblem || []).map(req => {
-      const probs = data.problems || [];
-      const hit = probs.find(p => problemLabelMatchesTerm(p.label, req));
-      return hit ? { term: req, label: hit.label, codedDate: hit.codedDate || null } : null;
-    }).filter(Boolean);
+    const matchedRequiredProblems = (rule.requiresProblem || [])
+      .map((req) => {
+        const probs = data.problems || [];
+        const hit = probs.find((p) => problemLabelMatchesTerm(p.label, req));
+        return hit ? { term: req, label: hit.label, codedDate: hit.codedDate || null } : null;
+      })
+      .filter(Boolean);
 
-    return [{
-      type:        'drug-combo',
-      ruleId:      rule.id,
-      status:      severityToStatus(rule.severity),
-      label:       rule.label || rule.id,
-      matchSummary,
-      source:      rule.source || null,
-      notes:       rule.notes  || null,
-      evidence:    buildDrugComboEvidence(rule, matchedPerSet, matchedRequiredProblems, data)
-    }];
+    const comboStatus = severityToStatus(rule.severity);
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = comboStatus;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchSummary = matchSummary;
+    }
+    return [
+      {
+        type: 'drug-combo',
+        ruleId: rule.id,
+        status: comboStatus,
+        label: rule.label || rule.id,
+        matchSummary,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: buildDrugComboEvidence(rule, matchedPerSet, matchedRequiredProblems, data),
+      },
+    ];
   }
 
   // === EVENT-COUNT EVALUATOR ===
@@ -673,10 +930,17 @@
   // For sourceKind === 'observations', uses data.observationHistory to count
   // individual historical readings (not just distinct test types).
   function evaluateEventCountRule(rule, data, now) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
-    const norm          = s => String(s || '').toLowerCase();
+    const norm = (s) => String(s || '').toLowerCase();
     // Window arithmetic uses the average Gregorian month (30.4375 days). This
     // means "12 months ago" is approximate — not aligned to the calendar date
     // — which keeps event-count and observation-trend consistent with each
@@ -686,20 +950,20 @@
     // breaking the rule. Also reject NaN. Fall through to 12-month default for
     // missing/non-numeric values.
     const wm = Number(rule.windowMonths);
-    const windowMs      = (Number.isFinite(wm) && wm > 0 ? wm : 12) * 30.4375 * 24 * 60 * 60 * 1000;
-    const nowMs         = new Date(now).getTime();
-    const cutoffMs      = nowMs - windowMs;
-    const matchTerms    = rule.match  || [];
-    const excludeTerms  = rule.exclude || [];
+    const windowMs = (Number.isFinite(wm) && wm > 0 ? wm : 12) * 30.4375 * 24 * 60 * 60 * 1000;
+    const nowMs = new Date(now).getTime();
+    const cutoffMs = nowMs - windowMs;
+    const matchTerms = rule.match || [];
+    const excludeTerms = rule.exclude || [];
 
     let items = [];
 
     if (rule.sourceKind === 'problems') {
       // Problems have codedDate; we match label text
-      items = (data.problems || []).filter(p => {
+      items = (data.problems || []).filter((p) => {
         const label = norm(p.label);
-        if (excludeTerms.some(e => label.includes(norm(e)))) return false;
-        if (!matchTerms.some(m => label.includes(norm(m)))) return false;
+        if (excludeTerms.some((e) => label.includes(norm(e)))) return false;
+        if (!matchTerms.some((m) => label.includes(norm(m)))) return false;
         const d = new Date(p.codedDate || '');
         return !isNaN(d.getTime()) && d.getTime() >= cutoffMs;
       });
@@ -707,14 +971,14 @@
       // sourceKind === 'observations': flatten observationHistory into individual readings.
       // Each history entry represents one recorded result on a specific date.
       // First, find matching investigation types, then collect their in-window readings.
-      const matchedEntries = (data.observationHistory || []).filter(entry => {
+      const matchedEntries = (data.observationHistory || []).filter((entry) => {
         const name = norm(entry.name);
-        if (excludeTerms.some(e => name.includes(norm(e)))) return false;
-        return matchTerms.some(m => name.includes(norm(m)));
+        if (excludeTerms.some((e) => name.includes(norm(e)))) return false;
+        return matchTerms.some((m) => name.includes(norm(m)));
       });
       // Flatten to individual { name, date } items for count and chip summary
-      matchedEntries.forEach(entry => {
-        (entry.history || []).forEach(pt => {
+      matchedEntries.forEach((entry) => {
+        (entry.history || []).forEach((pt) => {
           const d = new Date(pt.date || '');
           if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return;
           items.push({ name: entry.name, date: pt.date, rawValue: pt.rawValue });
@@ -727,32 +991,61 @@
     const op = rule.operator;
     const validOps = ['>=', '>', '=', '<=', '<'];
     if (!validOps.includes(op)) {
-      console.warn(`[Sentinel] event-count rule "${rule.label || rule.id}" has unknown operator "${op}" — rule will never fire`);
+      console.warn(
+        `[Sentinel] event-count rule "${rule.label || rule.id}" has unknown operator "${op}" — rule will never fire`
+      );
       return [];
     }
     let fires = false;
     if (op === '>=') fires = count >= threshold;
-    else if (op === '>')  fires = count >  threshold;
-    else if (op === '=')  fires = count === threshold;
+    else if (op === '>') fires = count > threshold;
+    else if (op === '=') fires = count === threshold;
     else if (op === '<=') fires = count <= threshold;
-    else if (op === '<')  fires = count <  threshold;
+    else if (op === '<') fires = count < threshold;
 
-    if (!fires) return [];
+    if (!fires) {
+      if (traceEntry) {
+        traceEntry.skipReason = 'count-threshold-not-met';
+        traceEntry.count = count;
+        traceEntry.countThreshold = threshold;
+        traceEntry.operator = op;
+      }
+      return [];
+    }
 
-    return [{
-      type:        'event-count',
-      ruleId:      rule.id,
-      status:      severityToStatus(rule.severity),
-      label:       rule.label || rule.id,
-      count,
-      countThreshold: threshold,
-      operator:    op,
-      windowMonths: rule.windowMonths,
-      matchedItems: items.slice(0, 10).map(it => it.date ? `${it.name} ${it.date}` : (it.label || it.name || '')),
-      notes:       rule.notes || null,
-      source:      rule.source || null,
-      evidence:    buildEventCountEvidence(rule, items, count, threshold, op, new Date(cutoffMs).toISOString().slice(0, 10))
-    }];
+    const ecStatus = severityToStatus(rule.severity);
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = ecStatus;
+      traceEntry.chipRef = rule.id;
+      traceEntry.count = count;
+      traceEntry.countThreshold = threshold;
+      traceEntry.operator = op;
+      traceEntry.windowMonths = rule.windowMonths;
+    }
+    return [
+      {
+        type: 'event-count',
+        ruleId: rule.id,
+        status: ecStatus,
+        label: rule.label || rule.id,
+        count,
+        countThreshold: threshold,
+        operator: op,
+        windowMonths: rule.windowMonths,
+        matchedItems: items.slice(0, 10).map((it) => (it.date ? `${it.name} ${it.date}` : it.label || it.name || '')),
+        notes: rule.notes || null,
+        source: rule.source || null,
+        evidence: buildEventCountEvidence(
+          rule,
+          items,
+          count,
+          threshold,
+          op,
+          new Date(cutoffMs).toISOString().slice(0, 10)
+        ),
+      },
+    ];
   }
 
   // === COMPOSITE EVALUATOR ===
@@ -766,9 +1059,11 @@
 
     // Build a lookup of rule type by id to guard against composite→composite references
     const ruleTypeById = {};
-    (allRules || []).forEach(r => { if (r.id) ruleTypeById[r.id] = r.type; });
+    (allRules || []).forEach((r) => {
+      if (r.id) ruleTypeById[r.id] = r.type;
+    });
 
-    const results = ruleIds.map(id => {
+    const results = ruleIds.map((id) => {
       if (ruleTypeById[id] === 'composite') {
         // Silently skip — composite cannot reference composite (prevents infinite recursion)
         return null;
@@ -782,40 +1077,43 @@
 
     // If any referenced rule resolved to null (missing or composite ref), skip the whole rule
     // only when operator is AND; for OR, still allow if at least one resolved.
-    const resolved = results.filter(r => r !== null);
+    const resolved = results.filter((r) => r !== null);
     if (resolved.length === 0) return [];
 
     let fires = false;
     if (rule.operator === 'AND') {
       // All referenced (and resolvable) rules must have fired (non-empty chips)
       if (resolved.length < ruleIds.length) return []; // some were missing/skipped
-      fires = resolved.every(chips => chips.length > 0);
+      fires = resolved.every((chips) => chips.length > 0);
     } else {
       // OR: any referenced rule that fired is sufficient
-      fires = resolved.some(chips => chips.length > 0);
+      fires = resolved.some((chips) => chips.length > 0);
     }
 
     if (!fires) return [];
 
-    const firedIds = ruleIds.filter(id => {
+    const firedIds = ruleIds.filter((id) => {
       const chips = evaluatedById.get(id);
       return chips && chips.length > 0;
     });
-    return [{
-      type:      'composite',
-      ruleId:    rule.id,
-      status:    severityToStatus(rule.severity),
-      label:     rule.label || rule.id,
-      operator:  rule.operator,
-      firedRuleIds: firedIds,
-      notes:     rule.notes  || null,
-      source:    rule.source || null,
-      evidence:  buildCompositeEvidence(rule, ruleIds, firedIds, evaluatedById, allRules)
-    }];
+    return [
+      {
+        type: 'composite',
+        ruleId: rule.id,
+        status: severityToStatus(rule.severity),
+        label: rule.label || rule.id,
+        operator: rule.operator,
+        firedRuleIds: firedIds,
+        notes: rule.notes || null,
+        source: rule.source || null,
+        evidence: buildCompositeEvidence(rule, ruleIds, firedIds, evaluatedById, allRules),
+      },
+    ];
   }
 
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
+    const traceEntry = _traceBase(data, rule);
     // evidenceCtx accumulates the matched data the evaluator consults so the
     // evidence panel can show "we looked here, we found X" without re-running
     // the match logic.
@@ -824,10 +1122,20 @@
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
       const registerRule = (data._registerLookup || {})[rule.requiresRegister];
-      if (!registerRule) return [];  // register rule not configured/disabled
+      if (!registerRule) {
+        if (traceEntry) traceEntry.skipReason = 'register-precondition';
+        return []; // register rule not configured/disabled
+      }
       const reg = patientOnRegister(data.problems, registerRule);
-      if (!reg || !reg.matched) return [];
-      evidenceCtx.matchedRegisterProblem = { label: reg.problem.label, codedDate: reg.problem.codedDate || null, registerName: registerRule.registerName || registerRule.registerCode };
+      if (!reg || !reg.matched) {
+        if (traceEntry) traceEntry.skipReason = 'register-precondition';
+        return [];
+      }
+      evidenceCtx.matchedRegisterProblem = {
+        label: reg.problem.label,
+        codedDate: reg.problem.codedDate || null,
+        registerName: registerRule.registerName || registerRule.registerCode,
+      };
     }
 
     // Step 2: age + sex constraints. Age is FAIL-OPEN — an unknown/unextractable
@@ -836,8 +1144,14 @@
     // drug-monitoring and register evaluators; previously this block was
     // fail-closed (returned [] when age was null), so age-gated indicators
     // vanished whenever age couldn't be read.
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
     // Step 3: problem-based requirements & exclusions. All matching is
     // negation-aware (problemLabelMatchesTerm) so "no frailty", "family history
@@ -848,22 +1162,28 @@
     const probs = data.problems || [];
     // requiresProblem: ALL listed problems must be present (conjunctive).
     if (Array.isArray(rule.requiresProblem) && rule.requiresProblem.length) {
-      const allMet = rule.requiresProblem.every(req =>
-        probs.some(p => problemLabelMatchesTerm(p.label, req)));
-      if (!allMet) return [];
+      const allMet = rule.requiresProblem.every((req) => probs.some((p) => problemLabelMatchesTerm(p.label, req)));
+      if (!allMet) {
+        if (traceEntry) traceEntry.skipReason = 'requires-problem';
+        return [];
+      }
     }
     // requiresAnyProblem: AT LEAST ONE listed problem must be present (disjunctive)
     // — e.g. the DM035 secondary-prevention cohort = any coded CVD problem.
     if (Array.isArray(rule.requiresAnyProblem) && rule.requiresAnyProblem.length) {
-      const anyMet = rule.requiresAnyProblem.some(req =>
-        probs.some(p => problemLabelMatchesTerm(p.label, req)));
-      if (!anyMet) return [];
+      const anyMet = rule.requiresAnyProblem.some((req) => probs.some((p) => problemLabelMatchesTerm(p.label, req)));
+      if (!anyMet) {
+        if (traceEntry) traceEntry.skipReason = 'requires-any-problem';
+        return [];
+      }
     }
     // excludeIfProblem: any negation-aware match disqualifies (e.g. frailty).
     if (Array.isArray(rule.excludeIfProblem) && rule.excludeIfProblem.length) {
-      const hit = probs.some(p =>
-        rule.excludeIfProblem.some(e => problemLabelMatchesTerm(p.label, e)));
-      if (hit) return [];
+      const hit = probs.some((p) => rule.excludeIfProblem.some((e) => problemLabelMatchesTerm(p.label, e)));
+      if (hit) {
+        if (traceEntry) traceEntry.skipReason = 'excluded-by-problem';
+        return [];
+      }
     }
 
     // Step 4: evaluate the check
@@ -881,17 +1201,29 @@
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (!obs || !obs.date) return [];
+      if (!obs || !obs.date) {
+        if (traceEntry) traceEntry.skipReason = 'no-observation';
+        return [];
+      }
       // Unparseable date: new Date(invalid) gives NaN; the stale check `< _cutoff`
       // is false for NaN so an invalid date would pass the stale gate and fire.
       // Treat the same as a missing date — stale result, do not alert.
-      if (isNaN(new Date(obs.date).getTime())) return [];
+      if (isNaN(new Date(obs.date).getTime())) {
+        if (traceEntry) traceEntry.skipReason = 'stale-observation';
+        return [];
+      }
       const v = parseNumeric(obs.value);
-      if (v == null) return [];
+      if (v == null) {
+        if (traceEntry) traceEntry.skipReason = 'no-observation';
+        return [];
+      }
       const _withinDays = check.withinDays || 365;
       const _cutoff = new Date(now);
       _cutoff.setDate(_cutoff.getDate() - _withinDays);
-      if (new Date(obs.date) < _cutoff) return []; // stale result — do not alert
+      if (new Date(obs.date) < _cutoff) {
+        if (traceEntry) traceEntry.skipReason = 'stale-observation';
+        return []; // stale result — do not alert
+      }
       const cmp = check.comparator || 'above';
       let sev = null;
       if (cmp === 'above') {
@@ -901,31 +1233,47 @@
         if (check.red != null && v <= check.red) sev = 'red';
         else if (check.amber != null && v <= check.amber) sev = 'amber';
       }
-      if (!sev) return []; // within safe range — no chip
+      if (!sev) {
+        if (traceEntry) traceEntry.skipReason = 'in-safe-range';
+        return []; // within safe range — no chip
+      }
       const unit = check.unit ? ` ${check.unit}` : '';
       const alertValueText = `${v}${unit}`;
       const alertStatus = severityToStatus(sev);
       const alertDays = daysBetween(obs.date, now);
-      evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
-      return [{
-        type: 'qof-indicator',
-        ruleId: rule.id,
-        indicatorCode: rule.indicatorCode,
-        indicatorName: rule.indicatorName,
-        status: alertStatus,
-        requiresRegister: rule.requiresRegister || null,
-        points: null,
-        thresholds: null,
-        valueText: alertValueText,
-        dateText: obs.date,
-        days: alertDays,
-        qofYear: qofYearLabel(now),
-        qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
-        check: rule.check,
-        source: rule.source || null,
-        notes: rule.notes || null,
-        evidence: buildQofIndicatorEvidence(rule, alertStatus, alertValueText, obs.date, alertDays, evidenceCtx)
-      }];
+      evidenceCtx.matchedObs = {
+        name: obs.name || (check.observation || [])[0] || '',
+        value: obs.value,
+        date: obs.date,
+      };
+      if (traceEntry) {
+        traceEntry.fired = true;
+        traceEntry.status = alertStatus;
+        traceEntry.chipRef = rule.id;
+        traceEntry.matchedObs = evidenceCtx.matchedObs;
+        traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+      }
+      return [
+        {
+          type: 'qof-indicator',
+          ruleId: rule.id,
+          indicatorCode: rule.indicatorCode,
+          indicatorName: rule.indicatorName,
+          status: alertStatus,
+          requiresRegister: rule.requiresRegister || null,
+          points: null,
+          thresholds: null,
+          valueText: alertValueText,
+          dateText: obs.date,
+          days: alertDays,
+          qofYear: qofYearLabel(now),
+          qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
+          check: rule.check,
+          source: rule.source || null,
+          notes: rule.notes || null,
+          evidence: buildQofIndicatorEvidence(rule, alertStatus, alertValueText, obs.date, alertDays, evidenceCtx),
+        },
+      ];
     }
 
     if (check.kind === 'observation-threshold') {
@@ -933,7 +1281,11 @@
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
-        evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
+        evidenceCtx.matchedObs = {
+          name: obs.name || (check.observation || [])[0] || '',
+          value: obs.value,
+          date: obs.date,
+        };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
         // Boundary check: by default bundled QOF indicators apply the 1 Apr – 31 Mar
@@ -946,9 +1298,7 @@
         const _withinDays = check.withinDays || 365;
         const _rollingCutoff = new Date(now);
         _rollingCutoff.setDate(_rollingCutoff.getDate() - _withinDays);
-        const _outOfWindow = _useFloor
-          ? _obsDate < _qofStart
-          : _obsDate < _rollingCutoff;
+        const _outOfWindow = _useFloor ? _obsDate < _qofStart : _obsDate < _rollingCutoff;
         if (_outOfWindow) {
           status = 'overdue';
         } else if (check.thresholdSystolic && check.thresholdDiastolic) {
@@ -979,10 +1329,10 @@
     } else if (check.kind === 'medication-present') {
       const matchTerms = check.medicationMatch || [];
       const excludeTerms = check.medicationExclude || [];
-      const foundMed = (data.medications || []).find(m => {
+      const foundMed = (data.medications || []).find((m) => {
         const norm = normaliseDrugString(m.name);
-        if (excludeTerms.some(t => norm.includes(normaliseDrugString(t)))) return false;
-        return matchTerms.some(t => norm.includes(normaliseDrugString(t)));
+        if (excludeTerms.some((t) => norm.includes(normaliseDrugString(t)))) return false;
+        return matchTerms.some((t) => norm.includes(normaliseDrugString(t)));
       });
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
@@ -991,7 +1341,11 @@
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
-        evidenceCtx.matchedObs = { name: obs.name || (check.observation || [])[0] || '', value: obs.value, date: obs.date };
+        evidenceCtx.matchedObs = {
+          name: obs.name || (check.observation || [])[0] || '',
+          value: obs.value,
+          date: obs.date,
+        };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
         // Capture the recorded value so the chip can show e.g. "Weight: 87 kg ·
@@ -1006,9 +1360,7 @@
         const _withinDays2 = check.withinDays || 365;
         const _rollingCutoff2 = new Date(now);
         _rollingCutoff2.setDate(_rollingCutoff2.getDate() - _withinDays2);
-        const _inWindow = _useFloor2
-          ? _obsDate2 >= _qofStart2
-          : _obsDate2 >= _rollingCutoff2;
+        const _inWindow = _useFloor2 ? _obsDate2 >= _qofStart2 : _obsDate2 >= _rollingCutoff2;
         if (_inWindow) status = 'achieved';
         else status = 'overdue';
       }
@@ -1022,14 +1374,14 @@
       const _qofStartB = qofYearStart(now);
       const _rollingCutoffB = new Date(now);
       _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
-      const bundleResults = bundleGroups.map(aliases => {
+      const bundleResults = bundleGroups.map((aliases) => {
         const obs = findLatestObservation(data.observations, { match: aliases });
         if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
         const obsDate = new Date(obs.date);
         const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
         return { aliases, obs, inWindow };
       });
-      const metCount = bundleResults.filter(r => r.inWindow).length;
+      const metCount = bundleResults.filter((r) => r.inWindow).length;
       const totalCount = bundleResults.length;
       if (check.requireAll) {
         if (metCount === totalCount) {
@@ -1044,36 +1396,67 @@
       }
       valueText = `${metCount}/${totalCount} care processes`;
       // Most recent observation date across all matched groups
-      const latestBundleDate = bundleResults
-        .filter(r => r.obs && r.obs.date)
-        .map(r => r.obs.date)
-        .sort()
-        .pop() || null;
+      const latestBundleDate =
+        bundleResults
+          .filter((r) => r.obs && r.obs.date)
+          .map((r) => r.obs.date)
+          .sort()
+          .pop() || null;
       dateText = latestBundleDate;
       if (latestBundleDate) days = daysBetween(latestBundleDate, now);
       evidenceCtx.bundleResults = bundleResults;
+    } else if (check.kind === 'medication-all-of') {
+      // medication-all-of: each group in check.groups must be satisfied by at
+      // least one current medication. Used by HF009 four-pillar therapy check.
+      // Clinical-safety rationale: a populated med list with ZERO pillar matches
+      // is 'not_met'; an EMPTY medication array more likely means extraction
+      // failure so we return 'no_data' rather than a false 'not_met'.
+      const groups = check.groups || [];
+      const meds = data.medications || [];
+      const groupResults = groups.map((g) => {
+        const found = meds.find((m) => {
+          const norm = normaliseDrugString(m.name);
+          if ((g.exclude || []).some((t) => norm.includes(normaliseDrugString(t)))) return false;
+          return (g.match || []).some((t) => norm.includes(normaliseDrugString(t)));
+        });
+        return { name: g.name, med: found ? found.name : null };
+      });
+      const metCount = groupResults.filter((r) => r.med).length;
+      if (metCount === groups.length && groups.length > 0) status = 'achieved';
+      else if (meds.length === 0) status = 'no_data';
+      else status = 'not_met';
+      valueText =
+        `${metCount}/${groups.length} classes` +
+        (metCount < groups.length
+          ? ` (missing: ${groupResults
+              .filter((r) => !r.med)
+              .map((r) => r.name)
+              .join(', ')})`
+          : '');
+      evidenceCtx.allOfResults = groupResults;
     } else if (check.kind === 'observation-trend') {
       // Find matching investigation history entries; multiple substrings may match
       // distinct test types (e.g. "PSA" matches both "PSA" and "PSA free/total ratio").
       // Pick the entry with the most data points so the trend uses the richest series.
       // BP-style "120/80" values are not supported in trend mode — they parse to NaN
       // in observationHistory and get filtered below.
-      const normStr = s => String(s || '').toLowerCase();
+      const normStr = (s) => String(s || '').toLowerCase();
       const matchTerms = check.observation || [];
-      const candidates = (data.observationHistory || []).filter(entry => {
+      const candidates = (data.observationHistory || []).filter((entry) => {
         const name = normStr(entry.name);
-        return matchTerms.some(m => name.includes(normStr(m)));
+        return matchTerms.some((m) => name.includes(normStr(m)));
       });
-      const historyEntry = candidates.length === 0
-        ? null
-        : candidates.reduce((a, b) => (b.history?.length || 0) > (a.history?.length || 0) ? b : a);
+      const historyEntry =
+        candidates.length === 0
+          ? null
+          : candidates.reduce((a, b) => ((b.history?.length || 0) > (a.history?.length || 0) ? b : a));
 
       if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
         // Filter history to within check.withinMonths of now
         const withinMs = (check.withinMonths || 24) * 30.4375 * 24 * 60 * 60 * 1000;
-        const nowMs    = new Date(now).getTime();
+        const nowMs = new Date(now).getTime();
         const cutoffMs = nowMs - withinMs;
-        const inWindow = historyEntry.history.filter(pt => {
+        const inWindow = historyEntry.history.filter((pt) => {
           const d = new Date(pt.date || '');
           if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return false;
           // isFinite excludes NaN AND Infinity; protects subsequent arithmetic
@@ -1088,27 +1471,27 @@
           // provenance (what values exist) rather than a bare "insufficient data".
           // Prefer in-window readings; if none, fall back to the most recent few
           // from the full history so the clinician can see the actual values.
-          const provenance = (inWindow.length ? inWindow : historyEntry.history.slice(0, 6))
-            .filter(pt => isFinite(pt.value));
+          const provenance = (inWindow.length ? inWindow : historyEntry.history.slice(0, 6)).filter((pt) =>
+            isFinite(pt.value)
+          );
           if (provenance.length) {
             // history is newest-first; reverse to oldest→newest for display.
             const ordered = provenance.slice().reverse();
             const pNewest = ordered[ordered.length - 1].value;
             const pOldest = ordered[0].value;
             const pSpan = Math.round(
-              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) /
-              (30.4375 * 24 * 60 * 60 * 1000)
+              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) / (30.4375 * 24 * 60 * 60 * 1000)
             );
             evidenceCtx.trendSeries = {
               testName: historyEntry.name,
               unit: historyEntry.unit || '',
-              points: ordered.map(p => ({ date: p.date, value: p.value })),
-              delta: ordered.length >= 2 ? (pNewest - pOldest) : null,
+              points: ordered.map((p) => ({ date: p.date, value: p.value })),
+              delta: ordered.length >= 2 ? pNewest - pOldest : null,
               direction: check.direction || 'rising',
               minDelta: check.minDelta != null ? check.minDelta : 0,
               spanMonths: ordered.length >= 2 ? pSpan : null,
               fires: false,
-              insufficient: true
+              insufficient: true,
             };
           }
         } else {
@@ -1116,35 +1499,44 @@
           // Trend direction: compare oldest value to newest value overall.
           // Using first-vs-last comparison (not regression) — simpler and less noisy
           // for the kind of sparse GP data seen in Medicus (3–6 points typical).
-          const newest = inWindow[0].value;                       // most recent reading
-          const oldest = inWindow[inWindow.length - 1].value;    // earliest reading
-          const delta  = newest - oldest;                        // positive = rising
+          const newest = inWindow[0].value; // most recent reading
+          const oldest = inWindow[inWindow.length - 1].value; // earliest reading
+          const delta = newest - oldest; // positive = rising
           // minDelta default 0 means "any movement in the named direction fires".
           // The strict-inequality check on delta below prevents a flat line
           // (delta exactly 0) from firing as either rising or falling.
           const minDelta = check.minDelta != null ? check.minDelta : 0;
           const spanMonths = Math.round(
             (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /
-            (30.4375 * 24 * 60 * 60 * 1000)
+              (30.4375 * 24 * 60 * 60 * 1000)
           );
           const direction = check.direction || 'rising';
           // Trend fires only when delta moves strictly in the named direction AND meets minDelta.
           // Strict inequality on delta prevents a flat line firing as either direction.
           const trendFires =
-            direction === 'rising'  ? (delta > 0 && delta >=  minDelta) :
-            direction === 'falling' ? (delta < 0 && delta <= -minDelta) :
-            false;
+            direction === 'rising'
+              ? delta > 0 && delta >= minDelta
+              : direction === 'falling'
+                ? delta < 0 && delta <= -minDelta
+                : false;
 
           const unit = historyEntry.unit ? ` ${historyEntry.unit}` : '';
           const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
           valueText = `${oldest.toFixed(1)} → ${newest.toFixed(1)}${unit} (${deltaStr}, ${inWindow.length} pts, ${spanMonths} mo)`;
-          dateText  = inWindow[0].date;
+          dateText = inWindow[0].date;
 
           evidenceCtx.trendSeries = {
             testName: historyEntry.name,
             unit: historyEntry.unit || '',
-            points: inWindow.slice().reverse().map(p => ({ date: p.date, value: p.value })),
-            delta, direction, minDelta, spanMonths, fires: trendFires
+            points: inWindow
+              .slice()
+              .reverse()
+              .map((p) => ({ date: p.date, value: p.value })),
+            delta,
+            direction,
+            minDelta,
+            spanMonths,
+            fires: trendFires,
           };
 
           status = trendFires ? 'not_met' : 'achieved';
@@ -1153,25 +1545,91 @@
       // status remains 'no_data' when no history entry found or history array is empty
     }
 
-    return [{
-      type: 'qof-indicator',
-      ruleId: rule.id,
-      indicatorCode: rule.indicatorCode,
-      indicatorName: rule.indicatorName,
-      status,
-      requiresRegister: rule.requiresRegister || null,
-      points: rule.points || null,
-      thresholds: rule.thresholds || null,
-      valueText,
-      dateText,
-      days,
-      qofYear: qofYearLabel(now),        // e.g. "2025/26" — used by UI for context
-      qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
-      check: rule.check,
-      source: rule.source || null,
-      notes: rule.notes || null,
-      evidence: buildQofIndicatorEvidence(rule, status, valueText, dateText, days, evidenceCtx)
-    }];
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchedRegisterProblem = evidenceCtx.matchedRegisterProblem || null;
+      traceEntry.matchedObs = evidenceCtx.matchedObs || null;
+      traceEntry.matchedMed = evidenceCtx.matchedMed || null;
+      traceEntry.allOfResults = evidenceCtx.allOfResults ? evidenceCtx.allOfResults.slice(0, 15) : null;
+      traceEntry.bundleResults = evidenceCtx.bundleResults
+        ? evidenceCtx.bundleResults.slice(0, 15).map((r) => ({
+            aliases: r.aliases || [],
+            inWindow: r.inWindow,
+            obs: r.obs ? { name: r.obs.name, date: r.obs.date, value: r.obs.value } : null,
+          }))
+        : null;
+      traceEntry.trendSeries = evidenceCtx.trendSeries || null;
+      traceEntry.valueText = valueText;
+      traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+    }
+
+    return [
+      {
+        type: 'qof-indicator',
+        ruleId: rule.id,
+        indicatorCode: rule.indicatorCode,
+        indicatorName: rule.indicatorName,
+        status,
+        requiresRegister: rule.requiresRegister || null,
+        points: rule.points || null,
+        thresholds: rule.thresholds || null,
+        valueText,
+        dateText,
+        days,
+        qofYear: qofYearLabel(now), // e.g. "2025/26" — used by UI for context
+        qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
+        check: rule.check,
+        source: rule.source || null,
+        notes: rule.notes || null,
+        evidence: buildQofIndicatorEvidence(rule, status, valueText, dateText, days, evidenceCtx),
+      },
+    ];
+  }
+
+  // === TRACE ENVELOPE BUILDER ===
+  // Builds the full export envelope from a raw trace array + data. Only called
+  // when options.trace is truthy; the hot path never touches this code.
+  function buildTraceEnvelope(traceEntries, data, nowIso, options) {
+    const generatedAt = new Date().toISOString();
+    const pc = data.patientContext || {};
+    const patient = {
+      uuid: pc.patientUuid || pc.uuid || pc.patientId || null,
+      nhsNumber: pc.nhsNumber || null,
+      displayName: pc.displayName || pc.patientName || pc.name || null,
+      ageYears: pc.ageYears != null ? pc.ageYears : pc.age != null ? pc.age : null,
+      sex: pc.sex || pc.gender || null,
+    };
+    const allChips = (options && options._chips) || [];
+    const rulesFired = traceEntries.filter((e) => e.fired).length;
+    const rulesSkipped = traceEntries.filter((e) => !e.fired).length;
+    const extraction = {
+      medications: (data.medications || []).length,
+      observations: (data.observations || []).length,
+      problems: (data.problems || []).length,
+      observationHistory: (data.observationHistory || []).length,
+      degraded: !!(options && options.degraded),
+    };
+    const chipsCompact = allChips.map((c) => ({ ruleId: c.ruleId, type: c.type, status: c.status }));
+    const unmatchedMedications = options && options.unmatchedDetailed ? options.unmatchedDetailed : [];
+    return {
+      traceSchemaVersion: 1,
+      generatedAt,
+      now: nowIso,
+      patient,
+      ruleset: {
+        rulesConsidered: traceEntries.length,
+        rulesFired,
+        rulesSkipped,
+        files: (options && options.ruleFileMeta) || [],
+        customRuleCount: options && options.customRuleCount != null ? options.customRuleCount : 0,
+      },
+      extraction,
+      entries: traceEntries,
+      unmatchedMedications,
+      chips: chipsCompact,
+    };
   }
 
   // === MAIN ENTRY ===
@@ -1187,9 +1645,13 @@
 
     const data = { medications, observations, observationHistory, problems, patientContext };
 
+    // Trace sink: attach only when tracing is requested (never on the hot path).
+    const trace = options.trace ? [] : null;
+    if (trace) data._trace = trace;
+
     // Pre-build register lookup for indicator rules
     const registerLookup = {};
-    (rules || []).forEach(r => {
+    (rules || []).forEach((r) => {
       if (r.type === 'qof-register' && r.enabled !== false && r.registerCode) {
         registerLookup[r.registerCode] = r;
       }
@@ -1201,27 +1663,66 @@
     // whether other rules fired. Composites are evaluated last (after the loop).
     const evaluatedById = new Map();
 
-    (rules || []).forEach(rule => {
-      if (rule.enabled === false) return;
+    (rules || []).forEach((rule) => {
+      if (rule.enabled === false) {
+        // Emit a disabled-rule trace entry before skipping
+        if (trace && rule.id) {
+          trace.push({
+            ruleId: rule.id,
+            ruleType: rule.type || 'drug-monitoring',
+            label:
+              rule.label ||
+              rule.drug?.match?.[0] ||
+              rule.registerName ||
+              rule.indicatorName ||
+              rule.displayName ||
+              rule.id,
+            fired: false,
+            status: null,
+            skipReason: 'disabled',
+            source: rule.source || null,
+            notes: rule.notes || null,
+          });
+        }
+        return;
+      }
       const type = rule.type || 'drug-monitoring';
       // Composite rules are collected separately and evaluated after all other rules.
       if (type === 'composite') return;
       let out = [];
-      if (type === 'drug-monitoring')  out = evaluateDrugRule(rule, data, now);
-      else if (type === 'qof-register')  out = evaluateQofRegisterRule(rule, data);
+      if (type === 'drug-monitoring') out = evaluateDrugRule(rule, data, now);
+      else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data);
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
-      else if (type === 'drug-combo')    out = evaluateDrugComboRule(rule, data);
-      else if (type === 'event-count')   out = evaluateEventCountRule(rule, data, now);
-      else if (type === 'vaccine')       out = evaluateVaccineRule(rule, data, now);
+      else if (type === 'drug-combo') out = evaluateDrugComboRule(rule, data);
+      else if (type === 'event-count') out = evaluateEventCountRule(rule, data, now);
+      else if (type === 'vaccine') out = evaluateVaccineRule(rule, data, now);
       chips.push(...out);
       if (rule.id) evaluatedById.set(rule.id, out);
     });
 
     // Evaluate composite rules last so all referenced rule results are available.
-    (rules || []).forEach(rule => {
+    (rules || []).forEach((rule) => {
       if (rule.enabled === false) return;
       if ((rule.type || '') !== 'composite') return;
       const out = evaluateCompositeRule(rule, rules, evaluatedById);
+      // Trace composite result inline (evaluateCompositeRule has no data param)
+      if (trace && rule.id) {
+        const fired = out.length > 0;
+        const chip = fired ? out[0] : null;
+        trace.push({
+          ruleId: rule.id,
+          ruleType: 'composite',
+          label: rule.label || rule.id,
+          fired,
+          status: chip ? chip.status : null,
+          skipReason: fired ? null : 'composite-not-met',
+          chipRef: fired ? rule.id : null,
+          firedRuleIds: chip ? chip.firedRuleIds : [],
+          operator: rule.operator || 'AND',
+          source: rule.source || null,
+          notes: rule.notes || null,
+        });
+      }
       chips.push(...out);
       if (rule.id) evaluatedById.set(rule.id, out);
     });
@@ -1234,6 +1735,10 @@
       return (a.type || '').localeCompare(b.type || '');
     });
 
+    if (options.trace) {
+      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: chips });
+      return { chips, trace: envelope };
+    }
     return chips;
   }
 
@@ -1244,7 +1749,7 @@
     const nowDatePart = String(nowIso).slice(0, 10); // "YYYY-MM-DD"
     let year = parseInt(nowDatePart.slice(0, 4), 10);
     // Build the candidate season start as a UTC date string for comparison.
-    const pad2 = n => String(n).padStart(2, '0');
+    const pad2 = (n) => String(n).padStart(2, '0');
     const candidateStr = `${year}-${pad2(startMonth)}-${pad2(startDay)}`;
     // If the candidate is in the future (relative to now's date part), use last year.
     if (candidateStr > nowDatePart) year -= 1;
@@ -1253,36 +1758,39 @@
 
   function matchesAnyTerm(str, terms) {
     const s = String(str || '').toLowerCase();
-    return terms.some(t => s.includes(t.toLowerCase()));
+    return terms.some((t) => s.includes(t.toLowerCase()));
   }
 
   function vaccineEventInWindow(rule, data, seasonStartIso) {
     const givenTerms = rule.statusTerms?.given || [];
     const declinedTerms = rule.statusTerms?.declined || [];
+    // IMPORTANT: check declined BEFORE given for each record so that a code
+    // like "Flu vaccine declined" (which contains the stem "flu vaccin") is
+    // never misclassified as given. This is a clinical-safety requirement.
     // Search problems
-    for (const p of (data.problems || [])) {
+    for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
       if (d && d < seasonStartIso) continue;
-      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
       if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
+      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
     }
     // Search observations (name and value)
-    for (const o of (data.observations || [])) {
+    for (const o of data.observations || []) {
       const d = o.date || '';
       if (d && d < seasonStartIso) continue;
-      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
       if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
+      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
     }
     // Search observationHistory (journal entries in history)
-    for (const h of (data.observationHistory || [])) {
-      if (matchesAnyTerm(h.name, givenTerms)) {
-        const latest = (h.history || []).find(pt => pt.date && pt.date >= seasonStartIso);
-        if (latest) return { type: 'given', date: latest.date, source: 'history' };
-      }
+    for (const h of data.observationHistory || []) {
       if (matchesAnyTerm(h.name, declinedTerms)) {
-        const latest = (h.history || []).find(pt => pt.date && pt.date >= seasonStartIso);
+        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
         if (latest) return { type: 'declined', date: latest.date, source: 'history' };
+      }
+      if (matchesAnyTerm(h.name, givenTerms)) {
+        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
+        if (latest) return { type: 'given', date: latest.date, source: 'history' };
       }
     }
     return null;
@@ -1290,24 +1798,33 @@
 
   function matchVaccineEligibility(rule, data) {
     const ctx = data.patientContext || {};
-    const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : (Number.isFinite(ctx.age) ? ctx.age : null);
+    const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : Number.isFinite(ctx.age) ? ctx.age : null;
     const sex = (ctx.sex || ctx.gender || '').toLowerCase();
 
-    for (const clause of (rule.eligibility?.anyOf || [])) {
+    for (const clause of rule.eligibility?.anyOf || []) {
       const k = clause.kind;
 
       if (k === 'age') {
         if (age == null) continue;
-        const ok = (clause.ageMin == null || age >= clause.ageMin) &&
-                   (clause.ageMax == null || age <= clause.ageMax);
-        if (ok) return clause;
+        const ok = (clause.ageMin == null || age >= clause.ageMin) && (clause.ageMax == null || age <= clause.ageMax);
+        if (!ok) continue;
+        // Optional bornOnOrAfter gate (ISO date string). Fail-closed: if dob is
+        // missing or unparseable, this clause does NOT match. A different clause
+        // (e.g. a wider age band without bornOnOrAfter) may still match.
+        if (clause.bornOnOrAfter) {
+          const dob = ctx.dob || null;
+          if (!dob) continue; // fail-closed: unknown dob → skip this clause
+          const dobParsed = Date.parse(dob);
+          if (!Number.isFinite(dobParsed)) continue; // unparseable dob → skip
+          if (dob < clause.bornOnOrAfter) continue; // born before threshold → skip
+        }
+        return clause;
       }
 
       if (k === 'problem') {
         if (clause.sex && sex && clause.sex !== sex[0]) continue;
         const terms = clause.match || [];
-        const hit = (data.problems || []).find(p =>
-          p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
+        const hit = (data.problems || []).find((p) => p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
       }
 
@@ -1335,22 +1852,29 @@
 
       if (k === 'medication') {
         const terms = clause.match || [];
-        const hit = (data.medications || []).find(m => matchesAnyTerm(m.name, terms));
+        const hit = (data.medications || []).find((m) => matchesAnyTerm(m.name, terms));
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.name}` };
       }
 
       if (k === 'observation-threshold') {
         const obsNames = clause.observation || [];
-        const obs = (data.observations || []).find(o =>
-          obsNames.some(n => (o.name || '').toLowerCase().includes(n.toLowerCase())));
+        const obs = (data.observations || []).find((o) =>
+          obsNames.some((n) => (o.name || '').toLowerCase().includes(n.toLowerCase()))
+        );
         if (obs) {
           const val = parseNumeric(obs.value);
           const op = clause.operator || '>=';
           const threshold = clause.value;
-          const met = op === '>=' ? val >= threshold :
-                      op === '>'  ? val >  threshold :
-                      op === '<=' ? val <= threshold :
-                      op === '<'  ? val <  threshold : false;
+          const met =
+            op === '>='
+              ? val >= threshold
+              : op === '>'
+                ? val > threshold
+                : op === '<='
+                  ? val <= threshold
+                  : op === '<'
+                    ? val < threshold
+                    : false;
           if (met) {
             const unit = obs.unit ? ` ${obs.unit}` : '';
             return { ...clause, matchedEvidence: `${clause.label}: ${obs.name} ${val}${unit}` };
@@ -1366,15 +1890,22 @@
         if (!regRes || !regRes.matched) continue;
         // AND any of the sub-conditions — capture which one hit
         let subDetail = null;
-        for (const sub of (clause.andAnyOf || [])) {
+        for (const sub of clause.andAnyOf || []) {
           if (sub.medication) {
-            const m = (data.medications || []).find(med => matchesAnyTerm(med.name, sub.medication));
-            if (m) { subDetail = m.name; break; }
+            const m = (data.medications || []).find((med) => matchesAnyTerm(med.name, sub.medication));
+            if (m) {
+              subDetail = m.name;
+              break;
+            }
           }
           if (sub.problem) {
-            const p = (data.problems || []).find(pr =>
-              pr.status !== 'inactive' && matchesAnyTerm(pr.label, sub.problem));
-            if (p) { subDetail = p.label; break; }
+            const p = (data.problems || []).find(
+              (pr) => pr.status !== 'inactive' && matchesAnyTerm(pr.label, sub.problem)
+            );
+            if (p) {
+              subDetail = p.label;
+              break;
+            }
           }
         }
         if (subDetail) {
@@ -1392,7 +1923,7 @@
   // the new year (flu: Sep 1 → Mar 31 of the following year).
   function seasonEnd(startIso, season) {
     if (!season || !season.endMonth) return null;
-    const pad2 = n => String(n).padStart(2, '0');
+    const pad2 = (n) => String(n).padStart(2, '0');
     const startYear = parseInt(startIso.slice(0, 4), 10);
     const endYear = season.endMonth < season.startMonth ? startYear + 1 : startYear;
     return `${endYear}-${pad2(season.endMonth)}-${pad2(season.endDay || 1)}`;
@@ -1400,49 +1931,81 @@
 
   function evaluateVaccineRule(rule, data, nowIso) {
     if (rule.enabled === false) return [];
+    const traceEntry = _traceBase(data, rule);
     const matchedClause = matchVaccineEligibility(rule, data);
-    if (!matchedClause) return [];
+    if (!matchedClause) {
+      if (traceEntry) traceEntry.skipReason = 'not-eligible';
+      return [];
+    }
 
-    const startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+    // One-off (lifetime) vaccines use schedule:"once" and omit season.
+    // They look back to 1900-01-01 (effectively all time) and are never
+    // suppressed out-of-campaign — a lifetime vaccine is always actionable.
+    const isOneOff = rule.schedule === 'once';
 
-    // Out-of-campaign suppression: between the campaign end (e.g. 31 Mar) and
-    // the next season start (e.g. 1 Sep), no vaccine chips fire at all — an
-    // eligible-but-unvaccinated patient is not actionable in June (the jab
-    // cannot be given), and a stale "VAX DUE" all summer trains staff to
-    // ignore the chip when it matters. Rules without endMonth stay year-round.
-    const endIso = seasonEnd(startIso, rule.season);
-    if (endIso && nowIso.slice(0, 10) > endIso) return [];
+    let startIso, seasonLabel;
+    if (isOneOff) {
+      startIso = '1900-01-01';
+      seasonLabel = 'one-off';
+    } else {
+      startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+      const seasonYear = startIso.slice(0, 4);
+      seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
+      // Out-of-campaign suppression: between the campaign end (e.g. 31 Mar) and
+      // the next season start (e.g. 1 Sep), no vaccine chips fire at all — an
+      // eligible-but-unvaccinated patient is not actionable in June (the jab
+      // cannot be given), and a stale "VAX DUE" all summer trains staff to
+      // ignore the chip when it matters. Rules without endMonth stay year-round.
+      const endIso = seasonEnd(startIso, rule.season);
+      if (endIso && nowIso.slice(0, 10) > endIso) {
+        if (traceEntry) traceEntry.skipReason = 'out-of-campaign';
+        return [];
+      }
+    }
+
     const evt = vaccineEventInWindow(rule, data, startIso);
 
     const status = evt ? (evt.type === 'given' ? 'vax_given' : 'vax_declined') : 'vax_due';
 
-    const seasonYear = startIso.slice(0, 4);
-    const seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
-
     const eligibilityDetail = matchedClause.matchedEvidence || matchedClause.label;
     const evidenceParts = [`${rule.displayName} — ${eligibilityDetail}`];
     if (evt) evidenceParts.push(`${evt.type === 'given' ? 'Given' : 'Declined'}: ${evt.date || 'date unknown'}`);
+    else if (isOneOff) evidenceParts.push('No record ever held (one-off vaccine)');
     else evidenceParts.push(`No record in ${seasonLabel} season (from ${startIso})`);
     if (rule.notes) evidenceParts.push(rule.notes);
 
-    return [{
-      type: 'vaccine',
-      ruleId: rule.id,
-      vaccine: rule.vaccine,
-      displayName: rule.displayName,
-      status,
-      eligibilityReason: matchedClause.label,
-      matchedEvidence: matchedClause.matchedEvidence || null,
-      eventDate: evt ? evt.date : null,
-      seasonLabel,
-      seasonStartIso: startIso,
-      evidence: {
-        summary: `${rule.displayName} · ${eligibilityDetail}`,
-        facts: evidenceParts
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.eligibilityReason = matchedClause.label;
+      traceEntry.matchedEvidence = matchedClause.matchedEvidence || null;
+      traceEntry.seasonLabel = seasonLabel;
+      traceEntry.seasonStartIso = startIso;
+      traceEntry.isOneOff = isOneOff;
+      traceEntry.eventDate = evt ? evt.date : null;
+    }
+
+    return [
+      {
+        type: 'vaccine',
+        ruleId: rule.id,
+        vaccine: rule.vaccine,
+        displayName: rule.displayName,
+        status,
+        eligibilityReason: matchedClause.label,
+        matchedEvidence: matchedClause.matchedEvidence || null,
+        eventDate: evt ? evt.date : null,
+        seasonLabel,
+        seasonStartIso: startIso,
+        evidence: {
+          summary: `${rule.displayName} · ${eligibilityDetail}`,
+          facts: evidenceParts,
+        },
+        source: rule.source || '',
+        notes: rule.notes || '',
       },
-      source: rule.source || '',
-      notes: rule.notes || ''
-    }];
+    ];
   }
 
   // Returns a deduplicated, alphabetically-sorted list of medication names from
@@ -1452,10 +2015,10 @@
   // as unmatched — it has no monitoring rule covering it. This is the key silent-
   // failure surface: an unlisted brand silently produces no alert.
   function listUnmatchedMedications(medications, rules) {
-    const drugMonitoringRules = (rules || []).filter(r => r.enabled !== false && r.type === 'drug-monitoring');
+    const drugMonitoringRules = (rules || []).filter((r) => r.enabled !== false && r.type === 'drug-monitoring');
     // Deduplication: track seen names case-insensitively, keep original display name.
     const seenLower = new Map(); // lowerName → displayName
-    (medications || []).forEach(med => {
+    (medications || []).forEach((med) => {
       if (!med || !med.name) return;
       const lower = String(med.name).toLowerCase();
       if (!seenLower.has(lower)) seenLower.set(lower, med.name);
@@ -1463,7 +2026,7 @@
     // Filter to only names not covered by any enabled drug-monitoring rule.
     const unmatched = [];
     seenLower.forEach((displayName, lower) => {
-      const covered = drugMonitoringRules.some(rule => drugMatchesRule(lower, rule));
+      const covered = drugMonitoringRules.some((rule) => drugMatchesRule(lower, rule));
       if (!covered) unmatched.push(displayName);
     });
     unmatched.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
@@ -1473,7 +2036,10 @@
   const api = {
     evaluatePatient,
     listUnmatchedMedications,
+    listUnmatchedMedicationsDetailed,
     drugMatchesRule,
+    drugMatchDetail,
+    buildTraceEnvelope,
     findLatestObservation,
     daysBetween,
     qofYearStart,
@@ -1490,7 +2056,7 @@
     evaluateVaccineRule,
     severityToStatus,
     STATUS_RANK,
-    seasonStart
+    seasonStart,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

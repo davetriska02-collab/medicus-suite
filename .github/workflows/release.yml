@@ -59,6 +59,13 @@ jobs:
             --exclude='.claude/' \
             --exclude='*.zip' \
             --exclude='.DS_Store' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='node_modules/' \
+            --exclude='eslint.config.mjs' \
+            --exclude='.prettierrc.json' \
+            --exclude='.prettierignore' \
+            --exclude='.githooks/' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/

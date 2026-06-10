@@ -13,7 +13,7 @@
 // Export format is a self-describing JSON document. The same format is used
 // for organisational and individual rulesets; the `scope` field distinguishes.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   const FORMAT = 'sentinel-ruleset';
@@ -35,7 +35,7 @@
       qofSpecVersion: opts.qofSpecVersion || 'QOF 2025/26',
       drugRuleOverrides: opts.drugRuleOverrides || {},
       qofRuleOverrides: opts.qofRuleOverrides || {},
-      displayConfig: opts.scope === 'organisation' ? null : (opts.displayConfig || null)
+      displayConfig: opts.scope === 'organisation' ? null : opts.displayConfig || null,
     };
     return doc;
   }
@@ -45,8 +45,13 @@
 
   // Known valid string sets for check object fields.
   const VALID_CHECK_KINDS = [
-    'observation-threshold', 'observation-recent', 'observation-alert',
-    'observation-bundle', 'observation-trend', 'medication-present'
+    'observation-threshold',
+    'observation-recent',
+    'observation-alert',
+    'observation-bundle',
+    'observation-trend',
+    'medication-present',
+    'medication-all-of',
   ];
   const VALID_CHECK_OPERATORS = ['<=', '<', '>=', '>'];
   const VALID_CHECK_COMPARATORS = ['above', 'below'];
@@ -54,8 +59,15 @@
 
   // Numeric fields in a check object — must satisfy Number.isFinite() if present.
   const CHECK_NUMERIC_FIELDS = [
-    'threshold', 'red', 'amber', 'thresholdSystolic', 'thresholdDiastolic',
-    'minDelta', 'minPoints', 'withinDays', 'withinMonths'
+    'threshold',
+    'red',
+    'amber',
+    'thresholdSystolic',
+    'thresholdDiastolic',
+    'minDelta',
+    'minPoints',
+    'withinDays',
+    'withinMonths',
   ];
   // Array fields in a check object — must be arrays if present.
   const CHECK_ARRAY_FIELDS = ['observation', 'observations', 'medicationMatch', 'medicationExclude'];
@@ -84,12 +96,12 @@
     if (check.unit != null && typeof check.unit !== 'string') {
       errors.push(`${path}.unit: must be a string`);
     }
-    CHECK_NUMERIC_FIELDS.forEach(field => {
+    CHECK_NUMERIC_FIELDS.forEach((field) => {
       if (check[field] != null && !Number.isFinite(check[field])) {
         errors.push(`${path}.${field}: must be a finite number (got ${JSON.stringify(check[field])})`);
       }
     });
-    CHECK_ARRAY_FIELDS.forEach(field => {
+    CHECK_ARRAY_FIELDS.forEach((field) => {
       if (check[field] != null && !Array.isArray(check[field])) {
         errors.push(`${path}.${field}: must be an array`);
       }
@@ -109,16 +121,20 @@
     if (typeof doc.formatVersion !== 'number') {
       errors.push('Missing or invalid formatVersion.');
     } else if (doc.formatVersion > FORMAT_VERSION) {
-      warnings.push(`This file was created with a newer version of Sentinel (formatVersion ${doc.formatVersion} > ${FORMAT_VERSION}). Some fields may be ignored.`);
+      warnings.push(
+        `This file was created with a newer version of Sentinel (formatVersion ${doc.formatVersion} > ${FORMAT_VERSION}). Some fields may be ignored.`
+      );
     }
     if (doc.ruleSchemaVersion && doc.ruleSchemaVersion !== SUPPORTED_RULE_SCHEMA) {
-      warnings.push(`Rule schema mismatch (file: v${doc.ruleSchemaVersion}, this Sentinel: v${SUPPORTED_RULE_SCHEMA}). Rules may not behave as expected.`);
+      warnings.push(
+        `Rule schema mismatch (file: v${doc.ruleSchemaVersion}, this Sentinel: v${SUPPORTED_RULE_SCHEMA}). Rules may not behave as expected.`
+      );
     }
     if (!['individual', 'organisation'].includes(doc.scope)) {
       warnings.push(`Unknown scope "${doc.scope}". Treating as individual.`);
     }
     // Validate override shapes — must be plain objects keyed by rule id
-    ['drugRuleOverrides', 'qofRuleOverrides'].forEach(key => {
+    ['drugRuleOverrides', 'qofRuleOverrides'].forEach((key) => {
       if (doc[key] == null) return;
       if (typeof doc[key] !== 'object' || Array.isArray(doc[key])) {
         errors.push(`${key} must be an object keyed by rule id.`);
@@ -135,16 +151,30 @@
         // Field whitelist - unknown fields raise a warning so unexpected/malicious
         // override keys are surfaced to the user on import. (Known typed fields below
         // - check/enabled/intervals - are hard-validated and reject the import on error.)
-        const allowed = ['enabled', 'tests', 'thresholds', 'check', 'ageRange', 'excludeIfProblem',
-                         'problemMatch', 'problemExclude', 'intervalDays', 'dueSoonDays', 'notes'];
-        Object.keys(override).forEach(field => {
+        const allowed = [
+          'enabled',
+          'tests',
+          'thresholds',
+          'check',
+          'ageRange',
+          'excludeIfProblem',
+          'problemMatch',
+          'problemExclude',
+          'intervalDays',
+          'dueSoonDays',
+          'notes',
+        ];
+        Object.keys(override).forEach((field) => {
           if (!allowed.includes(field)) {
             warnings.push(`${key}.${ruleId}.${field}: unknown override field, ignored.`);
           }
         });
         // Validate intervalDays / dueSoonDays at override level with Number.isFinite
         // (rejects NaN and Infinity in addition to non-numbers)
-        if (override.intervalDays != null && (!Number.isFinite(override.intervalDays) || override.intervalDays <= 0 || override.intervalDays > 3650)) {
+        if (
+          override.intervalDays != null &&
+          (!Number.isFinite(override.intervalDays) || override.intervalDays <= 0 || override.intervalDays > 3650)
+        ) {
           errors.push(`${key}.${ruleId}.intervalDays: must be a finite positive number <= 3650`);
         }
         if (override.dueSoonDays != null && (!Number.isFinite(override.dueSoonDays) || override.dueSoonDays < 0)) {
@@ -168,8 +198,13 @@
                 errors.push(`${key}.${ruleId}.tests[${i}]: not an object`);
               } else {
                 // Use Number.isFinite — rejects NaN and Infinity in addition to non-numbers
-                if (t.intervalDays != null && (!Number.isFinite(t.intervalDays) || t.intervalDays <= 0 || t.intervalDays > 3650)) {
-                  errors.push(`${key}.${ruleId}.tests[${i}].intervalDays: must be a finite positive number <= 3650 (10 years)`);
+                if (
+                  t.intervalDays != null &&
+                  (!Number.isFinite(t.intervalDays) || t.intervalDays <= 0 || t.intervalDays > 3650)
+                ) {
+                  errors.push(
+                    `${key}.${ruleId}.tests[${i}].intervalDays: must be a finite positive number <= 3650 (10 years)`
+                  );
                 }
                 if (t.dueSoonDays != null && (!Number.isFinite(t.dueSoonDays) || t.dueSoonDays < 0)) {
                   errors.push(`${key}.${ruleId}.tests[${i}].dueSoonDays: must be a finite non-negative number`);
@@ -200,7 +235,7 @@
       createdBy: doc.createdBy,
       drugRuleOverrideCount: drugCount,
       qofRuleOverrideCount: qofCount,
-      displayConfigCount: displayCount
+      displayConfigCount: displayCount,
     };
   }
 
@@ -217,7 +252,7 @@
   function safeCopy(obj) {
     if (!obj || typeof obj !== 'object') return obj;
     const result = {};
-    Object.keys(obj).forEach(k => {
+    Object.keys(obj).forEach((k) => {
       if (!DANGEROUS_KEYS.includes(k)) result[k] = obj[k];
     });
     return result;
@@ -227,7 +262,7 @@
     const orgMap = (orgOverrides && orgOverrides.drugRuleOverrides) || {};
     const orgQofMap = (orgOverrides && orgOverrides.qofRuleOverrides) || {};
     const indMap = individualOverrides || {};
-    return canonicalRules.map(rule => {
+    return canonicalRules.map((rule) => {
       const fromOrg = orgMap[rule.id] || orgQofMap[rule.id] || null;
       const fromInd = indMap[rule.id] || null;
       if (!fromOrg && !fromInd) return rule;
@@ -266,7 +301,7 @@
     validateImport,
     summariseImport,
     mergeRules,
-    suggestFilename
+    suggestFilename,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
