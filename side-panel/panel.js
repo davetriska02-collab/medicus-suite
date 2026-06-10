@@ -96,6 +96,7 @@ const MODULES = {
   trends:      { js: () => import('./modules/trends/trends.js'),         css: './modules/trends/trends.css' },
   reception:   { js: () => import('./modules/reception/reception.js'),   css: './modules/reception/reception.css' },
   sweep:       { js: () => import('./modules/sweep/sweep.js'),           css: './modules/sweep/sweep.css' },
+  knowledge:   { js: () => import('./modules/knowledge/knowledge.js'),   css: './modules/knowledge/knowledge.css' },
   about:       null,
 };
 

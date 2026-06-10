@@ -303,6 +303,7 @@
       <button class="nav-item" data-section="sentinel">Monitoring</button>
       <button class="nav-item" data-section="triage">Triage Lens</button>
       <button class="nav-item" data-section="reception">Reception</button>
+      <button class="nav-item" data-section="knowledge">Knowledge</button>
       <button class="nav-item" data-section="safety">Clinical Safety</button>
       <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
       <button class="nav-item" data-section="debug">Debug</button>
@@ -595,6 +596,46 @@
         <div id="rcpoChipList"><div style="font-size:12px; color:var(--text-3);">Loading rules&hellip;</div></div>
       </section>
 
+      <!-- Knowledge section -->
+      <section class="opt-section" id="sect-knowledge">
+        <h1>Knowledge <span class="module-badge">practice reference base</span></h1>
+        <p class="section-desc">A practice-owned reference base &mdash; referral criteria, key contacts, internal pathways and templates &mdash; shown on the <strong>Knowledge</strong> tab in the side panel. Day-to-day adding and editing happens on the tab itself; this page is for generating a starter pack and for backups. Entries are reference material, not clinical decision support &mdash; the practice is responsible for keeping them correct.</p>
+
+        <div id="kboStats" style="font-size:12px; color:var(--text-3); margin-bottom:14px;">Loading&hellip;</div>
+
+        <details id="kboLlmBlock" style="border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+          <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:10px; color:var(--text-4);">&#9654;</span>
+            Generate a starter pack with an LLM
+          </summary>
+          <div style="padding:14px 16px; border-top:1px solid var(--border);">
+            <p style="font-size:12px; color:var(--text-3); margin:0 0 12px; line-height:1.6;">
+              Copy the prompt below into any LLM (ChatGPT, Claude, etc.), optionally followed by pasted local documents
+              (referral guides, contact lists, rota emails) for it to turn into entries, then paste the JSON response back
+              into the box and click <strong>Validate &amp; import</strong>. Imported entries are tagged
+              <strong>AI-generated, unreviewed</strong> until someone at the practice marks each one reviewed on the tab,
+              and entries with titles too similar to existing ones are skipped so repeated imports don't bloat the base.
+            </p>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+              <button class="ghost" id="kboLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
+              <span id="kboLlmCopied" style="font-family:var(--mono); font-size:11px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied.</span>
+            </div>
+            <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
+              Paste LLM JSON output here
+            </label>
+            <textarea id="kboLlmJson" rows="8" placeholder='Paste the JSON returned by the LLM here, then click "Validate &amp; import".'
+              style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.03); border:1px solid var(--border-hi);
+                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:6px;
+                     padding:8px 10px; resize:vertical; outline:none; line-height:1.5;"></textarea>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+              <button class="primary" id="kboLlmImport" style="font-size:11px; padding:5px 14px;">Validate &amp; import</button>
+              <span id="kboLlmStatus" style="font-size:12px; line-height:1.5;"></span>
+            </div>
+            <div id="kboLlmWarnings" style="font-size:12px; color:var(--amber, #b45309); margin-top:8px; line-height:1.6;"></div>
+          </div>
+        </details>
+      </section>
+
       <!-- Clinical Safety section -->
       <section class="opt-section" id="sect-safety">
         <h1>Clinical Safety</h1>
@@ -861,6 +902,14 @@
                 <input type="file" class="mod-file-input" data-mod="reception" accept=".json" style="display:none" />
               </div>
             </div>
+            <div class="module-export-card">
+              <div class="mec-name">Knowledge</div>
+              <div class="mec-actions">
+                <button class="ghost" data-mod-export="knowledge">Export</button>
+                <button class="ghost" data-mod-import="knowledge">Import</button>
+                <input type="file" class="mod-file-input" data-mod="knowledge" accept=".json" style="display:none" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -928,6 +977,8 @@
   <script src="../shared/reception-pathway-utils.js"></script>
   <script src="../shared/io/condor-io.js"></script>
   <script src="../shared/io/reception-io.js"></script>
+  <script src="../shared/knowledge-utils.js"></script>
+  <script src="../shared/io/knowledge-io.js"></script>
   <script src="../shared/practice-code.js"></script>
   <script src="../shared/api-diag.js"></script>
   <script src="../shared/request-monitor.js"></script>

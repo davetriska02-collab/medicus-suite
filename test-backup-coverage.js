@@ -80,7 +80,7 @@ const NON_KEY_SUBSTRINGS = ['/'];
 // matches one of these are candidates.
 const KEY_PREFIXES = [
   'sentinel', 'capacity', 'triage', 'triagelens', 'slots', 'submissions',
-  'popout', 'referrals', 'suite', 'condor', 'config', 'day',
+  'popout', 'referrals', 'suite', 'condor', 'config', 'day', 'knowledge',
 ];
 
 function hasKeyPrefix(k) {

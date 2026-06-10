@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.42.0] — 2026-06-10
+
+### Feature: Knowledge tab — practice-owned reference base
+
+New **Knowledge** module (side panel + pop-out): a small practice-owned
+reference base for referral criteria, key contacts and phone numbers, internal
+pathways/protocols and templates. Reference material only — explicitly not
+clinical decision support, with a first-open notice saying so.
+
+- **On-tab add/edit/search** — a permanent **+ Add** button on the tab opens an
+  inline form (title, category, plain-text content, phone, link, tags,
+  review-by date); cards are searchable and filterable by category, with
+  copy buttons for phone numbers and content.
+- **Anti-bloat near-duplicate guard** — as you type a title, existing entries
+  with similar titles are surfaced ("edit that instead") via token-normalised
+  matching in `shared/knowledge-utils.js` (`findSimilar`): boilerplate words
+  (referral/criteria/pathway/…) ignored, so "Cardiology chest pain referral"
+  matches "Referral criteria — chest pain (cardiology)". Warns, doesn't block.
+- **LLM starter pack** (Options → Knowledge) — same external copy-paste flow
+  as Reception pathways: copy a self-contained prompt (optionally appending
+  local documents), paste the JSON back, validate & import. Imported entries
+  are forced to `source: llm, reviewed: false` and badged
+  **Unreviewed — AI-generated** until a human marks each one reviewed;
+  near-duplicate titles are skipped on import; a PHI heuristic (NHS-number /
+  DOB patterns) warns if patient-looking data was pasted in.
+- **Review-due chip** — entries carry an optional review-by date and show a
+  "Review due" badge once it passes.
+- Storage keys `knowledge.items` / `knowledge.categories` / `knowledge.config`
+  ride the suite backup via new `shared/io/knowledge-io.js` (scope `knowledge`
+  in the envelope, per-module export card, preview summary line). Imports are
+  validated and whitelist-sanitised; `noticeAcknowledgedAt` is per-install and
+  never imported (same rule as Reception's disclaimer).
+- Tests: `test-knowledge-utils.js` (schema, dedupe matcher, PHI heuristics,
+  prompt example round-trip), `test-knowledge-io.js` (backup round-trip,
+  crafted-backup rejection).
+
 ## [v3.41.0] — 2026-06-10
 
 ### Feature: organise Reception capture tiles — colour, A–Z sort, drag-and-drop
