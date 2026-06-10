@@ -1,0 +1,8 @@
+#!/bin/sh
+# Lints/format-checks only the staged JS. Tuned to pass on existing code, so
+# there is never a reason to reach for --no-verify. CI is the real gate.
+files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' | grep -v '^vendor/')
+[ -z "$files" ] && exit 0
+npx --no-install eslint $files || exit 1
+npx --no-install prettier --check $files || {
+  echo "Run: npx prettier --write <file> on the files above, then re-stage."; exit 1; }
