@@ -567,12 +567,17 @@
         </div>
       `;
       renderViewHint(data, list);
+      // Drift banner: render even when chip list is empty — drift means chips may
+      // be silently missing and this must NOT read as an all-clear.
+      renderDriftBanner(list, data);
       updateSummary(allChips);
       return;
     }
 
     list.innerHTML = '';
     renderViewHint(data, list);
+    // Drift banner: prepend before chips so clinician sees the warning immediately.
+    renderDriftBanner(list, data);
 
     if (CONFIG.chipGrouping === 'flat') {
       // One flat list
@@ -705,6 +710,39 @@
         <ul class="unmatched-meds-list">${items}</ul>
       </div>`;
     list.appendChild(section);
+  }
+
+  // Render an amber drift-warning banner at the top of the chip list.
+  // Called only when _lastDrift is set and not muted. Harmlessly skips if
+  // window.ExtractionHealth is not available (e.g. classic-script not loaded yet).
+  function renderDriftBanner(list, data) {
+    // Remove any stale banner from a previous render
+    list.querySelector('.drift-banner')?.remove();
+    if (!_lastDrift || !_lastDrift.drifted) return;
+    const EH = window.ExtractionHealth;
+    if (!EH) return;
+    const banner = document.createElement('div');
+    banner.className = 'drift-banner';
+    banner.innerHTML = `
+      &#x26A0; <strong>Extraction quality has dropped.</strong>
+      <p>${escapeHtml(_lastDrift.reason)} Alerts on this panel may be incomplete — this is NOT an all-clear. Verify in Medicus.</p>
+      <button class="drift-dismiss" type="button">Dismiss for 24h</button>
+    `;
+    // Dismiss handler: mute for 24h via storage key, then remove banner.
+    banner.querySelector('.drift-dismiss')?.addEventListener('click', async () => {
+      try {
+        const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+        const nowIso = new Date().toISOString();
+        const muted = EH.muteBaseline(r['sentinel.extractionBaseline'] || null, nowIso);
+        await chrome.storage.local.set({ 'sentinel.extractionBaseline': muted });
+        _lastDrift = null;
+        banner.remove();
+      } catch (_) {
+        banner.remove();
+      }
+    });
+    // Prepend: drift warning must appear before any chips
+    list.prepend(banner);
   }
 
   function updateSummary(chips) {
@@ -1131,7 +1169,10 @@
           if (trace) {
             trace.unmatchedMedications = unmatchedMedsDetailed;
           }
-          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace);
+          // Assess extraction drift (best-effort — never blocks chip publication).
+          const drift = await recordAndAssessDrift(data);
+          if (gen !== _evalGen) return; // navigation superseded us during drift assess
+          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift);
         })
         .catch(() => {
           if (gen === _evalGen) invalidateSnapshot();
@@ -1166,6 +1207,13 @@
   // patient change without blanking valid chips.
   let _lastPatientUuid = null;
 
+  // ── Extraction-drift detection (in-memory state) ───────────────────────────
+  // The UUID/name+bucket key is in-memory only — never written to storage.
+  // Storage only holds integer counts + ISO timestamps (zero PII).
+  let _lastSampleKey = null; // `${patientId}|${bucket}` — in-memory only, never persisted
+  let _lastSampleAt = 0;
+  let _lastDrift = null; // cached so re-renders don't re-read storage
+
   // Cheap, synchronous "which patient is this URL about?" — used only to decide
   // whether a SPA URL change is a real patient change or same-patient
   // sub-navigation. Mirrors the URL-path resolution in detectMedicusContext and
@@ -1187,6 +1235,51 @@
     } catch (_) {}
   }
 
+  // Assess extraction drift and update the per-view baseline in storage.
+  // Entirely wrapped in try/catch — drift detection must NEVER break chip publication.
+  // Returns the drift object if drifted and not muted, otherwise null.
+  async function recordAndAssessDrift(data) {
+    try {
+      const EH = window.ExtractionHealth;
+      if (!EH) return null;
+      const nowIso = new Date().toISOString();
+      const summary = EH.summariseExtraction(data, nowIso);
+      if (!summary) return null;
+
+      const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+      const stored = r['sentinel.extractionBaseline'] || null;
+
+      const drift = EH.assessDrift(stored, summary.bucket, summary.sample);
+
+      // Sample throttle: don't flood storage on every keypress / rapid re-eval.
+      // The in-memory key includes the patient id/name so a patient change always
+      // records immediately.
+      const pc = data.patientContext || {};
+      const patientId = pc.patientUuid || pc.patientId || pc.id || pc.uuid || pc.patientName || '?';
+      const sampleKey = patientId + '|' + summary.bucket;
+      if (EH.shouldRecordSample(_lastSampleKey, _lastSampleAt, sampleKey, Date.now())) {
+        // Read-modify-write. Last-writer-wins across tabs is acceptable for
+        // this telemetry — occasional sample loss does not affect safety.
+        let updated = EH.updateBaseline(stored, summary.bucket, summary.sample);
+        if (drift.drifted) updated = EH.markWarned(updated, nowIso);
+        chrome.storage.local.set({ 'sentinel.extractionBaseline': updated });
+        _lastSampleKey = sampleKey;
+        _lastSampleAt = Date.now();
+      }
+
+      // Only surface drift when not muted.
+      if (drift.drifted && !EH.isMuted(stored, nowIso)) {
+        _lastDrift = drift;
+        return drift;
+      }
+      _lastDrift = null;
+      return null;
+    } catch (_) {
+      // Drift detection must never break chip publication.
+      return null;
+    }
+  }
+
   // Drop any prior patient's snapshot. Called the instant the SPA navigates and
   // whenever an extraction fails, so the side panel can never render a previous
   // patient's chips as if they belonged to the record now on screen. The panel
@@ -1206,7 +1299,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace) {
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1222,6 +1315,9 @@
       // trace is in-memory only — never written to chrome.storage.local.
       // It is invalidated with the snapshot on navigation (invalidateSnapshot).
       trace: trace || null,
+      // drift is in-memory only — extraction drift assessment, null when no drift
+      // or when muted by the clinician. Never written to chrome.storage.local.
+      drift: drift || null,
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,

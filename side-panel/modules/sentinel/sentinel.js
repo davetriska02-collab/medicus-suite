@@ -611,6 +611,7 @@ function render(payload) {
     unmatchedMeds,
     unmatchedMedsDetailed,
     trace,
+    drift,
   } = snapshot;
   const patient = patientContext;
   _currentSnapshot = snapshot;
@@ -670,6 +671,23 @@ function render(payload) {
         .join(' · ')}</div>
     </div>`
     : '';
+
+  // Amber drift banner — shown when the content script detected a sustained
+  // extraction quality drop on this view. Amber (not red) because degraded (total
+  // blank) is already handled by classifySnapshot → 'degraded' state above.
+  // Placed between patient header and filter bar so the clinician sees it
+  // immediately without it blocking the chip list.
+  const driftHtml =
+    drift && drift.drifted
+      ? `
+     <div class="sent-drift-banner" role="alert">
+       <div class="sent-drift-head"><span class="sent-drift-icon">&#9888;</span>
+         <strong>Extraction quality has dropped</strong>
+         <button class="sent-drift-dismiss" id="sentDriftDismiss" title="Hide this warning for 24 hours">Dismiss 24h</button>
+       </div>
+       <p class="sent-drift-body">${escHtml(drift.reason)} Alerts below may be incomplete — this is NOT an all-clear. Verify directly in Medicus; the extension may need updating.</p>
+     </div>`
+      : '';
 
   const filterHtml = `
     <div class="sent-filter-bar">
@@ -739,7 +757,7 @@ function render(payload) {
   const currencyFooterHtml = _ruleCurrencyFooter || '';
 
   container.innerHTML = shell(
-    patientHtml + filterHtml,
+    patientHtml + driftHtml + filterHtml,
     groupsHtml +
       emptyMsg +
       unmatchedHtml +
@@ -780,6 +798,21 @@ function render(payload) {
   container
     .querySelector('#sentApptSummaryBtn')
     ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+
+  // Drift banner dismiss: mute for 24h via shared storage key. The content
+  // script's next publish reads mutedUntil and stops stamping drift, so the
+  // 10s poll will not resurrect the banner once dismissed.
+  container.querySelector('#sentDriftDismiss')?.addEventListener('click', async () => {
+    const EH = window.ExtractionHealth;
+    if (!EH) {
+      container.querySelector('.sent-drift-banner')?.remove();
+      return;
+    }
+    const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+    const muted = EH.muteBaseline(r['sentinel.extractionBaseline'] || null, new Date().toISOString());
+    await chrome.storage.local.set({ 'sentinel.extractionBaseline': muted });
+    container.querySelector('.sent-drift-banner')?.remove();
+  });
 
   // Export evaluation log button: download the trace as a JSON file.
   const exportLogBtn = container.querySelector('#sentExportLogBtn');
