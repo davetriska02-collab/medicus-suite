@@ -1,13 +1,26 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Sweep module (pre-clinic monitoring sweep)
 //
-// Runs the Sentinel rules engine across the logged-in user's booked patients
-// for today, producing a morning-huddle worklist so overdue monitoring can be
-// arranged BEFORE clinic rather than discovered during consultation.
+// Runs the Sentinel rules engine across today's booked patients from the
+// practice appointment book (optionally filtered to one clinician), producing
+// a morning-huddle worklist so overdue monitoring can be arranged BEFORE
+// clinic rather than discovered during consultation.
+//
+// v3.40.2: switched from /homepage/my-appointments (per-clinician diary —
+// silently empty for users without a booked clinic) to the practice-wide
+// appointment book.
+// v3.40.3: fixed clinician dropdown (pre-populated on init before first run);
+// fixed clinician column (was never propagated to rendered rows); added
+// sequential sweep — patients are processed in batches of BATCH_SIZE (40)
+// with a "Check next N patients" button so large lists can be fully covered.
 //
 // Design decisions:
 //  - Manual trigger ONLY (no auto-run, no polling) — polite to the API.
-//  - Sequential per-patient fetches with ~250 ms gap, hard cap of 40 patients.
+//  - Sequential per-patient fetches with ~250 ms gap, BATCH_SIZE (40) per run.
+//  - Clinician dropdown pre-populated on module load via a background fetch.
+//  - Sequential sweep: _allPatients holds the full sorted list; _sweepOffset
+//    tracks progress. Continue picks up where the last batch finished without
+//    re-fetching the appointment book.
 //  - Does NOT apply sentinel.hiddenRules suppression (a recall worklist must
 //    not inherit per-workstation dismissals), but flags when hidden rules
 //    would cover action chips so the clinician is not confused.
@@ -19,6 +32,7 @@
 
 'use strict';
 
+import { fetchSchedulingOverview, todayISO } from '../../../shared/medicus-api.js';
 import {
   extractBookedPatients,
   summariseSweep,
@@ -26,18 +40,29 @@ import {
   MAX_SWEEP_PATIENTS,
 } from './sweep-core.js';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const BATCH_SIZE = MAX_SWEEP_PATIENTS; // patients evaluated per batch (40)
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 let container  = null;
 let _abortFlag = false;   // set to true to stop the in-progress sweep loop
-let _running   = false;   // true while a sweep is in progress
+let _selectedClinician = ''; // '' = all clinicians
+let _running   = false;   // true while a batch is in progress
 
-// Cached rules (same TTL/invalidation as sentinel.js — cleared on storage change)
+// Sequential sweep state — preserved across "Continue" clicks within one session
+let _allPatients       = [];   // full sorted patient list from last appointment-book fetch
+let _sweepOffset       = 0;    // index into _allPatients: next unprocessed patient
+let _cumulativeResults = [];   // per-patient results accumulated across batches
+let _sweepRules        = null; // rules loaded at sweep start (cached for continue)
+let _sweepHiddenRules  = {};   // hidden rules snapshot for current sweep session
+let _sweepApiBase      = '';   // API base URL for current sweep session
+let _sweepMeta         = null; // { missingUuidCount, runAt }
+
+// Cached rules (invalidated on storage change, same as sentinel.js)
 let _mergedRulesCache     = null;
 let _canonicalRulesCache  = null;
-
-// Canonical rules are JSON from the extension bundle — fetched once per session.
-// chrome.storage listeners invalidate _mergedRulesCache on rule edits.
 let _storageListener = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,7 +73,8 @@ function esc(s) {
 
 function formatTime(t) {
   if (!t) return '';
-  return esc(t);
+  const m = String(t).match(/T(\d{2}:\d{2})/);
+  return esc(m ? m[1] : t);
 }
 
 function fmtTs(d) {
@@ -61,6 +87,11 @@ function fmtTs(d) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function setProgress(msg) {
+  const el = container?.querySelector('.sweep-progress');
+  if (el) el.textContent = msg;
 }
 
 // ── Rule loading (mirrors sentinel.js loadRules exactly) ──────────────────────
@@ -111,14 +142,9 @@ async function loadRules() {
 }
 
 // ── Per-patient evaluation ────────────────────────────────────────────────────
-// Mirrors the evaluation path in sentinel.js evaluateAndPublish:
-//   fetchAll → normaliseAll → evaluatePatient
-// urlContext: synthetic object that satisfies normalisers.js expectations.
-// normalisers.js only uses urlContext.url / .title / .view for the banner
-// patientContext shape (display only, no clinical logic depends on it).
 
 async function evaluatePatient(apiBase, patientUuid, rules) {
-  const apiClient  = window.SentinelApiClient;
+  const apiClient   = window.SentinelApiClient;
   const normalisers = window.SentinelNormalisers;
   const rulesEngine = window.SentinelRules;
 
@@ -128,10 +154,6 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
 
   const raw = await apiClient.fetchAll(apiBase, patientUuid, { useCache: false });
 
-  // fetchAll catches per-endpoint failures into raw.errors instead of throwing.
-  // A patient evaluated against partial data could surface as "no action-needed
-  // alerts" — a silent false-clear (the H-005 failure mode). Fail visibly instead:
-  // any endpoint failure puts the patient in the error rows, never the clear list.
   const failedEndpoints = Object.keys(raw.errors || {});
   if (!raw.banner) {
     throw new Error('patient banner unavailable — record not read' +
@@ -141,8 +163,6 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     throw new Error(`incomplete record read — ${failedEndpoints.join(', ')} failed`);
   }
 
-  // Synthetic URL context — normalisers.js uses this only for banner.url/title/view;
-  // no clinical rule logic branches on these fields.
   const urlContext = {
     url:         `https://england.medicus.health/${apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'unknown'}/patient/${patientUuid}/`,
     title:       'Sweep',
@@ -167,42 +187,51 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
   return chips;
 }
 
+// ── Clinician pre-population ──────────────────────────────────────────────────
+// Called non-blocking from init() so the dropdown is ready before the first run.
+
+async function preloadClinicians() {
+  let code = null;
+  try {
+    const res = await window.PracticeCode.resolve();
+    code = res.code;
+  } catch (_) { return; }
+  if (!code) return;
+
+  try {
+    const raw = await fetchSchedulingOverview(code, todayISO(), {});
+    const { clinicians } = extractBookedPatients(raw, { limit: null });
+    populateClinicianSelect(clinicians);
+  } catch (_) {}
+}
+
 // ── Sweep runner ──────────────────────────────────────────────────────────────
 
 async function runSweep(apiBase, hiddenRules) {
-  const setProgress = (msg) => {
-    const el = container?.querySelector('.sweep-progress');
-    if (el) el.textContent = msg;
-  };
+  setProgress('Fetching the appointment book…');
 
-  setProgress('Fetching appointment list…');
-
-  // Fetch today's appointments
-  const apptUrl = `${apiBase}/scheduling/data/homepage/my-appointments`;
+  const code = apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? '';
   let raw;
   try {
-    const r = await window.ApiDiag.fetch({
-      module:     'sweep',
-      url:        apptUrl,
-      code:       apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? '',
-      codeSource: 'tab',
-    });
-    raw = await r.json();
+    raw = await fetchSchedulingOverview(code, todayISO(), { bypassCache: true });
   } catch (e) {
-    renderError(`Could not fetch appointment list: ${esc(e.message)}`);
+    renderError(`Could not fetch the appointment book: ${esc(e.message)}`);
     return;
   }
 
-  const { patients, missingUuidCount, cappedAt, diagnosticMessage } =
-    extractBookedPatients(raw);
+  // limit: null — fetch the full list; sweep.js handles batching
+  const { patients, clinicians, missingUuidCount, diagnosticMessage } =
+    extractBookedPatients(raw, { clinician: _selectedClinician || null, limit: null });
+
+  populateClinicianSelect(clinicians);
 
   if (diagnosticMessage && patients.length === 0) {
-    renderError(esc(diagnosticMessage));
+    if (/^No booked appointments/.test(diagnosticMessage)) renderNotice(esc(diagnosticMessage));
+    else renderError(esc(diagnosticMessage));
     return;
   }
 
-  const total = patients.length;
-  setProgress(`Loading rules…`);
+  setProgress('Loading rules…');
 
   let rules;
   try {
@@ -212,59 +241,82 @@ async function runSweep(apiBase, hiddenRules) {
     return;
   }
 
-  const runAt = new Date();
-  const perPatientResults = [];
+  // Store session state for sequential batching
+  _allPatients       = patients;
+  _sweepOffset       = 0;
+  _cumulativeResults = [];
+  _sweepRules        = rules;
+  _sweepHiddenRules  = hiddenRules;
+  _sweepApiBase      = apiBase;
+  _sweepMeta         = { missingUuidCount, runAt: new Date() };
 
-  for (let i = 0; i < total; i++) {
+  await runNextBatch();
+}
+
+// Process the next BATCH_SIZE patients from _allPatients[_sweepOffset…].
+// Appends to _cumulativeResults and renders cumulative results when done.
+async function runNextBatch() {
+  const runArea = container?.querySelector('.sweep-run-area');
+  if (runArea) {
+    runArea.innerHTML = `<div class="sweep-progress-wrap"><div class="sweep-progress">Starting…</div></div>`;
+  }
+
+  const batchStart = _sweepOffset;
+  const batch = _allPatients.slice(batchStart, batchStart + BATCH_SIZE);
+  const total = _allPatients.length;
+  let processedThisBatch = 0;
+
+  for (let i = 0; i < batch.length; i++) {
     if (_abortFlag) break;
 
-    const patient = patients[i];
-    // setProgress writes via textContent — no HTML escaping needed (or wanted).
-    setProgress(`Checking ${i + 1}/${total} — ${patient.name}…`);
+    const patient = batch[i];
+    const overallPos = batchStart + i + 1;
+    setProgress(`Checking ${overallPos}/${total} — ${patient.name}…`);
 
     let chips = null;
     let error = null;
     try {
-      chips = await evaluatePatient(apiBase, patient.uuid, rules);
+      chips = await evaluatePatient(_sweepApiBase, patient.uuid, _sweepRules);
     } catch (e) {
       error = e.message || String(e);
     }
 
-    // Determine which of this patient's chips are in sentinel.hiddenRules
     const hiddenRuleIds = new Set();
-    if (chips && hiddenRules) {
+    if (chips && _sweepHiddenRules) {
       for (const chip of chips) {
-        if (chip.ruleId && hiddenRules[chip.ruleId] != null) {
+        if (chip.ruleId && _sweepHiddenRules[chip.ruleId] != null) {
           hiddenRuleIds.add(chip.ruleId);
         }
       }
     }
 
-    perPatientResults.push({
-      uuid:         patient.uuid,
-      name:         patient.name,
-      time:         patient.time,
+    _cumulativeResults.push({
+      uuid:      patient.uuid,
+      name:      patient.name,
+      time:      patient.time,
+      clinician: patient.clinician,
       chips,
       error,
       hiddenRuleIds,
     });
+    processedThisBatch++;
 
-    // Polite delay between patients (~250 ms)
-    if (i < total - 1 && !_abortFlag) await delay(250);
+    if (i < batch.length - 1 && !_abortFlag) await delay(250);
   }
 
   const aborted = _abortFlag;
   _abortFlag = false;
+  _sweepOffset = batchStart + processedThisBatch;
 
-  const { actionRows, clearRows, errorRows } = summariseSweep(perPatientResults);
+  const { actionRows, clearRows, errorRows } = summariseSweep(_cumulativeResults);
   renderResults({
     actionRows,
     clearRows,
     errorRows,
-    total,
-    cappedAt,
-    missingUuidCount,
-    runAt,
+    processedCount:   _sweepOffset,
+    totalCount:       total,
+    missingUuidCount: _sweepMeta.missingUuidCount,
+    runAt:            _sweepMeta.runAt,
     aborted,
   });
 }
@@ -272,7 +324,6 @@ async function runSweep(apiBase, hiddenRules) {
 // ── Render helpers ────────────────────────────────────────────────────────────
 
 function chipSummaryHtml(chips) {
-  // Compact text: action-needed chips only, grouped by colour
   const actionChips = (chips || []).filter(c => isActionNeeded(c.status));
   if (actionChips.length === 0) return '';
   return actionChips.map(c => {
@@ -282,8 +333,7 @@ function chipSummaryHtml(chips) {
         due_soon:'DUE SOON', caution:'CAUTION', vax_due:'VAX DUE' }[c.status]
       || String(c.status || '').toUpperCase()
     );
-    const colour = (c.status === 'overdue' || c.status === 'not_met' || c.status === 'alert') ? 'red'
-                 : 'amber';
+    const colour = (c.status === 'overdue' || c.status === 'not_met' || c.status === 'alert') ? 'red' : 'amber';
     return `<span class="sweep-chip sweep-chip-${colour}">${label} <em>${statusLabel}</em></span>`;
   }).join('');
 }
@@ -291,19 +341,19 @@ function chipSummaryHtml(chips) {
 function patientRowHtml(row, apiBase, siteId) {
   const name    = esc(row.name);
   const timeStr = row.time ? `<span class="sweep-row-time">${formatTime(row.time)}</span>` : '';
+  const clinStr = row.clinician ? `<span class="sweep-row-clin">${esc(row.clinician)}</span>` : '';
   const recUrl  = `https://england.medicus.health/${esc(siteId)}/patient/${esc(row.uuid)}/`;
 
   if (row.error) {
     return `<div class="sweep-row sweep-row-error">
       <div class="sweep-row-head">
-        ${timeStr}<span class="sweep-row-name">${name}</span>
+        ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
         <span class="sweep-row-badge sweep-badge-error">ERROR</span>
       </div>
       <div class="sweep-row-detail sweep-row-errtext">Could not read record: ${esc(row.error)}</div>
     </div>`;
   }
 
-  const actionChips = (row.chips || []).filter(c => isActionNeeded(c.status));
   const redCount    = row.redCount   ?? 0;
   const amberCount  = row.amberCount ?? 0;
 
@@ -319,7 +369,7 @@ function patientRowHtml(row, apiBase, siteId) {
 
   return `<div class="sweep-row">
     <div class="sweep-row-head">
-      ${timeStr}<span class="sweep-row-name">${name}</span>
+      ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
       <span class="sweep-row-badges">${badgeParts.join('')}</span>
       <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a>
     </div>
@@ -328,7 +378,7 @@ function patientRowHtml(row, apiBase, siteId) {
   </div>`;
 }
 
-function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, missingUuidCount, runAt, aborted }) {
+function renderResults({ actionRows, clearRows, errorRows, processedCount, totalCount, missingUuidCount, runAt, aborted }) {
   if (!container) return;
 
   const siteIdMatch = (window.PracticeCode?.getPracticeCodeSync
@@ -339,16 +389,25 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
   const actionCount = actionRows.length;
   const clearCount  = clearRows.length;
   const errorCount  = errorRows.length;
-  const processedCount = actionCount + clearCount + errorCount;
-  const abortNote   = aborted ? `<div class="sweep-notice sweep-notice-warn">Sweep was cancelled early — not all patients were checked.</div>` : '';
-
-  const capNote = cappedAt != null
-    ? `<div class="sweep-notice sweep-notice-warn">More than ${MAX_SWEEP_PATIENTS} booked patients (${cappedAt} found) — only the first ${MAX_SWEEP_PATIENTS} by appointment time were checked.</div>`
-    : '';
 
   const missingNote = missingUuidCount > 0
     ? `<div class="sweep-notice sweep-notice-warn">${missingUuidCount} appointment entr${missingUuidCount === 1 ? 'y' : 'ies'} could not be identified (no patient UUID found) and were skipped.</div>`
     : '';
+
+  // Progress across batches
+  const remaining = totalCount - processedCount;
+  const nextBatch = Math.min(BATCH_SIZE, remaining);
+  let batchNote = '';
+  if (aborted && remaining > 0) {
+    batchNote = `<div class="sweep-notice sweep-notice-warn">Sweep was cancelled — ${remaining} patient${remaining === 1 ? '' : 's'} not checked. Click "Run sweep" to restart.</div>`;
+  } else if (remaining > 0) {
+    batchNote = `<div class="sweep-continue-section">
+      <div class="sweep-notice sweep-notice-warn">Checked ${processedCount} of ${totalCount} booked patients — ${remaining} remaining.</div>
+      <button class="sweep-continue-btn" type="button">Check next ${nextBatch} patient${nextBatch === 1 ? '' : 's'}</button>
+    </div>`;
+  } else if (totalCount > BATCH_SIZE) {
+    batchNote = `<div class="sweep-notice sweep-notice-ok">All ${totalCount} booked patients checked.</div>`;
+  }
 
   const actionHtml = actionRows.map(r => patientRowHtml(r, apiBase, siteIdMatch)).join('');
   const errorHtml  = errorRows.map(r => patientRowHtml(r, apiBase, siteIdMatch)).join('');
@@ -360,10 +419,11 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
            ${clearRows.map(r => {
              const name = esc(r.name);
              const timeStr = r.time ? `<span class="sweep-row-time">${formatTime(r.time)}</span>` : '';
+             const clinStr = r.clinician ? `<span class="sweep-row-clin">${esc(r.clinician)}</span>` : '';
              const recUrl = `https://england.medicus.health/${esc(siteIdMatch)}/patient/${esc(r.uuid)}/`;
              return `<div class="sweep-row sweep-row-clear">
                <div class="sweep-row-head">
-                 ${timeStr}<span class="sweep-row-name">${name}</span>
+                 ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
                  <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
                </div>
              </div>`;
@@ -373,8 +433,8 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
     : '';
 
   const summaryLine = actionCount > 0
-    ? `<strong>${actionCount} of ${processedCount}</strong> patients have action-needed monitoring alerts.`
-    : `<strong>No action-needed alerts</strong> found across ${processedCount} patients.`;
+    ? `<strong>${actionCount} of ${processedCount}</strong> patients checked so far have action-needed alerts.`
+    : `<strong>No action-needed alerts</strong> found across ${processedCount} patient${processedCount === 1 ? '' : 's'} checked.`;
 
   const resultsHtml = `
     <div class="sweep-results" id="sweepResults">
@@ -390,18 +450,22 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
         Results are not stored; re-run to refresh.
       </div>
 
-      ${capNote}${missingNote}${abortNote}
+      ${missingNote}${batchNote}
 
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
       ${actionRows.length > 0 ? `<div class="sweep-section-head">Action needed (${actionCount})</div>${actionHtml}` : ''}
       ${clearSection}
     </div>`;
 
-  // Replace progress/running area with results
   const runArea = container.querySelector('.sweep-run-area');
-  if (runArea) runArea.innerHTML = resultsHtml;
+  if (runArea) {
+    runArea.innerHTML = resultsHtml;
+    // Attach Continue handler if the button was rendered
+    const continueBtn = runArea.querySelector('.sweep-continue-btn');
+    if (continueBtn) continueBtn.addEventListener('click', onContinueClick);
+  }
 
-  // Reset button state
+  // Reset Run sweep button
   const btn = container.querySelector('.sweep-run-btn');
   if (btn) {
     btn.textContent = 'Run sweep';
@@ -410,19 +474,38 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
   _running = false;
 }
 
+// Neutral notice (e.g. genuinely empty appointment book) — not a failure.
+function renderNotice(message) {
+  if (!container) return;
+  const runArea = container.querySelector('.sweep-run-area');
+  if (runArea) runArea.innerHTML = `<div class="sweep-notice">${message}</div>`;
+  const btn = container.querySelector('.sweep-run-btn');
+  if (btn) { btn.textContent = 'Run sweep'; btn.disabled = false; }
+  _running = false;
+}
+
+// Fill the clinician filter dropdown.
+// Preserves the current selection if that clinician is still in the list.
+function populateClinicianSelect(clinicians) {
+  const sel = container?.querySelector('#sweepClinician');
+  if (!sel || !Array.isArray(clinicians)) return;
+  const current = _selectedClinician;
+  sel.innerHTML = `<option value="">All clinicians</option>` +
+    clinicians.map(c => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  if (current && !clinicians.includes(current)) {
+    _selectedClinician = '';
+    sel.value = '';
+  }
+}
+
 function renderError(message) {
   if (!container) return;
   const runArea = container.querySelector('.sweep-run-area');
   if (runArea) {
-    runArea.innerHTML = `<div class="sweep-error-box">
-      <strong>Sweep failed:</strong> ${message}
-    </div>`;
+    runArea.innerHTML = `<div class="sweep-error-box"><strong>Sweep failed:</strong> ${message}</div>`;
   }
   const btn = container.querySelector('.sweep-run-btn');
-  if (btn) {
-    btn.textContent = 'Run sweep';
-    btn.disabled = false;
-  }
+  if (btn) { btn.textContent = 'Run sweep'; btn.disabled = false; }
   _running = false;
 }
 
@@ -432,15 +515,19 @@ export async function init(el) {
   container  = el;
   _abortFlag = false;
   _running   = false;
+  _allPatients = [];
+  _sweepOffset = 0;
+  _cumulativeResults = [];
 
-  // Render the shell
   container.innerHTML = `
     <div class="sweep-module">
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Runs the Sentinel rules engine across your booked patients for today to
-          identify overdue or action-needed monitoring BEFORE clinic starts.
+          Runs the Sentinel rules engine across today's booked patients from the
+          practice appointment book to identify overdue or action-needed
+          monitoring BEFORE clinic starts. Use the dropdown to sweep a single
+          clinician's list.
         </div>
         <div class="sweep-disclaimer sweep-disclaimer-top">
           <strong>Supplementary tool only.</strong>
@@ -452,6 +539,9 @@ export async function init(el) {
 
       <div class="sweep-controls">
         <button class="sweep-run-btn" type="button">Run sweep</button>
+        <label class="sweep-clin-label">for
+          <select id="sweepClinician"><option value="">All clinicians</option></select>
+        </label>
       </div>
 
       <div class="sweep-run-area">
@@ -461,6 +551,9 @@ export async function init(el) {
 
   const btn = container.querySelector('.sweep-run-btn');
   btn.addEventListener('click', onRunClick);
+  container.querySelector('#sweepClinician')?.addEventListener('change', e => {
+    _selectedClinician = e.target.value || '';
+  });
 
   // Invalidate merged rules cache when rules change (mirrors sentinel.js)
   _storageListener = (changes, area) => {
@@ -471,12 +564,16 @@ export async function init(el) {
   };
   chrome.storage.onChanged.addListener(_storageListener);
 
+  // Pre-populate clinician dropdown in the background so the user can filter
+  // before running their first sweep. Errors are silently swallowed here —
+  // the dropdown merely stays as "All clinicians" until the first full run.
+  preloadClinicians().catch(() => {});
+
   return cleanup;
 }
 
 async function onRunClick() {
   if (_running) {
-    // Cancel button pressed
     _abortFlag = true;
     const btn = container?.querySelector('.sweep-run-btn');
     if (btn) btn.textContent = 'Cancelling…';
@@ -487,20 +584,13 @@ async function onRunClick() {
   _abortFlag = false;
 
   const btn = container?.querySelector('.sweep-run-btn');
-  if (btn) {
-    btn.textContent = 'Cancel';
-    btn.disabled    = false;
-  }
+  if (btn) { btn.textContent = 'Cancel'; btn.disabled = false; }
 
-  // Show progress area
   const runArea = container?.querySelector('.sweep-run-area');
   if (runArea) {
-    runArea.innerHTML = `<div class="sweep-progress-wrap">
-      <div class="sweep-progress">Resolving practice code…</div>
-    </div>`;
+    runArea.innerHTML = `<div class="sweep-progress-wrap"><div class="sweep-progress">Resolving practice code…</div></div>`;
   }
 
-  // Resolve practice code
   let code = null;
   try {
     const res = await window.PracticeCode.resolve();
@@ -512,7 +602,6 @@ async function onRunClick() {
     return;
   }
 
-  // Load hidden rules (do NOT apply them as a suppression filter, but flag them)
   let hiddenRules = {};
   try {
     const r = await chrome.storage.local.get('sentinel.hiddenRules');
@@ -528,9 +617,27 @@ async function onRunClick() {
   }
 }
 
+async function onContinueClick() {
+  if (_running || _sweepOffset >= _allPatients.length) return;
+
+  _running   = true;
+  _abortFlag = false;
+
+  const btn = container?.querySelector('.sweep-run-btn');
+  if (btn) { btn.textContent = 'Cancel'; btn.disabled = false; }
+
+  try {
+    await runNextBatch();
+  } catch (e) {
+    renderError(`Unexpected error: ${esc(e.message)}`);
+  }
+}
+
 function cleanup() {
   _abortFlag = true;
   _running   = false;
+  _allPatients = [];
+  _cumulativeResults = [];
   if (_storageListener) {
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;

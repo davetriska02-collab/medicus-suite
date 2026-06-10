@@ -38,46 +38,80 @@ export function isActionNeeded(status) {
 }
 
 // ---------------------------------------------------------------------------
-// extractBookedPatients(raw)
+// extractBookedPatients(raw, { clinician, limit } = {})
 //
-// Parses the my-appointments response from:
-//   /scheduling/data/homepage/my-appointments
+// Parses the PRACTICE-WIDE appointment book response from:
+//   /scheduling/data/appointment-book/embedded-overview?date=...
+//   ({ staffSchedules: [{ name, schedule: [{ entries: [...] }] }] })
+//
+// v3.40.2: previously parsed /scheduling/data/homepage/my-appointments, which
+// is PER-CLINICIAN (the logged-in user's own diary) — a user with no
+// personally-booked clinic got an empty schedule and the sweep silently
+// reported "0 patients". Same root cause as the Condor waiting-room fix in
+// v3.36.2. The appointment book covers every clinician's booked patients.
+//
+// Options:
+//   clinician — when set, only that staff member's appointments are included
+//               (exact match on staffSchedules[].name).
+//   limit     — max patients to return (default: MAX_SWEEP_PATIENTS).
+//               Pass null for no cap (caller handles batching).
 //
 // Returns:
 //   {
-//     patients: Array<{ uuid, name, time }>,  // deduped, capped, time-sorted
-//     missingUuidCount: number,               // entries where no UUID was found
-//     cappedAt: number | null,                // total before cap (if >MAX)
-//     diagnosticMessage: string | null        // non-null when uuid extraction failed
+//     patients: Array<{ uuid, name, time, clinician }>, // deduped, time-sorted, limited
+//     clinicians: string[],            // staff with >=1 appointment entry (unfiltered)
+//     appointmentCount: number,        // appointment entries seen (after clinician filter)
+//     missingUuidCount: number,        // entries where no UUID was found
+//     cappedAt: number | null,         // total before limit (only set when limit applied)
+//     diagnosticMessage: string | null // non-null when the feed is unusable —
+//                                      //   unrecognised shape, no appointments
+//                                      //   at all, or no extractable UUIDs.
+//                                      //   NEVER silently zero (H-005).
 //   }
 //
-// "time" is the raw `entry.start` string (e.g. "09:30") or null.
-// Deduplication is on uuid (same patient booked twice → one entry).
+// "time" is the entry's startDateTime (ISO) or null. Deduplication is on uuid
+// (same patient booked twice, incl. with different clinicians → one entry,
+// earliest first).
 // ---------------------------------------------------------------------------
-export function extractBookedPatients(raw) {
-  const schedules = raw?.schedule?.schedule;
-  if (!Array.isArray(schedules)) {
+export function extractBookedPatients(raw, opts) {
+  const clinicianFilter = (opts && opts.clinician) || null;
+  const limit = (opts != null && 'limit' in opts) ? opts.limit : MAX_SWEEP_PATIENTS;
+  const staffSchedules = raw?.staffSchedules;
+  if (!Array.isArray(staffSchedules)) {
     return {
-      patients: [],
-      missingUuidCount: 0,
-      cappedAt: null,
-      diagnosticMessage: 'Could not identify patients from the appointment feed — sweep unavailable; field layout may have changed'
+      patients: [], clinicians: [], appointmentCount: 0, missingUuidCount: 0, cappedAt: null,
+      diagnosticMessage: 'Could not read the appointment book — sweep unavailable; field layout may have changed'
     };
   }
 
-  // Collect all appointment entries regardless of displayStatus
-  const allEntries = schedules.flatMap(s => s.entries ?? [])
-    .filter(e => e?.diaryEntryType?.value === 'appointment');
+  // Collect appointment entries (excluding cancelled), tagged with the staff
+  // member whose diary they sit in. Track which clinicians have appointments
+  // regardless of the filter so the UI can offer the full dropdown.
+  const allEntries = [];
+  const clinicianSet = new Set();
+  for (const staff of staffSchedules) {
+    const staffName = staff?.name || 'Unknown clinician';
+    let staffHasAppointments = false;
+    for (const session of (staff?.schedule || [])) {
+      for (const entry of (session?.entries || [])) {
+        if (entry?.diaryEntryType?.value !== 'appointment') continue;
+        if (String(entry?.displayStatus?.value || '').toLowerCase() === 'cancelled') continue;
+        staffHasAppointments = true;
+        if (clinicianFilter && staffName !== clinicianFilter) continue;
+        allEntries.push({ entry, clinician: staffName });
+      }
+    }
+    if (staffHasAppointments) clinicianSet.add(staffName);
+  }
+  const clinicians = Array.from(clinicianSet).sort((a, b) => a.localeCompare(b));
 
   // Extract UUID from an entry object using multiple strategies:
-  //   1. entry.patient.id
-  //   2. entry.patient.uuid
-  //   3. Any UUID-shaped string found in entry.patient or entry directly
+  //   1. entry.patient.id / uuid / patientId / patientUuid
+  //   2. Any UUID-shaped string found in entry.patient or entry directly
   function extractUuid(entry) {
     const p = entry.patient;
     if (!p && !entry) return null;
 
-    // Strategy 1 & 2: explicit fields
     if (p) {
       for (const field of ['id', 'uuid', 'patientId', 'patientUuid']) {
         const v = p[field];
@@ -87,7 +121,6 @@ export function extractBookedPatients(raw) {
       }
     }
 
-    // Strategy 3: scan all string values on entry.patient and entry for a UUID
     const sources = p ? [p, entry] : [entry];
     for (const obj of sources) {
       if (!obj || typeof obj !== 'object') continue;
@@ -105,7 +138,7 @@ export function extractBookedPatients(raw) {
   let missingUuidCount = 0;
   const seen = new Map(); // uuid → patient object (deduplicate)
 
-  for (const entry of allEntries) {
+  for (const { entry, clinician } of allEntries) {
     const uuid = extractUuid(entry);
     if (!uuid) {
       missingUuidCount++;
@@ -114,17 +147,23 @@ export function extractBookedPatients(raw) {
     if (seen.has(uuid)) continue; // same patient booked twice
 
     const name = entry.patient?.name ?? entry.patient?.displayName ?? 'Unknown patient';
-    const time = entry.start ?? entry.startTime ?? null;
-    seen.set(uuid, { uuid, name, time });
+    const time = entry.startDateTime ?? entry.start ?? entry.startTime ?? null;
+    seen.set(uuid, { uuid, name, time, clinician });
   }
 
-  // Diagnose if NO UUIDs were found at all but there were appointments
+  // Fail-visible (H-005): every zero outcome carries an explicit reason — a
+  // genuinely empty book, a filter matching nothing, or unextractable UUIDs —
+  // so the UI can never render a misleading "0 patients, nothing to action".
   let diagnosticMessage = null;
-  if (seen.size === 0 && allEntries.length > 0) {
-    diagnosticMessage = 'Could not identify patients from the appointment feed — sweep unavailable; field layout may have changed';
+  if (allEntries.length === 0) {
+    diagnosticMessage = clinicianFilter
+      ? `No booked appointments found for ${clinicianFilter} in today's appointment book.`
+      : 'No booked appointments found in today\'s appointment book.';
+  } else if (seen.size === 0) {
+    diagnosticMessage = 'Could not identify patients from the appointment book — sweep unavailable; field layout may have changed';
   }
 
-  // Sort by appointment time (lexicographic on time string is correct for HH:MM)
+  // Sort by appointment time (lexicographic works for ISO datetimes)
   const sorted = Array.from(seen.values()).sort((a, b) => {
     if (!a.time && !b.time) return 0;
     if (!a.time) return 1;
@@ -132,10 +171,10 @@ export function extractBookedPatients(raw) {
     return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
   });
 
-  const cappedAt = sorted.length > MAX_SWEEP_PATIENTS ? sorted.length : null;
-  const patients = sorted.slice(0, MAX_SWEEP_PATIENTS);
+  const cappedAt = (limit !== null && sorted.length > limit) ? sorted.length : null;
+  const patients = limit !== null ? sorted.slice(0, limit) : sorted;
 
-  return { patients, missingUuidCount, cappedAt, diagnosticMessage };
+  return { patients, clinicians, appointmentCount: allEntries.length, missingUuidCount, cappedAt, diagnosticMessage };
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +198,7 @@ export function extractBookedPatients(raw) {
 //   }
 //
 // SweepRow shape:
-//   { uuid, name, time, chips, redCount, amberCount, error,
+//   { uuid, name, time, clinician, chips, redCount, amberCount, error,
 //     hasHiddenActionChips: bool }   // true if any hidden chip is action-needed
 //
 // Hidden rules (sentinel.hiddenRules) are NOT applied as a suppression filter:
@@ -176,7 +215,7 @@ export function summariseSweep(perPatientResults) {
 
   for (const r of (perPatientResults || [])) {
     if (r.error) {
-      errorRows.push({ uuid: r.uuid, name: r.name, time: r.time, chips: null, redCount: 0, amberCount: 0, error: r.error, hasHiddenActionChips: false });
+      errorRows.push({ uuid: r.uuid, name: r.name, time: r.time, clinician: r.clinician || null, chips: null, redCount: 0, amberCount: 0, error: r.error, hasHiddenActionChips: false });
       continue;
     }
 
@@ -200,7 +239,7 @@ export function summariseSweep(perPatientResults) {
       else if (colour === 'amber') amberCount++;
     }
 
-    const row = { uuid: r.uuid, name: r.name, time: r.time, chips, redCount, amberCount, error: null, hasHiddenActionChips };
+    const row = { uuid: r.uuid, name: r.name, time: r.time, clinician: r.clinician || null, chips, redCount, amberCount, error: null, hasHiddenActionChips };
 
     if (redCount > 0 || amberCount > 0) {
       actionRows.push(row);

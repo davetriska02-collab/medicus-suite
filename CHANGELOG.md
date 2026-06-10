@@ -2,6 +2,130 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.40.3] — 2026-06-10
+
+### Fix: Sweep clinician dropdown empty before first run; clinician column never shown
+
+Two bugs in the v3.40.2 clinician filter:
+
+1. The dropdown was only populated inside `runSweep()`, so it showed only
+   "All clinicians" until a full sweep was completed — the user couldn't
+   pre-select a clinician before running. Fixed: `preloadClinicians()` now
+   fires non-blocking in `init()`, fetching the appointment book in the
+   background and populating the dropdown immediately on module load.
+
+2. `patient.clinician` was pushed to the per-patient result objects but
+   `summariseSweep` (sweep-core.js) never forwarded it to the output SweepRow,
+   so `patientRowHtml` always received `row.clinician = undefined` and the
+   clinician column was invisible. Fixed: `clinician` is now propagated through
+   both error rows and normal rows in `summariseSweep`.
+
+### Feature: Sequential sweep past 40-patient cap
+
+Previously, large practices (>40 booked patients) had the first 40 silently
+checked with a warning notice about the cap. Now:
+
+- `extractBookedPatients` accepts `{ limit: null }` to return all patients
+  without capping. Callers that do not pass `limit` retain the existing
+  `MAX_SWEEP_PATIENTS` (40) default — no behaviour change for other consumers.
+- `sweep.js` fetches the full patient list upfront and processes it in batches
+  of `BATCH_SIZE` (40). After each batch, results show "Checked X of Y booked
+  patients — N remaining" and a **"Check next N patients"** button.
+- Clicking Continue processes the next batch from cached state (no re-fetch of
+  the appointment book). Cumulative results (all batches combined, sorted
+  worst-first) are shown after each batch.
+- The Run sweep button always starts a fresh sweep (new fetch, reset offset).
+  Cancel mid-batch shows how many patients were not checked and prompts restart.
+
+## [v3.40.2] — 2026-06-10
+
+### Fix: Sweep found zero patients — wrong appointment feed (per-clinician, not practice)
+
+Sweep fetched `/scheduling/data/homepage/my-appointments`, which only covers
+the logged-in user's OWN booked diary — anyone without a personally-booked
+clinic that day got an empty schedule, and the empty case fell through
+silently to "No action-needed alerts found across 0 patients". This is the
+same root cause as the Condor waiting-room fix in v3.36.2 ("my-appointments
+is per-clinician only").
+
+- Sweep now reads the practice-wide appointment book
+  (`/scheduling/data/appointment-book/embedded-overview` via the shared
+  `fetchSchedulingOverview`, fresh fetch per run), parsing
+  `staffSchedules[].schedule[].entries[]`. Cancelled appointments excluded.
+- New clinician filter: "All clinicians" by default, or sweep a single
+  clinician's list (dropdown populates from the appointment book; patient
+  rows now show the clinician).
+- Fail-visible zero states (H-005): an empty appointment book, an empty
+  clinician filter, or an unreadable feed each render an explicit message —
+  a bare "0 patients, nothing to action" can no longer appear.
+- Limitation 26 updated; test-sweep-core.js migrated to the appointment-book
+  shape with regression guards for the silent-zero path, cancelled exclusion,
+  and the clinician filter.
+
+Diagnosed by three parallel investigation agents; root cause corroborated by
+the v3.36.2 changelog entry.
+
+## [v3.40.1] — 2026-06-10
+
+### Fix: Condor "Task inbox not configured" shown for a configured Request Monitor
+
+Condor's data layer fetched a non-existent endpoint
+(`/admin/data/request-monitor/{assigneeId}` — invented during the Condor
+build), so the request always 404'd and the Task Age card claimed the inbox
+was "not configured" even when Request Monitor was fully set up. Condor now
+reads the cached poll state the service worker already maintains
+(`suite.requestMonitor.state` — the SW alarm stays the single owner of task
+polling, and the cached items are already initials-only per F2 data
+minimisation). The card also now distinguishes the three states: not
+configured ("enable in Settings"), configured-but-unavailable ("Task inbox
+unavailable: <reason> — check Medicus sign-in"), and data. Day Score treats
+"unavailable" like "unknown" (never penalised), and the PPI urgent count
+already degrades to 0 with the error recorded in fetchErrors. New regression
+test `test-condor-rm-state.js`.
+
+## [v3.40.0] — 2026-06-10
+
+### Feature: drag-and-drop reorderable suite tabs
+
+Suite nav tabs can be dragged left/right to reorder, like browser tabs, so
+favourites sit on the left. Order persists in a new `suite.tabOrder` key (one
+global preference shared by the side panel and pop-out; each shell reconciles
+against its own tab set, so the pop-out simply ignores tabs it doesn't have)
+and rides the existing suite backup/export. New modules added later append in
+their default position; unknown/removed ids are ignored — never dropped or
+duplicated (`side-panel/tab-order.js` `reconcileTabOrder`, unit-tested in
+`test-tab-order.js`). A drag never triggers a tab switch. Keyboard-driven
+reordering is not yet implemented (tabs remain keyboard-activatable for
+switching); mouse/pointer drag only.
+
+### Feature: author rules with an LLM (Reception, Sentinel, Triage Lens)
+
+Each of the three rule-authoring surfaces gains a "Copy LLM prompt" button and
+a paste-JSON import box, so a user can ask an external LLM ("make me a
+cellulitis pathway") and import the result directly:
+
+- **Reception** — `pathwaySchemaPrompt()` in `shared/reception-pathway-utils.js`;
+  import validates via the existing `validatePathway`/`sanitisePathway` and adds
+  the pathway **disabled** (never auto-enabled — the off-by-default + disclaimer
+  gate still applies).
+- **Sentinel monitoring** — `customRuleSchemaPrompt()` in `shared/io/sentinel-io.js`
+  (covers all five custom-rule types); import validates via the existing
+  `validateCustomRule`, forces `enabled:false`, prefixes `custom-`, de-dupes ids.
+- **Triage Lens** — `triageRuleSchemaPrompt()` plus a refactor of the inline rule
+  checks into a reusable `validateTriageRule()` (now used by both the rule
+  builder and the importer); imported rules get a fresh id, `builtin:false`,
+  `enabled:false`.
+
+Each schema prompt embeds a worked example between stable markers, and a unit
+test extracts that example and runs it through the real validator — so a
+documented schema can never drift from what the validator accepts. All imports
+accept a single object, an array, or a `{rules:[…]}`/`{pathways:[…]}` wrapper;
+validate every candidate and import nothing from a failing one; and escape all
+status text (LLM output is untrusted). Imported clinical content always arrives
+inactive, pending human review.
+
+All 30 test files pass.
+
 ## [v3.39.1] — 2026-06-10
 
 ### Reception: security hardening + clinical escalation re-tiering (post-audit)

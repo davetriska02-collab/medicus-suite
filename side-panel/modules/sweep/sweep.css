@@ -338,3 +338,75 @@
 [data-theme="dark"] .sweep-clear-section {
   border-color: #334155;
 }
+
+/* Continue sweep button (v3.40.3) */
+.sweep-continue-section {
+  margin-bottom: 8px;
+}
+
+.sweep-continue-btn {
+  margin-top: 6px;
+  background: var(--bg-muted, #f1f5f9);
+  color: var(--accent, #2563eb);
+  border: 1px solid var(--accent, #2563eb);
+  border-radius: 5px;
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sweep-continue-btn:hover {
+  background: var(--accent, #2563eb);
+  color: #fff;
+}
+
+/* "All patients checked" positive notice (v3.40.3) */
+.sweep-notice-ok {
+  background: rgba(16, 185, 129, 0.10);
+  border-left: 3px solid #10b981;
+  color: #065f46;
+}
+
+[data-theme="dark"] .sweep-notice-ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .sweep-continue-btn {
+  background: #1e293b;
+  color: #60a5fa;
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .sweep-continue-btn:hover {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+/* Clinician filter (v3.40.2) */
+.sweep-clin-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #555);
+  margin-left: 8px;
+}
+.sweep-clin-label select {
+  font: inherit;
+  margin-left: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  background: inherit;
+  color: inherit;
+  max-width: 180px;
+}
+.sweep-row-clin {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #777);
+  margin-left: 6px;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

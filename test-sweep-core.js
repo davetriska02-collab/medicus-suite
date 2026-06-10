@@ -65,7 +65,8 @@ const path = require('path');
   // ── extractBookedPatients — normal payload ────────────────────────────────────
   console.log('\n--- extractBookedPatients: normal payload ---');
   const normalRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Smith, Alice' }, start: '09:00' },
@@ -73,7 +74,7 @@ const path = require('path');
           { diaryEntryType: { value: 'slot'        }, patient: { id: 'aaaaaaaa-0000-0000-0000-000000000003', name: 'Slot'         }, start: '10:00' },
         ]
       }]
-    }
+    }]
   };
 
   const normalResult = extractBookedPatients(normalRaw);
@@ -84,11 +85,14 @@ const path = require('path');
   check(normalResult.missingUuidCount === 0, 'No missing UUIDs');
   check(normalResult.cappedAt === null, 'No cap applied');
   check(normalResult.diagnosticMessage === null, 'No diagnostic message');
+  check(normalResult.patients[0].clinician === 'Dr Test', 'clinician captured from staff schedule');
+  check(Array.isArray(normalResult.clinicians) && normalResult.clinicians[0] === 'Dr Test', 'clinicians list populated');
 
   // ── extractBookedPatients — uuid fallback strategies ─────────────────────────
   console.log('\n--- extractBookedPatients: UUID fallback strategies ---');
   const uuidFallbackRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           // Strategy: patient.uuid field
@@ -97,7 +101,7 @@ const path = require('path');
           { diaryEntryType: { value: 'appointment' }, patient: { name: 'B', someLink: '/patient/cccccccc-0000-0000-0000-000000000001/care-record' }, start: '08:10' },
         ]
       }]
-    }
+    }]
   };
   const fbResult = extractBookedPatients(uuidFallbackRaw);
   check(fbResult.patients.length === 2, 'Both UUID fallback strategies produce patients');
@@ -107,14 +111,15 @@ const path = require('path');
   // ── extractBookedPatients — missing UUID ──────────────────────────────────────
   console.log('\n--- extractBookedPatients: missing UUID ---');
   const missingUuidRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID here'    }, start: '09:00' },
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'dddddddd-0000-0000-0000-000000000001', name: 'Has UUID' }, start: '09:30' },
         ]
       }]
-    }
+    }]
   };
   const missingResult = extractBookedPatients(missingUuidRaw);
   check(missingResult.patients.length === 1,       '1 patient extracted (1 with UUID)');
@@ -124,14 +129,15 @@ const path = require('path');
   // ── extractBookedPatients — ALL UUIDs missing (diagnostic) ───────────────────
   console.log('\n--- extractBookedPatients: all UUIDs missing → diagnostic ---');
   const allMissingRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID A' }, start: '09:00' },
           { diaryEntryType: { value: 'appointment' }, patient: { name: 'No UUID B' }, start: '09:30' },
         ]
       }]
-    }
+    }]
   };
   const allMissingResult = extractBookedPatients(allMissingRaw);
   check(allMissingResult.patients.length === 0,     'No patients when all UUIDs missing');
@@ -148,10 +154,46 @@ const path = require('path');
   const nullResult = extractBookedPatients(null);
   check(nullResult.patients.length === 0, 'No crash on null');
 
+  // ── extractBookedPatients — empty book is EXPLICIT, never a silent zero ──────
+  // (v3.40.2 regression guard: an empty/filtered-out book previously fell
+  // through to "No action-needed alerts found across 0 patients".)
+  console.log('\n--- extractBookedPatients: empty book → explicit diagnostic ---');
+  const emptyBook = extractBookedPatients({ staffSchedules: [{ name: 'Dr Test', schedule: [{ entries: [
+    { diaryEntryType: { value: 'slot' } },
+  ] }] }] });
+  check(emptyBook.patients.length === 0, 'slots-only book → no patients');
+  check(typeof emptyBook.diagnosticMessage === 'string' && /No booked appointments/.test(emptyBook.diagnosticMessage),
+        'slots-only book → explicit "No booked appointments" diagnostic (not silent)');
+  const emptySchedules = extractBookedPatients({ staffSchedules: [] });
+  check(/No booked appointments/.test(emptySchedules.diagnosticMessage || ''), 'empty staffSchedules → explicit diagnostic');
+
+  // ── extractBookedPatients — cancelled excluded, clinician filter ─────────────
+  console.log('\n--- extractBookedPatients: cancelled + clinician filter ---');
+  const twoClinRaw = { staffSchedules: [
+    { name: 'Dr A', schedule: [{ entries: [
+      { diaryEntryType: { value: 'appointment' }, patient: { id: '11111111-0000-0000-0000-000000000001', name: 'P1' }, startDateTime: '2026-06-10T09:00:00' },
+      { diaryEntryType: { value: 'appointment' }, displayStatus: { value: 'cancelled' }, patient: { id: '11111111-0000-0000-0000-000000000002', name: 'P2' }, startDateTime: '2026-06-10T09:30:00' },
+    ] }] },
+    { name: 'Dr B', schedule: [{ entries: [
+      { diaryEntryType: { value: 'appointment' }, patient: { id: '11111111-0000-0000-0000-000000000003', name: 'P3' }, startDateTime: '2026-06-10T10:00:00' },
+    ] }] },
+  ] };
+  let twoClin = extractBookedPatients(twoClinRaw);
+  check(twoClin.patients.length === 2, 'cancelled appointment excluded');
+  check(twoClin.clinicians.length === 2 && twoClin.clinicians.includes('Dr A') && twoClin.clinicians.includes('Dr B'), 'both clinicians listed');
+  check(twoClin.patients[0].time === '2026-06-10T09:00:00', 'startDateTime used as time');
+  twoClin = extractBookedPatients(twoClinRaw, { clinician: 'Dr B' });
+  check(twoClin.patients.length === 1 && twoClin.patients[0].name === 'P3', 'clinician filter narrows to that diary');
+  check(twoClin.clinicians.length === 2, 'clinicians list stays unfiltered (for the dropdown)');
+  twoClin = extractBookedPatients(twoClinRaw, { clinician: 'Dr Nobody' });
+  check(twoClin.patients.length === 0 && /No booked appointments found for Dr Nobody/.test(twoClin.diagnosticMessage || ''),
+        'filter matching nothing → explicit per-clinician diagnostic');
+
   // ── extractBookedPatients — deduplication ─────────────────────────────────────
   console.log('\n--- extractBookedPatients: deduplication ---');
   const dupeRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'eeeeeeee-0000-0000-0000-000000000001', name: 'Same Patient' }, start: '09:00' },
@@ -159,7 +201,7 @@ const path = require('path');
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'ffffffff-0000-0000-0000-000000000001', name: 'Other' }, start: '11:00' },
         ]
       }]
-    }
+    }]
   };
   const dupeResult = extractBookedPatients(dupeRaw);
   check(dupeResult.patients.length === 2, 'Duplicate patient (same UUID) deduped → 2 unique patients');
@@ -178,7 +220,7 @@ const path = require('path');
       start: `${String(Math.floor(i / 2 + 8)).padStart(2,'0')}:${i % 2 === 0 ? '00' : '30'}`
     });
   }
-  const capRaw = { schedule: { schedule: [{ entries: manyEntries }] } };
+  const capRaw = { staffSchedules: [{ name: 'Dr Test', schedule: [{ entries: manyEntries }] }] };
   const capResult = extractBookedPatients(capRaw);
   check(capResult.patients.length === MAX_SWEEP_PATIENTS, `Cap: exactly ${MAX_SWEEP_PATIENTS} patients returned`);
   check(capResult.cappedAt === totalPatients,              `cappedAt = ${totalPatients}`);
@@ -186,7 +228,8 @@ const path = require('path');
   // ── extractBookedPatients — time sorting ──────────────────────────────────────
   console.log('\n--- extractBookedPatients: time sorting ---');
   const sortRaw = {
-    schedule: {
+    staffSchedules: [{
+      name: 'Dr Test',
       schedule: [{
         entries: [
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'aabbccdd-0000-0000-0003-000000000003', name: 'Third'  }, start: '11:00' },
@@ -194,7 +237,7 @@ const path = require('path');
           { diaryEntryType: { value: 'appointment' }, patient: { id: 'aabbccdd-0000-0000-0002-000000000002', name: 'Second' }, start: '10:00' },
         ]
       }]
-    }
+    }]
   };
   const sortResult = extractBookedPatients(sortRaw);
   check(sortResult.patients[0].name === 'First',  'Time sorting: first slot first');
