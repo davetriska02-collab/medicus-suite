@@ -24,6 +24,9 @@ jobs:
       - name: Verify Triage Lens defaults are in sync (3-copy guard)
         run: node scripts/regen-defaults.js --check
 
+      - name: Verify vendored library integrity (sha256 vs vendor-versions.json)
+        run: node scripts/verify-vendor.js
+
       - name: Syntax-check changed JS entry points
         run: |
           node --check content-scripts/triage-lens/content.js
