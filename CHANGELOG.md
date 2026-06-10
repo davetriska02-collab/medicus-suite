@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.44.0] — 2026-06-10
+
+### Feature: Sweep — printable reception handout
+
+The Sweep results header gains a **"Print reception handout"** button: it opens
+a print-first page (`handout.html`, full tab) listing every action-needed
+patient in **appointment-time order** with tick-boxes and a literal,
+non-clinical instruction per alert:
+
+- Drug monitoring → "Book a blood test appointment: FBC, U&E — methotrexate
+  monitoring overdue" (named tests, in-date tests excluded).
+- QOF indicators → mapped to plain bookings ("Book a blood pressure check",
+  "Book a diabetes review", …) with the indicator code in the detail line;
+  unmapped codes fall back to "Book a review appointment".
+- Vaccines → "Offer to book: Flu vaccine".
+- Everything that needs clinical judgement (alerts, event counts, registers,
+  combos) → "Flag to the duty clinician" — reception books and flags, never
+  decides.
+
+The page prints (or saves as PDF) via the browser print dialog, carries a
+patient-identifiable confidentiality banner that also prints, and a footer
+making clear it is a booking/flagging worklist, not a clinical instruction.
+Duplicate instructions are deduplicated per patient; the "hidden Sentinel
+alerts" note is carried through. Handover to the tab uses a transient
+`sweep.handout` key (overwritten each print; allowlisted). Pure logic
+(`chipInstruction`/`buildHandout` in sweep-core.js) is covered by 18 new
+checks in `test-sweep-core.js`.
+
+### Fix: flu/COVID "VAX DUE" chips showing out of season (patient-safety noise)
+
+Eligible-but-unvaccinated patients were showing **VAX DUE all year round** —
+the season config had a start (1 Sep / 1 Oct) but no end, so from April to
+August every eligible patient carried a stale amber chip (as seen in Sweep,
+Sentinel and Reception). A jab that cannot be given is not actionable, and a
+chip that is wrong for five months trains staff to ignore it in October.
+
+- `rules/vaccine-rules.json`: both seasons now carry a campaign end
+  (`endMonth: 3, endDay: 31` — flu 1 Sep–31 Mar, COVID autumn 1 Oct–31 Mar).
+- `engine/rules-engine.js`: new `seasonEnd()`; outside the campaign window no
+  vaccine chips fire at all (DUE, GIVEN and DECLINED — there is nothing to do
+  out of season). Rules without `endMonth` keep the old year-round behaviour.
+- Fixes the chips everywhere the engine runs: Sentinel panel, Reception
+  quick-wins, Sweep, content scripts.
+- 8 new regression checks in `test-qof-year.js` (campaign boundaries, GIVEN
+  unaffected in season, back-compat without endMonth, shipped rules carry the
+  end dates).
+
 ## [v3.43.0] — 2026-06-10
 
 ### Feature: Practice Profile v2 — central practice management from the shared folder

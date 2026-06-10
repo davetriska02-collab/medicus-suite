@@ -410,3 +410,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* "Print reception handout" button (opens handout.html in a full tab) */
+.sweep-print-btn {
+  background: var(--bg-muted, #f1f5f9);
+  color: var(--accent, #2563eb);
+  border: 1px solid var(--accent, #2563eb);
+  border-radius: 5px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sweep-print-btn:hover {
+  background: var(--accent, #2563eb);
+  color: #fff;
+}
