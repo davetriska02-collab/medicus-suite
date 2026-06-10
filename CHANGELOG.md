@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.40.1] — 2026-06-10
+
+### Fix: Condor "Task inbox not configured" shown for a configured Request Monitor
+
+Condor's data layer fetched a non-existent endpoint
+(`/admin/data/request-monitor/{assigneeId}` — invented during the Condor
+build), so the request always 404'd and the Task Age card claimed the inbox
+was "not configured" even when Request Monitor was fully set up. Condor now
+reads the cached poll state the service worker already maintains
+(`suite.requestMonitor.state` — the SW alarm stays the single owner of task
+polling, and the cached items are already initials-only per F2 data
+minimisation). The card also now distinguishes the three states: not
+configured ("enable in Settings"), configured-but-unavailable ("Task inbox
+unavailable: <reason> — check Medicus sign-in"), and data. Day Score treats
+"unavailable" like "unknown" (never penalised), and the PPI urgent count
+already degrades to 0 with the error recorded in fetchErrors. New regression
+test `test-condor-rm-state.js`.
+
 ## [v3.40.0] — 2026-06-10
 
 ### Feature: drag-and-drop reorderable suite tabs

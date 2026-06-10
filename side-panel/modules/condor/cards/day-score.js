@@ -52,8 +52,11 @@ loadScores(); // fire-and-forget on module load
 function computeScore(data) {
   // Criterion 1 — Submissions in check: <= 60 or unknown (null) = pass
   const c1 = data.submissions === null || (data.submissions?.totals?.all ?? 0) <= 60;
-  // Criterion 2 — No stale urgent tasks: gt8h === 0 or unknown (null) = pass
-  const c2 = data.requestMonitor === null || (data.requestMonitor?.byAgeBucket?.gt8h === 0);
+  // Criterion 2 — No stale urgent tasks: gt8h === 0 or unknown = pass.
+  // Unknown covers both "not configured" (null) and "configured but the cached
+  // poll state is unavailable" ({unavailable:true}) — can't-assess never penalises.
+  const c2 = data.requestMonitor === null || data.requestMonitor?.unavailable === true ||
+             (data.requestMonitor?.byAgeBucket?.gt8h === 0);
   // Criterion 3 — Capacity maintained: totalRemaining > 0 or unknown (null) = pass
   const c3 = data.slots === null || ((data.slots?.totalRemaining ?? 0) > 0);
   // Criterion 4 — No critical fetch errors
