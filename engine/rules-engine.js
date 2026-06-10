@@ -60,6 +60,55 @@
     return rule.drug.match.some((m) => norm.includes(normaliseDrugString(m)));
   }
 
+  // Returns { matched, matchedTerm, excludedBy } — which match term hit, or
+  // which exclude term suppressed the medication. Used only when tracing is
+  // active (data._trace is set) so there is zero cost on the hot path.
+  function drugMatchDetail(medName, rule) {
+    if (!rule.drug || !rule.drug.match) return { matched: false, matchedTerm: null, excludedBy: null };
+    const norm = normaliseDrugString(medName);
+    const excludedBy = (rule.drug.exclude || []).find((e) => norm.includes(normaliseDrugString(e)));
+    if (excludedBy != null) return { matched: false, matchedTerm: null, excludedBy };
+    const matchedTerm = rule.drug.match.find((m) => norm.includes(normaliseDrugString(m)));
+    if (matchedTerm != null) return { matched: true, matchedTerm, excludedBy: null };
+    return { matched: false, matchedTerm: null, excludedBy: null };
+  }
+
+  // Returns [{ name, reason: 'no-rule' | 'excluded', excludedBy: { ruleId, term } | null }]
+  // Sibling of listUnmatchedMedications that explains WHY each med is unmatched.
+  // listUnmatchedMedications is kept exactly as-is (existing callers unchanged).
+  function listUnmatchedMedicationsDetailed(medications, rules) {
+    const drugMonitoringRules = (rules || []).filter((r) => r.enabled !== false && r.type === 'drug-monitoring');
+    const seenLower = new Map(); // lowerName → displayName
+    (medications || []).forEach((med) => {
+      if (!med || !med.name) return;
+      const lower = String(med.name).toLowerCase();
+      if (!seenLower.has(lower)) seenLower.set(lower, med.name);
+    });
+    const result = [];
+    seenLower.forEach((displayName, lower) => {
+      // Check if any rule fully matches (match term hit, not excluded)
+      for (const rule of drugMonitoringRules) {
+        const detail = drugMatchDetail(lower, rule);
+        if (detail.matched) return; // covered — skip
+      }
+      // Not matched by any rule. Find the first exclude suppression for the reason.
+      for (const rule of drugMonitoringRules) {
+        const detail = drugMatchDetail(lower, rule);
+        if (detail.excludedBy != null) {
+          result.push({
+            name: displayName,
+            reason: 'excluded',
+            excludedBy: { ruleId: rule.id, term: detail.excludedBy },
+          });
+          return;
+        }
+      }
+      result.push({ name: displayName, reason: 'no-rule', excludedBy: null });
+    });
+    result.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    return result;
+  }
+
   // === DATE HELPERS ===
   function daysBetween(isoA, isoB) {
     const a = new Date(isoA);
@@ -452,11 +501,41 @@
 
   // === EVALUATORS ===
 
+  // Shared trace-entry base: record a base entry into data._trace when tracing.
+  // Returns the entry object (or null when tracing is off) so evaluators can fill it in.
+  function _traceBase(data, rule) {
+    if (!data._trace) return null;
+    const entry = {
+      ruleId: rule.id,
+      ruleType: rule.type || 'drug-monitoring',
+      label:
+        rule.label || rule.drug?.match?.[0] || rule.registerName || rule.indicatorName || rule.displayName || rule.id,
+      fired: false,
+      status: null,
+      skipReason: null,
+      source: rule.source || null,
+      sharedCare: rule.sharedCare != null ? !!rule.sharedCare : undefined,
+      notes: rule.notes || null,
+    };
+    data._trace.push(entry);
+    return entry;
+  }
+
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
-    if (!passesProblemFilters(rule, data.problems)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
+    if (!passesProblemFilters(rule, data.problems)) {
+      if (traceEntry) traceEntry.skipReason = 'problem-filter';
+      return [];
+    }
     let matchedMeds = (data.medications || []).filter((m) => drugMatchesRule(m.name, rule));
     // HRT gating: an HRT review only applies to systemic oestrogen / HRT agents
     // (estradiol, conjugated oestrogens, tibolone, etc.). A progestogen or
@@ -471,7 +550,13 @@
         oestrogenTerms.some((t) => normaliseDrugString(name).includes(normaliseDrugString(t)));
       matchedMeds = matchedMeds.filter((m) => isOestrogen(m.name));
     }
-    return matchedMeds.map((med) => {
+    if (matchedMeds.length === 0) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
+    // Trace entry was created for the rule; for multi-med rules we emit one entry per med.
+    // The base entry already pushed above becomes the first med's entry (or we create extras).
+    return matchedMeds.map((med, idx) => {
       const testEvaluations = (rule.tests || []).map((test) => {
         const obs = findLatestObservation(data.observations, test);
         if (!obs || !obs.date) {
@@ -536,16 +621,91 @@
         chip.hrtContext = buildHrtContext(rule.hrtContext, data);
       }
 
+      // Populate trace entry. For idx>0 we need a new entry (multi-med rule).
+      if (data._trace) {
+        const te =
+          idx === 0
+            ? traceEntry
+            : (() => {
+                const e = {
+                  ruleId: rule.id,
+                  ruleType: 'drug-monitoring',
+                  label: traceEntry ? traceEntry.label : rule.id,
+                  fired: false,
+                  status: null,
+                  skipReason: null,
+                  source: rule.source || null,
+                  sharedCare: rule.sharedCare != null ? !!rule.sharedCare : undefined,
+                  notes: rule.notes || null,
+                };
+                data._trace.push(e);
+                return e;
+              })();
+        if (te) {
+          const detail = drugMatchDetail(med.name, rule);
+          te.fired = true;
+          te.status = worstStatus;
+          te.chipRef = rule.id + '|' + med.name;
+          te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
+          te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
+            const lastDate = tv.latestObs ? tv.latestObs.date : null;
+            const intDays = tv.intervalDays || 365;
+            let dueDate = null;
+            if (lastDate) {
+              const d = new Date(lastDate);
+              d.setDate(d.getDate() + intDays);
+              dueDate = d.toISOString().slice(0, 10);
+            }
+            return {
+              test: tv.testName || tv.name || '',
+              observation: tv.latestObs
+                ? {
+                    name: tv.latestObs.name || tv.testName || '',
+                    code: tv.latestObs.code || null,
+                    date: tv.latestObs.date,
+                    value: tv.latestObs.value != null ? tv.latestObs.value : null,
+                  }
+                : null,
+              lastDate,
+              intervalDays: intDays,
+              dueSoonDays: tv.dueSoonDays || 30,
+              daysSince: tv.days,
+              dueDate,
+              status: tv.status,
+            };
+          });
+        }
+      }
+
       return chip;
     });
   }
 
   // QOF register rule evaluator -> chip if patient is on register
   function evaluateQofRegisterRule(rule, data) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
     const result = patientOnRegister(data.problems, rule);
-    if (!result || !result.matched) return [];
+    if (!result || !result.matched) {
+      if (traceEntry) traceEntry.skipReason = 'not-on-register';
+      return [];
+    }
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = 'achieved';
+      // Find which problemMatch term actually hit
+      const matchedLabel = result.problem.label.toLowerCase();
+      const matchedTerm = (rule.problemMatch || []).find((m) => registerTermInLabel(matchedLabel, m)) || null;
+      traceEntry.matchedProblem = { label: result.problem.label, codedDate: result.problem.codedDate || null };
+      traceEntry.matchedTerm = matchedTerm;
+    }
     return [
       {
         type: 'qof-register',
@@ -657,21 +817,34 @@
   // AND the patient passes age/sex/problem filters.
   // Optional mustNotBePresent: any match in that list disqualifies the rule.
   function evaluateDrugComboRule(rule, data) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
     const meds = data.medications || [];
     const norm = (s) => String(s || '').toLowerCase();
 
     // Problem filters (shared helper applies negation-aware substring matching:
     // "no heart failure" / "family history of HF" no longer satisfy requiresProblem)
-    if (!passesProblemFilters(rule, data.problems)) return [];
+    if (!passesProblemFilters(rule, data.problems)) {
+      if (traceEntry) traceEntry.skipReason = 'problem-filter';
+      return [];
+    }
 
     // mustNotBePresent: single-drug absence check (e.g. "no PPI prescribed")
     const mustNotBePresent = rule.mustNotBePresent || [];
     if (mustNotBePresent.length > 0) {
       const anyForbiddenPresent = mustNotBePresent.some((term) => meds.some((m) => norm(m.name).includes(norm(term))));
-      if (anyForbiddenPresent) return [];
+      if (anyForbiddenPresent) {
+        if (traceEntry) traceEntry.skipReason = 'blocked-by-must-not-present';
+        return [];
+      }
     }
 
     // Each drugSet must have at least one matching active medication
@@ -687,7 +860,10 @@
     });
 
     // All sets must have at least one match
-    if (matchedPerSet.some((matched) => matched.length === 0)) return [];
+    if (matchedPerSet.some((matched) => matched.length === 0)) {
+      if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
 
     // Distinct-drug guard: when drugSets overlap (e.g. QTc-prolonging A vs B
     // are the same list), a single matched med can satisfy every set. Require
@@ -726,11 +902,18 @@
       })
       .filter(Boolean);
 
+    const comboStatus = severityToStatus(rule.severity);
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = comboStatus;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchSummary = matchSummary;
+    }
     return [
       {
         type: 'drug-combo',
         ruleId: rule.id,
-        status: severityToStatus(rule.severity),
+        status: comboStatus,
         label: rule.label || rule.id,
         matchSummary,
         source: rule.source || null,
@@ -747,8 +930,15 @@
   // For sourceKind === 'observations', uses data.observationHistory to count
   // individual historical readings (not just distinct test types).
   function evaluateEventCountRule(rule, data, now) {
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    const traceEntry = _traceBase(data, rule);
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
     const norm = (s) => String(s || '').toLowerCase();
     // Window arithmetic uses the average Gregorian month (30.4375 days). This
@@ -813,13 +1003,31 @@
     else if (op === '<=') fires = count <= threshold;
     else if (op === '<') fires = count < threshold;
 
-    if (!fires) return [];
+    if (!fires) {
+      if (traceEntry) {
+        traceEntry.skipReason = 'count-threshold-not-met';
+        traceEntry.count = count;
+        traceEntry.countThreshold = threshold;
+        traceEntry.operator = op;
+      }
+      return [];
+    }
 
+    const ecStatus = severityToStatus(rule.severity);
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = ecStatus;
+      traceEntry.chipRef = rule.id;
+      traceEntry.count = count;
+      traceEntry.countThreshold = threshold;
+      traceEntry.operator = op;
+      traceEntry.windowMonths = rule.windowMonths;
+    }
     return [
       {
         type: 'event-count',
         ruleId: rule.id,
-        status: severityToStatus(rule.severity),
+        status: ecStatus,
         label: rule.label || rule.id,
         count,
         countThreshold: threshold,
@@ -905,6 +1113,7 @@
 
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
+    const traceEntry = _traceBase(data, rule);
     // evidenceCtx accumulates the matched data the evaluator consults so the
     // evidence panel can show "we looked here, we found X" without re-running
     // the match logic.
@@ -913,9 +1122,15 @@
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
       const registerRule = (data._registerLookup || {})[rule.requiresRegister];
-      if (!registerRule) return []; // register rule not configured/disabled
+      if (!registerRule) {
+        if (traceEntry) traceEntry.skipReason = 'register-precondition';
+        return []; // register rule not configured/disabled
+      }
       const reg = patientOnRegister(data.problems, registerRule);
-      if (!reg || !reg.matched) return [];
+      if (!reg || !reg.matched) {
+        if (traceEntry) traceEntry.skipReason = 'register-precondition';
+        return [];
+      }
       evidenceCtx.matchedRegisterProblem = {
         label: reg.problem.label,
         codedDate: reg.problem.codedDate || null,
@@ -929,8 +1144,14 @@
     // drug-monitoring and register evaluators; previously this block was
     // fail-closed (returned [] when age was null), so age-gated indicators
     // vanished whenever age couldn't be read.
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) return [];
-    if (!passesSexFilter(rule.sex, data.patientContext)) return [];
+    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'age-filter';
+      return [];
+    }
+    if (!passesSexFilter(rule.sex, data.patientContext)) {
+      if (traceEntry) traceEntry.skipReason = 'sex-filter';
+      return [];
+    }
 
     // Step 3: problem-based requirements & exclusions. All matching is
     // negation-aware (problemLabelMatchesTerm) so "no frailty", "family history
@@ -942,18 +1163,27 @@
     // requiresProblem: ALL listed problems must be present (conjunctive).
     if (Array.isArray(rule.requiresProblem) && rule.requiresProblem.length) {
       const allMet = rule.requiresProblem.every((req) => probs.some((p) => problemLabelMatchesTerm(p.label, req)));
-      if (!allMet) return [];
+      if (!allMet) {
+        if (traceEntry) traceEntry.skipReason = 'requires-problem';
+        return [];
+      }
     }
     // requiresAnyProblem: AT LEAST ONE listed problem must be present (disjunctive)
     // — e.g. the DM035 secondary-prevention cohort = any coded CVD problem.
     if (Array.isArray(rule.requiresAnyProblem) && rule.requiresAnyProblem.length) {
       const anyMet = rule.requiresAnyProblem.some((req) => probs.some((p) => problemLabelMatchesTerm(p.label, req)));
-      if (!anyMet) return [];
+      if (!anyMet) {
+        if (traceEntry) traceEntry.skipReason = 'requires-any-problem';
+        return [];
+      }
     }
     // excludeIfProblem: any negation-aware match disqualifies (e.g. frailty).
     if (Array.isArray(rule.excludeIfProblem) && rule.excludeIfProblem.length) {
       const hit = probs.some((p) => rule.excludeIfProblem.some((e) => problemLabelMatchesTerm(p.label, e)));
-      if (hit) return [];
+      if (hit) {
+        if (traceEntry) traceEntry.skipReason = 'excluded-by-problem';
+        return [];
+      }
     }
 
     // Step 4: evaluate the check
@@ -971,17 +1201,29 @@
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
       const obs = findLatestObservation(data.observations, { match: check.observation });
-      if (!obs || !obs.date) return [];
+      if (!obs || !obs.date) {
+        if (traceEntry) traceEntry.skipReason = 'no-observation';
+        return [];
+      }
       // Unparseable date: new Date(invalid) gives NaN; the stale check `< _cutoff`
       // is false for NaN so an invalid date would pass the stale gate and fire.
       // Treat the same as a missing date — stale result, do not alert.
-      if (isNaN(new Date(obs.date).getTime())) return [];
+      if (isNaN(new Date(obs.date).getTime())) {
+        if (traceEntry) traceEntry.skipReason = 'stale-observation';
+        return [];
+      }
       const v = parseNumeric(obs.value);
-      if (v == null) return [];
+      if (v == null) {
+        if (traceEntry) traceEntry.skipReason = 'no-observation';
+        return [];
+      }
       const _withinDays = check.withinDays || 365;
       const _cutoff = new Date(now);
       _cutoff.setDate(_cutoff.getDate() - _withinDays);
-      if (new Date(obs.date) < _cutoff) return []; // stale result — do not alert
+      if (new Date(obs.date) < _cutoff) {
+        if (traceEntry) traceEntry.skipReason = 'stale-observation';
+        return []; // stale result — do not alert
+      }
       const cmp = check.comparator || 'above';
       let sev = null;
       if (cmp === 'above') {
@@ -991,7 +1233,10 @@
         if (check.red != null && v <= check.red) sev = 'red';
         else if (check.amber != null && v <= check.amber) sev = 'amber';
       }
-      if (!sev) return []; // within safe range — no chip
+      if (!sev) {
+        if (traceEntry) traceEntry.skipReason = 'in-safe-range';
+        return []; // within safe range — no chip
+      }
       const unit = check.unit ? ` ${check.unit}` : '';
       const alertValueText = `${v}${unit}`;
       const alertStatus = severityToStatus(sev);
@@ -1001,6 +1246,13 @@
         value: obs.value,
         date: obs.date,
       };
+      if (traceEntry) {
+        traceEntry.fired = true;
+        traceEntry.status = alertStatus;
+        traceEntry.chipRef = rule.id;
+        traceEntry.matchedObs = evidenceCtx.matchedObs;
+        traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+      }
       return [
         {
           type: 'qof-indicator',
@@ -1293,6 +1545,26 @@
       // status remains 'no_data' when no history entry found or history array is empty
     }
 
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.matchedRegisterProblem = evidenceCtx.matchedRegisterProblem || null;
+      traceEntry.matchedObs = evidenceCtx.matchedObs || null;
+      traceEntry.matchedMed = evidenceCtx.matchedMed || null;
+      traceEntry.allOfResults = evidenceCtx.allOfResults ? evidenceCtx.allOfResults.slice(0, 15) : null;
+      traceEntry.bundleResults = evidenceCtx.bundleResults
+        ? evidenceCtx.bundleResults.slice(0, 15).map((r) => ({
+            aliases: r.aliases || [],
+            inWindow: r.inWindow,
+            obs: r.obs ? { name: r.obs.name, date: r.obs.date, value: r.obs.value } : null,
+          }))
+        : null;
+      traceEntry.trendSeries = evidenceCtx.trendSeries || null;
+      traceEntry.valueText = valueText;
+      traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+    }
+
     return [
       {
         type: 'qof-indicator',
@@ -1316,6 +1588,50 @@
     ];
   }
 
+  // === TRACE ENVELOPE BUILDER ===
+  // Builds the full export envelope from a raw trace array + data. Only called
+  // when options.trace is truthy; the hot path never touches this code.
+  function buildTraceEnvelope(traceEntries, data, nowIso, options) {
+    const generatedAt = new Date().toISOString();
+    const pc = data.patientContext || {};
+    const patient = {
+      uuid: pc.patientUuid || pc.uuid || pc.patientId || null,
+      nhsNumber: pc.nhsNumber || null,
+      displayName: pc.displayName || pc.patientName || pc.name || null,
+      ageYears: pc.ageYears != null ? pc.ageYears : pc.age != null ? pc.age : null,
+      sex: pc.sex || pc.gender || null,
+    };
+    const allChips = (options && options._chips) || [];
+    const rulesFired = traceEntries.filter((e) => e.fired).length;
+    const rulesSkipped = traceEntries.filter((e) => !e.fired).length;
+    const extraction = {
+      medications: (data.medications || []).length,
+      observations: (data.observations || []).length,
+      problems: (data.problems || []).length,
+      observationHistory: (data.observationHistory || []).length,
+      degraded: !!(options && options.degraded),
+    };
+    const chipsCompact = allChips.map((c) => ({ ruleId: c.ruleId, type: c.type, status: c.status }));
+    const unmatchedMedications = options && options.unmatchedDetailed ? options.unmatchedDetailed : [];
+    return {
+      traceSchemaVersion: 1,
+      generatedAt,
+      now: nowIso,
+      patient,
+      ruleset: {
+        rulesConsidered: traceEntries.length,
+        rulesFired,
+        rulesSkipped,
+        files: (options && options.ruleFileMeta) || [],
+        customRuleCount: options && options.customRuleCount != null ? options.customRuleCount : 0,
+      },
+      extraction,
+      entries: traceEntries,
+      unmatchedMedications,
+      chips: chipsCompact,
+    };
+  }
+
   // === MAIN ENTRY ===
   function evaluatePatient(medications, observations, rules, options) {
     options = options || {};
@@ -1328,6 +1644,10 @@
     const observationHistory = options.observationHistory || [];
 
     const data = { medications, observations, observationHistory, problems, patientContext };
+
+    // Trace sink: attach only when tracing is requested (never on the hot path).
+    const trace = options.trace ? [] : null;
+    if (trace) data._trace = trace;
 
     // Pre-build register lookup for indicator rules
     const registerLookup = {};
@@ -1344,7 +1664,28 @@
     const evaluatedById = new Map();
 
     (rules || []).forEach((rule) => {
-      if (rule.enabled === false) return;
+      if (rule.enabled === false) {
+        // Emit a disabled-rule trace entry before skipping
+        if (trace && rule.id) {
+          trace.push({
+            ruleId: rule.id,
+            ruleType: rule.type || 'drug-monitoring',
+            label:
+              rule.label ||
+              rule.drug?.match?.[0] ||
+              rule.registerName ||
+              rule.indicatorName ||
+              rule.displayName ||
+              rule.id,
+            fired: false,
+            status: null,
+            skipReason: 'disabled',
+            source: rule.source || null,
+            notes: rule.notes || null,
+          });
+        }
+        return;
+      }
       const type = rule.type || 'drug-monitoring';
       // Composite rules are collected separately and evaluated after all other rules.
       if (type === 'composite') return;
@@ -1364,6 +1705,24 @@
       if (rule.enabled === false) return;
       if ((rule.type || '') !== 'composite') return;
       const out = evaluateCompositeRule(rule, rules, evaluatedById);
+      // Trace composite result inline (evaluateCompositeRule has no data param)
+      if (trace && rule.id) {
+        const fired = out.length > 0;
+        const chip = fired ? out[0] : null;
+        trace.push({
+          ruleId: rule.id,
+          ruleType: 'composite',
+          label: rule.label || rule.id,
+          fired,
+          status: chip ? chip.status : null,
+          skipReason: fired ? null : 'composite-not-met',
+          chipRef: fired ? rule.id : null,
+          firedRuleIds: chip ? chip.firedRuleIds : [],
+          operator: rule.operator || 'AND',
+          source: rule.source || null,
+          notes: rule.notes || null,
+        });
+      }
       chips.push(...out);
       if (rule.id) evaluatedById.set(rule.id, out);
     });
@@ -1376,6 +1735,10 @@
       return (a.type || '').localeCompare(b.type || '');
     });
 
+    if (options.trace) {
+      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: chips });
+      return { chips, trace: envelope };
+    }
     return chips;
   }
 
@@ -1568,8 +1931,12 @@
 
   function evaluateVaccineRule(rule, data, nowIso) {
     if (rule.enabled === false) return [];
+    const traceEntry = _traceBase(data, rule);
     const matchedClause = matchVaccineEligibility(rule, data);
-    if (!matchedClause) return [];
+    if (!matchedClause) {
+      if (traceEntry) traceEntry.skipReason = 'not-eligible';
+      return [];
+    }
 
     // One-off (lifetime) vaccines use schedule:"once" and omit season.
     // They look back to 1900-01-01 (effectively all time) and are never
@@ -1590,7 +1957,10 @@
       // cannot be given), and a stale "VAX DUE" all summer trains staff to
       // ignore the chip when it matters. Rules without endMonth stay year-round.
       const endIso = seasonEnd(startIso, rule.season);
-      if (endIso && nowIso.slice(0, 10) > endIso) return [];
+      if (endIso && nowIso.slice(0, 10) > endIso) {
+        if (traceEntry) traceEntry.skipReason = 'out-of-campaign';
+        return [];
+      }
     }
 
     const evt = vaccineEventInWindow(rule, data, startIso);
@@ -1603,6 +1973,18 @@
     else if (isOneOff) evidenceParts.push('No record ever held (one-off vaccine)');
     else evidenceParts.push(`No record in ${seasonLabel} season (from ${startIso})`);
     if (rule.notes) evidenceParts.push(rule.notes);
+
+    if (traceEntry) {
+      traceEntry.fired = true;
+      traceEntry.status = status;
+      traceEntry.chipRef = rule.id;
+      traceEntry.eligibilityReason = matchedClause.label;
+      traceEntry.matchedEvidence = matchedClause.matchedEvidence || null;
+      traceEntry.seasonLabel = seasonLabel;
+      traceEntry.seasonStartIso = startIso;
+      traceEntry.isOneOff = isOneOff;
+      traceEntry.eventDate = evt ? evt.date : null;
+    }
 
     return [
       {
@@ -1654,7 +2036,10 @@
   const api = {
     evaluatePatient,
     listUnmatchedMedications,
+    listUnmatchedMedicationsDetailed,
     drugMatchesRule,
+    drugMatchDetail,
+    buildTraceEnvelope,
     findLatestObservation,
     daysBetween,
     qofYearStart,
