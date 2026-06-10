@@ -403,7 +403,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 //     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception] = await Promise.all([
+  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, knowledge] = await Promise.all([
     sentinelExport(),
     capacityExport(),
     triageExport(),
@@ -415,9 +415,10 @@ async function doFullExport() {
     requestMonitorExport(),
     condorExport(),
     receptionExport(),
+    knowledgeExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, suite });
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, knowledge, suite });
 }
 
 async function doModuleExport(scope) {
@@ -433,6 +434,7 @@ async function doModuleExport(scope) {
     requestMonitor: () => requestMonitorExport(),
     condor:        () => condorExport(),
     reception:     () => receptionExport(),
+    knowledge:     () => knowledgeExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -456,6 +458,7 @@ async function applyEnvelope(envelope) {
     mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
     mods.condor        && (() => condorImport(mods.condor)),
     mods.reception     && (() => receptionImport(mods.reception)),
+    mods.knowledge     && (() => knowledgeImport(mods.knowledge)),
     mods.suite         && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1858,4 +1861,125 @@ rmSaveBtn?.addEventListener('click', async () => {
     refresh();
   }
   document.querySelectorAll('.nav-item[data-section="reception"]').forEach(btn => btn.addEventListener('click', refresh));
+})();
+
+// ── Knowledge options section ─────────────────────────────────────────────────
+// Starter-pack generation via external LLM (copy prompt → paste JSON →
+// validate → import). Mirrors the Reception LLM pathway flow above. Imported
+// entries are forced to source:'llm', reviewed:false regardless of what the
+// pasted JSON claims, and near-duplicate titles (KnowledgeUtils.findSimilar)
+// are skipped so repeated imports don't bloat the base.
+(() => {
+  const KU = window.KnowledgeUtils;
+  const $k = id => document.getElementById(id);
+
+  async function refreshStats() {
+    const el = $k('kboStats');
+    if (!el) return;
+    const r = await chrome.storage.local.get(['knowledge.items']);
+    const items = r['knowledge.items'] || [];
+    const unreviewed = items.filter(e => e && e.source === 'llm' && e.reviewed !== true).length;
+    el.textContent = `${items.length} entr${items.length === 1 ? 'y' : 'ies'} in the knowledge base`
+      + (unreviewed ? ` — ${unreviewed} AI-generated and awaiting review (badge shown on the tab).` : '.');
+  }
+
+  $k('kboLlmCopyPrompt')?.addEventListener('click', async () => {
+    const prompt = KU.kbSchemaPrompt();
+    const copiedEl = $k('kboLlmCopied');
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = prompt;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    if (copiedEl) {
+      copiedEl.style.opacity = '1';
+      setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+    }
+  });
+
+  $k('kboLlmImport')?.addEventListener('click', async () => {
+    const statusEl = $k('kboLlmStatus');
+    const warnEl = $k('kboLlmWarnings');
+    const jsonEl = $k('kboLlmJson');
+    if (!statusEl || !jsonEl) return;
+    const fail = msg => { statusEl.style.color = 'var(--red, #b91c1c)'; statusEl.textContent = msg; };
+    warnEl.textContent = '';
+
+    const raw = (jsonEl.value || '').trim();
+    if (!raw) return fail('Paste the LLM JSON into the box first.');
+
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return fail('Could not parse JSON: ' + e.message); }
+
+    let candidates;
+    if (Array.isArray(parsed)) candidates = parsed;
+    else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.entries)) candidates = parsed.entries;
+    else return fail('Expected { "entries": [ ... ] } or a JSON array of entries.');
+    if (candidates.length === 0) return fail('No entries found in the pasted JSON.');
+
+    for (let i = 0; i < candidates.length; i++) {
+      const errs = KU.validateEntry(candidates[i]);
+      if (errs.length > 0) return fail(`Entry ${i + 1}: ${errs[0]}`);
+    }
+
+    const r = await chrome.storage.local.get(['knowledge.items', 'knowledge.categories']);
+    const items = r['knowledge.items'] || [];
+    const categories = KU.sanitiseCategories(r['knowledge.categories']);
+    const catIds = new Set(categories.map(c => c.id));
+    const taken = new Set(items.map(e => e.id));
+
+    const toAdd = [];
+    let skipped = 0;
+    for (const c of candidates) {
+      // Anti-bloat: skip entries whose titles near-duplicate an existing or
+      // already-imported entry (token-normalised match, see knowledge-utils.js).
+      if (KU.findSimilar(c.title, [...items, ...toAdd]).length > 0) { skipped++; continue; }
+      const clean = KU.sanitiseEntry(c);
+      clean.source = 'llm';
+      clean.reviewed = false;
+      clean.id = KU.generateEntryId(clean.title, taken);
+      taken.add(clean.id);
+      if (!catIds.has(clean.category)) {
+        // Preserve the LLM's grouping rather than silently re-filing it.
+        const name = clean.category.replace(/-/g, ' ').replace(/^./, ch => ch.toUpperCase());
+        categories.push({ id: clean.category, name });
+        catIds.add(clean.category);
+      }
+      toAdd.push(clean);
+    }
+
+    if (toAdd.length === 0) {
+      return fail(`Nothing imported — all ${skipped} entr${skipped === 1 ? 'y' : 'ies'} matched existing titles.`);
+    }
+
+    const phi = KU.phiWarnings(toAdd);
+    if (phi.length > 0) {
+      warnEl.innerHTML = '<strong>Check before relying on these entries:</strong><br>' +
+        phi.map(w => '&bull; ' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+    }
+
+    await chrome.storage.local.set({
+      'knowledge.items': [...items, ...toAdd],
+      'knowledge.categories': categories,
+    });
+    jsonEl.value = '';
+    statusEl.style.color = 'var(--green, #16a34a)';
+    statusEl.textContent = `Imported ${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'}`
+      + (skipped ? ` (${skipped} skipped as near-duplicates)` : '')
+      + ' — review them on the Knowledge tab.';
+    refreshStats();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshStats);
+  } else {
+    refreshStats();
+  }
+  document.querySelectorAll('.nav-item[data-section="knowledge"]').forEach(btn => btn.addEventListener('click', refreshStats));
 })();

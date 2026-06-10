@@ -30,7 +30,7 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception', 'knowledge'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -189,6 +189,16 @@ function previewEnvelope(envelope) {
       lines.push(`WARNING: Enables ${enabledIds.length} reception capture pathway(s): ${shown}${more}`);
     }
   } else { const m = missing('Reception'); if (m) lines.push(m); }
+
+  if (mods.knowledge) {
+    const items = mods.knowledge.items || [];
+    const catCount = (mods.knowledge.categories || []).length;
+    lines.push(`Knowledge: ${items.length} entr${items.length === 1 ? 'y' : 'ies'}, ${catCount} categor${catCount === 1 ? 'y' : 'ies'}`);
+    const unreviewed = items.filter(e => e && e.source === 'llm' && e.reviewed !== true).length;
+    if (unreviewed > 0) {
+      lines.push(`NOTE: ${unreviewed} AI-generated entr${unreviewed === 1 ? 'y is' : 'ies are'} not yet marked reviewed`);
+    }
+  } else { const m = missing('Knowledge'); if (m) lines.push(m); }
 
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
