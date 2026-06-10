@@ -12,15 +12,21 @@ const SENTINEL_KEYS = [
   'sentinel.customRules',
   'sentinel.alertLibrary.acknowledged',
   'sentinel.hiddenRules',
+  // NOTE: 'sentinel.extractionBaseline' is intentionally NOT in this list.
+  // It stores ephemeral machine-local extraction telemetry (rolling per-view
+  // counts, zero PII). Restoring it from a backup onto another machine or after
+  // a Medicus UI change would corrupt the drift baseline and could mask or fake
+  // drift detection. It is on the ALLOWLIST in test-backup-coverage.js with the
+  // same rationale. See shared/extraction-health.js for the full schema.
 ];
 
 // Export all Sentinel storage keys into a plain data object.
 async function sentinelExport() {
   const r = await chrome.storage.local.get(SENTINEL_KEYS);
   return {
-    config:      r['sentinel.config']      ?? {},
-    rules:       r['sentinel.rules']       ?? {},
-    orgRules:    r['sentinel.orgRules']    ?? null,
+    config: r['sentinel.config'] ?? {},
+    rules: r['sentinel.rules'] ?? {},
+    orgRules: r['sentinel.orgRules'] ?? null,
     customRules: r['sentinel.customRules'] ?? [],
     alertLibraryAcknowledged: r['sentinel.alertLibrary.acknowledged'] ?? false,
     hiddenRules: r['sentinel.hiddenRules'] ?? {},
@@ -69,9 +75,9 @@ async function sentinelImport(data, { merge = false } = {}) {
     if (merge) {
       const existing = await chrome.storage.local.get('sentinel.customRules');
       const existingRules = existing['sentinel.customRules'] || [];
-      const existingIds = new Set(existingRules.map(r => r.id));
+      const existingIds = new Set(existingRules.map((r) => r.id));
       const merged = [...existingRules];
-      data.customRules.forEach(rule => {
+      data.customRules.forEach((rule) => {
         if (!existingIds.has(rule.id)) merged.push(rule);
       });
       toSet['sentinel.customRules'] = merged;
@@ -99,16 +105,25 @@ async function sentinelImport(data, { merge = false } = {}) {
       if (typeof entry !== 'object' || Array.isArray(entry) || entry === null) {
         throw new Error(`sentinel.hiddenRules["${ruleId}"]: entry must be an object.`);
       }
-      if (entry.until !== null && entry.until !== undefined &&
-          (typeof entry.until !== 'string' || !ISO_DATE_RE.test(entry.until))) {
+      if (
+        entry.until !== null &&
+        entry.until !== undefined &&
+        (typeof entry.until !== 'string' || !ISO_DATE_RE.test(entry.until))
+      ) {
         throw new Error(`sentinel.hiddenRules["${ruleId}"].until: must be null or a YYYY-MM-DD date string.`);
       }
-      if (entry.statusAtDismissal !== undefined && entry.statusAtDismissal !== null &&
-          typeof entry.statusAtDismissal !== 'string') {
+      if (
+        entry.statusAtDismissal !== undefined &&
+        entry.statusAtDismissal !== null &&
+        typeof entry.statusAtDismissal !== 'string'
+      ) {
         throw new Error(`sentinel.hiddenRules["${ruleId}"].statusAtDismissal: must be a string or null.`);
       }
-      if (entry.dismissedAt !== undefined && entry.dismissedAt !== null &&
-          (typeof entry.dismissedAt !== 'string' || !ISO_DATE_RE.test(entry.dismissedAt))) {
+      if (
+        entry.dismissedAt !== undefined &&
+        entry.dismissedAt !== null &&
+        (typeof entry.dismissedAt !== 'string' || !ISO_DATE_RE.test(entry.dismissedAt))
+      ) {
         throw new Error(`sentinel.hiddenRules["${ruleId}"].dismissedAt: must be null or a YYYY-MM-DD date string.`);
       }
     }
@@ -128,12 +143,14 @@ function validateCustomRule(rule, index) {
   if (!rule.id || typeof rule.id !== 'string') throw new Error(`Custom rule${loc}: id is required.`);
   if (!rule.id.startsWith('custom-')) throw new Error(`Custom rule${loc}: id must start with "custom-".`);
 
-  if (rule.type === 'drug-monitoring')  return validateDrugMonitoringRule(rule, loc);
-  if (rule.type === 'qof-indicator')    return validateQofIndicatorRule(rule, loc);
-  if (rule.type === 'drug-combo')       return validateDrugComboRule(rule, loc);
-  if (rule.type === 'event-count')      return validateEventCountRule(rule, loc);
-  if (rule.type === 'composite')        return validateCompositeRule(rule, loc);
-  throw new Error(`Custom rule${loc}: type must be one of "drug-monitoring", "qof-indicator", "drug-combo", "event-count", "composite".`);
+  if (rule.type === 'drug-monitoring') return validateDrugMonitoringRule(rule, loc);
+  if (rule.type === 'qof-indicator') return validateQofIndicatorRule(rule, loc);
+  if (rule.type === 'drug-combo') return validateDrugComboRule(rule, loc);
+  if (rule.type === 'event-count') return validateEventCountRule(rule, loc);
+  if (rule.type === 'composite') return validateCompositeRule(rule, loc);
+  throw new Error(
+    `Custom rule${loc}: type must be one of "drug-monitoring", "qof-indicator", "drug-combo", "event-count", "composite".`
+  );
 }
 
 function validateDrugMonitoringRule(rule, loc) {
@@ -156,7 +173,7 @@ function validateDrugMonitoringRule(rule, loc) {
     if (t.dueSoonDays !== undefined && (typeof t.dueSoonDays !== 'number' || t.dueSoonDays < 0)) {
       throw new Error(`Custom rule${loc} test[${ti}]: dueSoonDays must be a non-negative number.`);
     }
-    if (t.snomed !== undefined && (!Array.isArray(t.snomed) || t.snomed.some(s => typeof s !== 'string'))) {
+    if (t.snomed !== undefined && (!Array.isArray(t.snomed) || t.snomed.some((s) => typeof s !== 'string'))) {
       throw new Error(`Custom rule${loc} test[${ti}]: snomed must be an array of strings.`);
     }
   });
@@ -173,19 +190,26 @@ function validateDrugMonitoringRule(rule, loc) {
     }
   }
   for (const f of ['requiresProblem', 'excludesProblem']) {
-    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some(t => typeof t !== 'string'))) {
+    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some((t) => typeof t !== 'string'))) {
       throw new Error(`Custom rule${loc}: ${f} must be an array of strings.`);
     }
   }
 }
 
-const ALLOWED_QOF_REGISTERS = ['DM','HYP','CHD','HF','STIA','CKD','PAD','ASTHMA','COPD','AF'];
+const ALLOWED_QOF_REGISTERS = ['DM', 'HYP', 'CHD', 'HF', 'STIA', 'CKD', 'PAD', 'ASTHMA', 'COPD', 'AF'];
 // Keep in sync with IMPLEMENTED_KINDS in test-rule-schema.js and check.kind === guards in engine/rules-engine.js.
-const ALLOWED_CHECK_KINDS = ['observation-threshold','medication-present','observation-recent','observation-trend','observation-alert','observation-bundle'];
-const ALLOWED_SEVERITIES = ['red','amber','info'];
-const ALLOWED_SEX_VALUES = ['any','M','F'];
-const ALLOWED_EVENT_COUNT_OPERATORS = ['>=','>','=','<=','<'];
-const ALLOWED_SOURCE_KINDS = ['problems','observations'];
+const ALLOWED_CHECK_KINDS = [
+  'observation-threshold',
+  'medication-present',
+  'observation-recent',
+  'observation-trend',
+  'observation-alert',
+  'observation-bundle',
+];
+const ALLOWED_SEVERITIES = ['red', 'amber', 'info'];
+const ALLOWED_SEX_VALUES = ['any', 'M', 'F'];
+const ALLOWED_EVENT_COUNT_OPERATORS = ['>=', '>', '=', '<=', '<'];
+const ALLOWED_SOURCE_KINDS = ['problems', 'observations'];
 
 function validateQofIndicatorRule(rule, loc) {
   if (!rule.indicatorCode || typeof rule.indicatorCode !== 'string') {
@@ -207,9 +231,11 @@ function validateQofIndicatorRule(rule, loc) {
     const hasBp = rule.check.thresholdSystolic && rule.check.thresholdDiastolic;
     const hasSingle = rule.check.threshold != null && rule.check.operator;
     if (!hasBp && !hasSingle) {
-      throw new Error(`Custom rule${loc}: provide either (threshold + operator) or (thresholdSystolic + thresholdDiastolic).`);
+      throw new Error(
+        `Custom rule${loc}: provide either (threshold + operator) or (thresholdSystolic + thresholdDiastolic).`
+      );
     }
-    if (hasSingle && !['<=','<','>=','>','='].includes(rule.check.operator)) {
+    if (hasSingle && !['<=', '<', '>=', '>', '='].includes(rule.check.operator)) {
       throw new Error(`Custom rule${loc}: operator must be one of <= < >= > =`);
     }
   }
@@ -230,13 +256,16 @@ function validateQofIndicatorRule(rule, loc) {
     if (!Array.isArray(rule.check.observation) || rule.check.observation.length === 0) {
       throw new Error(`Custom rule${loc}: check.observation must be a non-empty array.`);
     }
-    if (!['rising','falling'].includes(rule.check.direction)) {
+    if (!['rising', 'falling'].includes(rule.check.direction)) {
       throw new Error(`Custom rule${loc}: check.direction must be "rising" or "falling".`);
     }
     if (rule.check.minPoints != null && (typeof rule.check.minPoints !== 'number' || rule.check.minPoints < 2)) {
       throw new Error(`Custom rule${loc}: check.minPoints must be a number >= 2.`);
     }
-    if (rule.check.withinMonths != null && (typeof rule.check.withinMonths !== 'number' || rule.check.withinMonths <= 0)) {
+    if (
+      rule.check.withinMonths != null &&
+      (typeof rule.check.withinMonths !== 'number' || rule.check.withinMonths <= 0)
+    ) {
       throw new Error(`Custom rule${loc}: check.withinMonths must be a positive number.`);
     }
     if (rule.check.minDelta != null && (typeof rule.check.minDelta !== 'number' || rule.check.minDelta < 0)) {
@@ -253,7 +282,7 @@ function validateQofIndicatorRule(rule, loc) {
     if (!Array.isArray(rule.check.observation) || rule.check.observation.length === 0) {
       throw new Error(`Custom rule${loc}: check.observation must be a non-empty array.`);
     }
-    if (rule.check.comparator !== undefined && !['above','below'].includes(rule.check.comparator)) {
+    if (rule.check.comparator !== undefined && !['above', 'below'].includes(rule.check.comparator)) {
       throw new Error(`Custom rule${loc}: check.comparator must be "above" or "below".`);
     }
     if (rule.check.amber == null && rule.check.red == null) {
@@ -272,7 +301,11 @@ function validateQofIndicatorRule(rule, loc) {
       throw new Error(`Custom rule${loc}: check.unit must be a string.`);
     }
   }
-  if (rule.requiresRegister != null && rule.requiresRegister !== '' && !ALLOWED_QOF_REGISTERS.includes(rule.requiresRegister)) {
+  if (
+    rule.requiresRegister != null &&
+    rule.requiresRegister !== '' &&
+    !ALLOWED_QOF_REGISTERS.includes(rule.requiresRegister)
+  ) {
     throw new Error(`Custom rule${loc}: requiresRegister must be one of: ${ALLOWED_QOF_REGISTERS.join(', ')}.`);
   }
   if (rule.points != null && (typeof rule.points !== 'number' || rule.points < 0)) {
@@ -293,12 +326,15 @@ function validateQofIndicatorRule(rule, loc) {
     throw new Error(`Custom rule${loc}: sex must be "M", "F" or "any".`);
   }
   for (const f of ['requiresProblem', 'requiresAnyProblem', 'excludeIfProblem']) {
-    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some(t => typeof t !== 'string'))) {
+    if (rule[f] != null && (!Array.isArray(rule[f]) || rule[f].some((t) => typeof t !== 'string'))) {
       throw new Error(`Custom rule${loc}: ${f} must be an array of strings.`);
     }
   }
-  if (rule.check.kind === 'medication-present' && rule.check.medicationExclude != null &&
-      (!Array.isArray(rule.check.medicationExclude) || rule.check.medicationExclude.some(t => typeof t !== 'string'))) {
+  if (
+    rule.check.kind === 'medication-present' &&
+    rule.check.medicationExclude != null &&
+    (!Array.isArray(rule.check.medicationExclude) || rule.check.medicationExclude.some((t) => typeof t !== 'string'))
+  ) {
     throw new Error(`Custom rule${loc}: check.medicationExclude must be an array of strings.`);
   }
 }
@@ -384,7 +420,7 @@ function validateEventCountRule(rule, loc) {
 // The validator does NOT resolve the referenced IDs — that is a runtime concern.
 // Composite rules cannot reference other composite rules (enforced at runtime).
 function validateCompositeRule(rule, loc) {
-  if (!['AND','OR'].includes(rule.operator)) {
+  if (!['AND', 'OR'].includes(rule.operator)) {
     throw new Error(`Custom rule${loc}: operator must be "AND" or "OR".`);
   }
   if (!Array.isArray(rule.ruleIds) || rule.ruleIds.length === 0) {
@@ -629,5 +665,12 @@ function defaultDueSoonDays(intervalDays) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { sentinelExport, sentinelImport, validateCustomRule, generateCustomRuleId, defaultDueSoonDays, customRuleSchemaPrompt };
+  module.exports = {
+    sentinelExport,
+    sentinelImport,
+    validateCustomRule,
+    generateCustomRuleId,
+    defaultDueSoonDays,
+    customRuleSchemaPrompt,
+  };
 }

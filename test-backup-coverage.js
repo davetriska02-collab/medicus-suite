@@ -15,13 +15,19 @@
 
 'use strict';
 
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 function check(cond, msg) {
-  if (cond) { console.log(`  OK  ${msg}`); passed++; }
-  else { console.error(`  FAIL  ${msg}`); failed++; }
+  if (cond) {
+    console.log(`  OK  ${msg}`);
+    passed++;
+  } else {
+    console.error(`  FAIL  ${msg}`);
+    failed++;
+  }
 }
 
 const ROOT = __dirname;
@@ -37,7 +43,7 @@ function listFilesRecursive(dir, exts) {
       // Skip vendor/ subtrees and docs/
       if (['vendor', 'docs', 'icons'].includes(entry.name)) continue;
       out.push(...listFilesRecursive(full, exts));
-    } else if (exts.some(e => entry.name.endsWith(e))) {
+    } else if (exts.some((e) => entry.name.endsWith(e))) {
       out.push(full);
     }
   }
@@ -45,10 +51,7 @@ function listFilesRecursive(dir, exts) {
 }
 
 // App source directories (per the task spec).
-const APP_DIRS = [
-  'side-panel', 'pop-out', 'shared', 'options',
-  'engine', 'content-scripts', 'sentinel-options',
-];
+const APP_DIRS = ['side-panel', 'pop-out', 'shared', 'options', 'engine', 'content-scripts', 'sentinel-options'];
 const APP_FILES = [
   // Top-level JS
   path.join(ROOT, 'service-worker.js'),
@@ -79,8 +82,19 @@ const NON_KEY_SUBSTRINGS = ['/'];
 // Known top-level storage key prefixes — only strings whose first segment
 // matches one of these are candidates.
 const KEY_PREFIXES = [
-  'sentinel', 'capacity', 'triage', 'triagelens', 'slots', 'submissions',
-  'popout', 'referrals', 'suite', 'condor', 'config', 'day', 'knowledge',
+  'sentinel',
+  'capacity',
+  'triage',
+  'triagelens',
+  'slots',
+  'submissions',
+  'popout',
+  'referrals',
+  'suite',
+  'condor',
+  'config',
+  'day',
+  'knowledge',
   'sweep',
 ];
 
@@ -95,8 +109,8 @@ function extractKeyLiterals(src) {
   let m;
   while ((m = rx.exec(src)) !== null) {
     const k = m[1];
-    if (NON_KEY_SUFFIXES.some(s => k.endsWith(s))) continue;
-    if (NON_KEY_SUBSTRINGS.some(s => k.includes(s))) continue;
+    if (NON_KEY_SUFFIXES.some((s) => k.endsWith(s))) continue;
+    if (NON_KEY_SUBSTRINGS.some((s) => k.includes(s))) continue;
     if (!hasKeyPrefix(k)) continue;
     keys.add(k);
   }
@@ -111,14 +125,14 @@ const USED = new Set();
 const usedSourceFiles = [];
 
 for (const f of APP_FILES) {
-  if (path.basename(f).startsWith('test-')) continue;          // test scripts
-  if (f.startsWith(IO_DIR)) continue;                          // io files
+  if (path.basename(f).startsWith('test-')) continue; // test scripts
+  if (f.startsWith(IO_DIR)) continue; // io files
   const src = fs.readFileSync(f, 'utf8');
-  if (!src.includes('chrome.storage.local')) continue;         // no storage access
+  if (!src.includes('chrome.storage.local')) continue; // no storage access
   const keys = extractKeyLiterals(src);
   if (keys.size) {
     usedSourceFiles.push(path.relative(ROOT, f));
-    keys.forEach(k => USED.add(k));
+    keys.forEach((k) => USED.add(k));
   }
 }
 
@@ -127,7 +141,7 @@ for (const f of APP_FILES) {
 const COVERED = new Set();
 for (const f of IO_FILES) {
   const src = fs.readFileSync(f, 'utf8');
-  extractKeyLiterals(src).forEach(k => COVERED.add(k));
+  extractKeyLiterals(src).forEach((k) => COVERED.add(k));
 }
 
 // ── Allowlist — transient / admin-managed keys not appropriate for user backup ─
@@ -135,8 +149,8 @@ for (const f of IO_FILES) {
 
 const ALLOWLIST = new Set([
   // Transient runtime state (documented in shared/io/request-monitor-io.js):
-  'suite.requestMonitor.state',     // live poll state object — not user config
-  'suite.requestMonitor.notifMap',  // service-worker notification tracking map — transient
+  'suite.requestMonitor.state', // live poll state object — not user config
+  'suite.requestMonitor.notifMap', // service-worker notification tracking map — transient
   'suite.requestMonitor.authError', // transient auth error flag — not user config
 
   // OS window handle — session-transient (documented in shared/io/popout-io.js):
@@ -148,9 +162,9 @@ const ALLOWLIST = new Set([
   'sweep.handout',
 
   // Admin-managed via practice-profile.json, not user-writable backup:
-  'suite.practiceProfile',                   // applied-profile metadata (version etc.)
-  'suite.practiceProfile.notifiedVersions',  // which profile versions have been notified
-  'suite.practiceProfile.publisher',         // Publisher-PC UI state for the practice-profile publish flow — not user config
+  'suite.practiceProfile', // applied-profile metadata (version etc.)
+  'suite.practiceProfile.notifiedVersions', // which profile versions have been notified
+  'suite.practiceProfile.publisher', // Publisher-PC UI state for the practice-profile publish flow — not user config
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',
@@ -164,6 +178,12 @@ const ALLOWLIST = new Set([
   // Legacy migration key — the bare 'config' key was the old triagelens.config
   // location. The triage IO migrates it on import; only read during migration.
   'config',
+
+  // Ephemeral extraction-health telemetry — rolling per-view extraction counts
+  // used for live drift detection. Machine/session-local by design; restoring it
+  // would import a stale baseline and mask real drift (documented in
+  // shared/extraction-health.js and shared/io/sentinel-io.js):
+  'sentinel.extractionBaseline',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
@@ -183,11 +203,13 @@ for (const k of USED) {
 
 if (UNCOVERED_REAL.length > 0) {
   console.error('\n  UNCOVERED storage keys (data-loss risk — add to io file or allowlist):');
-  UNCOVERED_REAL.forEach(k => console.error(`    ${k}`));
+  UNCOVERED_REAL.forEach((k) => console.error(`    ${k}`));
 }
 
-check(UNCOVERED_REAL.length === 0,
-  `all used storage keys are covered by an io file or the allowlist (${USED.size} used, ${COVERED.size} covered, ${ALLOWLIST.size} allowlisted)`);
+check(
+  UNCOVERED_REAL.length === 0,
+  `all used storage keys are covered by an io file or the allowlist (${USED.size} used, ${COVERED.size} covered, ${ALLOWLIST.size} allowlisted)`
+);
 
 // Sanity: USED and COVERED sets must be non-empty (guards against scan silently failing).
 check(USED.size >= 10, `USED set is non-trivially large (got ${USED.size})`);
