@@ -41,10 +41,12 @@ rule encodes now, what the source says now, and the exact edit.
 
 ### Field rules
 
-- `domain` is one of: `drugs`, `qof`, `vaccines`, `alerts`. Maps to the report sections in the order
-  below.
+- `domain` is one of: `drugs`, `qof`, `vaccines`, `alerts`, `medreview`, `pathways`. Maps to the
+  report sections in the order below.
 - `rule_file` is the file edited; `rule_id` is the `id` of the rule being changed, or `"(new)"` for a
-  brand-new rule.
+  brand-new rule. For the JS-hosted sets (`engine/acb-scores.js`, `engine/stopp-start.js`,
+  `visualiser-core.js` tables, threshold constants) use the entry's identifier (drug name, criterion
+  id like `stopp-nsaid-egfr`, or constant name) as `rule_id`.
 - `change_type` is one of:
   - `add-brand` / `add-match-term` — extend a `match` / `problemMatch` list (the commonest safe win).
   - `add-rule` — a new monitoring rule, QOF register/indicator, vaccine, or alert.
@@ -54,6 +56,10 @@ rule encodes now, what the source says now, and the exact edit.
   - `change-eligibility` — alter a vaccine cohort or `problemMatch`/`problemExclude` set.
   - `add-exclude` — add a `drug.exclude` / `problemExclude` term (sharp — see below).
   - `retire-indicator` / `disable-rule` — mark a rule `enabled: false` (QOF year diff convention).
+  - `change-score` — alter an ACB drug score, or add/remove a drug on the ACB map (medreview).
+  - `change-criterion` — alter a STOPP/START criterion's gate/wording, or add an implementable
+    criterion (medreview).
+  - `change-redflag` — add/alter a reception-pathway red flag or its escalation tier (pathways).
   - `update-source` — correct only the `source`/`notes`/SNOMED provenance, no behaviour change.
 - `current` / `proposed` are plain-English statements of the existing encoding and the exact edit.
 - `rag` is one of `Red`, `Amber`, `Green` (taxonomy below).
@@ -114,6 +120,8 @@ The builder renders sections in this fixed order. Each maps to one `domain` valu
 2. QOF registers and indicators — `qof`
 3. Vaccine eligibility — `vaccines`
 4. Prescribing-safety alerts — `alerts`
+5. Medication-review instruments (ACB / STOPP-START / PINCER) — `medreview`
+6. Reception pathways and clinical thresholds — `pathways`
 
 The "Changes needing CSO sign-off" box at the top is built automatically from every change with
 `weakens_safety: true`, across all domains. The "Action this run" summary lists all Red changes.
@@ -129,7 +137,10 @@ Written to `run-meta.json`. Drives the report title block and appendix.
     "drug-rules.json": "2026-06-03",
     "qof-rules.json": "QOF 2026/27",
     "vaccine-rules.json": "2025/26 season",
-    "alert-library.json": "1.0 / 2026-05-28"
+    "alert-library.json": "1.0 / 2026-05-28",
+    "reception-pathways.json": "v1.1 / 2026-06-10",
+    "acb-scores.js + stopp-start.js": "starter set v3.51.0 — CSO verification outstanding",
+    "clinical-thresholds": "test-clinical-thresholds-sync.js pin set"
   },
   "generated_at": "2026-06-04",
   "manifest_version_before": "3.28.0",

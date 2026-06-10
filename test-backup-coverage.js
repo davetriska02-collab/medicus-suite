@@ -161,6 +161,11 @@ const ALLOWLIST = new Set([
   // side-panel/modules/sweep/sweep.js):
   'sweep.handout',
 
+  // Transient print payload — written on "Print patient summary", read by
+  // passport.html, overwritten on every print. Not user config (mirrors the
+  // sweep.handout convention — see side-panel/modules/sentinel/sentinel.js):
+  'sentinel.passport',
+
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile', // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions', // which profile versions have been notified

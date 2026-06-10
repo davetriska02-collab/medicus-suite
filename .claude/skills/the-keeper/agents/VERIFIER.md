@@ -8,8 +8,8 @@ mode is **silent**: a wrong edit doesn't error, it just makes an alert stop firi
 
 ## Inputs you receive
 
-- A set of candidate change objects from the scanners (you take either DRUGS + ALERTS, or
-  QOF + VACCINES).
+- A set of candidate change objects from the scanners (you take either DRUGS + ALERTS + MEDREVIEW —
+  the medicines-safety half — or QOF + VACCINES + PATHWAYS).
 - The relevant rule file contents and the scan baseline.
 
 ## What to do, per candidate
@@ -36,13 +36,18 @@ mode is **silent**: a wrong edit doesn't error, it just makes an alert stop firi
    (a short factual paraphrase of what the source actually says — never a long quote).
 6. Tighten the wording. Rewrite `current`/`proposed`/`rationale` if loose or overclaiming.
 
-## Brand-completeness duty (DRUGS / ALERTS verifier)
+## Brand-completeness duty (DRUGS / ALERTS / MEDREVIEW verifier)
 
-When a candidate adds brands to a monitored drug's `match`, do not just confirm the one brand the
-scanner found — check the source for the **complete current UK brand set** and confirm none of the
-others are also missing. A half-completed brand list is still a silent gap. Likewise, scrutinise any
-`add-exclude`: confirm the exclude string cannot catch a real patient who needs the monitoring (the
-project's documented past failure was an exclude that dropped valid parenteral-methotrexate patients).
+When a candidate adds brands to a monitored drug's `match` (or to an ACB map entry or STOPP/START
+class term list — same substring matching, same silent failure), do not just confirm the one brand
+the scanner found — check the source for the **complete current UK brand set** and confirm none of
+the others are also missing. A half-completed brand list is still a silent gap. Likewise, scrutinise
+any `add-exclude`: confirm the exclude string cannot catch a real patient who needs the monitoring
+(the project's documented past failure was an exclude that dropped valid parenteral-methotrexate
+patients). For MEDREVIEW score changes, the published Boustani/ACBcalc value is the only acceptable
+source — never an aggregator or review article alone. For PATHWAYS candidates (VERIFIER-B), treat
+escalation-tier changes like safety-weakening drug changes: a demotion from 999 to duty needs an
+explicit source mandate and `weakens_safety: true`.
 
 ## When to kill a candidate
 

@@ -9,8 +9,12 @@ priority or write the report.
 ## Inputs you receive
 
 - Your domain block from `references/sources.md` (the sources you may search and fetch).
-- The **current contents of your rule file** (e.g. `rules/drug-rules.json`). This is the thing you
-  are checking for drift — read it carefully first.
+- The **current contents of your rule set** (e.g. `rules/drug-rules.json`; for the MEDREVIEW and
+  PATHWAYS domains this may be data tables and constants extracted from JS files). This is the
+  thing you are checking for drift — read it carefully first. When your rule set lives in a JS
+  file, you check the **data entries only** (drug names, scores, term lists, thresholds, red-flag
+  text, escalation tiers) — proposals that would change code logic are out of scope; mark those
+  `needs_engine_change: true` instead.
 - The practice profile (11,500-patient rural **dispensing** practice, total triage on Medicus,
   Surrey). Use it only to set an initial relevance flag, not to make final calls.
 - The baseline date/version from the last run, if provided.

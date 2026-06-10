@@ -104,15 +104,78 @@ event-count, observation checks). Check against:
   https://www.nice.org.uk/guidance/published?type=ktt
 - **MHRA Drug Safety Update** — new contraindications and dangerous combinations worth an alert:
   https://www.gov.uk/drug-safety-update
-- **STOPP/START** (potentially inappropriate prescribing in older people) — current published
-  version, for candidate additions: search "STOPP START criteria version 3" on a primary source.
 - **NICE CKS / guidance** — where a pathway implies a safety check:
   https://cks.nice.org.uk/ and https://www.nice.org.uk/guidance/published
 
 Domain-specific note: alert-library rules are explicitly *editable starting points*. Favour adding
 well-evidenced PINCER/KTT items and correcting drug-set completeness over re-tuning thresholds. The
 `mustNotBePresent` "absence" logic and age bands are the parts most likely to drift — verify the
-indicator's exact age/threshold against PINCER before changing it.
+indicator's exact age/threshold against PINCER before changing it. STOPP/START items now ship as a
+dedicated rule set in `engine/stopp-start.js` (MEDREVIEW domain) — if you find a STOPP/START change,
+report it as a cross-reference for MEDREVIEW rather than proposing an alert-library edit, so the two
+domains never produce duplicate candidates.
+
+---
+
+## MEDREVIEW scanner — owns `engine/acb-scores.js`, `engine/stopp-start.js`, and the high-risk-drug/PINCER tables in `visualiser-core.js`
+
+These are **JS-hosted rule sets** (data tables inside code, shipped v3.51.0 as a starter set
+explicitly requiring CSO verification — treat that verification as standing work for this scanner).
+Matching is the suite-wide case-insensitive substring convention, so missing drugs/brands fail
+silently, exactly like `drug.match`. Propose edits to **data entries only, never logic**. Check:
+
+- **Boustani ACB scale / ACBcalc** — the canonical drug→score list `engine/acb-scores.js` is derived
+  from: https://www.acbcalc.com/ (per-drug scores 1/2/3; cumulative ≥3 threshold). Verify every
+  encoded score against the published list; flag drugs on the published list that the starter set
+  omits (commonest UK prescribing first); confirm the score-3 urological/TCA brand names.
+- **STOPP/START version 3** (O'Mahony et al, European Geriatric Medicine 2023; 133 STOPP + 57 START
+  criteria) — `engine/stopp-start.js` implements a 13-criterion structured-data subset. Verify each
+  implemented criterion's wording/threshold against v3; flag newly implementable high-value criteria
+  (structured data only: age, meds, problems, eGFR); verify the drug-class term lists (NSAID, ACEi/
+  ARB, statin, beta-blocker, benzodiazepine, Z-drug, PPI, sulfonylurea) for missing generics/brands.
+- **PINCER indicators** (PRIMIS / University of Nottingham) — `computePINCER` and the high-risk-drug
+  detection table (~lines 360–515) in `visualiser-core.js`: https://www.nottingham.ac.uk/primis/
+- **BNF / dm+d / emc** for brand completeness in all three files' term lists (same duty as DRUGS):
+  https://bnf.nice.org.uk/ and https://www.medicines.org.uk/emc
+- **MHRA Drug Safety Update** — changes touching these instruments: https://www.gov.uk/drug-safety-update
+
+Domain-specific note: deliberate conservatisms are documented in the code and must not be "fixed"
+without a source mandate — e.g. trospium scored 1 (ACBcalc value; quaternary amine) and the aspirin
+primary-prevention rule matching only explicit forms to avoid combination-product false positives.
+Regression tests: `test-acb-scores.js`, `test-stopp-start.js`, `test-visualiser-pincer.js`,
+`test-prescribing-flags.js`.
+
+---
+
+## PATHWAYS scanner — owns `rules/reception-pathways.json` and the shared guideline threshold constants
+
+Two halves, both patient-facing-safety-critical:
+
+**Reception red-flag pathways** (`rules/reception-pathways.json` — the file's own `sourceNotes`
+says it "must be re-checked by The Keeper alongside the other rule files"). Check each pathway's
+red flags, escalation tiers (999 vs duty), age bands and Pharmacy First coverage against:
+
+- **NICE CKS topic red-flag lists** (per-pathway, e.g. sore throat — acute; headache — assessment;
+  feverish children; low back pain): https://cks.nice.org.uk/
+- **NICE NG12** (suspected cancer recognition/referral), **NG51** (sepsis), **NG143** (feverish
+  child traffic-light): https://www.nice.org.uk/guidance/published
+- **NHS Pharmacy First clinical pathways** (the seven pathways, age bands and exclusions):
+  https://www.england.nhs.uk/primary-care/pharmacy/pharmacy-services/pharmacy-first/
+
+**Guideline threshold constants** duplicated across `trends.js`, `visualiser-core.js`
+(`CLINICAL_ZONES`/`zonesFor`), and `passport-core.js` bands, pinned by
+`test-clinical-thresholds-sync.js`. Check against:
+
+- **NICE NG136** (hypertension targets), **NG28** (type 2 diabetes HbA1c zones):
+  https://www.nice.org.uk/guidance/published
+- **KDIGO CKD guideline** (eGFR G-stages / ACR A-stages): https://kdigo.org/guidelines/
+
+Domain-specific failure modes: a missed red flag in a pathway is a reception-facing safety gap
+(non-clinical staff rely on the prompt); an escalation tier that is too soft delays a 999 response.
+For thresholds, the values are deliberately duplicated across files — any change must land in
+**every** file that pins the value plus `test-clinical-thresholds-sync.js` in one synchronised edit;
+the sync test failing is the guard working. Regression tests: `test-reception-pathways.js`,
+`test-reception-pathway-utils.js`, `test-clinical-thresholds-sync.js`, `test-passport-core.js`.
 
 ---
 
@@ -120,8 +183,13 @@ indicator's exact age/threshold against PINCER before changing it.
 
 - **Highest-value Red checks**, never let these slip if quota is tight: BNF monitoring-interval
   changes and brand-set completeness for the DMARDs and lithium (silent under-matching is the worst
-  failure); the current-year QOF register/indicator add/retire list; and the current-season vaccine
-  cohort definitions.
+  failure); the current-year QOF register/indicator add/retire list; the current-season vaccine
+  cohort definitions; the standing CSO-verification of the v3.51.0 ACB/STOPP-START starter sets
+  until each entry has been confirmed against its published source; and the 999-tier red flags in
+  the reception pathways.
+- **Deliberately out of scope** (so their absence is never read as a gap): the eFI 36-deficit list
+  (Clegg 2016) and Charlson weights in `visualiser-core.js` are fixed published instruments with no
+  update cadence — only revisit them if Dave asks or a new validated version is published.
 - **Cadence reality.** QOF changes annually (effective 1 April); the flu letter and COVID JCVI
   advice are seasonal (spring/summer for the coming autumn); BNF and MHRA DSU update continuously.
   On a run where a source has not changed since `state/last-run.json`, that is a legitimate "nothing

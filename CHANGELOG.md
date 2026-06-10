@@ -2,6 +2,197 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.51.1] — 2026-06-10
+
+### Maintenance: The Keeper re-aimed at every clinical rule set in the repo
+
+The Keeper skill (periodic rule-currency check) previously targeted only the four original
+JSON rule files. The repo now carries clinical content in more places, so the whole pipeline
+(skill, scanner/verifier briefs, source register, change schema, report builder, scheduled
+task) is retargeted. No extension code changes.
+
+- Two new scanner domains (4 → 6):
+  - **MEDREVIEW** — owns `engine/acb-scores.js`, `engine/stopp-start.js`, and the
+    PINCER/high-risk-drug tables in `visualiser-core.js`. Sources: Boustani ACB scale via
+    ACBcalc, STOPP/START v3 (2023), PRIMIS PINCER, BNF/dm+d/emc, MHRA DSU. Carries the
+    standing CSO-verification duty for the v3.51.0 starter sets. Data tables only, never logic.
+  - **PATHWAYS** — owns `rules/reception-pathways.json` (whose own sourceNotes already
+    requested Keeper coverage) and the guideline threshold constants pinned by
+    `test-clinical-thresholds-sync.js`. Sources: NICE CKS red-flag lists, NG12, NG51, NG143,
+    NHS Pharmacy First pathways, NG136, NG28, KDIGO.
+- Verifier split updated: VERIFIER-A takes DRUGS+ALERTS+MEDREVIEW (medicines safety),
+  VERIFIER-B takes QOF+VACCINES+PATHWAYS. Escalation-tier demotions in reception pathways now
+  count as safety-weakening changes requiring CSO sign-off.
+- Change schema: new domains `medreview`/`pathways`; new change types `change-score`,
+  `change-criterion`, `change-redflag`; report gains two sections.
+- Stage-3 regression-guard and test-suite lists extended (ACB, STOPP/START, visualiser PINCER,
+  reception pathways, clinical-thresholds sync, passport/brief cores). Threshold edits must land
+  in all pinning files plus the sync test together.
+- ALERTS scanner no longer proposes STOPP/START items (routes to MEDREVIEW — no duplicates).
+  eFI/Charlson explicitly documented as out of scope (fixed published instruments).
+- `monthly-rule-currency` scheduled task updated to match.
+
+## [v3.51.0] — 2026-06-10
+
+### Feature: SMR workstation lens in the visualiser — ACB burden, STOPP/START v3 flags, printable SMR skeleton
+
+Adds a Structured Medication Review (SMR) tab to the patient record visualiser, providing
+anticholinergic cognitive burden scoring, STOPP/START v3 prescribing flags, and a
+printable NHS Network Contract DES-aligned SMR documentation skeleton.
+
+ACB scores and STOPP/START criteria are a starter set requiring Clinical Safety Officer
+verification before clinical release.
+
+- New `engine/acb-scores.js`: dual-mode (browser global `ACBScores` / Node `module.exports`)
+  anticholinergic burden scorer. Curated Boustani ACB scale starter set with score-3 TCAs,
+  urological antimuscarinics (with UK brands: Ditropan, Lyrinel, Kentera, Detrusitol, Vesicare,
+  Toviaz), hyoscine, sedating antihistamines, selected antipsychotics, antiparkinson
+  antimuscarinics; score-1 mild-ACB entries. Longest-match-wins prevents double-counting.
+  Exports `computeACB(drugs)` → `{ total, perDrug, alert: total >= 3 }`.
+  Trospium assigned ACBcalc score 1 (quaternary, limited CNS penetration) with comment.
+
+- New `engine/stopp-start.js`: dual-mode STOPP/START v3 (2023) implementable subset.
+  13 criteria: STOPP 1–10 (NSAID+eGFR<50 red; NSAID+loop diuretic; first-gen AH in ≥65;
+  benzo ≥65; Z-drug ≥65; digoxin+eGFR<30 red; metformin+eGFR<30 red; PPI review;
+  aspirin primary prevention; long-acting sulfonylurea ≥65) and START 11–13 (statin in IHD;
+  ACEi/ARB in diabetes+CKD; beta-blocker post-MI). Age-gated and eGFR-gated criteria
+  fail-closed when values are absent. Duration-unknowable criteria (benzo/Z-drug) carry
+  explicit snapshot caveats in the detail text.
+
+- Visualiser UI (`visualiser-core.js` + `visualiser-core.html`):
+  - New "Medication review (SMR)" tab with ACB score tile (big number, alert colouring at ≥3),
+    per-drug ACB badges (score 1/2/3 colour-coded), STOPP flag list (red then amber, ⛔/⚠
+    icons), START suggestion list (✚ icon), PINCER cross-link to Medications tab, and
+    context info (age, latest eGFR, active drug count).
+  - "Print SMR summary" button: renders a dedicated `#smr-print-block` element with patient
+    identifiers, ACB table, STOPP/START table, PINCER table, and NHS DES documentation
+    skeleton (changes agreed, patient decision, follow-up date, pharmacy/counselling fields).
+    Print triggered via body class `.smr-printing` + `@media print` stylesheet that hides
+    the app shell and shows only the print block.
+  - Engine files loaded as plain `<script>` tags before `visualiser-core.js`; globals
+    `ACBScores` and `StoppStart` guarded with `typeof` checks for graceful fallback.
+  - eGFR derived from `invData.analytes` (same pattern as condition summaries); age derived
+    from `_s.demographics.age` string (same pattern as PINCER).
+  - Prominent caveat on the card and on all printouts.
+
+- `test-acb-scores.js`: 32 assertions covering individual scores, case-insensitivity,
+  total summation, ≥3 alert boundary, longest-match-wins, unknown drug, object/label input,
+  UK brand names (Vesicare, Detrusitol, Ditropan).
+
+- `test-stopp-start.js`: 74 assertions — positive and negative fixture for each of the 13
+  criteria; age-gate and eGFR-gate fail-closed tests; flag structure validation.
+
+- `manifest.json` → 3.51.0.
+
+## [v3.50.0] — 2026-06-10
+
+### Feature: Patient Passport — printable plain-English health summary for patients
+
+Adds a one-click printable summary the GP hands to the patient in the room: what
+monitoring or reviews are due and why, key numbers with plain-English meaning, and
+whether those numbers are on track — all at reading age 9–11 with no jargon.
+
+- New `side-panel/modules/sentinel/passport-core.js` (pure ES module, no chrome/DOM):
+  exports `buildPassport(snapshot, trendData)` → `null | PassportObject`. Builds
+  patient identity block (name, DOB, NHS number), `due` list from action-needed
+  chips (drug-monitoring with due tests only; QOF indicators via patient-voiced map;
+  vaccines; generic fallback for unmapped types), and `numbers` list (BP, HbA1c,
+  eGFR, cholesterol, weight) with plain-English meaning sentences and evidence-based
+  status bands. Trend sentences appended when delta exceeds documented clinical
+  thresholds (≥10 mmHg systolic BP, ≥5 mmol/mol HbA1c, ≥15% eGFR change).
+  Status values ∈ {good, soon, action, none}; no colour decisions in core.
+- New `side-panel/modules/sentinel/passport.html` + `passport.js`: reads
+  `'sentinel.passport'` transient key on load; renders header (name/DOB/NHS),
+  confidentiality banner, "What's due for you" list, "Your numbers" table
+  (label, big value, status chip with text label, meaning sentence), footer with
+  bring-to-appointment note. Print CSS enforces 16pt body, 1.5 line spacing,
+  sans-serif, black on white, colour-coded status chips with text labels, high
+  contrast. Print button calls `window.print()`.
+- UI in `sentinel.js`: "Print patient summary" button added to the footer
+  alongside the existing action buttons (CSS class prefix `sent-pass-`). On click:
+  calls `buildPassport(_currentSnapshot, _lastTrendData)`, writes `sentinel.passport`
+  to `chrome.storage.local`, opens `passport.html` via `chrome.tabs.create` —
+  mirroring the sweep handout pattern exactly. Button disabled when no patient
+  context.
+- `manifest.json` → 3.50.0; `passport.html` added to `web_accessible_resources`.
+- `test-backup-coverage.js`: `sentinel.passport` added to ALLOWLIST with a comment
+  noting it follows the same transient-key convention as `sweep.handout`.
+- New `test-passport-core.js`: 62 pins covering all status bands, trend sentences,
+  no-abbreviation requirement, nothingDue flag, null guard, and all chip types.
+
+## [v3.49.0] — 2026-06-10
+
+### Feature: Pre-Consultation Brief — 30-second risk-ranked patient summary card
+
+Adds a collapsible "Brief" card at the top of the Sentinel side-panel that gives
+the GP a risk-ranked glance at the current patient before the full chip list:
+patient line, red/amber counts, up to 4 top action signals, and notable
+observation trends.
+
+- New `side-panel/modules/sentinel/brief-core.js` (pure ES module, no chrome/DOM):
+  exports `buildBrief(snapshot, trendData)` → `null | BriefObject`. Builds
+  `patientLine`, `counts` (red/amber), `signals` (max 4, STATUS_RANK then
+  drug-monitoring-first type ordering), `moreCount`, and `trendNotes` (0–3
+  clinically notable observation movements). Returns `null` when there are no
+  signals and no trend notes (suppresses empty card). Defensive against every
+  missing field.
+- Clinical trend thresholds (with documented rationale as constants):
+  - Systolic BP: ≥10 mmHg delta (ESH/ESC 2018 measurement variability).
+  - HbA1c: ≥5 mmol/mol delta (NICE NG28 / inter-assay CV).
+  - eGFR: ≥15% decline (NICE CG182 / KDIGO 2022 actionable progression).
+  - eGFR improvement suppressed (only declining eGFR is flagged).
+  - Matching constants are local copies of the trend.js constants with a comment
+    pointing to the authoritative source — no import to avoid module side-effects.
+- UI: brief card renders above the patient banner in the `data` state. Header row
+  shows "Brief" label + patient name + red/amber count badges (text labels for
+  colour-blind safety). Body shows severity-dotted signal lines (red dot = rank 0,
+  amber dot = rank 1–2) and ↑/↓ trend notes. "+N more below" plain text when
+  moreCount > 0. No link — keeps it simple.
+- Collapsible: clicking/Enter/Space on the header toggles collapsed state; new
+  `sentinel.briefCollapsed` key persisted in `chrome.storage.local`.
+- `sentinel.briefCollapsed` added to both `sentinelExport()` and `sentinelImport()`
+  in `shared/io/sentinel-io.js` per the CLAUDE.md backup convention.
+- Trend data fetched in `refresh()` after the snapshot fetch (catch → null, never
+  blocks Sentinel render).
+- New CSS prefix `sent-brief-` in `sentinel.css`.
+- 66-assertion test suite in `test-brief-core.js` covering: signal ordering
+  (red before amber, drug before QOF), max-4 cap + moreCount arithmetic, drug
+  signal lists only due tests, BP delta 12 → note / delta 6 → no note, HbA1c
+  and eGFR thresholds (including exact boundary cases), eGFR improvement → no
+  note, null snapshot → null, missing trendData → empty trendNotes, missing
+  patient fields → no crash.
+
+## [v3.48.0] — 2026-06-10
+
+### Feature: Action Packs — copy-ready blood forms, recall SMS/letters and tasks per chip
+
+Sentinel chips now carry copy-ready action text so clinicians can act on alerts
+without hand-writing every communication.
+
+- New `side-panel/modules/shared/action-packs.js` (pure ES module, no chrome/DOM):
+  exports `buildChipActions(chip, patient)` and `buildPatientActions(chips, patient)`.
+  Generates per-chip packs with `bloodForm` (only due tests, drug, status, source
+  citation), `sms` (first recall ≤320 chars, NHS Behavioural Insights pattern),
+  `smsEscalation` (consequence-transparent, CQC-aligned: prescriber informed /
+  prescription may be paused), `letter` (~120 word behaviourally-informed body),
+  and `task` (pharmacist/admin line with NHS number and order set). QOF indicator
+  chips produce review SMS/letter/task. Vaccine chips produce offer SMS + task.
+  Non-action chips return `null`.
+- `buildPatientActions` aggregates across all action-needed chips: deduplicates
+  blood-form lines, combines a single recall SMS listing all items, and produces a
+  combined task block.
+- UI: each action-needed chip in the Sentinel side-panel now has an "Actions"
+  button below it. Clicking opens a modal titled with the chip name, showing
+  labelled sections (Blood form, Recall SMS, Escalation SMS, Letter, Task) each
+  with a per-section "Copy" / "Copied ✓" clipboard button.
+- "Copy all actions" button added to the Sentinel footer (next to "Appts summary")
+  — opens a combined modal with deduplicated blood forms, combined SMS, and
+  combined task block.
+- New CSS prefix `sent-act-` in `sentinel.css` for all action-pack UI elements.
+- 61-assertion test suite in `test-action-packs.js` covering: overdue
+  methotrexate chip (FBC+LFT overdue, U&E in-date → bloodForm lists only FBC+LFT),
+  SMS ≤400 chars, escalation SMS mentions prescriber, QOF DM review SMS, vaccine
+  offer SMS, non-action chip → null, `buildPatientActions` deduplication.
 ## [v3.47.1] — 2026-06-10
 
 ### Fix: HRT progestogen context no longer trusts an expired/historical IUS

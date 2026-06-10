@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<!-- Medicus Suite — Patient Passport (print-first page).
+     Opened in a full tab by the Sentinel module; reads its data from the
+     transient 'sentinel.passport' storage key written just before the tab opens.
+     Designed for patient hand-out: large type, plain English, high contrast. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Your health summary — Medicus Suite</title>
+  <style>
+    /* ── Print-first: white paper styling on screen too ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #fff;
+      color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      /* 16pt equivalent ≈ 21px; body ≥16pt is the literacy requirement */
+      font-size: 21px;
+      line-height: 1.5;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 32px 36px;
+    }
+
+    /* ── No-print toolbar ── */
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .toolbar button {
+      background: #1d4ed8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .toolbar button:hover { opacity: 0.9; }
+    .toolbar .hint { font-size: 14px; color: #555; }
+
+    /* ── Header ── */
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+    .pass-meta {
+      font-size: 17px;
+      color: #333;
+      margin-bottom: 6px;
+    }
+    .pass-date {
+      font-size: 15px;
+      color: #555;
+      margin-bottom: 16px;
+    }
+
+    /* ── Confidential banner ── */
+    .confidential {
+      border: 2px solid #b91c1c;
+      color: #b91c1c;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Section headings ── */
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      border-bottom: 2px solid #1d4ed8;
+      padding-bottom: 4px;
+      margin: 24px 0 14px;
+      color: #1d4ed8;
+    }
+
+    /* ── Due list ── */
+    .pass-due-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .pass-due-item {
+      border-left: 4px solid #1d4ed8;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: #eff6ff;
+      border-radius: 0 6px 6px 0;
+      page-break-inside: avoid;
+    }
+    .pass-due-title {
+      font-weight: 700;
+      font-size: 19px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .pass-due-why {
+      font-size: 17px;
+      color: #333;
+    }
+    .pass-nothing-due {
+      font-size: 19px;
+      color: #166534;
+      background: #f0fdf4;
+      border: 2px solid #86efac;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-weight: 600;
+    }
+
+    /* ── Numbers table ── */
+    .pass-numbers {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+    .pass-numbers th {
+      text-align: left;
+      font-size: 14px;
+      font-weight: 700;
+      color: #555;
+      padding: 4px 8px 4px 0;
+      border-bottom: 2px solid #ddd;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pass-numbers td {
+      padding: 10px 8px 10px 0;
+      border-bottom: 1px solid #e5e7eb;
+      vertical-align: top;
+    }
+    .pass-num-label {
+      font-weight: 700;
+      font-size: 18px;
+      white-space: nowrap;
+    }
+    .pass-num-value {
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    /* Status chips: colour + text label (never colour alone) */
+    .pass-status-chip {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .pass-status-good  { background: #dcfce7; color: #14532d; }
+    .pass-status-soon  { background: #fef9c3; color: #713f12; }
+    .pass-status-action { background: #fee2e2; color: #7f1d1d; }
+    .pass-status-none  { background: #f3f4f6; color: #374151; }
+    .pass-num-meaning {
+      font-size: 15px;
+      color: #444;
+      line-height: 1.5;
+    }
+
+    /* ── Footer ── */
+    .pass-footer {
+      margin-top: 28px;
+      padding-top: 12px;
+      border-top: 2px solid #bbb;
+      font-size: 14px;
+      color: #555;
+      line-height: 1.6;
+    }
+    .pass-footer-bring {
+      font-size: 17px;
+      font-weight: 700;
+      color: #111;
+      margin-bottom: 6px;
+    }
+
+    /* ── Error state ── */
+    .empty {
+      padding: 40px 0;
+      color: #555;
+      font-size: 18px;
+    }
+
+    /* ── Print overrides ── */
+    @media print {
+      .no-print { display: none !important; }
+      body {
+        padding: 0;
+        font-size: 16pt;
+      }
+      h1 { font-size: 22pt; }
+      h2 { font-size: 16pt; }
+      .pass-num-value { font-size: 18pt; }
+      .pass-num-label { font-size: 14pt; }
+      .pass-num-meaning { font-size: 12pt; }
+      .pass-status-chip { font-size: 11pt; }
+      .pass-due-title { font-size: 14pt; }
+      .pass-due-why { font-size: 13pt; }
+      .pass-footer { font-size: 11pt; }
+      /* Ensure dark text on white for all status chips (print contrast) */
+      .pass-status-good  { background: #dcfce7 !important; color: #14532d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pass-status-soon  { background: #fef9c3 !important; color: #713f12 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pass-status-action { background: #fee2e2 !important; color: #7f1d1d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pass-status-none  { background: #f3f4f6 !important; color: #374151 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pass-due-item { background: #eff6ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pass-nothing-due { background: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <button id="printBtn" type="button">Print / save as PDF</button>
+    <span class="hint">Tip: choose "Save as PDF" in the print window to keep a file.</span>
+  </div>
+  <div id="content"><div class="empty">Loading your health summary&hellip;</div></div>
+  <script src="passport.js"></script>
+</body>
+</html>

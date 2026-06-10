@@ -4,7 +4,10 @@
 
 'use strict';
 
-import { STATUS_RANK, buildAdminSummaryText } from './sentinel-core.js';
+import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentinel-core.js';
+import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
+import { buildBrief } from './brief-core.js';
+import { buildPassport } from './passport-core.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -87,10 +90,150 @@ function showAdminSummaryModal(text) {
   modal.querySelector('#sentApptModalText')?.focus();
 }
 
+// Show a per-chip action pack modal with labelled sections and individual copy buttons.
+// `title` — chip name shown in the modal header.
+// `pack`  — result of buildChipActions(chip, patient).
+function showActionPackModal(title, pack) {
+  const moduleEl = container.querySelector('.sent-module');
+  if (!moduleEl) return;
+  moduleEl.querySelector('.sent-appt-modal')?.remove();
+  moduleEl.querySelector('.sent-act-modal')?.remove();
+
+  const sections = [
+    { key: 'bloodForm', label: 'Blood form' },
+    { key: 'sms', label: 'Recall SMS' },
+    { key: 'smsEscalation', label: 'Escalation SMS' },
+    { key: 'letter', label: 'Letter' },
+    { key: 'task', label: 'Task' },
+  ];
+
+  const visibleSections = sections.filter((s) => pack[s.key]);
+
+  const sectionsHtml = visibleSections
+    .map(
+      (s, i) => `
+      <div class="sent-act-section">
+        <div class="sent-act-section-head">
+          <span class="sent-act-section-label">${escHtml(s.label)}</span>
+          <button class="sent-act-copy-btn" data-section-idx="${i}" aria-label="Copy ${escHtml(s.label)}">Copy</button>
+        </div>
+        <textarea class="sent-act-textarea" data-section-idx="${i}" readonly spellcheck="false">${escHtml(pack[s.key])}</textarea>
+      </div>`
+    )
+    .join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'sent-act-modal';
+  modal.innerHTML = `
+    <div class="sent-act-modal-inner">
+      <div class="sent-appt-modal-head">
+        <span class="sent-appt-modal-title">${escHtml(title)} — Actions</span>
+        <button class="sent-appt-modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="sent-act-sections">${sectionsHtml}</div>
+    </div>`;
+
+  moduleEl.appendChild(modal);
+
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  // Per-section copy buttons
+  modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.sectionIdx, 10);
+      const text = pack[visibleSections[idx].key];
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => {
+          if (btn.isConnected) btn.textContent = 'Copy';
+        }, 2000);
+      } catch (_) {
+        modal.querySelector(`.sent-act-textarea[data-section-idx="${idx}"]`)?.select();
+      }
+    });
+  });
+}
+
+// Show a "Copy all actions" modal with the aggregated patient pack.
+function showAllActionsModal(chips, patient) {
+  const pack = buildPatientActions(chips, patient);
+  if (!pack) return;
+
+  const moduleEl = container.querySelector('.sent-module');
+  if (!moduleEl) return;
+  moduleEl.querySelector('.sent-appt-modal')?.remove();
+  moduleEl.querySelector('.sent-act-modal')?.remove();
+
+  const sections = [
+    { key: 'bloodForm', label: 'Blood forms' },
+    { key: 'sms', label: 'Combined recall SMS' },
+    { key: 'task', label: 'Combined task' },
+  ];
+
+  const visibleSections = sections.filter((s) => pack[s.key]);
+
+  const sectionsHtml = visibleSections
+    .map(
+      (s, i) => `
+      <div class="sent-act-section">
+        <div class="sent-act-section-head">
+          <span class="sent-act-section-label">${escHtml(s.label)}</span>
+          <button class="sent-act-copy-btn" data-section-idx="${i}" aria-label="Copy ${escHtml(s.label)}">Copy</button>
+        </div>
+        <textarea class="sent-act-textarea" data-section-idx="${i}" readonly spellcheck="false">${escHtml(pack[s.key])}</textarea>
+      </div>`
+    )
+    .join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'sent-act-modal';
+  modal.innerHTML = `
+    <div class="sent-act-modal-inner">
+      <div class="sent-appt-modal-head">
+        <span class="sent-appt-modal-title">All patient actions</span>
+        <button class="sent-appt-modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="sent-act-sections">${sectionsHtml}</div>
+    </div>`;
+
+  moduleEl.appendChild(modal);
+
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.sectionIdx, 10);
+      const text = pack[visibleSections[idx].key];
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => {
+          if (btn.isConnected) btn.textContent = 'Copy';
+        }, 2000);
+      } catch (_) {
+        modal.querySelector(`.sent-act-textarea[data-section-idx="${idx}"]`)?.select();
+      }
+    });
+  });
+}
+
 let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
+
+// Pre-consultation brief state: collapse preference persisted in storage.
+let _briefCollapsed = false;
+let _lastTrendData = null; // cached from last refresh so render() can use it
 
 // Tab ID of the Medicus source tab for the last successful snapshot fetch.
 // Stored here so the "Verify in Medicus" affordance can focus the right tab
@@ -106,6 +249,11 @@ let _ruleCurrencyFooter = null; // null = not loaded yet
 let _hiddenRules = {};
 let _dismissHandler = null;
 let _hiddenStorageListener = null;
+let _actionsHandler = null; // delegated click handler for per-chip Actions buttons
+
+// Map of action key → { chip, pack, chipName } for per-chip Actions modal.
+// Rebuilt on every render so the delegated click handler can find the pack.
+let _chipActionsMap = new Map();
 
 // Pure suppression check. Exported so node tests can import it without chrome APIs.
 // Returns { hidden: bool, resurfaced: bool }.
@@ -187,6 +335,10 @@ export async function init(el) {
   loadRuleCurrencyFooter();
 
   await loadHiddenRules();
+  // Load brief collapse preference (non-blocking — defaults to expanded).
+  chrome.storage.local.get('sentinel.briefCollapsed', (r) => {
+    _briefCollapsed = !!r['sentinel.briefCollapsed'];
+  });
   await refresh();
   pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
@@ -229,6 +381,22 @@ export async function init(el) {
   };
   document.addEventListener('click', _dismissHandler, true);
 
+  // Delegated Actions handler: clicks on a chip's "Actions" button open the
+  // per-chip action pack modal. Uses capture so it can stopPropagation before
+  // the evidence panel toggle handler sees the click.
+  _actionsHandler = (e) => {
+    const btn = e.target.closest?.('[data-act-key]');
+    if (!btn || !container || !container.contains(btn)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const key = btn.dataset.actKey;
+    if (!key) return;
+    const entry = _chipActionsMap.get(key);
+    if (!entry) return;
+    showActionPackModal(entry.chipName, entry.pack);
+  };
+  document.addEventListener('click', _actionsHandler, true);
+
   // Re-render when hidden rules change (e.g. re-enabled from settings).
   _hiddenStorageListener = (changes, area) => {
     if (area === 'local' && changes['sentinel.hiddenRules']) {
@@ -262,6 +430,11 @@ async function cleanup() {
     document.removeEventListener('click', _dismissHandler, true);
     _dismissHandler = null;
   }
+  if (_actionsHandler) {
+    document.removeEventListener('click', _actionsHandler, true);
+    _actionsHandler = null;
+  }
+  _chipActionsMap.clear();
   if (_hiddenStorageListener) {
     chrome.storage.onChanged.removeListener(_hiddenStorageListener);
     _hiddenStorageListener = null;
@@ -278,6 +451,7 @@ async function cleanup() {
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
+  _lastTrendData = null;
   container = null;
 }
 
@@ -528,6 +702,20 @@ async function refresh() {
     _snapshotTabId = tab.id;
     _snapshotTabWindowId = tab.windowId;
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+    // Also fetch trend data for the brief card. Failure here must never block
+    // or fail the Sentinel render — trends are supplementary, not critical.
+    let trendData = null;
+    try {
+      trendData = await new Promise((res, rej) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'getTrendData' }, (r) => {
+          if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
+          else res(r || null);
+        });
+      });
+    } catch (_) {
+      trendData = null;
+    }
+    _lastTrendData = trendData;
     switch (classifySnapshot(snapshot)) {
       case 'degraded':
         render({ state: 'degraded', snapshot });
@@ -756,8 +944,12 @@ function render(payload) {
   // Rule currency footer (one line, neutral if green, amber with first warning if amber).
   const currencyFooterHtml = _ruleCurrencyFooter || '';
 
+  // Pre-consultation brief — build and render above the patient banner.
+  const brief = buildBrief(snapshot, _lastTrendData);
+  const briefHtml = brief ? renderBriefCard(brief) : '';
+
   container.innerHTML = shell(
-    patientHtml + driftHtml + filterHtml,
+    briefHtml + patientHtml + driftHtml + filterHtml,
     groupsHtml +
       emptyMsg +
       unmatchedHtml +
@@ -768,6 +960,8 @@ function render(payload) {
       <div class="sent-footer-left">
         <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
         <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
+        <button class="ghost-btn" id="sentCopyAllActionsBtn" title="Copy-ready blood forms, recall SMS and tasks for all action-needed chips"${actionCount > 0 ? '' : ' disabled'}>Copy all actions</button>
+        <button class="ghost-btn sent-pass-btn" id="sentPrintPassportBtn" title="Print a plain-English health summary for the patient"${patient ? '' : ' disabled'}>Print patient summary</button>
         <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
       </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
@@ -798,6 +992,49 @@ function render(payload) {
   container
     .querySelector('#sentApptSummaryBtn')
     ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+
+  container
+    .querySelector('#sentCopyAllActionsBtn')
+    ?.addEventListener('click', () => showAllActionsModal(chips, patient));
+
+  // Inject per-chip "Actions" buttons under each action-needed chip rendered in the DOM.
+  // Rebuild _chipActionsMap so the delegated click handler can retrieve packs by key.
+  _chipActionsMap.clear();
+  const actionNeededChips = visibleChips.filter((c) => isChipActionNeeded(c.status));
+  if (actionNeededChips.length > 0) {
+    // Build lookup: evidence key → chip (matches format used by ChipRenderer's data-evidence-key).
+    const chipByKey = new Map();
+    actionNeededChips.forEach((c) => {
+      const key = (c.ruleId || '') + (c.type === 'drug-monitoring' ? '|' + (c.drugName || '') : '');
+      if (key) chipByKey.set(key, c);
+    });
+
+    // Walk the rendered chips. Chips with data-evidence-key are wired by ChipRenderer.
+    container.querySelectorAll('.sent-chip[data-evidence-key]').forEach((chipEl) => {
+      const key = chipEl.dataset.evidenceKey;
+      const chip = chipByKey.get(key);
+      if (!chip) return; // not action-needed or key not in our map
+      const pack = buildChipActions(chip, patient);
+      if (!pack) return;
+
+      // Derive a human-readable title for the modal
+      const chipName =
+        chip.drugName || chip.indicatorCode || chip.displayName || chip.ruleName || chip.ruleId || 'chip';
+
+      // Populate the module-level map for use by the delegated click handler
+      _chipActionsMap.set(key, { chip, pack, chipName });
+
+      // Remove any stale actions row from a previous render
+      const nextSib = chipEl.nextElementSibling;
+      if (nextSib && nextSib.classList.contains('sent-act-row')) nextSib.remove();
+
+      const row = document.createElement('div');
+      row.className = 'sent-act-row';
+      row.dataset.actKey = key;
+      row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Actions</button>`;
+      chipEl.insertAdjacentElement('afterend', row);
+    });
+  }
 
   // Drift banner dismiss: mute for 24h via shared storage key. The content
   // script's next publish reads mutedUntil and stops stamping drift, so the
@@ -838,6 +1075,13 @@ function render(payload) {
     }
   }
 
+  // Print patient summary (passport) button: build a plain-English health summary
+  // for the patient, write to transient 'sentinel.passport' key, open passport.html.
+  const passportBtn = container.querySelector('#sentPrintPassportBtn');
+  if (passportBtn && patient) {
+    passportBtn.addEventListener('click', () => onPrintPassport(snapshot));
+  }
+
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
 
@@ -852,6 +1096,7 @@ function render(payload) {
   });
 
   attachEvidenceHandlers();
+  attachBriefToggle();
 
   // Restore the evidence panel that was open before this re-render, if its chip
   // still exists in the new snapshot.
@@ -862,6 +1107,20 @@ function render(payload) {
   } else {
     _openEvidenceKey = null;
   }
+}
+
+// ── Patient Passport ──────────────────────────────────────────────────────────
+// Builds the patient passport model, writes it to the transient
+// 'sentinel.passport' key, then opens passport.html in a new tab.
+// The key is left in place so a page-refresh of passport.html still works;
+// it is overwritten on the next click.
+// Mirror of sweep.js onPrintHandout — see that function for the pattern.
+async function onPrintPassport(snapshot) {
+  if (!snapshot) return;
+  const model = buildPassport(snapshot, _lastTrendData);
+  if (!model) return;
+  await chrome.storage.local.set({ 'sentinel.passport': model });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sentinel/passport.html') });
 }
 
 // ── Verify in Medicus ─────────────────────────────────────────────────────────
@@ -1143,6 +1402,104 @@ function renderChip(chip) {
         <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
       </div>
     </div>`;
+}
+
+// ── Pre-consultation brief card ──────────────────────────────────────────────
+
+// Render the brief card HTML from a brief object (output of buildBrief()).
+// Returns an HTML string with CSS prefix sent-brief-*.
+function renderBriefCard(brief) {
+  const collapsed = _briefCollapsed;
+
+  // Header: "Brief" label + patientLine + red/amber count badges
+  const patPart = brief.patientLine ? ` <span class="sent-brief-patient">${escHtml(brief.patientLine)}</span>` : '';
+
+  // Count badges — include text labels for colour-blind safety
+  const redBadge =
+    brief.counts.red > 0 ? `<span class="sent-brief-badge sent-brief-badge-red">${brief.counts.red} red</span>` : '';
+  const amberBadge =
+    brief.counts.amber > 0
+      ? `<span class="sent-brief-badge sent-brief-badge-amber">${brief.counts.amber} amber</span>`
+      : '';
+
+  const chevron = collapsed ? '▶' : '▼';
+
+  const headerHtml = `
+    <div class="sent-brief-header" id="sentBriefHeader" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="sentBriefBody">
+      <span class="sent-brief-label">Brief</span>
+      ${patPart}
+      <span class="sent-brief-badges">${redBadge}${amberBadge}</span>
+      <span class="sent-brief-chevron" aria-hidden="true">${chevron}</span>
+    </div>`;
+
+  if (collapsed) {
+    return `<div class="sent-brief-card sent-brief-collapsed">${headerHtml}</div>`;
+  }
+
+  // Signal lines: severity dot + text
+  const signalLines = brief.signals
+    .map(
+      (sig) =>
+        `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
+        `<span class="sent-brief-dot" aria-hidden="true"></span>` +
+        `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
+        `</div>`
+    )
+    .join('');
+
+  // Trend notes: ↑/↓ arrows + text
+  const trendLines = brief.trendNotes
+    .map(
+      (note) =>
+        `<div class="sent-brief-trend">` +
+        `<span class="sent-brief-trend-arrow" aria-hidden="true">${note.direction === 'up' ? '↑' : '↓'}</span>` +
+        `<span class="sent-brief-trend-text">${escHtml(note.text)}</span>` +
+        `</div>`
+    )
+    .join('');
+
+  // "+N more below" text (plain, not a link)
+  const moreLine = brief.moreCount > 0 ? `<div class="sent-brief-more">+${brief.moreCount} more below</div>` : '';
+
+  const bodyHtml = `
+    <div class="sent-brief-body" id="sentBriefBody">
+      ${signalLines}
+      ${trendLines}
+      ${moreLine}
+    </div>`;
+
+  return `<div class="sent-brief-card">${headerHtml}${bodyHtml}</div>`;
+}
+
+// Attach the brief card toggle handler after render. Idempotent — safe to call on every render.
+function attachBriefToggle() {
+  const header = container?.querySelector('#sentBriefHeader');
+  if (!header) return;
+  const toggle = async () => {
+    _briefCollapsed = !_briefCollapsed;
+    await chrome.storage.local.set({ 'sentinel.briefCollapsed': _briefCollapsed });
+    // Re-render just the brief card (surgical update avoids full re-render).
+    const card = container.querySelector('.sent-brief-card');
+    if (card && _currentSnapshot) {
+      const brief = buildBrief(_currentSnapshot, _lastTrendData);
+      if (brief) {
+        const newHtml = document.createElement('div');
+        newHtml.innerHTML = renderBriefCard(brief);
+        const newCard = newHtml.firstElementChild;
+        if (newCard) {
+          card.replaceWith(newCard);
+          attachBriefToggle(); // re-attach to new DOM node
+        }
+      }
+    }
+  };
+  header.addEventListener('click', toggle);
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
 }
 
 function shell(top, inner) {

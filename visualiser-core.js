@@ -1768,6 +1768,42 @@ function rebuildAll() {
   const charlson = computeCharlson(_s.activeProblems, _s.pastProblems, _s.demographics?.age);
   const conditionSummaries = computeConditionSummaries(registersWithReview, invData.analytes);
 
+  // ── SMR: ACB + STOPP/START ────────────────────────────────────────────────
+  // ACB runs on active drugs (full record labels).
+  const acb = typeof ACBScores !== 'undefined' ? ACBScores.computeACB(drugs) : { total: 0, perDrug: [], alert: false };
+
+  // Derive ageYears and latest eGFR for STOPP/START gates.
+  const ageYears = (() => {
+    const raw = _s.demographics?.age;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  })();
+  const latestEgfr = (() => {
+    // Find the most recent eGFR result from the analyte table.
+    const analytes = invData.analytes || {};
+    const egfrKey = Object.keys(analytes).find((k) => k.toLowerCase().includes('egfr'));
+    if (!egfrKey) return null;
+    const pts = analytes[egfrKey];
+    if (!pts || !pts.length) return null;
+    const last = pts[pts.length - 1];
+    const v = parseFloat(last.value);
+    return Number.isFinite(v) ? v : null;
+  })();
+
+  // Build a plain-string drug list for STOPP/START from active detected drugs.
+  const drugStrings = drugs.filter((d) => d.active).map((d) => d.label);
+  const allProblems = [..._s.activeProblems, ..._s.pastProblems];
+
+  const stoppStart =
+    typeof StoppStart !== 'undefined'
+      ? StoppStart.computeStoppStart({
+          drugs: drugStrings,
+          problems: allProblems,
+          ageYears,
+          egfr: latestEgfr,
+        })
+      : [];
+
   buildSnapshot(d, entries, recalls, efi, pincer, drugs, charlson, registersWithReview);
   buildContinuity(clinicians, entries, upc, bice, contactableEntries);
   buildTimeline(entries);
@@ -1775,6 +1811,7 @@ function rebuildAll() {
   buildMedications(drugs, pincer);
   buildRecalls(recalls, registersWithReview, conditionSummaries);
   buildLetters(entries);
+  buildSMR(acb, stoppStart, pincer, drugs, ageYears, latestEgfr);
 
   // Filter-bar summary
   const sum = document.getElementById('fb-summary');
@@ -3088,6 +3125,288 @@ function buildLetters(entries) {
   </div>`;
 
   document.getElementById('tab-letters').innerHTML = html;
+}
+
+// ══ TAB: MEDICATION REVIEW (SMR) ══════════════════════════════════════════
+//
+// Structured Medication Review workstation lens. Displays:
+//   - Anticholinergic Cognitive Burden (ACB) total + per-drug badges
+//   - STOPP/START v3 flags (red first, then amber)
+//   - Link to PINCER flags (already shown in Medications tab)
+//   - Print SMR summary button (NHS Network Contract DES skeleton)
+//
+// Engine files (acb-scores.js, stopp-start.js) are loaded as plain script
+// tags before visualiser-core.js and expose ACBScores / StoppStart globals.
+// If they are absent (e.g. during testing without the engine files), the tab
+// renders a graceful "not available" message.
+
+function buildSMR(acb, stoppStart, pincer, drugs, ageYears, egfr) {
+  const d = _s.demographics;
+
+  const caveatHtml = `<div class="smr-caveat">
+    <strong>Decision support only</strong> — derived from a point-in-time record snapshot.
+    Verify against the live record before acting. Not a substitute for clinical judgement.
+    ACB scores and STOPP/START criteria are a starter set requiring Clinical Safety Officer
+    verification before clinical release.
+  </div>`;
+
+  // ── ACB section ──────────────────────────────────────────────────────────
+  let acbHtml = '';
+  if (!acb || typeof acb.total !== 'number') {
+    acbHtml = `<div class="card"><div class="card-title">Anticholinergic Burden (ACB)</div>
+      <div style="font-size:12px;color:#768692">ACB scorer not loaded.</div></div>`;
+  } else {
+    const alertColour = acb.alert ? '#d4351c' : '#007f3b';
+    const alertText = acb.alert
+      ? `ACB ${acb.total} — high anticholinergic burden, associated with falls, confusion and cognitive decline`
+      : acb.total > 0
+        ? `ACB ${acb.total} — some anticholinergic activity detected`
+        : 'ACB 0 — no anticholinergic drugs detected';
+
+    let perDrugRows = '';
+    if (acb.perDrug && acb.perDrug.length) {
+      perDrugRows = acb.perDrug
+        .map((pd) => {
+          const badgeCls = pd.score === 3 ? 'acb-badge-3' : pd.score === 2 ? 'acb-badge-2' : 'acb-badge-1';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
+          <span class="acb-badge ${esc(badgeCls)}">ACB ${pd.score}</span>
+          <span>${esc(pd.name)}</span>
+          <span style="color:#768692;font-size:11px">(matched: ${esc(pd.matchedTerm)})</span>
+        </div>`;
+        })
+        .join('');
+    }
+
+    acbHtml = `<div class="card" style="border-left:4px solid ${esc(alertColour)}">
+      <div class="card-title">Anticholinergic Cognitive Burden (ACB — Boustani scale)</div>
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:10px">
+        <div>
+          <div class="acb-score-big ${acb.alert ? 'acb-alert' : ''}">${acb.total}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">Total ACB score</div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:${esc(alertColour)}">${esc(alertText)}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">
+            ACB ≥3 is associated with increased risk of falls, delirium, and long-term cognitive decline.<br>
+            ${acb.alert ? 'Review for dose reduction, drug switch, or deprescription opportunities.' : ''}
+          </div>
+        </div>
+      </div>
+      ${perDrugRows ? `<div style="margin-top:6px">${perDrugRows}</div>` : '<div style="font-size:12px;color:#768692;margin-top:4px">No drugs with ACB ≥1 detected in the active medication list.</div>'}
+      <div style="font-size:10px;color:#768692;margin-top:8px">Starter set derived from the Boustani ACB scale (ACBcalc.com). CSO verification required. Score-3 includes: TCAs, oxybutynin, tolterodine, solifenacin, fesoterodine, hyoscine, sedating antihistamines, selected antipsychotics, antiparkinson antimuscarinics.</div>
+    </div>`;
+  }
+
+  // ── STOPP/START flags section ─────────────────────────────────────────────
+  let stoppStartHtml = '';
+  if (!Array.isArray(stoppStart)) {
+    stoppStartHtml = `<div class="card"><div class="card-title">STOPP/START v3 flags</div>
+      <div style="font-size:12px;color:#768692">STOPP/START engine not loaded.</div></div>`;
+  } else {
+    const stoppFlags = stoppStart.filter((f) => f.kind === 'stopp');
+    const startFlags = stoppStart.filter((f) => f.kind === 'start');
+
+    // Sort: red before amber
+    const sortedStopp = [...stoppFlags].sort((a, b) => (a.severity === 'red' ? -1 : b.severity === 'red' ? 1 : 0));
+
+    const renderFlag = (f) => {
+      const icon = f.kind === 'start' ? '✚' : f.severity === 'red' ? '⛔' : '⚠';
+      return `<div class="smr-flag-item ${esc(f.severity)}">
+        <span style="font-size:14px;flex-shrink:0">${icon}</span>
+        <div style="flex:1">
+          <div class="smr-flag-criterion">${esc(f.criterion)}</div>
+          <div class="smr-flag-detail">${esc(f.detail)}</div>
+          <div class="smr-flag-source">${esc(f.source)}</div>
+        </div>
+      </div>`;
+    };
+
+    const stoppListHtml = sortedStopp.length
+      ? `<div class="card-title" style="margin-top:10px;color:var(--nhs-red)">STOPP — potentially inappropriate prescribing (${sortedStopp.length})</div>
+         <div class="smr-flag-list">${sortedStopp.map(renderFlag).join('')}</div>`
+      : `<div style="font-size:12px;color:#4c6272;margin-top:4px">No STOPP criteria flagged from the visible record.</div>`;
+
+    const startListHtml = startFlags.length
+      ? `<div class="card-title" style="margin-top:14px;color:var(--nhs-green)">START — potentially omitted prescribing (${startFlags.length})</div>
+         <div class="smr-flag-list">${startFlags.map(renderFlag).join('')}</div>`
+      : `<div style="font-size:12px;color:#4c6272;margin-top:4px">No START criteria flagged from the visible record.</div>`;
+
+    const totalFlags = stoppStart.length;
+    const titleColour = totalFlags > 0 ? 'var(--nhs-orange)' : 'var(--text2)';
+
+    stoppStartHtml = `<div class="card" style="border-left:4px solid ${totalFlags > 0 ? 'var(--nhs-orange)' : 'var(--nhs-green)'}">
+      <div class="card-title" style="color:${esc(titleColour)}">STOPP/START v3 (2023) — implementable subset (${totalFlags} flag${totalFlags !== 1 ? 's' : ''})</div>
+      ${stoppListHtml}
+      ${startListHtml}
+    </div>`;
+  }
+
+  // ── PINCER link ───────────────────────────────────────────────────────────
+  const pincerCount = (pincer || []).length;
+  const pincerLinkHtml = `<div class="card" style="border-left:4px solid ${pincerCount > 0 ? 'var(--nhs-red)' : 'var(--nhs-green)'}">
+    <div class="card-title">PINCER &amp; monitoring flags</div>
+    <div style="font-size:12px;color:var(--text2)">
+      ${
+        pincerCount > 0
+          ? `${pincerCount} PINCER/monitoring flag${pincerCount !== 1 ? 's' : ''} detected — see the
+           <a href="#" class="smr-tab-link" data-tab="medications" style="color:var(--nhs-blue)">Medications tab</a>
+           for full detail. PINCER flags are part of the medication review and should be considered alongside
+           the ACB burden and STOPP/START findings above.`
+          : 'No PINCER-style prescribing flags detected from the visible record. See the Medications tab for full monitoring detail.'
+      }
+    </div>
+  </div>`;
+
+  // ── Context info ──────────────────────────────────────────────────────────
+  const egfrNote = egfr !== null ? `Latest eGFR: ${egfr.toFixed(0)} mL/min/1.73m²` : 'eGFR: not available';
+  const ageNote = ageYears !== null ? `Age: ${Math.floor(ageYears)}y` : 'Age: not available';
+  const contextHtml = `<div style="font-size:11px;color:#768692;margin-bottom:10px">${esc(ageNote)} · ${esc(egfrNote)} · Active drugs assessed: ${drugs.filter((d) => d.active).length}</div>`;
+
+  // ── Print button ──────────────────────────────────────────────────────────
+  const printBtnHtml = `<button class="smr-print-btn" id="smr-print-trigger">Print SMR summary</button>`;
+
+  const html = `
+    <div style="max-width:860px">
+      <div class="card" style="background:#f0f4f5;border-color:#b1b4b6">
+        <div class="card-title">Structured Medication Review (SMR) — NHS Network Contract DES</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.6">
+          This workstation lens supports the annual SMR for patients on 10+ medications or with complex polypharmacy.
+          It surfaces anticholinergic burden, STOPP/START v3 flags, and PINCER prescribing-safety alerts from the
+          parsed record snapshot. All findings require verification against the live record.
+        </div>
+      </div>
+      ${caveatHtml}
+      ${contextHtml}
+      ${acbHtml}
+      ${stoppStartHtml}
+      ${pincerLinkHtml}
+      ${printBtnHtml}
+    </div>`;
+
+  const panel = document.getElementById('tab-smr');
+  if (panel) panel.innerHTML = html;
+
+  // Wire the PINCER cross-tab link
+  panel?.querySelectorAll('.smr-tab-link').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchTab(a.dataset.tab || 'medications');
+    });
+  });
+
+  // Wire Print button
+  const printBtn = document.getElementById('smr-print-trigger');
+  if (printBtn) {
+    printBtn.addEventListener('click', () => {
+      _renderSmrPrintBlock(acb, stoppStart, pincer, drugs);
+      document.body.classList.add('smr-printing');
+      window.print();
+      document.body.classList.remove('smr-printing');
+    });
+  }
+}
+
+// Build the hidden print block for the SMR printout.
+function _renderSmrPrintBlock(acb, stoppStart, pincer, drugs) {
+  const d = _s.demographics;
+  const now = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const patName = (d.title ? d.title + ' ' : '') + (d.name || '—');
+  const patDob = d.dob || '—';
+  const patNhs = d.nhs || '—';
+  const patAge = d.age ? d.age + 'y' : '—';
+
+  // ACB drug rows
+  const acbRows =
+    acb && acb.perDrug && acb.perDrug.length
+      ? acb.perDrug
+          .map(
+            (pd) =>
+              `<tr><td>${esc(pd.name)}</td><td style="text-align:center;font-weight:700;color:${pd.score >= 3 ? '#d4351c' : pd.score >= 2 ? '#856404' : '#555'}">${pd.score}</td></tr>`
+          )
+          .join('')
+      : '<tr><td colspan="2" style="color:#666">No drugs with ACB ≥1 detected</td></tr>';
+
+  // STOPP/START rows
+  const allFlags = [...(stoppStart || [])].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'stopp' ? -1 : 1;
+    if (a.severity !== b.severity) return a.severity === 'red' ? -1 : 1;
+    return 0;
+  });
+  const flagRows = allFlags.length
+    ? allFlags
+        .map((f) => {
+          const kindLabel = f.kind === 'stopp' ? 'STOPP' : 'START';
+          const sevClass = f.severity === 'red' ? 'smr-p-flag-red' : 'smr-p-flag-amber';
+          return `<tr>
+          <td class="${esc(sevClass)}">${esc(kindLabel)}</td>
+          <td>${esc(f.criterion)}</td>
+          <td>${esc(f.detail)}</td>
+          <td>${esc(f.source)}</td>
+        </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="4" style="color:#666">No STOPP/START flags</td></tr>';
+
+  // PINCER rows
+  const pincerRows =
+    pincer && pincer.length
+      ? pincer
+          .map(
+            (f) =>
+              `<tr><td class="${f.severity === 'high' ? 'smr-p-flag-red' : 'smr-p-flag-amber'}">${esc(f.rule)}</td><td>${esc(f.detail)}</td><td>${esc(f.source || '')}</td></tr>`
+          )
+          .join('')
+      : '<tr><td colspan="3" style="color:#666">No PINCER flags</td></tr>';
+
+  const block = document.getElementById('smr-print-block');
+  if (!block) return;
+
+  block.innerHTML = `
+  <h1>Structured Medication Review (SMR) — NHS Network Contract DES</h1>
+  <p><strong>Date:</strong> ${esc(now)}</p>
+  <p><strong>Patient:</strong> ${esc(patName)} &nbsp;|&nbsp; <strong>DOB:</strong> ${esc(patDob)} &nbsp;|&nbsp; <strong>Age:</strong> ${esc(patAge)} &nbsp;|&nbsp; <strong>NHS No:</strong> ${esc(patNhs)}</p>
+
+  <div class="smr-p-caveat">
+    Decision support only — derived from a point-in-time record snapshot. Verify against the live record before acting.
+    Not a substitute for clinical judgement. ACB scores and STOPP/START criteria are a starter set requiring
+    Clinical Safety Officer verification before clinical release.
+  </div>
+
+  <h2>Anticholinergic Burden (ACB — Boustani scale)</h2>
+  <p><strong>Total ACB score: ${acb ? acb.total : '—'}</strong>${acb && acb.alert ? ' — HIGH (≥3). Associated with falls, confusion and cognitive decline.' : acb && acb.total > 0 ? ' — some anticholinergic activity detected.' : ' — none detected.'}</p>
+  <table>
+    <thead><tr><th>Drug (detected label)</th><th>ACB Score</th></tr></thead>
+    <tbody>${acbRows}</tbody>
+  </table>
+
+  <h2>STOPP/START v3 (2023) Flags</h2>
+  <table>
+    <thead><tr><th>Type</th><th>Criterion</th><th>Detail</th><th>Source</th></tr></thead>
+    <tbody>${flagRows}</tbody>
+  </table>
+
+  <h2>PINCER / Monitoring Flags</h2>
+  <table>
+    <thead><tr><th>Flag</th><th>Detail</th><th>Source</th></tr></thead>
+    <tbody>${pincerRows}</tbody>
+  </table>
+
+  <h2>SMR Documentation (for completion during/after consultation)</h2>
+  <p style="font-size:10pt;color:#555">Complete the fields below during or immediately after the SMR consultation.</p>
+  <p><strong>Changes agreed (drug / action: stop · reduce · add · switch / reason):</strong></p>
+  <div class="smr-p-skeleton smr-p-field"></div>
+  <p><strong>Patient decision (accepted / declined / deferred — detail any preference or concern):</strong></p>
+  <div class="smr-p-skeleton smr-p-field"></div>
+  <p><strong>Follow-up date: ____________________</strong></p>
+  <p><strong>Pharmacy informed:</strong> Y / N &nbsp;&nbsp;&nbsp; <strong>Patient counselled:</strong> Y / N</p>
+  <p><strong>Clinician name &amp; signature: ____________________</strong></p>
+
+  <p style="font-size:9pt;color:#555;margin-top:6mm">
+    Generated by Medicus Suite visualiser on ${esc(now)}.
+    This output is derived from a parsed record export and is for decision-support use only.
+    Always verify against the live clinical record. Adherence to local formulary, allergy status,
+    and patient-specific clinical context is the responsibility of the prescribing clinician.
+  </p>`;
 }
 
 // ══ TAB SWITCHING ══════════════════════════════════════════════════════════
