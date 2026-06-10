@@ -3,7 +3,13 @@
 //
 // Reads the model written by sentinel.js (buildPassport output) from the transient
 // 'sentinel.passport' key and renders the printable patient health summary. The key
-// is left in place so a page refresh still works; it is overwritten on the next print.
+// is removed from storage immediately after render (consume-on-read), so patient-
+// identifiable data (name, DOB, NHS number, observations) does not linger on disk
+// on shared GP workstations. Acceptable trade-off: a manual page refresh (F5) after
+// this point will show the empty state because the one-shot payload has been consumed.
+// This is intentional — it is better than leaving NHS numbers on disk.
+// The Print button uses window.print() on the already-rendered DOM and continues to
+// work after the key has been removed.
 //
 // Transient key convention: 'sentinel.passport' is intentionally excluded from
 // suite backup (it is a point-in-time print payload, not user configuration).
@@ -126,6 +132,11 @@ async function render() {
     </div>`;
 
   content.innerHTML = headerHtml + `<h2>What&rsquo;s due for you</h2>` + dueHtml + numbersHtml + footerHtml;
+
+  // Consume-on-read: remove the transient key now that the DOM is rendered.
+  // The Print button works on the already-rendered DOM; a page refresh will
+  // show the empty state — that is intentional (privacy over convenience).
+  chrome.storage.local.remove('sentinel.passport');
 }
 
 document.getElementById('printBtn').addEventListener('click', () => window.print());

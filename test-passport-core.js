@@ -17,6 +17,9 @@
 //   • vaccine chip → due entry with vaccine name
 //   • unknown chip type → generic fallback entry
 //   • eGFR < 30 → status action; eGFR >= 60 → status good
+//   • eGFR 50.4→42.8 (15.08% decline) fires trend sentence with raw values (Fix 4)
+//   • HbA1c 64.5→59.6 (Δ4.9) does NOT fire trend sentence with raw values (Fix 4)
+//   • displayed values remain rounded integers after Fix 4
 
 'use strict';
 
@@ -371,6 +374,60 @@ async function runTests() {
   check(
     !weightEntry?.meaning.toLowerCase().includes('target'),
     `weight meaning has no invented target (got: "${weightEntry?.meaning}")`
+  );
+
+  // ── 16. Fix 4 — trend rounding correctness (raw values for trend delta) ────
+  // Tests that trend-sentence functions receive raw (unrounded) values so that
+  // threshold checks use full precision rather than rounded numbers.
+  console.log('\n--- trend rounding correctness (Fix 4 regression) ---');
+
+  // eGFR 50.4 → 42.8: decline = (50.4-42.8)/50.4 = 15.08% ≥ 15% → "gone down"
+  // With rounding: 50 → 43 = 14% < 15% → no sentence (the old bug)
+  const egfrDeclineTrend = makeTrendData([
+    {
+      name: 'eGFR',
+      history: [
+        { date: '2026-06-01', value: 42.8 }, // latest
+        { date: '2026-03-01', value: 50.4 }, // prev
+      ],
+    },
+  ]);
+  const egfrDeclinePass = buildPassport(makeSnapshot([inDateChip]), egfrDeclineTrend);
+  const egfrDeclineEntry = egfrDeclinePass.numbers.find((n) => n.label.toLowerCase().includes('kidney'));
+  check(
+    egfrDeclineEntry?.meaning.toLowerCase().includes('gone down') ||
+      egfrDeclineEntry?.meaning.toLowerCase().includes('come down'),
+    `eGFR 50.4→42.8 (15.08% decline) → trend sentence present (got: "${egfrDeclineEntry?.meaning}")`
+  );
+  // Displayed value should still be rounded integer
+  check(
+    egfrDeclineEntry?.value === '43',
+    `eGFR 50.4→42.8 → displayed value is rounded "43" (got: "${egfrDeclineEntry?.value}")`
+  );
+
+  // HbA1c 64.5 → 59.6: delta = -4.9 < 5 → no trend sentence
+  // With rounding: 65 → 60 = Δ5.0 ≥ 5 → fires spuriously (the old bug)
+  const hba1cNarrowTrend = makeTrendData([
+    {
+      name: 'HbA1c',
+      history: [
+        { date: '2026-06-01', value: 59.6 }, // latest
+        { date: '2026-03-01', value: 64.5 }, // prev
+      ],
+    },
+  ]);
+  const hba1cNarrowPass = buildPassport(makeSnapshot([inDateChip]), hba1cNarrowTrend);
+  const hba1cNarrowEntry = hba1cNarrowPass.numbers.find((n) => n.label.toLowerCase().includes('hba1c'));
+  check(
+    !hba1cNarrowEntry?.meaning.toLowerCase().includes('gone up') &&
+      !hba1cNarrowEntry?.meaning.toLowerCase().includes('come down') &&
+      !hba1cNarrowEntry?.meaning.toLowerCase().includes('gone down'),
+    `HbA1c 64.5→59.6 (Δ4.9 < 5) → no trend sentence (got: "${hba1cNarrowEntry?.meaning}")`
+  );
+  // Displayed value should still be rounded integer
+  check(
+    hba1cNarrowEntry?.value === '60 mmol/mol',
+    `HbA1c 64.5→59.6 → displayed value is rounded "60 mmol/mol" (got: "${hba1cNarrowEntry?.value}")`
   );
 
   // ── Results ───────────────────────────────────────────────────────────────

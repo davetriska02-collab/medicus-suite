@@ -200,7 +200,9 @@ function buildHba1cEntry(observationHistory) {
     status = 'action';
     statusLabel = 'Action needed';
   }
-  const trendPart = hba1cTrendSentence(val, prevVal != null ? Math.round(prevVal) : null);
+  // Pass raw (unrounded) values so the trend threshold check operates on full
+  // precision. val is kept rounded for the displayed string only.
+  const trendPart = hba1cTrendSentence(h.latest.value, prevVal);
   const meaning = 'This shows your average blood sugar over the last 3 months.' + (trendPart ? ' ' + trendPart : '');
   return {
     label: 'HbA1c',
@@ -228,7 +230,9 @@ function buildEgfrEntry(observationHistory) {
     status = 'action';
     statusLabel = 'Action needed';
   }
-  const trendPart = egfrTrendSentence(val, prevVal != null ? Math.round(prevVal) : null);
+  // Pass raw (unrounded) values so the trend threshold check operates on full
+  // precision. val is kept rounded for the displayed string only.
+  const trendPart = egfrTrendSentence(h.latest.value, prevVal);
   // Natural-frequency phrasing: describes filtering capacity relative to 90 (healthy baseline).
   const meaning =
     `Your kidneys are filtering at about ${val} out of a healthy 90 or more.` + (trendPart ? ' ' + trendPart : '');

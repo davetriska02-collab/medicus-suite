@@ -5,6 +5,19 @@
 
 'use strict';
 
+// Defence-in-depth: strip keys that could trigger prototype-pollution when
+// merged via Object.assign. Mirrors engine/ruleset-io.js safeCopy — applied
+// to the untrusted import operand only.
+const _DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+function _stripDangerousKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  Object.keys(obj).forEach((k) => {
+    if (!_DANGEROUS_KEYS.includes(k)) out[k] = obj[k];
+  });
+  return out;
+}
+
 const SENTINEL_KEYS = [
   'sentinel.config',
   'sentinel.rules',
@@ -56,7 +69,8 @@ async function sentinelImport(data, { merge = false } = {}) {
     }
     if (merge) {
       const existing = await chrome.storage.local.get('sentinel.rules');
-      toSet['sentinel.rules'] = Object.assign({}, existing['sentinel.rules'] || {}, data.rules);
+      // Strip dangerous keys from the untrusted import operand before merging.
+      toSet['sentinel.rules'] = Object.assign({}, existing['sentinel.rules'] || {}, _stripDangerousKeys(data.rules));
     } else {
       toSet['sentinel.rules'] = data.rules;
     }
