@@ -1751,6 +1751,107 @@ rmSaveBtn?.addEventListener('click', async () => {
     openEditor(null, resolved);
   });
 
+  // ── LLM pathway authoring tool ──────────────────────────────────────────────
+
+  $('rcpoLlmCopyPrompt')?.addEventListener('click', async () => {
+    const prompt = PU.pathwaySchemaPrompt();
+    const copiedEl = $('rcpoLlmCopied');
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch (_) {
+      // Fallback: write to a temp textarea
+      const ta = document.createElement('textarea');
+      ta.value = prompt;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    if (copiedEl) {
+      copiedEl.style.opacity = '1';
+      setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+    }
+  });
+
+  $('rcpoLlmImport')?.addEventListener('click', async () => {
+    const statusEl = $('rcpoLlmStatus');
+    const jsonEl = $('rcpoLlmJson');
+    if (!statusEl || !jsonEl) return;
+
+    const raw = (jsonEl.value || '').trim();
+    if (!raw) {
+      statusEl.style.color = 'var(--red, #b91c1c)';
+      statusEl.textContent = 'Paste the LLM JSON into the box first.';
+      return;
+    }
+
+    // Parse and normalise: accept single object, array, or wrapped { pathway, pathways }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      statusEl.style.color = 'var(--red, #b91c1c)';
+      statusEl.textContent = 'Could not parse JSON: ' + escHtml(e.message);
+      return;
+    }
+
+    let candidates = [];
+    if (Array.isArray(parsed)) {
+      candidates = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      if (parsed.pathways && Array.isArray(parsed.pathways)) {
+        candidates = parsed.pathways;
+      } else if (parsed.pathway && typeof parsed.pathway === 'object') {
+        candidates = [parsed.pathway];
+      } else {
+        candidates = [parsed];
+      }
+    } else {
+      statusEl.style.color = 'var(--red, #b91c1c)';
+      statusEl.textContent = 'Expected a JSON object or array of pathway objects.';
+      return;
+    }
+
+    if (candidates.length === 0) {
+      statusEl.style.color = 'var(--red, #b91c1c)';
+      statusEl.textContent = 'No pathway objects found in the pasted JSON.';
+      return;
+    }
+
+    // Validate each candidate; abort on first error
+    for (let i = 0; i < candidates.length; i++) {
+      const errs = PU.validatePathway(candidates[i]);
+      if (errs.length > 0) {
+        const label = candidates.length > 1 ? `Pathway ${i + 1}: ` : '';
+        statusEl.style.color = 'var(--red, #b91c1c)';
+        statusEl.innerHTML = escHtml(label + errs[0]);
+        return;
+      }
+    }
+
+    // Sanitise, resolve id collisions, append to customPathways
+    const [{ custom }, bundledDoc] = await Promise.all([getState(), loadBundled()]);
+    const taken = new Set([...(bundledDoc.pathways || []).map(p => p.id), ...custom.map(p => p.id)]);
+    const toAdd = [];
+    for (const c of candidates) {
+      const clean = PU.sanitisePathway(c);
+      let id = clean.id;
+      let n = 2;
+      while (taken.has(id)) id = clean.id + '-' + n++;
+      clean.id = id;
+      taken.add(id);
+      toAdd.push(clean);
+    }
+
+    // Write — do NOT touch enabledPathways (imported pathways stay off until reviewed)
+    await chrome.storage.local.set({ 'reception.customPathways': [...custom, ...toAdd] });
+    jsonEl.value = '';
+    statusEl.style.color = 'var(--green, #16a34a)';
+    statusEl.textContent = `Imported ${toAdd.length} pathway${toAdd.length !== 1 ? 's' : ''} — review and enable them below.`;
+    refresh();
+  });
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', refresh);
   } else {
