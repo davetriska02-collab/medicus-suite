@@ -194,6 +194,9 @@ function previewEnvelope(envelope) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
     if (mods.suite.feedbackEmail) lines.push(`Feedback email: ${mods.suite.feedbackEmail}`);
     if (mods.suite.display) lines.push('Display preferences (theme / text size / colourblind)');
+    if (Array.isArray(mods.suite.tabOrder) && mods.suite.tabOrder.length) {
+      lines.push(`Tab order: ${mods.suite.tabOrder.length} tabs`);
+    }
   }
 
   return lines;

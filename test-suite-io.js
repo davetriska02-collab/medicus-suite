@@ -11,6 +11,7 @@ const capacityIo = require('./shared/io/capacity-io.js');
 const triageIo = require('./shared/io/triage-io.js');
 const slotIo = require('./shared/io/slot-counter-io.js');
 const subIo = require('./shared/io/submissions-io.js');
+const suiteIo = require('./shared/io/suite-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -399,6 +400,60 @@ console.log('\n--- applyWithRollback rollback ---');
     'submissionsImport: legacy payload with practiceCode still applied');
 
   global.chrome = origChrome;
+
+  // ── suite-io: tabOrder round-trip + validation ────────────────────────────────
+  // suite.tabOrder must survive export→import and reject malformed values, in the
+  // same validation style as the other suite.* keys.
+
+  console.log('\n--- suite-io: tabOrder ---');
+
+  const suiteStore = {};
+  const savedChrome = global.chrome;
+  global.chrome = {
+    storage: { local: {
+      async get(keys) {
+        const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+        const out = {};
+        ks.forEach(k => { if (k in suiteStore) out[k] = suiteStore[k]; });
+        return out;
+      },
+      async set(obj) { Object.assign(suiteStore, obj); },
+    }},
+  };
+
+  // Round-trip: import a tab order, then export it back unchanged.
+  const order = ['referrals', 'sweep', 'slots'];
+  await suiteIo.suiteImport({ tabOrder: order });
+  assert(JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order),
+    'suiteImport: writes suite.tabOrder');
+  const exp = await suiteIo.suiteExport();
+  assert(JSON.stringify(exp.tabOrder) === JSON.stringify(order),
+    'suiteExport: round-trips suite.tabOrder');
+
+  // Reject: non-array tabOrder.
+  let rejErr1 = null;
+  try { await suiteIo.suiteImport({ tabOrder: 'slots' }); } catch (e) { rejErr1 = e.message; }
+  assert(rejErr1 && rejErr1.includes('array'), 'suiteImport: rejects non-array tabOrder');
+
+  // Reject: array containing a non-string / bad-shaped id.
+  let rejErr2 = null;
+  try { await suiteIo.suiteImport({ tabOrder: ['slots', 42] }); } catch (e) { rejErr2 = e.message; }
+  assert(rejErr2 && rejErr2.includes('tab-id'), 'suiteImport: rejects array with non-string id');
+
+  let rejErr3 = null;
+  try { await suiteIo.suiteImport({ tabOrder: ['slots', 'has space'] }); } catch (e) { rejErr3 = e.message; }
+  assert(rejErr3 && rejErr3.includes('tab-id'), 'suiteImport: rejects malformed id string');
+
+  // A rejected import must not have mutated the stored value.
+  assert(JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order),
+    'suiteImport: rejected payload leaves prior tabOrder untouched');
+
+  // Unset tabOrder exports as null (round-trip omission is tolerated).
+  delete suiteStore['suite.tabOrder'];
+  const expUnset = await suiteIo.suiteExport();
+  assert(expUnset.tabOrder === null, 'suiteExport: unset tabOrder exports as null');
+
+  global.chrome = savedChrome;
 
   // ── Summary ───────────────────────────────────────────────────────────────────
 
