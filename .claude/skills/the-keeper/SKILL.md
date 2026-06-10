@@ -1,19 +1,23 @@
 ---
 name: the-keeper
 description: >
-  Periodic currency-check for the Sentinel clinical rules engine. Scanner subagents sweep the
+  Periodic currency-check for the suite's clinical rule sets. Scanner subagents sweep the
   authoritative UK sources that the rule files are derived from (BNF monitoring requirements,
   BSR/specialty shared-care protocols, MHRA Drug Safety Update, NICE guidance and CKS, the NHS
   England QOF guidance and NICE indicator menu, the QOF business rules, UKHSA Green Book and JCVI
-  advice, PINCER and NICE Key Therapeutic Topics) and compare them against what
-  rules/drug-rules.json, rules/qof-rules.json, rules/vaccine-rules.json and rules/alert-library.json
-  currently encode. Two verifier subagents confirm every proposed change against its own source
-  page. The orchestrator then applies only the verified, conservative changes to the rule files,
-  updates the regression tests, and produces a Clinical-Safety-Officer change-proposal report on a
-  review branch — it never auto-merges a clinical rule change. Use whenever Dave says run The
-  Keeper, the keeper, rule watch, check the rules, are the Sentinel rules current, refresh the
-  drug/QOF/vaccine/alert rules, is QOF up to date, or check our monitoring intervals, or when a
-  scheduled rule-currency task fires. Do NOT trigger for ordinary feature work on the engine, a
+  advice, PINCER and NICE Key Therapeutic Topics, the Boustani ACB scale via ACBcalc, STOPP/START
+  v3, and the NICE CKS/NG red-flag lists) and compare them against what the repo's clinical rule
+  sets currently encode: rules/drug-rules.json, rules/qof-rules.json, rules/vaccine-rules.json,
+  rules/alert-library.json, rules/reception-pathways.json, engine/acb-scores.js,
+  engine/stopp-start.js, the PINCER/high-risk-drug tables in visualiser-core.js, and the shared
+  clinical threshold constants pinned by test-clinical-thresholds-sync.js. Two verifier subagents
+  confirm every proposed change against its own source page. The orchestrator then applies only the
+  verified, conservative changes to the rule files, updates the regression tests, and produces a
+  Clinical-Safety-Officer change-proposal report on a review branch — it never auto-merges a
+  clinical rule change. Use whenever Dave says run The Keeper, the keeper, rule watch, check the
+  rules, are the Sentinel rules current, refresh the drug/QOF/vaccine/alert rules, is QOF up to
+  date, check our monitoring intervals, check the ACB scores or STOPP/START criteria, are the
+  reception pathways current, or when a scheduled rule-currency task fires. Do NOT trigger for ordinary feature work on the engine, a
   one-off "add this single drug" request (just edit the rule directly), or The Watch / Grand Round /
   The Regulator (those are different skills).
 ---
@@ -22,7 +26,9 @@ description: >
 
 You are running The Keeper for Dr Dave Triska's practice (Witley and Milford Surgery). The Keeper is
 a periodic horizon scan whose subject is **our own rule files**, not the news. It asks one question
-of each rule the Sentinel engine ships: *does this still match what the authoritative UK source says
+of every clinical rule the suite ships — Sentinel monitoring rules, QOF, vaccines, triage alerts,
+reception red-flag pathways, the medication-review instruments (ACB, STOPP/START, PINCER), and the
+shared guideline threshold constants: *does this still match what the authoritative UK source says
 today?* It finds where a rule has drifted from its source, verifies every proposed change against
 that source, applies the safe ones, and hands the practice's Clinical Safety Officer (Dave) a
 sourced change-proposal to review.
@@ -48,6 +54,12 @@ The project's own `CLAUDE.md` is explicit and you must internalise it:
 - The same silent-failure logic applies to QOF (`problemMatch`/`problemExclude`), vaccine
   eligibility, and alert-library combos. A too-narrow match misses patients; a too-broad exclude
   drops them.
+- It applies equally to the **JS-hosted rule sets**: the ACB drug map in `engine/acb-scores.js`,
+  the drug-class term lists in `engine/stopp-start.js`, and the high-risk-drug/PINCER tables in
+  `visualiser-core.js` all use the same case-insensitive substring matching — a missing brand or
+  generic in those tables silently fails to flag, exactly like a missing brand in `drug.match`.
+  When a domain owns a JS file, scanners and the orchestrator touch **data tables and constants
+  only, never logic** — a rule-set edit must not change control flow.
 
 This is why The Keeper's spine is **verification**, exactly as The Watch's is. Dave is the practice
 Clinical Safety Officer. A change that misremembers a BNF interval or invents a NICE indicator is a
@@ -70,8 +82,11 @@ Then read these skill files and the current rule files before dispatching anythi
   provenance rules, and the RAG taxonomy
 - `agents/SCANNER.md` — the scanner subagent brief
 - `agents/VERIFIER.md` — the verifier subagent brief
-- The four rule files under `rules/` — you are checking *these* for drift, so know their current
-  contents and their `lastUpdated` / `specVersion` fields.
+- The rule sets you are checking for drift — know their current contents and their
+  `lastUpdated` / `specVersion` fields (or file-header provenance for the JS-hosted sets):
+  the five JSON files under `rules/` (drug, QOF, vaccine, alert-library, reception-pathways),
+  `engine/acb-scores.js`, `engine/stopp-start.js`, the high-risk-drug/PINCER tables in
+  `visualiser-core.js`, and the threshold constants pinned by `test-clinical-thresholds-sync.js`.
 
 ## The pipeline
 
@@ -79,7 +94,7 @@ Three stages: fast broad collection, then verification, then conservative applic
 
 | Stage | Who | Model tier | Job |
 |-------|-----|-----------|-----|
-| 1 Scan | 4 scanner subagents, one per rule domain | Haiku (cheap fast tier) | For each rule in their domain, sweep the source register and report where the rule has drifted from source. Return structured candidate changes. Discard anything with no verifiable source URL. |
+| 1 Scan | 6 scanner subagents, one per rule domain | Haiku (cheap fast tier) | For each rule in their domain, sweep the source register and report where the rule has drifted from source. Return structured candidate changes. Discard anything with no verifiable source URL. |
 | 2 Verify | 2 verifier subagents | Sonnet | Re-fetch and confirm each candidate change against its source page. Kill the unsourced, stale or overstated. Right-size the RAG. Complete provenance. |
 | 3 Apply | You, the orchestrator | Opus (this session) | Apply only the verified, conservative changes to the rule files. Update regression tests. Run the full test suite. Bump manifest + CHANGELOG. Write the change-proposal report. Push to a review branch. |
 
@@ -88,16 +103,19 @@ supports per-subagent selection. If not, the discipline is what matters, not the
 
 ## Stage 1 — Scan
 
-Fire all four scanners in parallel in a single message with multiple subagent calls. Each scanner
-gets: its domain block from `references/sources.md`, the **current contents of its rule file**, and
-the `agents/SCANNER.md` brief.
+Fire all six scanners in parallel in a single message with multiple subagent calls. Each scanner
+gets: its domain block from `references/sources.md`, the **current contents of its rule file(s)**
+(for MEDREVIEW and PATHWAYS this includes the relevant JS data tables/constants, not whole files),
+and the `agents/SCANNER.md` brief.
 
-| Scanner | Rule file it owns | Looks for |
+| Scanner | Rule set it owns | Looks for |
 |---------|-------------------|-----------|
 | DRUGS | `rules/drug-rules.json` | New/withdrawn UK brands for a monitored drug; changed monitoring tests or intervals (BNF / BSR / specialty shared care); new drugs that warrant a monitoring rule; MHRA DSU changes to monitoring; SNOMED drift. |
 | QOF | `rules/qof-rules.json` | New, retired or changed registers and indicators for the current QOF year; changed thresholds, age bands or indicator windows; NICE indicator-menu (`NM###`/`IND###`) changes; business-rules cluster changes. |
 | VACCINES | `rules/vaccine-rules.json` | Eligibility-cohort changes (age bands, clinical risk groups, pregnancy); season-start changes; schedule changes; status-term coding changes. JCVI / annual flu letter / Green Book. |
-| ALERTS | `rules/alert-library.json` | New or changed PINCER indicators; NICE Key Therapeutic Topics; new MHRA contraindication/interaction alerts; threshold or age-band changes; STOPP/START items worth shipping. |
+| ALERTS | `rules/alert-library.json` | New or changed PINCER indicators; NICE Key Therapeutic Topics; new MHRA contraindication/interaction alerts; threshold or age-band changes. (STOPP/START candidates now route to MEDREVIEW — cross-reference, don't duplicate.) |
+| MEDREVIEW | `engine/acb-scores.js`, `engine/stopp-start.js`, and the high-risk-drug/PINCER tables in `visualiser-core.js` | ACB score corrections and missing drugs/brands vs the published Boustani/ACBcalc list; STOPP/START v3 criterion drift, missing class terms or brands in the term lists; PINCER indicator spec changes; MHRA DSU items touching these instruments. Data tables only, never logic. |
+| PATHWAYS | `rules/reception-pathways.json` + the guideline threshold constants pinned by `test-clinical-thresholds-sync.js` (trends.js, visualiser-core.js zones, passport-core.js bands) | Red-flag drift vs NICE CKS topic red-flag lists, NG12, NG51 (sepsis), NG143 (feverish child); Pharmacy First pathway changes (age bands, coverage); escalation-tier correctness; NICE NG136 BP / NG28 HbA1c / KDIGO boundary changes. |
 
 Each scanner returns a JSON array of **candidate change** objects in the schema in
 `references/change-schema.md`. A candidate with no real source URL and no statement of *what the
@@ -110,9 +128,9 @@ This is the spine of the skill. A tidy diff that invents a BNF interval, misdate
 overstates a JCVI change is a safety risk. Verification is not a polish pass.
 
 Fire two verifier subagents in parallel:
-- VERIFIER-A takes the DRUGS and ALERTS candidates — the dangerous-to-get-wrong, medicines-safety
-  half. Verify with care, brand by brand, interval by interval.
-- VERIFIER-B takes the QOF and VACCINES candidates.
+- VERIFIER-A takes the DRUGS, ALERTS and MEDREVIEW candidates — the dangerous-to-get-wrong,
+  medicines-safety half. Verify with care, brand by brand, interval by interval, score by score.
+- VERIFIER-B takes the QOF, VACCINES and PATHWAYS candidates.
 
 Each verifier follows `agents/VERIFIER.md`. For every Red and Amber candidate it must fetch the
 actual source page and confirm: the source genuinely says what the candidate claims; the change is
@@ -153,19 +171,28 @@ treat the existing rule as correct-until-sourced-otherwise.
 
 ### Steps
 
-1. **Apply** each verified candidate to its rule file by editing the JSON in place, honouring the
-   discipline above. Group Red (safety-relevant drift) first.
+1. **Apply** each verified candidate to its rule file by editing the JSON in place (or, for the
+   MEDREVIEW/PATHWAYS JS-hosted sets, the data table/constant entries only — never logic), honouring
+   the discipline above. Group Red (safety-relevant drift) first.
 2. **Update the regression guard.** Per `CLAUDE.md`: after changing any `match`/`exclude` you MUST
    extend the `EXPECTED` (and where relevant the must-NOT-fire) maps in `test-drug-brand-coverage.js`
    so the new brands/drugs are regression-locked. For QOF/vaccine/alert changes, extend the
    matching test (`test-qof-*.js`, `test-monitoring-chip.js`, `test-custom-*.js`,
-   `test-applicability-filters.js`) where one covers the changed behaviour.
+   `test-applicability-filters.js`) where one covers the changed behaviour. For MEDREVIEW changes,
+   extend `test-acb-scores.js` / `test-stopp-start.js` / `test-visualiser-pincer.js` /
+   `test-prescribing-flags.js`. For PATHWAYS changes, extend `test-reception-pathways.js` /
+   `test-reception-pathway-utils.js`; threshold changes MUST be made in **all** files that pin the
+   value and in `test-clinical-thresholds-sync.js` together (that test exists precisely to force a
+   synchronised edit — never update the test alone).
 3. **Run the full rule test suite and do not proceed on a failure:**
    ```bash
    node test-drug-brand-coverage.js
    node test-qof-indicator-filters.js && node test-qof-year.js
    node test-monitoring-chip.js && node test-prescribing-flags.js
    node test-applicability-filters.js && node test-custom-rules.js && node test-custom-indicators.js
+   node test-acb-scores.js && node test-stopp-start.js && node test-visualiser-pincer.js
+   node test-reception-pathways.js && node test-reception-pathway-utils.js
+   node test-clinical-thresholds-sync.js && node test-passport-core.js && node test-brief-core.js
    ```
    A red test means a rule edit broke matching — fix the rule, not the test, unless the test
    genuinely encoded the old behaviour you are intentionally changing (then update it and say so in

@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.51.1] — 2026-06-10
+
+### Maintenance: The Keeper re-aimed at every clinical rule set in the repo
+
+The Keeper skill (periodic rule-currency check) previously targeted only the four original
+JSON rule files. The repo now carries clinical content in more places, so the whole pipeline
+(skill, scanner/verifier briefs, source register, change schema, report builder, scheduled
+task) is retargeted. No extension code changes.
+
+- Two new scanner domains (4 → 6):
+  - **MEDREVIEW** — owns `engine/acb-scores.js`, `engine/stopp-start.js`, and the
+    PINCER/high-risk-drug tables in `visualiser-core.js`. Sources: Boustani ACB scale via
+    ACBcalc, STOPP/START v3 (2023), PRIMIS PINCER, BNF/dm+d/emc, MHRA DSU. Carries the
+    standing CSO-verification duty for the v3.51.0 starter sets. Data tables only, never logic.
+  - **PATHWAYS** — owns `rules/reception-pathways.json` (whose own sourceNotes already
+    requested Keeper coverage) and the guideline threshold constants pinned by
+    `test-clinical-thresholds-sync.js`. Sources: NICE CKS red-flag lists, NG12, NG51, NG143,
+    NHS Pharmacy First pathways, NG136, NG28, KDIGO.
+- Verifier split updated: VERIFIER-A takes DRUGS+ALERTS+MEDREVIEW (medicines safety),
+  VERIFIER-B takes QOF+VACCINES+PATHWAYS. Escalation-tier demotions in reception pathways now
+  count as safety-weakening changes requiring CSO sign-off.
+- Change schema: new domains `medreview`/`pathways`; new change types `change-score`,
+  `change-criterion`, `change-redflag`; report gains two sections.
+- Stage-3 regression-guard and test-suite lists extended (ACB, STOPP/START, visualiser PINCER,
+  reception pathways, clinical-thresholds sync, passport/brief cores). Threshold edits must land
+  in all pinning files plus the sync test together.
+- ALERTS scanner no longer proposes STOPP/START items (routes to MEDREVIEW — no duplicates).
+  eFI/Charlson explicitly documented as out of scope (fixed published instruments).
+- `monthly-rule-currency` scheduled task updated to match.
+
 ## [v3.51.0] — 2026-06-10
 
 ### Feature: SMR workstation lens in the visualiser — ACB burden, STOPP/START v3 flags, printable SMR skeleton

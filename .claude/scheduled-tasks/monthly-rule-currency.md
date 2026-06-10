@@ -6,20 +6,26 @@ the QOF turnover (Feb–Apr)** and the **autumn vaccination cohort announcements
 (Jun–Aug)**, when the source guidance moves.
 
 This routine runs **The Keeper** skill (`.claude/skills/the-keeper/`), which keeps
-the four Sentinel rule files current against their authoritative UK sources:
+the suite's clinical rule sets current against their authoritative UK sources:
 
 - `rules/drug-rules.json` — BNF monitoring / BSR shared care / MHRA DSU
 - `rules/qof-rules.json` — NHS England QOF guidance / NICE indicator menu
 - `rules/vaccine-rules.json` — UKHSA Green Book / JCVI / annual flu letter
 - `rules/alert-library.json` — PINCER / NICE Key Therapeutic Topics / MHRA DSU
+- `engine/acb-scores.js` + `engine/stopp-start.js` + the PINCER/high-risk-drug
+  tables in `visualiser-core.js` — Boustani ACB scale (ACBcalc) / STOPP-START v3 /
+  PRIMIS PINCER
+- `rules/reception-pathways.json` + the guideline threshold constants pinned by
+  `test-clinical-thresholds-sync.js` — NICE CKS red flags / NG12 / NG51 / NG143 /
+  Pharmacy First / NG136 / NG28 / KDIGO
 
 ---
 
 ## Prompt to use
 
 > Run The Keeper for the Sentinel rules. Follow `.claude/skills/the-keeper/SKILL.md`
-> exactly: read the source register and the four current rule files, fan out the
-> four domain scanners, verify every candidate change against its source page
+> exactly: read the source register and the current rule sets it lists, fan out the
+> six domain scanners, verify every candidate change against its source page
 > (no provenance, no edit), then apply only the verified, **conservative,
 > additive** changes.
 >
