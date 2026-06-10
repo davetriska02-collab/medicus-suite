@@ -322,7 +322,93 @@ be reviewed clinically and then toggled on explicitly in the Reception settings.
 `;
   }
 
-  const api = { validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt };
+  // ---------------------------------------------------------------------------
+  // Tile organisation — colour, manual order, alpha sort.
+  //
+  // These are DISPLAY / ORGANISING preferences only, edited from the reception
+  // panel itself and stored in `reception.tilePrefs`. They never affect which
+  // pathways are enabled, never gate clinical content, and a tile colour is NOT
+  // a clinical flag (the panel says so in the UI). Kept here so the panel, the
+  // backup importer, and the node test share one validated implementation.
+  //
+  //   reception.tilePrefs = {
+  //     sortMode: 'manual' | 'alpha',          // default 'manual'
+  //     order:    string[],                    // pathway ids, manual order
+  //     colours:  { [pathwayId]: colourKey }   // colourKey ∈ TILE_COLOUR_KEYS
+  //   }
+  // ---------------------------------------------------------------------------
+
+  // Palette offered for colour-coding tiles. 'default' = no colour. Each key maps
+  // to a CSS class (rcp-tile-c-<key>) in reception.css; keep the two in sync.
+  const TILE_COLOUR_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
+
+  function isValidColourKey(k) { return TILE_COLOUR_KEYS.indexOf(k) !== -1; }
+
+  // orderTiles(pathways, prefs) → pathways[] in display order.
+  //   'alpha'  → sorted by title, case-insensitive, locale-aware.
+  //   'manual' → ids listed in prefs.order first (those still present, in that
+  //              order), then any pathway not in prefs.order appended in its
+  //              incoming order. Never drops or duplicates a pathway — same
+  //              reconcile contract as tab-order.js reconcileTabOrder, so a
+  //              newly-added or removed pathway can't vanish from the picker.
+  function orderTiles(pathways, prefs) {
+    const list = Array.isArray(pathways) ? pathways.slice() : [];
+    const mode = (prefs && prefs.sortMode === 'alpha') ? 'alpha' : 'manual';
+    if (mode === 'alpha') {
+      return list.sort((a, b) =>
+        String((a && a.title) || '').localeCompare(String((b && b.title) || ''), undefined, { sensitivity: 'base' }));
+    }
+    const order = (prefs && Array.isArray(prefs.order)) ? prefs.order : [];
+    const byId = new Map();
+    for (const p of list) { if (p && p.id != null) byId.set(p.id, p); }
+    const result = [];
+    const seen = new Set();
+    for (const id of order) {
+      if (byId.has(id) && !seen.has(id)) { result.push(byId.get(id)); seen.add(id); }
+    }
+    for (const p of list) {
+      if (p && p.id != null && !seen.has(p.id)) { result.push(p); seen.add(p.id); }
+    }
+    return result;
+  }
+
+  // tileColourFor(prefs, id) → a valid colour key ('default' when unset/invalid).
+  function tileColourFor(prefs, id) {
+    const c = prefs && prefs.colours && prefs.colours[id];
+    return isValidColourKey(c) ? c : 'default';
+  }
+
+  // sanitiseTilePrefs(raw, validIds) → clean prefs object safe to store/render.
+  //   Drops unknown sort modes, non-array order, duplicate ids, invalid colour
+  //   keys, and 'default' colours (absence == default). When validIds (Set or
+  //   array) is supplied, order entries and colour keys are also filtered to
+  //   known pathway ids; otherwise ids are accepted on shape (ID_RE) alone.
+  //   Building a fresh object also blocks prototype-pollution keys on import.
+  function sanitiseTilePrefs(raw, validIds) {
+    const out = { sortMode: 'manual', order: [], colours: {} };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    if (raw.sortMode === 'alpha') out.sortMode = 'alpha';
+    const idOk = validIds
+      ? (validIds instanceof Set ? (x => validIds.has(x)) : (x => Array.isArray(validIds) && validIds.indexOf(x) !== -1))
+      : (x => typeof x === 'string' && ID_RE.test(x));
+    if (Array.isArray(raw.order)) {
+      const seen = new Set();
+      for (const id of raw.order) {
+        if (typeof id === 'string' && idOk(id) && !seen.has(id)) { out.order.push(id); seen.add(id); }
+      }
+    }
+    if (raw.colours && typeof raw.colours === 'object' && !Array.isArray(raw.colours)) {
+      for (const [id, key] of Object.entries(raw.colours)) {
+        if (idOk(id) && isValidColourKey(key) && key !== 'default') out.colours[id] = key;
+      }
+    }
+    return out;
+  }
+
+  const api = {
+    validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt,
+    orderTiles, tileColourFor, sanitiseTilePrefs, TILE_COLOUR_KEYS,
+  };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

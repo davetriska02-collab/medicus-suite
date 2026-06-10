@@ -39,6 +39,12 @@ let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
 
+// Tile organisation (reception.tilePrefs) — colour / order / sort. Display only.
+let _tilePrefs = { sortMode: 'manual', order: [], colours: {} };
+let _organising = false;      // true → reorder/colour mode (tiles don't launch capture)
+let _openColourFor = null;    // pathway id whose colour palette is open, or null
+let _ignoreNextTilePrefsChange = false; // skip our own storage write echo
+
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -47,6 +53,8 @@ function esc(s) {
 
 export async function init(el) {
   container = el;
+  _organising = false;
+  _openColourFor = null;
 
   container.innerHTML = `
     <div class="rcp-module">
@@ -74,9 +82,18 @@ export async function init(el) {
   _onActivated = () => refreshPatientCard();
   chrome.tabs.onActivated.addListener(_onActivated);
 
-  // Live-update when the admin changes reception config/pathways in Options.
+  // Live-update when the admin changes reception config/pathways in Options, or
+  // when tile prefs change in another context (pop-out ↔ panel).
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
+    const tileOnly = changes['reception.tilePrefs']
+      && !changes['reception.config'] && !changes['reception.customPathways'] && !changes['reception.pathwayOverrides'];
+    if (tileOnly) {
+      // Skip the echo of our own write so an in-progress organise action isn't reset.
+      if (_ignoreNextTilePrefsChange) { _ignoreNextTilePrefsChange = false; return; }
+      loadConfigAndResolve().then(() => { if (container) renderPathwayPicker(); });
+      return;
+    }
     if (changes['reception.config'] || changes['reception.customPathways'] || changes['reception.pathwayOverrides']) {
       loadConfigAndResolve().then(() => {
         if (!container) return;
@@ -100,9 +117,12 @@ function cleanup() {
 export { cleanup };
 
 async function loadConfigAndResolve() {
-  const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides']);
+  const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides', 'reception.tilePrefs']);
   _config = r['reception.config'] || {};
   const PU = (typeof window !== 'undefined') ? window.ReceptionPathwayUtils : null;
+  _tilePrefs = PU
+    ? PU.sanitiseTilePrefs(r['reception.tilePrefs'] || {})
+    : (r['reception.tilePrefs'] || { sortMode: 'manual', order: [], colours: {} });
   if (PU && _bundledDoc) {
     _effective = PU.resolveEffectivePathways({
       bundled: _bundledDoc.pathways || [],
@@ -222,20 +242,164 @@ function renderPathwayPicker() {
     return;
   }
 
-  const btns = enabled.map(p =>
-    `<button class="rcp-pathway-btn" data-pathway="${esc(p.id)}">
-       <span class="rcp-pathway-title">${esc(p.title)}</span>
-       <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
-     </button>`).join('');
+  const PU = window.ReceptionPathwayUtils;
+  const ordered = PU ? PU.orderTiles(enabled, _tilePrefs) : enabled;
+  const alpha = _tilePrefs.sortMode === 'alpha';
+  const colourKeys = (PU && PU.TILE_COLOUR_KEYS) || ['default'];
 
-  body.innerHTML = `
-    <div class="rcp-picker-note">Pick the problem that best matches what the caller describes. Red-flag questions come first — any YES means escalate straight away.</div>
-    <div class="rcp-pathway-grid">${btns}</div>`;
+  const toolbar = `
+    <div class="rcp-tile-toolbar">
+      <div class="rcp-sort-ctrl">
+        <span class="rcp-sort-label">Order</span>
+        <button class="rcp-seg ${alpha ? '' : 'rcp-seg-on'}" data-sort="manual" type="button">Manual</button>
+        <button class="rcp-seg ${alpha ? 'rcp-seg-on' : ''}" data-sort="alpha" type="button">A&ndash;Z</button>
+      </div>
+      <button class="rcp-link-btn rcp-organise-toggle" id="rcpOrganise" type="button">${_organising ? 'Done' : 'Organise tiles'}</button>
+    </div>`;
 
-  body.querySelectorAll('.rcp-pathway-btn').forEach(btn => {
+  const tiles = ordered.map(p => {
+    const colour = PU ? PU.tileColourFor(_tilePrefs, p.id) : 'default';
+    const draggable = _organising && !alpha;
+    const handle = draggable ? `<span class="rcp-drag-handle" aria-hidden="true">&#10303;</span>` : '';
+    const swatch = _organising
+      ? `<button class="rcp-tile-swatch rcp-tile-c-${esc(colour)}" data-colour-for="${esc(p.id)}" type="button" aria-label="Set tile colour" title="Tile colour"></button>`
+      : '';
+    const palette = (_organising && _openColourFor === p.id)
+      ? `<div class="rcp-colour-palette">` + colourKeys.map(k =>
+          `<button class="rcp-colour-dot rcp-tile-c-${esc(k)} ${k === colour ? 'rcp-colour-sel' : ''}" data-set-colour="${esc(k)}" data-for="${esc(p.id)}" type="button" title="${esc(k)}"></button>`).join('') + `</div>`
+      : '';
+    return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
+      ${handle}
+      <button class="rcp-pathway-btn" data-pathway-go="${esc(p.id)}" type="button"${_organising ? ' tabindex="-1"' : ''}>
+        <span class="rcp-pathway-title">${esc(p.title)}</span>
+        <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
+      </button>
+      ${swatch}${palette}
+    </div>`;
+  }).join('');
+
+  const note = _organising
+    ? `<div class="rcp-fineprint">${alpha ? 'Switch to &ldquo;Manual&rdquo; to drag tiles into your own order. ' : 'Drag tiles to reorder. '}Tap the dot to colour-label a tile. Colours and order organise your tiles only &mdash; they are not a clinical flag.</div>`
+    : `<div class="rcp-picker-note">Pick the problem that best matches what the caller describes. Red-flag questions come first — any YES means escalate straight away.</div>`;
+
+  body.innerHTML = `${toolbar}${note}<div class="rcp-pathway-grid${_organising ? ' rcp-organising' : ''}">${tiles}</div>`;
+
+  body.querySelector('#rcpOrganise')?.addEventListener('click', () => {
+    _organising = !_organising;
+    _openColourFor = null;
+    renderPathwayPicker();
+  });
+  body.querySelectorAll('.rcp-seg').forEach(btn =>
+    btn.addEventListener('click', () => setSortMode(btn.dataset.sort)));
+
+  body.querySelectorAll('.rcp-pathway-btn[data-pathway-go]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const p = enabled.find(x => x.id === btn.dataset.pathway);
+      if (_organising) return; // organise mode: launching a capture is disabled
+      const p = enabled.find(x => x.id === btn.dataset.pathwayGo);
       if (p) renderCaptureForm(p);
+    });
+  });
+
+  if (_organising) {
+    body.querySelectorAll('.rcp-tile-swatch').forEach(sw =>
+      sw.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = sw.dataset.colourFor;
+        _openColourFor = (_openColourFor === id) ? null : id;
+        renderPathwayPicker();
+      }));
+    body.querySelectorAll('.rcp-colour-dot').forEach(dot =>
+      dot.addEventListener('click', e => {
+        e.stopPropagation();
+        setTileColour(dot.dataset.for, dot.dataset.setColour);
+      }));
+    if (!alpha) wireTileDrag(body);
+  }
+}
+
+// Persist the in-memory tile prefs. _ignoreNextTilePrefsChange suppresses the
+// storage-change echo so the listener doesn't re-render over an active action.
+function persistTilePrefs() {
+  _ignoreNextTilePrefsChange = true;
+  try {
+    chrome.storage.local.set({
+      'reception.tilePrefs': {
+        sortMode: _tilePrefs.sortMode === 'alpha' ? 'alpha' : 'manual',
+        order:    Array.isArray(_tilePrefs.order) ? _tilePrefs.order : [],
+        colours:  _tilePrefs.colours || {},
+      },
+    });
+  } catch (_) { _ignoreNextTilePrefsChange = false; }
+}
+
+function setSortMode(mode) {
+  _tilePrefs.sortMode = mode === 'alpha' ? 'alpha' : 'manual';
+  persistTilePrefs();
+  renderPathwayPicker();
+}
+
+function setTileColour(id, key) {
+  if (!id) return;
+  _tilePrefs.colours = _tilePrefs.colours || {};
+  if (key === 'default') delete _tilePrefs.colours[id];
+  else _tilePrefs.colours[id] = key;
+  _openColourFor = null;
+  persistTilePrefs();
+  renderPathwayPicker();
+}
+
+// The pathway ids in the current MANUAL order (independent of sort mode), used
+// as the basis for a drag reorder so switching to A–Z then back is stable.
+function currentManualOrder() {
+  const PU = window.ReceptionPathwayUtils;
+  const list = PU
+    ? PU.orderTiles(_effective.enabled, { sortMode: 'manual', order: _tilePrefs.order })
+    : _effective.enabled;
+  return list.map(p => p.id);
+}
+
+function reorderTile(dragId, targetId) {
+  const ids = currentManualOrder();
+  const from = ids.indexOf(dragId);
+  const to = ids.indexOf(targetId);
+  if (from === -1 || to === -1 || from === to) return;
+  ids.splice(from, 1);
+  ids.splice(to, 0, dragId);
+  _tilePrefs.order = ids;
+  _tilePrefs.sortMode = 'manual';
+  persistTilePrefs();
+  renderPathwayPicker();
+}
+
+function wireTileDrag(body) {
+  const grid = body.querySelector('.rcp-pathway-grid');
+  if (!grid) return;
+  let dragId = null;
+  grid.querySelectorAll('.rcp-pathway-tile[draggable="true"]').forEach(tile => {
+    tile.addEventListener('dragstart', e => {
+      dragId = tile.dataset.pathway;
+      tile.classList.add('rcp-tile-dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+      }
+    });
+    tile.addEventListener('dragend', () => {
+      tile.classList.remove('rcp-tile-dragging');
+      grid.querySelectorAll('.rcp-tile-over').forEach(t => t.classList.remove('rcp-tile-over'));
+      dragId = null;
+    });
+    tile.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      if (dragId && tile.dataset.pathway !== dragId) tile.classList.add('rcp-tile-over');
+    });
+    tile.addEventListener('dragleave', () => tile.classList.remove('rcp-tile-over'));
+    tile.addEventListener('drop', e => {
+      e.preventDefault();
+      tile.classList.remove('rcp-tile-over');
+      const targetId = tile.dataset.pathway;
+      if (dragId && targetId) reorderTile(dragId, targetId);
     });
   });
 }

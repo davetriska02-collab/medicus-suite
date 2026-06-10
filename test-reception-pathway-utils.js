@@ -7,7 +7,8 @@
 
 'use strict';
 
-const { validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt } =
+const { validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt,
+        orderTiles, tileColourFor, sanitiseTilePrefs, TILE_COLOUR_KEYS } =
   require('./shared/reception-pathway-utils.js');
 
 let passed = 0, failed = 0;
@@ -148,6 +149,57 @@ check(exampleErrs.length === 0, 'embedded EXAMPLE JSON in pathwaySchemaPrompt() 
 if (exampleErrs.length > 0) {
   exampleErrs.forEach(e => console.error('    validation error:', e));
 }
+
+// ── Tile organisation: orderTiles / tileColourFor / sanitiseTilePrefs ─────────
+console.log('\n--- orderTiles ---');
+const tp = (id, title) => ({ id, title });
+const tiles = [tp('c', 'Cough'), tp('a', 'Asthma'), tp('b', 'Back pain')];
+
+// Manual mode, no prefs → input order preserved.
+let ot = orderTiles(tiles, {});
+check(ot.map(t => t.id).join(',') === 'c,a,b', 'manual + no order → incoming order preserved');
+
+// Manual mode honours stored order, appends unknown-to-order tiles at the end.
+ot = orderTiles(tiles, { sortMode: 'manual', order: ['b', 'c'] });
+check(ot.map(t => t.id).join(',') === 'b,c,a', 'manual order honoured; tile absent from order appended last');
+
+// Stored order referencing a removed pathway never injects a phantom tile.
+ot = orderTiles(tiles, { sortMode: 'manual', order: ['x', 'a'] });
+check(ot.map(t => t.id).join(',') === 'a,c,b', 'unknown id in stored order ignored (no phantom)');
+check(ot.length === tiles.length, 'manual reconcile never drops or duplicates a tile');
+
+// Alpha mode sorts by title, case-insensitively.
+ot = orderTiles([tp('c', 'cough'), tp('a', 'Asthma'), tp('b', 'Back pain')], { sortMode: 'alpha' });
+check(ot.map(t => t.id).join(',') === 'a,b,c', 'alpha sorts by title, case-insensitive');
+check(ot.length === 3, 'alpha keeps every tile');
+
+// Defensive: non-array input → empty array, no throw.
+check(Array.isArray(orderTiles(null, {})) && orderTiles(null, {}).length === 0, 'orderTiles(null) → []');
+
+console.log('\n--- tileColourFor ---');
+check(tileColourFor({ colours: { a: 'red' } }, 'a') === 'red', 'returns stored colour');
+check(tileColourFor({ colours: { a: 'red' } }, 'b') === 'default', 'unset id → default');
+check(tileColourFor({ colours: { a: 'not-a-colour' } }, 'a') === 'default', 'invalid colour → default');
+check(tileColourFor(null, 'a') === 'default', 'null prefs → default');
+check(TILE_COLOUR_KEYS.indexOf('default') === 0, 'TILE_COLOUR_KEYS leads with default');
+
+console.log('\n--- sanitiseTilePrefs ---');
+let sp = sanitiseTilePrefs({ sortMode: 'alpha', order: ['a', 'b', 'a'], colours: { a: 'red', b: 'bad', c: 'blue' } });
+check(sp.sortMode === 'alpha', 'valid sortMode kept');
+check(sp.order.join(',') === 'a,b', 'order de-duplicated, id-shaped entries kept');
+check(sp.colours.a === 'red' && sp.colours.c === 'blue' && sp.colours.b === undefined, 'invalid colour key dropped, valid kept');
+sp = sanitiseTilePrefs({ sortMode: 'sideways', colours: { a: 'default' } });
+check(sp.sortMode === 'manual', 'unknown sortMode falls back to manual');
+check(sp.colours.a === undefined, "'default' colour not stored (absence == default)");
+sp = sanitiseTilePrefs(null);
+check(sp.sortMode === 'manual' && Array.isArray(sp.order) && sp.order.length === 0, 'null → safe empty prefs');
+// Prototype-pollution / non-id keys rejected on shape.
+sp = sanitiseTilePrefs({ colours: { '__proto__': 'red', 'bad key': 'blue' } });
+check(Object.keys(sp.colours).length === 0, 'non-id-shaped colour keys rejected (prototype-pollution defence)');
+// validIds filter restricts to known pathway ids.
+sp = sanitiseTilePrefs({ order: ['a', 'b', 'c'], colours: { a: 'red', z: 'blue' } }, new Set(['a', 'b']));
+check(sp.order.join(',') === 'a,b', 'validIds Set filters order to known ids');
+check(sp.colours.a === 'red' && sp.colours.z === undefined, 'validIds Set filters colour keys to known ids');
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

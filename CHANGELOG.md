@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.41.0] — 2026-06-10
+
+### Feature: organise Reception capture tiles — colour, A–Z sort, drag-and-drop
+
+As practices author more capture pathways, the picker grid grows. Reception now
+has an **"Organise tiles"** mode (toggle in the capture card toolbar) so staff
+can lay the tiles out the way they work:
+
+- **Colour-code** — each tile carries an optional colour label (a palette of 9
+  hues plus "none"), shown as a coloured left edge on the tile. Tap the dot in
+  organise mode to set it.
+- **Sort A–Z** — a Manual / A–Z toggle. A–Z sorts by title (case-insensitive);
+  Manual restores the saved hand-ordered layout.
+- **Drag-and-drop reorder** — in Manual order, drag tiles into any order. The
+  reconcile logic mirrors `tab-order.js`: a newly-added pathway appends at the
+  end and a removed one drops out — a tile is never duplicated or lost.
+
+Design / safety notes:
+- Colours and order are **organising only and explicitly not a clinical flag**
+  (the UI says so); they never change which pathways are enabled and never gate
+  clinical content. Launching a capture is disabled while organising so a tile
+  click can't start a call flow by accident.
+- New `reception.tilePrefs` storage key `{ sortMode, order, colours }`, edited
+  from the panel itself and synced live between the panel and pop-out. It rides
+  the existing suite backup via `shared/io/reception-io.js`
+  (`receptionExport`/`receptionImport`), validated/sanitised through
+  `sanitiseTilePrefs` (unknown sort modes, non-id-shaped keys → dropped;
+  prototype-pollution-safe).
+- Pure logic (`orderTiles`, `tileColourFor`, `sanitiseTilePrefs`,
+  `TILE_COLOUR_KEYS`) lives in `shared/reception-pathway-utils.js` with new
+  regression tests in `test-reception-pathway-utils.js`.
+
 ## [v3.40.3] — 2026-06-10
 
 ### Fix: Sweep clinician dropdown empty before first run; clinician column never shown

@@ -143,7 +143,16 @@
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 6px;
 }
+
+/* Tile wrapper (holds the launch button + organise affordances) */
+.rcp-pathway-tile {
+  position: relative;
+  display: flex;
+  border-radius: 6px;
+}
 .rcp-pathway-btn {
+  flex: 1;
+  min-width: 0;
   border: 1px solid var(--border-color, #ccc);
   background: var(--bg-card, #fff);
   border-radius: 6px;
@@ -155,9 +164,110 @@
   gap: 2px;
   color: inherit;
 }
-.rcp-pathway-btn:hover { border-color: var(--accent, #2563eb); }
+.rcp-pathway-tile:not(.rcp-tile-organising) .rcp-pathway-btn:hover { border-color: var(--accent, #2563eb); }
 .rcp-pathway-title { font-weight: 600; font-size: 0.8rem; }
 .rcp-pathway-applies { font-size: 0.7rem; color: var(--text-secondary, #777); }
+
+/* Colour coding (organising only — NOT a clinical flag).
+   Each key sets --tile-col; tiles show it as a left edge, swatches/dots as a fill.
+   Keep keys in sync with TILE_COLOUR_KEYS in shared/reception-pathway-utils.js. */
+.rcp-tile-c-default { --tile-col: transparent; }
+.rcp-tile-c-slate   { --tile-col: #64748b; }
+.rcp-tile-c-red     { --tile-col: #dc2626; }
+.rcp-tile-c-orange  { --tile-col: #ea580c; }
+.rcp-tile-c-amber   { --tile-col: #d97706; }
+.rcp-tile-c-green   { --tile-col: #16a34a; }
+.rcp-tile-c-teal    { --tile-col: #0d9488; }
+.rcp-tile-c-blue    { --tile-col: #2563eb; }
+.rcp-tile-c-purple  { --tile-col: #7c3aed; }
+.rcp-tile-c-pink    { --tile-col: #db2777; }
+
+.rcp-pathway-tile:not(.rcp-tile-c-default) > .rcp-pathway-btn {
+  border-left: 4px solid var(--tile-col);
+}
+
+/* Organise toolbar */
+.rcp-tile-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rcp-sort-ctrl { display: inline-flex; align-items: center; gap: 4px; }
+.rcp-sort-label { font-size: 0.72rem; color: var(--text-secondary, #777); margin-right: 2px; }
+.rcp-seg {
+  border: 1px solid var(--border-color, #ccc);
+  background: var(--bg-card, #fff);
+  color: inherit;
+  font-size: 0.74rem;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.rcp-seg:first-of-type { border-radius: 5px 0 0 5px; }
+.rcp-seg:last-of-type  { border-radius: 0 5px 5px 0; border-left: none; }
+.rcp-seg-on { background: var(--accent, #2563eb); border-color: var(--accent, #2563eb); color: #fff; }
+.rcp-organise-toggle { font-weight: 600; }
+
+/* Organise mode: tile affordances */
+.rcp-tile-organising > .rcp-pathway-btn { cursor: default; padding-right: 26px; }
+.rcp-pathway-tile[draggable="true"] { cursor: grab; }
+.rcp-pathway-tile[draggable="true"] > .rcp-pathway-btn { padding-left: 20px; }
+.rcp-drag-handle {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary, #999);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: grab;
+}
+.rcp-tile-dragging { opacity: 0.4; }
+.rcp-tile-over > .rcp-pathway-btn { outline: 2px dashed var(--accent, #2563eb); outline-offset: -2px; }
+
+/* Colour swatch (top-right of a tile in organise mode) */
+.rcp-tile-swatch {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  background: var(--tile-col, transparent);
+  cursor: pointer;
+}
+.rcp-tile-swatch.rcp-tile-c-default { background: transparent; border-style: dashed; }
+
+/* Colour palette popover */
+.rcp-colour-palette {
+  position: absolute;
+  top: 26px;
+  right: 5px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  width: 116px;
+  padding: 7px;
+  border-radius: 6px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #ccc);
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.18);
+}
+.rcp-colour-dot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: var(--tile-col, transparent);
+  cursor: pointer;
+}
+.rcp-colour-dot.rcp-tile-c-default { background: transparent; border-style: dashed; }
+.rcp-colour-sel { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
 
 /* Capture form */
 .rcp-form-head {

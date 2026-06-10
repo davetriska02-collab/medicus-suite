@@ -35,6 +35,7 @@ const RECEPTION_KEYS = [
   'reception.config',
   'reception.customPathways',
   'reception.pathwayOverrides',
+  'reception.tilePrefs',
 ];
 
 async function receptionExport() {
@@ -43,6 +44,7 @@ async function receptionExport() {
     config:           r['reception.config']           ?? {},
     customPathways:   r['reception.customPathways']   ?? [],
     pathwayOverrides: r['reception.pathwayOverrides'] ?? {},
+    tilePrefs:        r['reception.tilePrefs']        ?? {},
   };
 }
 
@@ -127,6 +129,17 @@ async function receptionImport(data) {
       cleaned[id] = PU.sanitisePathway(p);
     }
     toSet['reception.pathwayOverrides'] = cleaned;
+  }
+
+  if (data.tilePrefs !== undefined) {
+    const tp = data.tilePrefs;
+    if (tp !== null && (typeof tp !== 'object' || Array.isArray(tp))) {
+      throw new Error('reception.tilePrefs must be an object.');
+    }
+    // Organising-only display prefs (tile colour / order / sort). sanitiseTilePrefs
+    // builds a fresh object — dropping unknown sort modes, non-id-shaped keys
+    // (prototype-pollution defence), and invalid colour keys.
+    toSet['reception.tilePrefs'] = PU.sanitiseTilePrefs(tp || {});
   }
 
   if (Object.keys(toSet).length) await chrome.storage.local.set(toSet);
