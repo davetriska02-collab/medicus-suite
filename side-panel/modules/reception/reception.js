@@ -109,6 +109,7 @@ async function loadConfigAndResolve() {
       overrides: r['reception.pathwayOverrides'] || {},
       customPathways: r['reception.customPathways'] || [],
       enabledPathways: _config.enabledPathways || {},
+      disclaimerAccepted: _config.disclaimerAcceptedAt != null,
     });
   } else {
     _effective = { all: [], enabled: [] };
@@ -342,7 +343,9 @@ function updateEscalationBanner(form, pathway) {
   // 999-level escalation wins over duty-level when both are present.
   const level = positives.some(p => p.escalate === '999') ? '999' : 'duty';
   banner.className = `rcp-banner rcp-banner-${level === '999' ? 'red' : 'amber'}`;
-  banner.textContent = `RED FLAG — ${(_bundledDoc.escalations && _bundledDoc.escalations[level]) || 'Escalate to the duty clinician now.'}`;
+  // Fallback includes the level so the receptionist always knows 999-vs-duty even if
+  // the escalations map entry is missing (near-unreachable; validation forces level ∈ {999,duty}).
+  banner.textContent = `RED FLAG — ${(_bundledDoc.escalations && _bundledDoc.escalations[level]) || `ACTION (level ${level}): Escalate immediately.`}`;
 }
 
 function readQuestionAnswers(form, scope, questions) {

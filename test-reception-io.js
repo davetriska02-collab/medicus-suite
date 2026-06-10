@@ -60,10 +60,22 @@ async function expectReject(data, msgPart, label) {
 
   await receptionImport({ config: { enabledPathways: { 'sore-throat': true }, disclaimerAcceptedAt: '2026-06-10T10:00:00Z', hiddenChipRules: {} } });
   check(_store['reception.config'].enabledPathways['sore-throat'] === true, 'valid config imported');
+  // disclaimerAcceptedAt must NOT be written by import — per-install attestation only.
+  check(!('disclaimerAcceptedAt' in _store['reception.config']), 'disclaimerAcceptedAt NOT stored on import (per-install attestation, not importable)');
 
   // Unknown config fields are dropped, not stored.
   await receptionImport({ config: { enabledPathways: {}, sneaky: 'payload' } });
   check(!('sneaky' in _store['reception.config']), 'unknown config fields stripped on import');
+
+  console.log('\n--- receptionImport: flag-map key whitelist (prototype-pollution defence) ---');
+  // __proto__ as an OWN property (from JSON.parse, not an object literal which silently sets the prototype).
+  await expectReject({ config: { enabledPathways: JSON.parse('{"__proto__":true}') } }, 'invalid key', '__proto__ own-key in enabledPathways rejected');
+  await expectReject({ config: { enabledPathways: { 'valid-id': true, '': true } } }, 'invalid key', 'empty key in enabledPathways rejected');
+  // Keys with leading/embedded special chars that don't match the ID regex
+  await expectReject({ config: { enabledPathways: { ' sore-throat': true } } }, 'invalid key', 'space-prefixed key in enabledPathways rejected');
+  await expectReject({ config: { hiddenChipRules: { 'rule/xss<>': true } } }, 'invalid key', 'slash/angle-bracket key in hiddenChipRules rejected');
+  await receptionImport({ config: { enabledPathways: { 'sore-throat': true, 'my-pathway-99': false } } });
+  check(_store['reception.config'].enabledPathways['sore-throat'] === true, 'valid alphanumeric-hyphen keys accepted');
 
   console.log('\n--- receptionImport: pathway validation ---');
   await expectReject({ customPathways: 'nope' }, 'array', 'non-array customPathways rejected');

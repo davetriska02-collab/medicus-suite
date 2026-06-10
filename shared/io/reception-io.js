@@ -8,6 +8,12 @@
 // anything. Every pathway is validated and whitelist-sanitised via
 // ReceptionPathwayUtils, and previewEnvelope() in suite-envelope.js warns
 // when a backup enables pathways.
+//
+// disclaimerAcceptedAt is intentionally NOT imported: acceptance is a
+// per-install attestation set only when a local admin clicks "Accept" in the
+// Options UI. A backup carrying a foreign acceptance timestamp must never
+// unlock pathways on a different install automatically. Export may still
+// include it to reflect local state, but import silently ignores it.
 
 'use strict';
 
@@ -18,6 +24,12 @@ const _ReceptionPathUtils =
   (typeof module !== 'undefined' && typeof require === 'function'
     ? require('../reception-pathway-utils.js')
     : null);
+
+// Pathway and rule IDs must match this shape (same as ID_RE in reception-pathway-utils.js).
+// Defined locally so reception-io.js can be used without importing pathway-utils in contexts
+// where it hasn't been loaded yet (defence-in-depth: the flag-map check runs before
+// validatePathway so the regex must be available independently).
+const _FLAG_KEY_RE = /^[a-z0-9][a-z0-9-]{0,49}$/i;
 
 const RECEPTION_KEYS = [
   'reception.config',
@@ -41,6 +53,17 @@ function _isFlagMap(v) {
   return Object.values(v).every(x => typeof x === 'boolean');
 }
 
+// Reject a flag map whose keys don't all conform to the pathway/rule id shape.
+// Defence-in-depth: prevents prototype-pollution via __proto__ or similar keys.
+// Throws a descriptive error consistent with the other import validators.
+function _assertFlagMapKeys(v, label) {
+  for (const k of Object.keys(v)) {
+    if (!_FLAG_KEY_RE.test(k)) {
+      throw new Error(`${label} contains an invalid key "${k}" (keys must match [a-z0-9][a-z0-9-]{0,49}).`);
+    }
+  }
+}
+
 async function receptionImport(data) {
   if (!data || typeof data !== 'object') return;
   const PU = _ReceptionPathUtils;
@@ -55,19 +78,25 @@ async function receptionImport(data) {
     const clean = {};
     if (c.enabledPathways !== undefined) {
       if (!_isFlagMap(c.enabledPathways)) throw new Error('reception.config.enabledPathways must map pathway ids to booleans.');
+      _assertFlagMapKeys(c.enabledPathways, 'reception.config.enabledPathways');
       clean.enabledPathways = c.enabledPathways;
     }
     if (c.hiddenChipRules !== undefined) {
       if (!_isFlagMap(c.hiddenChipRules)) throw new Error('reception.config.hiddenChipRules must map rule ids to booleans.');
+      _assertFlagMapKeys(c.hiddenChipRules, 'reception.config.hiddenChipRules');
       clean.hiddenChipRules = c.hiddenChipRules;
     }
+    // disclaimerAcceptedAt is intentionally NOT imported: acceptance is a per-install
+    // attestation that must only be set when a local admin explicitly clicks "Accept"
+    // in the Options UI. A backup carrying a foreign timestamp must not unlock pathways
+    // on a different install. Any value present in the backup is silently ignored here.
+    // Validation errors for clearly-malformed values are still raised to surface crafted
+    // backups early, but the field is never written to storage by this function.
     if (c.disclaimerAcceptedAt !== undefined && c.disclaimerAcceptedAt !== null) {
       if (typeof c.disclaimerAcceptedAt !== 'string' || !ISO_DATETIME_RE.test(c.disclaimerAcceptedAt)) {
         throw new Error('reception.config.disclaimerAcceptedAt must be null or an ISO datetime string.');
       }
-      clean.disclaimerAcceptedAt = c.disclaimerAcceptedAt;
-    } else if (c.disclaimerAcceptedAt === null) {
-      clean.disclaimerAcceptedAt = null;
+      // Intentionally not written: clean.disclaimerAcceptedAt is omitted.
     }
     toSet['reception.config'] = clean;
   }

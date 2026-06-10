@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "lastUpdated": "2026-06-10",
-  "specVersion": "Reception capture pathways v1 (DRAFT — requires CSO sign-off before live use)",
-  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, and the NHS Pharmacy First clinical pathways, re-phrased in lay language for telephone use by non-clinical staff. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
+  "specVersion": "Reception capture pathways v1.1 (DRAFT — requires CSO sign-off before live use; escalation re-tiering pass 2026-06-10)",
+  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG51 (sepsis) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
     "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
@@ -51,6 +51,7 @@
         { "id": "rf-meningism", "ask": "Severe headache with a stiff neck, dislike of light, or a rash that doesn't fade when pressed?", "escalate": "999" },
         { "id": "rf-head-injury", "ask": "Any recent head injury, or fluid leaking from the ear after a bang to the head?", "escalate": "duty" },
         { "id": "rf-sudden-deaf", "ask": "Sudden complete hearing loss in that ear?", "escalate": "duty" },
+        { "id": "rf-facial-droop", "ask": "Any drooping, weakness, or loss of movement on one side of the face on the same side as the earache?", "escalate": "duty" },
         { "id": "rf-unwell-child", "ask": "If a child: floppy, hard to wake, breathing very fast, or not drinking?", "escalate": "999" }
       ],
       "questions": [
@@ -67,11 +68,13 @@
       "id": "cough",
       "title": "Cough / chest symptoms (adult)",
       "appliesTo": "Adults",
-      "sources": ["NICE CKS: Cough — acute with chest signs", "NICE NG12 (urgent referral symptoms captured as history only)"],
+      "sources": ["NICE CKS: Cough — acute with chest signs", "NICE NG12 (urgent referral symptoms captured as history only)", "NICE CKS: Pulmonary embolism (PE red flags, lay-phrased)"],
       "redFlags": [
         { "id": "rf-breathless", "ask": "Are they so breathless they can't finish a sentence, or breathless at rest?", "escalate": "999" },
         { "id": "rf-bluelips", "ask": "Any blue or grey lips or face?", "escalate": "999" },
-        { "id": "rf-haemoptysis", "ask": "Coughing up blood?", "escalate": "duty" },
+        { "id": "rf-haemoptysis", "ask": "Coughing up a large amount of blood, or blood coughed up together with breathlessness or chest pain?", "escalate": "999" },
+        { "id": "rf-haemoptysis-minor", "ask": "Any blood-streaking in the phlegm, even a small amount?", "escalate": "duty" },
+        { "id": "rf-pe", "ask": "Sharp chest pain that gets worse when breathing in, especially with a swollen or painful calf, or after recent surgery or a long flight?", "escalate": "999" },
         { "id": "rf-chestpain", "ask": "Severe chest pain, or chest pain with breathlessness or sweating?", "escalate": "999" },
         { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness?", "escalate": "999" },
         { "id": "rf-asthma", "ask": "Known asthma or COPD and the reliever inhaler is hardly helping?", "escalate": "duty" }
@@ -91,15 +94,16 @@
       "id": "urinary",
       "title": "Urinary symptoms (woman 16–64)",
       "appliesTo": "Women aged 16–64. Men, children, and pregnancy go straight to a clinician.",
-      "sources": ["NICE CKS: Urinary tract infection (lower) — women", "TARGET UTI resources", "NHS Pharmacy First: uncomplicated UTI pathway"],
+      "sources": ["NICE CKS: Urinary tract infection (lower) — women", "TARGET UTI resources", "NHS Pharmacy First: uncomplicated UTI pathway", "NICE NG51: Sepsis (urosepsis cluster)"],
       "pharmacyFirst": { "label": "Uncomplicated UTI (women 16–64)", "ageMin": 16, "ageMax": 64, "note": "Pharmacy First covers uncomplicated UTI in women 16–64 — clinician or care navigator to confirm suitability." },
       "redFlags": [
-        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors)?", "escalate": "duty" },
+        { "id": "rf-urosepsis", "ask": "Fever or shivering and shaking chills, together with new confusion or drowsiness, or so unwell they are unable to keep any fluids down?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors) — without the confusion covered above?", "escalate": "duty" },
         { "id": "rf-loin", "ask": "Pain in the back or side, around kidney level?", "escalate": "duty" },
         { "id": "rf-vomiting", "ask": "Vomiting and unable to keep fluids down?", "escalate": "duty" },
         { "id": "rf-pregnant", "ask": "Is there any chance she is pregnant?", "escalate": "duty" },
         { "id": "rf-male-child", "ask": "Is the patient male, or under 16? (different pathway — needs a clinician)", "escalate": "duty" },
-        { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness (especially in an older person)?", "escalate": "duty" }
+        { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness (especially in an older person), not already captured above?", "escalate": "999" }
       ],
       "questions": [
         { "id": "symptoms", "ask": "Which of these do they have?", "type": "multi", "options": ["Burning or stinging when passing urine", "Going more often than usual", "Sudden urgency", "Urine looks cloudy or smells", "Blood in the urine", "Low tummy pain"], "label": "Symptoms" },
@@ -122,7 +126,7 @@
         { "id": "rf-eye", "ask": "A painful red eye, or halos around lights, with the headache?", "escalate": "duty" },
         { "id": "rf-new50", "ask": "Is this a brand-new type of headache and the patient is over 50, with tenderness at the temple or pain when chewing?", "escalate": "duty" },
         { "id": "rf-pregnant", "ask": "Pregnant with severe headache, swelling, or vision changes?", "escalate": "duty" },
-        { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) with a new headache?", "escalate": "duty" }
+        { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) — with a new headache AFTER ANY bump or knock to the head? (If yes: 999 now. If new headache on thinners with no head injury, report to duty clinician.)", "escalate": "999" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long has this headache been going on, and is it constant or does it come and go?", "type": "text", "label": "Duration/pattern" },
@@ -138,13 +142,13 @@
       "id": "backpain",
       "title": "Low back pain (adult)",
       "appliesTo": "Adults",
-      "sources": ["NICE CKS: Sciatica / low back pain", "Cauda equina red flags (national CESCQ-style lay phrasing)"],
+      "sources": ["NICE CKS: Sciatica / low back pain", "Cauda equina red flags (national CESCQ-style lay phrasing)", "Spinal epidural abscess risk factors (IV drug use / immunosuppression)"],
       "redFlags": [
-        { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)?", "escalate": "duty" },
-        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when passing urine?", "escalate": "duty" },
+        { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
         { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "duty" },
         { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
-        { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain?", "escalate": "duty" },
+        { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
         { "id": "rf-cancer", "ask": "Any history of cancer, with this being a new back pain?", "escalate": "duty" }
       ],
       "questions": [
@@ -161,6 +165,7 @@
       "title": "Feverish child",
       "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
       "sources": ["NICE NG143: Fever in under 5s (traffic-light features, lay-phrased)", "NICE CKS: Feverish children"],
+      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO should confirm whether the local escalation route for this age group is 999 or urgent duty.",
       "redFlags": [
         { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },
@@ -191,8 +196,8 @@
       "redFlags": [
         { "id": "rf-nonblanching", "ask": "Does the rash fade when a glass is pressed against it? (If it does NOT fade — treat as emergency)", "escalate": "999" },
         { "id": "rf-anaphylaxis", "ask": "Any swelling of the lips, tongue or face, or any difficulty breathing with the rash?", "escalate": "999" },
-        { "id": "rf-spreading", "ask": "An area of skin that is red, hot, very painful and spreading FAST, with fever or feeling very unwell?", "escalate": "duty" },
-        { "id": "rf-blistering", "ask": "Widespread blistering or skin peeling, with feeling unwell?", "escalate": "duty" },
+        { "id": "rf-spreading", "ask": "An area of skin that is red, hot, very painful and spreading FAST, AND they feel very unwell, have a fever, or look or sound seriously ill? (Possible necrotising fasciitis — emergency)", "escalate": "999" },
+        { "id": "rf-blistering", "ask": "Widespread blistering, skin peeling, or rawness or blistering also affecting the mouth, eyes, or genitals, with feeling unwell? (Possible SJS/TEN)", "escalate": "duty" },
         { "id": "rf-meningism", "ask": "Rash with severe headache, stiff neck, or dislike of bright light?", "escalate": "999" },
         { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" }
       ],
@@ -219,7 +224,9 @@
         { "id": "rf-bleeding", "ask": "Heavy bleeding that won't stop?", "escalate": "999" },
         { "id": "rf-collapse", "ask": "Collapsed, hard to wake, or new confusion?", "escalate": "999" },
         { "id": "rf-allergy", "ask": "Signs of a severe allergic reaction — swelling of lips or tongue, struggling to breathe?", "escalate": "999" },
-        { "id": "rf-mentalhealth", "ask": "Is the patient saying they may harm themselves or someone else?", "escalate": "duty" }
+        { "id": "rf-sepsis", "ask": "Shivering or shaking uncontrollably, skin that looks very pale, mottled (blotchy), or feels cold and clammy, or the person is saying they feel like they might die?", "escalate": "999" },
+        { "id": "rf-mentalhealth-attempt", "ask": "Is the patient actively attempting to harm themselves right now, or do they have a plan and the means to carry it out immediately?", "escalate": "999" },
+        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },

@@ -79,23 +79,30 @@ let res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customP
 check(res.enabled.length === 0, 'DEFAULT IS OFF: no enabled pathways without explicit config');
 check(res.all.length === 2 && res.all.every(e => e.enabled === false), 'all listed as disabled');
 
-// Enable one
-res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': true } });
-check(res.enabled.length === 1 && res.enabled[0].id === 'p-a', 'only explicitly-enabled pathway active');
+// Disclaimer gate: enabled pathways are suppressed when disclaimerAccepted is not strictly true.
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': true }, disclaimerAccepted: false });
+check(res.enabled.length === 0, 'disclaimerAccepted:false → enabled is empty (fail-safe)');
+check(res.all.find(e => e.pathway.id === 'p-a').enabled === true, 'all listing still shows enabled:true before acceptance (toggles render)');
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': true } /* no disclaimerAccepted field */ });
+check(res.enabled.length === 0, 'absent disclaimerAccepted defaults to not accepted → empty enabled (fail-safe)');
 
-// Non-true values do not enable
-res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': 'yes', 'p-b': 1 } });
+// Enable one with disclaimer accepted
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': true }, disclaimerAccepted: true });
+check(res.enabled.length === 1 && res.enabled[0].id === 'p-a', 'only explicitly-enabled pathway active (with disclaimer accepted)');
+
+// Non-true values do not enable (even with disclaimer accepted)
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [], enabledPathways: { 'p-a': 'yes', 'p-b': 1 }, disclaimerAccepted: true });
 check(res.enabled.length === 0, 'truthy-but-not-true values do NOT enable (strict === true)');
 
 // Valid override replaces bundled
 const edited = goodPathway({ id: 'p-a', title: 'A (edited)' });
-res = resolveEffectivePathways({ bundled: bundledSet, overrides: { 'p-a': edited }, customPathways: [], enabledPathways: { 'p-a': true } });
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: { 'p-a': edited }, customPathways: [], enabledPathways: { 'p-a': true }, disclaimerAccepted: true });
 check(res.enabled[0].title === 'A (edited)', 'valid override replaces bundled content');
 check(res.all.find(e => e.pathway.id === 'p-a').origin === 'edited', 'origin reported as edited');
 
 // Invalid override falls back to bundled, flagged
 const broken = goodPathway({ id: 'p-a', redFlags: [] });
-res = resolveEffectivePathways({ bundled: bundledSet, overrides: { 'p-a': broken }, customPathways: [], enabledPathways: { 'p-a': true } });
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: { 'p-a': broken }, customPathways: [], enabledPathways: { 'p-a': true }, disclaimerAccepted: true });
 check(res.enabled.length === 1 && res.enabled[0].title === 'A', 'invalid override → bundled original used and still enable-able');
 check(res.all.find(e => e.pathway.id === 'p-a').overrideInvalid === true, 'invalid override flagged (overrideInvalid), never silent');
 check(res.all.find(e => e.pathway.id === 'p-a').invalid === false, 'bundled fallback itself not marked unusable');
@@ -106,6 +113,7 @@ const clash = goodPathway({ id: 'p-a', title: 'Impostor' });
 res = resolveEffectivePathways({
   bundled: bundledSet, overrides: {}, customPathways: [custom, clash],
   enabledPathways: { 'p-custom': true, 'p-a': true },
+  disclaimerAccepted: true,
 });
 check(res.enabled.some(p => p.id === 'p-custom'), 'custom pathway enabled');
 check(res.enabled.find(p => p.id === 'p-a').title === 'A', 'custom id-clash cannot shadow a bundled pathway');
@@ -113,7 +121,7 @@ check(res.all.find(e => e.pathway.title === 'Impostor').invalid === true, 'clash
 
 // Invalid custom never reaches enabled set
 const badCustom = goodPathway({ id: 'p-bad', questions: [] });
-res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [badCustom], enabledPathways: { 'p-bad': true } });
+res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [badCustom], enabledPathways: { 'p-bad': true }, disclaimerAccepted: true });
 check(res.enabled.length === 0, 'invalid custom pathway never enabled even if flagged on');
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

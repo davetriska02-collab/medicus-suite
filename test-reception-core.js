@@ -87,6 +87,32 @@ const path = require('path');
   check(!textClean.includes('Pharmacy First:'), 'no PF line when hint null');
   check(!textClean.includes('Patient (from open record)'), 'no patient line when record not open');
 
+  // ── buildCaptureText: label collision disambiguation ──────────────────────────
+  console.log('\n--- buildCaptureText: label collision disambiguation ---');
+  const collisionPath = {
+    id: 'test-collision', title: 'Collision test',
+    // Two flags whose text before the first separator (',' here) is identical — both truncate to "Fever"
+    redFlags: [
+      { id: 'rf-x', ask: 'Fever, with shaking?', escalate: '999' },
+      { id: 'rf-y', ask: 'Fever, with confusion?', escalate: 'duty' },
+      { id: 'rf-z', ask: 'Chest pain?', escalate: '999' },
+    ],
+    questions: [{ id: 'q1', ask: 'Duration?', type: 'text' }],
+  };
+  const collText = buildCaptureText({
+    pathway: collisionPath, closingQuestions: [], escalations: {},
+    ownWords: '',
+    redFlagAnswers: { 'rf-x': 'no', 'rf-y': 'no', 'rf-z': 'no' },
+    questionAnswers: {}, closingAnswers: {},
+    meta: { takerInitials: '', nowIso: '2026-06-10T10:00:00Z', suiteVersion: '' },
+  });
+  // The two "Fever" labels must be disambiguated
+  check(collText.includes('Fever (#1)') && collText.includes('Fever (#2)'), 'colliding short labels disambiguated with (#n)');
+  // The non-colliding label must remain unchanged
+  check(collText.includes('Chest pain: no'), 'non-colliding label unchanged');
+  // Unique labels are not suffixed
+  check(!collText.includes('Chest pain (#'), 'non-colliding label has no (#n) suffix');
+
   // ── summariseActionChips ──────────────────────────────────────────────────────
   console.log('\n--- summariseActionChips ---');
   const sum = summariseActionChips([

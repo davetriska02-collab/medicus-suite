@@ -116,12 +116,18 @@
   }
 
   // ---------------------------------------------------------------------------
-  // resolveEffectivePathways({ bundled, overrides, customPathways, enabledPathways })
+  // resolveEffectivePathways({ bundled, overrides, customPathways, enabledPathways,
+  //                             disclaimerAccepted })
   //
-  //   bundled          — pathways array from rules/reception-pathways.json
-  //   overrides        — { [bundledId]: pathway } practice edits of bundled pathways
-  //   customPathways   — array of practice-authored pathways
-  //   enabledPathways  — { [id]: true } (anything else = disabled; DEFAULT IS OFF)
+  //   bundled             — pathways array from rules/reception-pathways.json
+  //   overrides           — { [bundledId]: pathway } practice edits of bundled pathways
+  //   customPathways      — array of practice-authored pathways
+  //   enabledPathways     — { [id]: true } (anything else = disabled; DEFAULT IS OFF)
+  //   disclaimerAccepted  — boolean; MUST be strictly true for any pathway to be
+  //                         enabled. When absent or falsy the returned `enabled`
+  //                         array is ALWAYS empty (fail-safe). The `all` listing
+  //                         is unaffected so toggle controls still render correctly
+  //                         before acceptance.
   //
   // Returns { all, enabled }:
   //   all     — [{ pathway, origin: 'bundled'|'edited'|'custom', enabled,
@@ -131,13 +137,16 @@
   //             overrideInvalid — a practice edit failed validation and was
   //                               ignored; the bundled original stays active
   //                               and enable-able. Flagged, never silent.
-  //   enabled — pathway objects that are enabled AND usable, in listing order
+  //   enabled — pathway objects that are enabled AND usable AND disclaimer has
+  //             been accepted, in listing order. Empty when disclaimer not accepted.
   // ---------------------------------------------------------------------------
   function resolveEffectivePathways(input) {
     const bundled = (input && input.bundled) || [];
     const overrides = (input && input.overrides) || {};
     const custom = (input && input.customPathways) || [];
     const enabledMap = (input && input.enabledPathways) || {};
+    // Disclaimer gate: if not strictly true, no pathway is enabled (fail-safe).
+    const disclaimerAccepted = (input && input.disclaimerAccepted) === true;
     const all = [];
     const seenIds = new Set();
 
@@ -166,7 +175,13 @@
       all.push({ pathway: c, origin: 'custom', enabled: enabledMap[c.id] === true, invalid: false, overrideInvalid: false });
     }
 
-    const enabled = all.filter(e => e.enabled && !e.invalid).map(e => e.pathway);
+    // Disclaimer gate: even if a pathway has enabled===true in the config, it
+    // must not reach reception until a local admin has explicitly accepted the
+    // disclaimer in-browser. When disclaimerAccepted is false, enabled is always
+    // empty so the capture UI shows "pathways are switched off".
+    const enabled = disclaimerAccepted
+      ? all.filter(e => e.enabled && !e.invalid).map(e => e.pathway)
+      : [];
     return { all, enabled };
   }
 

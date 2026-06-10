@@ -1431,6 +1431,7 @@ rmSaveBtn?.addEventListener('click', async () => {
     const resolved = PU.resolveEffectivePathways({
       bundled: bundled.pathways || [], overrides, customPathways: custom,
       enabledPathways: config.enabledPathways || {},
+      disclaimerAccepted: !!config.disclaimerAcceptedAt,
     });
     const map = {};
     if (on) for (const e of resolved.all) { if (!e.invalid) map[e.pathway.id] = true; }
@@ -1728,6 +1729,7 @@ rmSaveBtn?.addEventListener('click', async () => {
       const resolved = PU.resolveEffectivePathways({
         bundled: bundled.pathways || [], overrides, customPathways: custom,
         enabledPathways: config.enabledPathways || {},
+        disclaimerAccepted: !!config.disclaimerAcceptedAt,
       });
       renderDisclaimerArea(config, resolved);
       renderPathwayList(resolved, config);
@@ -1744,6 +1746,7 @@ rmSaveBtn?.addEventListener('click', async () => {
     const resolved = PU.resolveEffectivePathways({
       bundled: bundled.pathways || [], overrides, customPathways: custom,
       enabledPathways: config.enabledPathways || {},
+      disclaimerAccepted: !!config.disclaimerAcceptedAt,
     });
     openEditor(null, resolved);
   });

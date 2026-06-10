@@ -113,15 +113,32 @@ function buildCaptureText(input) {
   const { positives } = evaluateRedFlags(pathway.redFlags, redFlagAnswers);
   if (positives.length > 0) {
     for (const p of positives) {
-      const esc = (escalations && escalations[p.escalate]) || 'Escalate to the duty clinician now.';
+      // Fallback includes the level so the reading clinician knows 999-vs-duty even if
+      // the escalations map is missing or the key is unknown — this path is near-unreachable
+      // (validation forces escalate ∈ {999,duty}) but must never silently hide the level.
+      const esc = (escalations && escalations[p.escalate]) || `ACTION (level ${p.escalate}): Escalate immediately.`;
       lines.push(`*** RED FLAG REPORTED: ${p.ask} — YES`);
       lines.push(`*** ACTION: ${esc}`);
     }
     lines.push('');
   }
-  const flagSummary = (pathway.redFlags || []).map(rf => {
+  // Build the asked/denied summary line. If two flags produce the same short label,
+  // append " (#n)" (1-based index within the pathway) to all colliding entries so
+  // the line is unambiguous. The loud *** block already names positives in full.
+  const rawLabels = (pathway.redFlags || []).map(rf => shortFlagLabel(rf.ask));
+  const labelCounts = {};
+  for (const lbl of rawLabels) labelCounts[lbl] = (labelCounts[lbl] || 0) + 1;
+  const labelSeenIndex = {};
+  const disambiguated = rawLabels.map((lbl, idx) => {
+    if (labelCounts[lbl] > 1) {
+      labelSeenIndex[lbl] = (labelSeenIndex[lbl] || 0) + 1;
+      return `${lbl} (#${labelSeenIndex[lbl]})`;
+    }
+    return lbl;
+  });
+  const flagSummary = (pathway.redFlags || []).map((rf, idx) => {
     const a = redFlagAnswers ? redFlagAnswers[rf.id] : undefined;
-    const short = shortFlagLabel(rf.ask);
+    const short = disambiguated[idx];
     return `${short}: ${a === 'yes' ? 'YES' : a === 'no' ? 'no' : 'NOT ASKED'}`;
   });
   if (flagSummary.length > 0) {
