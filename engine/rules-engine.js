@@ -1401,30 +1401,33 @@
   function vaccineEventInWindow(rule, data, seasonStartIso) {
     const givenTerms = rule.statusTerms?.given || [];
     const declinedTerms = rule.statusTerms?.declined || [];
+    // IMPORTANT: check declined BEFORE given for each record so that a code
+    // like "Flu vaccine declined" (which contains the stem "flu vaccin") is
+    // never misclassified as given. This is a clinical-safety requirement.
     // Search problems
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
       if (d && d < seasonStartIso) continue;
-      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
       if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
+      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
     }
     // Search observations (name and value)
     for (const o of data.observations || []) {
       const d = o.date || '';
       if (d && d < seasonStartIso) continue;
-      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
       if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
+      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
     }
     // Search observationHistory (journal entries in history)
     for (const h of data.observationHistory || []) {
-      if (matchesAnyTerm(h.name, givenTerms)) {
-        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
-        if (latest) return { type: 'given', date: latest.date, source: 'history' };
-      }
       if (matchesAnyTerm(h.name, declinedTerms)) {
         const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
         if (latest) return { type: 'declined', date: latest.date, source: 'history' };
+      }
+      if (matchesAnyTerm(h.name, givenTerms)) {
+        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
+        if (latest) return { type: 'given', date: latest.date, source: 'history' };
       }
     }
     return null;
@@ -1441,7 +1444,18 @@
       if (k === 'age') {
         if (age == null) continue;
         const ok = (clause.ageMin == null || age >= clause.ageMin) && (clause.ageMax == null || age <= clause.ageMax);
-        if (ok) return clause;
+        if (!ok) continue;
+        // Optional bornOnOrAfter gate (ISO date string). Fail-closed: if dob is
+        // missing or unparseable, this clause does NOT match. A different clause
+        // (e.g. a wider age band without bornOnOrAfter) may still match.
+        if (clause.bornOnOrAfter) {
+          const dob = ctx.dob || null;
+          if (!dob) continue; // fail-closed: unknown dob → skip this clause
+          const dobParsed = Date.parse(dob);
+          if (!Number.isFinite(dobParsed)) continue; // unparseable dob → skip
+          if (dob < clause.bornOnOrAfter) continue; // born before threshold → skip
+        }
+        return clause;
       }
 
       if (k === 'problem') {
@@ -1557,25 +1571,36 @@
     const matchedClause = matchVaccineEligibility(rule, data);
     if (!matchedClause) return [];
 
-    const startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+    // One-off (lifetime) vaccines use schedule:"once" and omit season.
+    // They look back to 1900-01-01 (effectively all time) and are never
+    // suppressed out-of-campaign — a lifetime vaccine is always actionable.
+    const isOneOff = rule.schedule === 'once';
 
-    // Out-of-campaign suppression: between the campaign end (e.g. 31 Mar) and
-    // the next season start (e.g. 1 Sep), no vaccine chips fire at all — an
-    // eligible-but-unvaccinated patient is not actionable in June (the jab
-    // cannot be given), and a stale "VAX DUE" all summer trains staff to
-    // ignore the chip when it matters. Rules without endMonth stay year-round.
-    const endIso = seasonEnd(startIso, rule.season);
-    if (endIso && nowIso.slice(0, 10) > endIso) return [];
+    let startIso, seasonLabel;
+    if (isOneOff) {
+      startIso = '1900-01-01';
+      seasonLabel = 'one-off';
+    } else {
+      startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+      const seasonYear = startIso.slice(0, 4);
+      seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
+      // Out-of-campaign suppression: between the campaign end (e.g. 31 Mar) and
+      // the next season start (e.g. 1 Sep), no vaccine chips fire at all — an
+      // eligible-but-unvaccinated patient is not actionable in June (the jab
+      // cannot be given), and a stale "VAX DUE" all summer trains staff to
+      // ignore the chip when it matters. Rules without endMonth stay year-round.
+      const endIso = seasonEnd(startIso, rule.season);
+      if (endIso && nowIso.slice(0, 10) > endIso) return [];
+    }
+
     const evt = vaccineEventInWindow(rule, data, startIso);
 
     const status = evt ? (evt.type === 'given' ? 'vax_given' : 'vax_declined') : 'vax_due';
 
-    const seasonYear = startIso.slice(0, 4);
-    const seasonLabel = `${seasonYear}/${String(Number(seasonYear) + 1).slice(2)}`;
-
     const eligibilityDetail = matchedClause.matchedEvidence || matchedClause.label;
     const evidenceParts = [`${rule.displayName} — ${eligibilityDetail}`];
     if (evt) evidenceParts.push(`${evt.type === 'given' ? 'Given' : 'Declined'}: ${evt.date || 'date unknown'}`);
+    else if (isOneOff) evidenceParts.push('No record ever held (one-off vaccine)');
     else evidenceParts.push(`No record in ${seasonLabel} season (from ${startIso})`);
     if (rule.notes) evidenceParts.push(rule.notes);
 

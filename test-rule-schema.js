@@ -71,11 +71,15 @@ vaxRules.rules.forEach((rule) => {
     const allStrings = given.every((s) => typeof s === 'string' && s.length > 0);
     check(allStrings, `${rule.id}: all statusTerms.given entries are non-empty strings`);
   }
-  // season.startMonth must be an integer 1-12
+  // Enabled vaccine rules must have EITHER a valid season.startMonth (1-12)
+  // OR schedule === 'once'. Both absent is an error; both present is an error.
   const sm = rule.season?.startMonth;
+  const isOnce = rule.schedule === 'once';
+  const hasValidSeason = Number.isInteger(sm) && sm >= 1 && sm <= 12;
   check(
-    Number.isInteger(sm) && sm >= 1 && sm <= 12,
-    `${rule.id}: season.startMonth is integer 1-12 (got ${JSON.stringify(sm)})`
+    hasValidSeason !== isOnce, // XOR: exactly one must be true
+    `${rule.id}: must have EITHER season.startMonth (1-12) OR schedule:"once", not both and not neither` +
+      ` (season.startMonth=${JSON.stringify(sm)}, schedule=${JSON.stringify(rule.schedule)})`
   );
 });
 
