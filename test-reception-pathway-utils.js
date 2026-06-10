@@ -7,7 +7,7 @@
 
 'use strict';
 
-const { validatePathway, sanitisePathway, resolveEffectivePathways } =
+const { validatePathway, sanitisePathway, resolveEffectivePathways, pathwaySchemaPrompt } =
   require('./shared/reception-pathway-utils.js');
 
 let passed = 0, failed = 0;
@@ -123,6 +123,31 @@ check(res.all.find(e => e.pathway.title === 'Impostor').invalid === true, 'clash
 const badCustom = goodPathway({ id: 'p-bad', questions: [] });
 res = resolveEffectivePathways({ bundled: bundledSet, overrides: {}, customPathways: [badCustom], enabledPathways: { 'p-bad': true }, disclaimerAccepted: true });
 check(res.enabled.length === 0, 'invalid custom pathway never enabled even if flagged on');
+
+// ── pathwaySchemaPrompt — embedded example must satisfy validatePathway ────────
+console.log('\n--- pathwaySchemaPrompt ---');
+const prompt = pathwaySchemaPrompt();
+check(typeof prompt === 'string' && prompt.length > 100, 'pathwaySchemaPrompt returns a non-trivial string');
+const START_MARKER = '--- EXAMPLE JSON ---';
+const END_MARKER   = '--- END EXAMPLE ---';
+const startIdx = prompt.indexOf(START_MARKER);
+const endIdx   = prompt.indexOf(END_MARKER);
+check(startIdx !== -1 && endIdx !== -1 && endIdx > startIdx, 'prompt contains EXAMPLE JSON / END EXAMPLE markers');
+let exampleErrs = ['markers not found'];
+if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+  const jsonText = prompt.slice(startIdx + START_MARKER.length, endIdx).trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+    exampleErrs = validatePathway(parsed);
+  } catch (e) {
+    exampleErrs = ['JSON.parse failed: ' + e.message];
+  }
+}
+check(exampleErrs.length === 0, 'embedded EXAMPLE JSON in pathwaySchemaPrompt() passes validatePathway (schema stays in sync with validator)');
+if (exampleErrs.length > 0) {
+  exampleErrs.forEach(e => console.error('    validation error:', e));
+}
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

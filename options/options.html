@@ -560,6 +560,36 @@
           <button class="ghost" id="rcpoNewPathway">+ New custom pathway</button>
         </div>
 
+        <!-- LLM pathway authoring tool -->
+        <details id="rcpoLlmBlock" style="margin-top:14px; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+          <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:10px; color:var(--text-4);">&#9654;</span>
+            Generate a pathway with an LLM
+          </summary>
+          <div style="padding:14px 16px; border-top:1px solid var(--border);">
+            <p style="font-size:12px; color:var(--text-3); margin:0 0 12px; line-height:1.6;">
+              Copy the prompt below, paste it into any LLM (ChatGPT, Claude, etc.) followed by the clinical topic you want
+              (e.g. "write a cellulitis pathway"), then paste the JSON response back into the box below to import it.
+              Imported pathways are <strong>not enabled</strong> until you toggle them on after clinical review.
+            </p>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+              <button class="ghost" id="rcpoLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
+              <span id="rcpoLlmCopied" style="font-family:var(--mono); font-size:11px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied.</span>
+            </div>
+            <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
+              Paste LLM JSON output here
+            </label>
+            <textarea id="rcpoLlmJson" rows="8" placeholder='Paste the JSON object (or array) returned by the LLM here, then click "Import pathway".'
+              style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.03); border:1px solid var(--border-hi);
+                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:6px;
+                     padding:8px 10px; resize:vertical; outline:none; line-height:1.5;"></textarea>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+              <button class="primary" id="rcpoLlmImport" style="font-size:11px; padding:5px 14px;">Import pathway</button>
+              <span id="rcpoLlmStatus" style="font-size:12px; line-height:1.5;"></span>
+            </div>
+          </div>
+        </details>
+
         <h2 style="font-size:14px; margin:24px 0 6px;">Quick-wins alert &mdash; chips shown to reception</h2>
         <p class="section-desc" style="margin-top:0;">The Reception tab shows a single green/amber/red status for the open patient. Untick any monitoring/QOF/vaccine rules you do <em>not</em> want counted there (they remain visible in the Monitoring tab; the Reception tab notes when alerts are filtered).</p>
         <div id="rcpoChipList"><div style="font-size:12px; color:var(--text-3);">Loading rules&hellip;</div></div>

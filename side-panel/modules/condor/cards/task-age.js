@@ -42,6 +42,13 @@ export function renderTaskAge(data) {
     return '<div class="condor-card condor-placeholder">Task inbox not configured. Enable Request Monitor in Settings.</div>';
   }
 
+  // Configured but the cached poll state is missing or errored — a fetch/auth
+  // problem must never be presented as "not configured" (it sends the user to
+  // re-check settings that are fine).
+  if (data.requestMonitor.unavailable) {
+    return `<div class="condor-card condor-placeholder">Task inbox unavailable: ${esc(data.requestMonitor.reason || 'unknown')} — check Medicus sign-in.</div>`;
+  }
+
   ensureStyles();
 
   const { totalCount = 0, urgentCount = 0, byAgeBucket } = data.requestMonitor;

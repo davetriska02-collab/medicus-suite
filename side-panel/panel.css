@@ -216,6 +216,17 @@ html, body {
 
 .nav-tab svg { flex-shrink: 0; }
 
+/* Drag-and-drop reordering */
+.nav-tab[draggable="true"] { cursor: grab; }
+.nav-tab.nav-tab-dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+  background: var(--accent-dim);
+}
+/* Insertion marker — left/right edge highlight on the drop-target tab */
+.nav-tab.nav-tab-drop-before { box-shadow: inset 2px 0 0 0 var(--accent); }
+.nav-tab.nav-tab-drop-after  { box-shadow: inset -2px 0 0 0 var(--accent); }
+
 .nav-actions {
   margin-left: auto;
   display: flex;

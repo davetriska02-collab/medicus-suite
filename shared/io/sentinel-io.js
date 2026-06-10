@@ -400,6 +400,215 @@ function validateCompositeRule(rule, loc) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// customRuleSchemaPrompt() → string
+// Returns a self-contained LLM instruction string for authoring a single
+// Medicus Suite Sentinel custom monitoring rule. Embed the returned string in
+// an LLM chat, then paste the JSON response into the "Author rule with LLM"
+// import box in the Sentinel custom-rules options page.
+//
+// The embedded EXAMPLE JSON blocks are delimited by the stable markers
+//   --- EXAMPLE JSON ---
+//   --- END EXAMPLE ---
+// so that tests can slice them out and feed through validateCustomRule().
+// ---------------------------------------------------------------------------
+function customRuleSchemaPrompt() {
+  return `You are generating a single Medicus Suite Sentinel custom monitoring rule for a UK GP practice. Output ONLY a JSON object — no prose, no markdown fences, no code blocks. The object must conform exactly to the schema below.
+
+=== CLINICAL SAFETY INSTRUCTIONS ===
+
+1. Matching is CASE-INSENSITIVE SUBSTRING: "methotrexate" matches "Methotrexate 10mg tablets".
+   A short generic term auto-covers qualified forms — "lithium" matches "lithium carbonate" and "lithium citrate".
+2. Every DISTINCT BRAND NAME must be listed explicitly in drug.match or it will NEVER match — silently, with no error.
+   Check the current BNF / dm+d for the complete UK brand set and enumerate every brand.
+3. drug.exclude strings are equally silent and sharp — they drop every medication whose name contains the term.
+   Use exclude ONLY to suppress genuine false positives. Ask: "Could a patient who NEEDS this monitoring match this string?"
+4. Imported rules arrive DISABLED (enabled:false is forced on import). A clinician must review and enable each rule
+   before it fires. Always cite your source in the notes and source fields so the reviewer can verify currency.
+5. Be conservative: missing a monitoring alert is a patient-safety risk. When in doubt, include more match terms.
+
+=== COMMON FIELDS (all rule types) ===
+
+  type        (string, required)
+              One of: "drug-monitoring" | "qof-indicator" | "drug-combo" | "event-count" | "composite"
+
+  id          (string, required)
+              MUST start with "custom-". Use a slug, e.g. "custom-ciclosporin-fbc-lft-bp".
+              The importer will prefix "custom-" if absent and de-duplicate if already in use.
+
+  enabled     (boolean, required)
+              Always set false in your output — the importer forces this regardless, but be explicit.
+
+  label       (string, optional)
+              Human-readable name shown in the rule list (e.g. "Ciclosporin monitoring").
+
+  notes       (string, optional)
+              Shown on the alert chip hover. Include a brief clinical rationale.
+
+  source      (string, optional)
+              URL or citation: BNF monitoring requirements, BSR/NHSE shared-care protocol, MHRA DSU, NICE guideline.
+              Always include this — it is the reviewer's only audit trail.
+
+  sex         (string, optional)
+              "M" | "F" | "any". Omit for any sex.
+
+  ageRange    (object, optional)
+              { min: number, max: number } — either or both can be present. Ages in whole years.
+
+  requiresProblem  (array of strings, optional)  — ALL listed problem terms must be present (substring match).
+  excludesProblem  (array of strings, optional)  — ANY matching problem disqualifies the patient.
+
+=== TYPE: drug-monitoring ===
+
+  drug        (object, required)
+    .match    (array of strings, required, non-empty)
+              Case-insensitive substring list. Include: generic name, all current UK brand names (BNF/dm+d).
+    .exclude  (array of strings, optional)
+              Drop meds whose name contains any of these strings. Use with caution (see safety note 3).
+
+  tests       (array, required, non-empty)
+              Each test:
+    .name           (string, required)  — Human label, e.g. "FBC".
+    .match          (array of strings, required, non-empty)
+                    Case-insensitive substring against observation names, e.g. ["fbc","full blood count"].
+    .intervalDays   (number, required)  — Positive integer ≤ 3650. Standard monitoring intervals:
+                    every 12 weeks = 84 days; every 3 months = 90 days; every 6 months = 182 days;
+                    annually = 365 days.
+    .dueSoonDays    (number, optional)  — Days before due date to show "due soon". Default: 28 days
+                    for intervals ≥ 12 weeks; otherwise interval/6 capped at 30.
+    .snomed         (array of strings, optional)  — SNOMED CT codes matched in addition to text terms.
+
+  drugClass   (string, optional)   — e.g. "DMARD", "biologic", "immunosuppressant".
+  sharedCare  (boolean, optional)  — true if this is a shared-care drug.
+
+=== TYPE: qof-indicator ===
+
+  indicatorCode   (string, required)  — Short code, e.g. "LOCAL-MTX-LFT".
+  indicatorName   (string, required)  — Display name, e.g. "MTX LFT within 3 months".
+
+  check           (object, required)
+    .kind         (string, required)  — One of:
+                  "observation-threshold" | "medication-present" | "observation-recent" |
+                  "observation-trend" | "observation-alert" | "observation-bundle"
+
+  For kind "observation-threshold":
+    .observation  (array of strings, required, non-empty)  — observation match terms.
+    .threshold    (number) + .operator ("<="|"<"|">="|">"|"=")  — single value comparison.
+    OR
+    .thresholdSystolic + .thresholdDiastolic  (numbers)  — blood pressure dual threshold.
+    .withinDays   (number, optional)  — observation window. Default: 365 (QOF year).
+
+  For kind "observation-recent":
+    .observation  (array of strings, required, non-empty)
+    .withinDays   (number, required, > 0)
+
+  For kind "medication-present":
+    .medicationMatch  (array of strings, required, non-empty)
+    .medicationExclude (array of strings, optional)
+
+  For kind "observation-trend":
+    .observation  (array of strings, required, non-empty)
+    .direction    ("rising"|"falling", required)
+    .minPoints    (number, optional, ≥ 2, default 3)
+    .withinMonths (number, optional, > 0)
+    .minDelta     (number, optional, ≥ 0)
+
+  For kind "observation-alert":
+    .observation  (array of strings, required, non-empty)
+    .comparator   ("above"|"below", optional, default "above")
+    .amber        (number, optional)  — at least one of amber/red required.
+    .red          (number, optional)
+    .withinDays   (number, optional)
+    .unit         (string, optional)
+
+  For kind "observation-bundle":
+    .observations (array, required, non-empty)  — array of observation term arrays.
+
+  requiresRegister (string, optional)
+              One of: "DM"|"HYP"|"CHD"|"HF"|"STIA"|"CKD"|"PAD"|"ASTHMA"|"COPD"|"AF"
+  points       (number, optional, ≥ 0)
+  useQofYearFloor (boolean, optional)
+  requiresProblem / requiresAnyProblem / excludeIfProblem  (arrays of strings, optional)
+
+=== SUMMARY OF OTHER TYPES ===
+
+  "drug-combo":    drugSets (array of {name, match[], exclude[]}), severity ("red"|"amber"|"info").
+                   Fires when patient is on at least one drug from EVERY set concurrently.
+
+  "event-count":   sourceKind ("problems"|"observations"), match[], windowMonths, countThreshold,
+                   operator (">="|">"|"="|"<="|"<"), severity. Fires when count operator threshold
+                   within the rolling window.
+
+  "composite":     operator ("AND"|"OR"), ruleIds (array of existing custom rule ids), severity.
+                   Combines other custom rules with boolean logic.
+
+=== EXAMPLES ===
+
+--- EXAMPLE JSON ---
+{
+  "type": "drug-monitoring",
+  "id": "custom-ciclosporin-monitoring",
+  "enabled": false,
+  "label": "Ciclosporin monitoring",
+  "drugClass": "immunosuppressant",
+  "sharedCare": true,
+  "drug": {
+    "match": ["ciclosporin", "cyclosporin", "neoral", "sandimmun", "capimune", "capsorin", "deximune"]
+  },
+  "tests": [
+    {
+      "name": "FBC",
+      "match": ["fbc", "full blood count", "full blood picture"],
+      "intervalDays": 84,
+      "dueSoonDays": 28
+    },
+    {
+      "name": "U&E / Creatinine",
+      "match": ["urea", "creatinine", "u&e", "urea and electrolytes", "renal function", "renal profile"],
+      "intervalDays": 84,
+      "dueSoonDays": 28
+    },
+    {
+      "name": "LFT",
+      "match": ["lft", "liver function", "alanine aminotransferase", "alt", "bilirubin"],
+      "intervalDays": 84,
+      "dueSoonDays": 28
+    }
+  ],
+  "notes": "BSR/NHSE shared-care: FBC, U&E, LFT every 12 weeks once stable. Monitor BP and lipids annually.",
+  "source": "https://www.rheumatology.org.uk/guidelines/shared-care"
+}
+--- END EXAMPLE ---
+
+--- EXAMPLE JSON ---
+{
+  "type": "qof-indicator",
+  "id": "custom-dm-egfr-annual",
+  "enabled": false,
+  "label": "DM — eGFR within 12 months",
+  "indicatorCode": "LOCAL-DM-EGFR",
+  "indicatorName": "eGFR/CKD review in diabetes within 12 months",
+  "requiresRegister": "DM",
+  "check": {
+    "kind": "observation-recent",
+    "observation": ["egfr", "estimated glomerular filtration rate", "creatinine"],
+    "withinDays": 365
+  },
+  "useQofYearFloor": false,
+  "points": 0,
+  "notes": "NICE NG28 recommends annual renal function monitoring in all patients with type 1 or 2 diabetes.",
+  "source": "https://www.nice.org.uk/guidance/ng28"
+}
+--- END EXAMPLE ---
+
+=== CLOSING REMINDER ===
+
+The rule you output will be imported DISABLED. A GP or nominated clinical reviewer MUST inspect the
+match terms, thresholds, and behaviour before enabling the rule. A monitoring rule that silently fails
+to fire is a patient-safety risk — err on the side of including more match terms and citing your sources.
+`;
+}
+
 // Generate a unique custom rule ID from a drug name and current timestamp.
 function generateCustomRuleId(drugName) {
   const slug = String(drugName || 'drug')
@@ -420,5 +629,5 @@ function defaultDueSoonDays(intervalDays) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { sentinelExport, sentinelImport, validateCustomRule, generateCustomRuleId, defaultDueSoonDays };
+  module.exports = { sentinelExport, sentinelImport, validateCustomRule, generateCustomRuleId, defaultDueSoonDays, customRuleSchemaPrompt };
 }

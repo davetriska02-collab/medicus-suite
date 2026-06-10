@@ -54,11 +54,87 @@ function ensureModuleCss(cssPath) {
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    // A drag that ends on the same tab still fires a click; suppress it so a
+    // reorder doesn't also switch module.
+    if (tab.dataset.dragged === '1') { delete tab.dataset.dragged; return; }
     const mod = tab.dataset.module;
     if (mod === activeModule) return;
     switchModule(mod);
   });
 });
+
+// ── Drag-and-drop tab reordering ──────────────────────────────────────────────
+// Shares the global suite.tabOrder key with the panel; reconciled against the
+// pop-out's own tab set (so panel-only tabs like visualiser are simply ignored).
+
+(async () => {
+  const { reconcileTabOrder, STORAGE_KEY } = await import('../side-panel/tab-order.js');
+  const tabsEl = document.getElementById('popoutTabs');
+  if (!tabsEl) return;
+
+  const tabIds = () =>
+    [...tabsEl.querySelectorAll('.nav-tab')].map(t => t.dataset.module);
+
+  function applyOrder(stored) {
+    const order = reconcileTabOrder(tabIds(), stored);
+    order.forEach(id => {
+      const el = tabsEl.querySelector(`.nav-tab[data-module="${id}"]`);
+      if (el) tabsEl.appendChild(el);
+    });
+  }
+
+  const r = await chrome.storage.local.get(STORAGE_KEY);
+  applyOrder(r[STORAGE_KEY]);
+
+  chrome.storage.onChanged.addListener(changes => {
+    if (changes[STORAGE_KEY]) applyOrder(changes[STORAGE_KEY].newValue);
+  });
+
+  let dragSrc = null;
+
+  tabsEl.querySelectorAll('.nav-tab').forEach(makeDraggable);
+
+  function makeDraggable(tab) {
+    tab.setAttribute('draggable', 'true');
+    tab.title = tab.title || 'Drag to reorder';
+
+    tab.addEventListener('dragstart', e => {
+      dragSrc = tab;
+      tab.classList.add('nav-tab-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', tab.dataset.module); } catch (_) {}
+    });
+
+    tab.addEventListener('dragend', () => {
+      tab.dataset.dragged = '1';
+      setTimeout(() => { delete tab.dataset.dragged; }, 0);
+      tab.classList.remove('nav-tab-dragging');
+      tabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      dragSrc = null;
+    });
+
+    tab.addEventListener('dragover', e => {
+      if (!dragSrc || dragSrc === tab) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      tabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      tab.classList.add(after ? 'nav-tab-drop-after' : 'nav-tab-drop-before');
+    });
+
+    tab.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === tab) return;
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      tabsEl.insertBefore(dragSrc, after ? tab.nextSibling : tab);
+      chrome.storage.local.set({ [STORAGE_KEY]: tabIds() });
+    });
+  }
+})();
 
 settingsBtn?.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();

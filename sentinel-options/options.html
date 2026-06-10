@@ -271,6 +271,34 @@ button.lib-add-all-btn:hover { background: rgba(22,163,74,0.28); }
       <button class="ghost" id="crExportBtn">Export</button>
     </div>
     <div class="cr-list" id="crList"><div class="cr-empty">No custom rules yet.</div></div>
+
+    <!-- LLM rule authoring tool -->
+    <details id="crLlmBlock" style="margin-top:14px; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+      <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--t2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
+        <span style="font-size:10px; color:var(--t4);">&#9654;</span>
+        Author a rule with an LLM
+      </summary>
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
+        <p style="font-size:12px; color:var(--t3); margin:0 0 12px; line-height:1.6;">
+          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
+          (e.g. "make me a rule that flags methotrexate without recent FBC"), then paste the JSON response into the box below to import it.
+          Imported rules arrive <strong>disabled</strong> and must be reviewed and enabled before they fire.
+        </p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <button class="ghost" id="crLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
+          <span id="crLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
+        </div>
+        <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--t3); font-weight:600; margin-bottom:5px;">
+          Paste LLM JSON output here
+        </label>
+        <textarea id="crLlmJson" rows="8" placeholder='Paste the JSON object (or array, or {&quot;rules&quot;:[...]}) returned by the LLM here, then click &quot;Import rule(s)&quot;.'
+          style="width:100%; box-sizing:border-box;"></textarea>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+          <button class="primary" id="crLlmImport" style="font-size:11px; padding:5px 14px;">Import rule(s)</button>
+          <span id="crLlmStatus" style="font-size:12px; line-height:1.5;"></span>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div id="crFormView" style="display:none;">

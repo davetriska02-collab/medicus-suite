@@ -9,13 +9,6 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function initials(name) {
-  const parts = (name || '').trim().split(/\s+/);
-  const first = parts[0]?.[0] || '';
-  const last = parts[parts.length - 1]?.[0] || '';
-  return (first + last).toUpperCase() || '??';
-}
-
 // Fetches the appointment-book once and extracts both slot counts and the
 // practice-wide waiting room in a single request.
 async function fetchSlotsAndWaitingRoom(base, hiddenTypes = new Set()) {
@@ -124,25 +117,39 @@ async function fetchSubmissions(base) {
   return { tasks, totals, byHour };
 }
 
-async function fetchRequestMonitor(base, config) {
-  const { assigneeId } = config;
-  const url = `${base}/admin/data/request-monitor/${assigneeId}?pageSize=999`;
-  const r = await fetch(url, { credentials: 'include' });
-  if (!r.ok) throw new Error(`RequestMonitor HTTP ${r.status}`);
-  const d = await r.json();
+// Build the request-monitor stream from the cached poll state written by the
+// service worker (shared/request-monitor.js pollAll → suite.requestMonitor.state).
+// Condor must NOT fetch the task lists itself: the SW alarm is the single
+// owner of that polling, and an earlier version of this function fetched a
+// non-existent /admin/data/request-monitor endpoint — the resulting 404 made
+// a fully-configured task inbox render as "not configured".
+//
+// Returns:
+//   { items, urgentCount, totalCount, byAgeBucket, lastPoll }  — usable data
+//   { unavailable: true, reason }                              — configured but no
+//                                                                 usable state yet
+export function buildRequestMonitorFromState(state) {
+  if (!state || !state.lastPoll) {
+    return { unavailable: true, reason: 'no poll data yet — the monitor polls in the background' };
+  }
+  if (state.error) {
+    return { unavailable: true, reason: String(state.error) };
+  }
 
   const now = Date.now();
-  const items = (d.tasks || []).map(t => {
-    const ageMs = now - new Date(t.createdAt).getTime();
-    return {
-      id:        t.id,
-      patient:   initials(t.patientName),
-      summary:   t.summary || t.summaryLabel || '',
-      priority:  t.priority || '',
-      createdAt: t.createdAt,
-      ageMs,
-    };
-  });
+  const items = [];
+  for (const bucket of Object.values(state.buckets || {})) {
+    for (const t of (bucket?.items || [])) {
+      items.push({
+        id:        t.id,
+        patient:   t.patient || '',
+        summary:   t.summary || '',
+        priority:  t.priority || '',
+        createdAt: t.createdAt,
+        ageMs:     now - new Date(t.createdAt).getTime(),
+      });
+    }
+  }
 
   const urgentCount = items.filter(i => /urgent/i.test(i.priority)).length;
   const byAgeBucket = { lt1h: 0, h1to4: 0, h4to8: 0, gt8h: 0 };
@@ -153,7 +160,7 @@ async function fetchRequestMonitor(base, config) {
     else                          byAgeBucket.gt8h++;
   });
 
-  return { items, urgentCount, totalCount: items.length, byAgeBucket };
+  return { items, urgentCount, totalCount: items.length, byAgeBucket, lastPoll: state.lastPoll };
 }
 
 async function fetchActivity(base) {
@@ -214,6 +221,7 @@ export async function fetchAllStreams() {
     'capacity.activePresetId',
     'suite.requestMonitor.enabled',
     'suite.requestMonitor.assigneeId',
+    'suite.requestMonitor.state',
     'slots.hiddenTypes',
   ];
 
@@ -242,10 +250,9 @@ export async function fetchAllStreams() {
   };
   const rmEnabled = rmConfig.enabled && rmConfig.assigneeId;
 
-  const [slotsAndWrRes, subRes, rmRes, actRes] = await Promise.allSettled([
+  const [slotsAndWrRes, subRes, actRes] = await Promise.allSettled([
     fetchSlotsAndWaitingRoom(base, hiddenTypes),
     fetchSubmissions(base),
-    rmEnabled ? fetchRequestMonitor(base, rmConfig) : Promise.resolve(null),
     fetchActivity(base),
   ]);
 
@@ -256,12 +263,14 @@ export async function fetchAllStreams() {
   const submissions = subRes.status === 'fulfilled' ? subRes.value : null;
   if (subRes.status === 'rejected') fetchErrors.push(`submissions: ${subRes.reason?.message || subRes.reason}`);
 
+  // null = Request Monitor not configured (cards show "enable in Settings");
+  // { unavailable, reason } = configured but state missing/errored (fail-visible,
+  // must NOT render as "not configured").
   let requestMonitor = null;
   if (rmEnabled) {
-    if (rmRes.status === 'fulfilled') {
-      requestMonitor = rmRes.value;
-    } else {
-      fetchErrors.push(`requestMonitor: ${rmRes.reason?.message || rmRes.reason}`);
+    requestMonitor = buildRequestMonitorFromState(storage['suite.requestMonitor.state']);
+    if (requestMonitor.unavailable) {
+      fetchErrors.push(`requestMonitor: ${requestMonitor.reason}`);
     }
   }
 

@@ -158,6 +158,9 @@ function ensureModuleCss(cssPath) {
 
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    // A drag that ends on the same tab still fires a click; suppress it so a
+    // reorder doesn't also switch module.
+    if (tab.dataset.dragged === '1') { delete tab.dataset.dragged; return; }
     const mod = tab.dataset.module;
     if (mod === 'visualiser') {
       chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
@@ -167,6 +170,86 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     switchModule(mod);
   });
 });
+
+// ── Drag-and-drop tab reordering ──────────────────────────────────────────────
+// Persists a global preferred order in suite.tabOrder (see side-panel/tab-order.js).
+// Panel and pop-out share the key and each reconciles against its own tab set.
+
+(async () => {
+  const { reconcileTabOrder, STORAGE_KEY } = await import('./tab-order.js');
+  if (!navTabsEl) return;
+
+  const tabIds = () =>
+    [...navTabsEl.querySelectorAll('.nav-tab')].map(t => t.dataset.module);
+
+  // Apply a stored order by reordering existing nodes (listeners survive).
+  function applyOrder(stored) {
+    const order = reconcileTabOrder(tabIds(), stored);
+    order.forEach(id => {
+      const el = navTabsEl.querySelector(`.nav-tab[data-module="${id}"]`);
+      if (el) navTabsEl.appendChild(el);
+    });
+    updateNavOverflow();
+  }
+
+  // Initial apply from storage.
+  const r = await chrome.storage.local.get(STORAGE_KEY);
+  applyOrder(r[STORAGE_KEY]);
+
+  // Live sync: re-apply when another context changes the order.
+  chrome.storage.onChanged.addListener(changes => {
+    if (changes[STORAGE_KEY]) applyOrder(changes[STORAGE_KEY].newValue);
+  });
+
+  let dragSrc = null;
+
+  navTabsEl.querySelectorAll('.nav-tab').forEach(makeDraggable);
+
+  function makeDraggable(tab) {
+    tab.setAttribute('draggable', 'true');
+    tab.title = tab.title || 'Drag to reorder';
+
+    tab.addEventListener('dragstart', e => {
+      dragSrc = tab;
+      tab.classList.add('nav-tab-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Some browsers require data to be set for the drag to start.
+      try { e.dataTransfer.setData('text/plain', tab.dataset.module); } catch (_) {}
+    });
+
+    tab.addEventListener('dragend', () => {
+      tab.classList.add('nav-tab-just-dragged');
+      // Mark so the synthesised click after a drag is swallowed, then clear.
+      tab.dataset.dragged = '1';
+      setTimeout(() => { delete tab.dataset.dragged; }, 0);
+      tab.classList.remove('nav-tab-dragging', 'nav-tab-just-dragged');
+      navTabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      dragSrc = null;
+    });
+
+    tab.addEventListener('dragover', e => {
+      if (!dragSrc || dragSrc === tab) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      navTabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      tab.classList.add(after ? 'nav-tab-drop-after' : 'nav-tab-drop-before');
+    });
+
+    tab.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === tab) return;
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      navTabsEl.insertBefore(dragSrc, after ? tab.nextSibling : tab);
+      chrome.storage.local.set({ [STORAGE_KEY]: tabIds() });
+      updateNavOverflow();
+    });
+  }
+})();
 
 settingsBtn.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();

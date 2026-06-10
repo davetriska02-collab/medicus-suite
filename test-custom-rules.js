@@ -6,7 +6,7 @@
 'use strict';
 
 const engine = require('./engine/rules-engine.js');
-const { validateCustomRule, generateCustomRuleId, defaultDueSoonDays } = require('./shared/io/sentinel-io.js');
+const { validateCustomRule, generateCustomRuleId, defaultDueSoonDays, customRuleSchemaPrompt } = require('./shared/io/sentinel-io.js');
 const chipRenderer = require('./shared/chip-renderer.js');
 
 let passed = 0;
@@ -332,6 +332,54 @@ function assertThrows(fn, msgPart, label) {
       check: { kind: 'observation-bundle', observations: [['hba1c'], ['bmi']], withinDays: 365 } });
   } catch (e) { threw = true; }
   assert(!threw, 'validateCustomRule: valid observation-bundle accepted');
+}
+
+// ── customRuleSchemaPrompt: embedded examples validate ────────────────────────
+// Extract EXAMPLE JSON blocks from the prompt using the stable markers and
+// assert each example passes validateCustomRule. Guards schema-vs-validator drift.
+
+console.log('\n--- customRuleSchemaPrompt: embedded example validation ---');
+
+{
+  const prompt = customRuleSchemaPrompt();
+  assert(typeof prompt === 'string' && prompt.length > 200, 'customRuleSchemaPrompt: returns a non-trivial string');
+
+  // Extract all example blocks between --- EXAMPLE JSON --- and --- END EXAMPLE ---
+  const MARKER_START = '--- EXAMPLE JSON ---';
+  const MARKER_END   = '--- END EXAMPLE ---';
+  const examples = [];
+  let searchFrom = 0;
+  while (true) {
+    const start = prompt.indexOf(MARKER_START, searchFrom);
+    if (start === -1) break;
+    const end = prompt.indexOf(MARKER_END, start + MARKER_START.length);
+    if (end === -1) break;
+    const jsonText = prompt.slice(start + MARKER_START.length, end).trim();
+    examples.push(jsonText);
+    searchFrom = end + MARKER_END.length;
+  }
+
+  assert(examples.length >= 2, `customRuleSchemaPrompt: at least 2 embedded examples found (got ${examples.length})`);
+
+  examples.forEach((jsonText, i) => {
+    let parsed;
+    let parseErr = null;
+    try { parsed = JSON.parse(jsonText); } catch (e) { parseErr = e.message; }
+    assert(parseErr === null, `Example ${i + 1}: JSON.parse succeeds (${parseErr || 'ok'})`);
+    if (parsed === null) return; // already failed
+
+    // Accept single object or array
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    items.forEach((item, j) => {
+      // Force enabled:false as the importer would, and ensure id starts with custom-
+      const testItem = Object.assign({}, item);
+      if (!testItem.id || !testItem.id.startsWith('custom-')) testItem.id = 'custom-test-' + i + '-' + j;
+      testItem.enabled = false;
+      let err = null;
+      try { validateCustomRule(testItem, j); } catch (e) { err = e.message; }
+      assert(err === null, `Example ${i + 1} item ${j + 1}: validateCustomRule passes (${err || 'ok'})`);
+    });
+  });
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

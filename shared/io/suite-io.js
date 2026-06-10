@@ -13,7 +13,11 @@ const SUITE_KEYS = [
   'suite.display',
   'suite.practiceCode',
   'suite.feedbackEmail',
+  'suite.tabOrder',
 ];
+
+// Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
+const TAB_ID_RE = /^[a-z0-9][a-z0-9-]{0,40}$/i;
 
 async function suiteExport() {
   const r = await chrome.storage.local.get(SUITE_KEYS);
@@ -21,6 +25,7 @@ async function suiteExport() {
     display:       r['suite.display']       ?? null,
     practiceCode:  r['suite.practiceCode']  ?? null,
     feedbackEmail: r['suite.feedbackEmail'] ?? null,
+    tabOrder:      r['suite.tabOrder']       ?? null,
   };
 }
 
@@ -40,6 +45,13 @@ async function suiteImport(data) {
   if (data.feedbackEmail != null) {
     if (typeof data.feedbackEmail !== 'string') throw new Error('suite.feedbackEmail must be a string.');
     toSet['suite.feedbackEmail'] = data.feedbackEmail;
+  }
+  if (data.tabOrder != null) {
+    if (!Array.isArray(data.tabOrder)) throw new Error('suite.tabOrder must be an array.');
+    if (!data.tabOrder.every(id => typeof id === 'string' && TAB_ID_RE.test(id))) {
+      throw new Error('suite.tabOrder must be an array of tab-id strings.');
+    }
+    toSet['suite.tabOrder'] = data.tabOrder;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

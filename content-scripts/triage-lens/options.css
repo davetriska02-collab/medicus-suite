@@ -345,3 +345,8 @@ details summary {
   font-size: 11px;
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
 }
+
+/* LLM rule authoring tool status */
+.tl-llm-status { font-size: 12px; line-height: 1.5; }
+.tl-llm-status-ok  { color: #16a34a; }
+.tl-llm-status-err { color: #b8262e; }
