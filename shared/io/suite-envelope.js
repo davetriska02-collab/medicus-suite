@@ -30,7 +30,7 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -173,6 +173,22 @@ function previewEnvelope(envelope) {
     const enabled = mods.requestMonitor.enabled;
     lines.push(`Request Monitor: ${enabled ? 'enabled' : 'disabled'}, assignee ${mods.requestMonitor.assigneeId || 'not set'}`);
   } else { const m = missing('Request Monitor'); if (m) lines.push(m); }
+
+  if (mods.reception) {
+    const customCount = (mods.reception.customPathways || []).length;
+    const editCount = Object.keys(mods.reception.pathwayOverrides || {}).length;
+    lines.push(`Reception: ${customCount} custom pathway(s), ${editCount} edited pathway(s)`);
+    // Importing enable flags switches clinical-adjacent capture pathways on for
+    // reception staff — surface it at preview time, same concern class as the
+    // sentinel hiddenRules warning above.
+    const enabledIds = Object.entries((mods.reception.config || {}).enabledPathways || {})
+      .filter(([, v]) => v === true).map(([id]) => id);
+    if (enabledIds.length > 0) {
+      const shown = enabledIds.slice(0, 5).join(', ');
+      const more = enabledIds.length > 5 ? ` … +${enabledIds.length - 5} more` : '';
+      lines.push(`WARNING: Enables ${enabledIds.length} reception capture pathway(s): ${shown}${more}`);
+    }
+  } else { const m = missing('Reception'); if (m) lines.push(m); }
 
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);

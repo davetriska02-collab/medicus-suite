@@ -403,7 +403,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 //     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor] = await Promise.all([
+  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception] = await Promise.all([
     sentinelExport(),
     capacityExport(),
     triageExport(),
@@ -414,9 +414,10 @@ async function doFullExport() {
     referralsExport(),
     requestMonitorExport(),
     condorExport(),
+    receptionExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, suite });
+  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, suite });
 }
 
 async function doModuleExport(scope) {
@@ -431,6 +432,7 @@ async function doModuleExport(scope) {
     referrals:     () => referralsExport(),
     requestMonitor: () => requestMonitorExport(),
     condor:        () => condorExport(),
+    reception:     () => receptionExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -453,6 +455,7 @@ async function applyEnvelope(envelope) {
     mods.referrals     && (() => referralsImport(mods.referrals)),
     mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
     mods.condor        && (() => condorImport(mods.condor)),
+    mods.reception     && (() => receptionImport(mods.reception)),
     mods.suite         && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1325,4 +1328,430 @@ rmSaveBtn?.addEventListener('click', async () => {
   } catch (e) {
     console.warn('[Update banner init]', e.message);
   }
+})();
+
+// ── Reception section ─────────────────────────────────────────────────────────
+// Pathway enable/disable (disclaimer-gated, all OFF by default), pathway
+// editor (bundled edits → reception.pathwayOverrides; practice-authored →
+// reception.customPathways), and the quick-wins chip filter
+// (reception.config.hiddenChipRules). Validation/sanitisation delegates to
+// shared/reception-pathway-utils.js — the same code path the backup import
+// uses, so nothing invalid can reach storage from either direction.
+
+(function initReceptionSection() {
+  const PU = window.ReceptionPathwayUtils;
+  const $ = id => document.getElementById(id);
+  if (!$('rcpoPathwayList') || !PU) return;
+
+  const DISCLAIMER_HTML = `
+    <div style="border:1px solid rgba(180,83,9,0.45); background:rgba(180,83,9,0.07); border-radius:8px; padding:12px 14px; font-size:12px; line-height:1.7; color:var(--text-2);">
+      <div style="font-weight:700; margin-bottom:6px;">Before enabling the reception capture pathways, the practice confirms:</div>
+      <ol style="margin:0 0 8px 18px; padding:0;">
+        <li>The capture tool records what callers report. It does <strong>not</strong> triage, diagnose, or replace clinical judgement — a clinician reviews every capture.</li>
+        <li>The red-flag questions are short, lay-phrased prompts derived from NICE CKS / NICE guideline red-flag lists. They are <strong>not exhaustive</strong>: a full set of "no" answers does not make a contact safe to handle routinely.</li>
+        <li>Reception staff must follow the practice's own escalation policy whenever a red flag is positive <em>or the caller sounds unwell</em>, even if every scripted question is answered "no".</li>
+        <li>The bundled pathway content, and any practice edits or custom pathways, must be clinically reviewed (CSO or nominated GP) before use and re-reviewed after every edit.</li>
+        <li>Staff using the tool have been briefed on the points above.</li>
+      </ol>
+      <label style="display:flex; gap:8px; align-items:flex-start; font-weight:600; cursor:pointer;">
+        <input type="checkbox" id="rcpoDisclaimerTick" style="margin-top:2px;">
+        <span>A clinician (CSO or nominated GP) has reviewed the pathway content and the practice accepts responsibility for it.</span>
+      </label>
+      <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+        <button class="primary" id="rcpoDisclaimerAccept" disabled style="font-size:11px; padding:5px 12px;">Accept &amp; enable all pathways</button>
+        <button class="ghost" id="rcpoDisclaimerCancel" style="font-size:11px; padding:5px 12px;">Cancel</button>
+      </div>
+    </div>`;
+
+  let _bundled = null;      // pathways json doc
+  let _editing = null;      // { pathway, origin } while editor open
+
+  async function getState() {
+    const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides']);
+    return {
+      config: r['reception.config'] || {},
+      custom: r['reception.customPathways'] || [],
+      overrides: r['reception.pathwayOverrides'] || {},
+    };
+  }
+
+  async function setConfig(patch) {
+    const { config } = await getState();
+    await chrome.storage.local.set({ 'reception.config': Object.assign({}, config, patch) });
+  }
+
+  async function loadBundled() {
+    if (_bundled) return _bundled;
+    const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
+    _bundled = await r.json();
+    return _bundled;
+  }
+
+  // ── Disclaimer ──────────────────────────────────────────────────────────────
+
+  function renderDisclaimerArea(config, resolved) {
+    const host = $('rcpoDisclaimerBody');
+    if (!host) return;
+    if (config.disclaimerAcceptedAt) {
+      const enabledCount = resolved.all.filter(e => e.enabled).length;
+      host.innerHTML = `
+        <div style="font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span>Disclaimer accepted ${escHtml(String(config.disclaimerAcceptedAt).slice(0, 10))} · ${enabledCount}/${resolved.all.length} pathway(s) enabled.</span>
+          <button class="ghost" id="rcpoEnableAll" style="font-size:11px; padding:4px 10px;">Enable all</button>
+          <button class="ghost" id="rcpoDisableAll" style="font-size:11px; padding:4px 10px;">Disable all</button>
+        </div>`;
+      $('rcpoEnableAll')?.addEventListener('click', () => setAllEnabled(true));
+      $('rcpoDisableAll')?.addEventListener('click', () => setAllEnabled(false));
+      return;
+    }
+    host.innerHTML = `
+      <div style="border:1px solid rgba(185,28,28,0.4); background:rgba(185,28,28,0.06); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span style="font-weight:700;">All capture pathways are disabled.</span>
+        <span>Review and accept the disclaimer to enable them.</span>
+        <button class="primary" id="rcpoShowDisclaimer" style="font-size:11px; padding:5px 12px;">Review disclaimer…</button>
+      </div>
+      <div id="rcpoDisclaimerExpand" style="display:none; margin-top:10px;"></div>`;
+    $('rcpoShowDisclaimer')?.addEventListener('click', () => {
+      const exp = $('rcpoDisclaimerExpand');
+      exp.style.display = '';
+      exp.innerHTML = DISCLAIMER_HTML;
+      const tick = $('rcpoDisclaimerTick');
+      const accept = $('rcpoDisclaimerAccept');
+      tick?.addEventListener('change', () => { accept.disabled = !tick.checked; });
+      accept?.addEventListener('click', async () => {
+        await setConfig({ disclaimerAcceptedAt: new Date().toISOString() });
+        await setAllEnabled(true);
+      });
+      $('rcpoDisclaimerCancel')?.addEventListener('click', () => { exp.style.display = 'none'; });
+    });
+  }
+
+  async function setAllEnabled(on) {
+    const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+    const resolved = PU.resolveEffectivePathways({
+      bundled: bundled.pathways || [], overrides, customPathways: custom,
+      enabledPathways: config.enabledPathways || {},
+    });
+    const map = {};
+    if (on) for (const e of resolved.all) { if (!e.invalid) map[e.pathway.id] = true; }
+    await setConfig({ enabledPathways: map });
+    refresh();
+  }
+
+  // ── Pathway list ────────────────────────────────────────────────────────────
+
+  const ORIGIN_BADGE = {
+    bundled: ['Bundled', 'rgba(74,127,184,0.15)', 'var(--accent)'],
+    edited:  ['Edited',  'rgba(180,83,9,0.15)',   'var(--amber, #b45309)'],
+    custom:  ['Custom',  'rgba(22,163,74,0.15)',  'var(--green, #16a34a)'],
+  };
+
+  function renderPathwayList(resolved, config) {
+    const host = $('rcpoPathwayList');
+    if (!host) return;
+    host.innerHTML = resolved.all.map(e => {
+      const p = e.pathway;
+      const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
+      const invalid = e.invalid
+        ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
+        : e.overrideInvalid
+          ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>` : '';
+      const actions = [
+        `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
+        e.origin === 'edited' ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>` : '',
+        e.origin === 'custom' ? `<button class="ghost" data-rcpo-delete="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Delete</button>` : '',
+      ].join('');
+      return `
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; min-width:0; flex:1;">
+            <input type="checkbox" data-rcpo-toggle="${escAttr(p.id)}" ${e.enabled ? 'checked' : ''} ${e.invalid ? 'disabled' : ''}>
+            <span style="font-weight:600; font-size:12px;">${escHtml(p.title)}</span>
+            <span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; background:${bg}; color:${fg};">${label}</span>
+            ${invalid}
+          </label>
+          <div style="display:flex; gap:6px;">${actions}</div>
+        </div>`;
+    }).join('') || '<div style="font-size:12px; color:var(--text-3);">No pathways found.</div>';
+
+    host.querySelectorAll('[data-rcpo-toggle]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const id = cb.dataset.rcpoToggle;
+        const { config } = await getState();
+        if (cb.checked && !config.disclaimerAcceptedAt) {
+          cb.checked = false;
+          alert('Review and accept the disclaimer above before enabling any pathway.');
+          return;
+        }
+        const map = Object.assign({}, config.enabledPathways || {});
+        if (cb.checked) map[id] = true; else delete map[id];
+        await setConfig({ enabledPathways: map });
+        refresh();
+      });
+    });
+    host.querySelectorAll('[data-rcpo-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openEditor(btn.dataset.rcpoEdit, resolved));
+    });
+    host.querySelectorAll('[data-rcpo-reset]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Discard the practice edit and restore the bundled version of this pathway?')) return;
+        const { overrides } = await getState();
+        delete overrides[btn.dataset.rcpoReset];
+        await chrome.storage.local.set({ 'reception.pathwayOverrides': overrides });
+        refresh();
+      });
+    });
+    host.querySelectorAll('[data-rcpo-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this custom pathway? This cannot be undone.')) return;
+        const { custom, config } = await getState();
+        const id = btn.dataset.rcpoDelete;
+        const map = Object.assign({}, config.enabledPathways || {});
+        delete map[id];
+        await chrome.storage.local.set({ 'reception.customPathways': custom.filter(p => p.id !== id) });
+        await setConfig({ enabledPathways: map });
+        refresh();
+      });
+    });
+  }
+
+  // ── Editor ──────────────────────────────────────────────────────────────────
+
+  let _rowSeq = 0;
+  function rfRowHtml(rf) {
+    const id = rf?.id || `rf-new-${++_rowSeq}`;
+    return `
+      <div class="rcpo-rf-row" data-rfid="${escAttr(id)}" style="display:flex; gap:6px; margin-bottom:5px; align-items:center;">
+        <input type="text" class="rcpo-rf-ask" value="${escAttr(rf?.ask || '')}" placeholder="Red-flag question (lay wording, as asked on the phone)" style="flex:1; font-size:12px; padding:4px 7px;">
+        <select class="rcpo-rf-esc" style="font-size:12px; padding:4px;">
+          <option value="999" ${rf?.escalate === '999' ? 'selected' : ''}>999-level</option>
+          <option value="duty" ${rf?.escalate !== '999' ? 'selected' : ''}>Duty clinician</option>
+        </select>
+        <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px;">✕</button>
+      </div>`;
+  }
+  function qRowHtml(q) {
+    const id = q?.id || `q-new-${++_rowSeq}`;
+    const type = q?.type || 'text';
+    const opts = (q?.options || []).join(', ');
+    return `
+      <div class="rcpo-q-row" data-qid="${escAttr(id)}" style="border:1px solid var(--border); border-radius:6px; padding:7px 9px; margin-bottom:6px;">
+        <div style="display:flex; gap:6px; margin-bottom:5px;">
+          <input type="text" class="rcpo-q-label" value="${escAttr(q?.label || '')}" placeholder="Short label (used in the pasted summary)" style="flex:0 0 220px; font-size:12px; padding:4px 7px;">
+          <select class="rcpo-q-type" style="font-size:12px; padding:4px;">
+            ${['text', 'yesno', 'choice', 'multi'].map(t => `<option value="${t}" ${type === t ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+          <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px; margin-left:auto;">✕</button>
+        </div>
+        <input type="text" class="rcpo-q-ask" value="${escAttr(q?.ask || '')}" placeholder="Question as asked on the phone" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; margin-bottom:5px;">
+        <input type="text" class="rcpo-q-opts" value="${escAttr(opts)}" placeholder="Options, comma-separated (choice/multi only)" style="width:100%; box-sizing:border-box; font-size:12px; padding:4px 7px; ${type === 'choice' || type === 'multi' ? '' : 'display:none;'}">
+      </div>`;
+  }
+
+  function openEditor(idOrNull, resolved) {
+    const host = $('rcpoEditorHost');
+    if (!host) return;
+    let pathway = null, origin = 'custom';
+    if (idOrNull) {
+      const entry = resolved.all.find(e => e.pathway.id === idOrNull);
+      if (!entry) return;
+      pathway = entry.pathway;
+      origin = entry.origin === 'custom' ? 'custom' : 'bundled-edit';
+    }
+    _editing = { id: idOrNull, origin };
+
+    const rfRows = (pathway?.redFlags || [{}]).map(rfRowHtml).join('');
+    const qRows = (pathway?.questions || [{}]).map(qRowHtml).join('');
+
+    host.innerHTML = `
+      <div style="border:1px solid var(--border-hi); border-radius:10px; padding:14px 16px; margin-top:12px;">
+        <div style="font-weight:700; font-size:13px; margin-bottom:10px;">
+          ${pathway ? `Edit pathway: ${escHtml(pathway.title)}` : 'New custom pathway'}
+          ${origin === 'bundled-edit' ? '<span style="font-size:10px; color:var(--text-3);"> (saved as a practice edit — the bundled original can be restored at any time)</span>' : ''}
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input type="text" id="rcpoEdTitle" value="${escAttr(pathway?.title || '')}" placeholder="Pathway title" style="flex:1; font-size:12px; padding:5px 8px;">
+          <input type="text" id="rcpoEdApplies" value="${escAttr(pathway?.appliesTo || '')}" placeholder="Applies to (e.g. Adults)" style="flex:1; font-size:12px; padding:5px 8px;">
+        </div>
+        <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:10px 0 5px;">Red flags — asked first, every one must be answered</div>
+        <div id="rcpoEdRf">${rfRows}</div>
+        <button type="button" class="ghost" id="rcpoEdAddRf" style="font-size:10px; padding:3px 9px;">+ Add red flag</button>
+        <div style="font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-3); margin:14px 0 5px;">History questions</div>
+        <div id="rcpoEdQ">${qRows}</div>
+        <button type="button" class="ghost" id="rcpoEdAddQ" style="font-size:10px; padding:3px 9px;">+ Add question</button>
+        <div id="rcpoEdErrors" style="color:var(--red, #b91c1c); font-size:11px; margin-top:8px; white-space:pre-line;"></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button class="primary" id="rcpoEdSave" style="font-size:11px; padding:5px 14px;">Save pathway</button>
+          <button class="ghost" id="rcpoEdCancel" style="font-size:11px; padding:5px 12px;">Cancel</button>
+          <span style="font-size:11px; color:var(--text-3); align-self:center;">Saving does not enable the pathway — review it clinically, then toggle it on.</span>
+        </div>
+      </div>`;
+
+    const wireRowDeletes = () => host.querySelectorAll('.rcpo-row-del').forEach(b => {
+      b.onclick = () => b.closest('.rcpo-rf-row, .rcpo-q-row')?.remove();
+    });
+    const wireTypeToggles = () => host.querySelectorAll('.rcpo-q-type').forEach(sel => {
+      sel.onchange = () => {
+        const opts = sel.closest('.rcpo-q-row').querySelector('.rcpo-q-opts');
+        opts.style.display = (sel.value === 'choice' || sel.value === 'multi') ? '' : 'none';
+      };
+    });
+    wireRowDeletes(); wireTypeToggles();
+    $('rcpoEdAddRf')?.addEventListener('click', () => {
+      $('rcpoEdRf').insertAdjacentHTML('beforeend', rfRowHtml(null));
+      wireRowDeletes();
+    });
+    $('rcpoEdAddQ')?.addEventListener('click', () => {
+      $('rcpoEdQ').insertAdjacentHTML('beforeend', qRowHtml(null));
+      wireRowDeletes(); wireTypeToggles();
+    });
+    $('rcpoEdCancel')?.addEventListener('click', () => { host.innerHTML = ''; _editing = null; });
+    $('rcpoEdSave')?.addEventListener('click', () => saveEditor(pathway, origin));
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function slugify(title) {
+    return String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'pathway';
+  }
+
+  async function saveEditor(original, origin) {
+    const host = $('rcpoEditorHost');
+    const errsEl = $('rcpoEdErrors');
+    const title = $('rcpoEdTitle')?.value.trim() || '';
+    const appliesTo = $('rcpoEdApplies')?.value.trim() || '';
+
+    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map(row => ({
+      id: row.dataset.rfid,
+      ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
+      escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
+    }));
+    const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map(row => {
+      const type = row.querySelector('.rcpo-q-type')?.value || 'text';
+      const q = {
+        id: row.dataset.qid,
+        ask: row.querySelector('.rcpo-q-ask')?.value.trim() || '',
+        type,
+        label: row.querySelector('.rcpo-q-label')?.value.trim() || undefined,
+      };
+      if (type === 'choice' || type === 'multi') {
+        q.options = (row.querySelector('.rcpo-q-opts')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (!q.label) delete q.label;
+      return q;
+    });
+
+    const { custom, overrides } = await getState();
+    const bundled = await loadBundled();
+    let id;
+    if (original) {
+      id = original.id;
+    } else {
+      id = slugify(title);
+      const taken = new Set([...(bundled.pathways || []).map(p => p.id), ...custom.map(p => p.id)]);
+      let n = 2;
+      while (taken.has(id)) id = `${slugify(title)}-${n++}`;
+    }
+
+    const candidate = {
+      id, title, appliesTo: appliesTo || undefined,
+      sources: original?.sources || ['Practice-authored — clinically review before use'],
+      redFlags, questions,
+      pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
+    };
+    if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
+    if (!candidate.appliesTo) delete candidate.appliesTo;
+
+    const errs = PU.validatePathway(candidate);
+    if (errs.length > 0) {
+      if (errsEl) errsEl.textContent = errs.join('\n');
+      return;
+    }
+    const clean = PU.sanitisePathway(candidate);
+
+    if (origin === 'bundled-edit') {
+      overrides[id] = clean;
+      await chrome.storage.local.set({ 'reception.pathwayOverrides': overrides });
+    } else {
+      const idx = custom.findIndex(p => p.id === id);
+      if (idx >= 0) custom[idx] = clean; else custom.push(clean);
+      await chrome.storage.local.set({ 'reception.customPathways': custom });
+    }
+    if (host) host.innerHTML = '';
+    _editing = null;
+    refresh();
+  }
+
+  // ── Quick-wins chip filter ──────────────────────────────────────────────────
+
+  async function renderChipList(config) {
+    const host = $('rcpoChipList');
+    if (!host) return;
+    try {
+      const base = chrome.runtime.getURL('rules/');
+      const [drug, qof, vax, customRes] = await Promise.all([
+        fetch(base + 'drug-rules.json').then(r => r.json()),
+        fetch(base + 'qof-rules.json').then(r => r.json()),
+        fetch(base + 'vaccine-rules.json').then(r => r.json()),
+        chrome.storage.local.get('sentinel.customRules'),
+      ]);
+      const customRules = (customRes['sentinel.customRules'] || []).filter(r => r.enabled !== false);
+      const rules = [
+        ...(drug.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.id, kind: 'Drug monitoring' })),
+        ...(qof.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.name || r.id, kind: r.type === 'qof-register' ? 'QOF register' : 'QOF / alert' })),
+        ...(vax.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.id, kind: 'Vaccine' })),
+        ...customRules.map(r => ({ id: r.id, name: r.displayName || r.name || r.id, kind: 'Custom (Sentinel)' })),
+      ];
+      const hidden = config.hiddenChipRules || {};
+      host.innerHTML = rules.map(r => `
+        <label style="display:flex; align-items:center; gap:8px; padding:4px 2px; font-size:12px; cursor:pointer;">
+          <input type="checkbox" data-rcpo-chip="${escAttr(r.id)}" ${hidden[r.id] === true ? '' : 'checked'}>
+          <span>${escHtml(r.name)}</span>
+          <span style="font-size:10px; color:var(--text-3);">${escHtml(r.kind)}</span>
+        </label>`).join('') || '<div style="font-size:12px; color:var(--text-3);">No rules found.</div>';
+      host.querySelectorAll('[data-rcpo-chip]').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          const { config } = await getState();
+          const map = Object.assign({}, config.hiddenChipRules || {});
+          if (cb.checked) delete map[cb.dataset.rcpoChip]; else map[cb.dataset.rcpoChip] = true;
+          await setConfig({ hiddenChipRules: map });
+        });
+      });
+    } catch (e) {
+      host.innerHTML = `<div style="font-size:12px; color:var(--red, #b91c1c);">Could not load rules: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  // ── Orchestration ───────────────────────────────────────────────────────────
+
+  async function refresh() {
+    try {
+      const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+      const resolved = PU.resolveEffectivePathways({
+        bundled: bundled.pathways || [], overrides, customPathways: custom,
+        enabledPathways: config.enabledPathways || {},
+      });
+      renderDisclaimerArea(config, resolved);
+      renderPathwayList(resolved, config);
+      renderChipList(config);
+    } catch (e) {
+      const host = $('rcpoPathwayList');
+      if (host) host.innerHTML = `<div style="font-size:12px; color:var(--red, #b91c1c);">Could not load reception settings: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  // Single persistent listener: resolve the current pathway set at click time.
+  $('rcpoNewPathway')?.addEventListener('click', async () => {
+    const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
+    const resolved = PU.resolveEffectivePathways({
+      bundled: bundled.pathways || [], overrides, customPathways: custom,
+      enabledPathways: config.enabledPathways || {},
+    });
+    openEditor(null, resolved);
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refresh);
+  } else {
+    refresh();
+  }
+  document.querySelectorAll('.nav-item[data-section="reception"]').forEach(btn => btn.addEventListener('click', refresh));
 })();

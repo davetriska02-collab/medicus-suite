@@ -302,6 +302,7 @@
       <button class="nav-item" data-section="submissions">Submissions</button>
       <button class="nav-item" data-section="sentinel">Monitoring</button>
       <button class="nav-item" data-section="triage">Triage Lens</button>
+      <button class="nav-item" data-section="reception">Reception</button>
       <button class="nav-item" data-section="safety">Clinical Safety</button>
       <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
       <button class="nav-item" data-section="debug">Debug</button>
@@ -542,6 +543,26 @@
         <div class="iframe-section">
           <iframe id="triageFrame" src="../content-scripts/triage-lens/options.html" title="Triage Lens settings"></iframe>
         </div>
+      </section>
+
+      <!-- Reception section -->
+      <section class="opt-section" id="sect-reception">
+        <h1>Reception <span class="module-badge">capture pathways</span></h1>
+        <p class="section-desc">Guided capture pathways for reception staff, the quick-wins alert filter, and pathway editing. All pathways ship <strong>disabled</strong> until the disclaimer below has been reviewed and accepted.</p>
+
+        <div id="rcpoDisclaimerBody" style="margin-bottom:18px;"></div>
+
+        <h2 style="font-size:14px; margin:18px 0 6px;">Capture pathways</h2>
+        <p class="section-desc" style="margin-top:0;">Toggle pathways on or off, edit the questions and red flags of bundled pathways, or create your own. Edited and custom pathway content is the responsibility of the practice &mdash; review it clinically before enabling.</p>
+        <div id="rcpoPathwayList"></div>
+        <div id="rcpoEditorHost"></div>
+        <div style="margin-top:10px;">
+          <button class="ghost" id="rcpoNewPathway">+ New custom pathway</button>
+        </div>
+
+        <h2 style="font-size:14px; margin:24px 0 6px;">Quick-wins alert &mdash; chips shown to reception</h2>
+        <p class="section-desc" style="margin-top:0;">The Reception tab shows a single green/amber/red status for the open patient. Untick any monitoring/QOF/vaccine rules you do <em>not</em> want counted there (they remain visible in the Monitoring tab; the Reception tab notes when alerts are filtered).</p>
+        <div id="rcpoChipList"><div style="font-size:12px; color:var(--text-3);">Loading rules&hellip;</div></div>
       </section>
 
       <!-- Clinical Safety section -->
@@ -802,6 +823,14 @@
                 <input type="file" class="mod-file-input" data-mod="condor" accept=".json" style="display:none" />
               </div>
             </div>
+            <div class="module-export-card">
+              <div class="mec-name">Reception</div>
+              <div class="mec-actions">
+                <button class="ghost" data-mod-export="reception">Export</button>
+                <button class="ghost" data-mod-import="reception">Import</button>
+                <input type="file" class="mod-file-input" data-mod="reception" accept=".json" style="display:none" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -866,7 +895,9 @@
   <script src="../shared/io/popout-io.js"></script>
   <script src="../shared/io/referrals-io.js"></script>
   <script src="../shared/io/request-monitor-io.js"></script>
+  <script src="../shared/reception-pathway-utils.js"></script>
   <script src="../shared/io/condor-io.js"></script>
+  <script src="../shared/io/reception-io.js"></script>
   <script src="../shared/practice-code.js"></script>
   <script src="../shared/api-diag.js"></script>
   <script src="../shared/request-monitor.js"></script>

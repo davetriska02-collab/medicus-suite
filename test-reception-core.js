@@ -20,7 +20,7 @@ const path = require('path');
 
   const {
     summariseActionChips, evaluateRedFlags, buildCaptureText,
-    extractPatientAppointments, pharmacyFirstHint,
+    pharmacyFirstHint,
   } = await import(corePath);
 
   // ── evaluateRedFlags ──────────────────────────────────────────────────────────
@@ -87,40 +87,6 @@ const path = require('path');
   check(!textClean.includes('Pharmacy First:'), 'no PF line when hint null');
   check(!textClean.includes('Patient (from open record)'), 'no patient line when record not open');
 
-  // ── extractPatientAppointments ────────────────────────────────────────────────
-  console.log('\n--- extractPatientAppointments ---');
-  const U1 = '11111111-2222-3333-4444-555555555555';
-  const U2 = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-  const day = {
-    staffSchedules: [
-      {
-        name: 'Dr Foo',
-        schedule: [{
-          entries: [
-            { diaryEntryType: { value: 'appointment' }, patient: { id: U1, name: 'John Smith' }, startDateTime: '2026-06-01T09:00:00', appointmentType: { name: 'GP appt' }, displayStatus: { value: 'completed' } },
-            { diaryEntryType: { value: 'appointment' }, patient: { id: U2, name: 'John Smith' }, startDateTime: '2026-06-01T09:30:00', appointmentType: { name: 'GP appt' } },
-            { diaryEntryType: { value: 'slot' }, patient: { id: U1 } },
-          ]
-        }]
-      },
-      {
-        name: 'Nurse Bar',
-        schedule: [{
-          entries: [
-            { diaryEntryType: { value: 'appointment' }, patient: { ref: `/patient/${U1}` }, startDateTime: '2026-06-01T11:00:00', appointmentType: { name: 'Bloods' } },
-          ]
-        }]
-      }
-    ]
-  };
-  const appts = extractPatientAppointments(day, U1);
-  check(appts.length === 2, 'matches by UUID only — same-name different-UUID patient excluded');
-  check(appts.some(a => a.clinician === 'Dr Foo') && appts.some(a => a.clinician === 'Nurse Bar'), 'clinician taken from staff schedule');
-  check(appts.some(a => a.type === 'Bloods'), 'UUID found via defensive scan of patient object string fields');
-  check(!appts.some(a => a.type === '' && !a.startDateTime), 'slot entries ignored');
-  check(extractPatientAppointments(day, null).length === 0, 'no uuid → no matches (never name-matches)');
-  check(extractPatientAppointments({}, U1).length === 0, 'empty payload → no crash');
-
   // ── summariseActionChips ──────────────────────────────────────────────────────
   console.log('\n--- summariseActionChips ---');
   const sum = summariseActionChips([
@@ -135,6 +101,20 @@ const path = require('path');
   check(sum.items.length === 3, 'green/neutral chips excluded');
   const sumEmpty = summariseActionChips(null);
   check(sumEmpty.red === 0 && sumEmpty.amber === 0 && sumEmpty.items.length === 0, 'null chips → zero summary');
+
+  // Practice chip filter (reception.config.hiddenChipRules): hidden action
+  // chips are excluded from counts but COUNTED in hiddenCount — filtering is
+  // surfaced in the UI, never silent.
+  const sumHidden = summariseActionChips([
+    { status: 'overdue', ruleId: 'mtx', drugName: 'Methotrexate' },
+    { status: 'due_soon', ruleId: 'lith', drugName: 'Lithium' },
+    { status: 'achieved', ruleId: 'qof1' },
+  ], { mtx: true, qof1: true });
+  check(sumHidden.red === 0 && sumHidden.amber === 1, 'hidden rule excluded from counts');
+  check(sumHidden.hiddenCount === 1, 'hiddenCount counts only suppressed ACTION chips (green chip ignored)');
+  check(sumHidden.items.length === 1 && sumHidden.items[0].name === 'Lithium', 'remaining chip listed');
+  const sumNoHide = summariseActionChips([{ status: 'overdue', ruleId: 'mtx', drugName: 'M' }], {});
+  check(sumNoHide.red === 1 && sumNoHide.hiddenCount === 0, 'empty filter map hides nothing');
 
   // ── pharmacyFirstHint ─────────────────────────────────────────────────────────
   console.log('\n--- pharmacyFirstHint ---');

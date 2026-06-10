@@ -2,11 +2,10 @@
 // Medicus Suite — Reception module: pure-logic core (no chrome APIs, no DOM)
 //
 // Exported functions:
-//   summariseActionChips(chips)            — compact red/amber summary of Sentinel chips
-//   evaluateRedFlags(redFlags, answers)    — positives + unanswered for a pathway's red flags
-//   buildCaptureText(input)                — the plain-text capture block for copy-paste
-//   extractPatientAppointments(raw, uuid)  — match one day's appointment-book to a patient
-//   pharmacyFirstHint(pathway, ageYears)   — eligibility hint line (age-gated), or null
+//   summariseActionChips(chips, hiddenRuleIds) — compact red/amber summary of Sentinel chips
+//   evaluateRedFlags(redFlags, answers)        — positives + unanswered for a pathway's red flags
+//   buildCaptureText(input)                    — the plain-text capture block for copy-paste
+//   pharmacyFirstHint(pathway, ageYears)       — eligibility hint line (age-gated), or null
 
 'use strict';
 
@@ -25,22 +24,25 @@ const STATUS_LABEL = {
   due_soon: 'DUE SOON', caution: 'CAUTION', vax_due: 'VACCINE DUE'
 };
 
-// UUID shape used by Medicus APIs.
-const UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-
 // ---------------------------------------------------------------------------
-// summariseActionChips(chips)
+// summariseActionChips(chips, hiddenRuleIds)
 // Compact summary of the action-needed (red/amber) chips from a Sentinel
-// snapshot, for the reception "while they're on the phone" card.
-// Returns { red, amber, items: [{ name, statusLabel, colour }] } — items
-// red-first then amber, preserving snapshot order within each colour.
+// snapshot, for the reception "while they're on the phone" alert.
+// hiddenRuleIds — optional { [ruleId]: true } map of chips the practice has
+// chosen NOT to surface to reception (reception.config.hiddenChipRules).
+// Returns { red, amber, hiddenCount, items: [{ name, statusLabel, colour }] }
+// — items red-first then amber, preserving snapshot order within each colour.
+// hiddenCount counts action chips suppressed by the config so the practice
+// admin view can show that filtering is active (never silently zero).
 // ---------------------------------------------------------------------------
-function summariseActionChips(chips) {
+function summariseActionChips(chips, hiddenRuleIds) {
   const items = [];
-  let red = 0, amber = 0;
+  const hidden = hiddenRuleIds || {};
+  let red = 0, amber = 0, hiddenCount = 0;
   for (const chip of (chips || [])) {
     const colour = STATUS_COLOUR[chip.status];
     if (colour !== 'red' && colour !== 'amber') continue;
+    if (chip.ruleId && hidden[chip.ruleId] === true) { hiddenCount++; continue; }
     if (colour === 'red') red++; else amber++;
     items.push({
       name: chip.drugName || chip.indicatorCode || chip.displayName || chip.registerName || chip.ruleName || chip.ruleId || '',
@@ -49,7 +51,7 @@ function summariseActionChips(chips) {
     });
   }
   items.sort((a, b) => (a.colour === b.colour) ? 0 : (a.colour === 'red' ? -1 : 1));
-  return { red, amber, items };
+  return { red, amber, hiddenCount, items };
 }
 
 // ---------------------------------------------------------------------------
@@ -171,55 +173,6 @@ function formatWhen(nowIso) {
 }
 
 // ---------------------------------------------------------------------------
-// extractPatientAppointments(raw, patientUuid)
-//
-// raw: one day's /scheduling/data/appointment-book/embedded-overview response
-//      ({ staffSchedules: [{ name, schedule: [{ entries: [...] }] }] }).
-// Matches strictly by patient UUID (never by name — wrong-patient hazard H-001):
-// tries entry.patient.{id,uuid,patientId,patientUuid}, then any UUID-shaped
-// string on entry.patient. Returns [{ clinician, startDateTime, type, status }].
-// ---------------------------------------------------------------------------
-function extractPatientAppointments(raw, patientUuid) {
-  if (!patientUuid) return [];
-  const want = String(patientUuid).toLowerCase();
-  const out = [];
-  for (const staff of (raw?.staffSchedules || [])) {
-    for (const session of (staff?.schedule || [])) {
-      for (const entry of (session?.entries || [])) {
-        if (entry?.diaryEntryType?.value !== 'appointment') continue;
-        if (entryPatientUuid(entry) !== want) continue;
-        out.push({
-          clinician: staff?.name || 'Unknown clinician',
-          startDateTime: entry.startDateTime || null,
-          type: entry.appointmentType?.name || '',
-          status: entry.displayStatus?.value || ''
-        });
-      }
-    }
-  }
-  return out;
-}
-
-function entryPatientUuid(entry) {
-  const p = entry?.patient;
-  if (!p || typeof p !== 'object') return null;
-  for (const field of ['id', 'uuid', 'patientId', 'patientUuid']) {
-    const v = p[field];
-    if (typeof v === 'string') {
-      const m = v.match(UUID_RE);
-      if (m) return m[1].toLowerCase();
-    }
-  }
-  for (const val of Object.values(p)) {
-    if (typeof val === 'string') {
-      const m = val.match(UUID_RE);
-      if (m) return m[1].toLowerCase();
-    }
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // pharmacyFirstHint(pathway, ageYears)
 // Returns the pathway's Pharmacy First note when the patient's age (from the
 // open record) is inside the pathway's age band, null otherwise. With no known
@@ -241,7 +194,6 @@ export {
   summariseActionChips,
   evaluateRedFlags,
   buildCaptureText,
-  extractPatientAppointments,
   pharmacyFirstHint,
   STATUS_COLOUR
 };

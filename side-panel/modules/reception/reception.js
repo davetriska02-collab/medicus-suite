@@ -1,20 +1,24 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Reception module
 //
-// A reception-facing panel with three cards:
-//   1. Patient — compact action-needed monitoring/QOF summary for the patient
-//      open in the Medicus tab ("book the overdue bloods while they're on the
-//      phone"), reusing the Sentinel snapshot.
-//   2. Recent appointments — who the patient saw recently, found by scanning
-//      the practice appointment book backwards (manual trigger, UUID-matched
-//      only — never name-matched, wrong-patient hazard H-001).
-//   3. Guided capture — fixed question sets per presenting problem
-//      (rules/reception-pathways.json): red flags first with escalation
-//      prompts, then history questions, producing a structured plain-text
-//      block to copy-paste into the Medicus triage entry. Capture only — the
-//      tool never triages, diagnoses, or advises beyond red-flag escalation.
+// A reception-facing panel with two cards:
+//   1. Patient — a single green/amber/red status pill for the patient open in
+//      the Medicus tab; clicking it expands the action-needed monitoring/QOF
+//      detail ("book the overdue bloods while they're on the phone"). Which
+//      chips surface here is practice-configurable (Options → Reception);
+//      filtering is shown, never silent.
+//   2. Guided capture — fixed question sets per presenting problem. ALL
+//      pathways ship disabled; a practice administrator must accept the
+//      disclaimer in Options → Reception to enable them. Practices can edit
+//      bundled pathways and author custom ones there. Red flags come first
+//      with escalation prompts; output is a structured plain-text block to
+//      copy-paste into the Medicus triage entry. Capture only — the tool
+//      never triages, diagnoses, or advises beyond red-flag escalation.
 //
-// No chrome.storage keys: taker initials and results are in-memory only.
+// Storage (managed in Options, read-only here):
+//   reception.config           { enabledPathways, hiddenChipRules, disclaimerAcceptedAt }
+//   reception.customPathways   [pathway]
+//   reception.pathwayOverrides { id: pathway }
 
 'use strict';
 
@@ -22,23 +26,18 @@ import {
   summariseActionChips,
   evaluateRedFlags,
   buildCaptureText,
-  extractPatientAppointments,
   pharmacyFirstHint,
 } from './reception-core.js';
-import { fetchSchedulingOverview, todayISO, addDays } from '../../../shared/medicus-api.js';
-
-const CONTACT_SCAN_DAYS  = 42;  // how far back the appointment scan looks
-const CONTACT_SCAN_BATCH = 7;   // days fetched per batch (early-stops at 3 hits)
-const CONTACT_SHOW_MAX   = 5;
 
 let container = null;
-let _doc = null;              // reception-pathways.json document
+let _bundledDoc = null;       // reception-pathways.json document
+let _config = {};             // reception.config
+let _effective = { all: [], enabled: [] };
 let _snapshot = null;         // last Sentinel snapshot (or null)
 let _takerInitials = '';      // in-memory only, per panel session
-let _activePathway = null;    // pathway object while capturing
-let _contactsCache = new Map(); // patientUuid → rows
-let _scanAbort = false;
+let _pillExpanded = false;
 let _onActivated = null;
+let _storageListener = null;
 
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -48,7 +47,6 @@ function esc(s) {
 
 export async function init(el) {
   container = el;
-  _scanAbort = false;
 
   container.innerHTML = `
     <div class="rcp-module">
@@ -57,39 +55,67 @@ export async function init(el) {
         <span class="rcp-subtitle">Capture a structured history — a clinician always reviews and decides.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
-      <div class="rcp-card" id="rcpContactsCard"><div class="rcp-card-title">Recent appointments</div><div class="rcp-card-body rcp-muted">Open a patient record to search.</div></div>
       <div class="rcp-card" id="rcpCaptureCard"><div class="rcp-card-title">Guided capture</div><div class="rcp-card-body" id="rcpCaptureBody"></div></div>
     </div>`;
 
   try {
     const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
-    _doc = await r.json();
+    _bundledDoc = await r.json();
   } catch (e) {
-    const body = container.querySelector('#rcpCaptureBody');
+    const body = container?.querySelector('#rcpCaptureBody');
     if (body) body.innerHTML = `<div class="rcp-error">Could not load capture pathways: ${esc(e.message)}</div>`;
-    _doc = null;
+    _bundledDoc = null;
   }
 
+  await loadConfigAndResolve();
   renderPathwayPicker();
   refreshPatientCard();
 
   _onActivated = () => refreshPatientCard();
   chrome.tabs.onActivated.addListener(_onActivated);
 
+  // Live-update when the admin changes reception config/pathways in Options.
+  _storageListener = (changes, area) => {
+    if (area !== 'local') return;
+    if (changes['reception.config'] || changes['reception.customPathways'] || changes['reception.pathwayOverrides']) {
+      loadConfigAndResolve().then(() => {
+        if (!container) return;
+        renderPathwayPicker();
+        refreshPatientCard();
+      });
+    }
+  };
+  chrome.storage.onChanged.addListener(_storageListener);
+
   return cleanup;
 }
 
 function cleanup() {
-  _scanAbort = true;
   if (_onActivated) { chrome.tabs.onActivated.removeListener(_onActivated); _onActivated = null; }
-  _activePathway = null;
+  if (_storageListener) { chrome.storage.onChanged.removeListener(_storageListener); _storageListener = null; }
   _snapshot = null;
   container = null;
 }
 
 export { cleanup };
 
-// ── Card 1: patient + monitoring/QOF opportunities ────────────────────────────
+async function loadConfigAndResolve() {
+  const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides']);
+  _config = r['reception.config'] || {};
+  const PU = (typeof window !== 'undefined') ? window.ReceptionPathwayUtils : null;
+  if (PU && _bundledDoc) {
+    _effective = PU.resolveEffectivePathways({
+      bundled: _bundledDoc.pathways || [],
+      overrides: r['reception.pathwayOverrides'] || {},
+      customPathways: r['reception.customPathways'] || [],
+      enabledPathways: _config.enabledPathways || {},
+    });
+  } else {
+    _effective = { all: [], enabled: [] };
+  }
+}
+
+// ── Card 1: patient status pill ───────────────────────────────────────────────
 
 async function fetchSnapshot() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -112,37 +138,45 @@ async function refreshPatientCard() {
     _snapshot = null;
   }
   if (!container) return; // cleaned up mid-fetch
+  renderPatientCard();
+}
+
+function renderPatientCard() {
+  const card = container?.querySelector('#rcpPatientCard .rcp-card-body');
+  if (!card) return;
 
   if (!_snapshot) {
     card.innerHTML = `<span class="rcp-muted">No patient record open in the active Medicus tab.</span>
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>`;
     card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
-    renderContactsCard();
     return;
   }
 
   const pc = _snapshot.patientContext || {};
-  const sum = summariseActionChips(_snapshot.chips);
-  // Fail-visible: a degraded extraction means the counts may be missing data.
-  const degradedNote = _snapshot.degraded
-    ? `<div class="rcp-error">Record extraction incomplete — these counts may be missing data.</div>` : '';
+  const sum = summariseActionChips(_snapshot.chips, _config.hiddenChipRules || {});
   const who = [pc.patientName, pc.ageYears != null ? `${pc.ageYears}y` : null].filter(Boolean).join(', ');
 
-  let oppHtml;
-  if (sum.red + sum.amber === 0) {
-    oppHtml = `<div class="rcp-opp rcp-opp-clear">No action-needed monitoring or QOF alerts in the current data. <span class="rcp-fineprint">No alert ≠ everything is up to date.</span></div>`;
-  } else {
-    const counts = [
-      sum.red ? `<span class="rcp-count rcp-count-red">${sum.red} overdue/alert</span>` : '',
-      sum.amber ? `<span class="rcp-count rcp-count-amber">${sum.amber} due soon</span>` : ''
-    ].filter(Boolean).join(' ');
-    const items = sum.items.slice(0, 6).map(i =>
-      `<span class="rcp-chip rcp-chip-${i.colour}">${esc(i.name)} <em>${esc(i.statusLabel)}</em></span>`).join('');
-    const more = sum.items.length > 6 ? `<span class="rcp-fineprint">+${sum.items.length - 6} more in Monitoring</span>` : '';
-    oppHtml = `
-      <div class="rcp-opp">
-        <div class="rcp-opp-line">While they're on the phone: ${counts}</div>
-        <div class="rcp-opp-chips">${items}${more}</div>
+  // Single status pill: red wins over amber, green = nothing to action.
+  const level = sum.red > 0 ? 'red' : sum.amber > 0 ? 'amber' : 'green';
+  const pillText = level === 'green'
+    ? 'Nothing flagged'
+    : `${sum.red + sum.amber} to action${sum.red ? ` · ${sum.red} overdue` : ''}`;
+
+  const degradedNote = _snapshot.degraded
+    ? `<div class="rcp-error">Record extraction incomplete — this status may be missing data.</div>` : '';
+  const filteredNote = sum.hiddenCount > 0
+    ? `<div class="rcp-fineprint">${sum.hiddenCount} alert(s) not shown here by practice settings (visible in Monitoring).</div>` : '';
+
+  let detailHtml = '';
+  if (_pillExpanded) {
+    const rows = sum.items.map(i =>
+      `<div class="rcp-detail-row rcp-detail-${i.colour}"><span class="rcp-detail-name">${esc(i.name)}</span><span class="rcp-detail-status">${esc(i.statusLabel)}</span></div>`).join('');
+    detailHtml = `
+      <div class="rcp-pill-detail">
+        ${rows || '<div class="rcp-muted">No action-needed alerts in the current data.</div>'}
+        ${filteredNote}
+        <div class="rcp-fineprint">No alert ≠ everything is up to date — the Monitoring tab has the full picture.</div>
+        <button class="rcp-link-btn" id="rcpGotoSentinel">Open Monitoring →</button>
       </div>`;
   }
 
@@ -150,123 +184,44 @@ async function refreshPatientCard() {
     <div class="rcp-patient-line"><strong>${esc(who || 'Patient')}</strong>${pc.nhsNumber ? ` <span class="rcp-fineprint">NHS ${esc(pc.nhsNumber)}</span>` : ''}
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>
     </div>
-    ${degradedNote}${oppHtml}
-    <button class="rcp-link-btn" id="rcpGotoSentinel">Open Monitoring →</button>`;
+    ${degradedNote}
+    <button class="rcp-pill rcp-pill-${level}" id="rcpPill" aria-expanded="${_pillExpanded}">
+      <span class="rcp-pill-dot"></span>${esc(pillText)}
+      <span class="rcp-pill-caret">${_pillExpanded ? '▴' : '▾'}</span>
+    </button>
+    ${detailHtml}`;
+
   card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
+  card.querySelector('#rcpPill')?.addEventListener('click', () => {
+    _pillExpanded = !_pillExpanded;
+    renderPatientCard();
+  });
   card.querySelector('#rcpGotoSentinel')?.addEventListener('click', () => {
     document.querySelector('.nav-tab[data-module="sentinel"]')?.click();
   });
-  renderContactsCard();
 }
 
-// ── Card 2: recent appointments ───────────────────────────────────────────────
-
-function renderContactsCard() {
-  if (!container) return;
-  const body = container.querySelector('#rcpContactsCard .rcp-card-body');
-  if (!body) return;
-  const uuid = _snapshot?.patientContext?.patientUuid || null;
-  if (!uuid) {
-    body.innerHTML = `<span class="rcp-muted">Open a patient record to search their recent appointments.</span>`;
-    return;
-  }
-  if (_contactsCache.has(uuid)) {
-    body.innerHTML = contactsHtml(_contactsCache.get(uuid));
-    wireContactsRescan(body, uuid);
-    return;
-  }
-  body.innerHTML = `<button class="rcp-btn" id="rcpFindContacts">Find recent appointments (last ${CONTACT_SCAN_DAYS / 7} weeks)</button>
-    <div class="rcp-fineprint">Scans the practice appointment book day by day — takes a few seconds.</div>`;
-  body.querySelector('#rcpFindContacts')?.addEventListener('click', () => scanContacts(uuid));
-}
-
-async function scanContacts(uuid) {
-  const body = container?.querySelector('#rcpContactsCard .rcp-card-body');
-  if (!body) return;
-  let code = null;
-  try {
-    const res = await window.PracticeCode.resolve();
-    code = res.code;
-  } catch (_) {}
-  if (!code) {
-    body.innerHTML = `<div class="rcp-error">No practice code — open a Medicus tab or set it in Options.</div>`;
-    return;
-  }
-
-  const rows = [];
-  let failedDays = 0;
-  const today = todayISO();
-  const dates = [];
-  for (let i = 0; i <= CONTACT_SCAN_DAYS; i++) dates.push(addDays(today, -i));
-
-  for (let b = 0; b < dates.length && !_scanAbort; b += CONTACT_SCAN_BATCH) {
-    const batch = dates.slice(b, b + CONTACT_SCAN_BATCH);
-    body.innerHTML = `<div class="rcp-muted">Searching… ${Math.min(b + CONTACT_SCAN_BATCH, dates.length)}/${dates.length} days checked, ${rows.length} found.</div>`;
-    const results = await Promise.all(batch.map(d =>
-      fetchSchedulingOverview(code, d).then(raw => ({ d, raw })).catch(() => ({ d, raw: null }))
-    ));
-    for (const { d, raw } of results) {
-      if (!raw) { failedDays++; continue; }
-      for (const appt of extractPatientAppointments(raw, uuid)) {
-        if (String(appt.status).toLowerCase() === 'cancelled') continue;
-        rows.push({ ...appt, dateISO: d });
-      }
-    }
-    if (rows.length >= 3) break;
-  }
-  if (!container) return;
-
-  rows.sort((a, b) => {
-    const ka = a.startDateTime || a.dateISO || '';
-    const kb = b.startDateTime || b.dateISO || '';
-    return ka < kb ? 1 : ka > kb ? -1 : 0;
-  });
-  const result = { rows: rows.slice(0, CONTACT_SHOW_MAX), failedDays };
-  _contactsCache.set(uuid, result);
-  const bodyNow = container.querySelector('#rcpContactsCard .rcp-card-body');
-  if (bodyNow) {
-    bodyNow.innerHTML = contactsHtml(result);
-    wireContactsRescan(bodyNow, uuid);
-  }
-}
-
-function contactsHtml({ rows, failedDays }) {
-  const failNote = failedDays > 0
-    ? `<div class="rcp-error">${failedDays} day(s) could not be read — this list may be incomplete.</div>` : '';
-  if (rows.length === 0) {
-    return `${failNote}<span class="rcp-muted">No booked appointments found in the last ${CONTACT_SCAN_DAYS / 7} weeks.</span>
-      <div class="rcp-fineprint">Booked appointments only — telephone or ad-hoc contacts may not appear.</div>
-      <button class="rcp-link-btn rcp-rescan">Search again</button>`;
-  }
-  const items = rows.map(r => {
-    const when = r.startDateTime ? r.startDateTime.slice(0, 10) : r.dateISO;
-    return `<div class="rcp-contact-row">
-      <span class="rcp-contact-date">${esc(when)}</span>
-      <span class="rcp-contact-clin">${esc(r.clinician)}</span>
-      <span class="rcp-contact-type">${esc(r.type)}${r.status ? ` · ${esc(r.status)}` : ''}</span>
-    </div>`;
-  }).join('');
-  return `${failNote}${items}
-    <div class="rcp-fineprint">Booked appointments at this practice only (last ${CONTACT_SCAN_DAYS / 7} weeks) — telephone or ad-hoc contacts may not appear.</div>
-    <button class="rcp-link-btn rcp-rescan">Search again</button>`;
-}
-
-function wireContactsRescan(body, uuid) {
-  body.querySelector('.rcp-rescan')?.addEventListener('click', () => {
-    _contactsCache.delete(uuid);
-    scanContacts(uuid);
-  });
-}
-
-// ── Card 3: guided capture ────────────────────────────────────────────────────
+// ── Card 2: guided capture ────────────────────────────────────────────────────
 
 function renderPathwayPicker() {
-  if (!container || !_doc) return;
+  if (!container) return;
   const body = container.querySelector('#rcpCaptureBody');
-  if (!body) return;
-  _activePathway = null;
+  if (!body || !_bundledDoc) return;
 
-  const btns = (_doc.pathways || []).map(p =>
+  const enabled = _effective.enabled;
+  if (enabled.length === 0) {
+    body.innerHTML = `
+      <div class="rcp-disabled-note">
+        <strong>Capture pathways are switched off.</strong>
+        All pathways ship disabled. A practice administrator can review the
+        disclaimer and enable them in Options → Reception.
+      </div>
+      <button class="rcp-btn" id="rcpOpenOptions">Open options</button>`;
+    body.querySelector('#rcpOpenOptions')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+    return;
+  }
+
+  const btns = enabled.map(p =>
     `<button class="rcp-pathway-btn" data-pathway="${esc(p.id)}">
        <span class="rcp-pathway-title">${esc(p.title)}</span>
        <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
@@ -278,7 +233,7 @@ function renderPathwayPicker() {
 
   body.querySelectorAll('.rcp-pathway-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const p = (_doc.pathways || []).find(x => x.id === btn.dataset.pathway);
+      const p = enabled.find(x => x.id === btn.dataset.pathway);
       if (p) renderCaptureForm(p);
     });
   });
@@ -305,8 +260,7 @@ function inputHtml(scope, q) {
 
 function renderCaptureForm(pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
-  if (!body || !_doc) return;
-  _activePathway = pathway;
+  if (!body || !_bundledDoc) return;
 
   const rfRows = (pathway.redFlags || []).map(rf => `
     <div class="rcp-rf-row" data-rf="${esc(rf.id)}">
@@ -319,7 +273,7 @@ function renderCaptureForm(pathway) {
 
   const qRows = (pathway.questions || []).map(q => `
     <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('q', q)}</div>`).join('');
-  const cRows = (_doc.closingQuestions || []).map(q => `
+  const cRows = (_bundledDoc.closingQuestions || []).map(q => `
     <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('c', q)}</div>`).join('');
 
   body.innerHTML = `
@@ -388,7 +342,7 @@ function updateEscalationBanner(form, pathway) {
   // 999-level escalation wins over duty-level when both are present.
   const level = positives.some(p => p.escalate === '999') ? '999' : 'duty';
   banner.className = `rcp-banner rcp-banner-${level === '999' ? 'red' : 'amber'}`;
-  banner.textContent = `RED FLAG — ${(_doc.escalations && _doc.escalations[level]) || 'Escalate to the duty clinician now.'}`;
+  banner.textContent = `RED FLAG — ${(_bundledDoc.escalations && _bundledDoc.escalations[level]) || 'Escalate to the duty clinician now.'}`;
 }
 
 function readQuestionAnswers(form, scope, questions) {
@@ -428,12 +382,12 @@ function generateSummary(form, pathway) {
 
   const text = buildCaptureText({
     pathway,
-    closingQuestions: _doc.closingQuestions || [],
-    escalations: _doc.escalations || {},
+    closingQuestions: _bundledDoc.closingQuestions || [],
+    escalations: _bundledDoc.escalations || {},
     ownWords: (form.querySelector('[name="ownWords"]')?.value || '').trim(),
     redFlagAnswers: rfAnswers,
     questionAnswers: readQuestionAnswers(form, 'q', pathway.questions),
-    closingAnswers: readQuestionAnswers(form, 'c', _doc.closingQuestions),
+    closingAnswers: readQuestionAnswers(form, 'c', _bundledDoc.closingQuestions),
     meta: {
       takerInitials: _takerInitials,
       nowIso: new Date().toISOString(),

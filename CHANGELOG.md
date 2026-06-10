@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.39.0] — 2026-06-10
+
+### Reception module: full configurability, disclaimer-gated pathways, RAG status pill
+
+Follow-up hardening and configurability pass on the v3.38.0 Reception module:
+
+- **All capture pathways now ship DISABLED.** A practice administrator must
+  click through an explicit disclaimer in Options → Reception (confirming
+  CSO/GP review of the content and staff briefing) before anything can be
+  enabled; pathways can then be toggled individually or all at once. The
+  Reception tab tells staff to ask an administrator when everything is off.
+- **Pathway editor in Options.** Practices can edit the questions and red
+  flags of bundled pathways (stored as overrides — one click restores the
+  bundled original) and author new custom pathways. Validation is enforced by
+  shared code (`shared/reception-pathway-utils.js`): a pathway cannot be saved
+  without red flags, every red flag needs a 999/duty escalation level, and
+  invalid edits are flagged with the bundled original kept active — never
+  silently dropped. Saving never auto-enables.
+- **Quick-wins box replaced with a single green/amber/red status pill** that
+  expands on click to the detailed list. Practices choose which
+  monitoring/QOF/vaccine rules are counted there (Options → Reception); when
+  active alerts are filtered out the expanded view says so — filtering is
+  never silent. Custom chips are managed in Sentinel as before.
+- **Removed the "Recent appointments" card** (and its day-by-day appointment
+  book scan) introduced in v3.38.0.
+- **New storage keys with full backup ceremony:** `reception.config`,
+  `reception.customPathways`, `reception.pathwayOverrides` via
+  `shared/io/reception-io.js`; scope registered in suite-envelope; import is
+  validated + whitelist-sanitised through the same shared validator as the
+  editor, and the import preview WARNS when a backup would enable pathways
+  (same concern class as the hidden-chips warning). Limitation 27 updated.
+- New tests: `test-reception-pathway-utils.js` (41), `test-reception-io.js`
+  (19); reception core/pathway tests updated. Backup key coverage holds.
+
 ## [v3.38.0] — 2026-06-10
 
 ### Feature: Reception module — guided capture + recent appointments + opportunity summary
