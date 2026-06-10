@@ -195,6 +195,40 @@ html[data-theme="dark"] .pincer-item.med{background:#1e1a08}
 html[data-size="small"]{zoom:0.85}
 html[data-size="medium"]{zoom:1}
 html[data-size="large"]{zoom:1.25}
+/* ── SMR / Medication-Review card styles ────────────────────────────── */
+.acb-score-big{font-size:40px;font-weight:700;line-height:1;color:var(--nhs-blue)}
+.acb-score-big.acb-alert{color:var(--nhs-red)}
+.acb-badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;white-space:nowrap;vertical-align:middle}
+.acb-badge-1{background:#fff3cd;color:#856404}
+.acb-badge-2{background:#fde8e8;color:#8b0000}
+.acb-badge-3{background:#d4351c;color:#fff}
+.smr-flag-list{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.smr-flag-item{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:4px;font-size:12px;border-left:3px solid transparent}
+.smr-flag-item.red{border-left-color:var(--nhs-red);background:#fde8e8}
+.smr-flag-item.amber{border-left-color:var(--nhs-orange);background:#fef3cd}
+.smr-flag-criterion{font-weight:700;color:var(--text)}
+.smr-flag-detail{color:var(--text2);font-size:11px;margin-top:2px}
+.smr-flag-source{font-size:10px;color:var(--nhs-grey);margin-top:2px;font-style:italic}
+.smr-caveat{font-size:11px;color:#856404;background:#fff9e6;border:1px solid #ffe082;border-radius:4px;padding:8px 10px;margin-bottom:12px}
+.smr-print-btn{display:inline-block;padding:8px 18px;background:var(--nhs-blue);color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;margin-top:12px}
+.smr-print-btn:hover{background:var(--nhs-dark)}
+/* Print: only show #smr-print-block when body has .smr-printing class */
+@media print{
+  body:not(.smr-printing) #smr-print-block{display:none}
+  body.smr-printing #app,body.smr-printing #drop-zone{display:none!important}
+  body.smr-printing #smr-print-block{display:block!important}
+  #smr-print-block{font-size:12pt;color:#000;background:#fff;font-family:Arial,sans-serif;line-height:1.5;padding:20mm}
+  #smr-print-block h1{font-size:16pt;margin-bottom:4mm}
+  #smr-print-block h2{font-size:13pt;margin:6mm 0 2mm}
+  #smr-print-block .smr-p-caveat{background:#fffbe6;border:1px solid #ccc;padding:4mm;margin:4mm 0;font-style:italic}
+  #smr-print-block table{width:100%;border-collapse:collapse;margin:3mm 0}
+  #smr-print-block td,#smr-print-block th{border:1px solid #999;padding:2mm 3mm;font-size:10pt;vertical-align:top}
+  #smr-print-block th{background:#eee;font-weight:700}
+  #smr-print-block .smr-p-flag-red{color:#d4351c;font-weight:700}
+  #smr-print-block .smr-p-flag-amber{color:#856404;font-weight:700}
+  #smr-print-block .smr-p-skeleton{border:1px solid #999;padding:3mm 4mm;min-height:18mm;margin-top:2mm}
+  #smr-print-block .smr-p-field{margin:3mm 0;border-bottom:1px dotted #999;min-height:9mm}
+}
 </style>
 </head>
 <body>
@@ -227,6 +261,7 @@ html[data-size="large"]{zoom:1.25}
     <button class="tab-btn" data-tab="medications">Medications</button>
     <button class="tab-btn" data-tab="recalls">Registers &amp; Recalls</button>
     <button class="tab-btn" data-tab="letters">Letters</button>
+    <button class="tab-btn" data-tab="smr">Medication Review (SMR)</button>
   </nav>
   <div id="filter-bar">
     <div class="fb-group">
@@ -258,6 +293,7 @@ html[data-size="large"]{zoom:1.25}
     <div class="tab-panel" id="tab-medications"></div>
     <div class="tab-panel" id="tab-recalls"></div>
     <div class="tab-panel" id="tab-letters"></div>
+    <div class="tab-panel" id="tab-smr"></div>
   </div>
 </div>
 
@@ -269,10 +305,16 @@ html[data-size="large"]{zoom:1.25}
 </div>
 
 
+<!-- SMR printout block (hidden except during print) -->
+<div id="smr-print-block" style="display:none"></div>
+
 <!-- Vendored libraries: see vendor-versions.json for provenance, versions, upstream URLs, and SHA-256 checksums. -->
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/chart.min.js"></script>
 <script src="vendor/d3.min.js"></script>
+<!-- Engine files: ACB scorer + STOPP/START (must load before visualiser-core.js) -->
+<script src="engine/acb-scores.js"></script>
+<script src="engine/stopp-start.js"></script>
 <script src="visualiser-core.js"></script>
 </body>
 </html>
