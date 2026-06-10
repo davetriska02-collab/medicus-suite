@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.40.0] — 2026-06-10
+
+### Feature: drag-and-drop reorderable suite tabs
+
+Suite nav tabs can be dragged left/right to reorder, like browser tabs, so
+favourites sit on the left. Order persists in a new `suite.tabOrder` key (one
+global preference shared by the side panel and pop-out; each shell reconciles
+against its own tab set, so the pop-out simply ignores tabs it doesn't have)
+and rides the existing suite backup/export. New modules added later append in
+their default position; unknown/removed ids are ignored — never dropped or
+duplicated (`side-panel/tab-order.js` `reconcileTabOrder`, unit-tested in
+`test-tab-order.js`). A drag never triggers a tab switch. Keyboard-driven
+reordering is not yet implemented (tabs remain keyboard-activatable for
+switching); mouse/pointer drag only.
+
+### Feature: author rules with an LLM (Reception, Sentinel, Triage Lens)
+
+Each of the three rule-authoring surfaces gains a "Copy LLM prompt" button and
+a paste-JSON import box, so a user can ask an external LLM ("make me a
+cellulitis pathway") and import the result directly:
+
+- **Reception** — `pathwaySchemaPrompt()` in `shared/reception-pathway-utils.js`;
+  import validates via the existing `validatePathway`/`sanitisePathway` and adds
+  the pathway **disabled** (never auto-enabled — the off-by-default + disclaimer
+  gate still applies).
+- **Sentinel monitoring** — `customRuleSchemaPrompt()` in `shared/io/sentinel-io.js`
+  (covers all five custom-rule types); import validates via the existing
+  `validateCustomRule`, forces `enabled:false`, prefixes `custom-`, de-dupes ids.
+- **Triage Lens** — `triageRuleSchemaPrompt()` plus a refactor of the inline rule
+  checks into a reusable `validateTriageRule()` (now used by both the rule
+  builder and the importer); imported rules get a fresh id, `builtin:false`,
+  `enabled:false`.
+
+Each schema prompt embeds a worked example between stable markers, and a unit
+test extracts that example and runs it through the real validator — so a
+documented schema can never drift from what the validator accepts. All imports
+accept a single object, an array, or a `{rules:[…]}`/`{pathways:[…]}` wrapper;
+validate every candidate and import nothing from a failing one; and escape all
+status text (LLM output is untrusted). Imported clinical content always arrives
+inactive, pending human review.
+
+All 30 test files pass.
+
 ## [v3.39.1] — 2026-06-10
 
 ### Reception: security hardening + clinical escalation re-tiering (post-audit)
