@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.50.0] — 2026-06-10
+
+### Feature: Patient Passport — printable plain-English health summary for patients
+
+Adds a one-click printable summary the GP hands to the patient in the room: what
+monitoring or reviews are due and why, key numbers with plain-English meaning, and
+whether those numbers are on track — all at reading age 9–11 with no jargon.
+
+- New `side-panel/modules/sentinel/passport-core.js` (pure ES module, no chrome/DOM):
+  exports `buildPassport(snapshot, trendData)` → `null | PassportObject`. Builds
+  patient identity block (name, DOB, NHS number), `due` list from action-needed
+  chips (drug-monitoring with due tests only; QOF indicators via patient-voiced map;
+  vaccines; generic fallback for unmapped types), and `numbers` list (BP, HbA1c,
+  eGFR, cholesterol, weight) with plain-English meaning sentences and evidence-based
+  status bands. Trend sentences appended when delta exceeds documented clinical
+  thresholds (≥10 mmHg systolic BP, ≥5 mmol/mol HbA1c, ≥15% eGFR change).
+  Status values ∈ {good, soon, action, none}; no colour decisions in core.
+- New `side-panel/modules/sentinel/passport.html` + `passport.js`: reads
+  `'sentinel.passport'` transient key on load; renders header (name/DOB/NHS),
+  confidentiality banner, "What's due for you" list, "Your numbers" table
+  (label, big value, status chip with text label, meaning sentence), footer with
+  bring-to-appointment note. Print CSS enforces 16pt body, 1.5 line spacing,
+  sans-serif, black on white, colour-coded status chips with text labels, high
+  contrast. Print button calls `window.print()`.
+- UI in `sentinel.js`: "Print patient summary" button added to the footer
+  alongside the existing action buttons (CSS class prefix `sent-pass-`). On click:
+  calls `buildPassport(_currentSnapshot, _lastTrendData)`, writes `sentinel.passport`
+  to `chrome.storage.local`, opens `passport.html` via `chrome.tabs.create` —
+  mirroring the sweep handout pattern exactly. Button disabled when no patient
+  context.
+- `manifest.json` → 3.50.0; `passport.html` added to `web_accessible_resources`.
+- `test-backup-coverage.js`: `sentinel.passport` added to ALLOWLIST with a comment
+  noting it follows the same transient-key convention as `sweep.handout`.
+- New `test-passport-core.js`: 62 pins covering all status bands, trend sentences,
+  no-abbreviation requirement, nothingDue flag, null guard, and all chip types.
+
 ## [v3.49.0] — 2026-06-10
 
 ### Feature: Pre-Consultation Brief — 30-second risk-ranked patient summary card

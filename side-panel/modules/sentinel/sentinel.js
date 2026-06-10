@@ -7,6 +7,7 @@
 import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentinel-core.js';
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
+import { buildPassport } from './passport-core.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -960,6 +961,7 @@ function render(payload) {
         <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
         <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
         <button class="ghost-btn" id="sentCopyAllActionsBtn" title="Copy-ready blood forms, recall SMS and tasks for all action-needed chips"${actionCount > 0 ? '' : ' disabled'}>Copy all actions</button>
+        <button class="ghost-btn sent-pass-btn" id="sentPrintPassportBtn" title="Print a plain-English health summary for the patient"${patient ? '' : ' disabled'}>Print patient summary</button>
         <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
       </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
@@ -1073,6 +1075,13 @@ function render(payload) {
     }
   }
 
+  // Print patient summary (passport) button: build a plain-English health summary
+  // for the patient, write to transient 'sentinel.passport' key, open passport.html.
+  const passportBtn = container.querySelector('#sentPrintPassportBtn');
+  if (passportBtn && patient) {
+    passportBtn.addEventListener('click', () => onPrintPassport(snapshot));
+  }
+
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
 
@@ -1098,6 +1107,20 @@ function render(payload) {
   } else {
     _openEvidenceKey = null;
   }
+}
+
+// ── Patient Passport ──────────────────────────────────────────────────────────
+// Builds the patient passport model, writes it to the transient
+// 'sentinel.passport' key, then opens passport.html in a new tab.
+// The key is left in place so a page-refresh of passport.html still works;
+// it is overwritten on the next click.
+// Mirror of sweep.js onPrintHandout — see that function for the pattern.
+async function onPrintPassport(snapshot) {
+  if (!snapshot) return;
+  const model = buildPassport(snapshot, _lastTrendData);
+  if (!model) return;
+  await chrome.storage.local.set({ 'sentinel.passport': model });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sentinel/passport.html') });
 }
 
 // ── Verify in Medicus ─────────────────────────────────────────────────────────
