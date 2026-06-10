@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.39.1] — 2026-06-10
+
+### Reception: security hardening + clinical escalation re-tiering (post-audit)
+
+Follows the red-team audit of the Reception module. Two code findings fixed,
+plus a clinical re-tiering pass on the DRAFT capture pathways.
+
+**Security (verified findings):**
+- **Disclaimer gate is now defence-in-depth, not UI-only.**
+  `resolveEffectivePathways()` gates its `enabled` set on `disclaimerAccepted`
+  (strict `true`); absent/falsy ⇒ empty enabled set (fail-safe). The panel and
+  all three options call sites pass it, so a direct storage write or imported
+  backup can no longer surface capture pathways the practice never accepted.
+- **Acceptance timestamp is no longer importable.** `receptionImport()`
+  validates `disclaimerAcceptedAt`'s shape but never writes it — acceptance is
+  a per-install attestation set only by an in-browser admin click, so a backup
+  cannot forge a review-accepted state on another install.
+- **Flag-map key whitelist (prototype-pollution defence-in-depth).** Import now
+  rejects `enabledPathways`/`hiddenChipRules` keys that don't match the pathway/
+  rule id shape (e.g. `__proto__`).
+- **Clipboard escalation fallback never hides the level** — if an escalation
+  text lookup misses, the generated block now states `ACTION (level 999/duty)`.
+- **Asked/denied summary line disambiguates colliding short labels** with a
+  `(#n)` suffix (the loud positive block was already unambiguous).
+
+The two headline audit claims — a "critical" panel XSS and a backup
+preview-warning "evasion" — were verified as false positives (output is escaped;
+overrides don't enable pathways) and not actioned.
+
+**Clinical (DRAFT pathways — `rules/reception-pathways.json`, still pre-CSO):**
+Escalation re-tiering — several time-critical presentations were promoted from
+duty to 999 (erring toward more escalation, the safe direction):
+- **urinary** — new urosepsis 999 flag (fever/chills + confusion / can't keep
+  fluids, NICE NG51); confusion promoted to 999.
+- **backpain** — cauda equina (saddle anaesthesia, bladder/bowel) → 999 ("A&E
+  now"); spinal-infection wording (IVDU/immunosuppression) added.
+- **cough** — haemoptysis split (large/with breathlessness → 999, minor streak
+  → duty); new PE 999 flag.
+- **general** — new lay sepsis 999 flag; self-harm split (attempt/means → 999,
+  ideation → duty).
+- **earache** — facial droop flag added. **rash** — necrotising-fasciitis → 999;
+  SJS/TEN mucosal wording. **headache** — anticoagulant + head injury → 999.
+  **feverish-child** — NICE NG143 <3-month high-risk caveat note added.
+
+`specVersion` → v1.1; DRAFT marker retained. Backup/restore wiring re-verified
+end to end. All 29 test files pass (451 reception assertions).
+
 ## [v3.39.0] — 2026-06-10
 
 ### Reception module: full configurability, disclaimer-gated pathways, RAG status pill
