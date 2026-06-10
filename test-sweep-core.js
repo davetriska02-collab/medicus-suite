@@ -366,6 +366,17 @@ const path = require('path');
   instr = chipInstruction({ type: 'drug-monitoring', status: 'due_soon', drugName: 'Azathioprine', tests: [{ name: 'FBC', status: 'due_soon' }] });
   check(/due soon/.test(instr.detail), 'due_soon wording is "due soon", not "overdue"');
 
+  // BP / Weight / Pulse are HCA checks, not blood tests — wording must not say "blood test".
+  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Estradiol gel', tests: [{ name: 'BP', status: 'overdue' }, { name: 'Weight', status: 'overdue' }] });
+  check(instr.action === 'Book a check-up appointment: BP, Weight', 'non-blood checks → "check-up appointment", not "blood test"');
+
+  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Guanfacine', tests: [{ name: 'Blood pressure', status: 'overdue' }, { name: 'Pulse / heart rate', status: 'overdue' }] });
+  check(!/blood test/.test(instr.action), 'blood pressure + pulse not labelled a blood test');
+
+  // Mixed bloods + checks → honest combined wording.
+  instr = chipInstruction({ type: 'drug-monitoring', status: 'overdue', drugName: 'Lithium', tests: [{ name: 'Lithium level', status: 'overdue' }, { name: 'U&E', status: 'overdue' }, { name: 'Weight', status: 'overdue' }] });
+  check(instr.action === 'Book a blood test and check appointment: Lithium level, U&E, Weight', 'mixed bloods + checks → combined wording, bloods first');
+
   instr = chipInstruction({ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP ≤140/90' });
   check(instr.action === 'Book a blood pressure check', 'HYP indicator → blood pressure check');
   check(/HYP010/.test(instr.detail), 'QOF detail carries indicator code');
@@ -409,6 +420,19 @@ const path = require('path');
     'handout is in appointment-time order (reception order), not severity order');
   check(handout.patients[1].actions.length === 1, 'identical instructions deduplicated per patient');
   check(handout.patients[1].hasHiddenActionChips === true, 'hidden-chips flag carried through');
+
+  // Repeated bookings that resolve to the same action collapse to one line, reasons merged.
+  const multiQof = buildHandout([{
+    name: 'Multi', time: '2026-06-10T11:00:00Z', clinician: 'Dr Z', redCount: 0, amberCount: 3,
+    chips: [
+      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CD001', indicatorName: 'BP in CHD' },
+      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CHOL004', indicatorName: 'Cholesterol' },
+      { type: 'qof-indicator', status: 'not_met', indicatorCode: 'KHIGH', indicatorName: 'Raised potassium' },
+    ],
+  }], {});
+  check(multiQof.patients[0].actions.length === 1, 'three review-type gaps → one booking line for reception');
+  check(/CD001/.test(multiQof.patients[0].actions[0].detail) && /CHOL004/.test(multiQof.patients[0].actions[0].detail),
+    'merged booking keeps all reasons in the detail');
   check(handout.generatedAt === '2026-06-10T08:00:00Z' && handout.suiteVersion === '9.9.9', 'meta carried through');
   check(buildHandout([], {}).patients.length === 0, 'empty rows → empty handout');
 

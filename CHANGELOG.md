@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.44.1] — 2026-06-10
+
+### Fix: Sweep reception handout — broken date, wrong "blood test" wording, redundant lines
+
+Three issues spotted in the first printed handout:
+
+- **`[object Object]` title / "Invalid Date"** — the sweep stored `runAt` as a
+  `Date` object, but `chrome.storage.local` serialises `Date` to `{}`, so the
+  handout (which reads `runAt` back from storage) had no usable timestamp. Now
+  stored as an ISO string; `fmtTs` tolerates either.
+- **"Book a blood test appointment: BP, Weight"** — blood pressure, weight and
+  pulse are HCA checks, not blood tests, so reception was told to book the
+  wrong slot. `chipInstruction` now classifies each due test and says
+  "Book a check-up appointment" (checks only), "Book a blood test appointment"
+  (bloods only), or "Book a blood test and check appointment" (mixed).
+- **Redundant booking lines** — a patient with several QOF gaps that resolve to
+  the same booking (e.g. three indicators → "Book a review appointment" ×3)
+  printed one line each. `buildHandout` now groups by booking action and merges
+  the reasons into a single line, so reception books once.
+
+5 new regression checks in `test-sweep-core.js`.
+
 ## [v3.44.0] — 2026-06-10
 
 ### Feature: Sweep — printable reception handout

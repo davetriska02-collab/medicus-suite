@@ -83,10 +83,12 @@ function formatTime(t) {
 }
 
 function fmtTs(d) {
+  // Accept either a Date or an ISO string (runAt is now an ISO string).
+  const date = (d instanceof Date) ? d : new Date(d);
   try {
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch (_) {
-    return d.toISOString().replace('T', ' ').slice(0, 19);
+    return String(d);
   }
 }
 
@@ -253,7 +255,9 @@ async function runSweep(apiBase, hiddenRules) {
   _sweepRules        = rules;
   _sweepHiddenRules  = hiddenRules;
   _sweepApiBase      = apiBase;
-  _sweepMeta         = { missingUuidCount, runAt: new Date() };
+  // ISO string, not a Date: chrome.storage.local serialises Date objects to {},
+  // which would break the printable handout (it reads runAt back from storage).
+  _sweepMeta         = { missingUuidCount, runAt: new Date().toISOString() };
 
   await runNextBatch();
 }
