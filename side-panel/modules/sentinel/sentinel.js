@@ -4,7 +4,8 @@
 
 'use strict';
 
-import { STATUS_RANK, buildAdminSummaryText } from './sentinel-core.js';
+import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentinel-core.js';
+import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -87,6 +88,142 @@ function showAdminSummaryModal(text) {
   modal.querySelector('#sentApptModalText')?.focus();
 }
 
+// Show a per-chip action pack modal with labelled sections and individual copy buttons.
+// `title` — chip name shown in the modal header.
+// `pack`  — result of buildChipActions(chip, patient).
+function showActionPackModal(title, pack) {
+  const moduleEl = container.querySelector('.sent-module');
+  if (!moduleEl) return;
+  moduleEl.querySelector('.sent-appt-modal')?.remove();
+  moduleEl.querySelector('.sent-act-modal')?.remove();
+
+  const sections = [
+    { key: 'bloodForm', label: 'Blood form' },
+    { key: 'sms', label: 'Recall SMS' },
+    { key: 'smsEscalation', label: 'Escalation SMS' },
+    { key: 'letter', label: 'Letter' },
+    { key: 'task', label: 'Task' },
+  ];
+
+  const visibleSections = sections.filter((s) => pack[s.key]);
+
+  const sectionsHtml = visibleSections
+    .map(
+      (s, i) => `
+      <div class="sent-act-section">
+        <div class="sent-act-section-head">
+          <span class="sent-act-section-label">${escHtml(s.label)}</span>
+          <button class="sent-act-copy-btn" data-section-idx="${i}" aria-label="Copy ${escHtml(s.label)}">Copy</button>
+        </div>
+        <textarea class="sent-act-textarea" data-section-idx="${i}" readonly spellcheck="false">${escHtml(pack[s.key])}</textarea>
+      </div>`
+    )
+    .join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'sent-act-modal';
+  modal.innerHTML = `
+    <div class="sent-act-modal-inner">
+      <div class="sent-appt-modal-head">
+        <span class="sent-appt-modal-title">${escHtml(title)} — Actions</span>
+        <button class="sent-appt-modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="sent-act-sections">${sectionsHtml}</div>
+    </div>`;
+
+  moduleEl.appendChild(modal);
+
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  // Per-section copy buttons
+  modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.sectionIdx, 10);
+      const text = pack[visibleSections[idx].key];
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => {
+          if (btn.isConnected) btn.textContent = 'Copy';
+        }, 2000);
+      } catch (_) {
+        modal.querySelector(`.sent-act-textarea[data-section-idx="${idx}"]`)?.select();
+      }
+    });
+  });
+}
+
+// Show a "Copy all actions" modal with the aggregated patient pack.
+function showAllActionsModal(chips, patient) {
+  const pack = buildPatientActions(chips, patient);
+  if (!pack) return;
+
+  const moduleEl = container.querySelector('.sent-module');
+  if (!moduleEl) return;
+  moduleEl.querySelector('.sent-appt-modal')?.remove();
+  moduleEl.querySelector('.sent-act-modal')?.remove();
+
+  const sections = [
+    { key: 'bloodForm', label: 'Blood forms' },
+    { key: 'sms', label: 'Combined recall SMS' },
+    { key: 'task', label: 'Combined task' },
+  ];
+
+  const visibleSections = sections.filter((s) => pack[s.key]);
+
+  const sectionsHtml = visibleSections
+    .map(
+      (s, i) => `
+      <div class="sent-act-section">
+        <div class="sent-act-section-head">
+          <span class="sent-act-section-label">${escHtml(s.label)}</span>
+          <button class="sent-act-copy-btn" data-section-idx="${i}" aria-label="Copy ${escHtml(s.label)}">Copy</button>
+        </div>
+        <textarea class="sent-act-textarea" data-section-idx="${i}" readonly spellcheck="false">${escHtml(pack[s.key])}</textarea>
+      </div>`
+    )
+    .join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'sent-act-modal';
+  modal.innerHTML = `
+    <div class="sent-act-modal-inner">
+      <div class="sent-appt-modal-head">
+        <span class="sent-appt-modal-title">All patient actions</span>
+        <button class="sent-appt-modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="sent-act-sections">${sectionsHtml}</div>
+    </div>`;
+
+  moduleEl.appendChild(modal);
+
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.sectionIdx, 10);
+      const text = pack[visibleSections[idx].key];
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => {
+          if (btn.isConnected) btn.textContent = 'Copy';
+        }, 2000);
+      } catch (_) {
+        modal.querySelector(`.sent-act-textarea[data-section-idx="${idx}"]`)?.select();
+      }
+    });
+  });
+}
+
 let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
@@ -106,6 +243,11 @@ let _ruleCurrencyFooter = null; // null = not loaded yet
 let _hiddenRules = {};
 let _dismissHandler = null;
 let _hiddenStorageListener = null;
+let _actionsHandler = null; // delegated click handler for per-chip Actions buttons
+
+// Map of action key → { chip, pack, chipName } for per-chip Actions modal.
+// Rebuilt on every render so the delegated click handler can find the pack.
+let _chipActionsMap = new Map();
 
 // Pure suppression check. Exported so node tests can import it without chrome APIs.
 // Returns { hidden: bool, resurfaced: bool }.
@@ -229,6 +371,22 @@ export async function init(el) {
   };
   document.addEventListener('click', _dismissHandler, true);
 
+  // Delegated Actions handler: clicks on a chip's "Actions" button open the
+  // per-chip action pack modal. Uses capture so it can stopPropagation before
+  // the evidence panel toggle handler sees the click.
+  _actionsHandler = (e) => {
+    const btn = e.target.closest?.('[data-act-key]');
+    if (!btn || !container || !container.contains(btn)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const key = btn.dataset.actKey;
+    if (!key) return;
+    const entry = _chipActionsMap.get(key);
+    if (!entry) return;
+    showActionPackModal(entry.chipName, entry.pack);
+  };
+  document.addEventListener('click', _actionsHandler, true);
+
   // Re-render when hidden rules change (e.g. re-enabled from settings).
   _hiddenStorageListener = (changes, area) => {
     if (area === 'local' && changes['sentinel.hiddenRules']) {
@@ -262,6 +420,11 @@ async function cleanup() {
     document.removeEventListener('click', _dismissHandler, true);
     _dismissHandler = null;
   }
+  if (_actionsHandler) {
+    document.removeEventListener('click', _actionsHandler, true);
+    _actionsHandler = null;
+  }
+  _chipActionsMap.clear();
   if (_hiddenStorageListener) {
     chrome.storage.onChanged.removeListener(_hiddenStorageListener);
     _hiddenStorageListener = null;
@@ -768,6 +931,7 @@ function render(payload) {
       <div class="sent-footer-left">
         <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
         <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
+        <button class="ghost-btn" id="sentCopyAllActionsBtn" title="Copy-ready blood forms, recall SMS and tasks for all action-needed chips"${actionCount > 0 ? '' : ' disabled'}>Copy all actions</button>
         <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
       </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
@@ -798,6 +962,49 @@ function render(payload) {
   container
     .querySelector('#sentApptSummaryBtn')
     ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+
+  container
+    .querySelector('#sentCopyAllActionsBtn')
+    ?.addEventListener('click', () => showAllActionsModal(chips, patient));
+
+  // Inject per-chip "Actions" buttons under each action-needed chip rendered in the DOM.
+  // Rebuild _chipActionsMap so the delegated click handler can retrieve packs by key.
+  _chipActionsMap.clear();
+  const actionNeededChips = visibleChips.filter((c) => isChipActionNeeded(c.status));
+  if (actionNeededChips.length > 0) {
+    // Build lookup: evidence key → chip (matches format used by ChipRenderer's data-evidence-key).
+    const chipByKey = new Map();
+    actionNeededChips.forEach((c) => {
+      const key = (c.ruleId || '') + (c.type === 'drug-monitoring' ? '|' + (c.drugName || '') : '');
+      if (key) chipByKey.set(key, c);
+    });
+
+    // Walk the rendered chips. Chips with data-evidence-key are wired by ChipRenderer.
+    container.querySelectorAll('.sent-chip[data-evidence-key]').forEach((chipEl) => {
+      const key = chipEl.dataset.evidenceKey;
+      const chip = chipByKey.get(key);
+      if (!chip) return; // not action-needed or key not in our map
+      const pack = buildChipActions(chip, patient);
+      if (!pack) return;
+
+      // Derive a human-readable title for the modal
+      const chipName =
+        chip.drugName || chip.indicatorCode || chip.displayName || chip.ruleName || chip.ruleId || 'chip';
+
+      // Populate the module-level map for use by the delegated click handler
+      _chipActionsMap.set(key, { chip, pack, chipName });
+
+      // Remove any stale actions row from a previous render
+      const nextSib = chipEl.nextElementSibling;
+      if (nextSib && nextSib.classList.contains('sent-act-row')) nextSib.remove();
+
+      const row = document.createElement('div');
+      row.className = 'sent-act-row';
+      row.dataset.actKey = key;
+      row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Actions</button>`;
+      chipEl.insertAdjacentElement('afterend', row);
+    });
+  }
 
   // Drift banner dismiss: mute for 24h via shared storage key. The content
   // script's next publish reads mutedUntil and stops stamping drift, so the

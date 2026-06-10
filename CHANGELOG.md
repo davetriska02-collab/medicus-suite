@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.48.0] — 2026-06-10
+
+### Feature: Action Packs — copy-ready blood forms, recall SMS/letters and tasks per chip
+
+Sentinel chips now carry copy-ready action text so clinicians can act on alerts
+without hand-writing every communication.
+
+- New `side-panel/modules/shared/action-packs.js` (pure ES module, no chrome/DOM):
+  exports `buildChipActions(chip, patient)` and `buildPatientActions(chips, patient)`.
+  Generates per-chip packs with `bloodForm` (only due tests, drug, status, source
+  citation), `sms` (first recall ≤320 chars, NHS Behavioural Insights pattern),
+  `smsEscalation` (consequence-transparent, CQC-aligned: prescriber informed /
+  prescription may be paused), `letter` (~120 word behaviourally-informed body),
+  and `task` (pharmacist/admin line with NHS number and order set). QOF indicator
+  chips produce review SMS/letter/task. Vaccine chips produce offer SMS + task.
+  Non-action chips return `null`.
+- `buildPatientActions` aggregates across all action-needed chips: deduplicates
+  blood-form lines, combines a single recall SMS listing all items, and produces a
+  combined task block.
+- UI: each action-needed chip in the Sentinel side-panel now has an "Actions"
+  button below it. Clicking opens a modal titled with the chip name, showing
+  labelled sections (Blood form, Recall SMS, Escalation SMS, Letter, Task) each
+  with a per-section "Copy" / "Copied ✓" clipboard button.
+- "Copy all actions" button added to the Sentinel footer (next to "Appts summary")
+  — opens a combined modal with deduplicated blood forms, combined SMS, and
+  combined task block.
+- New CSS prefix `sent-act-` in `sentinel.css` for all action-pack UI elements.
+- 61-assertion test suite in `test-action-packs.js` covering: overdue
+  methotrexate chip (FBC+LFT overdue, U&E in-date → bloodForm lists only FBC+LFT),
+  SMS ≤400 chars, escalation SMS mentions prescriber, QOF DM review SMS, vaccine
+  offer SMS, non-action chip → null, `buildPatientActions` deduplication.
+
 ## [v3.47.0] — 2026-06-10
 
 Four workstreams landed together: extraction-drift detection, clinical-coverage
