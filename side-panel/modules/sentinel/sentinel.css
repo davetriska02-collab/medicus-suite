@@ -1,7 +1,7 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Sentinel module styles */
 
-.sent-module { font-family: var(--sans); }
+.sent-module { font-family: var(--sans); position: relative; }
 .sent-header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; }
 
 /* Patient banner */
@@ -111,6 +111,7 @@
 
 /* Footer */
 .sent-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sent-footer-left { display: flex; gap: 6px; align-items: center; }
 .sent-ts { font-family: var(--mono); font-size: 9px; color: var(--text-5); letter-spacing: 0.06em; }
 .sent-empty { font-size: 12px; color: var(--text-4); text-align: center; padding: 20px 0; }
 
@@ -505,3 +506,81 @@
   border: 1px solid rgba(180,83,9,0.2);
 }
 .sent-rules-footer-icon { margin-right: 4px; }
+
+/* ── Appointments summary modal ─────────────────────────────────────────────── */
+.sent-appt-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.88);
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: stretch;
+  padding: 12px;
+  border-radius: inherit;
+}
+.sent-appt-modal-inner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+.sent-appt-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sent-appt-modal-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sent-appt-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.sent-appt-modal-close:hover { color: var(--text-2); }
+.sent-appt-modal-text {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  background: var(--bg-deep, #0a0e1a);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+.sent-appt-modal-foot {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.sent-appt-modal-copy {
+  background: var(--accent, #4a7fb8);
+  border: none;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+.sent-appt-modal-copy:hover { opacity: 0.85; }

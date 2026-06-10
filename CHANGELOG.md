@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.45.0] — 2026-06-10
+
+### Feature: Sentinel — "Appts summary" button for admin handoff
+
+Adds an **Appts summary** button to the Sentinel footer. Clicking it opens a
+small overlay showing a plain-text summary of all action-needed monitoring items
+for the current patient, formatted for copy-paste directly into a Medicus
+internal message so admin can arrange the bookings without the clinician
+narrating each item verbally.
+
+Format mirrors the Sweep reception handout logic:
+
+- Drug-monitoring gaps → "Book a blood test: FBC, U&E (methotrexate monitoring overdue)"
+- Physical checks (BP, weight, ECG…) → "Book a check-up: …"
+- Mixed → "Book a blood test and check: …"
+- QOF gaps → "Book a [condition] review"
+- Vaccines → "Offer to book: [vaccine]"
+- Alerts/combos/composites → "Flag to duty clinician"
+
+Duplicate booking types are merged into a single line (e.g. two QOF diabetes
+gaps → one "Book a diabetes review"). The textarea auto-focuses on open; a
+"Copy to clipboard" button completes the workflow. If all monitoring is in date,
+the message says so — safe to send either way.
+
 ## [v3.44.2] — 2026-06-10
 
 ### Fix: Triage Lens LLM rule authoring was hidden in the wrong tab
