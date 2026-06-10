@@ -41,6 +41,36 @@
     </div>
     <div class="tl-rule-list" id="ruleList"></div>
     <div class="tl-empty" id="ruleListEmpty" style="display:none">No rules match.</div>
+
+    <!-- LLM rule authoring tool — lives on the Rules tab (the suite-standard
+         copy-prompt → paste-JSON → validate → import-disabled flow, same as
+         Sentinel custom rules / Reception pathways / Knowledge). -->
+    <details style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+      <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
+        <span style="font-size:10px; opacity:0.6;">&#9654;</span>
+        Generate a rule with an LLM
+      </summary>
+      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+        <p class="tl-help" style="margin:0 0 12px;">
+          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
+          (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste the JSON response into
+          the box below to import it. Imported rules are <strong>disabled</strong> until you review and enable them above.
+        </p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <button class="tl-btn" id="btnLlmCopyPrompt">Copy LLM prompt</button>
+          <span id="llmCopied" style="font-size:12px; color:#16a34a; opacity:0; transition:opacity 0.3s;">Copied.</span>
+        </div>
+        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; opacity:0.6; margin-bottom:5px;">
+          Paste LLM JSON output here
+        </label>
+        <textarea id="llmJson" rows="8" spellcheck="false"
+          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'></textarea>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+          <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rule(s)</button>
+          <span id="llmStatus" class="tl-llm-status"></span>
+        </div>
+      </div>
+    </details>
   </section>
 
   <!-- ============================ EDITOR ============================ -->
@@ -256,34 +286,6 @@
       <div class="tl-edit-footer">
         <button class="tl-btn" id="btnReloadJson">Reload from storage</button>
         <button class="tl-btn tl-btn-primary" id="btnSaveJson">Save pasted JSON</button>
-      </div>
-    </details>
-
-    <!-- LLM rule authoring tool -->
-    <details style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
-      <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
-        <span style="font-size:10px; opacity:0.6;">&#9654;</span>
-        Author a rule with an LLM
-      </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
-        <p class="tl-help" style="margin:0 0 12px;">
-          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
-          (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste the JSON response into
-          the box below to import it. Imported rules are <strong>disabled</strong> until you review and enable them in the Rules tab.
-        </p>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-          <button class="tl-btn" id="btnLlmCopyPrompt">Copy LLM prompt</button>
-          <span id="llmCopied" style="font-size:12px; color:#16a34a; opacity:0; transition:opacity 0.3s;">Copied.</span>
-        </div>
-        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; opacity:0.6; margin-bottom:5px;">
-          Paste LLM JSON output here
-        </label>
-        <textarea id="llmJson" rows="8" spellcheck="false"
-          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'></textarea>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rule(s)</button>
-          <span id="llmStatus" class="tl-llm-status"></span>
-        </div>
       </div>
     </details>
   </section>

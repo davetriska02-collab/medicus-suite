@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.44.2] — 2026-06-10
+
+### Fix: Triage Lens LLM rule authoring was hidden in the wrong tab
+
+Triage Lens has had the suite-standard LLM flow (copy prompt → paste JSON →
+validate → import disabled) since v0.5 — but the block lived collapsed at the
+bottom of **Backup & restore**, after the raw-JSON editor, where nobody
+authoring a rule would find it. Moved to the **Rules** tab beneath the rule
+list, retitled "Generate a rule with an LLM" to match the other modules. No
+logic changes — the prompt, validation and force-disabled import are untouched.
+
 ## [v3.44.1] — 2026-06-10
 
 ### Fix: Sweep reception handout — broken date, wrong "blood test" wording, redundant lines
