@@ -91,9 +91,13 @@ function _chipInstruction(chip) {
 
 function buildAdminSummaryText(chips, patient) {
   const actionChips = (chips || []).filter(c => _isChipActionNeeded(c.status));
-  const namePart = patient ? (patient.displayName || patient.name || 'Unknown patient') : 'Unknown patient';
+  const rawName = patient ? (patient.displayName || patient.name || null) : null;
+  // Use NHS number as fallback identifier so the header is never "Unknown patient"
+  // when we have enough to identify the record.
+  const namePart = rawName || (patient?.nhsNumber ? `NHS ${patient.nhsNumber}` : 'Unknown patient');
   const metaParts = patient ? [
-    patient.nhsNumber   ? `NHS ${patient.nhsNumber}`     : '',
+    // Only show NHS in the meta line when the name is already in the header
+    (rawName && patient.nhsNumber) ? `NHS ${patient.nhsNumber}` : '',
     patient.dateOfBirth ? `DOB ${patient.dateOfBirth}`   : '',
     patient.age         ? `Age ${patient.age}`           : '',
     patient.gender      ? patient.gender                 : '',

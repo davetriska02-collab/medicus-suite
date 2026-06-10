@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.45.1] — 2026-06-10
+
+### UX: Triage Lens — LLM rule generator moves inside the "New rule" form
+
+The "Generate a rule with an LLM" section is now hidden until the user clicks
+**New rule** (or **Edit** on an existing rule). It appears as a collapsible
+"Or generate with an LLM" block below the manual builder form, and collapses
+automatically when the form is cancelled, saved, or navigated away from.
+Previously the block was always visible below the rule list.
+
 ## [v3.45.0] — 2026-06-10
 
 ### Feature: Sentinel — "Appts summary" button for admin handoff
