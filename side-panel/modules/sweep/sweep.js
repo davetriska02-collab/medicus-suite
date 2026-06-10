@@ -1,9 +1,13 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Sweep module (pre-clinic monitoring sweep)
 //
-// Runs the Sentinel rules engine across the logged-in user's booked patients
-// for today, producing a morning-huddle worklist so overdue monitoring can be
-// arranged BEFORE clinic rather than discovered during consultation.
+// Runs the Sentinel rules engine across today's booked patients from the
+// practice appointment book (optionally filtered to one clinician), producing
+// a morning-huddle worklist so overdue monitoring can be arranged BEFORE
+// clinic rather than discovered during consultation.
+// v3.40.2: switched from /homepage/my-appointments (per-clinician diary —
+// silently empty for users without a booked clinic) to the practice-wide
+// appointment book.
 //
 // Design decisions:
 //  - Manual trigger ONLY (no auto-run, no polling) — polite to the API.
@@ -19,6 +23,7 @@
 
 'use strict';
 
+import { fetchSchedulingOverview, todayISO } from '../../../shared/medicus-api.js';
 import {
   extractBookedPatients,
   summariseSweep,
@@ -30,6 +35,7 @@ import {
 
 let container  = null;
 let _abortFlag = false;   // set to true to stop the in-progress sweep loop
+let _selectedClinician = ''; // '' = all clinicians (appointment-book staff name)
 let _running   = false;   // true while a sweep is in progress
 
 // Cached rules (same TTL/invalidation as sentinel.js — cleared on storage change)
@@ -48,7 +54,9 @@ function esc(s) {
 
 function formatTime(t) {
   if (!t) return '';
-  return esc(t);
+  // appointment-book times are ISO datetimes; show HH:MM
+  const m = String(t).match(/T(\d{2}:\d{2})/);
+  return esc(m ? m[1] : t);
 }
 
 function fmtTs(d) {
@@ -175,29 +183,31 @@ async function runSweep(apiBase, hiddenRules) {
     if (el) el.textContent = msg;
   };
 
-  setProgress('Fetching appointment list…');
+  setProgress('Fetching the appointment book…');
 
-  // Fetch today's appointments
-  const apptUrl = `${apiBase}/scheduling/data/homepage/my-appointments`;
+  // Fetch today's PRACTICE-WIDE appointment book. v3.40.2: previously used
+  // /scheduling/data/homepage/my-appointments, which only covers the
+  // logged-in user's own diary — users without a personally-booked clinic
+  // always got zero patients (same root cause as the Condor WR fix, v3.36.2).
+  const code = apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? '';
   let raw;
   try {
-    const r = await window.ApiDiag.fetch({
-      module:     'sweep',
-      url:        apptUrl,
-      code:       apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? '',
-      codeSource: 'tab',
-    });
-    raw = await r.json();
+    raw = await fetchSchedulingOverview(code, todayISO(), { bypassCache: true });
   } catch (e) {
-    renderError(`Could not fetch appointment list: ${esc(e.message)}`);
+    renderError(`Could not fetch the appointment book: ${esc(e.message)}`);
     return;
   }
 
-  const { patients, missingUuidCount, cappedAt, diagnosticMessage } =
-    extractBookedPatients(raw);
+  const { patients, clinicians, missingUuidCount, cappedAt, diagnosticMessage } =
+    extractBookedPatients(raw, { clinician: _selectedClinician || null });
+
+  populateClinicianSelect(clinicians);
 
   if (diagnosticMessage && patients.length === 0) {
-    renderError(esc(diagnosticMessage));
+    // A genuinely empty book / empty filter is a notice, not a failure;
+    // an unreadable feed is an error. Both are explicit — never a silent 0.
+    if (/^No booked appointments/.test(diagnosticMessage)) renderNotice(esc(diagnosticMessage));
+    else renderError(esc(diagnosticMessage));
     return;
   }
 
@@ -291,12 +301,13 @@ function chipSummaryHtml(chips) {
 function patientRowHtml(row, apiBase, siteId) {
   const name    = esc(row.name);
   const timeStr = row.time ? `<span class="sweep-row-time">${formatTime(row.time)}</span>` : '';
+  const clinStr = row.clinician ? `<span class="sweep-row-clin">${esc(row.clinician)}</span>` : '';
   const recUrl  = `https://england.medicus.health/${esc(siteId)}/patient/${esc(row.uuid)}/`;
 
   if (row.error) {
     return `<div class="sweep-row sweep-row-error">
       <div class="sweep-row-head">
-        ${timeStr}<span class="sweep-row-name">${name}</span>
+        ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
         <span class="sweep-row-badge sweep-badge-error">ERROR</span>
       </div>
       <div class="sweep-row-detail sweep-row-errtext">Could not read record: ${esc(row.error)}</div>
@@ -319,7 +330,7 @@ function patientRowHtml(row, apiBase, siteId) {
 
   return `<div class="sweep-row">
     <div class="sweep-row-head">
-      ${timeStr}<span class="sweep-row-name">${name}</span>
+      ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
       <span class="sweep-row-badges">${badgeParts.join('')}</span>
       <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a>
     </div>
@@ -410,6 +421,35 @@ function renderResults({ actionRows, clearRows, errorRows, total, cappedAt, miss
   _running = false;
 }
 
+// Neutral notice (e.g. genuinely empty appointment book) — not a failure.
+function renderNotice(message) {
+  if (!container) return;
+  const runArea = container.querySelector('.sweep-run-area');
+  if (runArea) {
+    runArea.innerHTML = `<div class="sweep-notice">${message}</div>`;
+  }
+  const btn = container.querySelector('.sweep-run-btn');
+  if (btn) {
+    btn.textContent = 'Run sweep';
+    btn.disabled = false;
+  }
+  _running = false;
+}
+
+// Fill the clinician filter from the staff seen in the appointment book.
+// Keeps the current selection if that clinician still exists.
+function populateClinicianSelect(clinicians) {
+  const sel = container?.querySelector('#sweepClinician');
+  if (!sel || !Array.isArray(clinicians)) return;
+  const current = _selectedClinician;
+  sel.innerHTML = `<option value="">All clinicians</option>` +
+    clinicians.map(c => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  if (current && !clinicians.includes(current)) {
+    _selectedClinician = '';
+    sel.value = '';
+  }
+}
+
 function renderError(message) {
   if (!container) return;
   const runArea = container.querySelector('.sweep-run-area');
@@ -439,8 +479,10 @@ export async function init(el) {
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Runs the Sentinel rules engine across your booked patients for today to
-          identify overdue or action-needed monitoring BEFORE clinic starts.
+          Runs the Sentinel rules engine across today's booked patients from the
+          practice appointment book to identify overdue or action-needed
+          monitoring BEFORE clinic starts. Use the dropdown to sweep a single
+          clinician's list.
         </div>
         <div class="sweep-disclaimer sweep-disclaimer-top">
           <strong>Supplementary tool only.</strong>
@@ -452,6 +494,9 @@ export async function init(el) {
 
       <div class="sweep-controls">
         <button class="sweep-run-btn" type="button">Run sweep</button>
+        <label class="sweep-clin-label">for
+          <select id="sweepClinician"><option value="">All clinicians</option></select>
+        </label>
       </div>
 
       <div class="sweep-run-area">
@@ -461,6 +506,9 @@ export async function init(el) {
 
   const btn = container.querySelector('.sweep-run-btn');
   btn.addEventListener('click', onRunClick);
+  container.querySelector('#sweepClinician')?.addEventListener('change', e => {
+    _selectedClinician = e.target.value || '';
+  });
 
   // Invalidate merged rules cache when rules change (mirrors sentinel.js)
   _storageListener = (changes, area) => {

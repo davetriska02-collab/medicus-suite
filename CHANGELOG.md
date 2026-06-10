@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.40.2] — 2026-06-10
+
+### Fix: Sweep found zero patients — wrong appointment feed (per-clinician, not practice)
+
+Sweep fetched `/scheduling/data/homepage/my-appointments`, which only covers
+the logged-in user's OWN booked diary — anyone without a personally-booked
+clinic that day got an empty schedule, and the empty case fell through
+silently to "No action-needed alerts found across 0 patients". This is the
+same root cause as the Condor waiting-room fix in v3.36.2 ("my-appointments
+is per-clinician only").
+
+- Sweep now reads the practice-wide appointment book
+  (`/scheduling/data/appointment-book/embedded-overview` via the shared
+  `fetchSchedulingOverview`, fresh fetch per run), parsing
+  `staffSchedules[].schedule[].entries[]`. Cancelled appointments excluded.
+- New clinician filter: "All clinicians" by default, or sweep a single
+  clinician's list (dropdown populates from the appointment book; patient
+  rows now show the clinician).
+- Fail-visible zero states (H-005): an empty appointment book, an empty
+  clinician filter, or an unreadable feed each render an explicit message —
+  a bare "0 patients, nothing to action" can no longer appear.
+- Limitation 26 updated; test-sweep-core.js migrated to the appointment-book
+  shape with regression guards for the silent-zero path, cancelled exclusion,
+  and the clinician filter.
+
+Diagnosed by three parallel investigation agents; root cause corroborated by
+the v3.36.2 changelog entry.
+
 ## [v3.40.1] — 2026-06-10
 
 ### Fix: Condor "Task inbox not configured" shown for a configured Request Monitor
