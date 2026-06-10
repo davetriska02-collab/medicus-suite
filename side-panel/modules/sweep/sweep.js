@@ -128,6 +128,19 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
 
   const raw = await apiClient.fetchAll(apiBase, patientUuid, { useCache: false });
 
+  // fetchAll catches per-endpoint failures into raw.errors instead of throwing.
+  // A patient evaluated against partial data could surface as "no action-needed
+  // alerts" — a silent false-clear (the H-005 failure mode). Fail visibly instead:
+  // any endpoint failure puts the patient in the error rows, never the clear list.
+  const failedEndpoints = Object.keys(raw.errors || {});
+  if (!raw.banner) {
+    throw new Error('patient banner unavailable — record not read' +
+      (failedEndpoints.length ? ` (${failedEndpoints.join(', ')} failed)` : ''));
+  }
+  if (failedEndpoints.length > 0) {
+    throw new Error(`incomplete record read — ${failedEndpoints.join(', ')} failed`);
+  }
+
   // Synthetic URL context — normalisers.js uses this only for banner.url/title/view;
   // no clinical rule logic branches on these fields.
   const urlContext = {
@@ -206,7 +219,8 @@ async function runSweep(apiBase, hiddenRules) {
     if (_abortFlag) break;
 
     const patient = patients[i];
-    setProgress(`Checking ${i + 1}/${total} — ${esc(patient.name)}…`);
+    // setProgress writes via textContent — no HTML escaping needed (or wanted).
+    setProgress(`Checking ${i + 1}/${total} — ${patient.name}…`);
 
     let chips = null;
     let error = null;

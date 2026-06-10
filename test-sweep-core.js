@@ -272,10 +272,12 @@ const path = require('path');
     },
   ];
   const hiddenSummary = summariseSweep(hiddenInput);
-  // The overdue chip is hidden, so redCount should be 0 → clear row
-  check(hiddenSummary.clearRows.length  === 1, 'Patient with only hidden action chips → clear row');
-  check(hiddenSummary.actionRows.length === 0, 'No action rows when action chip is hidden');
-  check(hiddenSummary.clearRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips flagged on clear row');
+  // Hidden rules are NOT applied as suppression (CLINICAL-SAFETY-NOTICE limitation
+  // 26): the hidden overdue chip still counts, so the patient stays on the worklist.
+  check(hiddenSummary.actionRows.length === 1, 'Patient with hidden action chip stays an action row');
+  check(hiddenSummary.clearRows.length  === 0, 'Hidden action chip does not demote patient to clear');
+  check(hiddenSummary.actionRows[0].redCount === 1, 'Hidden overdue chip still counted as red');
+  check(hiddenSummary.actionRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips flagged on action row');
 
   // ── summariseSweep — empty / null input ───────────────────────────────────────
   console.log('\n--- summariseSweep: empty/null ---');
@@ -298,8 +300,8 @@ const path = require('path');
     },
   ];
   const arrayS = summariseSweep(arrayHiddenInput);
-  check(arrayS.clearRows.length === 1,               'Array hiddenRuleIds treated as Set → patient in clear');
-  check(arrayS.clearRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips set via array path');
+  check(arrayS.actionRows.length === 1,               'Array hiddenRuleIds treated as Set → patient stays in action');
+  check(arrayS.actionRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips set via array path');
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

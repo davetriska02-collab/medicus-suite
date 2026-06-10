@@ -2,6 +2,70 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.37.0] — 2026-06-10
+
+Five user-aiding features from the high-impact development review.
+
+### Feature: Pre-clinic Monitoring Sweep — new "Sweep" side-panel tab
+
+Runs the Sentinel rules engine across the logged-in user's booked patients for
+today (same `/scheduling/data/homepage/my-appointments` feed as the waiting-room
+strip; same `fetchAll → normaliseAll → evaluatePatient` path as the live Sentinel
+module) and renders a worst-first worklist of patients with action-needed
+monitoring/QOF/vaccine chips, so recalls and bloods can be arranged before
+clinic. Manual trigger only; sequential per-patient fetches with a 250 ms gap
+and a 40-patient cap; results are ephemeral (no new storage keys). Fail-visible
+by design: any per-patient endpoint failure renders an explicit "could not read
+record" row — a patient with partial data can never appear as "clear".
+`sentinel.hiddenRules` suppressions are intentionally NOT applied (a
+per-workstation dismissal must not drop a patient from a recall list); rows
+including hidden alerts are flagged. New limitation 26 added to
+docs/CLINICAL-SAFETY-NOTICE.md. New module registered in both panel and pop-out;
+pure logic in `sweep-core.js` covered by `test-sweep-core.js`.
+**Note for CSO review:** the sweep is a new clinical surface and should receive
+hazard-log review before deployment; HAZARD-LOG.md deliberately not edited here.
+
+### Safety: dismissed Sentinel chips resurface on status escalation (H-021 / limitation 22)
+
+Permanent chip dismissals now record `statusAtDismissal` and `dismissedAt` in
+`sentinel.hiddenRules`. A permanently hidden chip automatically resurfaces (with
+a visible RESURFACED badge) when its current status becomes more severe than it
+was at dismissal (colour rank: red > amber > neutral > green; unknown statuses
+rank red — fail-safe). Legacy entries without a recorded status keep the old
+always-hidden behaviour to avoid flooding existing users; they are labelled in
+the review screen. The hidden-alerts list in Sentinel options now shows
+dismissal date, age and status-at-dismissal. Backup import validation accepts
+(and validates) the new optional fields. New `test-hidden-resurfacing.js`;
+import-hardening tests extended.
+
+### Safety: "Meds without a monitoring rule" audit view
+
+New `listUnmatchedMedications()` in the rules engine surfaces medications not
+matched by any enabled drug-monitoring rule — making the documented
+silent-failure mode (an unlisted brand never alerts) visible instead of silent.
+Rendered as a collapsed informational section in both the in-page Sentinel HUD
+and the side-panel tab, with a "report a possible missing brand" mailto link
+when a feedback address is configured. New `test-unmatched-meds.js`.
+
+### Feature: rule-currency status (options card + Sentinel footer)
+
+New `shared/rule-currency.js` assesses the four bundled rule files:
+amber when a file is >365 days old, when the QOF year has rolled over
+(file year vs 1 April boundary), or when the vaccine season file predates the
+current season (1 September boundary). Rendered as a "Rules status" card in
+Options and a one-line footer in the Sentinel tab. `vaccine-rules.json` and
+`alert-library.json` gain top-level `lastUpdated`/`specVersion` metadata
+(rule content untouched); `test-rule-schema.js` now asserts metadata on all
+four files. New `test-rule-currency.js` includes a live check against the
+bundled files, so CI starts failing when the shipped rules genuinely go stale.
+
+### Feature: one-click "Verify in Medicus" (H-007 automation-bias mitigation)
+
+The Sentinel side-panel patient banner and every chip's evidence panel gain a
+"Verify in Medicus ↗" button that focuses the source Medicus tab (never
+navigates it), making verify-before-acting a one-click action. Shows a brief
+"Medicus tab not found" note if the tab has closed.
+
 ## [v3.36.4] — 2026-06-09
 
 ### Fix: seasonStart() UTC safety (engine/rules-engine.js)

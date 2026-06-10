@@ -238,8 +238,6 @@ async function loadRuleCurrencyFooter() {
     const result = RC.assessRuleCurrency(files, today);
 
     // Build a compact one-line summary
-    const qofFile = files.find(f => f.id === 'qof');
-    const drugFile = files.find(f => f.id === 'drug');
     const qofSpec = qof.specVersion || '';
     // Extract "QOF YYYY/YY" from specVersion for the compact label
     const qofMatch = qofSpec.match(/QOF\s+\d{4}\/\d{2,4}/i);

@@ -162,6 +162,11 @@ export function extractBookedPatients(raw) {
 //   { uuid, name, time, chips, redCount, amberCount, error,
 //     hasHiddenActionChips: bool }   // true if any hidden chip is action-needed
 //
+// Hidden rules (sentinel.hiddenRules) are NOT applied as a suppression filter:
+// hidden action chips still count towards redCount/amberCount, so a dismissed
+// alert can never silently drop a patient from the worklist. The flag only
+// drives an explanatory note in the UI.
+//
 // Sort order for actionRows: most red first, then most amber, then name.
 // ---------------------------------------------------------------------------
 export function summariseSweep(perPatientResults) {
@@ -184,10 +189,12 @@ export function summariseSweep(perPatientResults) {
 
     for (const chip of chips) {
       const colour = STATUS_COLOUR[chip.status];
-      if (hiddenIds.has(chip.ruleId)) {
-        // Chip is hidden in sentinel panel — note it but don't count it as action
-        if (colour === 'red' || colour === 'amber') hasHiddenActionChips = true;
-        continue;
+      // Hidden rules are intentionally NOT suppressed here (CLINICAL-SAFETY-NOTICE
+      // limitation 26): a per-workstation dismissal must not silently omit a
+      // patient from the recall worklist. Hidden action chips still count; the
+      // row is flagged so the clinician knows why the panel looks different.
+      if (hiddenIds.has(chip.ruleId) && (colour === 'red' || colour === 'amber')) {
+        hasHiddenActionChips = true;
       }
       if (colour === 'red') redCount++;
       else if (colour === 'amber') amberCount++;
