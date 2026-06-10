@@ -10,6 +10,8 @@
 
 'use strict';
 
+import { isBloodTest, groupInstructionsByAction } from '../shared/chip-instructions.js';
+
 // Maximum patients the sweep will process. If the appointment feed returns
 // more, the first MAX_SWEEP_PATIENTS by appointment time are processed.
 export const MAX_SWEEP_PATIENTS = 40;
@@ -25,11 +27,20 @@ export const ACTION_COLOURS = new Set(['red', 'amber']);
 
 // Colour map (mirrors chip-renderer.js STATUS_COLOUR exactly)
 const STATUS_COLOUR = {
-  overdue: 'red', not_met: 'red', alert: 'red',
-  stale: 'amber', due_soon: 'amber', caution: 'amber',
-  no_data: 'neutral', recently_initiated: 'neutral', noted: 'neutral',
-  achieved: 'green', in_date: 'green',
-  vax_due: 'amber', vax_given: 'green', vax_declined: 'neutral'
+  overdue: 'red',
+  not_met: 'red',
+  alert: 'red',
+  stale: 'amber',
+  due_soon: 'amber',
+  caution: 'amber',
+  no_data: 'neutral',
+  recently_initiated: 'neutral',
+  noted: 'neutral',
+  achieved: 'green',
+  in_date: 'green',
+  vax_due: 'amber',
+  vax_given: 'green',
+  vax_declined: 'neutral',
 };
 
 // Returns true if this chip status counts as "action needed" (red or amber).
@@ -75,12 +86,16 @@ export function isActionNeeded(status) {
 // ---------------------------------------------------------------------------
 export function extractBookedPatients(raw, opts) {
   const clinicianFilter = (opts && opts.clinician) || null;
-  const limit = (opts != null && 'limit' in opts) ? opts.limit : MAX_SWEEP_PATIENTS;
+  const limit = opts != null && 'limit' in opts ? opts.limit : MAX_SWEEP_PATIENTS;
   const staffSchedules = raw?.staffSchedules;
   if (!Array.isArray(staffSchedules)) {
     return {
-      patients: [], clinicians: [], appointmentCount: 0, missingUuidCount: 0, cappedAt: null,
-      diagnosticMessage: 'Could not read the appointment book — sweep unavailable; field layout may have changed'
+      patients: [],
+      clinicians: [],
+      appointmentCount: 0,
+      missingUuidCount: 0,
+      cappedAt: null,
+      diagnosticMessage: 'Could not read the appointment book — sweep unavailable; field layout may have changed',
     };
   }
 
@@ -92,8 +107,8 @@ export function extractBookedPatients(raw, opts) {
   for (const staff of staffSchedules) {
     const staffName = staff?.name || 'Unknown clinician';
     let staffHasAppointments = false;
-    for (const session of (staff?.schedule || [])) {
-      for (const entry of (session?.entries || [])) {
+    for (const session of staff?.schedule || []) {
+      for (const entry of session?.entries || []) {
         if (entry?.diaryEntryType?.value !== 'appointment') continue;
         if (String(entry?.displayStatus?.value || '').toLowerCase() === 'cancelled') continue;
         staffHasAppointments = true;
@@ -158,9 +173,10 @@ export function extractBookedPatients(raw, opts) {
   if (allEntries.length === 0) {
     diagnosticMessage = clinicianFilter
       ? `No booked appointments found for ${clinicianFilter} in today's appointment book.`
-      : 'No booked appointments found in today\'s appointment book.';
+      : "No booked appointments found in today's appointment book.";
   } else if (seen.size === 0) {
-    diagnosticMessage = 'Could not identify patients from the appointment book — sweep unavailable; field layout may have changed';
+    diagnosticMessage =
+      'Could not identify patients from the appointment book — sweep unavailable; field layout may have changed';
   }
 
   // Sort by appointment time (lexicographic works for ISO datetimes)
@@ -171,7 +187,7 @@ export function extractBookedPatients(raw, opts) {
     return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
   });
 
-  const cappedAt = (limit !== null && sorted.length > limit) ? sorted.length : null;
+  const cappedAt = limit !== null && sorted.length > limit ? sorted.length : null;
   const patients = limit !== null ? sorted.slice(0, limit) : sorted;
 
   return { patients, clinicians, appointmentCount: allEntries.length, missingUuidCount, cappedAt, diagnosticMessage };
@@ -223,39 +239,33 @@ export function extractBookedPatients(raw, opts) {
 // Anything unmapped falls back to a generic review booking; the detail line
 // always carries the real indicator code + name so the clinician can verify.
 const QOF_ACTION_BY_PREFIX = [
-  ['HYP',  'Book a blood pressure check'],
-  ['BP',   'Book a blood pressure check'],
-  ['DM',   'Book a diabetes review'],
-  ['AST',  'Book an asthma review'],
+  ['HYP', 'Book a blood pressure check'],
+  ['BP', 'Book a blood pressure check'],
+  ['DM', 'Book a diabetes review'],
+  ['AST', 'Book an asthma review'],
   ['COPD', 'Book a COPD review'],
   ['SMOK', 'Ask for and record smoking status'],
-  ['CHD',  'Book a long-term condition review'],
-  ['HF',   'Book a long-term condition review'],
-  ['AF',   'Book a long-term condition review'],
+  ['CHD', 'Book a long-term condition review'],
+  ['HF', 'Book a long-term condition review'],
+  ['AF', 'Book a long-term condition review'],
   ['STIA', 'Book a long-term condition review'],
-  ['PAD',  'Book a long-term condition review'],
-  ['CKD',  'Book a long-term condition review'],
-  ['MH',   'Book an annual health check'],
-  ['SMI',  'Book an annual health check'],
-  ['LD',   'Book an annual health check'],
+  ['PAD', 'Book a long-term condition review'],
+  ['CKD', 'Book a long-term condition review'],
+  ['MH', 'Book an annual health check'],
+  ['SMI', 'Book an annual health check'],
+  ['LD', 'Book an annual health check'],
 ];
 
-// Monitoring "tests" are a mix of venous bloods (FBC, U&E, LFT, lithium level…)
-// and physical checks done by an HCA (BP, weight, pulse, height, ECG). Calling
-// a blood-pressure check a "blood test" sends reception to book the wrong slot,
-// so the instruction wording must reflect what's actually due.
-const NON_BLOOD_TEST_RE = /\b(b\.?p\.?|blood pressure|pulse|heart rate|weight|height|bmi|ecg|cxr|chest x-?ray|waist|peak flow|spirometr|annual review)\b/i;
-function isBloodTest(name) {
-  return !NON_BLOOD_TEST_RE.test(String(name || ''));
-}
+// isBloodTest() is imported from ../shared/chip-instructions.js.
+// NON_BLOOD_TEST_RE is shared there — see that file for the definition and comments.
 
 export function chipInstruction(chip) {
   if (!chip || !isActionNeeded(chip.status)) return null;
 
   if (chip.type === 'drug-monitoring') {
     const dueTests = (chip.tests || [])
-      .filter(t => t && (t.status === 'overdue' || t.status === 'stale' || t.status === 'due_soon'))
-      .map(t => t.name || t.testName)
+      .filter((t) => t && (t.status === 'overdue' || t.status === 'stale' || t.status === 'due_soon'))
+      .map((t) => t.name || t.testName)
       .filter(Boolean);
     const drug = chip.drugName || 'monitored medication';
     const detail = `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`;
@@ -263,7 +273,7 @@ export function chipInstruction(chip) {
       return { action: 'Book a monitoring appointment', detail };
     }
     const bloods = dueTests.filter(isBloodTest);
-    const checks = dueTests.filter(n => !isBloodTest(n));
+    const checks = dueTests.filter((n) => !isBloodTest(n));
     let action;
     if (bloods.length && checks.length) {
       action = `Book a blood test and check appointment: ${[...bloods, ...checks].join(', ')}`;
@@ -293,7 +303,14 @@ export function chipInstruction(chip) {
 
   // Everything else (alerts, event counts, registers, combos, trends) is a
   // clinical judgement — reception's only safe action is to hand it on.
-  const label = chip.drugName || chip.indicatorCode || chip.label || chip.displayName || chip.registerName || chip.ruleId || 'alert';
+  const label =
+    chip.drugName ||
+    chip.indicatorCode ||
+    chip.label ||
+    chip.displayName ||
+    chip.registerName ||
+    chip.ruleId ||
+    'alert';
   return { action: 'Flag to the duty clinician', detail: String(label) };
 }
 
@@ -317,31 +334,26 @@ export function chipInstruction(chip) {
 // ---------------------------------------------------------------------------
 export function buildHandout(actionRows, meta) {
   const m = meta || {};
-  const patients = (actionRows || []).map(row => {
-    // Group by the booking action so a patient with several gaps that resolve to
-    // the SAME booking (e.g. DM020 + DM036 → one diabetes review; three QOF gaps
-    // → one review appointment) prints as one line with the reasons combined,
-    // not three near-identical "book an appointment" rows for reception to wade
-    // through. Reasons are de-duplicated and joined.
-    const byAction = new Map(); // action → [unique details], insertion-ordered
-    for (const chip of (row.chips || [])) {
-      const instr = chipInstruction(chip);
-      if (!instr) continue;
-      if (!byAction.has(instr.action)) byAction.set(instr.action, []);
-      const details = byAction.get(instr.action);
-      if (instr.detail && !details.includes(instr.detail)) details.push(instr.detail);
-    }
-    const actions = [...byAction.entries()].map(([action, details]) => ({ action, detail: details.join('; ') }));
-    return {
-      time: row.time || null,
-      name: row.name || 'Unknown patient',
-      clinician: row.clinician || null,
-      redCount: row.redCount || 0,
-      amberCount: row.amberCount || 0,
-      actions,
-      hasHiddenActionChips: !!row.hasHiddenActionChips,
-    };
-  }).filter(p => p.actions.length > 0);
+  const patients = (actionRows || [])
+    .map((row) => {
+      // Group by the booking action so a patient with several gaps that resolve to
+      // the SAME booking (e.g. DM020 + DM036 → one diabetes review; three QOF gaps
+      // → one review appointment) prints as one line with the reasons combined,
+      // not three near-identical "book an appointment" rows for reception to wade
+      // through. Reasons are de-duplicated and joined.
+      const groups = groupInstructionsByAction(row.chips || [], chipInstruction);
+      const actions = groups.map(({ action, details }) => ({ action, detail: details.join('; ') }));
+      return {
+        time: row.time || null,
+        name: row.name || 'Unknown patient',
+        clinician: row.clinician || null,
+        redCount: row.redCount || 0,
+        amberCount: row.amberCount || 0,
+        actions,
+        hasHiddenActionChips: !!row.hasHiddenActionChips,
+      };
+    })
+    .filter((p) => p.actions.length > 0);
 
   // Reception works the day in appointment order.
   patients.sort((a, b) => {
@@ -364,9 +376,19 @@ export function summariseSweep(perPatientResults) {
   const clearRows = [];
   const errorRows = [];
 
-  for (const r of (perPatientResults || [])) {
+  for (const r of perPatientResults || []) {
     if (r.error) {
-      errorRows.push({ uuid: r.uuid, name: r.name, time: r.time, clinician: r.clinician || null, chips: null, redCount: 0, amberCount: 0, error: r.error, hasHiddenActionChips: false });
+      errorRows.push({
+        uuid: r.uuid,
+        name: r.name,
+        time: r.time,
+        clinician: r.clinician || null,
+        chips: null,
+        redCount: 0,
+        amberCount: 0,
+        error: r.error,
+        hasHiddenActionChips: false,
+      });
       continue;
     }
 
@@ -390,7 +412,17 @@ export function summariseSweep(perPatientResults) {
       else if (colour === 'amber') amberCount++;
     }
 
-    const row = { uuid: r.uuid, name: r.name, time: r.time, clinician: r.clinician || null, chips, redCount, amberCount, error: null, hasHiddenActionChips };
+    const row = {
+      uuid: r.uuid,
+      name: r.name,
+      time: r.time,
+      clinician: r.clinician || null,
+      chips,
+      redCount,
+      amberCount,
+      error: null,
+      hasHiddenActionChips,
+    };
 
     if (redCount > 0 || amberCount > 0) {
       actionRows.push(row);
