@@ -643,14 +643,8 @@ function computePINCER(allProblems, drugs, entries, ageStr) {
 
   // P-F: ACEi/ARB OR loop diuretic in age ≥75 without recent U&E (15 months / 456d)
   // Fail-closed: if age unknown, this flag does NOT fire.
-  const loopDiuretic = drugs.find(
-    (d) =>
-      d.id === 'diuretic' &&
-      d.terms &&
-      d.terms.some((t) => ['furosemide', 'frusemide', 'bumetanide', 'torasemide'].includes(t))
-  );
-  // Detect loop diuretic specifically via label (the diuretic entry covers loop+thiazide)
-  // Use a targeted search through HIGH_RISK_DRUGS entries with the known loop terms.
+  // Loop diuretic detected via the known loop terms on the diuretic entry
+  // (the diuretic entry covers loop+thiazide).
   const hasLoopDiuretic = () => {
     const loop = drugs.find(
       (d) =>
