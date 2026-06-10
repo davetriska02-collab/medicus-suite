@@ -206,18 +206,37 @@ const KB_PROMPT_RULES = `1. Use UK general-practice terminology (2WW, e-RS, ICB,
 3. NEVER include any patient details, real or invented. If the pasted material contains patient details, leave them out.`;
 
 function kbSchemaPrompt() {
-  return `You are helping a UK NHS GP practice build its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
+  return `You are helping a UK NHS GP practice build the initial content for its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
 
+Work in TWO PHASES. Do not skip phase 1.
+
+PHASE 1 — DISCOVERY (your first reply; no JSON yet):
+Ask the practice the questions you need to properly localise the content. Cover at least:
+- Practice name, town and postcode area, and which ICB they sit in.
+- Which acute hospital trust(s) and sites they usually refer to.
+- Community providers: district nursing, MSK/physio, podiatry, NHS Talking Therapies provider, community mental health trust and crisis line, palliative care team.
+- Local self-referral routes (MSK physio, talking therapies, weight management, stop smoking, drug & alcohol, continence, falls, antenatal booking).
+- In-house and PCN services (clinical pharmacist, social prescriber, first-contact physio, phlebotomy arrangements) and how patients access them.
+- The things their team looks up most often (frequently dialled numbers, quirky local rules, recurring "how do I refer to X?" questions).
+- Any local documents they can paste (referral guides, contact sheets, intranet pages, rota emails).
+If you have web browsing/search available, ALSO look up the named ICB, trust and provider websites to find current referral routes and public phone numbers, and put the page you used in that entry's "url" field. If you cannot browse, say so and rely on the practice's answers and pasted documents.
+
+PHASE 2 — GENERATION (after their answers):
 Output ONLY a valid JSON object of the form { "entries": [ ... ] } — no markdown fences, no commentary.
 
 ${KB_PROMPT_SCHEMA}
 
+COVERAGE — be comprehensive, not a sampler. Aim for 40–60 entries:
+- "referrals": a 2WW entry per major suspected-cancer pathway (lower GI, upper GI, lung, breast, skin, urology, gynaecology, head & neck, haematology), urgent-but-not-2WW routes the practice uses, advice & guidance routes, and the routine referrals they send most (cardiology, dermatology, MSK/orthopaedics, ENT, ophthalmology, paediatrics, gastroenterology, mental health).
+- "contacts": hospital switchboard and key departments, district nursing SPA, midwifery, health visiting, palliative/hospice, mental health crisis line, safeguarding (adults AND children), social services, local pharmacies, out-of-hours/111 clinical line, and the practice's own frequently dialled numbers.
+- "pathways": every local self-referral route from discovery, Pharmacy First scope, each in-house/PCN service and how to book it, and common admin pathways (fit notes, subject access requests, new registrations, private/non-NHS work).
+- "templates": short reusable text blocks the practice asked for (e.g. safety-netting lines, standard letter snippets).
+
 CONTENT INSTRUCTIONS:
 ${KB_PROMPT_RULES}
-4. Each entry must cover ONE distinct topic. Do not produce two entries for the same topic with reworded titles.
-5. Prefer 10–20 genuinely useful entries over padding.
-
-If the practice pastes local documents below, extract entries from them faithfully — do not embellish.
+4. Localise hard: only state a real phone number, address or provider name when you are confident it is current for THIS practice's area — from the practice's answers, a pasted document, or a source page you actually checked (cite it in "url"). Anything unverified stays a placeholder in square brackets for the practice to fill in.
+5. Each entry must cover ONE distinct topic. Do not produce two entries for the same topic with reworded titles.
+6. The practice reviews every entry before relying on it — make each one short enough to review in seconds.
 
 --- EXAMPLE JSON ---
 {

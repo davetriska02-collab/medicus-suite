@@ -107,6 +107,10 @@ if (m) {
 check(/Output ONLY a valid JSON/i.test(prompt), 'prompt demands JSON-only output');
 check(/NEVER include any patient details/i.test(prompt), 'prompt forbids patient details');
 check(/placeholder in square brackets/i.test(prompt), 'prompt forbids invented local numbers (placeholders instead)');
+check(/PHASE 1 — DISCOVERY/.test(prompt) && /PHASE 2 — GENERATION/.test(prompt), 'prompt is two-phase: discovery before generation');
+check(/which ICB/i.test(prompt) && /hospital trust/i.test(prompt) && /self-referral/i.test(prompt), 'discovery asks for ICB, trusts and self-referral routes');
+check(/web browsing\/search/i.test(prompt), 'prompt tells browsing-capable LLMs to verify local sources');
+check(/40–60 entries/.test(prompt) && /2WW entry per major suspected-cancer pathway/i.test(prompt) && /safeguarding/i.test(prompt), 'coverage checklist demands a comprehensive base set');
 
 // ── kbSingleEntryPrompt (one card from pasted text) ───────────────────────────
 console.log('\n--- kbSingleEntryPrompt ---');
