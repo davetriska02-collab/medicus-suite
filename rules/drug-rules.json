@@ -368,14 +368,15 @@
         { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "NICE NG23 (review 2024) / BNF / British Menopause Society",
-      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext.",
+      "notes": "Annual HRT review: BP, weight, symptom control, risks/benefits, breast awareness. No routine bloods required for standard HRT. Mammography per national screening. Excludes local vaginal preparations which have no systemic effects (vaginal pessaries, creams, tablets, rings, gels). The chip fires ONLY when a systemic oestrogen / HRT agent (estradiol, conjugated oestrogens, tibolone, etc.) is prescribed: a progestogen or LNG-IUS (Mirena, Levosert, Jaydess, Kyleena) on its own is contraception, not HRT, so it does not raise this review. When oestrogen IS prescribed, a co-prescribed LNG-IUS/progestogen is reported as the progestogen (endometrial-protection) component via hrtContext. A problem-coded IUS insertion only counts as cover if coded within iusValidityYears (5y, the licensed endometrial-protection life of the 52mg LNG-IUS); an older/undated coil code is flagged 'expired' so cover falls through to the patient's actual progestogen rather than a removed device silently asserting protection.",
       "sharedCare": false,
       "hrtContext": {
         "oestrogenTerms": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "bijuve", "progynova", "zumenon", "climaval", "estraderm", "nuvelle"],
         "iusTerms": ["mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
         "iusProblemTerms": ["intrauterine system", "intrauterine device", "mirena coil", "insertion of mirena", "introduction of mirena", "replacement of intrauterine", "fitting of intrauterine", "iud fitted", "ius fitted", "coil fitted", "coil inserted", "hormone releasing intrauterine", "insertion of hormone releasing"],
         "progestogenTerms": ["utrogestan", "micronised progesterone", "norethisterone", "medroxyprogesterone", "dydrogesterone", "progesterone"],
-        "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"]
+        "hysterectomyTerms": ["hysterectomy", "hysterectomised", "hysterectomized"],
+        "iusValidityYears": 5
       }
     },
     {

@@ -132,6 +132,44 @@ check(hrtChips([{ name: 'Tibolone 2.5mg tablets' }]).length === 1,
 check(hrtChips([{ name: 'Oestrogel pump', }, { name: 'Mirena 52mg IUS' }]).length === 1,
   'oestrogen + Mirena raises a single HRT chip (no duplicate)');
 
+// ── F11: problem-coded IUS only counts as cover within its 5y licensed life ───
+console.log('\n--- F11: HRT progestogen context honours IUS 5-year validity ---');
+const hrtCtx = (meds, problems) => engine.evaluateDrugRule(
+  hrt, { medications: meds, observations: [], problems: problems || [], patientContext: {} }, NOW
+)[0].hrtContext;
+
+// Recent coil insertion (within 5y) → valid in-situ cover.
+{
+  const ctx = hrtCtx([{ name: 'Oestrogel pump' }],
+    [{ label: 'Insertion of hormone releasing intrauterine system', codedDate: '2024-03-01' }]);
+  check(ctx.iusMed && !ctx.iusExpired, 'IUS coded 2024 (within 5y) counts as cover');
+}
+// Old coil insertion (>5y, 2017) with NO progestogen → expired, cover not confirmed.
+{
+  const ctx = hrtCtx([{ name: 'Oestrogel pump' }],
+    [{ label: 'Insertion of hormone releasing intrauterine system', codedDate: '2017-05-01' }]);
+  check(!ctx.iusMed && ctx.iusExpired, '2017 IUS (>5y) does NOT count as cover (expired)');
+}
+// The reported case: 2017 IUS still active AS A PROBLEM but patient is on
+// micronised progesterone → progestogen must win, not the stale coil.
+{
+  const ctx = hrtCtx([{ name: 'Oestrogel pump' }, { name: 'Utrogestan 100mg capsules' }],
+    [{ label: 'Insertion of hormone releasing intrauterine system', codedDate: '2017-05-01' }]);
+  check(!ctx.iusMed && ctx.iusExpired && /utrogestan/i.test(ctx.progestogenMed || ''),
+    'expired 2017 IUS does not trump co-prescribed micronised progesterone');
+}
+// A live LNG-IUS on the medication list is current cover regardless of date.
+{
+  const ctx = hrtCtx([{ name: 'Oestrogel pump' }, { name: 'Mirena 52mg IUS' }], []);
+  check(ctx.iusMed && !ctx.iusExpired, 'LNG-IUS on the medication list counts as cover');
+}
+// Undated coil problem → cannot confirm currency → treated as expired (safe).
+{
+  const ctx = hrtCtx([{ name: 'Oestrogel pump' }],
+    [{ label: 'Insertion of hormone releasing intrauterine system', codedDate: null }]);
+  check(!ctx.iusMed && ctx.iusExpired, 'undated IUS problem is treated conservatively as expired');
+}
+
 // ── F9: same-date observation tiebreak prefers earlier-listed term (LDL) ──────
 console.log('\n--- F9: LDL takes priority over non-HDL on the same date ---');
 const cholRule = {

@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.47.1] — 2026-06-10
+
+### Fix: HRT progestogen context no longer trusts an expired/historical IUS
+
+A 52mg LNG-IUS only provides endometrial protection for its licensed life
+(5 years). The HRT chip previously treated *any* problem-coded coil insertion —
+including one from years ago whose device had since been removed but left
+"active" on the record — as current cover, and that stale IUS could trump the
+patient's actual progestogen. That is false reassurance in the patient-safety
+direction (a clinician sees "cover present" when there is none).
+
+- `buildHrtContext` (`engine/rules-engine.js`) now only counts a *problem-coded*
+  IUS as cover when it was coded within `hrtContext.iusValidityYears` (new
+  config, default 5y in `rules/drug-rules.json`). An older — or undated, since
+  currency cannot then be confirmed — coil code is flagged `iusExpired` instead
+  of asserting cover. A live LNG-IUS on the *medication* list still counts
+  regardless of date.
+- When an IUS is expired but the patient is on a recognised progestogen (e.g.
+  micronised progesterone / Utrogestan), the chip now reports that progestogen
+  rather than the stale coil.
+- `shared/chip-renderer.js`: an expired-only IUS renders an amber
+  "IUS expired (>5y) — endometrial cover not confirmed" prompt.
+- New F11 regression tests in `test-qof-indicator-filters.js` cover the
+  in-window, out-of-window, undated, medication-list, and
+  expired-IUS-vs-progestogen cases.
+
 ## [v3.47.0] — 2026-06-10
 
 Four workstreams landed together: extraction-drift detection, clinical-coverage
