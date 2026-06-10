@@ -1,6 +1,7 @@
 {
   "version": "1.1",
   "lastUpdated": "2026-06-04",
+  "specVersion": "PINCER/NICE prescribing-safety alert library v1.1",
   "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source confirmation.",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [

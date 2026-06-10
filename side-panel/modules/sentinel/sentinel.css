@@ -447,3 +447,61 @@
 .sent-ext-label { color: var(--text-5); text-transform: uppercase; letter-spacing: 0.06em; }
 .sent-ext-item { color: var(--text-3); }
 .sent-ext-zero { color: var(--amber); }
+
+/* ── Patient banner row (holds name + verify button) ──────────────────────── */
+.sent-patient-banner-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+
+/* ── Verify in Medicus button (H-007 anti-automation-bias affordance) ──────── */
+/* Appears next to the patient name banner and inside chip evidence panels. */
+.sent-verify-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-hi, #3d5070);
+  border-radius: 4px;
+  color: var(--accent, #4a7fb8);
+  font-size: 10px;
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 3px 8px;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+.sent-verify-btn:hover { background: rgba(74,127,184,0.12); border-color: var(--accent, #4a7fb8); }
+.sent-verify-btn:disabled { opacity: 0.5; cursor: default; }
+
+.sent-ev-verify-btn {
+  background: transparent;
+  border: 1px solid var(--border, #2a3146);
+  border-radius: 4px;
+  padding: 4px 10px;
+  color: var(--accent, #4a7fb8);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  margin-right: 6px;
+}
+.sent-ev-verify-btn:hover { background: rgba(74,127,184,0.12); border-color: var(--accent, #4a7fb8); }
+.sent-ev-verify-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Rule currency footer ─────────────────────────────────────────────────── */
+/* One-line footer below the chip area. Neutral when green, amber when stale. */
+.sent-rules-footer {
+  margin-top: 10px;
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+.sent-rules-footer-green {
+  color: var(--text-5, #3d5070);
+  background: transparent;
+}
+.sent-rules-footer-amber {
+  color: var(--amber, #b45309);
+  background: rgba(180,83,9,0.06);
+  border: 1px solid rgba(180,83,9,0.2);
+}
+.sent-rules-footer-icon { margin-right: 4px; }

@@ -1,4 +1,6 @@
 {
+  "lastUpdated": "2026-06-09",
+  "specVersion": "JCVI/UKHSA 2025/26 season",
   "rules": [
     {
       "id": "vax-flu",

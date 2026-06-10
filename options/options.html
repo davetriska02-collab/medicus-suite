@@ -517,6 +517,19 @@
       <section class="opt-section" id="sect-sentinel">
         <h1>Monitoring <span class="module-badge">v0.4.0</span></h1>
         <p class="section-desc">Sentinel settings — rule overrides, display config, import/export.</p>
+
+        <!-- Rules currency status card -->
+        <div style="margin-bottom:24px; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <div style="background:var(--bg-mid); padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
+            <span style="font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600;">Rules status</span>
+            <span id="rulesCurrencyOverall" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:2px 8px; border-radius:3px;"></span>
+          </div>
+          <div id="rulesCurrencyBody" style="padding:12px 16px; font-size:12px; color:var(--text-3);">Checking…</div>
+          <div style="padding:8px 16px; border-top:1px solid var(--border); font-size:10px; color:var(--text-5); font-family:var(--mono);">
+            User-imported custom rule overrides are not included in this check.
+          </div>
+        </div>
+
         <div class="iframe-section">
           <iframe id="sentinelFrame" src="../sentinel-options/options.html" title="Sentinel settings"></iframe>
         </div>
@@ -859,6 +872,7 @@
   <script src="../shared/request-monitor.js"></script>
   <script src="../engine/triage-alert-engine.js"></script>
   <script src="../shared/update-checker.js"></script>
+  <script src="../shared/rule-currency.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

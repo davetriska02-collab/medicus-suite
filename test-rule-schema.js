@@ -112,6 +112,24 @@ function checkBundleRule(rule, source, libId) {
 (vaxRules.rules || []).forEach(r => checkBundleRule(r, 'vaccine-rules.json'));
 (alertLib.library || []).forEach(e => checkBundleRule(e.rule || {}, 'alert-library.json', e.libId));
 
+// ── Top-level metadata: lastUpdated + specVersion ────────────────────────────
+// All four files must carry a valid ISO date lastUpdated and a non-empty specVersion.
+// This converts rule-currency drift from a silent operational issue into a CI failure.
+console.log('\n--- top-level metadata: lastUpdated and specVersion ---');
+[
+  { file: drugRules,  name: 'drug-rules.json' },
+  { file: qofRules,   name: 'qof-rules.json' },
+  { file: vaxRules,   name: 'vaccine-rules.json' },
+  { file: alertLib,   name: 'alert-library.json' },
+].forEach(({ file, name }) => {
+  const lu = file.lastUpdated;
+  check(typeof lu === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(lu) && !isNaN(Date.parse(lu)),
+    `${name}: lastUpdated is a valid ISO date (got ${JSON.stringify(lu)})`);
+  const sv = file.specVersion;
+  check(typeof sv === 'string' && sv.trim().length > 0,
+    `${name}: specVersion is a non-empty string (got ${JSON.stringify(sv)})`);
+});
+
 // ── No duplicate rule IDs within or across all four files ────────────────────
 console.log('\n--- no duplicate rule IDs ---');
 const idMap = {}; // id -> [source, ...]

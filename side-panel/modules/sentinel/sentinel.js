@@ -25,6 +25,15 @@ let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
+// Tab ID of the Medicus source tab for the last successful snapshot fetch.
+// Stored here so the "Verify in Medicus" affordance can focus the right tab
+// even if the active tab changed since the snapshot was taken (H-007 mitigation).
+let _snapshotTabId = null;
+let _snapshotTabWindowId = null;
+
+// Rule currency footer: computed once per init from bundled files.
+let _ruleCurrencyFooter = null; // null = not loaded yet
+
 // Per-rule hide/snooze (sentinel.hiddenRules). Cached at init + refreshed on
 // storage change.
 let _hiddenRules = {};
@@ -101,6 +110,9 @@ export async function init(el) {
   // Start waiting room fetch in parallel with sentinel chip poll
   fetchWaitingRoom();
   wrPollTimer = setInterval(fetchWaitingRoom, WR_POLL_MS);
+
+  // Load rule currency footer once — non-blocking; re-renders will pick it up.
+  loadRuleCurrencyFooter();
 
   await loadHiddenRules();
   await refresh();
@@ -185,9 +197,72 @@ async function cleanup() {
   _evidenceHandlersAttached = false;
   _openEvidenceKey = null;
   _evidenceByKey.clear();
+  _snapshotTabId = null;
+  _snapshotTabWindowId = null;
+  _ruleCurrencyFooter = null;
   container = null;
 }
 
+
+// ── Rule currency footer ──────────────────────────────────────────────────────
+// Loaded once per module init. Renders a one-line footer beneath the chip area.
+// Neutral (green) when all rules are current; amber with the first warning when any
+// rule file is stale or has a version mismatch. Uses chrome.runtime.getURL so the
+// fetch works identically in the side-panel and the pop-out window.
+
+async function loadRuleCurrencyFooter() {
+  if (!chrome.runtime?.getURL) return;
+  try {
+    const base = chrome.runtime.getURL('rules/');
+    const [drug, qof, vax, alert] = await Promise.all([
+      fetch(base + 'drug-rules.json').then(r => r.json()),
+      fetch(base + 'qof-rules.json').then(r => r.json()),
+      fetch(base + 'vaccine-rules.json').then(r => r.json()),
+      fetch(base + 'alert-library.json').then(r => r.json()),
+    ]);
+
+    const files = [
+      { id: 'drug',    lastUpdated: drug.lastUpdated,  specVersion: drug.specVersion },
+      { id: 'qof',     lastUpdated: qof.lastUpdated,   specVersion: qof.specVersion },
+      { id: 'vaccine', lastUpdated: vax.lastUpdated,   specVersion: vax.specVersion },
+      { id: 'alert',   lastUpdated: alert.lastUpdated, specVersion: alert.specVersion },
+    ];
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // RuleCurrency is loaded as a classic script by the panel/pop-out shells.
+    // If it's not available (e.g. test env), show nothing.
+    const RC = (typeof window !== 'undefined') ? window.RuleCurrency : null;
+    if (!RC) return;
+
+    const result = RC.assessRuleCurrency(files, today);
+
+    // Build a compact one-line summary
+    const qofFile = files.find(f => f.id === 'qof');
+    const drugFile = files.find(f => f.id === 'drug');
+    const qofSpec = qof.specVersion || '';
+    // Extract "QOF YYYY/YY" from specVersion for the compact label
+    const qofMatch = qofSpec.match(/QOF\s+\d{4}\/\d{2,4}/i);
+    const qofLabel = qofMatch ? qofMatch[0] : qofSpec.slice(0, 20);
+    const drugDateLabel = drug.lastUpdated ? `updated ${drug.lastUpdated}` : '';
+
+    const summaryText = [qofLabel, drugDateLabel ? `drug rules ${drugDateLabel}` : ''].filter(Boolean).join(' · ');
+
+    if (result.overall === 'amber') {
+      _ruleCurrencyFooter = `<div class="sent-rules-footer sent-rules-footer-amber" title="${escHtml(result.warnings.join(' | '))}">` +
+        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}` +
+        `</div>`;
+    } else {
+      _ruleCurrencyFooter = `<div class="sent-rules-footer sent-rules-footer-green">` +
+        `Rules: ${escHtml(summaryText)}` +
+        `</div>`;
+    }
+  } catch (_) {
+    // Non-critical: suppress errors in currency footer silently
+    _ruleCurrencyFooter = '';
+  }
+}
 
 // ── Waiting room ─────────────────────────────────────────────────────────────
 
@@ -354,6 +429,9 @@ async function refresh() {
     }
     const mountCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__sentinelMounted });
     if (!mountCheck?.[0]?.result) { render({ state: 'not-mounted' }); return; }
+    // Store snapshot tab identity for the "Verify in Medicus" affordance.
+    _snapshotTabId = tab.id;
+    _snapshotTabWindowId = tab.windowId;
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
     switch (classifySnapshot(snapshot)) {
       case 'degraded':    render({ state: 'degraded', snapshot }); return;
@@ -421,9 +499,20 @@ function render(payload) {
   });
   Object.values(groups).forEach(g => g.sort((a, b) => (STATUS_RANK[a.status] ?? 3) - (STATUS_RANK[b.status] ?? 3)));
 
+  // "Verify in Medicus" button — focuses the source tab so the clinician can
+  // check the live record before acting (H-007 anti-automation-bias mitigation).
+  // Rendered next to the patient name banner and again inside each chip's evidence
+  // panel. Only shown when we have a known snapshot tab.
+  const verifyBtn = _snapshotTabId != null
+    ? `<button class="sent-verify-btn" id="sentVerifyBannerBtn" title="Check the source record before acting on this alert">Verify in Medicus &#x2197;</button>`
+    : '';
+
   const patientHtml = patient ? `
     <div class="sent-patient-banner">
-      <div class="sent-patient-name">${escHtml(patient.displayName || patient.name || '')}</div>
+      <div class="sent-patient-banner-row">
+        <div class="sent-patient-name">${escHtml(patient.displayName || patient.name || '')}</div>
+        ${verifyBtn}
+      </div>
       <div class="sent-patient-meta">${[
         patient.nhsNumber ? `NHS ${escHtml(patient.nhsNumber)}` : '',
         patient.dateOfBirth ? `DOB ${escHtml(patient.dateOfBirth)}` : '',
@@ -468,7 +557,10 @@ function render(payload) {
 
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds);
 
-  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + `
+  // Rule currency footer (one line, neutral if green, amber with first warning if amber).
+  const currencyFooterHtml = _ruleCurrencyFooter || '';
+
+  container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + currencyFooterHtml + `
     <div class="sent-footer">
       <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
@@ -484,6 +576,10 @@ function render(payload) {
   });
 
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+
+  // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
+  container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
+
   // #sentRefreshBtn is handled by the persistent delegated click handler wired in
   // init() (_refreshBtnHandler); no per-render listener here (would double-fire).
   container.querySelectorAll('.sent-filter-btn').forEach(btn => {
@@ -504,6 +600,40 @@ function render(payload) {
     else _openEvidenceKey = null;
   } else {
     _openEvidenceKey = null;
+  }
+}
+
+// ── Verify in Medicus ─────────────────────────────────────────────────────────
+// Focuses the source Medicus tab without navigating it (H-007 mitigation).
+// If the tab is gone, inserts a brief "not found" note instead of throwing.
+async function focusMedicusTab() {
+  if (_snapshotTabId == null) return;
+  try {
+    await chrome.tabs.update(_snapshotTabId, { active: true });
+    if (_snapshotTabWindowId != null) {
+      await chrome.windows.update(_snapshotTabWindowId, { focused: true });
+    }
+  } catch (_) {
+    // Tab is gone — show a brief inline note near the banner verify button.
+    // Both the panel and pop-out are extension pages where chrome.tabs/windows
+    // APIs are always available; this path only fires when the tab was closed.
+    const verifyBtn = container?.querySelector('#sentVerifyBannerBtn');
+    if (verifyBtn) {
+      verifyBtn.textContent = 'Medicus tab not found';
+      verifyBtn.disabled = true;
+      setTimeout(() => {
+        if (verifyBtn.textContent === 'Medicus tab not found') {
+          verifyBtn.textContent = 'Verify in Medicus ↗';
+          verifyBtn.disabled = false;
+        }
+      }, 3000);
+    }
+    // Also handle any evidence-panel verify buttons that were clicked.
+    const evVerifyBtns = container?.querySelectorAll('.sent-ev-verify-btn');
+    evVerifyBtns?.forEach(btn => {
+      btn.textContent = 'Medicus tab not found';
+      btn.disabled = true;
+    });
   }
 }
 
@@ -541,6 +671,13 @@ function onEvidenceClick(e) {
     if (!targetEl) return;
     openEvidenceFor(targetEl, targetKey);
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  // "Verify in Medicus" button inside the evidence panel
+  if (e.target.closest('.sent-ev-verify-btn')) {
+    e.stopPropagation();
+    focusMedicusTab();
     return;
   }
 
@@ -582,6 +719,20 @@ function openEvidenceFor(chipEl, key) {
   const panel = document.createElement('div');
   panel.className = 'sent-evidence-wrapper';
   panel.innerHTML = CR.renderEvidencePanel(chip.evidence);
+  // Inject "Verify in Medicus" button into the evidence panel footer.
+  // This appears in addition to the banner button so the clinician can verify
+  // directly from the expanded evidence view without scrolling up.
+  if (_snapshotTabId != null) {
+    const foot = panel.querySelector('.sent-ev-foot');
+    if (foot) {
+      const verifyEv = document.createElement('button');
+      verifyEv.className = 'sent-ev-verify-btn';
+      verifyEv.title = 'Check the source record before acting on this alert';
+      verifyEv.textContent = 'Verify in Medicus ↗';
+      verifyEv.addEventListener('click', (e) => { e.stopPropagation(); focusMedicusTab(); });
+      foot.prepend(verifyEv);
+    }
+  }
   chipEl.insertAdjacentElement('afterend', panel);
   chipEl.setAttribute('aria-expanded', 'true');
   chipEl.classList.add('sent-chip-open');

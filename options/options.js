@@ -865,6 +865,101 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
   btn.addEventListener('click', refreshDebugState);
 });
 
+// ── Rules currency status card (Monitoring section) ───────────────────────────
+// Fetches the four bundled rule files and renders a per-file age/status table.
+// Triggered on load (sentinel section may be active) and when the tab is opened.
+
+(async function initRulesCurrencyCard() {
+  const bodyEl    = document.getElementById('rulesCurrencyBody');
+  const overallEl = document.getElementById('rulesCurrencyOverall');
+  if (!bodyEl) return;
+
+  async function loadRulesCurrency() {
+    if (!window.RuleCurrency) {
+      bodyEl.textContent = 'Rule currency helper not available.';
+      return;
+    }
+    try {
+      const base = chrome.runtime.getURL('rules/');
+      const [drug, qof, vax, alert] = await Promise.all([
+        fetch(base + 'drug-rules.json').then(r => r.json()),
+        fetch(base + 'qof-rules.json').then(r => r.json()),
+        fetch(base + 'vaccine-rules.json').then(r => r.json()),
+        fetch(base + 'alert-library.json').then(r => r.json()),
+      ]);
+
+      const files = [
+        { id: 'drug',    lastUpdated: drug.lastUpdated,  specVersion: drug.specVersion,  displayName: 'Drug monitoring rules' },
+        { id: 'qof',     lastUpdated: qof.lastUpdated,   specVersion: qof.specVersion,   displayName: 'QOF rules' },
+        { id: 'vaccine', lastUpdated: vax.lastUpdated,   specVersion: vax.specVersion,   displayName: 'Vaccine rules' },
+        { id: 'alert',   lastUpdated: alert.lastUpdated, specVersion: alert.specVersion, displayName: 'Alert library' },
+      ];
+
+      const today = new Date().toISOString().slice(0, 10);
+      const result = window.RuleCurrency.assessRuleCurrency(files, today);
+
+      // Overall badge
+      if (overallEl) {
+        overallEl.style.display = '';
+        if (result.overall === 'amber') {
+          overallEl.textContent = 'Needs review';
+          overallEl.style.background = 'rgba(180,83,9,0.15)';
+          overallEl.style.color = 'var(--amber, #b45309)';
+        } else {
+          overallEl.textContent = 'Current';
+          overallEl.style.background = 'rgba(22,163,74,0.12)';
+          overallEl.style.color = 'var(--green, #16a34a)';
+        }
+      }
+
+      // File rows
+      const FILE_NAMES = { drug: 'Drug monitoring rules', qof: 'QOF rules', vaccine: 'Vaccine rules', alert: 'Alert library' };
+      const rows = result.files.map((f, i) => {
+        const displayName = files[i].displayName || FILE_NAMES[f.id] || f.id;
+        const levelColour = f.level === 'amber'
+          ? 'var(--amber, #b45309)'
+          : 'var(--green, #16a34a)';
+        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${levelColour};margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>`;
+        const ageStr = f.ageDays != null ? `${f.ageDays}d ago` : 'age unknown';
+        const specStr = f.specVersion ? escHtml(f.specVersion) : '<em style="color:var(--text-5)">none</em>';
+        const msgHtml = f.message
+          ? `<div style="font-size:11px;color:var(--amber,#b45309);margin-top:2px;">${escHtml(f.message)}</div>`
+          : '';
+        return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border);">
+          <div style="flex-shrink:0;padding-top:2px;">${dot}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:500;color:var(--text-2);">${escHtml(displayName)}</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--text-4);margin-top:1px;">${specStr} &middot; ${escHtml(f.lastUpdated || 'unknown')} (${ageStr})</div>
+            ${msgHtml}
+          </div>
+        </div>`;
+      }).join('');
+
+      // Warnings summary
+      const warnHtml = result.warnings.length
+        ? `<div style="margin-top:10px;padding:8px 10px;background:rgba(180,83,9,0.08);border:1px solid rgba(180,83,9,0.3);border-radius:6px;font-size:11px;color:var(--amber,#b45309);">${result.warnings.map(w => escHtml(w)).join('<br>')}</div>`
+        : '';
+
+      bodyEl.innerHTML = `<div style="margin:-4px 0;">${rows}</div>${warnHtml}`;
+
+    } catch (err) {
+      bodyEl.textContent = 'Could not load rule file metadata: ' + err.message;
+    }
+  }
+
+  // Load on DOMContentLoaded (or immediately if already done)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadRulesCurrency);
+  } else {
+    loadRulesCurrency();
+  }
+
+  // Also refresh when the sentinel section is navigated to
+  document.querySelectorAll('.nav-item[data-section="sentinel"]').forEach(btn => {
+    btn.addEventListener('click', loadRulesCurrency);
+  });
+})();
+
 // ── Request Monitor (v1.3) ────────────────────────────────────────────────────
 
 const rmEnabled       = document.getElementById('rmEnabled');
