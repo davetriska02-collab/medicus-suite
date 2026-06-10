@@ -206,18 +206,38 @@ const KB_PROMPT_RULES = `1. Use UK general-practice terminology (2WW, e-RS, ICB,
 3. NEVER include any patient details, real or invented. If the pasted material contains patient details, leave them out.`;
 
 function kbSchemaPrompt() {
-  return `You are helping a UK NHS GP practice build its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
+  return `You are helping a UK NHS GP practice build the initial content for its Practice Knowledge base: short, factual reference entries the practice team looks up during their working day (referral criteria, key phone numbers, internal pathways, document templates).
 
+Work in TWO PHASES. Do not skip phase 1.
+
+Skip the things every clinician already knows (standard 2WW routes, national guidance, how e-RS works). The value of this knowledge base is the LOCAL stuff nobody can hold in their head: community services, single points of access, odd local pathways, who actually provides what around here, and where the local trusts hide their GP information pages.
+
+PHASE 1 — DISCOVERY (your first reply; no JSON yet):
+First ask the practice for its name, town and postcode area (and ICB if they know it). Then DO YOUR OWN RESEARCH — if you have web browsing/search, work out the local landscape yourself rather than interrogating the practice:
+- Identify the local acute hospital trust(s) and sites, and find their "information for GPs" / "GP zone" / referral-information pages — these repositories are exactly what the entries should point at.
+- Identify the COMMUNITY services provider for the area (the trust or organisation running district nursing, community matrons, podiatry, continence, falls, community rehab) and its single point of access.
+- Identify the mental health trust, the local NHS Talking Therapies provider, and the crisis line.
+- Find the ICB's GP/referral-support pages and any local self-referral routes (MSK physio, talking therapies, weight management, stop smoking, drug & alcohol, antenatal booking).
+- Look for the odd-but-vital local services: SDEC/ambulatory care or hot clinics, DVT pathway, community ultrasound/phlebotomy, ear care provision, hospice/palliative SPA, wheelchair services, voluntary-sector hubs.
+Put the page you used in each entry's "url" field. Then ask the practice only what you genuinely cannot find: their quirky internal routes, frequently dialled numbers, recurring "how do I refer to X?" questions, and any documents they can paste (contact sheets, intranet pages, rota emails). If you cannot browse, say so and ask the practice for this information instead.
+
+PHASE 2 — GENERATION (after research and their answers):
 Output ONLY a valid JSON object of the form { "entries": [ ... ] } — no markdown fences, no commentary.
 
 ${KB_PROMPT_SCHEMA}
 
+COVERAGE — comprehensive on the local/quirky, silent on the obvious:
+- "referrals": only services with unusual or local routes — single points of access, services not findable in e-RS, advice & guidance quirks, "this trust wants X on the form" rules. NOT standard 2WW or routine specialty referrals.
+- "contacts": the community landscape — DN SPA, community matrons, midwifery, health visiting, palliative/hospice, mental health crisis, safeguarding (adults AND children), social services, podiatry, continence, falls, wheelchair services, voluntary sector, plus the trusts' GP-enquiry routes.
+- "pathways": the funny local pathways — SDEC/hot clinic access, DVT pathway, urgent community ultrasound, ear care, community phlebotomy, every self-referral route found, Pharmacy First scope, in-house/PCN services and how to book them.
+- "templates": short reusable text blocks the practice asked for.
+Include an entry pointing at each local trust's GP-information repository itself, so staff can find the source pages later.
+
 CONTENT INSTRUCTIONS:
 ${KB_PROMPT_RULES}
-4. Each entry must cover ONE distinct topic. Do not produce two entries for the same topic with reworded titles.
-5. Prefer 10–20 genuinely useful entries over padding.
-
-If the practice pastes local documents below, extract entries from them faithfully — do not embellish.
+4. Localise hard: only state a real phone number, address or provider name when you are confident it is current for THIS practice's area — from the practice's answers, a pasted document, or a source page you actually checked (cite it in "url"). Anything unverified stays a placeholder in square brackets for the practice to fill in.
+5. Each entry must cover ONE distinct topic. Do not produce two entries for the same topic with reworded titles.
+6. The practice reviews every entry before relying on it — make each one short enough to review in seconds.
 
 --- EXAMPLE JSON ---
 {

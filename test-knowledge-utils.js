@@ -107,6 +107,11 @@ if (m) {
 check(/Output ONLY a valid JSON/i.test(prompt), 'prompt demands JSON-only output');
 check(/NEVER include any patient details/i.test(prompt), 'prompt forbids patient details');
 check(/placeholder in square brackets/i.test(prompt), 'prompt forbids invented local numbers (placeholders instead)');
+check(/PHASE 1 — DISCOVERY/.test(prompt) && /PHASE 2 — GENERATION/.test(prompt), 'prompt is two-phase: discovery before generation');
+check(/DO YOUR OWN RESEARCH/.test(prompt) && /web browsing\/search/i.test(prompt), 'prompt makes browsing-capable LLMs research the local landscape themselves');
+check(/information for GPs/i.test(prompt) && /COMMUNITY services provider/i.test(prompt) && /mental health trust/i.test(prompt), 'discovery targets trust GP repositories, community provider and MH trust');
+check(/NOT standard 2WW/.test(prompt) && /Skip the things every clinician already knows/i.test(prompt), 'prompt excludes well-known national routes (2WW etc.)');
+check(/SDEC/.test(prompt) && /self-referral/i.test(prompt) && /safeguarding/i.test(prompt) && /single point/i.test(prompt), 'coverage targets the local/quirky: SDEC, self-referral, safeguarding, SPAs');
 
 // ── kbSingleEntryPrompt (one card from pasted text) ───────────────────────────
 console.log('\n--- kbSingleEntryPrompt ---');

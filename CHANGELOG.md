@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.42.3] — 2026-06-10
+
+### Knowledge: starter-pack prompt refocused on the local and the quirky
+
+Feedback on v3.42.2: clinicians don't need cards for things they already know
+(standard 2WW routes, national guidance). `kbSchemaPrompt()` now explicitly
+excludes those and targets what a knowledge base is actually for:
+
+- **Discovery is research-led, not a questionnaire**: the LLM asks only for
+  practice name/town/postcode, then (where it can browse) works out the local
+  landscape itself — finds the acute trusts' "information for GPs" / GP-zone
+  referral repositories, identifies the community services provider and its
+  single point of access, the mental health trust / Talking Therapies provider
+  / crisis line, ICB referral-support pages, self-referral routes, and the
+  odd-but-vital services (SDEC/hot clinics, DVT pathway, community ultrasound,
+  ear care, wheelchair services). It asks the practice only what it genuinely
+  cannot find.
+- **Coverage**: community landscape contacts, funny local pathways and
+  unusual referral routes (SPAs, not-in-e-RS services, per-trust form quirks)
+  — explicitly NOT standard 2WW or routine specialty referrals. Each trust's
+  GP-information repository gets its own entry so staff can find source pages
+  later.
+
+## [v3.42.2] — 2026-06-10
+
+### Knowledge: starter-pack prompt rewritten — discovery-first, comprehensive, localised
+
+The Options → Knowledge starter-pack prompt (`kbSchemaPrompt()`) now works in
+two phases instead of generating generic content blind:
+
+- **Phase 1 — discovery**: the LLM must first ask the practice about its ICB,
+  usual acute trust(s), community providers (DN, MSK, Talking Therapies,
+  mental health crisis, palliative), local self-referral routes, in-house/PCN
+  services, and the things the team looks up most — and, where the LLM has web
+  browsing, verify routes/numbers on the named provider sites (citing the page
+  in each entry's `url`).
+- **Phase 2 — generation**: an explicit coverage checklist (2WW per major
+  suspected-cancer pathway, urgent and routine referral routes, A&G, full
+  contacts set including safeguarding adults+children and crisis lines, every
+  discovered self-referral route, Pharmacy First, admin pathways), aiming for
+  40–60 entries rather than the previous 10–20 sampler.
+- Localisation rule hardened: real numbers/names only when confirmed from the
+  practice's answers, pasted documents, or a checked source — everything else
+  stays a `[placeholder]`.
+
+The single-card prompt (`kbSingleEntryPrompt()`) is unchanged. New regression
+checks pin the two-phase structure, discovery questions, browsing instruction
+and coverage checklist.
+
 ## [v3.42.1] — 2026-06-10
 
 ### Knowledge: create a single card from pasted text via LLM (on the tab)
