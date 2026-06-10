@@ -28,6 +28,48 @@ try {
   console.warn('[Suite] importScripts failed:', e && e.message);
 }
 
+// Dependencies for the v2 practice profile engine.
+// Each is wrapped individually so a parse error in one never takes out the others.
+try { importScripts('shared/knowledge-utils.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/knowledge-utils.js failed:', e && e.message);
+}
+try { importScripts('shared/reception-pathway-utils.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/reception-pathway-utils.js failed:', e && e.message);
+}
+try { importScripts('shared/io/sentinel-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/sentinel-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/triage-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/triage-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/submissions-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/submissions-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/slot-counter-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/slot-counter-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/capacity-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/capacity-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/knowledge-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/knowledge-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/reception-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/reception-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/triage-alert-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/triage-alert-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/referrals-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/referrals-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/request-monitor-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/request-monitor-io.js failed:', e && e.message);
+}
+try { importScripts('shared/io/suite-io.js'); } catch (e) {
+  console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);
+}
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -73,6 +115,7 @@ function broadcastToSidePanel(payload) {
 // worker termination and restart cycles.
 
 const SLOTS_ALARM = 'slots-poll';
+const PP_ALARM    = 'pp-check';
 
 async function startPolling() {
   const existing = await chrome.alarms.get(SLOTS_ALARM);
@@ -91,6 +134,13 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       broadcastToSidePanel({ type: 'slots:refresh' });
     }
   }
+
+  if (alarm.name === PP_ALARM) {
+    // Re-apply practice profile if a new version is available on the share
+    runStartupTask('pp-check checkAndApply', () => applyPracticeProfile());
+    // Also check whether the extension files on disk have been updated
+    runStartupTask('pp-check codeUpdate', _checkForCodeUpdate);
+  }
 });
 
 // Run a startup task without letting a rejection bubble up as an unhandled
@@ -103,6 +153,136 @@ function runStartupTask(label, fn) {
   }
 }
 
+// ── Practice Profile periodic alarm ──────────────────────────────────────────
+// Re-checks the profile file on a configurable interval (default 15 min,
+// clamped 5..1440) so an admin can push a new version without users needing to
+// restart the browser. Also used to drive the polite code-update watcher.
+// PP_ALARM is declared near SLOTS_ALARM at the top of the alarms block.
+
+// Read apply.checkEveryMinutes from the profile, clamped to 5..1440.
+// Returns 15 if the profile is absent or misconfigured.
+async function _ppCheckIntervalMinutes() {
+  try {
+    const profile = await self.PracticeProfile?.fetchProfile();
+    const raw = profile?.apply?.checkEveryMinutes;
+    if (typeof raw === 'number' && isFinite(raw)) {
+      return Math.max(5, Math.min(1440, raw));
+    }
+  } catch (_) {}
+  return 15;
+}
+
+async function _schedulePpAlarm() {
+  const periodInMinutes = await _ppCheckIntervalMinutes();
+  await chrome.alarms.clear(PP_ALARM);
+  await chrome.alarms.create(PP_ALARM, { periodInMinutes });
+}
+
+// ── Code-update watcher ───────────────────────────────────────────────────────
+// Compares manifest.json on disk against the running manifest. When a new
+// version is detected, reloads politely: immediately if the machine is idle or
+// locked, or deferred to the next alarm cycle if the user is active. After 8
+// consecutive deferrals, shows a single notification and keeps deferring.
+//
+// Notification deduplication is stored in meta.updateNotifiedVersions inside
+// suite.practiceProfile so no extra storage key is needed.
+
+let _pendingUpdateVersion = null;   // version waiting for an idle window
+let _updateDeferCount = 0;          // consecutive alarm cycles the user was active
+
+const _VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+async function _checkForCodeUpdate() {
+  try {
+    let diskManifest;
+    try {
+      const resp = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
+      // On a shared network drive the file may be mid-copy — any error = skip silently
+      if (!resp.ok) return;
+      diskManifest = await resp.json();
+    } catch (_) {
+      return; // mid-copy or parse error — skip this cycle
+    }
+
+    const diskVersion = diskManifest?.version;
+    if (!diskVersion || !_VERSION_RE.test(diskVersion)) return;
+
+    const runningVersion = chrome.runtime.getManifest().version;
+    if (diskVersion === runningVersion) {
+      // Back to same version (e.g. admin reverted the update) — reset state
+      _pendingUpdateVersion = null;
+      _updateDeferCount = 0;
+      return;
+    }
+
+    // Check profile hasn't disabled auto-reload
+    try {
+      const profile = await self.PracticeProfile?.fetchProfile();
+      if (profile?.apply?.autoReloadOnNewVersion === false) return;
+    } catch (_) {}
+
+    // Never reload twice for the same version
+    if (_pendingUpdateVersion === diskVersion) {
+      // Already know about this version — check idle state
+    } else {
+      _pendingUpdateVersion = diskVersion;
+      _updateDeferCount = 0;
+    }
+
+    await _attemptPoliteReload(diskVersion);
+  } catch (e) {
+    console.warn('[Suite] code-update check failed:', e.message);
+  }
+}
+
+async function _attemptPoliteReload(version) {
+  let idleState = 'active';
+  try {
+    idleState = await new Promise(resolve =>
+      chrome.idle.queryState(120, resolve)
+    );
+  } catch (_) {}
+
+  if (idleState === 'idle' || idleState === 'locked') {
+    console.log('[Suite] Reloading for update to', version, '(machine is', idleState + ')');
+    chrome.runtime.reload();
+    return;
+  }
+
+  // Machine is active — defer
+  _updateDeferCount++;
+  if (_updateDeferCount >= 8) {
+    // Show a notification once per version, then keep deferring
+    await _maybeShowUpdateNotification(version);
+  }
+}
+
+async function _maybeShowUpdateNotification(version) {
+  try {
+    const r = await chrome.storage.local.get(META_KEY);
+    const meta = r[META_KEY] || {};
+    const notified = meta.updateNotifiedVersions || [];
+    if (notified.includes(version)) return;
+
+    if (chrome.notifications?.create) {
+      chrome.notifications.create(`pp_update_${version}`, {
+        type:     'basic',
+        iconUrl:  'icons/icon-128.png',
+        title:    `Medicus Suite ${version} is ready`,
+        message:  'It will update next time this PC is idle.',
+        priority: 0,
+        silent:   true,
+      });
+    }
+
+    meta.updateNotifiedVersions = [...notified, version].slice(-10);
+    await chrome.storage.local.set({ [META_KEY]: meta });
+  } catch (_) {}
+}
+
+// Needed by _maybeShowUpdateNotification (matches suite.practiceProfile key in practice-profile.js)
+const META_KEY = 'suite.practiceProfile';
+
 // Start polling on install/startup
 chrome.runtime.onInstalled.addListener(() => {
   runStartupTask('startPolling', startPolling);
@@ -111,6 +291,7 @@ chrome.runtime.onInstalled.addListener(() => {
   runStartupTask('initialiseTriage', initialiseTriage);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
+  runStartupTask('schedulePpAlarm', _schedulePpAlarm);
   applyPracticeProfile();
 });
 
@@ -118,6 +299,7 @@ chrome.runtime.onStartup.addListener(() => {
   runStartupTask('startPolling', startPolling);
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
+  runStartupTask('schedulePpAlarm', _schedulePpAlarm);
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
   applyPracticeProfile();

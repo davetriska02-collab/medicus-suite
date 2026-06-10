@@ -13,10 +13,10 @@
 
 'use strict';
 
-// Browser: window.KnowledgeUtils (script tag, loaded before this file).
+// Browser/service worker: self.KnowledgeUtils (script tag or importScripts, loaded before this file).
 // Node tests: require directly.
 const _KnowledgeUtils =
-  (typeof window !== 'undefined' && window.KnowledgeUtils) ||
+  (typeof self !== 'undefined' && self.KnowledgeUtils) ||
   (typeof module !== 'undefined' && typeof require === 'function'
     ? require('../knowledge-utils.js')
     : null);

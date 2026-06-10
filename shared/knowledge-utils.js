@@ -300,6 +300,7 @@ const KnowledgeUtilsApi = {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = KnowledgeUtilsApi;
-} else if (typeof window !== 'undefined') {
-  window.KnowledgeUtils = KnowledgeUtilsApi;
+} else if (typeof self !== 'undefined') {
+  // Works in both extension pages (window === self) and service workers (no window).
+  self.KnowledgeUtils = KnowledgeUtilsApi;
 }

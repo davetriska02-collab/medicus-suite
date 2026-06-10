@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.43.0] — 2026-06-10
+
+### Feature: Practice Profile v2 — central practice management from the shared folder
+
+The shared-folder Practice Profile system (drop `practice-profile.json` next to
+the extension files; every PC applies it) has been finished and modernised so a
+practice manager can push settings — and extension updates — to the whole
+practice with one click.
+
+**Engine (`shared/io/practice-profile.js`, rewritten):**
+- Per-module apply modes: `"merge"` (fill gaps — never touches anything a user
+  set; arrays merge by id, Knowledge also skips near-duplicate titles) or
+  `"replace"` (enforce practice-wide). v1 profiles (`mode` +
+  array `modules`) still work unchanged.
+- Coverage extended from 5 to 11 modules: now includes **Knowledge**,
+  **Reception**, Triage Capacity Alerts, Referrals (config only),
+  Request Monitor, and practice code/feedback email. Validation delegates to
+  the same `*-io.js` import functions as backups, so a crafted profile can't
+  smuggle malformed data.
+- Per-install attestations are never pushable in any mode:
+  `disclaimerAcceptedAt`, `noticeAcknowledgedAt`, `alertLibraryAcknowledged`.
+  Personal display prefs, tab order, pop-out state and locally discovered
+  referral data are never pushed either.
+- Per-module errors are isolated (one bad section can't block the rest) and
+  recorded in the apply history.
+
+**Propagation (service-worker.js):**
+- New `pp-check` alarm: every 15 minutes (configurable 5–1440 via
+  `apply.checkEveryMinutes`) each PC re-reads the profile from the shared
+  folder with `cache: 'no-store'` — changes land while browsers stay open, not
+  just on restart.
+- **Self-updating code**: the same check compares the on-disk `manifest.json`
+  version with the running version; when the admin drops new extension files
+  in the shared folder, each PC reloads itself the next time it's been idle
+  for 2 minutes (never mid-use; notification after repeated deferrals; new
+  `idle` permission). This replaces the previous (incorrect) assumption that
+  Edge reloads unpacked extensions on file changes.
+
+**Publishing UX (Options → Backup & Restore):**
+- "Generate profile" replaced by **Publish to shared folder**: per-module
+  tick-list with plain-English "Fill gaps only / Enforce for everyone" choice,
+  auto-bumped `profileVersion` (date + counter — no hand-editing), label and
+  publisher pre-filled, and the file saved directly over
+  `practice-profile.json` via the file picker — which is remembered, so
+  subsequent publishes are one click. Picker state persists per publisher PC
+  (`suite.practiceProfile.publisher`, allowlisted — not user config).
+- Status card now shows when this PC last checked for profile updates.
+- The shared-folder setup guide rewritten end-to-end for non-technical users:
+  exact click-paths for Edge and Chrome, one-time shared-drive setup, 2-minute
+  per-PC install, 1-minute publish walkthrough, what staff see, and a
+  troubleshooting checklist. No JSON editing anywhere.
+
+**Tests:** new `test-practice-profile.js` (65 checks: v1 back-compat, version
+gating, merge/replace semantics per module, attestation stripping, error
+isolation, bookkeeping). Several shared utils/io files gained
+service-worker-compatible export guards (`self` instead of `window`).
+
 ## [v3.42.3] — 2026-06-10
 
 ### Knowledge: starter-pack prompt refocused on the local and the quirky

@@ -714,8 +714,37 @@
             <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
               <button class="ghost" id="ppCheckBtn" style="font-size:11px; padding:5px 12px;">Check for update</button>
               <button class="primary" id="ppApplyBtn" style="font-size:11px; padding:5px 12px; display:none;">Apply now</button>
-              <button class="ghost" id="ppGenerateBtn" style="font-size:11px; padding:5px 12px;">Generate profile from current settings</button>
               <span id="ppActionStatus" style="font-family:var(--mono); font-size:10px; color:var(--text-3);"></span>
+            </div>
+          </div>
+
+          <!-- Publish sub-block -->
+          <div style="border-top:1px solid var(--border); padding:14px 16px;">
+            <div style="font-weight:600; font-size:12px; color:var(--text-1); margin-bottom:10px;">Publish settings to the practice</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+              <div>
+                <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Profile label</label>
+                <input type="text" id="ppLabelInput" placeholder="e.g. Acme Surgery — practice defaults"
+                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg-elev); color:var(--text-1);" />
+              </div>
+              <div>
+                <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Published by</label>
+                <input type="text" id="ppPublishedByInput" placeholder="your@email.nhs.uk"
+                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg-elev); color:var(--text-1);" />
+              </div>
+            </div>
+
+            <!-- Module picker -->
+            <div style="margin-bottom:12px;">
+              <div style="font-size:11px; color:var(--text-3); margin-bottom:6px;">Choose which modules to include and how to apply them:</div>
+              <div id="ppModulePicker" style="display:flex; flex-direction:column; gap:4px; font-size:11px;">
+                <!-- rows injected by JS -->
+              </div>
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <button class="primary" id="ppPublishBtn" style="font-size:11px; padding:5px 14px;">Publish to shared folder</button>
+              <span id="ppPublishStatus" style="font-family:var(--mono); font-size:10px; color:var(--text-3);"></span>
             </div>
           </div>
 
@@ -724,46 +753,52 @@
             <summary style="padding:10px 16px; font-size:12px; font-weight:500; color:var(--text-2); cursor:pointer; user-select:none;">
               &#9654; How to set up shared-folder deployment
             </summary>
-            <div style="padding:16px 18px; font-size:12px; line-height:1.75; color:var(--text-2); border-top:1px solid var(--border);">
-              <p style="margin:0 0 10px;">
-                <strong>How it works:</strong> Place a file called <code>practice-profile.json</code> alongside the extension files in your shared folder.
-                The extension reads it on every browser start. If the file's <code>profileVersion</code> has changed since it was last applied,
-                the new settings are merged in automatically — no user action needed.
-              </p>
+            <div style="padding:16px 18px; font-size:12px; line-height:1.8; color:var(--text-2); border-top:1px solid var(--border);">
 
-              <p style="margin:0 0 8px;"><strong>Step 1 — Create a starter file</strong></p>
-              <p style="margin:0 0 10px;">
-                Configure one PC exactly how you want it (practice code, alert thresholds, monitoring rules, triage keywords),
-                then click <em>Generate profile from current settings</em> above.
-                Save the downloaded file as <code>practice-profile.json</code> in the extension folder (the same folder you pointed Edge at when you loaded it unpacked).
-              </p>
+              <strong style="display:block; margin-bottom:6px;">1. One-time: put the extension on your shared drive</strong>
+              <ol style="margin:0 0 14px; padding-left:20px;">
+                <li>Copy the entire Medicus Suite extension folder to a shared network location that every PC at the practice can open — for example <em>S:\Medicus Suite\extension</em>.</li>
+                <li>The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to be able to read from it.</li>
+                <li>Make sure the folder contains <em>manifest.json</em> at its top level — that is the file Edge and Chrome use to recognise an extension.</li>
+              </ol>
 
-              <p style="margin:0 0 8px;"><strong>Step 2 — Edit the profile header in Notepad</strong></p>
-              <ul style="margin:0 0 10px; padding-left:20px;">
-                <li><code>"profileLabel"</code> — a friendly name, e.g. <code>"Acme Surgery — May 2026"</code></li>
-                <li><code>"profileVersion"</code> — any string you'll recognise, e.g. <code>"2026-05-28.1"</code></li>
-                <li><code>"publishedBy"</code> — your email, for reference</li>
+              <strong style="display:block; margin-bottom:6px;">2. Add the extension to each PC (about 2 minutes, once per PC)</strong>
+              <ol style="margin:0 0 14px; padding-left:20px;">
+                <li><strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code> in the address bar, then press Enter. In the top-right corner, turn on the <strong>Developer mode</strong> toggle. Click <strong>Load unpacked</strong>. In the window that opens, navigate to the shared extension folder and click <strong>Select Folder</strong>.</li>
+                <li><strong>Chrome:</strong> The steps are identical — type <code>chrome://extensions</code> instead, then follow the same Developer mode → Load unpacked steps.</li>
+                <li>You should now see the Medicus Suite icon in the browser toolbar. Click it (or open the side panel) to confirm the extension is running.</li>
+                <li>Repeat on every PC that needs the extension. Each PC points to the same shared folder.</li>
+              </ol>
+
+              <strong style="display:block; margin-bottom:6px;">3. Practice manager: change settings for everyone (about 1 minute)</strong>
+              <ol style="margin:0 0 14px; padding-left:20px;">
+                <li>On your own PC, set up each module the way the practice wants it — practice code, monitoring rules, Knowledge tab entries, triage keywords, whatever you need.</li>
+                <li>Come back to this Settings page, scroll up to <em>Publish settings to the practice</em>, fill in a label (e.g. "Acme Surgery — June 2026") and your name or email, tick the modules you want to share, and choose how each one should apply:
+                  <ul style="margin:4px 0 4px; padding-left:18px;">
+                    <li><strong>Fill gaps only</strong> — adds your settings on PCs that haven't customised them yet; never changes what someone has already set themselves.</li>
+                    <li><strong>Enforce for everyone</strong> — everyone gets exactly your version, replacing their local changes for that module. Use this when you need to push a correction that must take effect for all staff.</li>
+                  </ul>
+                </li>
+                <li>Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — navigate to the shared extension folder and save the file there (replace the existing <em>practice-profile.json</em> if asked). After the first time, the extension remembers the location and publishing is a single click.</li>
+              </ol>
+
+              <strong style="display:block; margin-bottom:6px;">4. What happens on everyone else's PC</strong>
+              <ol style="margin:0 0 14px; padding-left:20px;">
+                <li>There is nothing for other staff to do. Each PC checks the shared folder roughly every 15 minutes while the browser is open, and also checks on every browser start.</li>
+                <li>When it finds a new version, it quietly applies the updated settings in the background. Staff do not need to restart their browser or do anything at all.</li>
+                <li>If the browser is closed, the changes will be picked up the next time it starts.</li>
+                <li>New versions of the extension itself (when you update the files in the shared folder) install themselves automatically when the PC is next idle — no manual reinstall needed.</li>
+              </ol>
+
+              <strong style="display:block; margin-bottom:6px;">5. If something isn't working</strong>
+              <ul style="margin:0; padding-left:20px;">
+                <li><strong>Is the PC running the extension from the shared folder?</strong> Open <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under <em>Source</em> or <em>Loaded from</em>. It should show the shared folder path, not a local path on that PC.</li>
+                <li><strong>Is practice-profile.json in the right place?</strong> The file must sit in the same folder as <em>manifest.json</em> — not inside a subfolder. You can check by opening the shared extension folder and looking for both files side by side (the practice-profile.json file is a JSON text file).</li>
+                <li><strong>Test it immediately:</strong> Press <em>Check for update</em> on this page. If an update is found it will say so; if not, the file is either missing or the version hasn't changed.</li>
+                <li><strong>A colleague's setting didn't change:</strong> The module is probably set to <em>Fill gaps only</em> and they had already customised that setting. Go back to <em>Publish settings to the practice</em>, change that module to <em>Enforce for everyone</em>, and publish again.</li>
+                <li><strong>Track what each PC has applied:</strong> The status box at the top of this card shows exactly which version this PC has applied, and when.</li>
               </ul>
 
-              <p style="margin:0 0 8px;"><strong>Step 3 — Choose a propagation mode</strong></p>
-              <ul style="margin:0 0 10px; padding-left:20px;">
-                <li><code>"mergeMissing"</code> <em>(default, recommended)</em> — only fills in settings the user hasn't already set. Safe: never overwrites individual customisations.</li>
-                <li><code>"forceOverride"</code> — always replaces user settings with the profile. Use when you need to push a mandatory change (e.g. a corrected drug-monitoring rule).</li>
-                <li><code>"firstRunOnly"</code> — applies once on brand-new installs, then never again regardless of version bumps.</li>
-              </ul>
-
-              <p style="margin:0 0 8px;"><strong>Step 4 — Pushing updates</strong></p>
-              <p style="margin:0 0 10px;">
-                Edit <code>practice-profile.json</code> in the shared folder and increment <code>"profileVersion"</code> (e.g. <code>"2026-06-01.1"</code>).
-                Each user's extension picks up the change on their next browser start. No action needed from them.
-                Edge auto-reloads the extension whenever any file in the folder changes, so the update is seamless.
-              </p>
-
-              <p style="margin:0 0 8px;"><strong>First-time install on a new PC</strong></p>
-              <p style="margin:0;">
-                Each PC still needs a one-time manual setup: open Edge → <code>edge://extensions</code> → enable <em>Developer mode</em> → <em>Load unpacked</em> → pick the shared folder.
-                After that, all future extension updates and settings changes propagate automatically from the shared folder — no further steps needed on that PC.
-              </p>
             </div>
           </details>
         </div>

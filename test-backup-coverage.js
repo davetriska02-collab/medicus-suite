@@ -144,6 +144,7 @@ const ALLOWLIST = new Set([
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile',                   // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions',  // which profile versions have been notified
+  'suite.practiceProfile.publisher',         // Publisher-PC UI state for the practice-profile publish flow — not user config
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',
