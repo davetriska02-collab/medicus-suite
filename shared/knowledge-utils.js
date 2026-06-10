@@ -210,27 +210,28 @@ function kbSchemaPrompt() {
 
 Work in TWO PHASES. Do not skip phase 1.
 
-PHASE 1 — DISCOVERY (your first reply; no JSON yet):
-Ask the practice the questions you need to properly localise the content. Cover at least:
-- Practice name, town and postcode area, and which ICB they sit in.
-- Which acute hospital trust(s) and sites they usually refer to.
-- Community providers: district nursing, MSK/physio, podiatry, NHS Talking Therapies provider, community mental health trust and crisis line, palliative care team.
-- Local self-referral routes (MSK physio, talking therapies, weight management, stop smoking, drug & alcohol, continence, falls, antenatal booking).
-- In-house and PCN services (clinical pharmacist, social prescriber, first-contact physio, phlebotomy arrangements) and how patients access them.
-- The things their team looks up most often (frequently dialled numbers, quirky local rules, recurring "how do I refer to X?" questions).
-- Any local documents they can paste (referral guides, contact sheets, intranet pages, rota emails).
-If you have web browsing/search available, ALSO look up the named ICB, trust and provider websites to find current referral routes and public phone numbers, and put the page you used in that entry's "url" field. If you cannot browse, say so and rely on the practice's answers and pasted documents.
+Skip the things every clinician already knows (standard 2WW routes, national guidance, how e-RS works). The value of this knowledge base is the LOCAL stuff nobody can hold in their head: community services, single points of access, odd local pathways, who actually provides what around here, and where the local trusts hide their GP information pages.
 
-PHASE 2 — GENERATION (after their answers):
+PHASE 1 — DISCOVERY (your first reply; no JSON yet):
+First ask the practice for its name, town and postcode area (and ICB if they know it). Then DO YOUR OWN RESEARCH — if you have web browsing/search, work out the local landscape yourself rather than interrogating the practice:
+- Identify the local acute hospital trust(s) and sites, and find their "information for GPs" / "GP zone" / referral-information pages — these repositories are exactly what the entries should point at.
+- Identify the COMMUNITY services provider for the area (the trust or organisation running district nursing, community matrons, podiatry, continence, falls, community rehab) and its single point of access.
+- Identify the mental health trust, the local NHS Talking Therapies provider, and the crisis line.
+- Find the ICB's GP/referral-support pages and any local self-referral routes (MSK physio, talking therapies, weight management, stop smoking, drug & alcohol, antenatal booking).
+- Look for the odd-but-vital local services: SDEC/ambulatory care or hot clinics, DVT pathway, community ultrasound/phlebotomy, ear care provision, hospice/palliative SPA, wheelchair services, voluntary-sector hubs.
+Put the page you used in each entry's "url" field. Then ask the practice only what you genuinely cannot find: their quirky internal routes, frequently dialled numbers, recurring "how do I refer to X?" questions, and any documents they can paste (contact sheets, intranet pages, rota emails). If you cannot browse, say so and ask the practice for this information instead.
+
+PHASE 2 — GENERATION (after research and their answers):
 Output ONLY a valid JSON object of the form { "entries": [ ... ] } — no markdown fences, no commentary.
 
 ${KB_PROMPT_SCHEMA}
 
-COVERAGE — be comprehensive, not a sampler. Aim for 40–60 entries:
-- "referrals": a 2WW entry per major suspected-cancer pathway (lower GI, upper GI, lung, breast, skin, urology, gynaecology, head & neck, haematology), urgent-but-not-2WW routes the practice uses, advice & guidance routes, and the routine referrals they send most (cardiology, dermatology, MSK/orthopaedics, ENT, ophthalmology, paediatrics, gastroenterology, mental health).
-- "contacts": hospital switchboard and key departments, district nursing SPA, midwifery, health visiting, palliative/hospice, mental health crisis line, safeguarding (adults AND children), social services, local pharmacies, out-of-hours/111 clinical line, and the practice's own frequently dialled numbers.
-- "pathways": every local self-referral route from discovery, Pharmacy First scope, each in-house/PCN service and how to book it, and common admin pathways (fit notes, subject access requests, new registrations, private/non-NHS work).
-- "templates": short reusable text blocks the practice asked for (e.g. safety-netting lines, standard letter snippets).
+COVERAGE — comprehensive on the local/quirky, silent on the obvious:
+- "referrals": only services with unusual or local routes — single points of access, services not findable in e-RS, advice & guidance quirks, "this trust wants X on the form" rules. NOT standard 2WW or routine specialty referrals.
+- "contacts": the community landscape — DN SPA, community matrons, midwifery, health visiting, palliative/hospice, mental health crisis, safeguarding (adults AND children), social services, podiatry, continence, falls, wheelchair services, voluntary sector, plus the trusts' GP-enquiry routes.
+- "pathways": the funny local pathways — SDEC/hot clinic access, DVT pathway, urgent community ultrasound, ear care, community phlebotomy, every self-referral route found, Pharmacy First scope, in-house/PCN services and how to book them.
+- "templates": short reusable text blocks the practice asked for.
+Include an entry pointing at each local trust's GP-information repository itself, so staff can find the source pages later.
 
 CONTENT INSTRUCTIONS:
 ${KB_PROMPT_RULES}
