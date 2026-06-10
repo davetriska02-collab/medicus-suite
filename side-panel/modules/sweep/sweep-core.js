@@ -240,6 +240,15 @@ const QOF_ACTION_BY_PREFIX = [
   ['LD',   'Book an annual health check'],
 ];
 
+// Monitoring "tests" are a mix of venous bloods (FBC, U&E, LFT, lithium level…)
+// and physical checks done by an HCA (BP, weight, pulse, height, ECG). Calling
+// a blood-pressure check a "blood test" sends reception to book the wrong slot,
+// so the instruction wording must reflect what's actually due.
+const NON_BLOOD_TEST_RE = /\b(b\.?p\.?|blood pressure|pulse|heart rate|weight|height|bmi|ecg|cxr|chest x-?ray|waist|peak flow|spirometr|annual review)\b/i;
+function isBloodTest(name) {
+  return !NON_BLOOD_TEST_RE.test(String(name || ''));
+}
+
 export function chipInstruction(chip) {
   if (!chip || !isActionNeeded(chip.status)) return null;
 
@@ -249,13 +258,21 @@ export function chipInstruction(chip) {
       .map(t => t.name || t.testName)
       .filter(Boolean);
     const drug = chip.drugName || 'monitored medication';
-    if (dueTests.length > 0) {
-      return {
-        action: `Book a blood test appointment: ${dueTests.join(', ')}`,
-        detail: `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`,
-      };
+    const detail = `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`;
+    if (dueTests.length === 0) {
+      return { action: 'Book a monitoring appointment', detail };
     }
-    return { action: 'Book a monitoring blood test', detail: `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}` };
+    const bloods = dueTests.filter(isBloodTest);
+    const checks = dueTests.filter(n => !isBloodTest(n));
+    let action;
+    if (bloods.length && checks.length) {
+      action = `Book a blood test and check appointment: ${[...bloods, ...checks].join(', ')}`;
+    } else if (bloods.length) {
+      action = `Book a blood test appointment: ${bloods.join(', ')}`;
+    } else {
+      action = `Book a check-up appointment: ${checks.join(', ')}`;
+    }
+    return { action, detail };
   }
 
   if (chip.type === 'qof-indicator') {
@@ -301,16 +318,20 @@ export function chipInstruction(chip) {
 export function buildHandout(actionRows, meta) {
   const m = meta || {};
   const patients = (actionRows || []).map(row => {
-    const seen = new Set();
-    const actions = [];
+    // Group by the booking action so a patient with several gaps that resolve to
+    // the SAME booking (e.g. DM020 + DM036 → one diabetes review; three QOF gaps
+    // → one review appointment) prints as one line with the reasons combined,
+    // not three near-identical "book an appointment" rows for reception to wade
+    // through. Reasons are de-duplicated and joined.
+    const byAction = new Map(); // action → [unique details], insertion-ordered
     for (const chip of (row.chips || [])) {
       const instr = chipInstruction(chip);
       if (!instr) continue;
-      const key = `${instr.action}|${instr.detail || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      actions.push(instr);
+      if (!byAction.has(instr.action)) byAction.set(instr.action, []);
+      const details = byAction.get(instr.action);
+      if (instr.detail && !details.includes(instr.detail)) details.push(instr.detail);
     }
+    const actions = [...byAction.entries()].map(([action, details]) => ({ action, detail: details.join('; ') }));
     return {
       time: row.time || null,
       name: row.name || 'Unknown patient',
