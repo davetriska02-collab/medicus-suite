@@ -104,6 +104,16 @@
     });
   };
   const activateTab = (name) => {
+    // When leaving the edit pane, collapse and clear the LLM section so it
+    // starts fresh the next time "New rule" or "Edit" is clicked.
+    if (name !== 'edit') {
+      const llmDetails = $('#llmDetails');
+      if (llmDetails) llmDetails.removeAttribute('open');
+      const llmJson = $('#llmJson');
+      if (llmJson) llmJson.value = '';
+      const llmStatus = $('#llmStatus');
+      if (llmStatus) { llmStatus.textContent = ''; llmStatus.className = 'tl-llm-status'; }
+    }
     $$('.tl-tab').forEach(t => t.classList.toggle('tl-tab-active', t.dataset.tab === name));
     const map = { rules: 'paneRules', edit: 'paneEdit', systemChips: 'paneSystemChips', systemEdit: 'paneSystemEdit', thresholds: 'paneThresholds', prefs: 'panePrefs', preview: 'panePreview', backup: 'paneBackup', about: 'paneAbout' };
     $$('.tl-pane').forEach(p => p.classList.remove('tl-pane-active'));
