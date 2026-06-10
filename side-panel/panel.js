@@ -94,6 +94,7 @@ const MODULES = {
   referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
   condor:      { js: () => import('./modules/condor/condor.js'),         css: './modules/condor/condor.css' },
   trends:      { js: () => import('./modules/trends/trends.js'),         css: './modules/trends/trends.css' },
+  sweep:       { js: () => import('./modules/sweep/sweep.js'),           css: './modules/sweep/sweep.css' },
   about:       null,
 };
 

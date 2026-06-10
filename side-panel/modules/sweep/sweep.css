@@ -1,0 +1,340 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Sweep module styles */
+
+.sweep-module {
+  padding: 10px 12px;
+  font-size: 0.83rem;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.sweep-header {
+  margin-bottom: 10px;
+}
+
+.sweep-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.sweep-intro {
+  color: var(--text-secondary, #555);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+/* Disclaimers */
+.sweep-disclaimer,
+.sweep-disclaimer-top {
+  background: var(--bg-info, #f0f4ff);
+  border-left: 3px solid var(--border-info, #6c8ebf);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #444);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+/* Controls */
+.sweep-controls {
+  margin-bottom: 10px;
+}
+
+.sweep-run-btn {
+  background: var(--accent, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sweep-run-btn:hover {
+  background: var(--accent-hover, #1d4ed8);
+}
+
+.sweep-run-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Progress */
+.sweep-progress-wrap {
+  padding: 8px 0;
+}
+
+.sweep-progress {
+  font-size: 0.81rem;
+  color: var(--text-secondary, #555);
+  font-style: italic;
+}
+
+/* Notices */
+.sweep-notice {
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.sweep-notice-warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-left: 3px solid #f59e0b;
+  color: #92400e;
+}
+
+/* Error box */
+.sweep-error-box {
+  background: rgba(220, 38, 38, 0.1);
+  border-left: 3px solid #dc2626;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  color: #7f1d1d;
+}
+
+/* Results */
+.sweep-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.sweep-summary-line {
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.sweep-timestamp {
+  font-size: 0.76rem;
+  color: var(--text-secondary, #777);
+}
+
+/* Section headers */
+.sweep-section-head {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #666);
+  padding: 6px 0 3px 0;
+  border-bottom: 1px solid var(--border-muted, #e2e8f0);
+  margin-bottom: 4px;
+}
+
+.sweep-section-head-error {
+  color: #dc2626;
+  border-bottom-color: #fca5a5;
+}
+
+/* Patient rows */
+.sweep-row {
+  padding: 6px 8px;
+  border-radius: 5px;
+  margin-bottom: 4px;
+  background: var(--bg-row, #f8fafc);
+  border: 1px solid var(--border-muted, #e2e8f0);
+}
+
+.sweep-row-error {
+  background: rgba(220, 38, 38, 0.06);
+  border-color: #fca5a5;
+}
+
+.sweep-row-clear {
+  opacity: 0.85;
+}
+
+.sweep-row-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.82rem;
+}
+
+.sweep-row-time {
+  font-size: 0.76rem;
+  color: var(--text-secondary, #777);
+  min-width: 2.8em;
+}
+
+.sweep-row-name {
+  font-weight: 600;
+  flex: 1;
+  min-width: 80px;
+}
+
+.sweep-row-badges {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.sweep-open-record {
+  font-size: 0.75rem;
+  color: var(--accent, #2563eb);
+  text-decoration: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.sweep-open-record:hover {
+  text-decoration: underline;
+}
+
+/* Badges */
+.sweep-badge {
+  font-size: 0.70rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.sweep-badge-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.sweep-badge-amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.sweep-badge-error {
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.70rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* Chip summary */
+.sweep-row-chips {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.sweep-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.73rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.sweep-chip em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.sweep-chip-red {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.sweep-chip-amber {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+/* Hidden-rule note */
+.sweep-row-hidden-note {
+  font-size: 0.73rem;
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 3px;
+  padding: 2px 5px;
+  margin-top: 3px;
+}
+
+/* Row error detail */
+.sweep-row-errtext {
+  font-size: 0.78rem;
+  color: #7f1d1d;
+  margin-top: 3px;
+}
+
+/* Clear patients section */
+.sweep-clear-section {
+  margin-top: 8px;
+  border: 1px solid var(--border-muted, #e2e8f0);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.sweep-clear-summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 0.80rem;
+  font-weight: 500;
+  background: var(--bg-muted, #f1f5f9);
+  user-select: none;
+  list-style: none;
+}
+
+.sweep-clear-summary::-webkit-details-marker { display: none; }
+
+.sweep-clear-summary::before {
+  content: '\25B6\0020';
+  font-size: 0.65rem;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+
+.sweep-clear-section[open] .sweep-clear-summary::before {
+  content: '\25BC\0020';
+}
+
+.sweep-clear-body {
+  padding: 4px 6px;
+}
+
+/* Dark theme support */
+[data-theme="dark"] .sweep-module {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .sweep-intro,
+[data-theme="dark"] .sweep-timestamp,
+[data-theme="dark"] .sweep-section-head {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .sweep-disclaimer,
+[data-theme="dark"] .sweep-disclaimer-top {
+  background: rgba(99, 102, 241, 0.1);
+  border-left-color: #6366f1;
+  color: #c7d2fe;
+}
+
+[data-theme="dark"] .sweep-row {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .sweep-row-name {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .sweep-clear-summary {
+  background: #1e293b;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .sweep-clear-section {
+  border-color: #334155;
+}

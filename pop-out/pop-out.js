@@ -19,6 +19,7 @@ const MODULES = {
   referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
   condor:      { js: () => import('../side-panel/modules/condor/condor.js'),         css: '../side-panel/modules/condor/condor.css' },
   trends:      { js: () => import('../side-panel/modules/trends/trends.js'),         css: '../side-panel/modules/trends/trends.css' },
+  sweep:       { js: () => import('../side-panel/modules/sweep/sweep.js'),           css: '../side-panel/modules/sweep/sweep.css' },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────
