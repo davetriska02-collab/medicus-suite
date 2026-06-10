@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.41.1] — 2026-06-10
+
+### Fix: sweep now respects vaccine rules disabled via "Manage Alerts"
+
+Flu and COVID vaccine rules disabled through the Sentinel → Manage Alerts
+panel were still appearing in sweep results. Root cause: the "Manage Alerts"
+toggle stores a `{ until: null }` entry in `sentinel.hiddenRules` (with no
+`dismissedAt`), but sweep's `loadRules()` only read `sentinel.rules`, `orgRules`,
+and `customRules` — it never consulted `hiddenRules`.
+
+The fix: `loadRules()` now also reads `sentinel.hiddenRules` and marks any rule
+with `{ until: null }` and no `dismissedAt` as `enabled: false` before caching.
+This is the discriminator between a practice-level rule-off decision (Manage
+Alerts, no `dismissedAt`) and a per-patient snooze/dismissal (always has
+`dismissedAt`). Per-patient snoozes are intentionally preserved in the worklist
+per CLINICAL-SAFETY-NOTICE limitation 26.
+
+The storage-change listener now also invalidates the merged-rules cache when
+`sentinel.hiddenRules` changes, so toggling a rule in Manage Alerts takes effect
+on the next sweep run without a panel reload.
+
 ## [v3.41.0] — 2026-06-10
 
 ### Feature: organise Reception capture tiles — colour, A–Z sort, drag-and-drop

@@ -118,11 +118,12 @@ async function loadRules() {
   const canonical = _canonicalRulesCache;
   return new Promise(resolve => {
     chrome.storage.local.get(
-      ['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'],
+      ['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules', 'sentinel.hiddenRules'],
       res => {
         const individual  = res['sentinel.rules']       || {};
         const org         = res['sentinel.orgRules']    || null;
         const customRules = res['sentinel.customRules'] || [];
+        const hiddenMap   = res['sentinel.hiddenRules'] || {};
         const RIO = window.SentinelRulesetIo;
         let merged;
         if (RIO) {
@@ -132,6 +133,15 @@ async function loadRules() {
             individual[rule.id] ? Object.assign({}, rule, individual[rule.id]) : rule
           );
         }
+        // Rules disabled via "Manage Alerts" are stored as { until: null } with no
+        // dismissedAt (distinguishing them from per-patient snoozes which always set
+        // dismissedAt). Treat these as enabled:false so the engine never fires them —
+        // a practice-level decision to turn off a rule category must suppress sweep too.
+        merged = merged.map(rule => {
+          const h = hiddenMap[rule.id];
+          if (h && h.until == null && !h.dismissedAt) return { ...rule, enabled: false };
+          return rule;
+        });
         const enabledCustom = customRules.filter(r => r.enabled !== false);
         merged.push(...enabledCustom);
         _mergedRulesCache = merged;
@@ -558,7 +568,7 @@ export async function init(el) {
   // Invalidate merged rules cache when rules change (mirrors sentinel.js)
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
-    if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules']) {
+    if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules'] || changes['sentinel.hiddenRules']) {
       _mergedRulesCache = null;
     }
   };
