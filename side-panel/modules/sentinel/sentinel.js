@@ -20,6 +20,152 @@ function statusSeverityRank(status) {
   return colour !== undefined ? (COLOUR_RANK[colour] ?? 3) : 3;
 }
 
+// ── Admin appointments-summary helpers ────────────────────────────────────────
+// Converts a single chip into a plain-English booking instruction for admin
+// (mirrors sweep-core.js chipInstruction — kept local to avoid cross-module
+// coupling; if the two diverge, sync them deliberately).
+
+function _isChipActionNeeded(status) { return (STATUS_RANK[status] ?? 99) <= 2; }
+
+const _QOF_ACTION_BY_PREFIX = [
+  ['HYP',  'Book a blood pressure check'],
+  ['DM',   'Book a diabetes review'],
+  ['AST',  'Book an asthma review'],
+  ['COPD', 'Book a COPD review'],
+  ['CHD',  'Book a heart disease review'],
+  ['AF',   'Book an atrial fibrillation review'],
+  ['CKD',  'Book a kidney disease review'],
+  ['HF',   'Book a heart failure review'],
+  ['MH',   'Book a mental health review'],
+  ['DEP',  'Book a depression review'],
+  ['EP',   'Book an epilepsy review'],
+  ['PAD',  'Book a peripheral arterial disease review'],
+  ['STIA', 'Book a stroke/TIA review'],
+  ['RA',   'Book a rheumatoid arthritis review'],
+  ['OB',   'Book an obesity review'],
+  ['SMOK', 'Book a smoking cessation review'],
+  ['LD',   'Book an annual health check'],
+];
+const _NON_BLOOD_TEST_RE = /\b(b\.?p\.?|blood pressure|pulse|heart rate|weight|height|bmi|ecg|cxr|chest x-?ray|waist|peak flow|spirometr|annual review)\b/i;
+
+function _chipInstruction(chip) {
+  if (!chip || !_isChipActionNeeded(chip.status)) return null;
+
+  if (chip.type === 'drug-monitoring') {
+    const dueTests = (chip.tests || [])
+      .filter(t => t && _isChipActionNeeded(t.status))
+      .map(t => t.name || t.testName)
+      .filter(Boolean);
+    const drug = chip.drugName || 'monitored medication';
+    const detail = `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`;
+    if (dueTests.length === 0) return { action: 'Book a monitoring appointment', detail };
+    const bloods = dueTests.filter(n => !_NON_BLOOD_TEST_RE.test(String(n)));
+    const checks = dueTests.filter(n => _NON_BLOOD_TEST_RE.test(String(n)));
+    let action;
+    if (bloods.length && checks.length) action = `Book a blood test and check: ${[...bloods, ...checks].join(', ')}`;
+    else if (bloods.length)             action = `Book a blood test: ${bloods.join(', ')}`;
+    else                                action = `Book a check-up: ${checks.join(', ')}`;
+    return { action, detail };
+  }
+
+  if (chip.type === 'qof-indicator') {
+    const code = String(chip.indicatorCode || '').toUpperCase();
+    const hit = _QOF_ACTION_BY_PREFIX.find(([prefix]) => code.startsWith(prefix));
+    return {
+      action: hit ? hit[1] : 'Book a review appointment',
+      detail: `${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}`,
+    };
+  }
+
+  if (chip.type === 'vaccine') {
+    return {
+      action: `Offer to book: ${chip.displayName || 'vaccination'}`,
+      detail: 'eligible this season — double-check eligibility on the record',
+    };
+  }
+
+  // Alerts, combos, event-counts, composites → clinical judgement only
+  const label = chip.drugName || chip.indicatorCode || chip.label || chip.displayName || chip.registerName || chip.ruleId || 'alert';
+  return { action: 'Flag to duty clinician', detail: String(label) };
+}
+
+function buildAdminSummaryText(chips, patient) {
+  const actionChips = (chips || []).filter(c => _isChipActionNeeded(c.status));
+  const namePart = patient ? (patient.displayName || patient.name || 'Unknown patient') : 'Unknown patient';
+  const metaParts = patient ? [
+    patient.nhsNumber   ? `NHS ${patient.nhsNumber}`     : '',
+    patient.dateOfBirth ? `DOB ${patient.dateOfBirth}`   : '',
+    patient.age         ? `Age ${patient.age}`           : '',
+    patient.gender      ? patient.gender                 : '',
+  ].filter(Boolean) : [];
+  const dateLine = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  if (actionChips.length === 0) {
+    return `No monitoring appointments needed — ${namePart}\n${dateLine}`;
+  }
+
+  // Deduplicate by booking action (same logic as sweep-core buildHandout)
+  const byAction = new Map();
+  for (const chip of actionChips) {
+    const instr = _chipInstruction(chip);
+    if (!instr) continue;
+    if (!byAction.has(instr.action)) byAction.set(instr.action, []);
+    const details = byAction.get(instr.action);
+    if (instr.detail && !details.includes(instr.detail)) details.push(instr.detail);
+  }
+
+  if (byAction.size === 0) {
+    return `No monitoring appointments needed — ${namePart}\n${dateLine}`;
+  }
+
+  const lines = [...byAction.entries()].map(([action, details]) =>
+    `• ${action}${details.length ? ' (' + details.join('; ') + ')' : ''}`
+  );
+
+  const header = [`Appointments needed — ${namePart}`];
+  if (metaParts.length) header.push(metaParts.join(' · '));
+  header.push(dateLine);
+  return header.join('\n') + '\n\n' + lines.join('\n');
+}
+
+function showAdminSummaryModal(text) {
+  const moduleEl = container.querySelector('.sent-module');
+  if (!moduleEl) return;
+  moduleEl.querySelector('.sent-appt-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'sent-appt-modal';
+  modal.innerHTML = `
+    <div class="sent-appt-modal-inner">
+      <div class="sent-appt-modal-head">
+        <span class="sent-appt-modal-title">Appointments summary</span>
+        <button class="sent-appt-modal-close" id="sentApptModalClose" aria-label="Close">&#x2715;</button>
+      </div>
+      <textarea class="sent-appt-modal-text" id="sentApptModalText" readonly spellcheck="false">${escHtml(text)}</textarea>
+      <div class="sent-appt-modal-foot">
+        <button class="sent-appt-modal-copy" id="sentApptModalCopy">Copy to clipboard</button>
+      </div>
+    </div>`;
+
+  moduleEl.appendChild(modal);
+
+  modal.querySelector('#sentApptModalClose').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+  const copyBtn = modal.querySelector('#sentApptModalCopy');
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => { if (copyBtn.isConnected) copyBtn.textContent = 'Copy to clipboard'; }, 2000);
+    } catch (_) {
+      modal.querySelector('#sentApptModalText')?.select();
+    }
+  });
+
+  modal.querySelector('#sentApptModalText')?.focus();
+}
+
 let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
@@ -560,7 +706,10 @@ function render(payload) {
 
   container.innerHTML = shell(patientHtml + filterHtml, groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + currencyFooterHtml + `
     <div class="sent-footer">
-      <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
+      <div class="sent-footer-left">
+        <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
+        <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
+      </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
     </div>`);
 
@@ -574,6 +723,7 @@ function render(payload) {
   });
 
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  container.querySelector('#sentApptSummaryBtn')?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
 
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
