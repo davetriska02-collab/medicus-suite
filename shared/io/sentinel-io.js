@@ -12,6 +12,7 @@ const SENTINEL_KEYS = [
   'sentinel.customRules',
   'sentinel.alertLibrary.acknowledged',
   'sentinel.hiddenRules',
+  'sentinel.briefCollapsed',
   // NOTE: 'sentinel.extractionBaseline' is intentionally NOT in this list.
   // It stores ephemeral machine-local extraction telemetry (rolling per-view
   // counts, zero PII). Restoring it from a backup onto another machine or after
@@ -30,6 +31,7 @@ async function sentinelExport() {
     customRules: r['sentinel.customRules'] ?? [],
     alertLibraryAcknowledged: r['sentinel.alertLibrary.acknowledged'] ?? false,
     hiddenRules: r['sentinel.hiddenRules'] ?? {},
+    briefCollapsed: r['sentinel.briefCollapsed'] ?? false,
   };
 }
 
@@ -128,6 +130,13 @@ async function sentinelImport(data, { merge = false } = {}) {
       }
     }
     toSet['sentinel.hiddenRules'] = data.hiddenRules;
+  }
+
+  if (data.briefCollapsed !== undefined) {
+    if (typeof data.briefCollapsed !== 'boolean') {
+      throw new Error('sentinel.briefCollapsed must be a boolean.');
+    }
+    toSet['sentinel.briefCollapsed'] = data.briefCollapsed;
   }
 
   if (Object.keys(toSet).length > 0) {

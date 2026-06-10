@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.49.0] — 2026-06-10
+
+### Feature: Pre-Consultation Brief — 30-second risk-ranked patient summary card
+
+Adds a collapsible "Brief" card at the top of the Sentinel side-panel that gives
+the GP a risk-ranked glance at the current patient before the full chip list:
+patient line, red/amber counts, up to 4 top action signals, and notable
+observation trends.
+
+- New `side-panel/modules/sentinel/brief-core.js` (pure ES module, no chrome/DOM):
+  exports `buildBrief(snapshot, trendData)` → `null | BriefObject`. Builds
+  `patientLine`, `counts` (red/amber), `signals` (max 4, STATUS_RANK then
+  drug-monitoring-first type ordering), `moreCount`, and `trendNotes` (0–3
+  clinically notable observation movements). Returns `null` when there are no
+  signals and no trend notes (suppresses empty card). Defensive against every
+  missing field.
+- Clinical trend thresholds (with documented rationale as constants):
+  - Systolic BP: ≥10 mmHg delta (ESH/ESC 2018 measurement variability).
+  - HbA1c: ≥5 mmol/mol delta (NICE NG28 / inter-assay CV).
+  - eGFR: ≥15% decline (NICE CG182 / KDIGO 2022 actionable progression).
+  - eGFR improvement suppressed (only declining eGFR is flagged).
+  - Matching constants are local copies of the trend.js constants with a comment
+    pointing to the authoritative source — no import to avoid module side-effects.
+- UI: brief card renders above the patient banner in the `data` state. Header row
+  shows "Brief" label + patient name + red/amber count badges (text labels for
+  colour-blind safety). Body shows severity-dotted signal lines (red dot = rank 0,
+  amber dot = rank 1–2) and ↑/↓ trend notes. "+N more below" plain text when
+  moreCount > 0. No link — keeps it simple.
+- Collapsible: clicking/Enter/Space on the header toggles collapsed state; new
+  `sentinel.briefCollapsed` key persisted in `chrome.storage.local`.
+- `sentinel.briefCollapsed` added to both `sentinelExport()` and `sentinelImport()`
+  in `shared/io/sentinel-io.js` per the CLAUDE.md backup convention.
+- Trend data fetched in `refresh()` after the snapshot fetch (catch → null, never
+  blocks Sentinel render).
+- New CSS prefix `sent-brief-` in `sentinel.css`.
+- 66-assertion test suite in `test-brief-core.js` covering: signal ordering
+  (red before amber, drug before QOF), max-4 cap + moreCount arithmetic, drug
+  signal lists only due tests, BP delta 12 → note / delta 6 → no note, HbA1c
+  and eGFR thresholds (including exact boundary cases), eGFR improvement → no
+  note, null snapshot → null, missing trendData → empty trendNotes, missing
+  patient fields → no crash.
+
 ## [v3.48.0] — 2026-06-10
 
 ### Feature: Action Packs — copy-ready blood forms, recall SMS/letters and tasks per chip

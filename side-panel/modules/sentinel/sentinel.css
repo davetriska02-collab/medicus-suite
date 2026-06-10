@@ -1166,6 +1166,164 @@
   border-color: var(--accent, #4a7fb8);
 }
 
+/* ── Pre-Consultation Brief card ──────────────────────────────────────────── */
+/* Collapsible 30-second risk-ranked glance at the top of the Sentinel panel.  */
+/* CSS prefix: sent-brief-*                                                     */
+
+.sent-brief-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 7px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+/* Header row: clickable toggle bar */
+.sent-brief-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 7px;
+  transition: background 0.1s;
+}
+.sent-brief-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.sent-brief-header:focus {
+  outline: 2px solid var(--accent, #4a7fb8);
+  outline-offset: -2px;
+}
+
+.sent-brief-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+.sent-brief-patient {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-brief-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.sent-brief-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.sent-brief-badge-red {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--red, #f87171);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.sent-brief-badge-amber {
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--amber, #fbbf24);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.sent-brief-chevron {
+  font-size: 9px;
+  color: var(--text-5);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+/* Body: signals + trend notes */
+.sent-brief-body {
+  padding: 0 10px 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* When collapsed the body is absent — card has no bottom content */
+.sent-brief-collapsed .sent-brief-header {
+  border-radius: 7px;
+}
+
+/* Signal lines */
+.sent-brief-signal {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.sent-brief-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-4);
+}
+.sent-brief-signal-red .sent-brief-dot {
+  background: var(--red, #f87171);
+}
+.sent-brief-signal-amber .sent-brief-dot {
+  background: var(--amber, #fbbf24);
+}
+.sent-brief-signal-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Trend notes */
+.sent-brief-trend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.sent-brief-trend-arrow {
+  flex-shrink: 0;
+  font-size: 12px;
+  width: 7px;
+  text-align: center;
+  color: var(--text-4);
+}
+.sent-brief-trend-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "+N more below" line */
+.sent-brief-more {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-5);
+  padding-top: 4px;
+  text-transform: uppercase;
+}
+
 /* ── Unmatched meds: excluded-by annotation ───────────────────────────────── */
 /* Amber inline annotation shown next to meds silently suppressed by an
    exclude term — surfaces the "wrong injection suppresses everything" class of

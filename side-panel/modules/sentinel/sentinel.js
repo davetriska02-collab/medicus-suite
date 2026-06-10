@@ -6,6 +6,7 @@
 
 import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentinel-core.js';
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
+import { buildBrief } from './brief-core.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -229,6 +230,10 @@ let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
+// Pre-consultation brief state: collapse preference persisted in storage.
+let _briefCollapsed = false;
+let _lastTrendData = null; // cached from last refresh so render() can use it
+
 // Tab ID of the Medicus source tab for the last successful snapshot fetch.
 // Stored here so the "Verify in Medicus" affordance can focus the right tab
 // even if the active tab changed since the snapshot was taken (H-007 mitigation).
@@ -329,6 +334,10 @@ export async function init(el) {
   loadRuleCurrencyFooter();
 
   await loadHiddenRules();
+  // Load brief collapse preference (non-blocking — defaults to expanded).
+  chrome.storage.local.get('sentinel.briefCollapsed', (r) => {
+    _briefCollapsed = !!r['sentinel.briefCollapsed'];
+  });
   await refresh();
   pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
@@ -441,6 +450,7 @@ async function cleanup() {
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
+  _lastTrendData = null;
   container = null;
 }
 
@@ -691,6 +701,20 @@ async function refresh() {
     _snapshotTabId = tab.id;
     _snapshotTabWindowId = tab.windowId;
     const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+    // Also fetch trend data for the brief card. Failure here must never block
+    // or fail the Sentinel render — trends are supplementary, not critical.
+    let trendData = null;
+    try {
+      trendData = await new Promise((res, rej) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'getTrendData' }, (r) => {
+          if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
+          else res(r || null);
+        });
+      });
+    } catch (_) {
+      trendData = null;
+    }
+    _lastTrendData = trendData;
     switch (classifySnapshot(snapshot)) {
       case 'degraded':
         render({ state: 'degraded', snapshot });
@@ -919,8 +943,12 @@ function render(payload) {
   // Rule currency footer (one line, neutral if green, amber with first warning if amber).
   const currencyFooterHtml = _ruleCurrencyFooter || '';
 
+  // Pre-consultation brief — build and render above the patient banner.
+  const brief = buildBrief(snapshot, _lastTrendData);
+  const briefHtml = brief ? renderBriefCard(brief) : '';
+
   container.innerHTML = shell(
-    patientHtml + driftHtml + filterHtml,
+    briefHtml + patientHtml + driftHtml + filterHtml,
     groupsHtml +
       emptyMsg +
       unmatchedHtml +
@@ -1059,6 +1087,7 @@ function render(payload) {
   });
 
   attachEvidenceHandlers();
+  attachBriefToggle();
 
   // Restore the evidence panel that was open before this re-render, if its chip
   // still exists in the new snapshot.
@@ -1350,6 +1379,104 @@ function renderChip(chip) {
         <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
       </div>
     </div>`;
+}
+
+// ── Pre-consultation brief card ──────────────────────────────────────────────
+
+// Render the brief card HTML from a brief object (output of buildBrief()).
+// Returns an HTML string with CSS prefix sent-brief-*.
+function renderBriefCard(brief) {
+  const collapsed = _briefCollapsed;
+
+  // Header: "Brief" label + patientLine + red/amber count badges
+  const patPart = brief.patientLine ? ` <span class="sent-brief-patient">${escHtml(brief.patientLine)}</span>` : '';
+
+  // Count badges — include text labels for colour-blind safety
+  const redBadge =
+    brief.counts.red > 0 ? `<span class="sent-brief-badge sent-brief-badge-red">${brief.counts.red} red</span>` : '';
+  const amberBadge =
+    brief.counts.amber > 0
+      ? `<span class="sent-brief-badge sent-brief-badge-amber">${brief.counts.amber} amber</span>`
+      : '';
+
+  const chevron = collapsed ? '▶' : '▼';
+
+  const headerHtml = `
+    <div class="sent-brief-header" id="sentBriefHeader" role="button" tabindex="0" aria-expanded="${!collapsed}" aria-controls="sentBriefBody">
+      <span class="sent-brief-label">Brief</span>
+      ${patPart}
+      <span class="sent-brief-badges">${redBadge}${amberBadge}</span>
+      <span class="sent-brief-chevron" aria-hidden="true">${chevron}</span>
+    </div>`;
+
+  if (collapsed) {
+    return `<div class="sent-brief-card sent-brief-collapsed">${headerHtml}</div>`;
+  }
+
+  // Signal lines: severity dot + text
+  const signalLines = brief.signals
+    .map(
+      (sig) =>
+        `<div class="sent-brief-signal sent-brief-signal-${escHtml(sig.severity)}">` +
+        `<span class="sent-brief-dot" aria-hidden="true"></span>` +
+        `<span class="sent-brief-signal-text">${escHtml(sig.text)}</span>` +
+        `</div>`
+    )
+    .join('');
+
+  // Trend notes: ↑/↓ arrows + text
+  const trendLines = brief.trendNotes
+    .map(
+      (note) =>
+        `<div class="sent-brief-trend">` +
+        `<span class="sent-brief-trend-arrow" aria-hidden="true">${note.direction === 'up' ? '↑' : '↓'}</span>` +
+        `<span class="sent-brief-trend-text">${escHtml(note.text)}</span>` +
+        `</div>`
+    )
+    .join('');
+
+  // "+N more below" text (plain, not a link)
+  const moreLine = brief.moreCount > 0 ? `<div class="sent-brief-more">+${brief.moreCount} more below</div>` : '';
+
+  const bodyHtml = `
+    <div class="sent-brief-body" id="sentBriefBody">
+      ${signalLines}
+      ${trendLines}
+      ${moreLine}
+    </div>`;
+
+  return `<div class="sent-brief-card">${headerHtml}${bodyHtml}</div>`;
+}
+
+// Attach the brief card toggle handler after render. Idempotent — safe to call on every render.
+function attachBriefToggle() {
+  const header = container?.querySelector('#sentBriefHeader');
+  if (!header) return;
+  const toggle = async () => {
+    _briefCollapsed = !_briefCollapsed;
+    await chrome.storage.local.set({ 'sentinel.briefCollapsed': _briefCollapsed });
+    // Re-render just the brief card (surgical update avoids full re-render).
+    const card = container.querySelector('.sent-brief-card');
+    if (card && _currentSnapshot) {
+      const brief = buildBrief(_currentSnapshot, _lastTrendData);
+      if (brief) {
+        const newHtml = document.createElement('div');
+        newHtml.innerHTML = renderBriefCard(brief);
+        const newCard = newHtml.firstElementChild;
+        if (newCard) {
+          card.replaceWith(newCard);
+          attachBriefToggle(); // re-attach to new DOM node
+        }
+      }
+    }
+  };
+  header.addEventListener('click', toggle);
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
 }
 
 function shell(top, inner) {
