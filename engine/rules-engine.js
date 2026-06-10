@@ -188,7 +188,7 @@
   // For oestrogen-triggered HRT chips, annotate with whether the patient has
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
   // at a glance whether progestogen coverage is documented or missing.
-  function buildHrtContext(hrtConfig, data) {
+  function buildHrtContext(hrtConfig, data, now) {
     const norm = (s) => String(s || '').toLowerCase();
     const meds = data.medications || [];
     const problems = data.problems || [];
@@ -199,13 +199,38 @@
       (hrtConfig.hysterectomyTerms || []).some((t) => norm(p.label).includes(norm(t)))
     );
 
-    const iusMed =
-      meds.find((m) => (hrtConfig.iusTerms || []).some((t) => norm(m.name).includes(norm(t)))) ||
-      problems.find((p) =>
+    // A current LNG-IUS on the *medication* list is a live prescription/issue and
+    // counts as in-situ endometrial cover.
+    let iusMed = meds.find((m) => (hrtConfig.iusTerms || []).some((t) => norm(m.name).includes(norm(t))));
+
+    // A problem-coded IUS insertion only proves cover while the device is still
+    // in date. The 52mg LNG-IUS used for HRT endometrial protection is licensed
+    // for a fixed period (default 5y); a coil "problem" from years ago may since
+    // have been removed yet left active on the record. So only treat a
+    // problem-derived IUS as valid cover when it was coded within the validity
+    // window — otherwise flag it as expired so the chip falls through to the
+    // patient's actual progestogen (or a "cover not confirmed" warning) rather
+    // than silently asserting protection that may no longer exist.
+    let iusExpired = false;
+    if (!iusMed) {
+      const iusProblem = problems.find((p) =>
         [...(hrtConfig.iusTerms || []), ...(hrtConfig.iusProblemTerms || [])].some((t) =>
           norm(p.label).includes(norm(t))
         )
       );
+      if (iusProblem) {
+        const validityDays = (hrtConfig.iusValidityYears || 5) * 365.25;
+        const ageDays = daysBetween(iusProblem.codedDate, now);
+        // ageDays == null → no usable insertion date → cannot confirm currency.
+        // Treat conservatively as expired (don't assert cover the record can't
+        // support); a real in-date device will normally carry a coded date.
+        if (ageDays != null && ageDays <= validityDays) {
+          iusMed = iusProblem;
+        } else {
+          iusExpired = true;
+        }
+      }
+    }
 
     const progestogenMed = meds.find((m) =>
       (hrtConfig.progestogenTerms || []).some((t) => norm(m.name).includes(norm(t)))
@@ -214,6 +239,7 @@
     return {
       hasHysterectomy,
       iusMed: iusMed ? iusMed.name || iusMed.label : null,
+      iusExpired,
       progestogenMed: progestogenMed ? progestogenMed.name : null,
     };
   }
@@ -618,7 +644,7 @@
       // context (endometrial protection). matchedMeds is already filtered to
       // oestrogen/HRT agents above, so every HRT chip here is an oestrogen chip.
       if (rule.hrtContext) {
-        chip.hrtContext = buildHrtContext(rule.hrtContext, data);
+        chip.hrtContext = buildHrtContext(rule.hrtContext, data, now);
       }
 
       // Populate trace entry. For idx>0 we need a new entry (multi-med rule).

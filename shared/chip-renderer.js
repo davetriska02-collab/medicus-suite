@@ -133,6 +133,11 @@
         // Strip trailing dose (e.g. "Utrogestan 100mg capsules" → "Utrogestan")
         const name = ctx.progestogenMed.replace(/\s+\d.*$/i, '').trim();
         ctxText = `Progestogen: ${escHtml(name)}`;
+      } else if (ctx.iusExpired) {
+        // A historical coil code older than its licensed life is NOT current
+        // cover — surface it so the clinician confirms a replacement/progestogen.
+        ctxClass = 'hrt-ctx-warn';
+        ctxText = 'IUS expired (>5y) — endometrial cover not confirmed';
       } else {
         ctxClass = 'hrt-ctx-warn';
         ctxText = 'No progestogen or hysterectomy recorded';
