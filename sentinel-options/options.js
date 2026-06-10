@@ -661,6 +661,114 @@ getEl('crExportBtn')?.addEventListener('click', async () => {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 });
 
+// ── LLM rule authoring tool ────────────────────────────────────────────────────
+
+getEl('crLlmCopyPrompt')?.addEventListener('click', async () => {
+  const prompt = (typeof customRuleSchemaPrompt === 'function') ? customRuleSchemaPrompt() : '';
+  const copiedEl = getEl('crLlmCopied');
+  try {
+    await navigator.clipboard.writeText(prompt);
+  } catch (_) {
+    // execCommand fallback for extension contexts without clipboard permission
+    const ta = document.createElement('textarea');
+    ta.value = prompt;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand && document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  if (copiedEl) {
+    copiedEl.style.opacity = '1';
+    setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+  }
+});
+
+getEl('crLlmImport')?.addEventListener('click', async () => {
+  const statusEl = getEl('crLlmStatus');
+  const jsonEl   = getEl('crLlmJson');
+  if (!statusEl || !jsonEl) return;
+
+  const raw = (jsonEl.value || '').trim();
+  if (!raw) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Paste the LLM JSON into the box first.';
+    return;
+  }
+
+  // Parse JSON
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Could not parse JSON: ' + escHtml(e.message);
+    return;
+  }
+
+  // Normalise: accept single object, array, or {rules:[...]}
+  let candidates = [];
+  if (Array.isArray(parsed)) {
+    candidates = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.rules)) {
+      candidates = parsed.rules;
+    } else {
+      candidates = [parsed];
+    }
+  } else {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Expected a JSON object, an array, or an object with a "rules" array.';
+    return;
+  }
+
+  if (candidates.length === 0) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'No rule objects found in the pasted JSON.';
+    return;
+  }
+
+  // Load existing rules for id de-duplication
+  const res = await chrome.storage.local.get('sentinel.customRules');
+  const existing = res['sentinel.customRules'] || [];
+  const taken = new Set(existing.map(r => r.id));
+
+  // Validate each candidate via the shared validator; abort on first error
+  for (let i = 0; i < candidates.length; i++) {
+    const rule = candidates[i];
+    // Ensure id starts with custom-
+    if (!rule.id || typeof rule.id !== 'string' || !rule.id.startsWith('custom-')) {
+      rule.id = 'custom-' + (rule.id || 'rule');
+    }
+    // Force disabled — imported rules must be reviewed before firing
+    rule.enabled = false;
+    try {
+      if (typeof validateCustomRule === 'function') validateCustomRule(rule, i);
+    } catch (e) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = 'Rule ' + (candidates.length > 1 ? (i + 1) + ': ' : '') + escHtml(e.message);
+      return;
+    }
+  }
+
+  // De-duplicate ids and append
+  const toAdd = [];
+  for (const rule of candidates) {
+    let id = rule.id;
+    let n = 2;
+    while (taken.has(id)) id = rule.id + '-' + n++;
+    rule.id = id;
+    taken.add(id);
+    toAdd.push(rule);
+  }
+
+  await chrome.storage.local.set({ 'sentinel.customRules': [...existing, ...toAdd] });
+  jsonEl.value = '';
+  statusEl.style.color = 'var(--green)';
+  statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each one before it fires).';
+  renderCrList();
+});
+
 // Render list on load if Custom Rules tab is already active
 if (document.querySelector('.tab-btn.active')?.dataset.tab === 'customrules') renderCrList();
 

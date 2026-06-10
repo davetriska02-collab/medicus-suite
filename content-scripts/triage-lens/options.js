@@ -86,6 +86,7 @@
     setupPrefsPane();
     setupPreviewPane();
     setupBackupPane();
+    setupLlmPane();
     renderRules();
     renderSystemChips();
     populateThresholds();
@@ -292,6 +293,287 @@
     });
   };
 
+  // ============================================================
+  // RULE VALIDATION (shared by save path and LLM importer)
+  // ============================================================
+
+  const ALLOWED_KINDS  = ['red', 'amber', 'green', 'info'];
+  const ALLOWED_FIELDS = FIELDS.map(f => f.id);
+  const ALLOWED_PAGES  = PAGES.map(p => p.id);
+  const ALLOWED_BUMPS  = ['', 'risk', 'monitoring', 'meds', 'openLoops', 'carePlan', 'safeguarding'];
+  const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
+
+  // validateTriageRule(rule) → string[]
+  // Returns an array of error strings (empty = valid).
+  // Used by both saveCurrentRule and the LLM importer.
+  const validateTriageRule = (rule) => {
+    const errs = [];
+    if (!rule || typeof rule !== 'object') { errs.push('Rule must be an object.'); return errs; }
+
+    // kind
+    if (!ALLOWED_KINDS.includes(rule.kind)) {
+      errs.push('kind must be one of: ' + ALLOWED_KINDS.join(', ') + '.');
+    }
+
+    // patterns — at least one non-empty
+    const patterns = Array.isArray(rule.patterns) ? rule.patterns.filter(p => typeof p === 'string' && p.trim()) : [];
+    if (patterns.length === 0) {
+      errs.push('At least one non-empty pattern is required.');
+    } else if (rule.regex) {
+      for (const p of patterns) {
+        try { new RegExp(p, 'i'); }
+        catch (e) { errs.push('Invalid regex pattern "' + p + '": ' + e.message); }
+      }
+    }
+
+    // fields — non-empty, from allowed set
+    const fields = Array.isArray(rule.fields) ? rule.fields : [];
+    if (fields.length === 0) {
+      errs.push('At least one field must be selected.');
+    } else {
+      const bad = fields.filter(f => !ALLOWED_FIELDS.includes(f));
+      if (bad.length) errs.push('Unknown field(s): ' + bad.join(', ') + '. Allowed: ' + ALLOWED_FIELDS.join(', ') + '.');
+    }
+
+    // pages — non-empty, from allowed set
+    const pages = Array.isArray(rule.pages) ? rule.pages : [];
+    if (pages.length === 0) {
+      errs.push('At least one page must be selected.');
+    } else {
+      const bad = pages.filter(p => !ALLOWED_PAGES.includes(p));
+      if (bad.length) errs.push('Unknown page(s): ' + bad.join(', ') + '. Allowed: ' + ALLOWED_PAGES.join(', ') + '.');
+    }
+
+    // bumpsTile — optional but must be from allowed set if present
+    if (rule.bumpsTile != null && rule.bumpsTile !== '' && !ALLOWED_BUMPS.includes(rule.bumpsTile)) {
+      errs.push('bumpsTile must be one of: ' + ALLOWED_BUMPS.filter(Boolean).join(', ') + ', or null/empty.');
+    }
+
+    // actions — each action must be well-formed
+    const actions = Array.isArray(rule.actions) ? rule.actions : [];
+    actions.forEach((a, i) => {
+      if (!a || typeof a !== 'object') { errs.push('actions[' + i + ']: must be an object.'); return; }
+      if (!ALLOWED_ACTION_TYPES.includes(a.type)) {
+        errs.push('actions[' + i + '].type must be one of: ' + ALLOWED_ACTION_TYPES.join(', ') + '.');
+      }
+      if (!a.label || typeof a.label !== 'string' || !a.label.trim()) {
+        errs.push('actions[' + i + ']: label is required.');
+      }
+      if (a.type === 'link' && (!a.url || typeof a.url !== 'string')) {
+        errs.push('actions[' + i + ']: url is required for link actions.');
+      }
+      if ((a.type === 'snippet' || a.type === 'note') && (a.text == null || typeof a.text !== 'string')) {
+        errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
+      }
+    });
+
+    return errs;
+  };
+
+  // ============================================================
+  // LLM RULE AUTHORING TOOL
+  // ============================================================
+
+  // triageRuleSchemaPrompt() → string
+  // Returns a self-contained LLM instruction string for authoring a single
+  // Triage Lens custom alert rule. Embed in an LLM chat, paste JSON back.
+  // Embedded EXAMPLE JSON block uses stable markers for test extraction.
+  const triageRuleSchemaPrompt = () => `You are generating a single Triage Lens custom alert rule for a UK GP practice using Medicus. Output ONLY a JSON object — no prose, no markdown fences, no code blocks. The object must conform exactly to the schema below.
+
+=== CLINICAL SAFETY INSTRUCTIONS ===
+
+1. Unless regex:true, patterns are CASE-INSENSITIVE SUBSTRING matches — "safeguarding" matches "Safeguarding concern re: child".
+2. If regex:true, every pattern MUST be a valid JavaScript regular expression. Incorrect regex silently prevents the rule firing.
+3. Imported rules arrive DISABLED (enabled:false is forced on import). A clinician must review and enable the rule before it fires.
+4. This is display-only decision support — it surfaces existing record text with no synthesis, inference, or record writes.
+
+=== SCHEMA ===
+
+  id          (string)
+              Will be replaced on import with a fresh unique id of the form "rule_" + random.
+              You may set any placeholder — the importer ignores it.
+
+  enabled     (boolean)
+              Set false. The importer forces this regardless.
+
+  label       (string, required)
+              Short label shown on the chip, max ~40 characters. e.g. "Safeguarding concern".
+
+  kind        (string, required)
+              Severity of the chip. One of: "red" | "amber" | "green" | "info"
+              red   = high-risk / urgent
+              amber = caution / needs attention
+              green = reassuring / positive finding
+              info  = neutral information
+
+  patterns    (array of strings, required, non-empty)
+              Text to search for. Case-insensitive substring match (unless regex:true).
+              Plain patterns: list words or phrases, one per array element.
+              Regex patterns: valid JS regex source strings (no slashes, no flags — flags are added internally).
+
+  regex       (boolean, required)
+              false = plain substring; true = treat each pattern as a regex.
+              Use false unless you need alternation or optional characters.
+
+  fields      (array of strings, required, non-empty)
+              Which parts of the patient record to scan. At least one required.
+              Allowed values: "request" | "problems" | "registers" | "meds" | "allergies" |
+                              "banner" | "consultations" | "docs"
+              Note: "request" is the only field available on the queue page.
+
+  pages       (array of strings, required, non-empty)
+              Which Medicus pages the rule fires on. At least one required.
+              Allowed values: "queue" | "detail" | "record"
+              Note: fields other than "request" are only populated on "detail" and "record" pages.
+
+  bumpsTile   (string or null)
+              When matched on a detail or record page, optionally highlight one of the six
+              built-in tile categories. null = don't bump any tile.
+              Allowed values: null | "risk" | "monitoring" | "meds" | "openLoops" | "carePlan" | "safeguarding"
+
+  builtin     (boolean)
+              Always false for user-authored rules.
+
+  actions     (array, optional)
+              Click-to-fire shortcuts shown when the chip is expanded. Each action:
+                type   (string, required)  — "link" | "snippet" | "note"
+                label  (string, required)  — Button label, e.g. "NICE safeguarding guidance".
+                url    (string)            — Required for type "link". Full URL.
+                text   (string)            — Required for type "snippet" and "note".
+                       snippet: text copied to clipboard on click.
+                       note: informational text shown in a popover.
+
+  notes       (string, optional)
+              Your own reference note — not shown in the UI, only in the rule list.
+
+=== EXAMPLE JSON ---
+
+--- EXAMPLE JSON ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "label": "Safeguarding concern",
+  "kind": "amber",
+  "patterns": ["safeguarding", "child protection", "at risk", "domestic abuse", "domestic violence"],
+  "regex": false,
+  "fields": ["request", "problems", "consultations"],
+  "pages": ["queue", "detail", "record"],
+  "bumpsTile": "safeguarding",
+  "builtin": false,
+  "actions": [
+    {
+      "type": "note",
+      "label": "Safeguarding reminder",
+      "text": "Consider whether this presentation raises a safeguarding concern. If in doubt, consult your practice safeguarding lead before proceeding."
+    }
+  ],
+  "notes": "Flags common safeguarding-related terms in request text and problem list."
+}
+--- END EXAMPLE ---
+
+=== CLOSING REMINDER ===
+
+The rule will be imported DISABLED. A GP or nominated reviewer MUST check the patterns and fields
+are appropriate before enabling the rule. A rule that fires on irrelevant content creates alert fatigue;
+a rule that silently fails to fire misses a clinical signal. Test it using the Live Preview tab.
+`;
+
+  const setupLlmPane = () => {
+    const btnCopy   = $('#btnLlmCopyPrompt');
+    const copiedEl  = $('#llmCopied');
+    const jsonEl    = $('#llmJson');
+    const btnImport = $('#btnLlmImport');
+    const statusEl  = $('#llmStatus');
+    if (!btnCopy || !jsonEl || !btnImport || !statusEl) return;
+
+    btnCopy.addEventListener('click', async () => {
+      const prompt = triageRuleSchemaPrompt();
+      try {
+        await navigator.clipboard.writeText(prompt);
+      } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = prompt;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (copiedEl) {
+        copiedEl.style.opacity = '1';
+        setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+      }
+    });
+
+    btnImport.addEventListener('click', async () => {
+      statusEl.className = 'tl-llm-status';
+      statusEl.textContent = '';
+      const raw = (jsonEl.value || '').trim();
+      if (!raw) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Paste the LLM JSON into the box first.';
+        return;
+      }
+
+      // Parse JSON
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (e) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Could not parse JSON: ' + escHtml(e.message);
+        return;
+      }
+
+      // Normalise: single object, array, or {rules:[...]}
+      let candidates = [];
+      if (Array.isArray(parsed)) {
+        candidates = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.rules)) {
+          candidates = parsed.rules;
+        } else {
+          candidates = [parsed];
+        }
+      } else {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Expected a JSON object, an array, or an object with a "rules" array.';
+        return;
+      }
+
+      if (candidates.length === 0) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'No rule objects found in the pasted JSON.';
+        return;
+      }
+
+      // Validate each candidate; abort on first error
+      for (let i = 0; i < candidates.length; i++) {
+        const errs = validateTriageRule(candidates[i]);
+        if (errs.length > 0) {
+          statusEl.className = 'tl-llm-status tl-llm-status-err';
+          const prefix = candidates.length > 1 ? 'Rule ' + (i + 1) + ': ' : '';
+          statusEl.textContent = prefix + errs[0];
+          return;
+        }
+      }
+
+      // Assign fresh ids, force builtin:false, force enabled:false, append
+      const toAdd = candidates.map(rule => ({
+        ...rule,
+        id: 'rule_' + Math.random().toString(36).slice(2, 9),
+        builtin: false,
+        enabled: false,
+      }));
+
+      CONFIG.rules.push(...toAdd);
+      await saveConfig(CONFIG);
+      jsonEl.value = '';
+      statusEl.className = 'tl-llm-status tl-llm-status-ok';
+      statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each one before it fires).';
+      renderRules();
+    });
+  };
+
   const saveCurrentRule = async () => {
     if (!editingId) return;
     // Read draft state from the DOM
@@ -305,15 +587,13 @@
     editingDraft.fields = $$('#fFields input:checked').map(c => c.dataset.field);
     editingDraft.pages = $$('#fPages input:checked').map(c => c.dataset.page);
 
-    // Validate regex if enabled
-    if (editingDraft.regex) {
-      for (const p of editingDraft.patterns) {
-        try { new RegExp(p, 'i'); }
-        catch (e) {
-          flash('Invalid regex: ' + p, 'err');
-          return;
-        }
-      }
+    // Validate via the shared validator; the form builder ensures kind/fields/pages
+    // come from the fixed select/checkbox sets, so the main check that can fail here
+    // is the regex compilation. Use validateTriageRule for consistency.
+    const errs = validateTriageRule(editingDraft);
+    if (errs.length > 0) {
+      flash(errs[0], 'err');
+      return;
     }
 
     // Persist
