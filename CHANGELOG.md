@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.38.0] — 2026-06-10
+
+### Feature: Reception module — guided capture + recent appointments + opportunity summary
+
+New "Reception" side-panel tab (panel + pop-out) designed for non-clinical
+front-desk staff:
+
+- **Guided capture.** Fixed question sets per presenting problem
+  (`rules/reception-pathways.json`: sore throat, earache, adult cough, urinary
+  symptoms in women 16–64, adult headache, low back pain, feverish child,
+  rash/skin, plus a general catch-all — NICE CKS / NG143-derived, lay-phrased).
+  Red-flag questions come first and every one must be explicitly answered
+  (unanswered ≠ "no"); any YES shows an immediate 999-level or duty-clinician
+  escalation banner and stamps the flag + instruction into the output. The
+  result is a same-every-time plain-text history block with a copy-to-clipboard
+  button for pasting into the Medicus triage entry, ending with a "not a
+  clinical assessment — clinician to review" footer. When a patient record is
+  open, the patient's name/DOB is embedded in the header so a wrong-record
+  paste is detectable. Unanswered questions render as "not recorded", never
+  blank. Pharmacy First suitability hints are age-gated against the open
+  record and fail towards "clinician to confirm" when age is unknown.
+  **The pathway set ships marked DRAFT and requires CSO sign-off before live
+  use** (limitation 27 added to docs/CLINICAL-SAFETY-NOTICE.md); structure is
+  CI-guarded by `test-reception-pathways.js` (433 assertions).
+- **Recent appointments.** "Who did you last see" support: manual-trigger scan
+  of the practice appointment book backwards (up to 6 weeks, 7-day batches,
+  early-stop at 3 hits), matched strictly by patient UUID — never by name
+  (wrong-patient hazard H-001). Days that fail to load are explicitly counted
+  as unread; the card states it shows booked practice appointments only.
+- **Opportunity summary.** Compact red/amber counts of the open patient's
+  Sentinel chips ("while they're on the phone: 1 overdue, 2 due soon") with a
+  jump to the Monitoring tab, so reception can offer to book overdue checks.
+- Nothing is stored: answers, output text, and taker initials are in-memory
+  only — no new chrome.storage keys, so no backup/IO changes.
+- The Rules status card in Options now also tracks the reception pathway
+  file's age/version. New `test-reception-core.js` covers the text builder,
+  red-flag evaluation, UUID-only appointment matching, and chip summarising.
+
 ## [v3.37.0] — 2026-06-10
 
 Five user-aiding features from the high-impact development review.

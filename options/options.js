@@ -881,18 +881,20 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
     }
     try {
       const base = chrome.runtime.getURL('rules/');
-      const [drug, qof, vax, alert] = await Promise.all([
+      const [drug, qof, vax, alert, reception] = await Promise.all([
         fetch(base + 'drug-rules.json').then(r => r.json()),
         fetch(base + 'qof-rules.json').then(r => r.json()),
         fetch(base + 'vaccine-rules.json').then(r => r.json()),
         fetch(base + 'alert-library.json').then(r => r.json()),
+        fetch(base + 'reception-pathways.json').then(r => r.json()),
       ]);
 
       const files = [
-        { id: 'drug',    lastUpdated: drug.lastUpdated,  specVersion: drug.specVersion,  displayName: 'Drug monitoring rules' },
-        { id: 'qof',     lastUpdated: qof.lastUpdated,   specVersion: qof.specVersion,   displayName: 'QOF rules' },
-        { id: 'vaccine', lastUpdated: vax.lastUpdated,   specVersion: vax.specVersion,   displayName: 'Vaccine rules' },
-        { id: 'alert',   lastUpdated: alert.lastUpdated, specVersion: alert.specVersion, displayName: 'Alert library' },
+        { id: 'drug',      lastUpdated: drug.lastUpdated,      specVersion: drug.specVersion,      displayName: 'Drug monitoring rules' },
+        { id: 'qof',       lastUpdated: qof.lastUpdated,       specVersion: qof.specVersion,       displayName: 'QOF rules' },
+        { id: 'vaccine',   lastUpdated: vax.lastUpdated,       specVersion: vax.specVersion,       displayName: 'Vaccine rules' },
+        { id: 'alert',     lastUpdated: alert.lastUpdated,     specVersion: alert.specVersion,     displayName: 'Alert library' },
+        { id: 'reception', lastUpdated: reception.lastUpdated, specVersion: reception.specVersion, displayName: 'Reception capture pathways' },
       ];
 
       const today = new Date().toISOString().slice(0, 10);
