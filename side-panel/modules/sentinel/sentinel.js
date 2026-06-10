@@ -155,6 +155,12 @@ async function loadHiddenRules() {
 // objects from the latest snapshot for lookup on click.
 let _openEvidenceKey = null;
 let _evidenceByKey = new Map();
+// Trace entry lookup: ruleId → trace entry (for the "Why?" block). Populated
+// from snapshot.trace.entries alongside _evidenceByKey. Keyed by ruleId; for
+// multi-med drug-monitoring rules also keyed by ruleId|drugName (chipRef).
+// In-memory only; cleared in cleanup().
+let _traceByKey = new Map();
+let _currentSnapshot = null; // reference to last rendered snapshot for export
 let _evidenceKeydownHandler = null;
 let _evidenceHandlersAttached = false;
 
@@ -267,6 +273,8 @@ async function cleanup() {
   _evidenceHandlersAttached = false;
   _openEvidenceKey = null;
   _evidenceByKey.clear();
+  _traceByKey.clear();
+  _currentSnapshot = null;
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
@@ -595,8 +603,17 @@ function render(payload) {
     return;
   }
 
-  const { chips: allChips, patientContext, evaluatedAt, modules, unmatchedMeds } = snapshot;
+  const {
+    chips: allChips,
+    patientContext,
+    evaluatedAt,
+    modules,
+    unmatchedMeds,
+    unmatchedMedsDetailed,
+    trace,
+  } = snapshot;
   const patient = patientContext;
+  _currentSnapshot = snapshot;
 
   // Drop chips for currently-suppressed rules (per-rule hide/snooze) before any
   // filtering or counting, so hidden alerts vanish entirely and don't skew the
@@ -716,7 +733,7 @@ function render(payload) {
     </div>`
     : '';
 
-  const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds);
+  const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
 
   // Rule currency footer (one line, neutral if green, amber with first warning if amber).
   const currencyFooterHtml = _ruleCurrencyFooter || '';
@@ -733,6 +750,7 @@ function render(payload) {
       <div class="sent-footer-left">
         <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
         <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
+        <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
       </div>
       <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
     </div>`
@@ -747,10 +765,45 @@ function render(payload) {
     _evidenceByKey.set(key, chip);
   });
 
+  // Build trace-key → trace entry lookup. Drug-monitoring entries are keyed by
+  // chipRef (ruleId|drugName); all other types are keyed by ruleId.
+  _traceByKey = new Map();
+  if (trace && Array.isArray(trace.entries)) {
+    trace.entries.forEach((entry) => {
+      if (!entry) return;
+      if (entry.chipRef) _traceByKey.set(entry.chipRef, entry);
+      if (entry.ruleId) _traceByKey.set(entry.ruleId, entry);
+    });
+  }
+
   container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
   container
     .querySelector('#sentApptSummaryBtn')
     ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
+
+  // Export evaluation log button: download the trace as a JSON file.
+  const exportLogBtn = container.querySelector('#sentExportLogBtn');
+  if (exportLogBtn) {
+    if (trace) {
+      exportLogBtn.disabled = false;
+      exportLogBtn.addEventListener('click', () => {
+        const pc = _currentSnapshot && _currentSnapshot.patientContext;
+        const id = (pc && (pc.nhsNumber || pc.patientUuid || pc.uuid)) || 'unknown';
+        const safeId = String(id).replace(/[^a-zA-Z0-9-]/g, '');
+        const today = new Date().toISOString().slice(0, 10);
+        const filename = `sentinel-evaluation-log-${safeId}-${today}.json`;
+        const blob = new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    } else {
+      exportLogBtn.disabled = true;
+    }
+  }
 
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
@@ -900,6 +953,21 @@ function openEvidenceFor(chipEl, key) {
   const panel = document.createElement('div');
   panel.className = 'sent-evidence-wrapper';
   panel.innerHTML = CR.renderEvidencePanel(chip.evidence);
+
+  // Inject "Why?" block from trace entry before the footer.
+  // Look up by chipRef (ruleId|drugName for drug-monitoring) first, then ruleId.
+  if (CR.renderWhyBlock && _traceByKey.size > 0) {
+    const traceEntry = _traceByKey.get(key) || _traceByKey.get(chip.ruleId);
+    if (traceEntry) {
+      const foot = panel.querySelector('.sent-ev-foot');
+      if (foot) {
+        const whyEl = document.createElement('div');
+        whyEl.innerHTML = CR.renderWhyBlock(traceEntry);
+        foot.insertAdjacentElement('beforebegin', whyEl);
+      }
+    }
+  }
+
   // Inject "Verify in Medicus" button into the evidence panel footer.
   // This appears in addition to the banner button so the clinician can verify
   // directly from the expanded evidence view without scrolling up.
@@ -1105,10 +1173,28 @@ function ensureFeedbackEmailLoaded() {
 // Most medicines need no monitoring — this list exists to spot brand names that
 // SHOULD have matched a monitoring rule but didn't. A "Report a possible missing
 // brand" mailto link is included when a feedback email address is configured.
-function renderUnmatchedMedsSection(meds) {
+// When unmatchedDetailed is provided, excluded meds are annotated in amber.
+function renderUnmatchedMedsSection(meds, unmatchedDetailed) {
   ensureFeedbackEmailLoaded();
   if (!meds || meds.length === 0) return '';
-  const items = meds.map((n) => `<li>${escHtml(n)}</li>`).join('');
+
+  // Build item list. Use detailed data when available for exclude annotations.
+  const detailedMap = new Map();
+  if (unmatchedDetailed && unmatchedDetailed.length > 0) {
+    unmatchedDetailed.forEach((u) => detailedMap.set(u.name, u));
+  }
+
+  const items = meds
+    .map((n) => {
+      const detail = detailedMap.get(n);
+      if (detail && detail.reason === 'excluded' && detail.excludedBy) {
+        const annotation = escHtml(`excluded by '${detail.excludedBy.term}' (rule ${detail.excludedBy.ruleId})`);
+        return `<li>${escHtml(n)} <span class="sent-unmatched-excluded">${annotation}</span></li>`;
+      }
+      return `<li>${escHtml(n)}</li>`;
+    })
+    .join('');
+
   let mailtoLink = '';
   if (_feedbackEmail) {
     const subject = encodeURIComponent('Possible missing monitoring rule brand');
