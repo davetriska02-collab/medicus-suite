@@ -1386,12 +1386,32 @@
     return null;
   }
 
+  // Returns the campaign end date (ISO date string) for the season cycle that
+  // begins at startIso, or null when the rule has no endMonth (year-round).
+  // An end month numerically before the start month means the campaign crosses
+  // the new year (flu: Sep 1 → Mar 31 of the following year).
+  function seasonEnd(startIso, season) {
+    if (!season || !season.endMonth) return null;
+    const pad2 = n => String(n).padStart(2, '0');
+    const startYear = parseInt(startIso.slice(0, 4), 10);
+    const endYear = season.endMonth < season.startMonth ? startYear + 1 : startYear;
+    return `${endYear}-${pad2(season.endMonth)}-${pad2(season.endDay || 1)}`;
+  }
+
   function evaluateVaccineRule(rule, data, nowIso) {
     if (rule.enabled === false) return [];
     const matchedClause = matchVaccineEligibility(rule, data);
     if (!matchedClause) return [];
 
     const startIso = seasonStart(nowIso, rule.season.startMonth, rule.season.startDay || 1);
+
+    // Out-of-campaign suppression: between the campaign end (e.g. 31 Mar) and
+    // the next season start (e.g. 1 Sep), no vaccine chips fire at all — an
+    // eligible-but-unvaccinated patient is not actionable in June (the jab
+    // cannot be given), and a stale "VAX DUE" all summer trains staff to
+    // ignore the chip when it matters. Rules without endMonth stay year-round.
+    const endIso = seasonEnd(startIso, rule.season);
+    if (endIso && nowIso.slice(0, 10) > endIso) return [];
     const evt = vaccineEventInWindow(rule, data, startIso);
 
     const status = evt ? (evt.type === 'given' ? 'vax_given' : 'vax_declined') : 'vax_due';

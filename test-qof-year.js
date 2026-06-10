@@ -240,6 +240,57 @@ console.log('\n=== seasonStart() UTC boundary ===');
     'seasonStart: one day before Sep 1 → previous year');
 }
 
+// ── Vaccine campaign window (season.endMonth) ─────────────────────────────────
+// Regression guard for the "VAX DUE all summer" bug: an eligible, unvaccinated
+// patient must show vax_due only INSIDE the campaign window (flu: 1 Sep–31 Mar).
+// Out of campaign there is nothing actionable (the jab cannot be given), so NO
+// vaccine chips fire at all. Rules without endMonth stay year-round.
+
+console.log('\n=== vaccine campaign window ===');
+{
+  const fluRule = {
+    id: 'vax-flu', type: 'vaccine', enabled: true, vaccine: 'flu',
+    displayName: 'Flu vaccine',
+    season: { startMonth: 9, startDay: 1, endMonth: 3, endDay: 31 },
+    eligibility: { anyOf: [{ kind: 'age', ageMin: 65, label: 'Age 65+' }] },
+    statusTerms: { given: ['flu vaccin'], declined: ['flu vaccine declined'] },
+  };
+  const eligible = { patientContext: { ageYears: 70 }, problems: [], medications: [], observationHistory: [] };
+
+  // June (mid-campaign-gap) → no chips at all, even though eligible + unvaccinated
+  let chips = engine.evaluateVaccineRule(fluRule, eligible, '2026-06-10T08:00:00Z');
+  assert(chips.length === 0, 'June, eligible, unvaccinated → NO flu chip (out of campaign)');
+
+  // April 1 (day after campaign end) → suppressed
+  chips = engine.evaluateVaccineRule(fluRule, eligible, '2026-04-01T08:00:00Z');
+  assert(chips.length === 0, '1 Apr (day after end) → suppressed');
+
+  // March 31 (last day of campaign) → vax_due
+  chips = engine.evaluateVaccineRule(fluRule, eligible, '2026-03-31T08:00:00Z');
+  assert(chips.length === 1 && chips[0].status === 'vax_due', '31 Mar (last campaign day) → vax_due');
+
+  // October (in campaign, unvaccinated) → vax_due
+  chips = engine.evaluateVaccineRule(fluRule, eligible, '2026-10-15T08:00:00Z');
+  assert(chips.length === 1 && chips[0].status === 'vax_due', 'October, unvaccinated → vax_due');
+
+  // In campaign, vaccinated this season → vax_given (campaign window must not break GIVEN)
+  const vaccinated = { ...eligible, problems: [{ label: 'Seasonal flu vaccination given', codedDate: '2026-10-01' }] };
+  chips = engine.evaluateVaccineRule(fluRule, vaccinated, '2026-11-15T08:00:00Z');
+  assert(chips.length === 1 && chips[0].status === 'vax_given', 'November, vaccinated Oct → vax_given');
+
+  // No endMonth → year-round behaviour unchanged (back-compat)
+  const yearRound = { ...fluRule, season: { startMonth: 9, startDay: 1 } };
+  chips = engine.evaluateVaccineRule(yearRound, eligible, '2026-06-10T08:00:00Z');
+  assert(chips.length === 1 && chips[0].status === 'vax_due', 'rule without endMonth still fires year-round');
+
+  // The shipped rules file carries campaign ends for both vaccines
+  const vaxDoc = require('./rules/vaccine-rules.json');
+  for (const r of vaxDoc.rules) {
+    assert(r.season && r.season.endMonth === 3 && r.season.endDay === 31,
+      `${r.id}: shipped rule has campaign end 31 Mar`);
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(50)}`);

@@ -29,7 +29,8 @@ const path = require('path');
     `file://${path.resolve(__dirname)}/`
   ).href;
 
-  let extractBookedPatients, summariseSweep, isActionNeeded, MAX_SWEEP_PATIENTS, ACTION_COLOURS;
+  let extractBookedPatients, summariseSweep, isActionNeeded, MAX_SWEEP_PATIENTS, ACTION_COLOURS,
+      chipInstruction, buildHandout;
   try {
     const mod = await import(sweepCorePath);
     extractBookedPatients = mod.extractBookedPatients;
@@ -37,6 +38,8 @@ const path = require('path');
     isActionNeeded        = mod.isActionNeeded;
     MAX_SWEEP_PATIENTS    = mod.MAX_SWEEP_PATIENTS;
     ACTION_COLOURS        = mod.ACTION_COLOURS;
+    chipInstruction       = mod.chipInstruction;
+    buildHandout          = mod.buildHandout;
   } catch (e) {
     console.error('FATAL: could not import sweep-core.js:', e.message);
     process.exit(1);
@@ -345,6 +348,69 @@ const path = require('path');
   const arrayS = summariseSweep(arrayHiddenInput);
   check(arrayS.actionRows.length === 1,               'Array hiddenRuleIds treated as Set → patient stays in action');
   check(arrayS.actionRows[0].hasHiddenActionChips === true, 'hasHiddenActionChips set via array path');
+
+  // ── chipInstruction (reception handout wording) ──────────────────────────────
+  console.log('\n--- chipInstruction ---');
+
+  let instr = chipInstruction({
+    type: 'drug-monitoring', status: 'overdue', drugName: 'Lithium carbonate',
+    tests: [
+      { name: 'FBC', status: 'overdue' },
+      { name: 'U&E', status: 'stale' },
+      { name: 'TFT', status: 'in_date' },
+    ],
+  });
+  check(instr.action === 'Book a blood test appointment: FBC, U&E', 'drug chip → book named overdue tests (in-date test excluded)');
+  check(/Lithium carbonate monitoring overdue/.test(instr.detail), 'drug chip detail names the drug');
+
+  instr = chipInstruction({ type: 'drug-monitoring', status: 'due_soon', drugName: 'Azathioprine', tests: [{ name: 'FBC', status: 'due_soon' }] });
+  check(/due soon/.test(instr.detail), 'due_soon wording is "due soon", not "overdue"');
+
+  instr = chipInstruction({ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP ≤140/90' });
+  check(instr.action === 'Book a blood pressure check', 'HYP indicator → blood pressure check');
+  check(/HYP010/.test(instr.detail), 'QOF detail carries indicator code');
+
+  instr = chipInstruction({ type: 'qof-indicator', status: 'not_met', indicatorCode: 'NDH001', indicatorName: 'Pre-diabetes HbA1c' });
+  check(instr.action === 'Book a review appointment', 'unmapped indicator → generic review booking');
+
+  instr = chipInstruction({ type: 'vaccine', status: 'vax_due', displayName: 'Flu vaccine' });
+  check(instr.action === 'Offer to book: Flu vaccine', 'vaccine chip → offer to book');
+
+  instr = chipInstruction({ type: 'event-count', status: 'alert', label: 'Polypharmacy ≥10 meds' });
+  check(instr.action === 'Flag to the duty clinician', 'non-bookable chip → flag to duty clinician (reception never acts clinically)');
+
+  check(chipInstruction({ type: 'drug-monitoring', status: 'in_date', drugName: 'X', tests: [] }) === null, 'non-action chip → null');
+  check(chipInstruction(null) === null, 'null chip → null');
+
+  // ── buildHandout ──────────────────────────────────────────────────────────────
+  console.log('\n--- buildHandout ---');
+
+  const handoutRows = [
+    {
+      name: 'Mr B', time: '2026-06-10T10:30:00Z', clinician: 'Dr Y', redCount: 1, amberCount: 0,
+      chips: [
+        { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' },
+        { type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' }, // duplicate
+        { type: 'qof-register', status: 'achieved', registerName: 'HYP' },                            // not action-needed
+      ],
+      hasHiddenActionChips: true,
+    },
+    {
+      name: 'Ms A', time: '2026-06-10T08:35:00Z', clinician: 'Dr X', redCount: 2, amberCount: 1,
+      chips: [{ type: 'drug-monitoring', status: 'overdue', drugName: 'Methotrexate', tests: [{ name: 'FBC', status: 'overdue' }] }],
+      hasHiddenActionChips: false,
+    },
+    { name: 'No actions', time: '2026-06-10T09:00:00Z', clinician: 'Dr X', redCount: 0, amberCount: 0, chips: [], hasHiddenActionChips: false },
+  ];
+  const handout = buildHandout(handoutRows, { runAt: '2026-06-10T08:00:00Z', clinician: null, suiteVersion: '9.9.9' });
+
+  check(handout.patients.length === 2, 'patients without printable actions are dropped');
+  check(handout.patients[0].name === 'Ms A' && handout.patients[1].name === 'Mr B',
+    'handout is in appointment-time order (reception order), not severity order');
+  check(handout.patients[1].actions.length === 1, 'identical instructions deduplicated per patient');
+  check(handout.patients[1].hasHiddenActionChips === true, 'hidden-chips flag carried through');
+  check(handout.generatedAt === '2026-06-10T08:00:00Z' && handout.suiteVersion === '9.9.9', 'meta carried through');
+  check(buildHandout([], {}).patients.length === 0, 'empty rows → empty handout');
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

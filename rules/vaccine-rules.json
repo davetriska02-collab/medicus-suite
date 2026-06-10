@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-09",
+  "lastUpdated": "2026-06-10",
   "specVersion": "JCVI/UKHSA 2025/26 season",
   "rules": [
     {
@@ -8,7 +8,7 @@
       "enabled": true,
       "vaccine": "flu",
       "displayName": "Flu vaccine",
-      "season": { "startMonth": 9, "startDay": 1 },
+      "season": { "startMonth": 9, "startDay": 1, "endMonth": 3, "endDay": 31 },
       "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2025)",
       "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
       "eligibility": {
@@ -34,7 +34,7 @@
       "enabled": true,
       "vaccine": "covid",
       "displayName": "COVID vaccine",
-      "season": { "startMonth": 10, "startDay": 1 },
+      "season": { "startMonth": 10, "startDay": 1, "endMonth": 3, "endDay": 31 },
       "source": "JCVI COVID-19 autumn 2025 eligibility",
       "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
       "eligibility": {

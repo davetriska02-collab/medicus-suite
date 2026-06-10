@@ -17,10 +17,10 @@
 
 'use strict';
 
-// Browser: window.ReceptionPathwayUtils (script tag, loaded before this file).
+// Browser/service worker: self.ReceptionPathwayUtils (script tag or importScripts, loaded before this file).
 // Node tests: require directly.
 const _ReceptionPathUtils =
-  (typeof window !== 'undefined' && window.ReceptionPathwayUtils) ||
+  (typeof self !== 'undefined' && self.ReceptionPathwayUtils) ||
   (typeof module !== 'undefined' && typeof require === 'function'
     ? require('../reception-pathway-utils.js')
     : null);

@@ -601,7 +601,7 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
   });
 });
 
-// ── Practice Profile (v2.5) ──────────────────────────────────────────────────
+// ── Practice Profile (v3.0) ──────────────────────────────────────────────────
 
 (async function initPracticeProfileSection() {
   try {
@@ -611,12 +611,70 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
     const badge        = document.getElementById('ppBadge');
     const checkBtn     = document.getElementById('ppCheckBtn');
     const applyBtn     = document.getElementById('ppApplyBtn');
-    const generateBtn  = document.getElementById('ppGenerateBtn');
     const actionStatus = document.getElementById('ppActionStatus');
+    const publishBtn   = document.getElementById('ppPublishBtn');
+    const publishStatus= document.getElementById('ppPublishStatus');
+    const labelInput   = document.getElementById('ppLabelInput');
+    const publishedByInput = document.getElementById('ppPublishedByInput');
+    const modulePicker = document.getElementById('ppModulePicker');
 
     if (!statusBlock) return;
 
     let _profile = null;
+
+    // ── Module picker definition ──────────────────────────────────────────────
+    const PUBLISHER_KEY = 'suite.practiceProfile.publisher';
+
+    const MODULE_DEFS = [
+      { id: 'knowledge',      label: 'Knowledge',                      defaultChecked: true,  defaultMode: 'replace', desc: 'The Knowledge tab — referral criteria, contacts, local pathways' },
+      { id: 'sentinel',       label: 'Sentinel',                       defaultChecked: true,  defaultMode: 'merge',   desc: 'Monitoring rules and custom rules' },
+      { id: 'reception',      label: 'Reception',                      defaultChecked: true,  defaultMode: 'merge',   desc: 'Reception capture pathways and which ones are enabled' },
+      { id: 'triage',         label: 'Triage Lens',                    defaultChecked: true,  defaultMode: 'merge',   desc: 'Triage Lens settings, custom rules and thresholds' },
+      { id: 'triageAlerts',   label: 'Triage Capacity Alerts',         defaultChecked: false, defaultMode: 'merge',   desc: 'Capacity-based triage alert rules' },
+      { id: 'slots',          label: 'Slot Counter',                   defaultChecked: true,  defaultMode: 'merge',   desc: 'Slot counter hidden types and alert rules' },
+      { id: 'submissions',    label: 'Submissions Tracker',            defaultChecked: true,  defaultMode: 'merge',   desc: 'Submissions config and thresholds' },
+      { id: 'capacity',       label: 'Capacity Forecast',              defaultChecked: true,  defaultMode: 'merge',   desc: 'Capacity forecast presets' },
+      { id: 'referrals',      label: 'Referrals',                      defaultChecked: false, defaultMode: 'merge',   desc: 'Referrals tracker config (not locally discovered data)' },
+      { id: 'requestMonitor', label: 'Request Monitor',                defaultChecked: false, defaultMode: 'merge',   desc: 'Request monitor config and assignee' },
+      { id: 'suite',          label: 'Practice code &amp; feedback email', defaultChecked: true,  defaultMode: 'merge',   desc: 'Practice code and feedback email only — never personal display prefs' },
+    ];
+
+    // ── IndexedDB helpers for FileSystemFileHandle persistence ───────────────
+
+    function openHandleDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('medicus-suite-pp', 1);
+        req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror   = (e) => reject(e.target.error);
+      });
+    }
+
+    async function loadFileHandle() {
+      try {
+        const db = await openHandleDB();
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction('handles', 'readonly');
+          const req = tx.objectStore('handles').get('profileFile');
+          req.onsuccess = (e) => resolve(e.target.result || null);
+          req.onerror   = (e) => reject(e.target.error);
+        });
+      } catch (_) { return null; }
+    }
+
+    async function saveFileHandle(handle) {
+      try {
+        const db = await openHandleDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction('handles', 'readwrite');
+          const req = tx.objectStore('handles').put(handle, 'profileFile');
+          req.onsuccess = () => resolve();
+          req.onerror   = (e) => reject(e.target.error);
+        });
+      } catch (_) {}
+    }
+
+    // ── Status helpers ────────────────────────────────────────────────────────
 
     function setPPStatus(msg, isError = false) {
       if (!actionStatus) return;
@@ -625,6 +683,15 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       if (msg) setTimeout(() => { if (actionStatus.textContent === msg) actionStatus.textContent = ''; }, 4000);
     }
 
+    function setPublishStatus(msg, isError = false) {
+      if (!publishStatus) return;
+      publishStatus.textContent = msg;
+      publishStatus.style.color = isError ? '#ef4444' : 'var(--text-3)';
+      if (msg) setTimeout(() => { if (publishStatus.textContent === msg) publishStatus.textContent = ''; }, 6000);
+    }
+
+    // ── Render status block ───────────────────────────────────────────────────
+
     async function render() {
       _profile = await window.PracticeProfile.fetchProfile();
       const stored = await window.PracticeProfile.getStatus();
@@ -632,8 +699,8 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       if (!_profile) {
         statusBlock.innerHTML =
           `<span style="color:var(--text-3);">No <code>practice-profile.json</code> found in the extension folder.</span><br>` +
-          `<span style="font-size:11px; color:var(--text-3);">Use <em>Generate profile from current settings</em> to create one, ` +
-          `then drop it into the extension folder. See the setup guide below.</span>`;
+          `<span style="font-size:11px; color:var(--text-3);">Use <em>Publish to shared folder</em> below to create one. ` +
+          `See the setup guide for first-time instructions.</span>`;
         if (badge) badge.style.display = 'none';
         if (applyBtn) applyBtn.style.display = 'none';
         return;
@@ -644,20 +711,23 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       const hasUpdate       = currentVersion !== incomingVersion;
       const appliedAt       = stored?.lastAppliedAt ? new Date(stored.lastAppliedAt).toLocaleString() : null;
       const autoApply       = _profile.apply?.autoApplyOnStartup !== false;
-      const mode            = _profile.apply?.mode || 'mergeMissing';
 
       let html =
         `<div><strong>Profile found:</strong> ${escHtml(_profile.profileLabel || '(no label)')}</div>` +
         `<div><strong>Version in folder:</strong> <code style="font-family:var(--mono);font-size:11px">${escHtml(incomingVersion)}</code></div>` +
-        `<div><strong>Mode:</strong> ${escHtml(mode)} &nbsp;·&nbsp; Auto-apply on startup: ${autoApply ? 'yes' : 'no'}</div>`;
+        `<div><strong>Auto-apply on startup:</strong> ${autoApply ? 'yes' : 'no'}</div>`;
 
       if (stored?.lastAppliedVersion) {
         html += `<div style="margin-top:4px;"><strong>Last applied:</strong> ` +
           `<code style="font-family:var(--mono);font-size:11px">${escHtml(stored.lastAppliedVersion)}</code>` +
-          ` on ${escHtml(appliedAt || '—')} ` +
-          `<span style="font-size:11px; color:var(--text-3);">(${escHtml(stored.lastAppliedMode || mode)})</span></div>`;
+          ` on ${escHtml(appliedAt || '—')}` +
+          `</div>`;
       } else {
         html += `<div style="margin-top:4px; color:var(--text-3);">Not yet applied on this install.</div>`;
+      }
+
+      if (stored?.lastCheckedAt) {
+        html += `<div style="margin-top:4px; font-size:11px; color:var(--text-3);">This PC last looked for profile updates at ${escHtml(new Date(stored.lastCheckedAt).toLocaleString())}.</div>`;
       }
 
       if (hasUpdate) {
@@ -669,7 +739,225 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       if (applyBtn) applyBtn.style.display = (hasUpdate || !stored?.lastAppliedVersion) ? '' : 'none';
     }
 
+    // ── Build module picker rows ──────────────────────────────────────────────
+
+    async function buildModulePicker() {
+      if (!modulePicker) return;
+
+      // Load persisted publisher state
+      let saved = {};
+      try {
+        const r = await chrome.storage.local.get(PUBLISHER_KEY);
+        saved = r[PUBLISHER_KEY] || {};
+      } catch (_) {}
+
+      // Pre-fill label and publishedBy
+      if (labelInput) {
+        const existingLabel = _profile?.profileLabel || saved.label || '';
+        labelInput.value = existingLabel;
+      }
+      if (publishedByInput) {
+        let byVal = saved.publishedBy || _profile?.publishedBy || '';
+        if (!byVal) {
+          try {
+            const r = await chrome.storage.local.get('suite.feedbackEmail');
+            byVal = r['suite.feedbackEmail'] || '';
+          } catch (_) {}
+        }
+        publishedByInput.value = byVal;
+      }
+
+      modulePicker.innerHTML = '';
+
+      for (const mod of MODULE_DEFS) {
+        const savedMod = (saved.modules || {})[mod.id] || {};
+        const isChecked = savedMod.checked !== undefined ? savedMod.checked : mod.defaultChecked;
+        const modeVal   = savedMod.mode    !== undefined ? savedMod.mode    : mod.defaultMode;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px; background:var(--bg-mid);';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.id = `ppMod_${mod.id}`;
+        chk.checked = isChecked;
+        chk.style.cssText = 'width:14px; height:14px; flex-shrink:0; cursor:pointer;';
+
+        const lbl = document.createElement('label');
+        lbl.htmlFor = `ppMod_${mod.id}`;
+        lbl.innerHTML = `<span style="font-weight:500; color:var(--text-1);">${mod.label}</span> <span style="color:var(--text-3);">— ${escHtml(mod.desc)}</span>`;
+        lbl.style.cssText = 'flex:1; cursor:pointer; line-height:1.4;';
+
+        const sel = document.createElement('select');
+        sel.id = `ppModMode_${mod.id}`;
+        sel.style.cssText = 'font-size:10px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; background:var(--bg-elev); color:var(--text-1); cursor:pointer;';
+        const optMerge   = document.createElement('option');
+        optMerge.value   = 'merge';
+        optMerge.textContent = 'Fill gaps only (merge)';
+        const optReplace = document.createElement('option');
+        optReplace.value = 'replace';
+        optReplace.textContent = 'Enforce for everyone (replace)';
+        sel.appendChild(optMerge);
+        sel.appendChild(optReplace);
+        sel.value = modeVal;
+
+        row.appendChild(chk);
+        row.appendChild(lbl);
+        row.appendChild(sel);
+        modulePicker.appendChild(row);
+      }
+    }
+
+    // ── Persist picker state ──────────────────────────────────────────────────
+
+    async function savePickerState() {
+      const modules = {};
+      for (const mod of MODULE_DEFS) {
+        const chk = document.getElementById(`ppMod_${mod.id}`);
+        const sel = document.getElementById(`ppModMode_${mod.id}`);
+        modules[mod.id] = {
+          checked: chk ? chk.checked : mod.defaultChecked,
+          mode:    sel ? sel.value   : mod.defaultMode,
+        };
+      }
+      const state = {
+        label:      labelInput?.value || '',
+        publishedBy: publishedByInput?.value || '',
+        modules,
+      };
+      try {
+        await chrome.storage.local.set({ [PUBLISHER_KEY]: state });
+      } catch (_) {}
+    }
+
+    // ── Version auto-bump ─────────────────────────────────────────────────────
+
+    async function nextProfileVersion() {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      try {
+        const existing = await window.PracticeProfile.fetchProfile();
+        if (existing && existing.profileVersion) {
+          const m = existing.profileVersion.match(/^(\d{4}-\d{2}-\d{2})\.(\d+)$/);
+          if (m && m[1] === today) {
+            return `${today}.${parseInt(m[2], 10) + 1}`;
+          }
+        }
+      } catch (_) {}
+      return `${today}.1`;
+    }
+
+    // ── Write to file helper ──────────────────────────────────────────────────
+
+    async function writeProfileToHandle(handle, json) {
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+    }
+
+    // ── Publish handler ───────────────────────────────────────────────────────
+
+    async function doPublish() {
+      if (!publishBtn) return;
+      publishBtn.disabled = true;
+      publishBtn.textContent = 'Publishing…';
+
+      try {
+        await savePickerState();
+
+        const label      = labelInput?.value?.trim() || 'Practice defaults';
+        const publishedBy= publishedByInput?.value?.trim() || '';
+        const version    = await nextProfileVersion();
+
+        // Build apply.modules map
+        const applyModules = {};
+        for (const mod of MODULE_DEFS) {
+          const chk = document.getElementById(`ppMod_${mod.id}`);
+          const sel = document.getElementById(`ppModMode_${mod.id}`);
+          if (chk && chk.checked) {
+            applyModules[mod.id] = (sel && sel.value === 'replace') ? 'replace' : 'merge';
+          }
+        }
+
+        const envelope = await doFullExport();
+
+        const profileJson = {
+          format:        'medicus-suite-practice-profile',
+          formatVersion: 2,
+          profileVersion: version,
+          profileLabel:  label,
+          publishedAt:   new Date().toISOString(),
+          publishedBy:   publishedBy,
+          apply: {
+            modules:              applyModules,
+            autoApplyOnStartup:   true,
+            checkEveryMinutes:    15,
+            autoReloadOnNewVersion: true,
+            notifyUserOnApply:    false,
+          },
+          envelope,
+        };
+
+        const jsonStr = JSON.stringify(profileJson, null, 2);
+
+        // Try remembered handle first
+        let usedHandle = null;
+        if (typeof showSaveFilePicker === 'function') {
+          const remembered = await loadFileHandle();
+          if (remembered) {
+            try {
+              let perm = await remembered.queryPermission({ mode: 'readwrite' });
+              if (perm !== 'granted') {
+                perm = await remembered.requestPermission({ mode: 'readwrite' });
+              }
+              if (perm === 'granted') {
+                await writeProfileToHandle(remembered, jsonStr);
+                usedHandle = remembered;
+                setPublishStatus(`Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`);
+              }
+            } catch (_) {
+              // Permission denied or stale handle — fall through to picker
+            }
+          }
+
+          if (!usedHandle) {
+            // Show save picker
+            let handle;
+            try {
+              handle = await showSaveFilePicker({
+                suggestedName: 'practice-profile.json',
+                types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+              });
+            } catch (err) {
+              if (err && err.name === 'AbortError') {
+                setPublishStatus('Publish cancelled.');
+                return;
+              }
+              throw err;
+            }
+            await writeProfileToHandle(handle, jsonStr);
+            await saveFileHandle(handle);
+            usedHandle = handle;
+            setPublishStatus(`Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`);
+          }
+        } else {
+          // Fallback: download via blob
+          downloadJson(profileJson, 'practice-profile.json');
+          setPublishStatus(`Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`);
+        }
+
+        await render();
+      } catch (e) {
+        setPublishStatus('Publish failed: ' + e.message, true);
+      } finally {
+        publishBtn.disabled = false;
+        publishBtn.textContent = 'Publish to shared folder';
+      }
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+
     await render();
+    await buildModulePicker();
 
     checkBtn?.addEventListener('click', async () => {
       checkBtn.disabled = true;
@@ -705,35 +993,7 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       applyBtn.textContent = 'Apply now';
     });
 
-    generateBtn?.addEventListener('click', async () => {
-      generateBtn.disabled = true;
-      generateBtn.textContent = 'Generating…';
-      try {
-        const envelope = await doFullExport();
-        const stamp = new Date().toISOString().slice(0, 10);
-        const practiceProfile = {
-          format:        'medicus-suite-practice-profile',
-          formatVersion: 1,
-          profileVersion: stamp + '.1',
-          profileLabel:  'Your Practice Name — Default Settings',
-          publishedAt:   new Date().toISOString(),
-          publishedBy:   '',
-          apply: {
-            mode:               'mergeMissing',
-            modules:            ['sentinel', 'triage', 'submissions', 'slots', 'capacity'],
-            autoApplyOnStartup: true,
-            notifyUserOnApply:  false,
-          },
-          envelope,
-        };
-        downloadJson(practiceProfile, 'practice-profile.json');
-        setPPStatus('Downloaded — edit profileLabel, profileVersion, and publishedBy, then save to the extension folder.');
-      } catch (e) {
-        setPPStatus('Could not generate: ' + e.message, true);
-      }
-      generateBtn.disabled = false;
-      generateBtn.textContent = 'Generate profile from current settings';
-    });
+    publishBtn?.addEventListener('click', doPublish);
 
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);

@@ -48,4 +48,5 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { requestMonitorExport, requestMonitorImport, REQUEST_MONITOR_KEYS };
   }
-})(typeof window !== 'undefined' ? window : self);
+// Works in extension pages (window === self) and service workers (no window).
+})(typeof self !== 'undefined' ? self : this);

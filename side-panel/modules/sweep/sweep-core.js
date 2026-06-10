@@ -208,6 +208,136 @@ export function extractBookedPatients(raw, opts) {
 //
 // Sort order for actionRows: most red first, then most amber, then name.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// chipInstruction(chip)
+//
+// Translate one action-needed chip into a literal instruction a receptionist
+// can act on without clinical knowledge. Receptionists BOOK and FLAG — they
+// never make clinical decisions, so every instruction is either "book X" or
+// "flag to the duty clinician". Returns { action, detail } or null when the
+// chip is not action-needed.
+// ---------------------------------------------------------------------------
+
+// QOF indicator code prefix → plain-English booking instruction. Codes are
+// like HYP010 / DM006 — the leading letters identify the clinical area.
+// Anything unmapped falls back to a generic review booking; the detail line
+// always carries the real indicator code + name so the clinician can verify.
+const QOF_ACTION_BY_PREFIX = [
+  ['HYP',  'Book a blood pressure check'],
+  ['BP',   'Book a blood pressure check'],
+  ['DM',   'Book a diabetes review'],
+  ['AST',  'Book an asthma review'],
+  ['COPD', 'Book a COPD review'],
+  ['SMOK', 'Ask for and record smoking status'],
+  ['CHD',  'Book a long-term condition review'],
+  ['HF',   'Book a long-term condition review'],
+  ['AF',   'Book a long-term condition review'],
+  ['STIA', 'Book a long-term condition review'],
+  ['PAD',  'Book a long-term condition review'],
+  ['CKD',  'Book a long-term condition review'],
+  ['MH',   'Book an annual health check'],
+  ['SMI',  'Book an annual health check'],
+  ['LD',   'Book an annual health check'],
+];
+
+export function chipInstruction(chip) {
+  if (!chip || !isActionNeeded(chip.status)) return null;
+
+  if (chip.type === 'drug-monitoring') {
+    const dueTests = (chip.tests || [])
+      .filter(t => t && (t.status === 'overdue' || t.status === 'stale' || t.status === 'due_soon'))
+      .map(t => t.name || t.testName)
+      .filter(Boolean);
+    const drug = chip.drugName || 'monitored medication';
+    if (dueTests.length > 0) {
+      return {
+        action: `Book a blood test appointment: ${dueTests.join(', ')}`,
+        detail: `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}`,
+      };
+    }
+    return { action: 'Book a monitoring blood test', detail: `${drug} monitoring ${chip.status === 'due_soon' ? 'due soon' : 'overdue'}` };
+  }
+
+  if (chip.type === 'qof-indicator') {
+    const code = String(chip.indicatorCode || '').toUpperCase();
+    const hit = QOF_ACTION_BY_PREFIX.find(([prefix]) => code.startsWith(prefix));
+    return {
+      action: hit ? hit[1] : 'Book a review appointment',
+      detail: `${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}`,
+    };
+  }
+
+  if (chip.type === 'vaccine') {
+    return {
+      action: `Offer to book: ${chip.displayName || 'vaccination'}`,
+      detail: 'eligible this season — double-check eligibility on the record',
+    };
+  }
+
+  // Everything else (alerts, event counts, registers, combos, trends) is a
+  // clinical judgement — reception's only safe action is to hand it on.
+  const label = chip.drugName || chip.indicatorCode || chip.label || chip.displayName || chip.registerName || chip.ruleId || 'alert';
+  return { action: 'Flag to the duty clinician', detail: String(label) };
+}
+
+// ---------------------------------------------------------------------------
+// buildHandout(actionRows, meta)
+//
+// Build the printable reception worklist from the sweep's action rows.
+// Pure: no DOM, no chrome APIs — the caller renders it.
+//
+// meta: { runAt, clinician (or null = all), suiteVersion }
+//
+// Returns {
+//   generatedAt, clinician, suiteVersion,
+//   patients: [{ time, name, clinician, redCount, amberCount,
+//                actions: [{ action, detail }],   // deduplicated, red-first order preserved
+//                hasHiddenActionChips }]
+// }
+// Patients are ordered by appointment time (the order reception works in),
+// not severity. Identical action+detail pairs are deduplicated per patient
+// (two overdue tests on one drug rule must not print twice).
+// ---------------------------------------------------------------------------
+export function buildHandout(actionRows, meta) {
+  const m = meta || {};
+  const patients = (actionRows || []).map(row => {
+    const seen = new Set();
+    const actions = [];
+    for (const chip of (row.chips || [])) {
+      const instr = chipInstruction(chip);
+      if (!instr) continue;
+      const key = `${instr.action}|${instr.detail || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      actions.push(instr);
+    }
+    return {
+      time: row.time || null,
+      name: row.name || 'Unknown patient',
+      clinician: row.clinician || null,
+      redCount: row.redCount || 0,
+      amberCount: row.amberCount || 0,
+      actions,
+      hasHiddenActionChips: !!row.hasHiddenActionChips,
+    };
+  }).filter(p => p.actions.length > 0);
+
+  // Reception works the day in appointment order.
+  patients.sort((a, b) => {
+    if (!a.time && !b.time) return (a.name || '').localeCompare(b.name || '');
+    if (!a.time) return 1;
+    if (!b.time) return -1;
+    return a.time < b.time ? -1 : a.time > b.time ? 1 : 0;
+  });
+
+  return {
+    generatedAt: m.runAt || new Date().toISOString(),
+    clinician: m.clinician || null,
+    suiteVersion: m.suiteVersion || '',
+    patients,
+  };
+}
+
 export function summariseSweep(perPatientResults) {
   const actionRows = [];
   const clearRows = [];

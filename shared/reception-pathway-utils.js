@@ -415,4 +415,5 @@ be reviewed clinically and then toggled on explicitly in the Reception settings.
   } else {
     global.ReceptionPathwayUtils = api;
   }
-})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : global));
+// Works in extension pages (window === self) and service workers (no window).
+})(typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : global));

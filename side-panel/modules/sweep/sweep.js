@@ -24,7 +24,10 @@
 //  - Does NOT apply sentinel.hiddenRules suppression (a recall worklist must
 //    not inherit per-workstation dismissals), but flags when hidden rules
 //    would cover action chips so the clinician is not confused.
-//  - No new chrome.storage keys — results are ephemeral (in-memory only).
+//  - Results are ephemeral (in-memory only). The single exception is the
+//    transient 'sweep.handout' key: the printable reception handout payload,
+//    written on "Print reception handout" and read once by handout.html in a
+//    new tab (overwritten on each print; allowlisted in test-backup-coverage).
 //  - Evaluation path: SentinelApiClient.fetchAll → SentinelNormalisers.normaliseAll
 //    → SentinelRules.evaluatePatient — identical to sentinel.js / content-scripts.
 //  - Rule loading: SentinelRulesetIo.mergeRules with canonical JSON + overrides,
@@ -37,6 +40,7 @@ import {
   extractBookedPatients,
   summariseSweep,
   isActionNeeded,
+  buildHandout,
   MAX_SWEEP_PATIENTS,
 } from './sweep-core.js';
 
@@ -59,6 +63,7 @@ let _sweepRules        = null; // rules loaded at sweep start (cached for contin
 let _sweepHiddenRules  = {};   // hidden rules snapshot for current sweep session
 let _sweepApiBase      = '';   // API base URL for current sweep session
 let _sweepMeta         = null; // { missingUuidCount, runAt }
+let _lastActionRows    = [];   // action rows from the last render — source for the printable handout
 
 // Cached rules (invalidated on storage change, same as sentinel.js)
 let _mergedRulesCache     = null;
@@ -436,11 +441,16 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
     ? `<strong>${actionCount} of ${processedCount}</strong> patients checked so far have action-needed alerts.`
     : `<strong>No action-needed alerts</strong> found across ${processedCount} patient${processedCount === 1 ? '' : 's'} checked.`;
 
+  const printBtn = actionCount > 0
+    ? `<button class="sweep-print-btn" type="button" title="Open a printable to-do list for reception">Print reception handout</button>`
+    : '';
+
   const resultsHtml = `
     <div class="sweep-results" id="sweepResults">
       <div class="sweep-results-header">
         <div class="sweep-summary-line">${summaryLine}</div>
         <div class="sweep-timestamp">Run at ${esc(fmtTs(runAt))}</div>
+        ${printBtn}
       </div>
 
       <div class="sweep-disclaimer">
@@ -457,12 +467,16 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
       ${clearSection}
     </div>`;
 
+  _lastActionRows = actionRows;
+
   const runArea = container.querySelector('.sweep-run-area');
   if (runArea) {
     runArea.innerHTML = resultsHtml;
     // Attach Continue handler if the button was rendered
     const continueBtn = runArea.querySelector('.sweep-continue-btn');
     if (continueBtn) continueBtn.addEventListener('click', onContinueClick);
+    const handoutBtn = runArea.querySelector('.sweep-print-btn');
+    if (handoutBtn) handoutBtn.addEventListener('click', onPrintHandout);
   }
 
   // Reset Run sweep button
@@ -472,6 +486,21 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
     btn.disabled = false;
   }
   _running = false;
+}
+
+// Build the printable reception handout from the latest results and open it
+// in a full tab. The model is handed over via the transient 'sweep.handout'
+// key (overwritten on every print) because a fresh tab cannot receive an
+// in-memory object — handout.html re-reads it on load, so refresh works.
+async function onPrintHandout() {
+  if (!_lastActionRows.length) return;
+  const model = buildHandout(_lastActionRows, {
+    runAt: _sweepMeta?.runAt || new Date().toISOString(),
+    clinician: _selectedClinician || null,
+    suiteVersion: chrome.runtime.getManifest().version,
+  });
+  await chrome.storage.local.set({ 'sweep.handout': model });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/handout.html') });
 }
 
 // Neutral notice (e.g. genuinely empty appointment book) — not a failure.

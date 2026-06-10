@@ -81,6 +81,7 @@ const NON_KEY_SUBSTRINGS = ['/'];
 const KEY_PREFIXES = [
   'sentinel', 'capacity', 'triage', 'triagelens', 'slots', 'submissions',
   'popout', 'referrals', 'suite', 'condor', 'config', 'day', 'knowledge',
+  'sweep',
 ];
 
 function hasKeyPrefix(k) {
@@ -141,9 +142,15 @@ const ALLOWLIST = new Set([
   // OS window handle — session-transient (documented in shared/io/popout-io.js):
   'popout.windowId',
 
+  // Transient print payload — written on "Print reception handout", read by
+  // handout.html, overwritten on every print. Not user config (documented in
+  // side-panel/modules/sweep/sweep.js):
+  'sweep.handout',
+
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile',                   // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions',  // which profile versions have been notified
+  'suite.practiceProfile.publisher',         // Publisher-PC UI state for the practice-profile publish flow — not user config
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',
