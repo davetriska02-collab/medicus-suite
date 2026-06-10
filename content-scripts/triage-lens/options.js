@@ -74,9 +74,33 @@
   // ============================================================
   // INITIAL RENDER
   // ============================================================
+  // Mirror of the content script's non-destructive defaults migration: when
+  // shipped defaults are newer than the stored config, append builtin rules
+  // the user doesn't have (honouring removedBuiltins tombstones) and any
+  // missing threshold / pref / systemChip keys. Never overwrites user edits.
+  const mergeShippedDefaults = (cfg, shipped) => {
+    if (!cfg || !Array.isArray(cfg.rules) || !shipped) return null;
+    if ((cfg.version || 0) >= (shipped.version || 0)) return null;
+    const out = { ...cfg, rules: [...cfg.rules] };
+    const have = new Set(out.rules.map(r => r && r.id));
+    const removed = new Set(out.removedBuiltins || []);
+    for (const r of shipped.rules || []) {
+      if (r.builtin && !have.has(r.id) && !removed.has(r.id)) out.rules.push(r);
+    }
+    out.thresholds = { ...(shipped.thresholds || {}), ...(cfg.thresholds || {}) };
+    out.prefs = { ...(shipped.prefs || {}), ...(cfg.prefs || {}) };
+    out.systemChips = { ...(shipped.systemChips || {}), ...(cfg.systemChips || {}) };
+    out.version = shipped.version;
+    return out;
+  };
+
   const init = async () => {
     DEFAULTS = await fetchDefaults();
     CONFIG = await loadConfig();
+    const merged = mergeShippedDefaults(CONFIG, DEFAULTS);
+    if (merged) {
+      await saveConfig(merged);
+    }
     $('#tlVersion').textContent = 'v' + (chrome.runtime.getManifest()?.version || '');
     setupTabs();
     setupRulesPane();
@@ -193,6 +217,11 @@
       row.querySelector('[data-act="del"]').addEventListener('click', async () => {
         if (!confirm(`Delete rule "${rule.label}"? This can't be undone (unless you reset to defaults).`)) return;
         CONFIG.rules = CONFIG.rules.filter(r => r.id !== rule.id);
+        // Tombstone deleted builtins so the defaults-version merge never
+        // resurrects a rule the user deliberately removed.
+        if (rule.builtin) {
+          CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), rule.id])];
+        }
         await saveConfig(CONFIG);
         flash('Deleted');
         renderRules();

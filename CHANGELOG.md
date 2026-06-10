@@ -2,6 +2,65 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.46.0] — 2026-06-10
+
+### Feature: Triage Lens — major baseline-rule expansion (52 new rules) + defaults migration
+
+A clinically verified expansion of the shipped Triage Lens rule set, covering
+the highest-value silent-miss presentations in UK GP total triage. Researched
+across 8 clinical domains, then adversarially verified (dedupe, severity
+calibration, over-broad pattern pruning, NICE-anchor checking) before
+implementation. `defaults.json` schema version bumped to 2.
+
+**New red rules (17):** stroke/TIA (FAST), sepsis (fever+deterioration combos),
+anaphylaxis, meningitis/non-blanching rash, AAA/dissection, testicular torsion,
+PE/DVT/acute limb ischaemia, acute surgical abdomen, fever in infant <3m
+(NG143), paediatric respiratory distress, seizure (first/febrile/ongoing),
+pregnancy bleeding/pain (?ectopic/miscarriage), reduced fetal movements
+(GTG57 → maternity triage), pre-eclampsia symptoms, sudden visual loss
+(detachment/GCA), septic arthritis, psychosis (first-episode).
+
+**New amber rules (27):** NG12 2WW flags (visible haematuria, post-menopausal
+bleeding, breast lump/change, dysphagia + persistent hoarseness, testicular
+lump, adult jaundice), diabetes problems (DKA/HHS/hypo red flags + sick-day
+rules), child dehydration, infant bilious/projectile vomiting, head injury
+(NG232 incl. anticoagulant→CT), limping child, neonatal jaundice (NG98),
+chickenpox/shingles in pregnancy, emergency contraception (time windows +
+Pharmacy First), mastitis (feeding-context only — de-conflicted from breast
+2WW), heavy menstrual bleeding (NG88), postpartum bleeding/infection, painful
+red eye (gated on pain/photophobia/vision), sudden hearing loss (SSNHL),
+significant epistaxis, gout (NG219), cellulitis, medication side effects,
+acute confusion/delirium, alcohol misuse, eating disorders (MEED), perinatal
+mental health.
+
+**New info rules (8):** dental signposting, blood-result queries, referral
+chasing, letter/report requests, travel health, weight-loss-injection requests
+(GLP-1, current NICE TA status), DNACPR/ACP/LPA admin, memory concerns.
+
+**Modified existing rules:** `sore-throat` no longer owns persistent dysphagia
+(moved to the 2WW rule); `cough-resp` gains reliever-overuse/poor-control
+patterns + an RCP-3-Questions / acute-severity action note; `mh-crisis` gains
+postpartum-psychosis and thoughts-of-harming-baby patterns.
+
+**Engine improvements:**
+- **Defaults migration (the big one):** a stored config previously shadowed
+  shipped defaults forever, so existing users would never have received new
+  builtin rules without a destructive reset. `loadConfig` (content script and
+  options page) now performs a version-gated, non-destructive merge: appends
+  shipped builtin rules the user doesn't have, plus missing
+  threshold/pref/systemChip keys; never overwrites user customisations.
+  Builtins the user deliberately deleted are tombstoned (`removedBuiltins`)
+  and stay deleted.
+- **Severity-ordered chips:** rule chips now render red → amber → info instead
+  of config order, so a red can never trail an info chip.
+
+**New regression test:** `test-triage-rule-patterns.js` compiles every shipped
+pattern under the engine's exact wrapping semantics (the engine silently skips
+invalid regexes — a silent clinical miss), pins schema invariants, and asserts
+~90 positive/negative match examples for the high-risk rules (including
+guards against over-broad stems: "confused about my medication", "hangover",
+"my eye is red", "fell out with my sister" must not fire).
+
 ## [v3.45.1] — 2026-06-10
 
 ### UX: Triage Lens — LLM rule generator moves inside the "New rule" form
