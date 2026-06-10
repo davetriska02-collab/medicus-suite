@@ -11,10 +11,11 @@
 // In a browser context the IIFE assigns to global.RuleCurrency.
 // In a Node/test context module.exports is set.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   const STALE_DAYS = 365;
+  const RED_DAYS = 540;
 
   // Parse "QOF YYYY/YY" from a specVersion string.
   // Returns { startYear, endYear } or null if unparseable.
@@ -70,7 +71,13 @@
 
   // Assess a single file entry.
   // Returns { id, lastUpdated, specVersion, ageDays, level, message }
-  function assessFile(file, todayISO) {
+  // level: 'green' | 'amber' | 'red'
+  // red = materially wrong content (QOF year mismatch, ended vaccine season,
+  //       or age > RED_DAYS); amber = stale but not materially wrong or age unknown.
+  function assessFile(file, todayISO, opts) {
+    const staleDays = opts && opts.staleDays != null ? opts.staleDays : STALE_DAYS;
+    const redDays = opts && opts.redDays != null ? opts.redDays : RED_DAYS;
+
     const id = file.id || '';
     const lastUpdated = file.lastUpdated || null;
     const specVersion = file.specVersion || null;
@@ -83,45 +90,49 @@
     if (ageDays === null) {
       level = 'amber';
       message = 'lastUpdated missing or unparseable — currency unknown.';
-    } else if (ageDays > STALE_DAYS) {
+    } else if (ageDays > redDays) {
+      level = 'red';
+      message = `Last updated ${ageDays} days ago (>${redDays}d) — needs urgent review.`;
+    } else if (ageDays > staleDays) {
       level = 'amber';
-      message = `Last updated ${ageDays} days ago (>${STALE_DAYS}d).`;
+      message = `Last updated ${ageDays} days ago (>${staleDays}d).`;
     }
 
-    // QOF-specific check (id === 'qof')
+    // QOF-specific check (id === 'qof') — QOF year mismatch is materially wrong → red
     if (id === 'qof' && specVersion) {
       const parsed = parseQofSpecVersion(specVersion);
       if (!parsed) {
-        if (level !== 'amber') {
+        if (level === 'green') {
           level = 'amber';
           message = `Could not parse QOF year from specVersion "${specVersion}".`;
         }
       } else {
         // QOF year YYYY/YY runs 1 April YYYY – 31 March (YYYY+1).
         // A file becomes mismatched once today is on or after 1 April (endYear),
-        // i.e. the next QOF year has started.
+        // i.e. the next QOF year has started. This is materially wrong → red.
         const nextYearStart = todayISO >= `${parsed.endYear}-04-01`;
         if (nextYearStart) {
-          level = 'amber';
+          level = 'red';
           message = `QOF year mismatch: file encodes "${parsed.startYear}/${String(parsed.endYear).slice(-2)}" but today (${todayISO}) is in QOF ${parsed.endYear}/${String(parsed.endYear + 1).slice(-2)}.`;
         }
       }
     }
 
-    // Vaccine-season check (id === 'vaccine')
+    // Vaccine-season check (id === 'vaccine') — ended season is materially wrong → red
     if (id === 'vaccine' && specVersion) {
       const parsed = parseSeasonSpecVersion(specVersion);
       if (!parsed) {
-        if (level !== 'amber') {
+        if (level === 'green') {
           level = 'amber';
           message = `Could not parse vaccine season from specVersion "${specVersion}".`;
         }
       } else {
         // Season YYYY/YY goes stale from 1 September of endYear
         // (2025/26 → stale from 2026-09-01, when 2026/27 should exist).
+        // An ended season is materially wrong (wrong eligibility) → red.
         const staleCutoff = `${parsed.endYear}-09-01`;
         if (todayISO >= staleCutoff) {
-          level = 'amber';
+          level = 'red';
           message = `Vaccine season "${parsed.startYear}/${String(parsed.endYear).slice(-2)}" ended — the ${parsed.endYear}/${String(parsed.endYear + 1).slice(-2)} season file should be available.`;
         }
       }
@@ -136,19 +147,25 @@
    * @param {Array<{id: string, lastUpdated: string|null, specVersion: string|null}>} files
    *   One entry per rule file. id values: 'drug', 'qof', 'vaccine', 'alert'.
    * @param {string} todayISO  Today's date in 'YYYY-MM-DD' format.
-   * @returns {{ overall: 'green'|'amber', files: Array, warnings: string[] }}
+   * @param {object} [opts]    Optional overrides. Defaults: { staleDays: 365, redDays: 540 }.
+   *   opts.staleDays: age threshold (days) for amber. Backwards-compatible: omit for default.
+   *   opts.redDays:   age threshold (days) for red. Ignored for QOF/vaccine content checks
+   *                   which are always red when mismatched.
+   * @returns {{ overall: 'green'|'amber'|'red', files: Array, warnings: string[] }}
    */
-  function assessRuleCurrency(files, todayISO) {
+  function assessRuleCurrency(files, todayISO, opts) {
     if (!Array.isArray(files) || files.length === 0) {
       return { overall: 'amber', files: [], warnings: ['No rule file metadata provided.'] };
     }
 
-    const assessed = files.map(f => assessFile(f, todayISO));
+    const assessed = files.map((f) => assessFile(f, todayISO, opts));
     const warnings = assessed
-      .filter(f => f.level === 'amber' && f.message)
-      .map(f => f.message);
+      .filter((f) => (f.level === 'amber' || f.level === 'red') && f.message)
+      .map((f) => f.message);
 
-    const overall = assessed.some(f => f.level === 'amber') ? 'amber' : 'green';
+    const hasRed = assessed.some((f) => f.level === 'red');
+    const hasAmber = assessed.some((f) => f.level === 'amber');
+    const overall = hasRed ? 'red' : hasAmber ? 'amber' : 'green';
     return { overall, files: assessed, warnings };
   }
 
@@ -159,5 +176,4 @@
   } else {
     global.RuleCurrency = api;
   }
-
-})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : global));
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : global);

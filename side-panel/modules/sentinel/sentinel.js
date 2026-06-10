@@ -315,7 +315,13 @@ async function loadRuleCurrencyFooter() {
 
     const summaryText = [qofLabel, drugDateLabel ? `drug rules ${drugDateLabel}` : ''].filter(Boolean).join(' · ');
 
-    if (result.overall === 'amber') {
+    if (result.overall === 'red') {
+      _ruleCurrencyFooter =
+        `<div class="sent-rules-footer sent-rules-footer-red" title="${escHtml(result.warnings.join(' | '))}">` +
+        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}` +
+        `</div>`;
+    } else if (result.overall === 'amber') {
       _ruleCurrencyFooter =
         `<div class="sent-rules-footer sent-rules-footer-amber" title="${escHtml(result.warnings.join(' | '))}">` +
         `<span class="sent-rules-footer-icon">&#9888;</span> ` +

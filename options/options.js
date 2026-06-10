@@ -7,12 +7,12 @@
 (function applyDisplayPrefs() {
   function apply(prefs) {
     prefs = prefs || {};
-    document.documentElement.setAttribute('data-theme',      prefs.theme      || 'light');
-    document.documentElement.setAttribute('data-size',       prefs.size       || 'medium');
+    document.documentElement.setAttribute('data-theme', prefs.theme || 'light');
+    document.documentElement.setAttribute('data-size', prefs.size || 'medium');
     document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
   }
-  chrome.storage.local.get('suite.display', r => apply(r['suite.display'] || {}));
-  chrome.storage.onChanged.addListener(changes => {
+  chrome.storage.local.get('suite.display', (r) => apply(r['suite.display'] || {}));
+  chrome.storage.onChanged.addListener((changes) => {
     if (changes['suite.display']) apply(changes['suite.display'].newValue || {});
   });
 })();
@@ -34,8 +34,15 @@
 
 // ── Helpers (hoisted to top so any subsequent code can use them) ──────────────
 
-function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escAttr(s) { return escHtml(s).replace(/"/g,'&quot;'); }
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, '&quot;');
+}
 
 const CAP_WEEKDAYS = [
   { key: 'mon', label: 'Mon' },
@@ -55,8 +62,8 @@ function capDefaultMinimumByDay(legacyMin) {
 function capPresetMinimumSummary(p) {
   const mins = p.minimumByDay;
   if (!mins) return `Min ${p.minimumPerDay || 0}/day`;
-  const values = CAP_WEEKDAYS.map(d => mins[d.key] || 0);
-  const allSame = values.slice(0, 5).every(v => v === values[0]);
+  const values = CAP_WEEKDAYS.map((d) => mins[d.key] || 0);
+  const allSame = values.slice(0, 5).every((v) => v === values[0]);
   if (allSame && values[5] === 0 && values[6] === 0) return `Min ${values[0]}/weekday`;
   const wkTotal = values.reduce((a, b) => a + b, 0);
   return `Min ${wkTotal}/week`;
@@ -64,11 +71,11 @@ function capPresetMinimumSummary(p) {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-document.querySelectorAll('.nav-item').forEach(btn => {
+document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.section;
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.opt-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.opt-section').forEach((s) => s.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(`sect-${target}`)?.classList.add('active');
   });
@@ -93,13 +100,13 @@ const testConnectionResult = document.getElementById('testConnectionResult');
   try {
     // Load saved fallback
     if (practiceCodeInput) {
-      chrome.storage.local.get(['suite.practiceCode'], res => {
+      chrome.storage.local.get(['suite.practiceCode'], (res) => {
         practiceCodeInput.value = res['suite.practiceCode'] || '';
       });
     }
     // Load saved feedback recipient email
     if (feedbackEmailInput) {
-      chrome.storage.local.get(['suite.feedbackEmail'], res => {
+      chrome.storage.local.get(['suite.feedbackEmail'], (res) => {
         feedbackEmailInput.value = res['suite.feedbackEmail'] || '';
       });
     }
@@ -109,15 +116,18 @@ const testConnectionResult = document.getElementById('testConnectionResult');
       const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
       for (const tab of tabs) {
         const m = tab.url && tab.url.match(/england\.medicus\.health\/([a-f0-9]{4,8})\//i);
-        if (m?.[1]) { detected = m[1].toLowerCase(); break; }
+        if (m?.[1]) {
+          detected = m[1].toLowerCase();
+          break;
+        }
       }
     } catch (_) {}
     if (detected) {
-      if (codeDetectedRow)   codeDetectedRow.style.display = 'flex';
+      if (codeDetectedRow) codeDetectedRow.style.display = 'flex';
       if (codeDetectedValue) codeDetectedValue.textContent = detected;
       if (codeNotDetectedRow) codeNotDetectedRow.style.display = 'none';
     } else {
-      if (codeDetectedRow)    codeDetectedRow.style.display = 'none';
+      if (codeDetectedRow) codeDetectedRow.style.display = 'none';
       if (codeNotDetectedRow) codeNotDetectedRow.style.display = 'block';
     }
   } catch (e) {
@@ -151,7 +161,10 @@ testConnectionBtn?.addEventListener('click', async () => {
     const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     for (const tab of tabs) {
       const m = tab.url && tab.url.match(/england\.medicus\.health\/([a-f0-9]{4,8})\//i);
-      if (m?.[1]) { code = m[1].toLowerCase(); break; }
+      if (m?.[1]) {
+        code = m[1].toLowerCase();
+        break;
+      }
     }
   } catch (_) {}
   if (!code) {
@@ -201,7 +214,10 @@ async function loadAvailableTypes() {
     const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     for (const t of tabs) {
       const m = t.url && t.url.match(/england\.medicus\.health\/([a-f0-9]{4,8})\//i);
-      if (m?.[1]) { siteId = m[1].toLowerCase(); break; }
+      if (m?.[1]) {
+        siteId = m[1].toLowerCase();
+        break;
+      }
     }
   } catch (e) {}
   if (!siteId) {
@@ -216,9 +232,11 @@ async function loadAvailableTypes() {
     if (!r.ok) return [];
     const d = await r.json();
     return (d.appointmentTypeOptions || [])
-      .map(t => ({ id: t.label, name: t.label }))
+      .map((t) => ({ id: t.label, name: t.label }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 async function renderPresetEditor() {
@@ -229,7 +247,12 @@ async function renderPresetEditor() {
 
   presetEditor.innerHTML = `
     <div class="preset-list">
-      ${presets.length === 0 ? '<div style="color:var(--text-4);font-size:12px;padding:8px 0">No presets yet — create one below.</div>' : presets.map(p => `
+      ${
+        presets.length === 0
+          ? '<div style="color:var(--text-4);font-size:12px;padding:8px 0">No presets yet — create one below.</div>'
+          : presets
+              .map(
+                (p) => `
         <div class="preset-card">
           <div class="preset-card-header">
             <div class="preset-card-name">${escHtml(p.name)}</div>
@@ -242,29 +265,37 @@ async function renderPresetEditor() {
             <span>${capPresetMinimumSummary(p)}</span>
             <span>Tight at ${p.thresholds?.tight ?? 75}%</span>
             <span>Low at ${p.thresholds?.low ?? 50}%</span>
-            <span>${p.slotTypes.length} slot type${p.slotTypes.length!==1?'s':''}</span>
+            <span>${p.slotTypes.length} slot type${p.slotTypes.length !== 1 ? 's' : ''}</span>
           </div>
           <div class="preset-card-types">${escHtml(p.slotTypes.slice(0, 3).join(', '))}${p.slotTypes.length > 3 ? ` and ${p.slotTypes.length - 3} more` : ''}</div>
         </div>
-      `).join('')}
+      `
+              )
+              .join('')
+      }
     </div>
     <button class="add-preset-btn" id="addPresetBtn">+ New preset</button>
   `;
 
-  presetEditor.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openForm(b.dataset.edit)));
-  presetEditor.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => deletePreset(b.dataset.delete)));
+  presetEditor
+    .querySelectorAll('[data-edit]')
+    .forEach((b) => b.addEventListener('click', () => openForm(b.dataset.edit)));
+  presetEditor
+    .querySelectorAll('[data-delete]')
+    .forEach((b) => b.addEventListener('click', () => deletePreset(b.dataset.delete)));
   presetEditor.querySelector('#addPresetBtn')?.addEventListener('click', () => openForm(null));
 }
 
 async function openForm(presetId) {
   editingPresetId = presetId;
   const { 'capacity.presets': presets = [] } = await chrome.storage.local.get('capacity.presets');
-  const editingRaw = presetId ? presets.find(p => p.id === presetId) : null;
+  const editingRaw = presetId ? presets.find((p) => p.id === presetId) : null;
   const editing = editingRaw
     ? { ...editingRaw, minimumByDay: editingRaw.minimumByDay || capDefaultMinimumByDay(editingRaw.minimumPerDay) }
     : null;
   const p = editing || {
-    name: '', slotTypes: [],
+    name: '',
+    slotTypes: [],
     minimumByDay: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 20, sat: 0, sun: 0 },
     thresholds: { tight: 75, low: 50 },
   };
@@ -274,15 +305,17 @@ async function openForm(presetId) {
   }
 
   // Merge available types with any saved types not currently visible (so unknown saved types still show)
-  const allTypeNames = new Set([...availableTypes.map(t => t.name), ...p.slotTypes]);
+  const allTypeNames = new Set([...availableTypes.map((t) => t.name), ...p.slotTypes]);
   const sortedTypes = Array.from(allTypeNames).sort();
 
-  const weekdayInputs = CAP_WEEKDAYS.map(d => `
+  const weekdayInputs = CAP_WEEKDAYS.map(
+    (d) => `
     <div class="cap-day-min">
       <label class="cap-day-min-label">${d.label}</label>
       <input type="number" class="cap-day-min-input" data-day="${d.key}" value="${p.minimumByDay[d.key] ?? 0}" min="0" max="999" />
     </div>
-  `).join('');
+  `
+  ).join('');
 
   presetEditor.innerHTML = `
     <div class="preset-form">
@@ -312,12 +345,20 @@ async function openForm(presetId) {
       <div class="form-row full">
         <label>Slot types (${p.slotTypes.length} selected)</label>
         <div class="types-multiselect" id="fTypes">
-          ${sortedTypes.length === 0 ? '<div style="color:var(--text-4);padding:8px;font-size:11px;font-family:var(--sans)">No slot types loaded. Set the practice code in Suite tab first.</div>' : sortedTypes.map(t => `
+          ${
+            sortedTypes.length === 0
+              ? '<div style="color:var(--text-4);padding:8px;font-size:11px;font-family:var(--sans)">No slot types loaded. Set the practice code in Suite tab first.</div>'
+              : sortedTypes
+                  .map(
+                    (t) => `
             <label class="type-check-row">
               <input type="checkbox" value="${escAttr(t)}" ${p.slotTypes.includes(t) ? 'checked' : ''} />
               <label>${escHtml(t)}</label>
             </label>
-          `).join('')}
+          `
+                  )
+                  .join('')
+          }
         </div>
       </div>
       <div class="form-actions">
@@ -331,7 +372,7 @@ async function openForm(presetId) {
   presetEditor.querySelector('#fCancel').addEventListener('click', renderPresetEditor);
   presetEditor.querySelector('#fCopyMon')?.addEventListener('click', () => {
     const monVal = presetEditor.querySelector('input[data-day="mon"]').value;
-    ['tue', 'wed', 'thu', 'fri'].forEach(d => {
+    ['tue', 'wed', 'thu', 'fri'].forEach((d) => {
       const el = presetEditor.querySelector(`input[data-day="${d}"]`);
       if (el) el.value = monVal;
     });
@@ -341,7 +382,7 @@ async function openForm(presetId) {
 async function savePreset(editing) {
   const name = presetEditor.querySelector('#fName').value.trim();
   const minimumByDay = {};
-  CAP_WEEKDAYS.forEach(d => {
+  CAP_WEEKDAYS.forEach((d) => {
     const el = presetEditor.querySelector(`input[data-day="${d.key}"]`);
     minimumByDay[d.key] = parseInt(el?.value, 10) || 0;
   });
@@ -349,24 +390,46 @@ async function savePreset(editing) {
   const lowRaw = parseInt(presetEditor.querySelector('#fLow').value, 10);
   const tight = Number.isFinite(tightRaw) ? tightRaw : 75;
   const low = Number.isFinite(lowRaw) ? lowRaw : 50;
-  const slotTypes = Array.from(presetEditor.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(i => i.value);
+  const slotTypes = Array.from(presetEditor.querySelectorAll('#fTypes input[type=checkbox]:checked')).map(
+    (i) => i.value
+  );
 
-  if (!name) { alert('Preset needs a name.'); return; }
-  if (slotTypes.length === 0) { alert('Select at least one slot type.'); return; }
-  if (tight < 0 || low < 0) { alert('Thresholds must be non-negative.'); return; }
-  if (low >= tight) { alert('Low threshold must be below Tight threshold.'); return; }
-  if (tight >= 100 || low >= 100) { alert('Thresholds must be below 100%.'); return; }
+  if (!name) {
+    alert('Preset needs a name.');
+    return;
+  }
+  if (slotTypes.length === 0) {
+    alert('Select at least one slot type.');
+    return;
+  }
+  if (tight < 0 || low < 0) {
+    alert('Thresholds must be non-negative.');
+    return;
+  }
+  if (low >= tight) {
+    alert('Low threshold must be below Tight threshold.');
+    return;
+  }
+  if (tight >= 100 || low >= 100) {
+    alert('Thresholds must be below 100%.');
+    return;
+  }
 
   const { 'capacity.presets': presets = [] } = await chrome.storage.local.get('capacity.presets');
 
   const preset = editing
     ? { ...editing, name, slotTypes, minimumByDay, thresholds: { tight, low } }
-    : { id: 'p_' + Math.random().toString(36).slice(2, 10), name, slotTypes, minimumByDay, thresholds: { tight, low }, createdAt: new Date().toISOString() };
+    : {
+        id: 'p_' + Math.random().toString(36).slice(2, 10),
+        name,
+        slotTypes,
+        minimumByDay,
+        thresholds: { tight, low },
+        createdAt: new Date().toISOString(),
+      };
   delete preset.minimumPerDay;
 
-  const updated = editing
-    ? presets.map(p => p.id === editing.id ? preset : p)
-    : [...presets, preset];
+  const updated = editing ? presets.map((p) => (p.id === editing.id ? preset : p)) : [...presets, preset];
 
   await chrome.storage.local.set({ 'capacity.presets': updated });
 
@@ -380,15 +443,18 @@ async function savePreset(editing) {
 
 async function deletePreset(presetId) {
   if (!confirm('Delete this preset?')) return;
-  const { 'capacity.presets': presets = [], 'capacity.activePresetId': activeId } = await chrome.storage.local.get(['capacity.presets', 'capacity.activePresetId']);
-  const updated = presets.filter(p => p.id !== presetId);
-  const newActive = activeId === presetId ? (updated[0]?.id || null) : activeId;
+  const { 'capacity.presets': presets = [], 'capacity.activePresetId': activeId } = await chrome.storage.local.get([
+    'capacity.presets',
+    'capacity.activePresetId',
+  ]);
+  const updated = presets.filter((p) => p.id !== presetId);
+  const newActive = activeId === presetId ? updated[0]?.id || null : activeId;
   await chrome.storage.local.set({ 'capacity.presets': updated, 'capacity.activePresetId': newActive });
   renderPresetEditor();
 }
 
 // Render editor when Capacity tab is opened
-document.querySelectorAll('.nav-item').forEach(btn => {
+document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.dataset.section === 'capacity') renderPresetEditor();
   });
@@ -403,7 +469,20 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 //     storage key, update the relevant shared/io/<module>-io.js only. ---
 
 async function doFullExport() {
-  const [sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, knowledge] = await Promise.all([
+  const [
+    sentinel,
+    capacity,
+    triage,
+    triageAlerts,
+    slots,
+    submissions,
+    popout,
+    referrals,
+    requestMonitor,
+    condor,
+    reception,
+    knowledge,
+  ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
     triageExport(),
@@ -418,23 +497,37 @@ async function doFullExport() {
     knowledgeExport(),
   ]);
   const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap('suite', { sentinel, capacity, triage, triageAlerts, slots, submissions, popout, referrals, requestMonitor, condor, reception, knowledge, suite });
+  return window.SuiteEnvelope.wrap('suite', {
+    sentinel,
+    capacity,
+    triage,
+    triageAlerts,
+    slots,
+    submissions,
+    popout,
+    referrals,
+    requestMonitor,
+    condor,
+    reception,
+    knowledge,
+    suite,
+  });
 }
 
 async function doModuleExport(scope) {
   const exporters = {
-    sentinel:      () => sentinelExport(),
-    capacity:      () => capacityExport(),
-    triage:        () => triageExport(),
-    triageAlerts:  () => TriageAlertIO.exportData(),
-    slots:         () => slotCounterExport(),
-    submissions:   () => submissionsExport(),
-    popout:        () => popoutExport(),
-    referrals:     () => referralsExport(),
+    sentinel: () => sentinelExport(),
+    capacity: () => capacityExport(),
+    triage: () => triageExport(),
+    triageAlerts: () => TriageAlertIO.exportData(),
+    slots: () => slotCounterExport(),
+    submissions: () => submissionsExport(),
+    popout: () => popoutExport(),
+    referrals: () => referralsExport(),
     requestMonitor: () => requestMonitorExport(),
-    condor:        () => condorExport(),
-    reception:     () => receptionExport(),
-    knowledge:     () => knowledgeExport(),
+    condor: () => condorExport(),
+    reception: () => receptionExport(),
+    knowledge: () => knowledgeExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -447,19 +540,19 @@ async function applyEnvelope(envelope) {
   // Only include modules that are present in this backup (same mods.X && gating).
   // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
   const tasks = [
-    mods.sentinel      && (() => sentinelImport(mods.sentinel)),
-    mods.capacity      && (() => capacityImport(mods.capacity)),
-    mods.triage        && (() => triageImport(mods.triage)),
-    mods.triageAlerts  && (() => TriageAlertIO.importData(mods.triageAlerts)),
-    mods.slots         && (() => slotCounterImport(mods.slots)),
-    mods.submissions   && (() => submissionsImport(mods.submissions)),
-    mods.popout        && (() => popoutImport(mods.popout)),
-    mods.referrals     && (() => referralsImport(mods.referrals)),
+    mods.sentinel && (() => sentinelImport(mods.sentinel)),
+    mods.capacity && (() => capacityImport(mods.capacity)),
+    mods.triage && (() => triageImport(mods.triage)),
+    mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
+    mods.slots && (() => slotCounterImport(mods.slots)),
+    mods.submissions && (() => submissionsImport(mods.submissions)),
+    mods.popout && (() => popoutImport(mods.popout)),
+    mods.referrals && (() => referralsImport(mods.referrals)),
     mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
-    mods.condor        && (() => condorImport(mods.condor)),
-    mods.reception     && (() => receptionImport(mods.reception)),
-    mods.knowledge     && (() => knowledgeImport(mods.knowledge)),
-    mods.suite         && (() => suiteImport(mods.suite)),
+    mods.condor && (() => condorImport(mods.condor)),
+    mods.reception && (() => receptionImport(mods.reception)),
+    mods.knowledge && (() => knowledgeImport(mods.knowledge)),
+    mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
 }
@@ -468,7 +561,9 @@ function downloadJson(obj, filename) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  a.href = url;
+  a.download = filename;
+  a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
@@ -477,7 +572,9 @@ function setBackupStatus(msg, isError) {
   if (!el) return;
   el.textContent = msg;
   el.style.color = isError ? '#ef4444' : '#4ade80';
-  setTimeout(() => { el.textContent = ''; }, 4000);
+  setTimeout(() => {
+    el.textContent = '';
+  }, 4000);
 }
 
 // --- Pending import state ---
@@ -513,7 +610,10 @@ document.getElementById('importSuiteFile')?.addEventListener('change', async (e)
     const text = await file.text();
     const raw = JSON.parse(text);
     const { valid, errors, warnings, envelope } = window.SuiteEnvelope.unwrap(raw);
-    if (!valid) { setBackupStatus('Invalid backup: ' + errors.join('; '), true); return; }
+    if (!valid) {
+      setBackupStatus('Invalid backup: ' + errors.join('; '), true);
+      return;
+    }
     pendingEnvelope = envelope;
     const lines = window.SuiteEnvelope.previewEnvelope(envelope);
     const previewBox = document.getElementById('importPreviewBox');
@@ -556,7 +656,7 @@ document.getElementById('resetAllBtn')?.addEventListener('click', async () => {
 });
 
 // --- Per-module export/import ---
-document.querySelectorAll('[data-mod-export]').forEach(btn => {
+document.querySelectorAll('[data-mod-export]').forEach((btn) => {
   btn.addEventListener('click', async () => {
     const scope = btn.dataset.modExport;
     try {
@@ -570,7 +670,7 @@ document.querySelectorAll('[data-mod-export]').forEach(btn => {
   });
 });
 
-document.querySelectorAll('[data-mod-import]').forEach(btn => {
+document.querySelectorAll('[data-mod-import]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const scope = btn.dataset.modImport;
     const fileInput = btn.closest('.module-export-card')?.querySelector('.mod-file-input[data-mod="' + scope + '"]');
@@ -578,7 +678,7 @@ document.querySelectorAll('[data-mod-import]').forEach(btn => {
   });
 });
 
-document.querySelectorAll('.mod-file-input').forEach(input => {
+document.querySelectorAll('.mod-file-input').forEach((input) => {
   input.addEventListener('change', async (e) => {
     const scope = input.dataset.mod;
     const file = e.target.files?.[0];
@@ -588,7 +688,10 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       const text = await file.text();
       const raw = JSON.parse(text);
       const { valid, errors, warnings, envelope } = window.SuiteEnvelope.unwrap(raw, scope);
-      if (!valid) { setBackupStatus('Invalid file: ' + errors.join('; '), true); return; }
+      if (!valid) {
+        setBackupStatus('Invalid file: ' + errors.join('; '), true);
+        return;
+      }
       const lines = window.SuiteEnvelope.previewEnvelope(envelope);
       const msg = `Import ${scope}?\n\n${lines.join('\n')}${warnings.length ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`;
       if (!confirm(msg)) return;
@@ -607,14 +710,14 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
   try {
     if (!window.PracticeProfile) return;
 
-    const statusBlock  = document.getElementById('ppStatusBlock');
-    const badge        = document.getElementById('ppBadge');
-    const checkBtn     = document.getElementById('ppCheckBtn');
-    const applyBtn     = document.getElementById('ppApplyBtn');
+    const statusBlock = document.getElementById('ppStatusBlock');
+    const badge = document.getElementById('ppBadge');
+    const checkBtn = document.getElementById('ppCheckBtn');
+    const applyBtn = document.getElementById('ppApplyBtn');
     const actionStatus = document.getElementById('ppActionStatus');
-    const publishBtn   = document.getElementById('ppPublishBtn');
-    const publishStatus= document.getElementById('ppPublishStatus');
-    const labelInput   = document.getElementById('ppLabelInput');
+    const publishBtn = document.getElementById('ppPublishBtn');
+    const publishStatus = document.getElementById('ppPublishStatus');
+    const labelInput = document.getElementById('ppLabelInput');
     const publishedByInput = document.getElementById('ppPublishedByInput');
     const modulePicker = document.getElementById('ppModulePicker');
 
@@ -626,17 +729,83 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
     const PUBLISHER_KEY = 'suite.practiceProfile.publisher';
 
     const MODULE_DEFS = [
-      { id: 'knowledge',      label: 'Knowledge',                      defaultChecked: true,  defaultMode: 'replace', desc: 'The Knowledge tab — referral criteria, contacts, local pathways' },
-      { id: 'sentinel',       label: 'Sentinel',                       defaultChecked: true,  defaultMode: 'merge',   desc: 'Monitoring rules and custom rules' },
-      { id: 'reception',      label: 'Reception',                      defaultChecked: true,  defaultMode: 'merge',   desc: 'Reception capture pathways and which ones are enabled' },
-      { id: 'triage',         label: 'Triage Lens',                    defaultChecked: true,  defaultMode: 'merge',   desc: 'Triage Lens settings, custom rules and thresholds' },
-      { id: 'triageAlerts',   label: 'Triage Capacity Alerts',         defaultChecked: false, defaultMode: 'merge',   desc: 'Capacity-based triage alert rules' },
-      { id: 'slots',          label: 'Slot Counter',                   defaultChecked: true,  defaultMode: 'merge',   desc: 'Slot counter hidden types and alert rules' },
-      { id: 'submissions',    label: 'Submissions Tracker',            defaultChecked: true,  defaultMode: 'merge',   desc: 'Submissions config and thresholds' },
-      { id: 'capacity',       label: 'Capacity Forecast',              defaultChecked: true,  defaultMode: 'merge',   desc: 'Capacity forecast presets' },
-      { id: 'referrals',      label: 'Referrals',                      defaultChecked: false, defaultMode: 'merge',   desc: 'Referrals tracker config (not locally discovered data)' },
-      { id: 'requestMonitor', label: 'Request Monitor',                defaultChecked: false, defaultMode: 'merge',   desc: 'Request monitor config and assignee' },
-      { id: 'suite',          label: 'Practice code &amp; feedback email', defaultChecked: true,  defaultMode: 'merge',   desc: 'Practice code and feedback email only — never personal display prefs' },
+      {
+        id: 'knowledge',
+        label: 'Knowledge',
+        defaultChecked: true,
+        defaultMode: 'replace',
+        desc: 'The Knowledge tab — referral criteria, contacts, local pathways',
+      },
+      {
+        id: 'sentinel',
+        label: 'Sentinel',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Monitoring rules and custom rules',
+      },
+      {
+        id: 'reception',
+        label: 'Reception',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Reception capture pathways and which ones are enabled',
+      },
+      {
+        id: 'triage',
+        label: 'Triage Lens',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Triage Lens settings, custom rules and thresholds',
+      },
+      {
+        id: 'triageAlerts',
+        label: 'Triage Capacity Alerts',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Capacity-based triage alert rules',
+      },
+      {
+        id: 'slots',
+        label: 'Slot Counter',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Slot counter hidden types and alert rules',
+      },
+      {
+        id: 'submissions',
+        label: 'Submissions Tracker',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Submissions config and thresholds',
+      },
+      {
+        id: 'capacity',
+        label: 'Capacity Forecast',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Capacity forecast presets',
+      },
+      {
+        id: 'referrals',
+        label: 'Referrals',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Referrals tracker config (not locally discovered data)',
+      },
+      {
+        id: 'requestMonitor',
+        label: 'Request Monitor',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Request monitor config and assignee',
+      },
+      {
+        id: 'suite',
+        label: 'Practice code &amp; feedback email',
+        defaultChecked: true,
+        defaultMode: 'merge',
+        desc: 'Practice code and feedback email only — never personal display prefs',
+      },
     ];
 
     // ── IndexedDB helpers for FileSystemFileHandle persistence ───────────────
@@ -646,7 +815,7 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
         const req = indexedDB.open('medicus-suite-pp', 1);
         req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
         req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror   = (e) => reject(e.target.error);
+        req.onerror = (e) => reject(e.target.error);
       });
     }
 
@@ -657,9 +826,11 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
           const tx = db.transaction('handles', 'readonly');
           const req = tx.objectStore('handles').get('profileFile');
           req.onsuccess = (e) => resolve(e.target.result || null);
-          req.onerror   = (e) => reject(e.target.error);
+          req.onerror = (e) => reject(e.target.error);
         });
-      } catch (_) { return null; }
+      } catch (_) {
+        return null;
+      }
     }
 
     async function saveFileHandle(handle) {
@@ -669,7 +840,7 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
           const tx = db.transaction('handles', 'readwrite');
           const req = tx.objectStore('handles').put(handle, 'profileFile');
           req.onsuccess = () => resolve();
-          req.onerror   = (e) => reject(e.target.error);
+          req.onerror = (e) => reject(e.target.error);
         });
       } catch (_) {}
     }
@@ -680,14 +851,20 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       if (!actionStatus) return;
       actionStatus.textContent = msg;
       actionStatus.style.color = isError ? '#ef4444' : 'var(--text-3)';
-      if (msg) setTimeout(() => { if (actionStatus.textContent === msg) actionStatus.textContent = ''; }, 4000);
+      if (msg)
+        setTimeout(() => {
+          if (actionStatus.textContent === msg) actionStatus.textContent = '';
+        }, 4000);
     }
 
     function setPublishStatus(msg, isError = false) {
       if (!publishStatus) return;
       publishStatus.textContent = msg;
       publishStatus.style.color = isError ? '#ef4444' : 'var(--text-3)';
-      if (msg) setTimeout(() => { if (publishStatus.textContent === msg) publishStatus.textContent = ''; }, 6000);
+      if (msg)
+        setTimeout(() => {
+          if (publishStatus.textContent === msg) publishStatus.textContent = '';
+        }, 6000);
     }
 
     // ── Render status block ───────────────────────────────────────────────────
@@ -707,10 +884,10 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       }
 
       const incomingVersion = _profile.profileVersion;
-      const currentVersion  = stored?.lastAppliedVersion;
-      const hasUpdate       = currentVersion !== incomingVersion;
-      const appliedAt       = stored?.lastAppliedAt ? new Date(stored.lastAppliedAt).toLocaleString() : null;
-      const autoApply       = _profile.apply?.autoApplyOnStartup !== false;
+      const currentVersion = stored?.lastAppliedVersion;
+      const hasUpdate = currentVersion !== incomingVersion;
+      const appliedAt = stored?.lastAppliedAt ? new Date(stored.lastAppliedAt).toLocaleString() : null;
+      const autoApply = _profile.apply?.autoApplyOnStartup !== false;
 
       let html =
         `<div><strong>Profile found:</strong> ${escHtml(_profile.profileLabel || '(no label)')}</div>` +
@@ -718,7 +895,8 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
         `<div><strong>Auto-apply on startup:</strong> ${autoApply ? 'yes' : 'no'}</div>`;
 
       if (stored?.lastAppliedVersion) {
-        html += `<div style="margin-top:4px;"><strong>Last applied:</strong> ` +
+        html +=
+          `<div style="margin-top:4px;"><strong>Last applied:</strong> ` +
           `<code style="font-family:var(--mono);font-size:11px">${escHtml(stored.lastAppliedVersion)}</code>` +
           ` on ${escHtml(appliedAt || '—')}` +
           `</div>`;
@@ -736,7 +914,7 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
 
       statusBlock.innerHTML = html;
       if (badge) badge.style.display = hasUpdate ? '' : 'none';
-      if (applyBtn) applyBtn.style.display = (hasUpdate || !stored?.lastAppliedVersion) ? '' : 'none';
+      if (applyBtn) applyBtn.style.display = hasUpdate || !stored?.lastAppliedVersion ? '' : 'none';
     }
 
     // ── Build module picker rows ──────────────────────────────────────────────
@@ -772,10 +950,11 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       for (const mod of MODULE_DEFS) {
         const savedMod = (saved.modules || {})[mod.id] || {};
         const isChecked = savedMod.checked !== undefined ? savedMod.checked : mod.defaultChecked;
-        const modeVal   = savedMod.mode    !== undefined ? savedMod.mode    : mod.defaultMode;
+        const modeVal = savedMod.mode !== undefined ? savedMod.mode : mod.defaultMode;
 
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px; background:var(--bg-mid);';
+        row.style.cssText =
+          'display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px; background:var(--bg-mid);';
 
         const chk = document.createElement('input');
         chk.type = 'checkbox';
@@ -790,9 +969,10 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
 
         const sel = document.createElement('select');
         sel.id = `ppModMode_${mod.id}`;
-        sel.style.cssText = 'font-size:10px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; background:var(--bg-elev); color:var(--text-1); cursor:pointer;';
-        const optMerge   = document.createElement('option');
-        optMerge.value   = 'merge';
+        sel.style.cssText =
+          'font-size:10px; padding:2px 4px; border:1px solid var(--border); border-radius:4px; background:var(--bg-elev); color:var(--text-1); cursor:pointer;';
+        const optMerge = document.createElement('option');
+        optMerge.value = 'merge';
         optMerge.textContent = 'Fill gaps only (merge)';
         const optReplace = document.createElement('option');
         optReplace.value = 'replace';
@@ -817,11 +997,11 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
         const sel = document.getElementById(`ppModMode_${mod.id}`);
         modules[mod.id] = {
           checked: chk ? chk.checked : mod.defaultChecked,
-          mode:    sel ? sel.value   : mod.defaultMode,
+          mode: sel ? sel.value : mod.defaultMode,
         };
       }
       const state = {
-        label:      labelInput?.value || '',
+        label: labelInput?.value || '',
         publishedBy: publishedByInput?.value || '',
         modules,
       };
@@ -864,9 +1044,9 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
       try {
         await savePickerState();
 
-        const label      = labelInput?.value?.trim() || 'Practice defaults';
-        const publishedBy= publishedByInput?.value?.trim() || '';
-        const version    = await nextProfileVersion();
+        const label = labelInput?.value?.trim() || 'Practice defaults';
+        const publishedBy = publishedByInput?.value?.trim() || '';
+        const version = await nextProfileVersion();
 
         // Build apply.modules map
         const applyModules = {};
@@ -874,25 +1054,25 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
           const chk = document.getElementById(`ppMod_${mod.id}`);
           const sel = document.getElementById(`ppModMode_${mod.id}`);
           if (chk && chk.checked) {
-            applyModules[mod.id] = (sel && sel.value === 'replace') ? 'replace' : 'merge';
+            applyModules[mod.id] = sel && sel.value === 'replace' ? 'replace' : 'merge';
           }
         }
 
         const envelope = await doFullExport();
 
         const profileJson = {
-          format:        'medicus-suite-practice-profile',
+          format: 'medicus-suite-practice-profile',
           formatVersion: 2,
           profileVersion: version,
-          profileLabel:  label,
-          publishedAt:   new Date().toISOString(),
-          publishedBy:   publishedBy,
+          profileLabel: label,
+          publishedAt: new Date().toISOString(),
+          publishedBy: publishedBy,
           apply: {
-            modules:              applyModules,
-            autoApplyOnStartup:   true,
-            checkEveryMinutes:    15,
+            modules: applyModules,
+            autoApplyOnStartup: true,
+            checkEveryMinutes: 15,
             autoReloadOnNewVersion: true,
-            notifyUserOnApply:    false,
+            notifyUserOnApply: false,
           },
           envelope,
         };
@@ -912,7 +1092,9 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
               if (perm === 'granted') {
                 await writeProfileToHandle(remembered, jsonStr);
                 usedHandle = remembered;
-                setPublishStatus(`Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`);
+                setPublishStatus(
+                  `Published v${version} to ${remembered.name}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
+                );
               }
             } catch (_) {
               // Permission denied or stale handle — fall through to picker
@@ -937,12 +1119,16 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
             await writeProfileToHandle(handle, jsonStr);
             await saveFileHandle(handle);
             usedHandle = handle;
-            setPublishStatus(`Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`);
+            setPublishStatus(
+              `Published v${version}. Other PCs will pick it up within about 15 minutes, or on their next browser start.`
+            );
           }
         } else {
           // Fallback: download via blob
           downloadJson(profileJson, 'practice-profile.json');
-          setPublishStatus(`Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`);
+          setPublishStatus(
+            `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
+          );
         }
 
         await render();
@@ -969,7 +1155,11 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
         setPPStatus('No practice-profile.json found in the extension folder.');
       } else {
         const stored = await window.PracticeProfile.getStatus();
-        setPPStatus(stored?.lastAppliedVersion === _profile.profileVersion ? 'Up to date.' : 'New version available — click Apply now.');
+        setPPStatus(
+          stored?.lastAppliedVersion === _profile.profileVersion
+            ? 'Up to date.'
+            : 'New version available — click Apply now.'
+        );
       }
     });
 
@@ -994,7 +1184,6 @@ document.querySelectorAll('.mod-file-input').forEach(input => {
     });
 
     publishBtn?.addEventListener('click', doPublish);
-
   } catch (e) {
     console.warn('[Practice Profile section]', e.message);
   }
@@ -1014,15 +1203,19 @@ async function buildDebugState() {
   } catch (_) {}
 
   // Resolve practice code, show both sources
-  let tabCode = null, storageCode = null;
+  let tabCode = null,
+    storageCode = null;
   try {
     const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     for (const t of tabs) {
       const m = t.url && t.url.match(/england\.medicus\.health\/([a-f0-9]{4,8})\//i);
-      if (m?.[1]) { tabCode = m[1].toLowerCase(); break; }
+      if (m?.[1]) {
+        tabCode = m[1].toLowerCase();
+        break;
+      }
     }
     lines.push(`Open Medicus tabs: ${tabs.length}`);
-    tabs.forEach(t => lines.push(`  - ${t.url}`));
+    tabs.forEach((t) => lines.push(`  - ${t.url}`));
   } catch (e) {
     lines.push(`chrome.tabs.query failed: ${e.message}`);
   }
@@ -1039,7 +1232,8 @@ async function buildDebugState() {
   try {
     const r = await chrome.storage.local.get('submissions.config');
     const subCode = r['submissions.config']?.practiceCode;
-    if (subCode) lines.push(`Submissions config code: ${subCode}${subCode !== (tabCode || storageCode) ? ' ⚠ MISMATCH' : ''}`);
+    if (subCode)
+      lines.push(`Submissions config code: ${subCode}${subCode !== (tabCode || storageCode) ? ' ⚠ MISMATCH' : ''}`);
   } catch (_) {}
 
   lines.push('');
@@ -1048,10 +1242,12 @@ async function buildDebugState() {
   if (entries.length === 0) {
     lines.push('(no API calls recorded — open the side panel or popup to trigger one)');
   } else {
-    entries.slice(0, 20).forEach(e => {
+    entries.slice(0, 20).forEach((e) => {
       const t = e.ts.slice(11, 19);
       const tag = e.ok ? 'OK ' : 'ERR';
-      lines.push(`${t} ${tag} [${e.module}] status=${e.status ?? '-'} code=${e.code || '-'} src=${e.codeSource || '-'}`);
+      lines.push(
+        `${t} ${tag} [${e.module}] status=${e.status ?? '-'} code=${e.code || '-'} src=${e.codeSource || '-'}`
+      );
       if (e.error) lines.push(`         ${e.error}`);
     });
   }
@@ -1070,7 +1266,10 @@ document.getElementById('debugCopyBtn')?.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(text);
     const s = document.getElementById('debugCopyStatus');
-    if (s) { s.textContent = 'Copied ✓'; setTimeout(() => s.textContent = '', 2000); }
+    if (s) {
+      s.textContent = 'Copied ✓';
+      setTimeout(() => (s.textContent = ''), 2000);
+    }
   } catch (e) {
     // Fallback: select the text
     const el = document.getElementById('debugState');
@@ -1099,18 +1298,27 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
   lines.push(`Resolved code: ${code || '(none)'} (${source || 'no source'})`);
   if (!code) {
     lines.push('Cannot probe without a practice code. Open a Medicus tab or set one in Suite.');
-    results.innerHTML = lines.map(l => `<div>${l.replace(/</g,'&lt;')}</div>`).join('');
+    results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
     return;
   }
 
   const today = new Date().toISOString().slice(0, 10);
   const probes = [
-    { name: 'Waiting room',     url: `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments` },
-    { name: 'Appointment book', url: `https://${code}.api.england.medicus.health/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false` },
-    { name: 'Task list (admin)',url: `https://${code}.api.england.medicus.health/tasks/data/admin/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}` },
+    {
+      name: 'Waiting room',
+      url: `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments`,
+    },
+    {
+      name: 'Appointment book',
+      url: `https://${code}.api.england.medicus.health/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false`,
+    },
+    {
+      name: 'Task list (admin)',
+      url: `https://${code}.api.england.medicus.health/tasks/data/admin/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`,
+    },
   ];
 
-  results.innerHTML = lines.map(l => `<div>${l.replace(/</g,'&lt;')}</div>`).join('');
+  results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
   for (const p of probes) {
     const t0 = Date.now();
     let line;
@@ -1127,7 +1335,7 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
 });
 
 // Refresh debug state when the Debug tab is opened
-document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
+document.querySelectorAll('.nav-item[data-section="debug"]').forEach((btn) => {
   btn.addEventListener('click', refreshDebugState);
 });
 
@@ -1136,7 +1344,7 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
 // Triggered on load (sentinel section may be active) and when the tab is opened.
 
 (async function initRulesCurrencyCard() {
-  const bodyEl    = document.getElementById('rulesCurrencyBody');
+  const bodyEl = document.getElementById('rulesCurrencyBody');
   const overallEl = document.getElementById('rulesCurrencyOverall');
   if (!bodyEl) return;
 
@@ -1148,19 +1356,29 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
     try {
       const base = chrome.runtime.getURL('rules/');
       const [drug, qof, vax, alert, reception] = await Promise.all([
-        fetch(base + 'drug-rules.json').then(r => r.json()),
-        fetch(base + 'qof-rules.json').then(r => r.json()),
-        fetch(base + 'vaccine-rules.json').then(r => r.json()),
-        fetch(base + 'alert-library.json').then(r => r.json()),
-        fetch(base + 'reception-pathways.json').then(r => r.json()),
+        fetch(base + 'drug-rules.json').then((r) => r.json()),
+        fetch(base + 'qof-rules.json').then((r) => r.json()),
+        fetch(base + 'vaccine-rules.json').then((r) => r.json()),
+        fetch(base + 'alert-library.json').then((r) => r.json()),
+        fetch(base + 'reception-pathways.json').then((r) => r.json()),
       ]);
 
       const files = [
-        { id: 'drug',      lastUpdated: drug.lastUpdated,      specVersion: drug.specVersion,      displayName: 'Drug monitoring rules' },
-        { id: 'qof',       lastUpdated: qof.lastUpdated,       specVersion: qof.specVersion,       displayName: 'QOF rules' },
-        { id: 'vaccine',   lastUpdated: vax.lastUpdated,       specVersion: vax.specVersion,       displayName: 'Vaccine rules' },
-        { id: 'alert',     lastUpdated: alert.lastUpdated,     specVersion: alert.specVersion,     displayName: 'Alert library' },
-        { id: 'reception', lastUpdated: reception.lastUpdated, specVersion: reception.specVersion, displayName: 'Reception capture pathways' },
+        {
+          id: 'drug',
+          lastUpdated: drug.lastUpdated,
+          specVersion: drug.specVersion,
+          displayName: 'Drug monitoring rules',
+        },
+        { id: 'qof', lastUpdated: qof.lastUpdated, specVersion: qof.specVersion, displayName: 'QOF rules' },
+        { id: 'vaccine', lastUpdated: vax.lastUpdated, specVersion: vax.specVersion, displayName: 'Vaccine rules' },
+        { id: 'alert', lastUpdated: alert.lastUpdated, specVersion: alert.specVersion, displayName: 'Alert library' },
+        {
+          id: 'reception',
+          lastUpdated: reception.lastUpdated,
+          specVersion: reception.specVersion,
+          displayName: 'Reception capture pathways',
+        },
       ];
 
       const today = new Date().toISOString().slice(0, 10);
@@ -1169,7 +1387,11 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
       // Overall badge
       if (overallEl) {
         overallEl.style.display = '';
-        if (result.overall === 'amber') {
+        if (result.overall === 'red') {
+          overallEl.textContent = 'Needs urgent review';
+          overallEl.style.background = 'rgba(212,53,28,0.12)';
+          overallEl.style.color = 'var(--red, #d4351c)';
+        } else if (result.overall === 'amber') {
           overallEl.textContent = 'Needs review';
           overallEl.style.background = 'rgba(180,83,9,0.15)';
           overallEl.style.color = 'var(--amber, #b45309)';
@@ -1181,19 +1403,29 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
       }
 
       // File rows
-      const FILE_NAMES = { drug: 'Drug monitoring rules', qof: 'QOF rules', vaccine: 'Vaccine rules', alert: 'Alert library' };
-      const rows = result.files.map((f, i) => {
-        const displayName = files[i].displayName || FILE_NAMES[f.id] || f.id;
-        const levelColour = f.level === 'amber'
-          ? 'var(--amber, #b45309)'
-          : 'var(--green, #16a34a)';
-        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${levelColour};margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>`;
-        const ageStr = f.ageDays != null ? `${f.ageDays}d ago` : 'age unknown';
-        const specStr = f.specVersion ? escHtml(f.specVersion) : '<em style="color:var(--text-5)">none</em>';
-        const msgHtml = f.message
-          ? `<div style="font-size:11px;color:var(--amber,#b45309);margin-top:2px;">${escHtml(f.message)}</div>`
-          : '';
-        return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border);">
+      const FILE_NAMES = {
+        drug: 'Drug monitoring rules',
+        qof: 'QOF rules',
+        vaccine: 'Vaccine rules',
+        alert: 'Alert library',
+      };
+      const rows = result.files
+        .map((f, i) => {
+          const displayName = files[i].displayName || FILE_NAMES[f.id] || f.id;
+          const levelColour =
+            f.level === 'red'
+              ? 'var(--red, #d4351c)'
+              : f.level === 'amber'
+                ? 'var(--amber, #b45309)'
+                : 'var(--green, #16a34a)';
+          const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${levelColour};margin-right:6px;vertical-align:middle;flex-shrink:0;"></span>`;
+          const ageStr = f.ageDays != null ? `${f.ageDays}d ago` : 'age unknown';
+          const specStr = f.specVersion ? escHtml(f.specVersion) : '<em style="color:var(--text-5)">none</em>';
+          const msgColour = f.level === 'red' ? 'var(--red,#d4351c)' : 'var(--amber,#b45309)';
+          const msgHtml = f.message
+            ? `<div style="font-size:11px;color:${msgColour};margin-top:2px;">${escHtml(f.message)}</div>`
+            : '';
+          return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid var(--border);">
           <div style="flex-shrink:0;padding-top:2px;">${dot}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:500;color:var(--text-2);">${escHtml(displayName)}</div>
@@ -1201,15 +1433,19 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
             ${msgHtml}
           </div>
         </div>`;
-      }).join('');
+        })
+        .join('');
 
       // Warnings summary
+      const hasRedFile = result.files.some((f) => f.level === 'red');
+      const warnBg = hasRedFile ? 'rgba(212,53,28,0.08)' : 'rgba(180,83,9,0.08)';
+      const warnBdr = hasRedFile ? 'rgba(212,53,28,0.3)' : 'rgba(180,83,9,0.3)';
+      const warnClr = hasRedFile ? 'var(--red,#d4351c)' : 'var(--amber,#b45309)';
       const warnHtml = result.warnings.length
-        ? `<div style="margin-top:10px;padding:8px 10px;background:rgba(180,83,9,0.08);border:1px solid rgba(180,83,9,0.3);border-radius:6px;font-size:11px;color:var(--amber,#b45309);">${result.warnings.map(w => escHtml(w)).join('<br>')}</div>`
+        ? `<div style="margin-top:10px;padding:8px 10px;background:${warnBg};border:1px solid ${warnBdr};border-radius:6px;font-size:11px;color:${warnClr};">${result.warnings.map((w) => escHtml(w)).join('<br>')}</div>`
         : '';
 
       bodyEl.innerHTML = `<div style="margin:-4px 0;">${rows}</div>${warnHtml}`;
-
     } catch (err) {
       bodyEl.textContent = 'Could not load rule file metadata: ' + err.message;
     }
@@ -1223,21 +1459,21 @@ document.querySelectorAll('.nav-item[data-section="debug"]').forEach(btn => {
   }
 
   // Also refresh when the sentinel section is navigated to
-  document.querySelectorAll('.nav-item[data-section="sentinel"]').forEach(btn => {
+  document.querySelectorAll('.nav-item[data-section="sentinel"]').forEach((btn) => {
     btn.addEventListener('click', loadRulesCurrency);
   });
 })();
 
 // ── Request Monitor (v1.3) ────────────────────────────────────────────────────
 
-const rmEnabled       = document.getElementById('rmEnabled');
-const rmAssigneeId    = document.getElementById('rmAssigneeId');
-const rmPollSeconds   = document.getElementById('rmPollSeconds');
+const rmEnabled = document.getElementById('rmEnabled');
+const rmAssigneeId = document.getElementById('rmAssigneeId');
+const rmPollSeconds = document.getElementById('rmPollSeconds');
 const rmNotifyEnabled = document.getElementById('rmNotifyEnabled');
-const rmNotifySound   = document.getElementById('rmNotifySound');
-const rmConditional   = document.getElementById('rmConditionalFields');
-const rmSaveBtn       = document.getElementById('saveRm');
-const rmSavedTag      = document.getElementById('rmSaved');
+const rmNotifySound = document.getElementById('rmNotifySound');
+const rmConditional = document.getElementById('rmConditionalFields');
+const rmSaveBtn = document.getElementById('saveRm');
+const rmSavedTag = document.getElementById('rmSaved');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1250,11 +1486,11 @@ function toggleRmConditional() {
   try {
     if (!window.RequestMonitor) return;
     const cfg = await window.RequestMonitor.getConfig();
-    if (rmEnabled)       rmEnabled.checked       = !!cfg.enabled;
-    if (rmAssigneeId)    rmAssigneeId.value      = cfg.assigneeId || '';
-    if (rmPollSeconds)   rmPollSeconds.value     = cfg.pollSeconds || 60;
+    if (rmEnabled) rmEnabled.checked = !!cfg.enabled;
+    if (rmAssigneeId) rmAssigneeId.value = cfg.assigneeId || '';
+    if (rmPollSeconds) rmPollSeconds.value = cfg.pollSeconds || 60;
     if (rmNotifyEnabled) rmNotifyEnabled.checked = !!cfg.notifyEnabled;
-    if (rmNotifySound)   rmNotifySound.checked   = !!cfg.notifySound;
+    if (rmNotifySound) rmNotifySound.checked = !!cfg.notifySound;
     toggleRmConditional();
   } catch (e) {
     console.warn('[RM init]', e.message);
@@ -1276,7 +1512,11 @@ rmSaveBtn?.addEventListener('click', async () => {
       rmSavedTag.textContent = 'Invalid UUID — check format';
       rmSavedTag.style.color = '#f87171';
       rmSavedTag.classList.add('show');
-      setTimeout(() => { rmSavedTag.classList.remove('show'); rmSavedTag.textContent = 'Saved ✓'; rmSavedTag.style.color = ''; }, 3000);
+      setTimeout(() => {
+        rmSavedTag.classList.remove('show');
+        rmSavedTag.textContent = 'Saved ✓';
+        rmSavedTag.style.color = '';
+      }, 3000);
     }
     return;
   }
@@ -1295,7 +1535,7 @@ rmSaveBtn?.addEventListener('click', async () => {
     assigneeId,
     pollSeconds,
     notifyEnabled: !!rmNotifyEnabled?.checked,
-    notifySound:   !!rmNotifySound?.checked,
+    notifySound: !!rmNotifySound?.checked,
   });
 
   // Normalised values back to form
@@ -1318,7 +1558,9 @@ rmSaveBtn?.addEventListener('click', async () => {
     let rules = await window.TriageAlertIO.getRules();
 
     function renderRules() {
-      container.innerHTML = rules.map((rule, i) => `
+      container.innerHTML = rules
+        .map(
+          (rule, i) => `
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer; min-width:120px;">
             <input type="checkbox" class="ta-enabled" data-i="${i}" ${rule.enabled ? 'checked' : ''} />
@@ -1330,14 +1572,16 @@ rmSaveBtn?.addEventListener('click', async () => {
                    font-family:var(--mono); font-size:11px; border-radius:5px; padding:3px 6px;" />
           <span style="font-size:11px; color:var(--text-4);">tasks</span>
         </div>
-      `).join('');
+      `
+        )
+        .join('');
 
-      container.querySelectorAll('.ta-enabled').forEach(cb => {
+      container.querySelectorAll('.ta-enabled').forEach((cb) => {
         cb.addEventListener('change', () => {
           rules[+cb.dataset.i].enabled = cb.checked;
         });
       });
-      container.querySelectorAll('.ta-threshold').forEach(inp => {
+      container.querySelectorAll('.ta-threshold').forEach((inp) => {
         inp.addEventListener('change', () => {
           const v = parseInt(inp.value, 10);
           if (!isNaN(v) && v >= 1) rules[+inp.dataset.i].threshold = v;
@@ -1350,7 +1594,10 @@ rmSaveBtn?.addEventListener('click', async () => {
     document.getElementById('saveTriageAlerts')?.addEventListener('click', async () => {
       await window.TriageAlertIO.setRules(rules);
       const tag = document.getElementById('triageAlertSaved');
-      if (tag) { tag.classList.add('show'); setTimeout(() => tag.classList.remove('show'), 2000); }
+      if (tag) {
+        tag.classList.add('show');
+        setTimeout(() => tag.classList.remove('show'), 2000);
+      }
     });
   } catch (e) {
     console.warn('[Triage alerts init]', e.message);
@@ -1361,9 +1608,9 @@ rmSaveBtn?.addEventListener('click', async () => {
 
 (async function initSlotAlerts() {
   try {
-    const container  = document.getElementById('slotAlertRules');
-    const addBtn     = document.getElementById('addSlotAlertRule');
-    const savedTag   = document.getElementById('slotAlertSaved');
+    const container = document.getElementById('slotAlertRules');
+    const addBtn = document.getElementById('addSlotAlertRule');
+    const savedTag = document.getElementById('slotAlertSaved');
     if (!container || !addBtn) return;
 
     const r = await chrome.storage.local.get('slots.alertRules');
@@ -1371,7 +1618,10 @@ rmSaveBtn?.addEventListener('click', async () => {
 
     function save() {
       chrome.storage.local.set({ 'slots.alertRules': rules });
-      if (savedTag) { savedTag.classList.add('show'); setTimeout(() => savedTag.classList.remove('show'), 2000); }
+      if (savedTag) {
+        savedTag.classList.add('show');
+        setTimeout(() => savedTag.classList.remove('show'), 2000);
+      }
     }
 
     function renderRules() {
@@ -1391,11 +1641,20 @@ rmSaveBtn?.addEventListener('click', async () => {
           <span style="font-size:11px; color:var(--text-4);">slots</span>
           <button class="sar-delete ghost" style="padding:2px 8px; font-size:11px;" title="Remove rule">✕</button>
         `;
-        row.querySelector('.sar-enabled').addEventListener('change', e => { rules[i].enabled = e.target.checked; save(); });
-        row.querySelector('.sar-type').addEventListener('change', e => { rules[i].typeName = e.target.value.trim(); save(); });
-        row.querySelector('.sar-threshold').addEventListener('change', e => {
+        row.querySelector('.sar-enabled').addEventListener('change', (e) => {
+          rules[i].enabled = e.target.checked;
+          save();
+        });
+        row.querySelector('.sar-type').addEventListener('change', (e) => {
+          rules[i].typeName = e.target.value.trim();
+          save();
+        });
+        row.querySelector('.sar-threshold').addEventListener('change', (e) => {
           const v = parseInt(e.target.value, 10);
-          if (!isNaN(v) && v >= 0) { rules[i].threshold = v; save(); }
+          if (!isNaN(v) && v >= 0) {
+            rules[i].threshold = v;
+            save();
+          }
         });
         row.querySelector('.sar-delete').addEventListener('click', () => {
           rules.splice(i, 1);
@@ -1423,21 +1682,22 @@ rmSaveBtn?.addEventListener('click', async () => {
   try {
     const DEFAULT_THRESHOLDS = {
       medical: { amber: 30, red: 60, enabled: false },
-      admin:   { amber: 20, red: 40, enabled: false },
+      admin: { amber: 20, red: 40, enabled: false },
     };
     const LABELS = { medical: 'Medical requests', admin: 'Admin requests' };
 
-    const grid    = document.getElementById('submissionThresholds');
+    const grid = document.getElementById('submissionThresholds');
     const saveBtn = document.getElementById('saveSubmissionThresholds');
-    const status  = document.getElementById('submissionThresholdSaved');
+    const status = document.getElementById('submissionThresholdSaved');
     if (!grid || !saveBtn) return;
 
     const stored = await chrome.storage.local.get('submissions.thresholds');
     const thresholds = { ...DEFAULT_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
 
-    grid.innerHTML = Object.entries(LABELS).map(([key, label]) => {
-      const t = { ...DEFAULT_THRESHOLDS[key], ...(thresholds[key] || {}) };
-      return `
+    grid.innerHTML = Object.entries(LABELS)
+      .map(([key, label]) => {
+        const t = { ...DEFAULT_THRESHOLDS[key], ...(thresholds[key] || {}) };
+        return `
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span style="font-family:var(--mono);font-size:10px;color:var(--text-2);min-width:110px">${label}</span>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-3)">
@@ -1452,19 +1712,28 @@ rmSaveBtn?.addEventListener('click', async () => {
               style="width:54px;background:var(--bg-elev);border:1px solid var(--border-hi);color:var(--text-2);font-family:var(--mono);font-size:10px;border-radius:5px;padding:2px 5px">
           </label>
         </div>`;
-    }).join('');
+      })
+      .join('');
 
     saveBtn.addEventListener('click', async () => {
       const out = {};
       for (const key of Object.keys(LABELS)) {
         out[key] = {
           enabled: grid.querySelector(`[data-key="${key}"][data-field="enabled"]`)?.checked ?? false,
-          amber:   parseInt(grid.querySelector(`[data-key="${key}"][data-field="amber"]`)?.value) || DEFAULT_THRESHOLDS[key].amber,
-          red:     parseInt(grid.querySelector(`[data-key="${key}"][data-field="red"]`)?.value)   || DEFAULT_THRESHOLDS[key].red,
+          amber:
+            parseInt(grid.querySelector(`[data-key="${key}"][data-field="amber"]`)?.value) ||
+            DEFAULT_THRESHOLDS[key].amber,
+          red:
+            parseInt(grid.querySelector(`[data-key="${key}"][data-field="red"]`)?.value) || DEFAULT_THRESHOLDS[key].red,
         };
       }
       await chrome.storage.local.set({ 'submissions.thresholds': out });
-      if (status) { status.style.display = ''; setTimeout(() => { status.style.display = 'none'; }, 2000); }
+      if (status) {
+        status.style.display = '';
+        setTimeout(() => {
+          status.style.display = 'none';
+        }, 2000);
+      }
     });
   } catch (e) {
     console.warn('[Submission thresholds init]', e.message);
@@ -1474,17 +1743,17 @@ rmSaveBtn?.addEventListener('click', async () => {
 // ── Manual update check button (v3.0) ─────────────────────────────────────────
 
 (function initManualUpdateCheck() {
-  const btn    = document.getElementById('checkUpdateBtn');
+  const btn = document.getElementById('checkUpdateBtn');
   const result = document.getElementById('checkUpdateResult');
   if (!btn || !window.UpdateChecker) return;
 
   function formatTimeAgo(ts) {
     if (!ts) return 'never';
     const mins = Math.round((Date.now() - ts) / 60000);
-    if (mins < 1)   return 'just now';
-    if (mins < 60)  return `${mins} min ago`;
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
     const hrs = Math.round(mins / 60);
-    if (hrs < 24)   return `${hrs}h ago`;
+    if (hrs < 24) return `${hrs}h ago`;
     return `${Math.round(hrs / 24)}d ago`;
   }
 
@@ -1525,12 +1794,18 @@ rmSaveBtn?.addEventListener('click', async () => {
     try {
       const res = await window.UpdateChecker.checkForUpdate({ force: true });
       if (!res.ok) {
-        if (result) { result.textContent = `Check failed: ${res.error}`; result.style.color = '#ef4444'; }
+        if (result) {
+          result.textContent = `Check failed: ${res.error}`;
+          result.style.color = '#ef4444';
+        }
       } else {
         await setIdleStatus();
       }
     } catch (e) {
-      if (result) { result.textContent = `Check failed: ${e.message}`; result.style.color = '#ef4444'; }
+      if (result) {
+        result.textContent = `Check failed: ${e.message}`;
+        result.style.color = '#ef4444';
+      }
     }
     btn.disabled = false;
     btn.textContent = originalText;
@@ -1551,7 +1826,8 @@ rmSaveBtn?.addEventListener('click', async () => {
     async function render() {
       const state = await window.UpdateChecker.getState();
       const installed = window.UpdateChecker.getInstalledVersion();
-      const available = state.latestVersion && installed && window.UpdateChecker.isNewer(state.latestVersion, installed);
+      const available =
+        state.latestVersion && installed && window.UpdateChecker.isNewer(state.latestVersion, installed);
 
       if (!available) {
         banner.style.display = 'none';
@@ -1567,8 +1843,8 @@ rmSaveBtn?.addEventListener('click', async () => {
     await render();
 
     // Re-render whenever the stored update state changes
-    chrome.storage.onChanged.addListener(changes => {
-      if (Object.keys(changes).some(k => k.startsWith('suite.update.'))) render();
+    chrome.storage.onChanged.addListener((changes) => {
+      if (Object.keys(changes).some((k) => k.startsWith('suite.update.'))) render();
     });
 
     // Buttons
@@ -1603,7 +1879,7 @@ rmSaveBtn?.addEventListener('click', async () => {
 
 (function initReceptionSection() {
   const PU = window.ReceptionPathwayUtils;
-  const $ = id => document.getElementById(id);
+  const $ = (id) => document.getElementById(id);
   if (!$('rcpoPathwayList') || !PU) return;
 
   const DISCLAIMER_HTML = `
@@ -1626,11 +1902,15 @@ rmSaveBtn?.addEventListener('click', async () => {
       </div>
     </div>`;
 
-  let _bundled = null;      // pathways json doc
-  let _editing = null;      // { pathway, origin } while editor open
+  let _bundled = null; // pathways json doc
+  let _editing = null; // { pathway, origin } while editor open
 
   async function getState() {
-    const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides']);
+    const r = await chrome.storage.local.get([
+      'reception.config',
+      'reception.customPathways',
+      'reception.pathwayOverrides',
+    ]);
     return {
       config: r['reception.config'] || {},
       custom: r['reception.customPathways'] || [],
@@ -1656,7 +1936,7 @@ rmSaveBtn?.addEventListener('click', async () => {
     const host = $('rcpoDisclaimerBody');
     if (!host) return;
     if (config.disclaimerAcceptedAt) {
-      const enabledCount = resolved.all.filter(e => e.enabled).length;
+      const enabledCount = resolved.all.filter((e) => e.enabled).length;
       host.innerHTML = `
         <div style="font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <span>Disclaimer accepted ${escHtml(String(config.disclaimerAcceptedAt).slice(0, 10))} · ${enabledCount}/${resolved.all.length} pathway(s) enabled.</span>
@@ -1680,24 +1960,33 @@ rmSaveBtn?.addEventListener('click', async () => {
       exp.innerHTML = DISCLAIMER_HTML;
       const tick = $('rcpoDisclaimerTick');
       const accept = $('rcpoDisclaimerAccept');
-      tick?.addEventListener('change', () => { accept.disabled = !tick.checked; });
+      tick?.addEventListener('change', () => {
+        accept.disabled = !tick.checked;
+      });
       accept?.addEventListener('click', async () => {
         await setConfig({ disclaimerAcceptedAt: new Date().toISOString() });
         await setAllEnabled(true);
       });
-      $('rcpoDisclaimerCancel')?.addEventListener('click', () => { exp.style.display = 'none'; });
+      $('rcpoDisclaimerCancel')?.addEventListener('click', () => {
+        exp.style.display = 'none';
+      });
     });
   }
 
   async function setAllEnabled(on) {
     const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
     const resolved = PU.resolveEffectivePathways({
-      bundled: bundled.pathways || [], overrides, customPathways: custom,
+      bundled: bundled.pathways || [],
+      overrides,
+      customPathways: custom,
       enabledPathways: config.enabledPathways || {},
       disclaimerAccepted: !!config.disclaimerAcceptedAt,
     });
     const map = {};
-    if (on) for (const e of resolved.all) { if (!e.invalid) map[e.pathway.id] = true; }
+    if (on)
+      for (const e of resolved.all) {
+        if (!e.invalid) map[e.pathway.id] = true;
+      }
     await setConfig({ enabledPathways: map });
     refresh();
   }
@@ -1706,26 +1995,33 @@ rmSaveBtn?.addEventListener('click', async () => {
 
   const ORIGIN_BADGE = {
     bundled: ['Bundled', 'rgba(74,127,184,0.15)', 'var(--accent)'],
-    edited:  ['Edited',  'rgba(180,83,9,0.15)',   'var(--amber, #b45309)'],
-    custom:  ['Custom',  'rgba(22,163,74,0.15)',  'var(--green, #16a34a)'],
+    edited: ['Edited', 'rgba(180,83,9,0.15)', 'var(--amber, #b45309)'],
+    custom: ['Custom', 'rgba(22,163,74,0.15)', 'var(--green, #16a34a)'],
   };
 
   function renderPathwayList(resolved, config) {
     const host = $('rcpoPathwayList');
     if (!host) return;
-    host.innerHTML = resolved.all.map(e => {
-      const p = e.pathway;
-      const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
-      const invalid = e.invalid
-        ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
-        : e.overrideInvalid
-          ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>` : '';
-      const actions = [
-        `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
-        e.origin === 'edited' ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>` : '',
-        e.origin === 'custom' ? `<button class="ghost" data-rcpo-delete="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Delete</button>` : '',
-      ].join('');
-      return `
+    host.innerHTML =
+      resolved.all
+        .map((e) => {
+          const p = e.pathway;
+          const [label, bg, fg] = ORIGIN_BADGE[e.origin] || ORIGIN_BADGE.bundled;
+          const invalid = e.invalid
+            ? `<span style="font-size:10px; font-weight:700; color:var(--red, #b91c1c);">INVALID — not shown to reception</span>`
+            : e.overrideInvalid
+              ? `<span style="font-size:10px; font-weight:700; color:var(--amber, #b45309);">EDIT INVALID — bundled version active</span>`
+              : '';
+          const actions = [
+            `<button class="ghost" data-rcpo-edit="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Edit</button>`,
+            e.origin === 'edited'
+              ? `<button class="ghost" data-rcpo-reset="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Reset to bundled</button>`
+              : '',
+            e.origin === 'custom'
+              ? `<button class="ghost" data-rcpo-delete="${escAttr(p.id)}" style="font-size:10px; padding:3px 9px;">Delete</button>`
+              : '',
+          ].join('');
+          return `
         <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; min-width:0; flex:1;">
             <input type="checkbox" data-rcpo-toggle="${escAttr(p.id)}" ${e.enabled ? 'checked' : ''} ${e.invalid ? 'disabled' : ''}>
@@ -1735,9 +2031,10 @@ rmSaveBtn?.addEventListener('click', async () => {
           </label>
           <div style="display:flex; gap:6px;">${actions}</div>
         </div>`;
-    }).join('') || '<div style="font-size:12px; color:var(--text-3);">No pathways found.</div>';
+        })
+        .join('') || '<div style="font-size:12px; color:var(--text-3);">No pathways found.</div>';
 
-    host.querySelectorAll('[data-rcpo-toggle]').forEach(cb => {
+    host.querySelectorAll('[data-rcpo-toggle]').forEach((cb) => {
       cb.addEventListener('change', async () => {
         const id = cb.dataset.rcpoToggle;
         const { config } = await getState();
@@ -1747,15 +2044,16 @@ rmSaveBtn?.addEventListener('click', async () => {
           return;
         }
         const map = Object.assign({}, config.enabledPathways || {});
-        if (cb.checked) map[id] = true; else delete map[id];
+        if (cb.checked) map[id] = true;
+        else delete map[id];
         await setConfig({ enabledPathways: map });
         refresh();
       });
     });
-    host.querySelectorAll('[data-rcpo-edit]').forEach(btn => {
+    host.querySelectorAll('[data-rcpo-edit]').forEach((btn) => {
       btn.addEventListener('click', () => openEditor(btn.dataset.rcpoEdit, resolved));
     });
-    host.querySelectorAll('[data-rcpo-reset]').forEach(btn => {
+    host.querySelectorAll('[data-rcpo-reset]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         if (!confirm('Discard the practice edit and restore the bundled version of this pathway?')) return;
         const { overrides } = await getState();
@@ -1764,14 +2062,14 @@ rmSaveBtn?.addEventListener('click', async () => {
         refresh();
       });
     });
-    host.querySelectorAll('[data-rcpo-delete]').forEach(btn => {
+    host.querySelectorAll('[data-rcpo-delete]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         if (!confirm('Delete this custom pathway? This cannot be undone.')) return;
         const { custom, config } = await getState();
         const id = btn.dataset.rcpoDelete;
         const map = Object.assign({}, config.enabledPathways || {});
         delete map[id];
-        await chrome.storage.local.set({ 'reception.customPathways': custom.filter(p => p.id !== id) });
+        await chrome.storage.local.set({ 'reception.customPathways': custom.filter((p) => p.id !== id) });
         await setConfig({ enabledPathways: map });
         refresh();
       });
@@ -1802,7 +2100,7 @@ rmSaveBtn?.addEventListener('click', async () => {
         <div style="display:flex; gap:6px; margin-bottom:5px;">
           <input type="text" class="rcpo-q-label" value="${escAttr(q?.label || '')}" placeholder="Short label (used in the pasted summary)" style="flex:0 0 220px; font-size:12px; padding:4px 7px;">
           <select class="rcpo-q-type" style="font-size:12px; padding:4px;">
-            ${['text', 'yesno', 'choice', 'multi'].map(t => `<option value="${t}" ${type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            ${['text', 'yesno', 'choice', 'multi'].map((t) => `<option value="${t}" ${type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
           <button type="button" class="ghost rcpo-row-del" style="font-size:10px; padding:3px 8px; margin-left:auto;">✕</button>
         </div>
@@ -1814,9 +2112,10 @@ rmSaveBtn?.addEventListener('click', async () => {
   function openEditor(idOrNull, resolved) {
     const host = $('rcpoEditorHost');
     if (!host) return;
-    let pathway = null, origin = 'custom';
+    let pathway = null,
+      origin = 'custom';
     if (idOrNull) {
-      const entry = resolved.all.find(e => e.pathway.id === idOrNull);
+      const entry = resolved.all.find((e) => e.pathway.id === idOrNull);
       if (!entry) return;
       pathway = entry.pathway;
       origin = entry.origin === 'custom' ? 'custom' : 'bundled-edit';
@@ -1850,31 +2149,44 @@ rmSaveBtn?.addEventListener('click', async () => {
         </div>
       </div>`;
 
-    const wireRowDeletes = () => host.querySelectorAll('.rcpo-row-del').forEach(b => {
-      b.onclick = () => b.closest('.rcpo-rf-row, .rcpo-q-row')?.remove();
-    });
-    const wireTypeToggles = () => host.querySelectorAll('.rcpo-q-type').forEach(sel => {
-      sel.onchange = () => {
-        const opts = sel.closest('.rcpo-q-row').querySelector('.rcpo-q-opts');
-        opts.style.display = (sel.value === 'choice' || sel.value === 'multi') ? '' : 'none';
-      };
-    });
-    wireRowDeletes(); wireTypeToggles();
+    const wireRowDeletes = () =>
+      host.querySelectorAll('.rcpo-row-del').forEach((b) => {
+        b.onclick = () => b.closest('.rcpo-rf-row, .rcpo-q-row')?.remove();
+      });
+    const wireTypeToggles = () =>
+      host.querySelectorAll('.rcpo-q-type').forEach((sel) => {
+        sel.onchange = () => {
+          const opts = sel.closest('.rcpo-q-row').querySelector('.rcpo-q-opts');
+          opts.style.display = sel.value === 'choice' || sel.value === 'multi' ? '' : 'none';
+        };
+      });
+    wireRowDeletes();
+    wireTypeToggles();
     $('rcpoEdAddRf')?.addEventListener('click', () => {
       $('rcpoEdRf').insertAdjacentHTML('beforeend', rfRowHtml(null));
       wireRowDeletes();
     });
     $('rcpoEdAddQ')?.addEventListener('click', () => {
       $('rcpoEdQ').insertAdjacentHTML('beforeend', qRowHtml(null));
-      wireRowDeletes(); wireTypeToggles();
+      wireRowDeletes();
+      wireTypeToggles();
     });
-    $('rcpoEdCancel')?.addEventListener('click', () => { host.innerHTML = ''; _editing = null; });
+    $('rcpoEdCancel')?.addEventListener('click', () => {
+      host.innerHTML = '';
+      _editing = null;
+    });
     $('rcpoEdSave')?.addEventListener('click', () => saveEditor(pathway, origin));
     host.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function slugify(title) {
-    return String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'pathway';
+    return (
+      String(title)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'pathway'
+    );
   }
 
   async function saveEditor(original, origin) {
@@ -1883,12 +2195,12 @@ rmSaveBtn?.addEventListener('click', async () => {
     const title = $('rcpoEdTitle')?.value.trim() || '';
     const appliesTo = $('rcpoEdApplies')?.value.trim() || '';
 
-    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map(row => ({
+    const redFlags = Array.from(host.querySelectorAll('.rcpo-rf-row')).map((row) => ({
       id: row.dataset.rfid,
       ask: row.querySelector('.rcpo-rf-ask')?.value.trim() || '',
       escalate: row.querySelector('.rcpo-rf-esc')?.value || 'duty',
     }));
-    const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map(row => {
+    const questions = Array.from(host.querySelectorAll('.rcpo-q-row')).map((row) => {
       const type = row.querySelector('.rcpo-q-type')?.value || 'text';
       const q = {
         id: row.dataset.qid,
@@ -1897,7 +2209,10 @@ rmSaveBtn?.addEventListener('click', async () => {
         label: row.querySelector('.rcpo-q-label')?.value.trim() || undefined,
       };
       if (type === 'choice' || type === 'multi') {
-        q.options = (row.querySelector('.rcpo-q-opts')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+        q.options = (row.querySelector('.rcpo-q-opts')?.value || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
       }
       if (!q.label) delete q.label;
       return q;
@@ -1910,15 +2225,18 @@ rmSaveBtn?.addEventListener('click', async () => {
       id = original.id;
     } else {
       id = slugify(title);
-      const taken = new Set([...(bundled.pathways || []).map(p => p.id), ...custom.map(p => p.id)]);
+      const taken = new Set([...(bundled.pathways || []).map((p) => p.id), ...custom.map((p) => p.id)]);
       let n = 2;
       while (taken.has(id)) id = `${slugify(title)}-${n++}`;
     }
 
     const candidate = {
-      id, title, appliesTo: appliesTo || undefined,
+      id,
+      title,
+      appliesTo: appliesTo || undefined,
       sources: original?.sources || ['Practice-authored — clinically review before use'],
-      redFlags, questions,
+      redFlags,
+      questions,
       pharmacyFirst: original?.pharmacyFirst, // not editable in v1; preserved on bundled edits
     };
     if (!candidate.pharmacyFirst) delete candidate.pharmacyFirst;
@@ -1935,8 +2253,9 @@ rmSaveBtn?.addEventListener('click', async () => {
       overrides[id] = clean;
       await chrome.storage.local.set({ 'reception.pathwayOverrides': overrides });
     } else {
-      const idx = custom.findIndex(p => p.id === id);
-      if (idx >= 0) custom[idx] = clean; else custom.push(clean);
+      const idx = custom.findIndex((p) => p.id === id);
+      if (idx >= 0) custom[idx] = clean;
+      else custom.push(clean);
       await chrome.storage.local.set({ 'reception.customPathways': custom });
     }
     if (host) host.innerHTML = '';
@@ -1952,30 +2271,46 @@ rmSaveBtn?.addEventListener('click', async () => {
     try {
       const base = chrome.runtime.getURL('rules/');
       const [drug, qof, vax, customRes] = await Promise.all([
-        fetch(base + 'drug-rules.json').then(r => r.json()),
-        fetch(base + 'qof-rules.json').then(r => r.json()),
-        fetch(base + 'vaccine-rules.json').then(r => r.json()),
+        fetch(base + 'drug-rules.json').then((r) => r.json()),
+        fetch(base + 'qof-rules.json').then((r) => r.json()),
+        fetch(base + 'vaccine-rules.json').then((r) => r.json()),
         chrome.storage.local.get('sentinel.customRules'),
       ]);
-      const customRules = (customRes['sentinel.customRules'] || []).filter(r => r.enabled !== false);
+      const customRules = (customRes['sentinel.customRules'] || []).filter((r) => r.enabled !== false);
       const rules = [
-        ...(drug.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.id, kind: 'Drug monitoring' })),
-        ...(qof.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.name || r.id, kind: r.type === 'qof-register' ? 'QOF register' : 'QOF / alert' })),
-        ...(vax.rules || []).filter(r => r.enabled !== false).map(r => ({ id: r.id, name: r.displayName || r.id, kind: 'Vaccine' })),
-        ...customRules.map(r => ({ id: r.id, name: r.displayName || r.name || r.id, kind: 'Custom (Sentinel)' })),
+        ...(drug.rules || [])
+          .filter((r) => r.enabled !== false)
+          .map((r) => ({ id: r.id, name: r.displayName || r.id, kind: 'Drug monitoring' })),
+        ...(qof.rules || [])
+          .filter((r) => r.enabled !== false)
+          .map((r) => ({
+            id: r.id,
+            name: r.displayName || r.name || r.id,
+            kind: r.type === 'qof-register' ? 'QOF register' : 'QOF / alert',
+          })),
+        ...(vax.rules || [])
+          .filter((r) => r.enabled !== false)
+          .map((r) => ({ id: r.id, name: r.displayName || r.id, kind: 'Vaccine' })),
+        ...customRules.map((r) => ({ id: r.id, name: r.displayName || r.name || r.id, kind: 'Custom (Sentinel)' })),
       ];
       const hidden = config.hiddenChipRules || {};
-      host.innerHTML = rules.map(r => `
+      host.innerHTML =
+        rules
+          .map(
+            (r) => `
         <label style="display:flex; align-items:center; gap:8px; padding:4px 2px; font-size:12px; cursor:pointer;">
           <input type="checkbox" data-rcpo-chip="${escAttr(r.id)}" ${hidden[r.id] === true ? '' : 'checked'}>
           <span>${escHtml(r.name)}</span>
           <span style="font-size:10px; color:var(--text-3);">${escHtml(r.kind)}</span>
-        </label>`).join('') || '<div style="font-size:12px; color:var(--text-3);">No rules found.</div>';
-      host.querySelectorAll('[data-rcpo-chip]').forEach(cb => {
+        </label>`
+          )
+          .join('') || '<div style="font-size:12px; color:var(--text-3);">No rules found.</div>';
+      host.querySelectorAll('[data-rcpo-chip]').forEach((cb) => {
         cb.addEventListener('change', async () => {
           const { config } = await getState();
           const map = Object.assign({}, config.hiddenChipRules || {});
-          if (cb.checked) delete map[cb.dataset.rcpoChip]; else map[cb.dataset.rcpoChip] = true;
+          if (cb.checked) delete map[cb.dataset.rcpoChip];
+          else map[cb.dataset.rcpoChip] = true;
           await setConfig({ hiddenChipRules: map });
         });
       });
@@ -1990,7 +2325,9 @@ rmSaveBtn?.addEventListener('click', async () => {
     try {
       const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
       const resolved = PU.resolveEffectivePathways({
-        bundled: bundled.pathways || [], overrides, customPathways: custom,
+        bundled: bundled.pathways || [],
+        overrides,
+        customPathways: custom,
         enabledPathways: config.enabledPathways || {},
         disclaimerAccepted: !!config.disclaimerAcceptedAt,
       });
@@ -1999,7 +2336,8 @@ rmSaveBtn?.addEventListener('click', async () => {
       renderChipList(config);
     } catch (e) {
       const host = $('rcpoPathwayList');
-      if (host) host.innerHTML = `<div style="font-size:12px; color:var(--red, #b91c1c);">Could not load reception settings: ${escHtml(e.message)}</div>`;
+      if (host)
+        host.innerHTML = `<div style="font-size:12px; color:var(--red, #b91c1c);">Could not load reception settings: ${escHtml(e.message)}</div>`;
     }
   }
 
@@ -2007,7 +2345,9 @@ rmSaveBtn?.addEventListener('click', async () => {
   $('rcpoNewPathway')?.addEventListener('click', async () => {
     const [{ config, custom, overrides }, bundled] = await Promise.all([getState(), loadBundled()]);
     const resolved = PU.resolveEffectivePathways({
-      bundled: bundled.pathways || [], overrides, customPathways: custom,
+      bundled: bundled.pathways || [],
+      overrides,
+      customPathways: custom,
       enabledPathways: config.enabledPathways || {},
       disclaimerAccepted: !!config.disclaimerAcceptedAt,
     });
@@ -2027,13 +2367,16 @@ rmSaveBtn?.addEventListener('click', async () => {
       ta.value = prompt;
       ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
       document.body.appendChild(ta);
-      ta.focus(); ta.select();
+      ta.focus();
+      ta.select();
       document.execCommand && document.execCommand('copy');
       document.body.removeChild(ta);
     }
     if (copiedEl) {
       copiedEl.style.opacity = '1';
-      setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+      setTimeout(() => {
+        copiedEl.style.opacity = '0';
+      }, 2000);
     }
   });
 
@@ -2095,7 +2438,7 @@ rmSaveBtn?.addEventListener('click', async () => {
 
     // Sanitise, resolve id collisions, append to customPathways
     const [{ custom }, bundledDoc] = await Promise.all([getState(), loadBundled()]);
-    const taken = new Set([...(bundledDoc.pathways || []).map(p => p.id), ...custom.map(p => p.id)]);
+    const taken = new Set([...(bundledDoc.pathways || []).map((p) => p.id), ...custom.map((p) => p.id)]);
     const toAdd = [];
     for (const c of candidates) {
       const clean = PU.sanitisePathway(c);
@@ -2120,7 +2463,9 @@ rmSaveBtn?.addEventListener('click', async () => {
   } else {
     refresh();
   }
-  document.querySelectorAll('.nav-item[data-section="reception"]').forEach(btn => btn.addEventListener('click', refresh));
+  document
+    .querySelectorAll('.nav-item[data-section="reception"]')
+    .forEach((btn) => btn.addEventListener('click', refresh));
 })();
 
 // ── Knowledge options section ─────────────────────────────────────────────────
@@ -2131,16 +2476,17 @@ rmSaveBtn?.addEventListener('click', async () => {
 // are skipped so repeated imports don't bloat the base.
 (() => {
   const KU = window.KnowledgeUtils;
-  const $k = id => document.getElementById(id);
+  const $k = (id) => document.getElementById(id);
 
   async function refreshStats() {
     const el = $k('kboStats');
     if (!el) return;
     const r = await chrome.storage.local.get(['knowledge.items']);
     const items = r['knowledge.items'] || [];
-    const unreviewed = items.filter(e => e && e.source === 'llm' && e.reviewed !== true).length;
-    el.textContent = `${items.length} entr${items.length === 1 ? 'y' : 'ies'} in the knowledge base`
-      + (unreviewed ? ` — ${unreviewed} AI-generated and awaiting review (badge shown on the tab).` : '.');
+    const unreviewed = items.filter((e) => e && e.source === 'llm' && e.reviewed !== true).length;
+    el.textContent =
+      `${items.length} entr${items.length === 1 ? 'y' : 'ies'} in the knowledge base` +
+      (unreviewed ? ` — ${unreviewed} AI-generated and awaiting review (badge shown on the tab).` : '.');
   }
 
   $k('kboLlmCopyPrompt')?.addEventListener('click', async () => {
@@ -2153,13 +2499,16 @@ rmSaveBtn?.addEventListener('click', async () => {
       ta.value = prompt;
       ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
       document.body.appendChild(ta);
-      ta.focus(); ta.select();
+      ta.focus();
+      ta.select();
       document.execCommand && document.execCommand('copy');
       document.body.removeChild(ta);
     }
     if (copiedEl) {
       copiedEl.style.opacity = '1';
-      setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+      setTimeout(() => {
+        copiedEl.style.opacity = '0';
+      }, 2000);
     }
   });
 
@@ -2168,14 +2517,21 @@ rmSaveBtn?.addEventListener('click', async () => {
     const warnEl = $k('kboLlmWarnings');
     const jsonEl = $k('kboLlmJson');
     if (!statusEl || !jsonEl) return;
-    const fail = msg => { statusEl.style.color = 'var(--red, #b91c1c)'; statusEl.textContent = msg; };
+    const fail = (msg) => {
+      statusEl.style.color = 'var(--red, #b91c1c)';
+      statusEl.textContent = msg;
+    };
     warnEl.textContent = '';
 
     const raw = (jsonEl.value || '').trim();
     if (!raw) return fail('Paste the LLM JSON into the box first.');
 
     let parsed;
-    try { parsed = JSON.parse(raw); } catch (e) { return fail('Could not parse JSON: ' + e.message); }
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      return fail('Could not parse JSON: ' + e.message);
+    }
 
     let candidates;
     if (Array.isArray(parsed)) candidates = parsed;
@@ -2191,15 +2547,18 @@ rmSaveBtn?.addEventListener('click', async () => {
     const r = await chrome.storage.local.get(['knowledge.items', 'knowledge.categories']);
     const items = r['knowledge.items'] || [];
     const categories = KU.sanitiseCategories(r['knowledge.categories']);
-    const catIds = new Set(categories.map(c => c.id));
-    const taken = new Set(items.map(e => e.id));
+    const catIds = new Set(categories.map((c) => c.id));
+    const taken = new Set(items.map((e) => e.id));
 
     const toAdd = [];
     let skipped = 0;
     for (const c of candidates) {
       // Anti-bloat: skip entries whose titles near-duplicate an existing or
       // already-imported entry (token-normalised match, see knowledge-utils.js).
-      if (KU.findSimilar(c.title, [...items, ...toAdd]).length > 0) { skipped++; continue; }
+      if (KU.findSimilar(c.title, [...items, ...toAdd]).length > 0) {
+        skipped++;
+        continue;
+      }
       const clean = KU.sanitiseEntry(c);
       clean.source = 'llm';
       clean.reviewed = false;
@@ -2207,7 +2566,7 @@ rmSaveBtn?.addEventListener('click', async () => {
       taken.add(clean.id);
       if (!catIds.has(clean.category)) {
         // Preserve the LLM's grouping rather than silently re-filing it.
-        const name = clean.category.replace(/-/g, ' ').replace(/^./, ch => ch.toUpperCase());
+        const name = clean.category.replace(/-/g, ' ').replace(/^./, (ch) => ch.toUpperCase());
         categories.push({ id: clean.category, name });
         catIds.add(clean.category);
       }
@@ -2220,8 +2579,9 @@ rmSaveBtn?.addEventListener('click', async () => {
 
     const phi = KU.phiWarnings(toAdd);
     if (phi.length > 0) {
-      warnEl.innerHTML = '<strong>Check before relying on these entries:</strong><br>' +
-        phi.map(w => '&bull; ' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+      warnEl.innerHTML =
+        '<strong>Check before relying on these entries:</strong><br>' +
+        phi.map((w) => '&bull; ' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
     }
 
     await chrome.storage.local.set({
@@ -2230,9 +2590,10 @@ rmSaveBtn?.addEventListener('click', async () => {
     });
     jsonEl.value = '';
     statusEl.style.color = 'var(--green, #16a34a)';
-    statusEl.textContent = `Imported ${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'}`
-      + (skipped ? ` (${skipped} skipped as near-duplicates)` : '')
-      + ' — review them on the Knowledge tab.';
+    statusEl.textContent =
+      `Imported ${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'}` +
+      (skipped ? ` (${skipped} skipped as near-duplicates)` : '') +
+      ' — review them on the Knowledge tab.';
     refreshStats();
   });
 
@@ -2241,5 +2602,7 @@ rmSaveBtn?.addEventListener('click', async () => {
   } else {
     refreshStats();
   }
-  document.querySelectorAll('.nav-item[data-section="knowledge"]').forEach(btn => btn.addEventListener('click', refreshStats));
+  document
+    .querySelectorAll('.nav-item[data-section="knowledge"]')
+    .forEach((btn) => btn.addEventListener('click', refreshStats));
 })();

@@ -1,0 +1,120 @@
+name: Rule currency check
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  currency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Staleness check (120-day early warning)
+        run: node scripts/check-rule-currency.js --threshold-days 120 --json > currency.json
+        # Exits 0 always; JSON output consumed by next step.
+
+      - name: Open / update / close tracking issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('currency.json', 'utf8'));
+            const LABEL = 'rule-currency';
+            const TITLE = 'Rule currency: one or more rule files need review';
+
+            // Ensure the label exists (create if missing).
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: LABEL });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  name: LABEL, color: 'f4a261',
+                  description: 'Bundled clinical rule files are stale or have a version mismatch',
+                });
+              }
+            }
+
+            // Find existing open tracking issue.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: LABEL, state: 'open',
+            });
+            const openIssue = existing.data[0] || null;
+
+            if (report.overall === 'green') {
+              // All current — close tracking issue if open.
+              if (openIssue) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: openIssue.number,
+                  body: `✅ All rule files are current as of ${report.today}. Closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: openIssue.number,
+                  state: 'closed',
+                });
+              }
+              console.log('All rule files green — no issue action needed.');
+              return;
+            }
+
+            // Build issue body with per-file table and warnings.
+            const levelIcon = { green: '✅', amber: '⚠️', red: '🔴' };
+            const rows = report.files.map(f => {
+              const age = f.ageDays != null ? `${f.ageDays}d` : '?';
+              const icon = levelIcon[f.level] || f.level;
+              return `| ${f.displayName} | ${f.lastUpdated || '?'} | ${age} | ${icon} | ${f.message || ''} |`;
+            }).join('\n');
+
+            const warnSection = report.warnings.length
+              ? `\n### Warnings\n\n${report.warnings.map(w => `- ${w}`).join('\n')}`
+              : '';
+
+            const body = [
+              `## Rule currency: ${report.overall.toUpperCase()} — ${report.today}`,
+              '',
+              `| File | Last updated | Age | Status | Note |`,
+              `|---|---|---|---|---|`,
+              rows,
+              warnSection,
+              '',
+              '### Action',
+              '',
+              '- Run [The Keeper skill](../../blob/main/.claude/skills/the-keeper.md) to refresh stale rules from source guidance, OR',
+              '- If the rules are still clinically accurate, update `lastUpdated` and `specVersion` in the relevant file after manual review.',
+              '',
+              '> This is a tracking issue. It will be updated in-place each Monday and closed automatically when all files are current.',
+            ].join('\n');
+
+            if (openIssue) {
+              // Update existing issue body.
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: openIssue.number,
+                title: TITLE,
+                body,
+                state: 'open',
+              });
+              console.log(`Updated existing issue #${openIssue.number}.`);
+            } else {
+              // Create new issue.
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: TITLE,
+                body,
+                labels: [LABEL],
+              });
+              console.log(`Created issue #${created.data.number}.`);
+            }

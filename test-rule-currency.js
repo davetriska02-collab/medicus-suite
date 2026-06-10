@@ -13,15 +13,21 @@ const path = require('path');
 const { assessRuleCurrency } = require(path.join(__dirname, 'shared', 'rule-currency.js'));
 
 // Load real rule files for the live check at the end.
-const drugRules  = require(path.join(__dirname, 'rules', 'drug-rules.json'));
-const qofRules   = require(path.join(__dirname, 'rules', 'qof-rules.json'));
-const vaxRules   = require(path.join(__dirname, 'rules', 'vaccine-rules.json'));
-const alertLib   = require(path.join(__dirname, 'rules', 'alert-library.json'));
+const drugRules = require(path.join(__dirname, 'rules', 'drug-rules.json'));
+const qofRules = require(path.join(__dirname, 'rules', 'qof-rules.json'));
+const vaxRules = require(path.join(__dirname, 'rules', 'vaccine-rules.json'));
+const alertLib = require(path.join(__dirname, 'rules', 'alert-library.json'));
 
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 function check(cond, msg) {
-  if (cond) { console.log(`  OK  ${msg}`); passed++; }
-  else { console.error(`  FAIL  ${msg}`); failed++; }
+  if (cond) {
+    console.log(`  OK  ${msg}`);
+    passed++;
+  } else {
+    console.error(`  FAIL  ${msg}`);
+    failed++;
+  }
 }
 
 // Helper: build a minimal file descriptor
@@ -34,15 +40,15 @@ console.log('\n--- fresh files → green ---');
 {
   const today = '2026-06-10';
   const files = [
-    mkFile('drug',    '2026-06-04', 'Sentinel drug rules - June 2026 review'),
-    mkFile('qof',     '2026-06-04', 'QOF 2026/27'),
+    mkFile('drug', '2026-06-04', 'Sentinel drug rules - June 2026 review'),
+    mkFile('qof', '2026-06-04', 'QOF 2026/27'),
     mkFile('vaccine', '2026-06-09', 'JCVI/UKHSA 2025/26 season'),
-    mkFile('alert',   '2026-06-04', 'PINCER/NICE prescribing-safety alert library v1.1'),
+    mkFile('alert', '2026-06-04', 'PINCER/NICE prescribing-safety alert library v1.1'),
   ];
   const result = assessRuleCurrency(files, today);
   check(result.overall === 'green', `overall green (got: ${result.overall})`);
   check(result.warnings.length === 0, `no warnings (got: ${result.warnings.join('; ')})`);
-  result.files.forEach(f => {
+  result.files.forEach((f) => {
     check(f.level === 'green', `${f.id}: green`);
   });
 }
@@ -80,22 +86,26 @@ console.log('\n--- unparseable lastUpdated → amber ---');
   check(result.files[0].level === 'amber', `drug: amber (unparseable)`);
 }
 
-// ── QOF year mismatch (today 2027-05-01 vs "QOF 2026/27") → amber + warning ──
-console.log('\n--- QOF year mismatch → amber + warning ---');
+// ── QOF year mismatch (today 2027-05-01 vs "QOF 2026/27") → RED + warning ──
+// NOTE: changed from amber to red in ws2-clinical (plan §D) — QOF mismatch is
+// materially wrong content, not merely stale.
+console.log('\n--- QOF year mismatch → RED + warning ---');
 {
   const today = '2027-05-01';
   const files = [
-    mkFile('drug',    '2027-04-15', 'Sentinel drug rules'),
-    mkFile('qof',     '2027-03-01', 'QOF 2026/27'),
+    mkFile('drug', '2027-04-15', 'Sentinel drug rules'),
+    mkFile('qof', '2027-03-01', 'QOF 2026/27'),
     mkFile('vaccine', '2027-04-15', 'JCVI/UKHSA 2026/27 season'),
-    mkFile('alert',   '2027-04-15', 'PINCER v1.1'),
+    mkFile('alert', '2027-04-15', 'PINCER v1.1'),
   ];
   const result = assessRuleCurrency(files, today);
-  check(result.overall === 'amber', `overall amber (QOF mismatch)`);
-  const qofFile = result.files.find(f => f.id === 'qof');
-  check(qofFile && qofFile.level === 'amber', `qof: amber`);
-  check(result.warnings.some(w => /QOF year mismatch/i.test(w) || /2026\/27/i.test(w)),
-    `warning mentions QOF year mismatch (got: ${result.warnings.join('; ')})`);
+  check(result.overall === 'red', `overall red (QOF mismatch)`);
+  const qofFile = result.files.find((f) => f.id === 'qof');
+  check(qofFile && qofFile.level === 'red', `qof: red`);
+  check(
+    result.warnings.some((w) => /QOF year mismatch/i.test(w) || /2026\/27/i.test(w)),
+    `warning mentions QOF year mismatch (got: ${result.warnings.join('; ')})`
+  );
 }
 
 // ── QOF in-year (today 2026-06-10, "QOF 2026/27") → no QOF warning ──────────
@@ -108,13 +118,15 @@ console.log('\n--- QOF in-year → no QOF warning ---');
   check(result.warnings.length === 0, `no warnings for in-year QOF`);
 }
 
-// ── QOF boundary: exactly on 1 April of end year → amber ─────────────────────
-console.log('\n--- QOF boundary: 1 April of end year → amber ---');
+// ── QOF boundary: exactly on 1 April of end year → RED ──────────────────────
+// NOTE: changed from amber to red in ws2-clinical — QOF year mismatch is materially
+// wrong content (wrong targets/thresholds); red is the appropriate level.
+console.log('\n--- QOF boundary: 1 April of end year → RED ---');
 {
   const today = '2027-04-01';
   const files = [mkFile('qof', '2027-03-15', 'QOF 2026/27')];
   const result = assessRuleCurrency(files, today);
-  check(result.files[0].level === 'amber', `qof: amber on 1 Apr of end year`);
+  check(result.files[0].level === 'red', `qof: red on 1 Apr of end year`);
 }
 
 // ── QOF boundary: 31 March of end year → green (last day of the year) ────────
@@ -126,24 +138,29 @@ console.log('\n--- QOF boundary: 31 March of end year → green ---');
   check(result.files[0].level === 'green', `qof: green on 31 Mar (still in-year)`);
 }
 
-// ── Vaccine season stale (today 2026-10-01 vs "2025/26 season") → amber ──────
-console.log('\n--- vaccine season stale → amber ---');
+// ── Vaccine season stale (today 2026-10-01 vs "2025/26 season") → RED ───────
+// NOTE: changed from amber to red in ws2-clinical — an ended vaccine season
+// means wrong eligibility criteria are being shown; red is appropriate.
+console.log('\n--- vaccine season stale → RED ---');
 {
   const today = '2026-10-01';
   const files = [mkFile('vaccine', '2026-06-09', 'JCVI/UKHSA 2025/26 season')];
   const result = assessRuleCurrency(files, today);
-  check(result.files[0].level === 'amber', `vaccine: amber when season ended`);
-  check(result.warnings.some(w => /2025\/26/i.test(w) || /season/i.test(w)),
-    `warning mentions season (got: ${result.warnings.join('; ')})`);
+  check(result.files[0].level === 'red', `vaccine: red when season ended`);
+  check(
+    result.warnings.some((w) => /2025\/26/i.test(w) || /season/i.test(w)),
+    `warning mentions season (got: ${result.warnings.join('; ')})`
+  );
 }
 
-// ── Vaccine season boundary: exactly 2026-09-01 → amber ──────────────────────
-console.log('\n--- vaccine season boundary: 2026-09-01 → amber ---');
+// ── Vaccine season boundary: exactly 2026-09-01 → RED ─────────────────────
+// NOTE: changed from amber to red in ws2-clinical.
+console.log('\n--- vaccine season boundary: 2026-09-01 → RED ---');
 {
   const today = '2026-09-01';
   const files = [mkFile('vaccine', '2026-06-09', 'JCVI/UKHSA 2025/26 season')];
   const result = assessRuleCurrency(files, today);
-  check(result.files[0].level === 'amber', `vaccine: amber on 2026-09-01 (cutoff)`);
+  check(result.files[0].level === 'red', `vaccine: red on 2026-09-01 (cutoff)`);
 }
 
 // ── Vaccine not yet stale (today 2026-08-31) → green ─────────────────────────
@@ -160,13 +177,16 @@ console.log('\n--- unparseable specVersion → amber not crash ---');
 {
   const today = '2026-06-10';
   const files = [
-    mkFile('qof',     '2026-06-04', 'TOTALLY UNPARSEABLE SPEC VERSION!!!'),
+    mkFile('qof', '2026-06-04', 'TOTALLY UNPARSEABLE SPEC VERSION!!!'),
     mkFile('vaccine', '2026-06-09', 'ALSO UNPARSEABLE'),
   ];
   let threw = false;
   let result;
-  try { result = assessRuleCurrency(files, today); }
-  catch (e) { threw = true; }
+  try {
+    result = assessRuleCurrency(files, today);
+  } catch (e) {
+    threw = true;
+  }
   check(!threw, 'assessRuleCurrency does not throw on unparseable specVersion');
   if (!threw) {
     check(result.files[0].level === 'amber', `qof: amber for unparseable specVersion`);
@@ -181,6 +201,61 @@ console.log('\n--- empty files array → amber ---');
   check(result.overall === 'amber', `overall amber for empty files array`);
 }
 
+// ── RED level: age > 540d ─────────────────────────────────────────────────────
+console.log('\n--- age > 540d → red ---');
+{
+  const today = '2026-06-10';
+  // 600 days before 2026-06-10 = 2024-10-18
+  const files = [mkFile('drug', '2024-10-18', 'Sentinel drug rules')];
+  const result = assessRuleCurrency(files, today);
+  check(
+    result.files[0].level === 'red',
+    `drug: red for age > 540d (got: ${result.files[0].level}, ageDays: ${result.files[0].ageDays})`
+  );
+  check(result.overall === 'red', `overall red for age > 540d`);
+}
+
+// ── AMBER range: 366d–540d stays amber ───────────────────────────────────────
+console.log('\n--- age 366-540d stays amber ---');
+{
+  const today = '2026-06-10';
+  // 400 days before 2026-06-10 ≈ 2025-05-06
+  const files = [mkFile('drug', '2025-05-06', 'Sentinel drug rules')];
+  const result = assessRuleCurrency(files, today);
+  check(result.files[0].level === 'amber', `drug: amber for 400d old (not red yet)`);
+  check(result.overall === 'amber', `overall amber for 400d`);
+}
+
+// ── Default opts backwards-compatible: assessRuleCurrency(files, today) works ─
+console.log('\n--- default opts backwards-compatible ---');
+{
+  const today = '2026-06-10';
+  const files = [mkFile('drug', '2026-06-04', 'Sentinel drug rules')];
+  let threw = false;
+  let result;
+  try {
+    result = assessRuleCurrency(files, today);
+  } catch (e) {
+    threw = true;
+  }
+  check(!threw, 'assessRuleCurrency(files, today) does not throw without opts');
+  if (!threw) check(result.overall === 'green', `default opts: fresh file → green`);
+}
+
+// ── opts.staleDays = 120 makes a 130-day file amber ──────────────────────────
+console.log('\n--- opts.staleDays=120 makes 130-day file amber ---');
+{
+  const today = '2026-06-10';
+  // 130 days before 2026-06-10 ≈ 2026-02-01
+  const files = [mkFile('drug', '2026-02-01', 'Sentinel drug rules')];
+  // Without opts: green (< 365d)
+  const defaultResult = assessRuleCurrency(files, today);
+  check(defaultResult.files[0].level === 'green', `without opts: 130d file is green`);
+  // With opts.staleDays=120: amber
+  const earlyResult = assessRuleCurrency(files, today, { staleDays: 120 });
+  check(earlyResult.files[0].level === 'amber', `with staleDays=120: 130d file is amber`);
+}
+
 // ── LIVE CHECK against real bundled rule files with today's date ───────────────
 // This check is intentional: CI should fail when the bundled rules go genuinely stale.
 // If this assertion fails:
@@ -192,20 +267,24 @@ console.log('\n--- LIVE CHECK: bundled rule files vs today ---');
 {
   const today = new Date().toISOString().slice(0, 10);
   const files = [
-    { id: 'drug',    lastUpdated: drugRules.lastUpdated,  specVersion: drugRules.specVersion },
-    { id: 'qof',     lastUpdated: qofRules.lastUpdated,   specVersion: qofRules.specVersion },
-    { id: 'vaccine', lastUpdated: vaxRules.lastUpdated,   specVersion: vaxRules.specVersion },
-    { id: 'alert',   lastUpdated: alertLib.lastUpdated,   specVersion: alertLib.specVersion },
+    { id: 'drug', lastUpdated: drugRules.lastUpdated, specVersion: drugRules.specVersion },
+    { id: 'qof', lastUpdated: qofRules.lastUpdated, specVersion: qofRules.specVersion },
+    { id: 'vaccine', lastUpdated: vaxRules.lastUpdated, specVersion: vaxRules.specVersion },
+    { id: 'alert', lastUpdated: alertLib.lastUpdated, specVersion: alertLib.specVersion },
   ];
   const result = assessRuleCurrency(files, today);
   if (result.overall !== 'green') {
     console.error('\n  LIVE CHECK FAILED — bundled rule files are stale or have a version mismatch.');
     console.error('  What to do: run The Keeper skill (or update the stale rule file manually).');
     console.error('  Warnings:');
-    result.warnings.forEach(w => console.error(`    - ${w}`));
-    result.files.filter(f => f.level === 'amber').forEach(f => {
-      console.error(`    File "${f.id}": lastUpdated=${f.lastUpdated}, ageDays=${f.ageDays}, specVersion=${f.specVersion}`);
-    });
+    result.warnings.forEach((w) => console.error(`    - ${w}`));
+    result.files
+      .filter((f) => f.level === 'amber' || f.level === 'red')
+      .forEach((f) => {
+        console.error(
+          `    File "${f.id}" [${f.level}]: lastUpdated=${f.lastUpdated}, ageDays=${f.ageDays}, specVersion=${f.specVersion}`
+        );
+      });
   }
   check(result.overall === 'green', `LIVE: all bundled rule files green today (${today})`);
 }
