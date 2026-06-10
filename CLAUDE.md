@@ -68,6 +68,12 @@ Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
 
 Always add a `CHANGELOG.md` entry on the same commit.
 
+## Running the tests
+
+- **Run all tests:** `npm test` (or `node --test --test-concurrency=1 test-*.js`)
+- **Run one test file:** `node test-foo.js` — direct invocation still works unchanged
+- The test suite uses `node --test`; each file is an independent exit-code-driven script (no `node:test` API required). The test job in CI is npm-free.
+
 ## Git workflow
 
 - Dev branches are created per session and merged to `main` via PR when complete

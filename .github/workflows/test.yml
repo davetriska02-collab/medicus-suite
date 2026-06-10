@@ -35,13 +35,4 @@ jobs:
           node --check sentinel-options/options.js
 
       - name: Run automated test suite (fails closed)
-        run: |
-          fail=0
-          for t in test-*.js; do
-            echo "── $t"
-            node "$t" || fail=1
-          done
-          if [ "$fail" -ne 0 ]; then
-            echo "::error::One or more test files failed."
-            exit 1
-          fi
+        run: node --test --test-concurrency=1 test-*.js
