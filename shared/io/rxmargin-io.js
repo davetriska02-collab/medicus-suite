@@ -3,13 +3,14 @@
 
 'use strict';
 
-const RXMARGIN_KEYS = ['rxmargin.products', 'rxmargin.config'];
+const RXMARGIN_KEYS = ['rxmargin.products', 'rxmargin.config', 'rxmargin.history'];
 
 async function rxmarginExport() {
   const r = await chrome.storage.local.get(RXMARGIN_KEYS);
   return {
     products: r['rxmargin.products'] ?? [],
     config: r['rxmargin.config'] ?? null,
+    history: r['rxmargin.history'] ?? [],
   };
 }
 
@@ -55,6 +56,11 @@ async function rxmarginImport(data, { merge = false } = {}) {
   if (data.config !== undefined && data.config !== null) {
     if (typeof data.config !== 'object') throw new Error('rxmargin.config must be an object.');
     toSet['rxmargin.config'] = data.config;
+  }
+
+  if (data.history !== undefined) {
+    if (!Array.isArray(data.history)) throw new Error('rxmargin.history must be an array.');
+    toSet['rxmargin.history'] = data.history;
   }
 
   if (Object.keys(toSet).length > 0) {

@@ -41,6 +41,11 @@ const path = require('path');
     deductionRateFor,
     productMetrics,
     practiceTotals,
+    categoryBreakdown,
+    parsePackQty,
+    marginBand,
+    upsertSnapshot,
+    ymKeyOf,
     parseCsv,
     toCsv,
     sampleProducts,
@@ -172,6 +177,130 @@ const path = require('path');
   );
   const sampleTotals = practiceTotals(sample, DEFAULT_CONFIG);
   check(sampleTotals.switchSavingMonthly > 0, 'sample dataset surfaces a positive switch saving');
+
+  // ── Blank-price supplier must not be treated as a free (£0) quote ────────────
+  const blankPrice = {
+    id: 'p5',
+    name: 'Omeprazole 20mg',
+    pack: '28',
+    category: 'generic',
+    tariff: 1.0,
+    monthlyPacks: 100,
+    suppliers: [
+      { name: 'A', price: 0.55 },
+      { name: 'B', price: '' }, // not yet quoted
+    ],
+    currentSupplier: 'A',
+  };
+  const bp = productMetrics(blankPrice, DEFAULT_CONFIG);
+  check(bp.best.name === 'A' && approx(bp.bestCost, 0.55), 'blank-price supplier is not the cheapest buy');
+  check(approx(bp.switchSavingMonthly, 0), 'blank-price supplier produces no fake switch saving');
+  check(bp.marginPerPackCurrent < bp.netReimb, 'margin is computed against the real (non-zero) cost');
+
+  // Same hazard via CSV: an empty price cell is unpriced, not £0.
+  const csvBlank = parseCsv(
+    'name,pack,category,tariff,monthlyPacks,supplier,price,current\nDrugX,28,generic,1.00,100,A,0.55,yes\nDrugX,28,generic,1.00,100,B,,'
+  );
+  check(csvBlank.length === 1, 'CSV blank-price row groups into one product');
+  const drugX = csvBlank[0];
+  const bSup = drugX.suppliers.find((s) => s.name === 'B');
+  check(bSup && bSup.price === '', 'empty CSV price cell parses to "" (unpriced), not 0');
+  const cm = productMetrics(drugX, DEFAULT_CONFIG);
+  check(cm.best.name === 'A' && approx(cm.switchSavingMonthly, 0), 'CSV unpriced supplier yields no fake saving');
+
+  // ── CSV formula-injection guard ──────────────────────────────────────────────
+  const danger = [
+    {
+      id: 'p6',
+      name: '=cmd|calc',
+      pack: '+1',
+      category: 'generic',
+      tariff: 1,
+      monthlyPacks: 1,
+      suppliers: [{ name: '@evil', price: 1 }],
+      currentSupplier: '@evil',
+    },
+  ];
+  const dangerCsv = toCsv(danger);
+  check(dangerCsv.includes("'=cmd|calc"), 'formula-leading name is prefixed with apostrophe on export');
+  check(/,'\+1,/.test(dangerCsv) || dangerCsv.includes("'+1"), 'formula-leading pack is guarded on export');
+  check(dangerCsv.includes("'@evil"), 'formula-leading supplier name is guarded on export');
+  const reparsed = parseCsv(dangerCsv);
+  check(reparsed[0].name === '=cmd|calc', 'guard is stripped on re-import (lossless round-trip)');
+  check(reparsed[0].suppliers[0].name === '@evil', 'supplier-name guard stripped on re-import');
+
+  // ── parsePackQty ─────────────────────────────────────────────────────────────
+  check(parsePackQty('28') === 28, 'pack quantity parsed from a bare number');
+  check(parsePackQty('28 tablets') === 28, 'pack quantity parsed from "28 tablets"');
+  check(parsePackQty('') === null && parsePackQty('OP') === null, 'no quantity → null');
+
+  // ── cost-per-unit in productMetrics ──────────────────────────────────────────
+  const cpu = productMetrics(
+    {
+      id: 'u1',
+      name: 'Y',
+      pack: '100',
+      category: 'generic',
+      tariff: 10,
+      monthlyPacks: 1,
+      suppliers: [{ name: 'A', price: 5 }],
+      currentSupplier: 'A',
+    },
+    DEFAULT_CONFIG
+  );
+  check(approx(cpu.costPerUnit, 0.05), 'cost-per-unit = pack cost / pack quantity');
+  check(approx(cpu.bestCostPerUnit, 0.05), 'best cost-per-unit computed');
+
+  // ── marginBand (RAG) ─────────────────────────────────────────────────────────
+  const th = { green: 25, amber: 10 };
+  check(marginBand(40, th) === 'good', 'margin ≥ green → good');
+  check(marginBand(15, th) === 'watch', 'margin between amber and green → watch');
+  check(marginBand(2, th) === 'poor', 'margin below amber → poor');
+  check(marginBand(-5, th) === 'poor', 'negative margin → poor');
+  check(marginBand(null, th) === null, 'unknown margin → null band');
+
+  // ── categoryBreakdown ────────────────────────────────────────────────────────
+  const mix = [
+    {
+      id: 'c1',
+      name: 'G1',
+      pack: '28',
+      category: 'generic',
+      tariff: 2,
+      monthlyPacks: 10,
+      suppliers: [{ name: 'A', price: 1 }],
+      currentSupplier: 'A',
+    },
+    {
+      id: 'c2',
+      name: 'B1',
+      pack: '28',
+      category: 'branded',
+      tariff: 5,
+      monthlyPacks: 10,
+      suppliers: [{ name: 'A', price: 4 }],
+      currentSupplier: 'A',
+    },
+  ];
+  const cb = categoryBreakdown(mix, DEFAULT_CONFIG);
+  check(cb.length === 2, 'breakdown has one row per populated category');
+  check(
+    cb.every((r) => r.productCount === 1 && Number.isFinite(r.monthlyProfitCurrent)),
+    'breakdown rows carry counts and profit'
+  );
+  check(cb[0].monthlyProfitCurrent >= cb[1].monthlyProfitCurrent, 'breakdown sorted by profit, biggest first');
+
+  // ── upsertSnapshot / ymKeyOf ─────────────────────────────────────────────────
+  const ym = ymKeyOf(new Date('2026-06-15T00:00:00Z'));
+  check(ym === '2026-06', 'ymKeyOf formats YYYY-MM');
+  let hist = upsertSnapshot([], { monthlyProfitCurrent: 100 }, '2026-05');
+  hist = upsertSnapshot(hist, { monthlyProfitCurrent: 120 }, '2026-06');
+  check(hist.length === 2 && hist[1].ym === '2026-06', 'snapshots appended in month order');
+  hist = upsertSnapshot(hist, { monthlyProfitCurrent: 130 }, '2026-06');
+  check(hist.length === 2 && hist[1].monthlyProfitCurrent === 130, 'same-month snapshot replaced, not duplicated');
+  const capped = Array.from({ length: 30 }, (_, i) => ({ ym: `y${i}`, monthlyProfitCurrent: i }));
+  const cappedOut = capped.reduce((h, s) => upsertSnapshot(h, s, s.ym, 24), []);
+  check(cappedOut.length === 24, 'history is capped to the configured length');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

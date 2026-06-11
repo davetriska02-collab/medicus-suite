@@ -42,6 +42,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   mode: 'dispensingDoctor',
   ddRate: 11.18, // flat % for dispensing-doctor mode
   groupRates: { generic: 20.0, branded: 5.0, appliance: 9.85, dnd: 0.0 },
+  // RAG thresholds on net-margin % (margin as a share of net reimbursement):
+  // >= green → healthy, >= amber → watch, below amber → poor / review.
+  thresholds: { green: 25, amber: 10 },
 });
 
 export const CATEGORIES = [
@@ -75,6 +78,38 @@ function num(n) {
   return Number.isFinite(v) ? v : 0;
 }
 
+// Coerce a supplier price to a finite number, or null when it is blank /
+// missing / non-numeric. Distinct from num() (which returns 0) precisely so an
+// unpriced supplier is never mistaken for a free (£0) one.
+function priceValue(p) {
+  if (p === '' || p == null) return null;
+  const v = Number(p);
+  return Number.isFinite(v) ? v : null;
+}
+
+// Pull the unit count out of a free-text pack field ("28", "28 tablets",
+// "30 caps") so cost-per-unit can be compared across pack sizes. Returns a
+// positive integer, or null when no sensible quantity is present.
+export function parsePackQty(pack) {
+  const m = String(pack == null ? '' : pack).match(/\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const v = Number(m[0]);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+// Classify a net-margin % into a RAG band using the configured thresholds.
+// Returns 'good' | 'watch' | 'poor', or null when the margin is unknown.
+export function marginBand(pct, thresholds) {
+  if (pct == null || !Number.isFinite(Number(pct))) return null;
+  const t = thresholds || DEFAULT_CONFIG.thresholds;
+  const green = Number(t.green);
+  const amber = Number(t.amber);
+  const p = Number(pct);
+  if (p >= (Number.isFinite(green) ? green : 25)) return 'good';
+  if (p >= (Number.isFinite(amber) ? amber : 10)) return 'watch';
+  return 'poor';
+}
+
 // ── Per-product computation ────────────────────────────────────────────────────
 //
 // Returns a metrics object with everything the UI and totals need. All money is
@@ -84,9 +119,13 @@ function num(n) {
 // current line to its best supplier (never negative).
 export function productMetrics(product, config = DEFAULT_CONFIG) {
   const suppliers = Array.isArray(product?.suppliers) ? product.suppliers : [];
+  // A supplier with a blank/non-numeric price is "unpriced": it must NOT be
+  // treated as a £0.00 quote, or it would masquerade as the cheapest buy and
+  // produce a bogus margin and switch-saving. priceValue() returns null for
+  // those, and they are dropped from the priced set below.
   const priced = suppliers
-    .map((s) => ({ name: String(s?.name || '').trim(), price: num(s?.price) }))
-    .filter((s) => s.name !== '' && Number.isFinite(s.price));
+    .map((s) => ({ name: String(s?.name || '').trim(), price: priceValue(s?.price) }))
+    .filter((s) => s.name !== '' && s.price !== null);
 
   const tariff = num(product?.tariff);
   const monthlyPacks = Math.max(0, num(product?.monthlyPacks));
@@ -123,6 +162,12 @@ export function productMetrics(product, config = DEFAULT_CONFIG) {
   const switchSavingMonthly =
     currentCost == null || bestCost == null ? 0 : Math.max(0, (currentCost - bestCost) * monthlyPacks);
 
+  // Cost-per-unit normalisation lets the user compare like-for-like across pack
+  // sizes (e.g. a 28-pack vs a 100-pack of the same drug).
+  const packQty = parsePackQty(product?.pack);
+  const costPerUnit = packQty && currentCost != null ? currentCost / packQty : null;
+  const bestCostPerUnit = packQty && bestCost != null ? bestCost / packQty : null;
+
   return {
     id: product?.id || null,
     name: String(product?.name || '').trim(),
@@ -138,9 +183,13 @@ export function productMetrics(product, config = DEFAULT_CONFIG) {
     bestCost,
     currentCost,
     hasCost,
+    packQty,
+    costPerUnit,
+    bestCostPerUnit,
     marginPerPackBest,
     marginPerPackCurrent,
     marginPct,
+    band: marginBand(marginPct, (config || DEFAULT_CONFIG).thresholds),
     monthlyProfitCurrent,
     monthlyProfitBest,
     annualProfitCurrent: monthlyProfitCurrent * 12,
@@ -198,6 +247,52 @@ export function practiceTotals(products, config = DEFAULT_CONFIG) {
   return t;
 }
 
+// Margin split by product category (generic / branded / appliance / DND), so the
+// practice can see where its dispensing profit actually comes from. Returns one
+// row per category that has at least one product, biggest contributor first.
+export function categoryBreakdown(products, config = DEFAULT_CONFIG) {
+  const list = Array.isArray(products) ? products : [];
+  const by = new Map();
+  for (const p of list) {
+    const m = productMetrics(p, config);
+    const id = CATEGORIES.some((c) => c.id === m.category) ? m.category : 'generic';
+    let row = by.get(id);
+    if (!row) {
+      row = {
+        category: id,
+        label: (CATEGORIES.find((c) => c.id === id) || CATEGORIES[0]).label,
+        productCount: 0,
+        monthlyProfitCurrent: 0,
+        switchSavingMonthly: 0,
+        lossCount: 0,
+      };
+      by.set(id, row);
+    }
+    row.productCount += 1;
+    row.monthlyProfitCurrent += m.monthlyProfitCurrent;
+    row.switchSavingMonthly += m.switchSavingMonthly;
+    if (m.lossMaker) row.lossCount += 1;
+  }
+  return [...by.values()].sort((a, b) => b.monthlyProfitCurrent - a.monthlyProfitCurrent);
+}
+
+// Append (or replace) the snapshot for a given year-month key in a capped,
+// chronologically-ordered history array. Used to build the margin trend
+// sparkline. Pure: returns a new array, never mutates the input.
+export function upsertSnapshot(history, snapshot, ymKey, cap = 24) {
+  const list = Array.isArray(history) ? history.filter((s) => s && s.ym !== ymKey) : [];
+  list.push({ ...snapshot, ym: ymKey });
+  list.sort((a, b) => String(a.ym).localeCompare(String(b.ym)));
+  return list.slice(-Math.max(1, cap));
+}
+
+// Current year-month key, e.g. "2026-06". Injectable date for testability.
+export function ymKeyOf(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 // ── CSV import / export ────────────────────────────────────────────────────────
 //
 // Flat one-row-per-supplier-quote shape so spreadsheets are easy to author:
@@ -219,17 +314,19 @@ export function parseCsv(text) {
   for (let i = start; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.every((c) => String(c).trim() === '')) continue;
-    const name = (r[0] || '').trim();
+    const name = unguardCell((r[0] || '').trim());
     if (!name) continue;
-    const pack = (r[1] || '').trim();
+    const pack = unguardCell((r[1] || '').trim());
     const category = normaliseCategory(r[2]);
     const tariff = parseMoney(r[3]);
     const monthlyPacks = Math.max(0, Math.round(num(parseMoney(r[4]))));
-    const supplierName = (r[5] || '').trim();
-    const price = parseMoney(r[6]);
+    const supplierName = unguardCell((r[5] || '').trim());
+    // Distinguish an empty price cell (unpriced supplier) from a literal 0.
+    const priceCell = (r[6] || '').trim();
+    const price = priceCell === '' ? '' : parseMoney(priceCell);
     const isCurrent = isTruthyFlag(r[7]);
 
-    const key = `${name.toLowerCase()} ${pack.toLowerCase()}`;
+    const key = `${name.toLowerCase()} ${pack.toLowerCase()}`;
     let prod = byKey.get(key);
     if (!prod) {
       prod = {
@@ -315,9 +412,22 @@ function splitCsvRows(text) {
   return rows;
 }
 
+// Formula-injection prefix: a leading =, +, -, @, tab or CR in a text field can
+// be executed as a formula when the exported CSV is opened in a spreadsheet.
+const CSV_FORMULA_LEAD = /^[=+\-@\t\r]/;
+
 function csvCell(v) {
-  const s = String(v == null ? '' : v);
+  let s = String(v == null ? '' : v);
+  // Neutralise spreadsheet formula injection on export; unguardCell() reverses
+  // this on re-import so the round-trip is lossless.
+  if (CSV_FORMULA_LEAD.test(s)) s = "'" + s;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Strip a single leading apostrophe that this module added to guard a
+// formula-leading text field (see csvCell). Leaves all other values untouched.
+function unguardCell(s) {
+  return /^'[=+\-@\t\r]/.test(s) ? s.slice(1) : s;
 }
 
 function parseMoney(v) {
@@ -410,6 +520,11 @@ if (typeof module !== 'undefined' && module.exports) {
     deductionRateFor,
     productMetrics,
     practiceTotals,
+    categoryBreakdown,
+    parsePackQty,
+    marginBand,
+    upsertSnapshot,
+    ymKeyOf,
     parseCsv,
     toCsv,
     makeId,
@@ -423,11 +538,13 @@ if (typeof module !== 'undefined' && module.exports) {
 
 const STORE_KEY = 'rxmargin.products';
 const CONFIG_KEY = 'rxmargin.config';
+const HISTORY_KEY = 'rxmargin.history';
 
 let container = null;
 let state = {
   products: [],
   config: { ...DEFAULT_CONFIG, groupRates: { ...DEFAULT_CONFIG.groupRates } },
+  history: [],
   view: 'ledger', // 'ledger' | 'settings'
   editingId: null,
   selfWrite: false,
@@ -435,10 +552,13 @@ let state = {
 
 export async function init(el) {
   container = el;
-  const stored = await chrome.storage.local.get([STORE_KEY, CONFIG_KEY]);
+  const stored = await chrome.storage.local.get([STORE_KEY, CONFIG_KEY, HISTORY_KEY]);
   state.products = Array.isArray(stored[STORE_KEY]) ? stored[STORE_KEY] : [];
   state.config = mergeConfig(stored[CONFIG_KEY]);
+  state.history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
   chrome.storage.onChanged.addListener(onStorageChange);
+  // Record this month's position so the margin trend builds up over time.
+  await recordSnapshot();
   render();
   return () => {
     chrome.storage.onChanged.removeListener(onStorageChange);
@@ -447,7 +567,11 @@ export async function init(el) {
 }
 
 function mergeConfig(raw) {
-  const base = { ...DEFAULT_CONFIG, groupRates: { ...DEFAULT_CONFIG.groupRates } };
+  const base = {
+    ...DEFAULT_CONFIG,
+    groupRates: { ...DEFAULT_CONFIG.groupRates },
+    thresholds: { ...DEFAULT_CONFIG.thresholds },
+  };
   if (raw && typeof raw === 'object') {
     if (raw.mode === 'pharmacyGroups' || raw.mode === 'dispensingDoctor') base.mode = raw.mode;
     if (Number.isFinite(Number(raw.ddRate))) base.ddRate = clampPct(raw.ddRate);
@@ -455,6 +579,10 @@ function mergeConfig(raw) {
       for (const k of Object.keys(base.groupRates)) {
         if (Number.isFinite(Number(raw.groupRates[k]))) base.groupRates[k] = clampPct(raw.groupRates[k]);
       }
+    }
+    if (raw.thresholds && typeof raw.thresholds === 'object') {
+      if (Number.isFinite(Number(raw.thresholds.green))) base.thresholds.green = clampPct(raw.thresholds.green);
+      if (Number.isFinite(Number(raw.thresholds.amber))) base.thresholds.amber = clampPct(raw.thresholds.amber);
     }
   }
   return base;
@@ -471,7 +599,33 @@ function onStorageChange(changes, area) {
     state.config = mergeConfig(changes[CONFIG_KEY].newValue);
     changed = true;
   }
+  if (changes[HISTORY_KEY]) {
+    state.history = Array.isArray(changes[HISTORY_KEY].newValue) ? changes[HISTORY_KEY].newValue : [];
+    changed = true;
+  }
   if (changed) render();
+}
+
+// Capture the current headline figures into the month's history slot (one slot
+// per calendar month, replaced if it already exists), so the trend sparkline
+// reflects the latest position. Skips writing when nothing has changed.
+async function recordSnapshot() {
+  const t = practiceTotals(state.products, state.config);
+  const snap = {
+    monthlyProfitCurrent: Math.round(t.monthlyProfitCurrent * 100) / 100,
+    switchSavingMonthly: Math.round(t.switchSavingMonthly * 100) / 100,
+    productCount: t.productCount,
+  };
+  const next = upsertSnapshot(state.history, snap, ymKeyOf());
+  if (JSON.stringify(next) !== JSON.stringify(state.history)) {
+    state.history = next;
+    state.selfWrite = true;
+    try {
+      await chrome.storage.local.set({ [HISTORY_KEY]: state.history });
+    } finally {
+      state.selfWrite = false;
+    }
+  }
 }
 
 async function persistProducts() {
@@ -481,6 +635,7 @@ async function persistProducts() {
   } finally {
     state.selfWrite = false;
   }
+  await recordSnapshot();
 }
 
 async function persistConfig() {
@@ -529,6 +684,8 @@ function renderLedger() {
       : 'Pharmacy group rates';
 
   const metrics = state.products.map((p) => ({ p, m: productMetrics(p, state.config) }));
+  const breakdown = categoryBreakdown(state.products, state.config);
+  const canSwitchAll = totals.switchableCount > 0;
 
   container.innerHTML = `
     <div class="rxm-module">
@@ -541,6 +698,8 @@ function renderLedger() {
           <button class="rxm-btn" data-act="settings" title="Clawback &amp; rate settings">Rates</button>
           <button class="rxm-btn" data-act="import" title="Import a price list (CSV)">Import CSV</button>
           <button class="rxm-btn" data-act="export" title="Export ledger as CSV">Export CSV</button>
+          ${state.products.length ? '<button class="rxm-btn" data-act="report" title="Open a printable board report">Report</button>' : ''}
+          ${canSwitchAll ? `<button class="rxm-btn" data-act="switch-all" title="Set every line to its cheapest supplier">Switch all → save ${gbp0(totals.switchSavingMonthly)}/mo</button>` : ''}
           <button class="rxm-btn rxm-btn-primary" data-act="add">+ Product</button>
         </div>
       </div>
@@ -548,6 +707,8 @@ function renderLedger() {
       ${renderDashboard(totals)}
 
       ${state.products.length === 0 ? renderEmpty() : `<div class="rxm-table-wrap">${renderTable(metrics)}</div>`}
+
+      ${renderBreakdown(breakdown)}
 
       ${renderOpportunities(totals)}
 
@@ -557,13 +718,60 @@ function renderLedger() {
   wireLedger();
 }
 
+// Compact inline SVG sparkline of monthly-margin history (no chart library).
+function sparkline(history) {
+  const pts = (history || []).map((s) => Number(s.monthlyProfitCurrent)).filter((n) => Number.isFinite(n));
+  if (pts.length < 2) return '';
+  const w = 96;
+  const h = 22;
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
+  const span = max - min || 1;
+  const step = w / (pts.length - 1);
+  const coords = pts.map((v, i) => [i * step, h - 2 - ((v - min) / span) * (h - 4)]);
+  const d = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const last = coords[coords.length - 1];
+  const up = pts[pts.length - 1] >= pts[0];
+  const stroke = up ? 'var(--green)' : 'var(--red)';
+  return `<svg class="rxm-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2" fill="${stroke}"/>
+  </svg>`;
+}
+
+function renderBreakdown(rows) {
+  if (!rows || rows.length < 2) return '';
+  const body = rows
+    .map(
+      (r) => `<tr>
+        <td>${esc(r.label)}</td>
+        <td class="rxm-c-num">${r.productCount}</td>
+        <td class="rxm-c-num ${r.monthlyProfitCurrent < 0 ? 'neg' : 'pos'}">${gbp(r.monthlyProfitCurrent)}</td>
+        <td class="rxm-c-num ${r.switchSavingMonthly > 0 ? 'accent' : ''}">${gbp(r.switchSavingMonthly)}</td>
+        <td class="rxm-c-num ${r.lossCount > 0 ? 'neg' : ''}">${r.lossCount}</td>
+      </tr>`
+    )
+    .join('');
+  return `
+    <div class="rxm-opp-block rxm-breakdown">
+      <h3>Margin by category</h3>
+      <table class="rxm-table rxm-mini-table">
+        <thead><tr><th>Category</th><th>Lines</th><th>Profit/mo</th><th>Switch save/mo</th><th>Loss</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderDashboard(t) {
   const profitCls = t.monthlyProfitCurrent >= 0 ? 'pos' : 'neg';
   return `
     <div class="rxm-cards">
       <div class="rxm-card">
         <div class="rxm-card-label">Monthly margin (current)</div>
-        <div class="rxm-card-val ${profitCls}">${gbp0(t.monthlyProfitCurrent)}</div>
+        <div class="rxm-card-top">
+          <div class="rxm-card-val ${profitCls}">${gbp0(t.monthlyProfitCurrent)}</div>
+          ${sparkline(state.history)}
+        </div>
         <div class="rxm-card-foot">${gbp0(t.annualProfitCurrent)}/yr · ${t.pricedCount}/${t.productCount} priced</div>
       </div>
       <div class="rxm-card ${t.switchSavingMonthly > 0 ? 'rxm-card-accent' : ''}">
@@ -613,24 +821,26 @@ function renderTable(metrics) {
       if (m.switchable) flags.push('<span class="rxm-flag rxm-flag-switch">SWITCH</span>');
       const supplierBits = (p.suppliers || [])
         .map((s) => {
-          const isBest = m.best && s.name === m.best.name && Number(s.price) === Number(m.best.price);
+          const sPrice = priceValue(s.price);
+          const isBest = m.best && s.name === m.best.name && sPrice !== null && sPrice === m.best.price;
           const isCur = m.current && s.name === m.current.name;
           const cls = isBest ? 'rxm-sup-best' : '';
           const star = isCur ? ' ●' : '';
-          return `<span class="rxm-sup ${cls}">${esc(s.name)} ${gbp(s.price)}${star}</span>`;
+          const priceLabel = sPrice === null ? '—' : gbp(sPrice);
+          return `<span class="rxm-sup ${cls}">${esc(s.name)} ${priceLabel}${star}</span>`;
         })
         .join('');
       return `
         <tr data-id="${esc(p.id)}" class="${m.lossMaker ? 'rxm-row-loss' : ''}">
           <td class="rxm-c-name">
             <div class="rxm-name">${esc(p.name) || '<em>unnamed</em>'}</div>
-            <div class="rxm-meta">${esc(p.pack ? 'pack ' + p.pack : '')} · ${esc(catLabel(p.category))} · clawback ${(m.rate * 100).toFixed(2)}%</div>
+            <div class="rxm-meta">${esc(p.pack ? 'pack ' + p.pack : '')} · ${esc(catLabel(p.category))} · clawback ${(m.rate * 100).toFixed(2)}%${m.costPerUnit != null ? ` · ${gbp(m.costPerUnit)}/unit` : ''}</div>
             <div class="rxm-suppliers">${supplierBits || '<span class="rxm-meta">no supplier price</span>'}</div>
           </td>
           <td class="rxm-c-num">${m.tariff ? gbp(m.tariff) : '—'}</td>
           <td class="rxm-c-num">${m.tariff ? gbp(m.netReimb) : '—'}</td>
           <td class="rxm-c-num">${m.currentCost == null ? '—' : gbp(m.currentCost)}</td>
-          <td class="rxm-c-num ${marginCls}">${m.marginPerPackCurrent == null ? '—' : gbp(m.marginPerPackCurrent)}<div class="rxm-meta">${pct(m.marginPct)}</div></td>
+          <td class="rxm-c-num ${marginCls}">${m.marginPerPackCurrent == null ? '—' : gbp(m.marginPerPackCurrent)}<div class="rxm-meta">${m.band ? `<span class="rxm-band rxm-band-${m.band}">${pct(m.marginPct)}</span>` : pct(m.marginPct)}</div></td>
           <td class="rxm-c-num">${m.monthlyPacks || 0}</td>
           <td class="rxm-c-num ${m.monthlyProfitCurrent < 0 ? 'neg' : ''}">${gbp(m.monthlyProfitCurrent)}<div class="rxm-meta">${flags.join(' ')}</div></td>
           <td class="rxm-c-act">
@@ -680,6 +890,10 @@ function renderOpportunities(t) {
             net reimbursement ${gbp(m.netReimb)} vs buy ${gbp(m.currentCost)}</li>`
         )
         .join('')}</ul>
+      <p class="rxm-note">Where a line is unavoidably bought above tariff, check whether a
+      reimbursement route applies — a price concession (NCSO), an out-of-pocket (XP) claim, or a
+      broken-bulk endorsement can recover the gap. Otherwise consider prescribing rather than
+      dispensing the line.</p>
     </div>`;
   }
   html += '</div>';
@@ -731,6 +945,22 @@ function renderSettings() {
           <p class="rxm-note">Current Drug Tariff Part V group deductions: generics 20.00%, branded 5.00%, appliances 9.85%.</p>
         </div>
 
+        <div class="rxm-rate-group">
+          <div class="rxm-field-label">Margin health thresholds (RAG)</div>
+          <div class="rxm-field-row">
+            <label class="rxm-field">
+              <span>Healthy at or above %</span>
+              <input type="number" id="rxmGreen" step="1" min="0" max="100" value="${c.thresholds.green}" />
+            </label>
+            <label class="rxm-field">
+              <span>Watch at or above %</span>
+              <input type="number" id="rxmAmber" step="1" min="0" max="100" value="${c.thresholds.amber}" />
+            </label>
+          </div>
+          <p class="rxm-note">Net-margin % (margin as a share of net reimbursement) below the watch
+          level is flagged red as a line to review.</p>
+        </div>
+
         <div class="rxm-settings-actions">
           <button class="rxm-btn rxm-btn-primary" data-act="save-settings">Save</button>
           <button class="rxm-btn" data-act="reset-settings">Reset to defaults</button>
@@ -755,6 +985,10 @@ function wireSettings() {
     container.querySelectorAll('.rxm-grate').forEach((inp) => {
       cfg.groupRates[inp.dataset.cat] = clampPct(inp.value);
     });
+    cfg.thresholds = {
+      green: clampPct(container.querySelector('#rxmGreen').value),
+      amber: clampPct(container.querySelector('#rxmAmber').value),
+    };
     state.config = mergeConfig(cfg);
     await persistConfig();
     state.view = 'ledger';
@@ -782,6 +1016,8 @@ function wireLedger() {
     render();
   });
   on('[data-act="export"]', 'click', () => exportCsv());
+  on('[data-act="report"]', 'click', () => printReport());
+  on('[data-act="switch-all"]', 'click', () => applyBestToAll());
   on('[data-act="import"]', 'click', () => container.querySelector('#rxmFile').click());
 
   const file = container.querySelector('#rxmFile');
@@ -829,6 +1065,102 @@ function exportCsv() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Scenario action: point every switchable line at its cheapest supplier on file.
+// This is the "realise all switch savings" lever — fully reversible by editing.
+async function applyBestToAll() {
+  const totals = practiceTotals(state.products, state.config);
+  if (totals.switchableCount === 0) return;
+  if (
+    !confirm(
+      `Set ${totals.switchableCount} line(s) to their cheapest supplier on file? ` +
+        `This realises about ${gbp0(totals.switchSavingMonthly)}/month (${gbp0(totals.switchSavingAnnual)}/year). ` +
+        `You can change any line back afterwards.`
+    )
+  )
+    return;
+  state.products = state.products.map((p) => {
+    const m = productMetrics(p, state.config);
+    if (m.switchable && m.best) return { ...p, currentSupplier: m.best.name };
+    return p;
+  });
+  await persistProducts();
+  render();
+}
+
+// Open a clean, print-ready board report in a new window (no backend, no PDF
+// library — the browser's print-to-PDF produces the file).
+function printReport() {
+  const t = practiceTotals(state.products, state.config);
+  const breakdown = categoryBreakdown(state.products, state.config);
+  const rateLabel =
+    state.config.mode === 'dispensingDoctor'
+      ? `Dispensing doctor — ${state.config.ddRate}% flat clawback`
+      : 'Pharmacy group rates';
+  const dateStr = new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const oppRows = t.switchOpportunities
+    .slice(0, 15)
+    .map(
+      (m) =>
+        `<tr><td>${esc(m.name)}</td><td>${esc(m.current ? m.current.name : '?')}</td><td>${esc(m.best ? m.best.name : '?')}</td><td class="r">${gbp(m.switchSavingMonthly)}</td><td class="r">${gbp(m.switchSavingAnnual)}</td></tr>`
+    )
+    .join('');
+  const lossRows = t.lossMakers
+    .slice(0, 15)
+    .map(
+      (m) =>
+        `<tr><td>${esc(m.name)}</td><td class="r">${gbp(m.netReimb)}</td><td class="r">${gbp(m.currentCost)}</td><td class="r neg">${gbp(m.monthlyProfitCurrent)}</td></tr>`
+    )
+    .join('');
+  const catRows = breakdown
+    .map(
+      (r) =>
+        `<tr><td>${esc(r.label)}</td><td class="r">${r.productCount}</td><td class="r">${gbp(r.monthlyProfitCurrent)}</td><td class="r">${gbp(r.switchSavingMonthly)}</td><td class="r">${r.lossCount}</td></tr>`
+    )
+    .join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Dispensing Margin report — ${esc(dateStr)}</title>
+    <style>
+      body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:32px;font-size:13px}
+      h1{font-size:20px;margin:0 0 2px}.sub{color:#475569;margin:0 0 18px;font-size:12px}
+      .cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+      .card{border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;min-width:150px}
+      .card .l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#475569}
+      .card .v{font-size:22px;font-weight:700;margin-top:4px}
+      .pos{color:#16a34a}.neg{color:#dc2626}
+      h2{font-size:14px;margin:20px 0 8px;border-bottom:1px solid #cbd5e1;padding-bottom:4px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e2e8f0}
+      td.r,th.r{text-align:right}
+      .foot{margin-top:26px;color:#64748b;font-size:10px}
+      @media print{body{margin:12mm}}
+    </style></head><body>
+    <h1>Dispensing Margin report</h1>
+    <p class="sub">${esc(dateStr)} · ${esc(rateLabel)} · ${t.pricedCount}/${t.productCount} products priced</p>
+    <div class="cards">
+      <div class="card"><div class="l">Monthly margin</div><div class="v ${t.monthlyProfitCurrent >= 0 ? 'pos' : 'neg'}">${gbp0(t.monthlyProfitCurrent)}</div></div>
+      <div class="card"><div class="l">Annualised margin</div><div class="v">${gbp0(t.annualProfitCurrent)}</div></div>
+      <div class="card"><div class="l">Switch saving / mo</div><div class="v">${gbp0(t.switchSavingMonthly)}</div></div>
+      <div class="card"><div class="l">Switch saving / yr</div><div class="v">${gbp0(t.switchSavingAnnual)}</div></div>
+      <div class="card"><div class="l">Loss-making lines</div><div class="v ${t.lossCount ? 'neg' : ''}">${t.lossCount}</div></div>
+    </div>
+    ${catRows ? `<h2>Margin by category</h2><table><thead><tr><th>Category</th><th class="r">Lines</th><th class="r">Profit/mo</th><th class="r">Switch save/mo</th><th class="r">Loss</th></tr></thead><tbody>${catRows}</tbody></table>` : ''}
+    ${oppRows ? `<h2>Top supplier switches</h2><table><thead><tr><th>Product</th><th>From</th><th>To</th><th class="r">Save/mo</th><th class="r">Save/yr</th></tr></thead><tbody>${oppRows}</tbody></table>` : ''}
+    ${lossRows ? `<h2>Loss-making lines</h2><table><thead><tr><th>Product</th><th class="r">Net reimb.</th><th class="r">Buy</th><th class="r">Profit/mo</th></tr></thead><tbody>${lossRows}</tbody></table>` : ''}
+    <p class="foot">Generated by Medicus Suite — Dispensing Margin. Figures derive from prices entered by the practice; no live Drug Tariff or wholesaler data is bundled. Verify reimbursement routes against the current Drug Tariff before acting.</p>
+    <script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script>
+    </body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Please allow pop-ups to open the printable report.');
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 }
 
 // ── Product editor (modal) ─────────────────────────────────────────────────────

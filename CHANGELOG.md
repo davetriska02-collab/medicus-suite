@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.0] — 2026-06-11
+
+### Dispensing Margin — glass UI refresh + market-feature expansion
+
+Round-two on the `rxmargin` module from a competitive scan of UK dispensing/pharmacy
+margin tools (RxMargin, Dispex/DispensingRx, Drug Tariff Pro/PharmData,
+OpenPrescribing/ePACT2, PMR analytics, wholesaler ordering platforms).
+
+**UI**
+- Full glass redesign: theme-derived translucent panels with `backdrop-filter`,
+  gradient accents, frosted buttons/cards/modals, hover lift, sticky table header,
+  and a `prefers-reduced-motion` fallback. All theme-token based, so it adapts to
+  light/dark/colourblind themes.
+
+**New money-saving features**
+- **Cost-per-unit normalisation** — parses the pack quantity and shows £/unit so
+  different pack sizes of the same drug compare like-for-like.
+- **Margin-by-category breakdown** (generic / branded / appliance / DND) — shows
+  where dispensing profit actually comes from.
+- **RAG margin health** — configurable green/amber/red thresholds on net-margin %,
+  with coloured badges per line.
+- **"Switch all → save £X/mo"** one-click scenario — points every switchable line
+  at its cheapest supplier on file (fully reversible).
+- **Margin trend sparkline** — a per-month history snapshot (`rxmargin.history`,
+  capped at 24 months) renders an inline trend on the headline card.
+- **Loss → recovery hint** — loss-making lines now prompt the reimbursement routes
+  that can recover the gap (price concession / out-of-pocket / broken-bulk), or to
+  prescribe rather than dispense.
+- **Printable board report** — one-click clean report (KPIs, category breakdown,
+  top switches, loss-makers) via the browser's print-to-PDF.
+
+**Red-team fixes (correctness/security)**
+- Blank/non-numeric supplier prices are no longer coerced to £0 — they were
+  masquerading as the cheapest buy and producing bogus margins and switch-savings
+  (reachable via the editor and via empty CSV price cells). Now treated as
+  "unpriced" and excluded from the best-buy calculation.
+- CSV export now neutralises spreadsheet formula-injection (leading `=`,`+`,`-`,`@`),
+  with a matching strip on re-import so the round-trip stays lossless.
+- Removed a stray NUL byte from the product-grouping key.
+
+`test-rxmargin-core.js` expanded to 70 assertions; the new `rxmargin.history` key is
+covered by `shared/io/rxmargin-io.js` and the suite backup envelope.
+
 ## [v3.52.0] — 2026-06-11
 
 ### New module: Dispensing Margin (`rxmargin`)
