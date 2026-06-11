@@ -800,6 +800,8 @@ function render(payload) {
     unmatchedMedsDetailed,
     trace,
     drift,
+    journalAugmentFailed,
+    journalAugmentError,
   } = snapshot;
   const patient = patientContext;
   _currentSnapshot = snapshot;
@@ -941,6 +943,17 @@ function render(payload) {
 
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
 
+  // Journal-augment failure indicator — shown when the content script's
+  // fetchJournalObservations threw. QOF chips that rely on journal-coded
+  // evidence (AST007, COPD010, HF007, etc.) may show no_data incorrectly.
+  // Deliberately unobtrusive: a small muted line near the extraction health
+  // block, not a banner (the chip list is still usable; this is advisory only).
+  const journalAugmentHtml = journalAugmentFailed
+    ? `<div class="sent-journal-warn" title="Journal fetch error: ${escHtml(journalAugmentError || 'unknown error')}">` +
+      `&#9888; Journal data unavailable — QOF journal-coded indicators may show no data. Reload or check network.` +
+      `</div>`
+    : '';
+
   // Rule currency footer (one line, neutral if green, amber with first warning if amber).
   const currencyFooterHtml = _ruleCurrencyFooter || '';
 
@@ -954,6 +967,7 @@ function render(payload) {
       emptyMsg +
       unmatchedHtml +
       extractionHtml +
+      journalAugmentHtml +
       currencyFooterHtml +
       `
     <div class="sent-footer">

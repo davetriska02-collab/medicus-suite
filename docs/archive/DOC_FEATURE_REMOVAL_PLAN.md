@@ -1,3 +1,5 @@
+> Archived 2026-06-11 — implemented/superseded; kept for historical reference.
+
 # Document-context Lens — Removal Plan
 
 Removes the **document-context lens** from Triage Lens **in full** — a dead

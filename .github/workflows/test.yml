@@ -24,6 +24,9 @@ jobs:
       - name: Verify Triage Lens defaults are in sync (3-copy guard)
         run: node scripts/regen-defaults.js --check
 
+      - name: Verify safety-doc versions track manifest (known-stale pins allowed)
+        run: node scripts/check-doc-versions.js
+
       - name: Verify vendored library integrity (sha256 vs vendor-versions.json)
         run: node scripts/verify-vendor.js
 

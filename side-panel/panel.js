@@ -2,6 +2,8 @@
 
 'use strict';
 
+import { createModuleLoader } from './module-loader.js';
+
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
 let activeModule = 'slots';
@@ -12,15 +14,6 @@ let panelDisplayPrefs = { theme: 'light', size: 'medium', colorblind: false };
 let displayOpen = false;
 let _dpCloseHandler = null;
 
-function applyDisplayPrefs(prefs) {
-  prefs = prefs || {};
-  panelDisplayPrefs.theme     = prefs.theme     || 'light';
-  panelDisplayPrefs.size      = prefs.size      || 'medium';
-  panelDisplayPrefs.colorblind = !!prefs.colorblind;
-  document.documentElement.setAttribute('data-theme',      panelDisplayPrefs.theme);
-  document.documentElement.setAttribute('data-size',       panelDisplayPrefs.size);
-  document.documentElement.setAttribute('data-colorblind', String(panelDisplayPrefs.colorblind));
-}
 
 function buildDisplayPopoverHTML() {
   const p = panelDisplayPrefs;
@@ -58,14 +51,12 @@ function renderDisplayPopover() {
     btn.addEventListener('click', () => {
       panelDisplayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
       chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
-      applyDisplayPrefs(panelDisplayPrefs);
       renderDisplayPopover();
     });
   });
   host.querySelector('#dpColorblind')?.addEventListener('change', e => {
     panelDisplayPrefs.colorblind = e.target.checked;
     chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
-    applyDisplayPrefs(panelDisplayPrefs);
     renderDisplayPopover();
   });
 
@@ -145,15 +136,8 @@ document.addEventListener('suite:slots:count', e => {
   badge.style.display = (n != null && n >= 0) ? '' : 'none';
 });
 
-// Inject module CSS once per module
+// CSS dedup set for module stylesheets — passed to createModuleLoader
 const loadedCss = new Set();
-function ensureModuleCss(cssPath) {
-  if (!cssPath || loadedCss.has(cssPath)) return;
-  loadedCss.add(cssPath);
-  const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = cssPath;
-  document.head.appendChild(link);
-}
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
@@ -280,45 +264,21 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 
 updatePopoutBtn();
 
-async function switchModule(name) {
-  const mySeq = ++switchSeq;
-
-  // Cleanup previous module before wiping content
-  const prevCleanup = moduleCleanup;
-  moduleCleanup = null;
-  if (prevCleanup) try { prevCleanup(); } catch (e) { console.error(e); }
-
-  // Update nav
-  document.querySelectorAll('.nav-tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.module === name)
-  );
-  activeModule = name;
-  content.innerHTML = '';
-
-  if (name === 'about') { renderAbout(); return; }
-
-  const entry = MODULES[name];
-  if (!entry) return;
-
-  ensureModuleCss(entry.css);
-
-  try {
-    const mod = await entry.js();
-    if (mySeq !== switchSeq) return;
-    if (mod.init) {
-      const cleanup = await mod.init(content);
-      if (mySeq !== switchSeq) {
-        // A newer switch happened while init was running — clean up immediately
-        if (typeof cleanup === 'function') try { cleanup(); } catch (e) { console.error(e); }
-        return;
-      }
-      moduleCleanup = cleanup;
-    }
-  } catch (err) {
-    if (mySeq !== switchSeq) return;
-    content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load module: ${escStrip(err.message)}</div></div>`;
-  }
-}
+const switchModule = createModuleLoader({
+  modules:      MODULES,
+  container:    content,
+  loadedCss,
+  getSwitchSeq: () => switchSeq,
+  incSwitchSeq: () => ++switchSeq,
+  getCleanup:   () => moduleCleanup,
+  setCleanup:   (fn) => { moduleCleanup = fn; },
+  setActive:    (name) => { activeModule = name; },
+  onSpecial:    (name) => {
+    if (name === 'about') { renderAbout(); return true; }
+    return false;
+  },
+  escFn: escStrip,
+});
 
 // ── About module (inline) ─────────────────────────────────────────────────────
 
@@ -563,10 +523,10 @@ let WR_API        = null;
 const WR_POLL_MS  = 30 * 1000;
 const wrStripEl   = document.getElementById('wrStrip');
 
-let wrPollTimer   = null;
+let wrPoller = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') return true;
   // Resolve practice code on every call so user changes take effect immediately
   const { code, source } = await window.PracticeCode.resolve();
   SITE_ID_WR = code;
@@ -576,7 +536,7 @@ async function fetchAndRenderStrip(bypassCache = false) {
       wrStripEl.className = 'wr-strip wr-strip-hidden';
       wrStripEl.innerHTML = '';
     }
-    return;
+    return true;
   }
   WR_API = `https://${SITE_ID_WR}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
   try {
@@ -600,8 +560,10 @@ async function fetchAndRenderStrip(bypassCache = false) {
 
     renderStrip(arrived);
     updateStripBadge(arrived.length);
+    return true;
   } catch (_) {
     // Network error or no Medicus session — keep strip hidden, don't spam console
+    return false;
   }
 }
 
@@ -664,6 +626,61 @@ function escStrip(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── Failure-backoff poller ────────────────────────────────────────────────────
+// makePoller(fn, baseMs, label) → { start(overrideMs?), stop() }
+//
+// Runs fn() on a self-scheduling setTimeout chain.  fn() should return true
+// (or any truthy value) on success and false on a network/API failure.
+// Consecutive failures double the interval (capped at 8× base); a single
+// success resets to base.  console.warn fires once per new escalation level.
+//
+// start(overrideMs) can be called while a tick is in progress (e.g. the RM
+// strip restarts itself on config change) — a _scheduledByStart flag prevents
+// the in-progress tick from stacking a second setTimeout on top.
+
+function makePoller(fn, baseMs, label) {
+  let _timer          = null;
+  let _failCount      = 0;
+  let _currentBaseMs  = baseMs;
+  let _startedDuring  = false; // set if start() called while tick is running
+
+  function _schedule(delayMs) {
+    if (_timer) clearTimeout(_timer);
+    _timer = setTimeout(_tick, delayMs);
+  }
+
+  async function _tick() {
+    _timer         = null;
+    _startedDuring = false;
+    const ok = await fn();
+    if (_startedDuring) return; // start() rescheduled us already — don't double-schedule
+    if (ok === false) {
+      _failCount++;
+      const level = Math.min(_failCount, 3);          // 2^3 = 8 → cap at 8×
+      const delay = _currentBaseMs * Math.pow(2, level);
+      console.warn(`[${label}] poll failure #${_failCount}, backing off to ${delay}ms`);
+      _schedule(delay);
+    } else {
+      _failCount = 0;
+      _schedule(_currentBaseMs);
+    }
+  }
+
+  return {
+    start(overrideMs) {
+      _startedDuring = true;           // suppress any in-progress tick's post-schedule
+      if (overrideMs != null) _currentBaseMs = overrideMs;
+      _failCount = 0;
+      _schedule(0);                    // fire first tick immediately
+      return this;
+    },
+    stop() {
+      _startedDuring = true;
+      if (_timer) { clearTimeout(_timer); _timer = null; }
+    },
+  };
+}
+
 // Listen for Pusher-triggered refresh from service worker
 // F5: Sender guard — only accept messages from intra-extension contexts.
 // Light coalescing: fetchAndRenderStrip / fetchAndRenderRmStrip are already
@@ -675,9 +692,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg?.type === 'requestMonitor:refresh') fetchAndRenderRmStrip();
 });
 
-// Boot the strip — initial fetch + poll
-fetchAndRenderStrip();
-wrPollTimer = setInterval(fetchAndRenderStrip, WR_POLL_MS);
+// Boot the strip — initial fetch + self-scheduling poll with failure backoff
+wrPoller = makePoller(fetchAndRenderStrip, WR_POLL_MS, 'wr-strip').start();
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
 // Sits below the waiting room strip. Hidden entirely unless toggled on in
@@ -685,31 +701,30 @@ wrPollTimer = setInterval(fetchAndRenderStrip, WR_POLL_MS);
 // buckets; clicking a pill opens the filtered task list in a new tab.
 
 const rmStripEl = document.getElementById('rmStrip');
-let rmPollTimer = null;
+let rmPoller = null;
 let rmPollSeconds = 60;
 
 async function fetchAndRenderRmStrip() {
-  if (document.visibilityState !== 'visible') return;
-  if (!rmStripEl || !window.RequestMonitor) return;
+  if (document.visibilityState !== 'visible') return true;
+  if (!rmStripEl || !window.RequestMonitor) return true;
 
   const cfg = await window.RequestMonitor.getConfig();
   if (!cfg.enabled || !cfg.assigneeId) {
     rmStripEl.className = 'rm-strip rm-strip-hidden';
     rmStripEl.innerHTML = '';
-    return;
+    return true;
   }
-  // Adjust poll interval if config changed
+  // Adjust poll interval if config changed — restart the poller at the new interval
   if (cfg.pollSeconds && cfg.pollSeconds * 1000 !== rmPollSeconds * 1000) {
     rmPollSeconds = cfg.pollSeconds;
-    if (rmPollTimer) clearInterval(rmPollTimer);
-    rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
+    if (rmPoller) rmPoller.start(rmPollSeconds * 1000);
   }
 
   const { code, source } = await window.PracticeCode.resolve();
   if (!code) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">No practice code</span>`;
-    return;
+    return true;
   }
 
   // Direct fetch via API diag so failures show up in the Debug panel
@@ -721,11 +736,12 @@ async function fetchAndRenderRmStrip() {
   } catch (e) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
-    return;
+    return false;
   }
 
   renderRmStrip(result, code, cfg.assigneeId);
   applyTriageAlerts(result.buckets);
+  return true;
 }
 
 function renderRmStrip(result, practiceCode, assigneeId) {
@@ -816,10 +832,9 @@ chrome.storage.onChanged.addListener(changes => {
   }
 });
 
-// Boot the rm strip
-fetchAndRenderRmStrip();
+// Boot the rm strip — initial fetch + self-scheduling poll with failure backoff
 // Initial poll interval — will adjust to cfg.pollSeconds on first fetch
-rmPollTimer = setInterval(fetchAndRenderRmStrip, rmPollSeconds * 1000);
+rmPoller = makePoller(fetchAndRenderRmStrip, rmPollSeconds * 1000, 'rm-strip').start();
 
 // ── Submissions demand strip (global — visible on every module) ───────────────
 // Shows amber/red when medical or admin request counts hit configured thresholds.
@@ -847,8 +862,8 @@ function _subRagLevel(key, value, thresholds) {
 }
 
 async function fetchAndRenderSubRagStrip() {
-  if (document.visibilityState !== 'visible') return;
-  if (!subRagStripEl) return;
+  if (document.visibilityState !== 'visible') return true;
+  if (!subRagStripEl) return true;
 
   const stored = await chrome.storage.local.get('submissions.thresholds');
   const thresholds = { ...DEFAULT_SUB_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
@@ -857,11 +872,11 @@ async function fetchAndRenderSubRagStrip() {
   if (!anyEnabled) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
-    return;
+    return true;
   }
 
   const { code, source } = await window.PracticeCode.resolve();
-  if (!code) return;
+  if (!code) return true;
 
   const today = new Date().toISOString().slice(0, 10);
   const results = await Promise.allSettled(
@@ -875,6 +890,9 @@ async function fetchAndRenderSubRagStrip() {
       return { key: tt.key, label: tt.label, count: (d.tasks || []).length };
     })
   );
+
+  // A failure in any sub-request counts as a polling failure for backoff purposes
+  const anyFailed = results.some(r => r.status === 'rejected');
 
   const triggered = [];
   let maxLevel = null;
@@ -892,7 +910,7 @@ async function fetchAndRenderSubRagStrip() {
   if (triggered.length === 0) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
-    return;
+    return !anyFailed;
   }
 
   const pills = triggered.map(t =>
@@ -907,10 +925,10 @@ async function fetchAndRenderSubRagStrip() {
     <button class="sub-rag-goto" title="Go to Submissions">Submissions →</button>
   `;
   subRagStripEl.querySelector('.sub-rag-goto')?.addEventListener('click', () => switchModule('submissions'));
+  return !anyFailed;
 }
 
-fetchAndRenderSubRagStrip();
-let subRagPollTimer = setInterval(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS);
+let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-rag-strip').start();
 
 // Refresh all three strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
@@ -921,25 +939,31 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Tear down all strip poll timers when the panel document goes away. The side
+// Tear down all strip pollers when the panel document goes away. The side
 // panel is normally permanent, but if Chrome re-creates the document (e.g. an
 // extension reload without a browser restart) the old timers would otherwise
-// keep running and a fresh set would stack on top. Only rmPollTimer was cleared
-// before (on config change); wr/subRag ran for the document's whole lifetime.
+// keep running and a fresh set would stack on top.
 window.addEventListener('pagehide', () => {
-  if (wrPollTimer) clearInterval(wrPollTimer);
-  if (rmPollTimer) clearInterval(rmPollTimer);
-  if (subRagPollTimer) clearInterval(subRagPollTimer);
+  if (wrPoller)     wrPoller.stop();
+  if (rmPoller)     rmPoller.stop();
+  if (subRagPoller) subRagPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
-// Load and apply display preferences; keep popover state in sync with external changes
+// Sync panelDisplayPrefs from storage so the display popover reflects current settings.
+// HTML attributes (data-theme etc.) are applied by shared/display-prefs.js.
+function _syncPanelDisplayPrefs(p) {
+  p = p || {};
+  panelDisplayPrefs.theme      = p.theme      || 'light';
+  panelDisplayPrefs.size       = p.size       || 'medium';
+  panelDisplayPrefs.colorblind = !!p.colorblind;
+}
 chrome.storage.local.get('suite.display').then(r => {
-  applyDisplayPrefs(r['suite.display'] || {});
+  _syncPanelDisplayPrefs(r['suite.display'] || {});
 });
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes['suite.display']) applyDisplayPrefs(changes['suite.display'].newValue || {});
+  if (changes['suite.display']) _syncPanelDisplayPrefs(changes['suite.display'].newValue || {});
 });
 
 // Wire display button

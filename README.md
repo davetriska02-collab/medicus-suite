@@ -1,9 +1,11 @@
 # Medicus Suite
 
 Chrome extension toolkit for GP practices using the Medicus clinical system.
-Bundles waiting room, slot counter, capacity forecast, submissions tracker,
-clinical monitoring (Sentinel), triage lens, and triage request monitor into
-one extension that reads the user's logged-in Medicus session.
+Bundles slot counter, capacity forecast, submissions tracker, clinical
+monitoring (Sentinel), activity report, referrals tracker, trend charts,
+Condor operational dashboard, reception pathways, pre-clinic sweep, practice
+knowledge base, patient record visualiser, triage lens, and triage request
+monitor into one extension that reads the user's logged-in Medicus session.
 
 Built by Dr Dave Triska (Witley & Milford Surgery). Not affiliated with
 Medicus the company.
