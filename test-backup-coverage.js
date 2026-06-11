@@ -198,6 +198,11 @@ const ALLOWLIST = new Set([
   // would import a stale baseline and mask real drift (documented in
   // shared/extraction-health.js and shared/io/sentinel-io.js):
   'sentinel.extractionBaseline',
+
+  // Locally-discovered referral endpoint URL only (no PHI after audit M1).
+  // Rediscovered on visiting the referrals page; never exported to backup.
+  // referrals.config IS covered via referrals-io.
+  'referrals.discovery',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
