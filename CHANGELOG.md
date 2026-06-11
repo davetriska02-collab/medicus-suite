@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.52.0] — 2026-06-11
+
+### New module: Dispensing Margin (`rxmargin`)
+
+A working, offline alternative to RxMargin (rxmargin.co.uk) for UK dispensing GP
+practices. Dispensing practices buy medicines from wholesalers but are reimbursed
+at Drug Tariff prices minus the NHS discount-deduction "clawback", so a line's
+profit is `tariff × (1 − clawback) − purchase price`. The module turns each
+practice's own prices into the money decisions that save cash:
+
+- **Per-product margin ledger** — enter Drug Tariff reimbursement, pack size,
+  category, monthly packs dispensed, and one or more wholesaler quotes per line.
+  Computes net reimbursement after clawback, margin per pack and margin %, and
+  monthly/annual profit at the supplier currently used.
+- **Best-buy detection & switch savings** — highlights the cheapest supplier on
+  file for every line and totals the cash freed simply by switching each line to
+  it (monthly and annualised), ranked biggest-saving-first.
+- **Loss-maker flagging** — surfaces lines where the clawed-back tariff no longer
+  covers the purchase price (negative margin), the headline budget risk.
+- **Configurable clawback model** — `dispensing doctor` flat rate (default 11.18%,
+  the SFE reference) or `pharmacy group` rates (generics 20.00%, branded 5.00%,
+  appliances 9.85%, DND 0.00%). All figures are user-editable so the tool stays
+  current with the Drug Tariff without a code change.
+- **CSV import/export** — bulk-load a price list (`name,pack,category,tariff,
+  monthlyPacks,supplier,price,current`); rows sharing a name+pack group into one
+  product with multiple supplier quotes. Export the ledger back to CSV.
+- **Worked-example dataset** for first-run exploration; no live Drug Tariff or
+  wholesaler price feeds are bundled (those are licensed) — all prices are entered
+  by the practice and stay on the device.
+
+Wired into the side panel and pop-out nav, the suite backup/restore envelope
+(`rxmargin` scope, `shared/io/rxmargin-io.js`), and the per-module export cards in
+Settings. Pure margin math is regression-tested in `test-rxmargin-core.js`
+(42 assertions).
+
 ## [v3.51.2] — 2026-06-10
 
 ### Security / bug fixes (2026-06-10 authorised audit)

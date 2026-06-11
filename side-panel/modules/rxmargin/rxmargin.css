@@ -1,0 +1,399 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Dispensing Margin module styles */
+
+.rxm-module {
+  font-family: var(--sans);
+  padding: 12px;
+  color: var(--text-1);
+}
+
+/* Header */
+.rxm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.rxm-title {
+  font-size: 15px;
+  margin: 0;
+  font-weight: 600;
+}
+.rxm-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.rxm-head-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.rxm-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 7px;
+  padding: 7px 11px;
+  transition: all 0.15s;
+}
+.rxm-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+.rxm-btn-primary {
+  background: linear-gradient(135deg, rgba(74, 127, 184, 0.32), rgba(74, 127, 184, 0.16));
+  border-color: rgba(74, 127, 184, 0.5);
+}
+.rxm-btn-primary:hover {
+  background: rgba(74, 127, 184, 0.38);
+}
+.rxm-btn-sm {
+  padding: 4px 8px;
+  font-size: 9px;
+}
+
+/* Dashboard cards */
+.rxm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.rxm-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.rxm-card-accent {
+  border-color: rgba(74, 127, 184, 0.5);
+}
+.rxm-card-warn {
+  border-color: var(--red);
+}
+.rxm-card-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rxm-card-val {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.rxm-card-val.pos {
+  color: var(--green);
+}
+.rxm-card-val.neg {
+  color: var(--red);
+}
+.rxm-card-val.accent {
+  color: #4a7fb8;
+}
+.rxm-card-foot {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+/* Empty state */
+.rxm-empty {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+.rxm-empty p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 0 0 10px;
+}
+.rxm-empty code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+.rxm-empty-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.rxm-note {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* Table */
+.rxm-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.rxm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.rxm-table th {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--bg-elev);
+}
+.rxm-table th:first-child {
+  text-align: left;
+}
+.rxm-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.rxm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.rxm-row-loss {
+  background: rgba(220, 60, 60, 0.07);
+}
+.rxm-c-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rxm-c-num.pos {
+  color: var(--green);
+}
+.rxm-c-num.neg {
+  color: var(--red);
+}
+.rxm-c-name {
+  min-width: 180px;
+}
+.rxm-name {
+  font-weight: 600;
+}
+.rxm-meta {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-3);
+}
+.rxm-suppliers {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rxm-sup {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.rxm-sup-best {
+  border-color: var(--green);
+  color: var(--green);
+}
+.rxm-c-act {
+  white-space: nowrap;
+}
+.rxm-icon {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 5px;
+}
+.rxm-icon:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-1);
+}
+
+/* Flags */
+.rxm-flag {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.rxm-flag-loss {
+  background: rgba(220, 60, 60, 0.18);
+  color: var(--red);
+}
+.rxm-flag-switch {
+  background: rgba(74, 127, 184, 0.18);
+  color: #4a7fb8;
+}
+
+/* Opportunities */
+.rxm-opps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.rxm-opp-block {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.rxm-opp-block h3 {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 8px;
+}
+.rxm-opp-block ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.rxm-opp-block li {
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  color: var(--text-2);
+}
+.rxm-opp-block .neg {
+  color: var(--red);
+}
+
+/* Settings */
+.rxm-settings {
+  max-width: 520px;
+}
+.rxm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.rxm-field > span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+.rxm-field input,
+.rxm-field select {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-1);
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.rxm-field-row {
+  display: flex;
+  gap: 10px;
+}
+.rxm-field-row .rxm-field {
+  flex: 1;
+}
+.rxm-rate-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.rxm-hidden {
+  display: none;
+}
+.rxm-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.rxm-field-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+
+/* Modal */
+.rxm-modal-host {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 12px;
+  z-index: 50;
+  overflow-y: auto;
+}
+.rxm-modal {
+  background: var(--bg, #1a1d23);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  width: 100%;
+  max-width: 460px;
+}
+.rxm-modal h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.rxm-suppliers-edit {
+  margin: 6px 0 14px;
+}
+.rxm-sup-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.rxm-sup-edit input[type='radio'] {
+  flex: 0 0 auto;
+}
+.rxm-sup-name {
+  flex: 1 1 auto;
+}
+.rxm-sup-price {
+  flex: 0 0 90px;
+}
+.rxm-sup-edit input[type='text'],
+.rxm-sup-edit input[type='number'] {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-1);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.rxm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
