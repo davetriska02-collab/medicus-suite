@@ -1,0 +1,52 @@
+<div class="sentinel-root">
+  <header class="sb-header">
+    <div class="sb-title">
+      <span class="sb-icon">&#x25B2;</span>
+      <strong>Sentinel</strong> <span class="sb-version">v0.4.2</span>
+    </div>
+    <div class="sb-header-actions">
+      <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Open settings" type="button">&#9881;</button>
+      <button id="close-btn" class="icon-btn" aria-label="Close" type="button">&times;</button>
+    </div>
+  </header>
+
+  <section class="sb-toolbar">
+    <label class="data-source-label">
+      <span class="data-source-text">DATA SOURCE</span>
+      <select id="mode-select" class="mode-select">
+        <option value="live" selected>Live (extract from page)</option>
+        <option value="mock">Mock (demo data)</option>
+        <option value="discovery">Discovery (log structure)</option>
+      </select>
+    </label>
+    <button id="refresh-btn" class="text-btn" type="button">Refresh</button>
+  </section>
+
+  <section class="sb-status-row">
+    <span class="status">Loading...</span>
+  </section>
+
+  <div class="patient-banner" style="display:none"></div>
+
+  <section class="sb-summary">
+    <span class="summary"></span>
+  </section>
+
+  <section class="sb-filter">
+    <label class="show-achieved-label">
+      <input id="show-achieved-toggle" type="checkbox" checked>
+      <span>Show achieved</span>
+    </label>
+    <label class="show-achieved-label">
+      <input id="show-no-data-toggle" type="checkbox" checked>
+      <span>Show no-data</span>
+    </label>
+    <button id="chip-style-cycle" class="text-btn-tiny" type="button" title="Cycle chip colour style">Style</button>
+  </section>
+
+  <main class="chip-list"></main>
+
+  <footer class="sb-footer">
+    <small>Read-only memory aid. Not clinical decision support. Verify all values in the record.</small>
+  </footer>
+</div>

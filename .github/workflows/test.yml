@@ -1,0 +1,48 @@
+name: Tests
+
+# Runs the full automated test suite on every push and pull request, and fails
+# closed on any failure. This is the "release gating" control referenced in
+# docs/CLINICAL-SAFETY-NOTICE.md (§11) and docs/HAZARD-LOG.md (H-006).
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify Triage Lens defaults are in sync (3-copy guard)
+        run: node scripts/regen-defaults.js --check
+
+      - name: Verify vendored library integrity (sha256 vs vendor-versions.json)
+        run: node scripts/verify-vendor.js
+
+      - name: Syntax-check changed JS entry points
+        run: |
+          node --check content-scripts/triage-lens/content.js
+          node --check content-scripts/sentinel.js
+          node --check engine/rules-engine.js
+          node --check sentinel-options/options.js
+
+      - name: Run automated test suite (fails closed)
+        run: node --test --test-concurrency=1 test-*.js
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm install --no-audit --no-fund
+      - name: ESLint (lenient config, repo-wide, fails closed)
+        run: npx eslint .

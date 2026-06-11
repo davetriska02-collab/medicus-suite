@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build artefacts (the GitHub Actions workflow creates these)
+*.zip
+!medicus-suite-baseline.zip
+
+# Local dev scratch
+node_modules/
+*.log
+
+# Patient / sensitive data — NEVER commit
+data/sars/
+uploads/
+output/
+
+# Cowork skill staging — for the medicus-suite-deploy skill, copied to
+# /mnt/skills/user/ during repo setup. Not part of the repo itself.
+_skill/
+
+# Claude Code agent worktrees (scratch, never commit)
+.claude/worktrees/

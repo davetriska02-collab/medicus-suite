@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medicus Patient Record Visualiser</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --nhs-blue:#005eb8;--nhs-dark:#003d78;--nhs-light:#d4e8ff;
+  --nhs-green:#007f3b;--nhs-red:#d4351c;--nhs-orange:#f47738;
+  --nhs-grey:#b1b4b6;--nhs-mid:#768692;--nhs-pale:#f0f4f5;
+  --card:#ffffff;--text:#212b32;--text2:#4c6272;--border:#d8dde0;
+  --r:6px;--tr:0.15s ease;
+}
+html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14px;color:var(--text);background:var(--nhs-pale)}
+#drop-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:20px;padding:40px}
+#drop-zone.drag-over{background:#e8f0fa}
+.drop-box{border:2px dashed var(--border);border-radius:12px;padding:48px 60px;text-align:center;cursor:pointer;transition:var(--tr);background:var(--card)}
+.drop-box:hover,.drop-box.drag-over{border-color:var(--nhs-blue);background:var(--nhs-light)}
+.drop-icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.drop-title{font-size:20px;font-weight:700;color:var(--nhs-blue);margin-bottom:8px}
+.drop-sub{font-size:13px;color:var(--text2)}
+.drop-btn{display:inline-block;margin-top:16px;padding:10px 24px;background:var(--nhs-blue);color:#fff;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;border:none}
+.drop-btn:hover{background:var(--nhs-dark)}
+#app{display:none;flex-direction:column;height:100vh;overflow:hidden}
+#patient-banner{background:var(--nhs-blue);color:#fff;padding:10px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;flex-shrink:0}
+.pb-name{font-size:17px;font-weight:700}
+.pb-chip{font-size:12px;background:rgba(255,255,255,.18);border-radius:20px;padding:3px 10px}
+.pb-change{margin-left:auto;font-size:12px;opacity:.75;cursor:pointer;text-decoration:underline}
+#tab-nav{background:var(--card);border-bottom:2px solid var(--border);display:flex;padding:0 16px;gap:0;flex-shrink:0;overflow-x:auto}
+.tab-btn{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:var(--tr)}
+.tab-btn:hover{color:var(--nhs-blue)}
+.tab-btn.active{color:var(--nhs-blue);border-bottom-color:var(--nhs-blue)}
+/* Filter bar */
+#filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:8px 24px;background:#fafbfc;border-bottom:1px solid var(--border);flex-shrink:0;font-size:12px}
+.fb-group{display:flex;align-items:center;gap:6px}
+.fb-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2)}
+.fb-preset{padding:3px 10px;border:1px solid var(--border);background:#fff;border-radius:14px;font-size:11px;cursor:pointer;color:var(--text2);font-weight:600;transition:var(--tr)}
+.fb-preset:hover{background:var(--nhs-light);border-color:var(--nhs-blue);color:var(--nhs-blue)}
+.fb-preset.active{background:var(--nhs-blue);border-color:var(--nhs-blue);color:#fff}
+.fb-select{padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--text);max-width:180px}
+#fb-clear{padding:4px 10px;font-size:11px;background:none;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;color:var(--text2);font-weight:600}
+#fb-clear:hover{background:#fee;border-color:var(--nhs-red);color:var(--nhs-red)}
+.fb-summary{margin-left:auto;font-size:11px;color:var(--text2);font-style:italic}
+.fb-brush-svg .selection{fill:var(--nhs-blue);fill-opacity:.18;stroke:var(--nhs-blue);stroke-width:1}
+.fb-brush-svg .handle{fill:var(--nhs-blue)}
+.fb-brush-svg text{font-size:9px;fill:var(--text2)}
+.fb-brush-svg .tick line{stroke:var(--border)}
+#tab-body{flex:1;overflow-y:auto;padding:20px 24px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+/* Active-problem chip (clickable for cross-filtering) */
+.prob-item.clickable{cursor:pointer;transition:var(--tr)}
+.prob-item.clickable:hover{background:var(--nhs-light)}
+.prob-item.problem-active{background:#fff3cd;border-left:3px solid var(--nhs-orange);padding-left:5px;margin-left:-8px}
+/* Swim-lane */
+.swimlane-wrap{position:relative}
+.swimlane-svg{display:block;width:100%;background:#fff;border:1px solid var(--border);border-radius:var(--r)}
+.swimlane-svg .lane-bg{fill:#fafbfc}
+.swimlane-svg .lane-bg.alt{fill:#fff}
+.swimlane-svg .lane-label{font-size:11px;font-weight:600;fill:var(--text2);text-transform:capitalize}
+.swimlane-svg .axis text{font-size:10px;fill:var(--text2)}
+.swimlane-svg .axis line, .swimlane-svg .axis path{stroke:var(--border)}
+.swimlane-svg .event{cursor:pointer;transition:opacity .1s}
+.swimlane-svg .event:hover{opacity:.6}
+.swimlane-svg .event.highlighted{stroke:var(--nhs-orange);stroke-width:2}
+.swimlane-svg .event.dimmed{opacity:.18}
+.swimlane-tooltip{position:absolute;pointer-events:none;background:#212b32;color:#fff;font-size:11px;padding:6px 9px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);z-index:50;opacity:0;transition:opacity .1s}
+.swimlane-tooltip.visible{opacity:1}
+/* Investigations table sort/filter */
+.inv-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.inv-toolbar input[type="text"]{flex:1;min-width:180px;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--r)}
+.inv-toolbar select{padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:#fff}
+.inv-toolbar label{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer}
+.sortable-th{cursor:pointer;user-select:none}
+.sortable-th:hover{background:var(--nhs-light)!important;color:var(--nhs-blue)}
+.sortable-th .sort-glyph{display:inline-block;width:8px;color:var(--nhs-blue);font-weight:700}
+/* eFI gauge */
+.efi-card{display:flex;align-items:center;gap:18px}
+.efi-gauge{position:relative;width:90px;height:90px;flex-shrink:0}
+.efi-gauge-bg{fill:none;stroke:#e8edf0;stroke-width:9}
+.efi-gauge-fg{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .5s ease}
+.efi-num{font-size:22px;font-weight:700;text-anchor:middle;dominant-baseline:central}
+.efi-cat{font-size:8px;font-weight:600;text-anchor:middle;text-transform:uppercase;letter-spacing:.04em}
+.efi-detail{flex:1}
+.efi-cat-label{font-size:14px;font-weight:700;margin-bottom:4px}
+.efi-meta{font-size:11px;color:var(--text2);line-height:1.5}
+/* PINCER alerts */
+.pincer-card{border-left:4px solid var(--nhs-red)}
+.pincer-list{display:flex;flex-direction:column;gap:6px}
+.pincer-item{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:#fff5f5;border-radius:4px;font-size:12px;border-left:3px solid transparent}
+.pincer-item.high{border-left-color:var(--nhs-red);background:#fde8e8}
+.pincer-item.med{border-left-color:var(--nhs-orange);background:#fef3cd}
+.pincer-item.low{border-left-color:var(--nhs-grey);background:var(--nhs-pale)}
+.pincer-rule{font-weight:700}
+.pincer-detail{color:var(--text2);font-size:11px;margin-top:2px}
+/* High-risk drug rows */
+.drug-row{display:grid;grid-template-columns:200px 1fr 1fr 1fr 90px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:12px}
+.drug-row:hover{background:#fafbfc}
+.drug-row.overdue{background:#fde8e8}
+.drug-row.overdue:hover{background:#fcd6d6}
+.drug-name{font-weight:600;font-size:13px}
+.drug-meta{color:var(--text2);font-size:11px}
+.drug-head{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);background:var(--nhs-pale);padding:8px 10px;display:grid;grid-template-columns:200px 1fr 1fr 1fr 90px;gap:10px;border-bottom:2px solid var(--border)}
+/* Register cards w/ review */
+.reg-card{position:relative}
+.reg-review{font-size:11px;margin-top:4px;display:flex;justify-content:space-between;align-items:center}
+.reg-review-date{color:var(--text2)}
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+/* Stats tiles */
+.stat-tile{background:var(--nhs-pale);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center}
+.stat-num{font-size:26px;font-weight:700;color:var(--nhs-blue);line-height:1}
+.stat-lbl{font-size:11px;color:var(--text2);margin-top:4px}
+/* Problem list */
+.prob-list{list-style:none;display:flex;flex-direction:column;gap:4px}
+.prob-item{display:flex;align-items:baseline;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid #f0f0f0}
+.prob-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.prob-dot.major{background:var(--nhs-red)}
+.prob-dot.minor{background:var(--nhs-grey)}
+.prob-name{flex:1}
+.prob-date{font-size:11px;color:var(--text2)}
+.prob-past{opacity:.55}
+.collapsible-toggle{background:none;border:none;color:var(--nhs-blue);font-size:12px;cursor:pointer;padding:4px 0;text-decoration:underline}
+/* Table */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{background:var(--nhs-pale);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);border-bottom:2px solid var(--border)}
+.data-table td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.data-table tr:hover td{background:#f8fafb}
+/* Bar chart (pure CSS/SVG) */
+.bar-chart{display:flex;flex-direction:column;gap:5px}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.bar-label{width:160px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;color:var(--text2)}
+.bar-track{flex:1;height:16px;background:var(--nhs-pale);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .4s ease;background:var(--nhs-blue)}
+.bar-fill.accent{background:var(--nhs-orange)}
+.bar-val{width:40px;font-size:11px;color:var(--text2)}
+/* Heatmap */
+.heatmap{display:grid;gap:3px}
+.hm-cell{height:20px;border-radius:3px;cursor:default;transition:opacity .1s}
+.hm-cell:hover{opacity:.7}
+.hm-label{font-size:10px;color:var(--text2);text-align:center}
+.hm-legend{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+/* Recall badges */
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.badge-red{background:#fde8e8;color:var(--nhs-red)}
+.badge-amber{background:#fef3cd;color:#856404}
+.badge-green{background:#d4edda;color:#155724}
+.badge-grey{background:#f0f4f5;color:var(--text2)}
+/* Register cards */
+.reg-card{background:var(--nhs-pale);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.reg-name{font-size:13px;font-weight:700;color:var(--nhs-blue);margin-bottom:4px}
+.reg-conds{font-size:11px;color:var(--text2);margin-bottom:6px}
+/* Condition summary cards */
+.cond-card{background:var(--nhs-pale);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.cond-value{font-size:24px;font-weight:700;color:var(--nhs-blue);line-height:1.1;font-variant-numeric:tabular-nums}
+.cond-target{font-size:11px;color:var(--text2)}
+/* Index card */
+.idx-card{text-align:center;padding:20px}
+.idx-pct{font-size:42px;font-weight:700;color:var(--nhs-blue);line-height:1}
+.idx-lbl{font-size:12px;color:var(--text2);margin-top:4px}
+/* Analyte chart */
+#inv-chart-wrap{position:relative;height:240px;margin-top:10px}
+/* Progress */
+#progress-overlay{display:none;position:fixed;inset:0;background:rgba(0,46,93,.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff}
+#progress-overlay.visible{display:flex}
+.prog-title{font-size:16px;font-weight:600}
+.prog-bar-outer{width:360px;height:8px;background:rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
+.prog-bar-inner{height:100%;background:#41b3e0;border-radius:4px;transition:width .3s}
+.prog-text{font-size:12px;opacity:.75}
+/* Dark theme */
+html[data-theme="dark"]{
+  --nhs-pale:#0b1424;--card:#131e34;--text:#f1f5f9;--text2:#93a8c5;--border:#1e3050;
+}
+html[data-theme="dark"] body{background:var(--nhs-pale)}
+html[data-theme="dark"] #tab-nav{background:var(--card);border-bottom-color:var(--border)}
+html[data-theme="dark"] #filter-bar{background:#0d1930;border-bottom-color:var(--border)}
+html[data-theme="dark"] .fb-select{background:var(--card);color:var(--text);border-color:var(--border)}
+html[data-theme="dark"] .inv-toolbar input[type="text"],html[data-theme="dark"] .inv-toolbar select{background:var(--card);color:var(--text);border-color:var(--border)}
+html[data-theme="dark"] .drop-box{background:var(--card);border-color:var(--border)}
+html[data-theme="dark"] .swimlane-svg{background:var(--card);border-color:var(--border)}
+html[data-theme="dark"] .swimlane-svg .lane-bg{fill:#0d1930}
+html[data-theme="dark"] .swimlane-svg .lane-bg.alt{fill:var(--card)}
+html[data-theme="dark"] .drug-row:hover{background:#0d1930}
+html[data-theme="dark"] .drug-row.overdue{background:#2a1010}
+html[data-theme="dark"] .prob-item{border-bottom-color:#1e3050}
+html[data-theme="dark"] .pincer-item{background:#1a0d0d}
+html[data-theme="dark"] .pincer-item.high{background:#2a1010}
+html[data-theme="dark"] .pincer-item.med{background:#1e1a08}
+html[data-size="small"]{zoom:0.85}
+html[data-size="medium"]{zoom:1}
+html[data-size="large"]{zoom:1.25}
+/* ── SMR / Medication-Review card styles ────────────────────────────── */
+.acb-score-big{font-size:40px;font-weight:700;line-height:1;color:var(--nhs-blue)}
+.acb-score-big.acb-alert{color:var(--nhs-red)}
+.acb-badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;white-space:nowrap;vertical-align:middle}
+.acb-badge-1{background:#fff3cd;color:#856404}
+.acb-badge-2{background:#fde8e8;color:#8b0000}
+.acb-badge-3{background:#d4351c;color:#fff}
+.smr-flag-list{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.smr-flag-item{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:4px;font-size:12px;border-left:3px solid transparent}
+.smr-flag-item.red{border-left-color:var(--nhs-red);background:#fde8e8}
+.smr-flag-item.amber{border-left-color:var(--nhs-orange);background:#fef3cd}
+.smr-flag-criterion{font-weight:700;color:var(--text)}
+.smr-flag-detail{color:var(--text2);font-size:11px;margin-top:2px}
+.smr-flag-source{font-size:10px;color:var(--nhs-grey);margin-top:2px;font-style:italic}
+.smr-caveat{font-size:11px;color:#856404;background:#fff9e6;border:1px solid #ffe082;border-radius:4px;padding:8px 10px;margin-bottom:12px}
+.smr-print-btn{display:inline-block;padding:8px 18px;background:var(--nhs-blue);color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;margin-top:12px}
+.smr-print-btn:hover{background:var(--nhs-dark)}
+/* Print: only show #smr-print-block when body has .smr-printing class */
+@media print{
+  body:not(.smr-printing) #smr-print-block{display:none}
+  body.smr-printing #app,body.smr-printing #drop-zone{display:none!important}
+  body.smr-printing #smr-print-block{display:block!important}
+  #smr-print-block{font-size:12pt;color:#000;background:#fff;font-family:Arial,sans-serif;line-height:1.5;padding:20mm}
+  #smr-print-block h1{font-size:16pt;margin-bottom:4mm}
+  #smr-print-block h2{font-size:13pt;margin:6mm 0 2mm}
+  #smr-print-block .smr-p-caveat{background:#fffbe6;border:1px solid #ccc;padding:4mm;margin:4mm 0;font-style:italic}
+  #smr-print-block table{width:100%;border-collapse:collapse;margin:3mm 0}
+  #smr-print-block td,#smr-print-block th{border:1px solid #999;padding:2mm 3mm;font-size:10pt;vertical-align:top}
+  #smr-print-block th{background:#eee;font-weight:700}
+  #smr-print-block .smr-p-flag-red{color:#d4351c;font-weight:700}
+  #smr-print-block .smr-p-flag-amber{color:#856404;font-weight:700}
+  #smr-print-block .smr-p-skeleton{border:1px solid #999;padding:3mm 4mm;min-height:18mm;margin-top:2mm}
+  #smr-print-block .smr-p-field{margin:3mm 0;border-bottom:1px dotted #999;min-height:9mm}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ DROP ZONE ═══ -->
+<div id="drop-zone">
+  <div class="drop-box" id="drop-box">
+    <div class="drop-icon">📋</div>
+    <div class="drop-title">Medicus Patient Record Visualiser</div>
+    <div class="drop-sub">Drop a Medicus EPR export PDF here, or click to browse</div>
+    <label class="drop-btn" for="file-input">Choose PDF file</label>
+    <input type="file" id="file-input" accept=".pdf" style="display:none">
+  </div>
+</div>
+
+<!-- ═══ APP SHELL ═══ -->
+<div id="app">
+  <div id="patient-banner">
+    <span class="pb-name" id="pb-name">—</span>
+    <span class="pb-chip" id="pb-age"></span>
+    <span class="pb-chip" id="pb-nhs"></span>
+    <span class="pb-chip" id="pb-last"></span>
+    <span class="pb-change" id="pb-change">Load different file</span>
+  </div>
+  <nav id="tab-nav">
+    <button class="tab-btn active" data-tab="snapshot">Snapshot</button>
+    <button class="tab-btn" data-tab="continuity">Continuity</button>
+    <button class="tab-btn" data-tab="timeline">Timeline</button>
+    <button class="tab-btn" data-tab="investigations">Investigations</button>
+    <button class="tab-btn" data-tab="medications">Medications</button>
+    <button class="tab-btn" data-tab="recalls">Registers &amp; Recalls</button>
+    <button class="tab-btn" data-tab="letters">Letters</button>
+    <button class="tab-btn" data-tab="smr">Medication Review (SMR)</button>
+  </nav>
+  <div id="filter-bar">
+    <div class="fb-group">
+      <span class="fb-label">Range</span>
+      <button class="fb-preset active" data-preset="all">All</button>
+      <button class="fb-preset" data-preset="5y">5y</button>
+      <button class="fb-preset" data-preset="3y">3y</button>
+      <button class="fb-preset" data-preset="1y">1y</button>
+    </div>
+    <div class="fb-group">
+      <svg id="fb-brush" class="fb-brush-svg" width="320" height="38"></svg>
+    </div>
+    <div class="fb-group">
+      <span class="fb-label">Clinician</span>
+      <select id="fb-clinician" class="fb-select"><option value="">All clinicians</option></select>
+    </div>
+    <div class="fb-group">
+      <span class="fb-label">Problem</span>
+      <select id="fb-problem" class="fb-select"><option value="">All problems</option></select>
+    </div>
+    <button id="fb-clear" title="Reset all filters">Clear</button>
+    <div class="fb-summary" id="fb-summary"></div>
+  </div>
+  <div id="tab-body">
+    <div class="tab-panel active" id="tab-snapshot"></div>
+    <div class="tab-panel" id="tab-continuity"></div>
+    <div class="tab-panel" id="tab-timeline"></div>
+    <div class="tab-panel" id="tab-investigations"></div>
+    <div class="tab-panel" id="tab-medications"></div>
+    <div class="tab-panel" id="tab-recalls"></div>
+    <div class="tab-panel" id="tab-letters"></div>
+    <div class="tab-panel" id="tab-smr"></div>
+  </div>
+</div>
+
+<!-- ═══ PROGRESS ═══ -->
+<div id="progress-overlay">
+  <div class="prog-title">Processing PDF…</div>
+  <div class="prog-bar-outer"><div class="prog-bar-inner" id="prog-bar" style="width:0%"></div></div>
+  <div class="prog-text" id="prog-text">Loading…</div>
+</div>
+
+
+<!-- SMR printout block (hidden except during print) -->
+<div id="smr-print-block" style="display:none"></div>
+
+<!-- Vendored libraries: see vendor-versions.json for provenance, versions, upstream URLs, and SHA-256 checksums. -->
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/chart.min.js"></script>
+<script src="vendor/d3.min.js"></script>
+<!-- Engine files: ACB scorer + STOPP/START (must load before visualiser-core.js) -->
+<script src="engine/acb-scores.js"></script>
+<script src="engine/stopp-start.js"></script>
+<script src="visualiser-core.js"></script>
+</body>
+</html>

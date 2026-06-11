@@ -1,0 +1,144 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Trends module (BP / Renal / HbA1c / Cholesterol / Weight) */
+
+.trends-module { font-family: var(--sans); }
+
+.trends-msg { font-family: var(--sans); color: var(--text-3); padding: 20px 16px; font-size: 13px; line-height: 1.5; }
+.trends-hint { font-size: 11px; }
+.trends-msg-inline { padding: 16px 12px; }
+
+/* ── Picker ──────────────────────────────────────────────────────────────────── */
+.trends-picker { display: flex; gap: 6px; padding: 10px 12px 4px; flex-wrap: wrap; }
+.trends-tab {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  background: rgba(127,127,127,0.08);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+.trends-tab:hover { color: var(--text-2); }
+.trends-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Shared chart primitives (tc-*) ─────────────────────────────────────────── */
+.tc-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.tc-grid { stroke: var(--border); stroke-width: 1; }
+.tc-axis { stroke: var(--border); stroke-width: 1; }
+.tc-axis-lbl { fill: var(--text-3); font-size: 9px; font-family: var(--sans); }
+.tc-empty { fill: var(--text-3); font-size: 13px; font-family: var(--sans); }
+.tc-line { stroke-width: 2; }
+.tc-dot { fill: var(--t4); cursor: default; }
+.tc-dot-alert { fill: var(--red); }
+.tc-target { stroke: var(--text-3); stroke-dasharray: 4 3; stroke-width: 1; }
+.tc-target-lbl { fill: var(--text-3); font-size: 9px; font-family: var(--sans); }
+.tc-band { opacity: .15; }
+
+/* Series colours */
+.tc-trend { stroke: var(--accent); }
+.tc-sys   { stroke: var(--red); }
+.tc-dia   { stroke: var(--accent); }
+.tc-acr   { stroke: var(--accent); }
+.tc-egfr  { stroke: var(--t4); }
+
+/* ACR band fills */
+.tc-a1 { fill: var(--green); }
+.tc-a2 { fill: var(--amber); }
+.tc-a3 { fill: var(--red);   }
+
+/* eGFR G-stage band fills */
+.tc-g1, .tc-g2             { fill: var(--green); }
+.tc-g3a                    { fill: var(--amber); }
+.tc-g3b, .tc-g4, .tc-g5   { fill: var(--red);   }
+
+/* ── Obs view: latest value head ─────────────────────────────────────────────── */
+.trends-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 4px; flex-wrap: wrap; }
+.trends-val  { display: flex; align-items: baseline; gap: 6px; }
+.trends-num  { font-size: 22px; font-weight: 700; color: var(--t1); }
+.trends-unit { font-size: 11px; color: var(--text-3); }
+.trends-delta { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: rgba(127,127,127,0.1); }
+.trends-up, .trends-down { color: var(--text-2); }
+.trends-flat { color: var(--text-3); }
+.trends-latest-date { font-size: 10px; color: var(--text-3); }
+
+.trends-section-lbl { font-size: 10px; color: var(--text-3); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.trends-count       { font-size: 10px; color: var(--text-3); padding: 4px 12px 12px; }
+
+/* ── BP view ─────────────────────────────────────────────────────────────────── */
+.bpt-module { font-family: var(--sans); }
+
+.bpt-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px 6px;
+}
+.bpt-latest { font-size: 20px; font-weight: 700; color: var(--t1); }
+.bpt-latest small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+
+.bpt-pill {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bpt-above   { background: var(--red);    color: #fff; }
+.bpt-met     { background: var(--green);  color: #fff; }
+.bpt-neutral { background: var(--border); color: var(--text-3); }
+.bpt-tgt-lbl { font-weight: 400; opacity: .85; }
+
+.bpt-registers { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 8px; }
+.bpt-reg { font-size: 10px; background: var(--border); color: var(--t4); padding: 1px 7px; border-radius: 8px; }
+.bpt-reg-none { color: var(--text-3); background: transparent; padding: 0; }
+
+.bpt-note { font-size: 11px; color: var(--amber); padding: 4px 12px 8px; line-height: 1.4; }
+
+.bpt-legend { display: flex; gap: 14px; padding: 5px 12px; font-family: var(--sans); font-size: 11px; color: var(--t4); }
+.bpt-key { display: flex; align-items: center; gap: 4px; }
+.bpt-key::before { content: ''; display: inline-block; width: 14px; height: 2px; }
+.bpt-k-sys::before  { background: var(--red); }
+.bpt-k-dia::before  { background: var(--accent); }
+.bpt-k-tgt::before  { background: var(--text-3); border-top: 2px dashed var(--text-3); height: 0; }
+
+.bpt-count { font-size: 10px; color: var(--text-3); padding: 0 12px 10px; }
+
+/* ── Renal view ──────────────────────────────────────────────────────────────── */
+.acrt-module { font-family: var(--sans); }
+
+.acrt-banner { font-size: 12px; padding: 7px 12px; font-weight: 600; line-height: 1.4; }
+.acrt-banner-red   { background: var(--red);   color: #fff; }
+.acrt-banner-amber { background: var(--amber); color: #fff; }
+
+.acrt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px 8px; }
+.acrt-val  { display: flex; align-items: baseline; gap: 5px; }
+.acrt-num  { font-size: 20px; font-weight: 700; color: var(--t1); }
+.acrt-unit { font-size: 11px; color: var(--text-3); }
+.acrt-no-val { font-size: 12px; color: var(--text-3); }
+
+.acrt-stage { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+.acrt-a1 { background: var(--green); color: #fff; }
+.acrt-a2 { background: var(--amber); color: #fff; }
+.acrt-a3 { background: var(--red);   color: #fff; }
+
+.acrt-g1, .acrt-g2             { background: var(--green); color: #fff; }
+.acrt-g3a                       { background: var(--amber); color: #fff; }
+.acrt-g3b, .acrt-g4, .acrt-g5  { background: var(--red);   color: #fff; }
+
+.acrt-kdigo      { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.acrt-kdigo-cell { font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 6px; background: var(--border); color: var(--t1); }
+.acrt-kdigo-freq { font-size: 12px; color: var(--t4); font-weight: 600; }
+.acrt-kdigo-lbl  { font-size: 10px; color: var(--text-3); }
+
+.acrt-section-lbl { font-size: 10px; color: var(--text-3); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+.acrt-band-legend { display: flex; gap: 12px; padding: 4px 12px; font-size: 10px; }
+.acrt-band-a1, .acrt-band-a2, .acrt-band-a3 { padding: 1px 6px; border-radius: 8px; }
+.acrt-band-a1 { background: var(--green); color: #fff; opacity: .85; }
+.acrt-band-a2 { background: var(--amber); color: #fff; opacity: .85; }
+.acrt-band-a3 { background: var(--red);   color: #fff; opacity: .85; }
+
+.acrt-count { font-size: 10px; color: var(--text-3); padding: 4px 12px 12px; }

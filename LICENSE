@@ -1,0 +1,122 @@
+PROPRIETARY SOFTWARE LICENCE
+Medicus Suite
+
+Copyright (c) 2026 Dr Dave Triska / Graysbrook Ltd. All rights reserved.
+
+================================================================================
+1. PROPRIETARY AND CONFIDENTIAL
+================================================================================
+
+Medicus Suite, including its source code, object code, design, structure,
+documentation, rule files, configuration, and all associated materials in this
+repository (collectively, the "Software"), is the proprietary and confidential
+property of Dr Dave Triska / Graysbrook Ltd (the "Author").
+
+The Software is licensed, not sold. No title to or ownership of the Software is
+transferred to any person by access to this repository.
+
+================================================================================
+2. NO LICENCE GRANTED
+================================================================================
+
+No right or licence, express or implied, is granted to any person under this
+document or by reason of access to this repository. All rights are reserved.
+
+The fact that this repository is, or has at any time been, publicly visible on
+GitHub or any other platform does NOT constitute a waiver of any right, does NOT
+place the Software in the public domain, and does NOT grant any person any right
+to use, copy, or exploit the Software. Public visibility is provided solely for
+transparency to named, authorised clinical users and for no other purpose.
+
+Any rights that the operating platform (e.g. the GitHub Terms of Service)
+mechanically confers on its users — such as the ability to view or fork a public
+repository — are tolerated only to the minimum extent technically unavoidable on
+that platform, and confer no further right to use, retain, build upon, or exploit
+the Software off-platform or for any purpose prohibited below.
+
+================================================================================
+3. PROHIBITED ACTS
+================================================================================
+
+Except with the prior, specific, written permission of the Author, no person may:
+
+  (a) use, run, install, or execute the Software for any purpose, including any
+      commercial purpose whatsoever;
+  (b) copy, reproduce, store, or retain the Software or any part of it, except a
+      transient copy strictly incidental to permitted viewing on GitHub;
+  (c) modify, adapt, translate, or create derivative works of the Software;
+  (d) distribute, publish, redistribute, sublicense, sell, rent, lease, lend,
+      transfer, or otherwise make the Software available to any third party;
+  (e) fork, mirror, or republish the repository, in whole or in part, on any
+      platform;
+  (f) decompile, disassemble, or reverse-engineer the Software, save to the
+      extent such restriction is prohibited by applicable law;
+  (g) remove, obscure, or alter any copyright, proprietary, or attribution notice;
+  (h) use the Software, or any portion of its code, structure, or expression, as
+      input to train, fine-tune, evaluate, or develop any machine-learning model,
+      dataset, or other software product;
+  (i) incorporate the Software, or any portion of it, into any other product or
+      service; or
+  (j) use the Software in any way that competes with, or is intended to replicate
+      for commercial gain, the function of the Software.
+
+"Commercial purpose" includes any use by, on behalf of, or for the benefit of any
+commercial entity, including any provider of an electronic patient record system.
+
+================================================================================
+4. PERMITTED USE BY NAMED CLINICAL USERS
+================================================================================
+
+Separately from this repository licence, deployed instances of the Software are
+made available to specific named clinical users under the terms set out in
+docs/sentinel-DISCLAIMER.txt and docs/INTENDED-PURPOSE.md. Those documents govern
+the clinical, regulatory, and end-user terms of an authorised deployment. Nothing
+in those documents grants any right to the source code beyond what is expressly
+stated, and nothing in this LICENCE grants any clinical or regulatory permission.
+
+================================================================================
+5. DERIVATIVE WORKS AND REGULATORY RESPONSIBILITY
+================================================================================
+
+Any unauthorised modification of the Software creates a derivative work for which
+the modifier is the manufacturer and bears the full regulatory, clinical-safety,
+and liability responsibilities of a manufacturer. The Author bears no
+responsibility whatsoever for any derivative work, authorised or otherwise.
+
+================================================================================
+6. THIRD-PARTY COMPONENTS
+================================================================================
+
+The Software includes third-party components under their own licences, recorded
+in vendor-versions.json (for example, PDF.js / pdfjs-dist under Apache-2.0). Those
+components remain subject to their respective upstream licences. This LICENCE
+applies only to the Author's own work and does not purport to restrict rights
+granted by those third-party licences in respect of those components.
+
+================================================================================
+7. NO WARRANTY
+================================================================================
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+================================================================================
+8. GOVERNING LAW
+================================================================================
+
+This LICENCE is governed by and construed in accordance with the laws of England
+and Wales, and any dispute arising under it is subject to the exclusive
+jurisdiction of the courts of England and Wales.
+
+================================================================================
+9. CONTACT
+================================================================================
+
+For permissions, licensing enquiries, or any use not expressly permitted above,
+contact the Author at davetriska02@gmail.com.
+
+All rights reserved.
