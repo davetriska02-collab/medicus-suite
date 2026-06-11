@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.56.1] — 2026-06-11
+
+### Security audit remediation (third pass — branch `claude/security-audit-li13eq`)
+
+Findings from the 2026-06-11 authorised red-team audit. This pass remediates the
+four in-scope code findings; the PDF.js upgrade (NF6) remains tracked separately
+as it requires re-vendoring.
+
+- **M1 (Medium) — Referrals discovery no longer persists or backs up patient
+  data.** `content-scripts/referrals-discovery.js` captured the full referrals
+  clinical-audit-report API payload (patient-identifiable rows) into
+  `referrals.discovery` (plaintext on disk, not consume-on-read), and
+  `shared/io/referrals-io.js` exported it into suite backups. The discovery key
+  now stores only `{ url, discoveredAt }`; the stored config copy is trimmed to
+  `priorityOptions`/`statusOptions` only; the side panel re-fetches live data
+  and never read the persisted rows. `referrals.discovery` is removed from the
+  backup export (kept live-only and allowlisted in `test-backup-coverage.js`);
+  `referrals.config` (non-PHI) is retained. `suite-envelope.js` preview updated.
+- **M2 (Medium) — Operational alert thresholds validated on import.**
+  `shared/io/submissions-io.js` and `shared/io/triage-alert-io.js` now reject
+  non-finite / non-positive thresholds (and non-boolean `enabled`) on import,
+  mirroring `engine/ruleset-io.js`. Previously a crafted backup with a string
+  threshold survived import and made `value >= (t.red || Infinity)` evaluate
+  `value >= NaN` (always false), silently disabling the submissions RAG strip /
+  triage demand notifications. Regression tests in `test-import-hardening.js`.
+- **L1 (Low) — `sentinel-io.js` non-merge import path now strips dangerous
+  keys.** The replace path wrote `data.rules` raw while the merge path already
+  stripped `__proto__`/`constructor`/`prototype`; both paths now call
+  `_stripDangerousKeys()`. Regression test added.
+- **L2 (Low) — Transient print/passport keys gain a best-effort TTL backstop.**
+  `sweep.handout`, `sweep.batchPack` and `sentinel.passport` already self-clear
+  on print-tab render; a 60s `setTimeout` backstop at each write site now also
+  clears them if the tab never renders.
+
 ## [v3.56.0] — 2026-06-11
 
 ### CSO review decisions (recorded 2026-06-11, PR #78)

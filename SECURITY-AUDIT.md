@@ -1,5 +1,52 @@
 # Security Audit — Medicus Suite
 
+## Third Pass — v3.56.0 (2026-06-11)
+
+**Version audited:** 3.56.0 (commit dd6a61f)
+**Remediated in:** 3.56.1
+**Date:** 2026-06-11
+**Type:** Red-team / adversarial code review (authorised, developer-initiated)
+**Method:** 8 parallel automated agents swept all 8 attack surfaces; every finding
+verified by the orchestrator against source before rating. Severities are the
+verified, adjusted ratings — four agent findings initially rated High were
+downgraded or rejected on verification (see below).
+
+### Overall posture
+
+All prior fixes (F1–F8, NF1–NF5) verified still holding at dd6a61f. The material
+new exposure was a **data-minimisation regression** in the newer Referrals module
+(same class as the previously-fixed F2): it persisted a full patient-identifiable
+referral dataset to `chrome.storage.local` plaintext **and** exported it into suite
+backups. Four findings remediated in 3.56.1; PDF.js upgrade (NF6) still deferred.
+
+### Findings (third pass)
+
+| ID | Severity | Finding | Location | Status |
+|---|---|---|---|---|
+| TF1 | **Medium** | Referrals discovery persisted the full captured referrals API payload (patient-identifiable rows) to `chrome.storage.local` (plaintext, not consume-on-read) **and** exported it into suite backups — PHI in shareable backup files. | `content-scripts/referrals-discovery.js:104,119-120`, `shared/io/referrals-io.js:23-24` | Fixed v3.56.1 |
+| TF2 | **Medium** | Operational alert thresholds (`submissions`, `triage-alert`) not numerically validated on import; a crafted backup with a string threshold makes `value >= NaN` always false → submissions RAG strip / triage demand alerts silently never fire. | `shared/io/submissions-io.js:24-28`, `shared/io/triage-alert-io.js:31-34` | Fixed v3.56.1 |
+| TF3 | **Low** | `sentinel-io.js` non-merge import path wrote `data.rules` raw; merge path already stripped `__proto__`/`constructor`/`prototype`. | `shared/io/sentinel-io.js:80` | Fixed v3.56.1 |
+| TF4 | **Low** | Transient print/passport keys (`sweep.handout`, `sweep.batchPack`, `sentinel.passport`) hold full PHI on disk in the write→read window; linger if the print tab never renders. | `side-panel/modules/sweep/sweep.js:623,643`, `side-panel/modules/sentinel/sentinel.js:1136` | Fixed v3.56.1 — 60s TTL backstop |
+| NF6 | **Low** | PDF.js 3.11.174 predates CVE-2024-4367 patch (<4.2.67); mitigated by `isEvalSupported:false`. | `vendor/pdf.min.js` | Still tracked (re-vendoring required) |
+
+### Verified-and-downgraded / rejected (third pass)
+
+- **"drug-combo crashes on null `patientContext`" (agent: High)** → **Rejected.** `passesSexFilter`/`passesAgeFilter` are null-safe (`rules-engine.js:780,789`).
+- **"`registerTermInLabel` ReDoS / regex SyntaxError" (agent: Medium)** → **Rejected.** The `new RegExp` is only built when the term matches `/^[a-z0-9 ]+$/` (line 260); metacharacter terms fall back to `String.includes()` (line 264).
+- **"capacity preset `id` prototype pollution" (agent: High)** → **Rejected.** The id is an array value / `Map` key; neither writes `Object.prototype`. Operational module, no clinical impact.
+- **"HRT `vaginal gel` exclude silently suppresses systemic HRT" (agent: Medium-High)** → **Downgraded to clinical-content nit.** Medications are separate entries; no UK systemic HRT product name contains the contiguous phrase. Routed to The Keeper, not a security fix.
+- **`web_accessible_resources` exposes rule JSONs** → **Known/accepted.** Required so content scripts can `fetch(getURL())`; contents are public clinical specs.
+
+### Confirmed safe (third pass additions)
+
+- New sweep/handout renderers, sentinel, triage-lens, and visualiser: all patient/page data escaped via `esc()`/`escHtml()`/`escAttr()` (16+ sinks verified, no unescaped sink).
+- No exfiltration/telemetry; practice code validated before every fetch; `update-checker` download URL host-allowlisted; vendor checksums enforced by `scripts/verify-vendor.js`.
+- `sender.id` guards on all message handlers incl. the new pusher relay; no `externally_connectable`.
+- Clinical-ruleset import validation (F1/NF1/NF3) still holding; age/sex filters fail open without crashing.
+- F2 holding — Request Monitor persists initials only.
+
+---
+
 ## Second Pass — v3.31.2 (2026-06-07)
 
 **Version audited:** 3.31.2 (commit e73eb0e)
