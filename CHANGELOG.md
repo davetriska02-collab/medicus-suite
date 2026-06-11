@@ -2,6 +2,57 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.0] — 2026-06-11
+
+### Repo-audit fix batch (quick wins + Milestones 0–2)
+
+Implements the actionable findings of the 2026-06-11 repo audit. Six commits
+(`0b5ff1f`..this), all verified against the full test suite (50 suites green).
+
+**Safety net / CI**
+- New `scripts/check-doc-versions.js` CI gate: safety-doc Product versions must
+  track the manifest. The four currently-stale docs (CLINICAL-SAFETY-NOTICE
+  3.26.4, HAZARD-LOG/SOUP 3.33.0, feature-list 3.31.2) are pinned KNOWN_STALE
+  with a loud warning pending CSO review (audit T4); any NEW drift fails CI.
+- New `test-service-worker.js` (76 assertions): vm-extracted behaviour tests for
+  alarm scheduling, update-notification dedup, RM notification formatting and
+  caps, plus source-invariant locks (importScripts try/catch coverage, onMessage
+  sender guard, alarm↔handler pairing, F2 data-minimisation).
+- New `test-api-clients.js` (109 assertions): pins 401/403/500, network-failure
+  and malformed-JSON contracts for medicus-api, referrals-api, activity-api.
+- New `test-pincer-parity.js` (138 assertions): pins parity between the
+  visualiser's `computePINCER` and the triage-lens prescribing flags; documents
+  36 KNOWN_DIVERGENCES for CSO review (headline: the visualiser's drug tables
+  are missing 32 agents the active HUD covers, incl. the 2026-06-11 Keeper
+  additions). Fails only on NEW divergence.
+
+**Hygiene**
+- Deleted `push-initial.sh` (force-pushed a stale v1.3.1 tag — landmine).
+- Archived completed plan docs into `docs/archive/`; README module list brought
+  current.
+
+**Refactors / behaviour**
+- `shared/display-prefs.js`: single implementation of the display-preferences
+  applicator, replacing five inline copies (panel, pop-out, options ×2,
+  visualiser). One copy remains in `content-scripts/triage-lens/options.js`
+  (follow-up).
+- `side-panel/module-loader.js`: shared `ensureModuleCss` + parameterised
+  module switcher used by panel and pop-out (net −52 lines).
+- Polling resilience: the three panel strips (WR/RM/sub-RAG) and the worker's
+  request-monitor alarm now back off on consecutive failures (delay doubles per
+  failure, capped at 8×, resets on success) instead of hammering the API at a
+  fixed rate during outages.
+- Best-effort failures surfaced: journal-augmentation failure now flags the
+  sentinel snapshot and renders a muted warning (so `no_data` from a failed
+  fetch is distinguishable from absent data); update-check failures persist to
+  `suite.updateCheck.status` and show in Options.
+- `shared/extraction-health.js`: hard 50-bucket cap on the stored extraction
+  baseline (oldest evicted).
+
+**Deferred (tracked in the audit report):** T4 safety-doc content refresh (CSO),
+T10 per-section extraction canaries, T11 pdf.js ≥4.2.67 upgrade, T12
+practice-profile refactor.
+
 ## [v3.52.0] — 2026-06-11
 
 ### Triage Lens — engine hardening (red-team follow-up) + DKA/HHS red flag
