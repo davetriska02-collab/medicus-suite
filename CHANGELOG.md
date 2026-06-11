@@ -2,6 +2,57 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.55.0] — 2026-06-11
+
+### Suite-wide UI overhaul — "Atelier" design pass
+
+A full design-system pass over every surface of the suite, executed by the new
+`ui-design` skill (`.claude/skills/ui-design/` — doctrine, token canon, stylist
+subagent briefs, and a headless Playwright screenshot harness, all added in
+this release and used to verify the pass in light *and* dark themes).
+
+**Token canon (`side-panel/panel.css`).** The `:root` system gains status
+*triads* (ink/wash/line: `--red`/`--red-dim`/`--red-line` etc., incl. accent),
+`--accent-hover`, a radius scale (`--r-sm/md/lg/pill`), a three-step shadow
+scale, motion tokens (`--ease`/`--fast`/`--med`), and `--t1..--t5` aliases that
+heal old strip rules which referenced tokens that never existed. The colorblind
+mode now swaps the *whole* red/green triads, so any component built from triads
+inherits the swap for free. A global `:focus-visible` ring and a
+`prefers-reduced-motion` kill-switch ship suite-wide.
+
+**Bug-class fixes the pass surfaced and removed everywhere:**
+- *Dark-only literals in theme-neutral rules* — `#fbbf24`/`#f87171`/`#4ade80`
+  text and `rgba(255,255,255,…)` surfaces that washed out in light theme
+  (strips, pills, referrals/activity card surfaces) — all tokenised.
+- *Phantom tokens* — `reception.css`/`sweep.css` referenced `--text-primary`,
+  `--bg-card`, `--border-muted` & co. (never defined; everything silently fell
+  to fallbacks), plus `rem` font sizing that ignored the suite's zoom-based
+  size setting; both rebuilt on the canon, and sweep's hand-rolled (and wrong)
+  dark-theme block deleted in favour of automatic token theming.
+- *Unstyled form controls* — the options page only styled `input[type=text]`,
+  so the feedback-email and number inputs rendered as white UA-default boxes in
+  dark mode; inputs/selects/textareas across options pages now styled, with
+  `outline: none` suppressions removed in favour of visible focus rings.
+- *Clinical-signal drift* — the injected Triage Lens HUD and Sentinel sidebar
+  used *different reds/ambers/greens* for the same severities (and `#1f3a5f` vs
+  `#1e3a5f` navy). Both injected stylesheets now carry self-contained token
+  blocks mirroring the suite canon, so a chip means the same thing everywhere.
+  Full-ink fills on clinical RAG pills/banners are deliberately retained
+  (salience is a safety property); their text now uses `var(--bg-deep)` so the
+  pastel dark-theme inks keep contrast.
+- *Layout-shift actives* — nav tabs, filter buttons, mode tabs and the options
+  side-nav reserved transparent borders so activation no longer nudges layout.
+- *Accessibility* — `:focus-visible` rings on every interactive element
+  (including the visualiser, which had none), `:disabled` states added
+  throughout, tabular numerals on counts, machine-voice labels cast to mono.
+
+The visualiser keeps its intentional NHS palette; its pass was states,
+dark-theme gaps (badges/table hairlines now legible on dark) and print
+(`thead` repeats, rows no longer split across pages).
+
+No JS or rule-engine changes; CSS and embedded-style/HTML-attribute edits only.
+Tests: full suite green (50 suites).
+
 ## [v3.54.0] — 2026-06-11
 
 > Note: originally drafted as v3.53.0/v3.53.1 on the review branch; renumbered to
