@@ -4,6 +4,19 @@ All notable changes to Medicus Suite are documented here.
 
 ## [v3.56.0] — 2026-06-11
 
+### CSO review decisions (recorded 2026-06-11, PR #78)
+
+- **Epiglottitis promoted to red**: new dedicated `epiglottitis` triage rule
+  (drooling / cannot swallow saliva / muffled "hot potato" voice / explicit
+  mention) with an airway-emergency note (999, do not examine the throat,
+  sit upright). The two phrasings are removed from the amber `sore-throat`
+  rule. Shipped defaults config version bumped 2 → 3 so existing stored
+  configs receive the new builtin rules (`dka-hhs`, `epiglottitis`) via the
+  non-destructive merge.
+- **LMWH/heparin**: confirmed excluded from the visualiser oral-anticoagulant
+  set; KD-18..21 remain deliberately pinned in `test-pincer-parity.js`.
+- **Hazard log v3.5 signed off** by the CSO (H-022..H-026 accepted).
+
 ### Gauntlet follow-up batch (B1 / B3 / M2-T4, CSO-approved)
 
 1. **PINCER rule-shape parity (B1).** All four pinned divergences KD-30..33

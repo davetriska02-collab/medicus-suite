@@ -61,7 +61,8 @@
 //          monitoring entries; folding parenteral heparins in would need a new
 //          table entry referenced by computePINCER (a logic change, out of the
 //          Keeper's data-only remit) and the prior verifier advised against
-//          LMWH in oral-anticoagulant PINCER lists. CSO may revisit.
+//          LMWH in oral-anticoagulant PINCER lists.
+//          CSO REVIEWED 2026-06-11: keep excluded (decision recorded on PR #78).
 //
 //   KD-34  NSAID + anticoagulant: content.js does NOT have gastroprotection suppression;
 //          visualiser also does NOT suppress on gastroprotection for this combo — PARITY OK

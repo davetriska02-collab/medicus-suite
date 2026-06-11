@@ -194,8 +194,9 @@ expectMatch('struggling to pass water since this morning', ['uti']);
 expectMatch('unable to wee and in pain', ['uti']);
 
 // sore-throat: epiglottitis phrasings (amber pending CSO red-rule decision)
-expectMatch("I'm drooling and can't swallow my own saliva", ['sore-throat']);
-expectMatch("I have a muffled voice and can't swallow", ['sore-throat']);
+expectMatch("I'm drooling and can't swallow my own saliva", ['epiglottitis']);
+expectMatch('muffled hot potato voice since this morning', ['epiglottitis']);
+expectMatch("I have a muffled voice and can't swallow", ['epiglottitis']);
 
 // insect-bite: tick and Lyme phrasings
 expectMatch('I have a tick bite on my leg', ['insect-bite']);
