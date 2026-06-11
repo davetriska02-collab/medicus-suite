@@ -2,6 +2,67 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.56.0] — 2026-06-11
+
+### CSO review decisions (recorded 2026-06-11, PR #78)
+
+- **Epiglottitis promoted to red**: new dedicated `epiglottitis` triage rule
+  (drooling / cannot swallow saliva / muffled "hot potato" voice / explicit
+  mention) with an airway-emergency note (999, do not examine the throat,
+  sit upright). The two phrasings are removed from the amber `sore-throat`
+  rule. Shipped defaults config version bumped 2 → 3 so existing stored
+  configs receive the new builtin rules (`dka-hhs`, `epiglottitis`) via the
+  non-destructive merge.
+- **LMWH/heparin**: confirmed excluded from the visualiser oral-anticoagulant
+  set; KD-18..21 remain deliberately pinned in `test-pincer-parity.js`.
+- **Hazard log v3.5 signed off** by the CSO (H-022..H-026 accepted).
+
+### Gauntlet follow-up batch (B1 / B3 / M2-T4, CSO-approved)
+
+1. **PINCER rule-shape parity (B1).** All four pinned divergences KD-30..33
+   closed with additive alerts: the visualiser's `computePINCER` gains the
+   triple-whammy rule (PINCER#4/STOPP), NSAID+antiplatelet with the same
+   anticoagulant-precedence as the triage HUD (PINCER#3/STOPP), and
+   benzodiazepine/Z-drug in age ≥80 (STOPP; new `benzo_z` table entry,
+   fail-closed on unknown age); the triage HUD gains PINCER#1 — NSAID in
+   age ≥65 without gastroprotection (new PPI/H2 `GASTRO` regex, fail-closed,
+   topical-excluded). `test-pincer-parity.js` now pins only the deliberate
+   LMWH/heparin divergences (KD-18..21).
+
+2. **Sweep batch Action Packs (B3).** Multi-select on the Sweep action
+   worklist with a one-click batch generator: a print-first tab with
+   per-patient blood-form / recall-SMS / task sections plus a consolidated
+   copyable SMS list for Medicus batch messaging. Uses the established
+   consume-on-read transient print-key pattern; generates artefacts only,
+   never sends; selection is in-memory and cleared on re-render/cleanup.
+
+3. **Clinical-safety documentation refresh (M2 / audit T4).**
+   CLINICAL-SAFETY-NOTICE v3.4, HAZARD-LOG v3.5 and SOUP v1.1 brought
+   current to product 3.56.0: intended-purpose and scope updated for all
+   modules shipped since 3.26.4/3.33.0; five new hazards recorded
+   (H-022 Condor metrics, H-023 Sweep batch wrong-patient, H-024 Reception
+   over-reliance, H-025 Trends sparse-data misread, H-026 triage red-flag
+   false-negative reliance); H-005/H-016 controls updated for the
+   extraction-health and PINCER-parity work; SOUP reconciled against
+   vendor-versions.json with a new dev-dependencies section. The
+   `KNOWN_STALE` pins in `scripts/check-doc-versions.js` are removed —
+   the CI doc-version guard now fully enforces.
+
+4. **Triage red-flag phrasing extensions (L1).** Additive lay-phrasing
+   coverage from the 2026-06-11 red-team, applied to defaults.json and
+   regenerated into the derived copies: stroke-tia (can't get words out /
+   both arms weak), sepsis (fever + feeling dreadful, uncontrollable
+   shivering), meningitis (non-blanching rash phrasings incl. the glass
+   test), chest-pain (22 atypical-MI literals: jaw/neck/arm + sweat,
+   indigestion + arm), thunderclap (+ stiff-neck combinations),
+   cauda-equina (lost sensation down below), uti (retention phrasings,
+   deduplicated against cauda-equina), insect-bite (tick / bull's-eye
+   rash / Lyme), shingles (unilateral burning prodrome). One pattern
+   REJECTED as over-match-prone ("trouble speaking" — benign collisions);
+   epiglottitis signs (drooling, hot-potato voice) added to sore-throat
+   at AMBER pending a CSO decision on a dedicated adult red rule.
+   +36 pattern assertions with negative controls (675 green).
+
 ## [v3.55.0] — 2026-06-11
 
 ### Suite-wide UI overhaul — "Atelier" design pass

@@ -37,6 +37,17 @@
 //     entry completed; 'frusemide' added to content.js DIURETIC in the same pass.
 //   These now appear as positive both-sides coverage assertions below.
 //
+// RESOLVED 2026-06-11 (audit/Gauntlet B1, CSO-approved — additive alerts only):
+//   KD-30  NSAID + antiplatelet (no anticoag) — computePINCER now has this rule
+//            (source 'PINCER #3 / STOPP'). Both sides fire. PARITY.
+//   KD-31  Triple whammy (NSAID + ACEi/ARB + diuretic) — computePINCER now has
+//            this rule (source 'PINCER #4 / STOPP'). Both sides fire. PARITY.
+//   KD-32  NSAID + age ≥65 without gastroprotection (PINCER #1) — content.js now
+//            has this rule; fail-closed on unknown age. Both sides fire. PARITY.
+//   KD-33  Benzodiazepine/Z-drug in age ≥80 — computePINCER now has this rule;
+//            benzo_z entry added to HIGH_RISK_DRUGS. Fail-closed on unknown age.
+//            Both sides fire. PARITY.
+//
 // REMAINING known divergences (deliberate, pinned):
 //
 // Anticoagulant drug-set — LMWH/heparin (content.js includes them, visualiser
@@ -50,26 +61,8 @@
 //          monitoring entries; folding parenteral heparins in would need a new
 //          table entry referenced by computePINCER (a logic change, out of the
 //          Keeper's data-only remit) and the prior verifier advised against
-//          LMWH in oral-anticoagulant PINCER lists. CSO may revisit.
-//
-// Rule-shape divergence (one side has a rule the other lacks entirely):
-//   KD-30  NSAID + antiplatelet (no anticoag)
-//          content.js fires "NSAID + antiplatelet"
-//          visualiser has NO equivalent rule (only NSAID+anticoag, not NSAID-only+antiplatelet)
-//
-//   KD-31  Triple whammy (NSAID + ACEi/ARB + diuretic)
-//          content.js fires "Triple whammy (NSAID + ACEi/ARB + diuretic)"
-//          visualiser has NO triple-whammy rule (NSAID+CKD/HF checks exist but not this combo)
-//          NOTE: the alert-library.json PINCER #4 covers this; the triage-lens does; the
-//          visualiser's computePINCER does NOT.
-//
-//   KD-32  NSAID in age ≥65 without gastroprotection (PINCER #1)
-//          visualiser fires "NSAID in age ≥65 without gastroprotection (PINCER #1)"
-//          content.js has NO age-gated NSAID+age flag (only NSAID combos regardless of age)
-//
-//   KD-33  Benzodiazepine/Z-drug in age ≥80
-//          content.js fires "Benzodiazepine/Z-drug in age ≥80"
-//          visualiser has NO benzo/Z-drug flag at all
+//          LMWH in oral-anticoagulant PINCER lists.
+//          CSO REVIEWED 2026-06-11: keep excluded (decision recorded on PR #78).
 //
 //   KD-34  NSAID + anticoagulant: content.js does NOT have gastroprotection suppression;
 //          visualiser also does NOT suppress on gastroprotection for this combo — PARITY OK
@@ -107,10 +100,7 @@ if (coreEnd < 0) throw new Error('STATE anchor not found in visualiser-core.js')
 const coreSandbox = {};
 vm.createContext(coreSandbox);
 vm.runInContext(CORE_SRC.slice(coreStart, coreEnd), coreSandbox);
-vm.runInContext(
-  'this.computePINCER = computePINCER; this.HIGH_RISK_DRUGS = HIGH_RISK_DRUGS;',
-  coreSandbox,
-);
+vm.runInContext('this.computePINCER = computePINCER; this.HIGH_RISK_DRUGS = HIGH_RISK_DRUGS;', coreSandbox);
 
 const computePINCER = coreSandbox.computePINCER;
 const HIGH_RISK_DRUGS = coreSandbox.HIGH_RISK_DRUGS;
@@ -119,20 +109,14 @@ assert(Array.isArray(HIGH_RISK_DRUGS), 'HIGH_RISK_DRUGS extracted from visualise
 
 // ── Extract evaluatePrescribingFlags from content.js ──────────────────────
 
-const CONTENT_SRC = fs.readFileSync(
-  path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'),
-  'utf8',
-);
+const CONTENT_SRC = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
 const fnMatch = CONTENT_SRC.match(/function evaluatePrescribingFlags\(meds, age\) \{[\s\S]*?\n  \}/);
 assert(!!fnMatch, 'evaluatePrescribingFlags extracted from content.js');
 
 let evaluate = null;
 if (fnMatch) {
   const csSandbox = {};
-  vm.runInNewContext(
-    fnMatch[0] + '\nthis.evaluatePrescribingFlags = evaluatePrescribingFlags;',
-    csSandbox,
-  );
+  vm.runInNewContext(fnMatch[0] + '\nthis.evaluatePrescribingFlags = evaluatePrescribingFlags;', csSandbox);
   evaluate = csSandbox.evaluatePrescribingFlags;
   assert(typeof evaluate === 'function', 'evaluatePrescribingFlags is callable');
 }
@@ -190,9 +174,7 @@ function csFiresAsAnticoag(anticoagName) {
 
 // Check whether a content.js drug string fires triple whammy
 function csFiresTripleWhammy(nsaid, acei, diuretic) {
-  return csTexts(evaluate([nsaid, acei, diuretic], 60)).some((t) =>
-    t.startsWith('Triple whammy'),
-  );
+  return csTexts(evaluate([nsaid, acei, diuretic], 60)).some((t) => t.startsWith('Triple whammy'));
 }
 
 // ── KNOWN_DIVERGENCES table ───────────────────────────────────────────────
@@ -207,35 +189,7 @@ const KNOWN_DIVERGENCES = [
   { id: 'KD-19', drug: 'Dalteparin 5000 units', side: 'anticoag_detection', vis: false, cs: true },
   { id: 'KD-20', drug: 'Tinzaparin 3500 units', side: 'anticoag_detection', vis: false, cs: true },
   { id: 'KD-21', drug: 'Heparin 5000 units', side: 'anticoag_detection', vis: false, cs: true },
-  // Rule-shape divergences (one side lacks the rule entirely)
-  {
-    id: 'KD-30',
-    drug: 'Diclofenac 50mg + Clopidogrel 75mg (no anticoag)',
-    side: 'nsaid_antiplatelet_rule',
-    vis: false,
-    cs: true,
-  },
-  {
-    id: 'KD-31',
-    drug: 'Ibuprofen + Ramipril + Furosemide (triple whammy rule)',
-    side: 'triple_whammy_rule',
-    vis: false,
-    cs: true,
-  },
-  {
-    id: 'KD-32',
-    drug: 'NSAID + age ≥65 without gastroprotection (PINCER #1 age-gate)',
-    side: 'nsaid_age65_rule',
-    vis: true,
-    cs: false,
-  },
-  {
-    id: 'KD-33',
-    drug: 'Zopiclone 7.5mg + age ≥80 (benzo/Z-drug rule)',
-    side: 'benzo_zdrug_rule',
-    vis: false,
-    cs: true,
-  },
+  // KD-30..33 resolved 2026-06-11 — now appear as parity assertions in sections 2d..2i below.
 ];
 
 // ── SECTION 1: Extraction health-check (already asserted above) ───────────
@@ -260,19 +214,13 @@ function parityCheck(label, visFires, csFires, kdId) {
     const kd = kdId ? KNOWN_DIVERGENCES.find((k) => k.id === kdId) : null;
     if (kd) {
       // Known divergence — assert pinned behaviour for each side
-      assert(
-        visFires === kd.vis,
-        `KD pinned — visualiser ${kd.vis ? 'fires' : 'silent'} for [${label}]`,
-      );
-      assert(
-        csFires === kd.cs,
-        `KD pinned — content.js ${kd.cs ? 'fires' : 'silent'} for [${label}]`,
-      );
+      assert(visFires === kd.vis, `KD pinned — visualiser ${kd.vis ? 'fires' : 'silent'} for [${label}]`);
+      assert(csFires === kd.cs, `KD pinned — content.js ${kd.cs ? 'fires' : 'silent'} for [${label}]`);
     } else {
       // NEW divergence — hard fail
       assert(
         false,
-        `NEW DIVERGENCE (not in KNOWN_DIVERGENCES): [${label}] visualiser=${visFires} content.js=${csFires}`,
+        `NEW DIVERGENCE (not in KNOWN_DIVERGENCES): [${label}] visualiser=${visFires} content.js=${csFires}`
       );
     }
   }
@@ -289,25 +237,16 @@ console.log('--- 2a: NSAID + anticoagulant (drugs known to both sides) ---');
 }
 {
   // Naproxen + warfarin
-  const visFlags = computePINCER(
-    [],
-    [makeVDrug('nsaid_long'), makeVDrug('warfarin')],
-    [],
-    null,
-  );
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug('warfarin')], [], null);
   const visFires = visFlags.some((f) => f.rule.toLowerCase().includes('anticoagulant'));
-  const csFires = csTexts(evaluate(['Naproxen 500mg', 'Warfarin 3mg'], 60)).includes(
-    'NSAID + anticoagulant',
-  );
+  const csFires = csTexts(evaluate(['Naproxen 500mg', 'Warfarin 3mg'], 60)).includes('NSAID + anticoagulant');
   parityCheck('naproxen + warfarin → NSAID+anticoag', visFires, csFires);
 }
 {
   // Diclofenac + rivaroxaban
   const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug('doac')], [], null);
   const visFires = visFlags.some((f) => f.rule.toLowerCase().includes('anticoagulant'));
-  const csFires = csTexts(evaluate(['Diclofenac 50mg', 'Rivaroxaban 20mg'], 60)).includes(
-    'NSAID + anticoagulant',
-  );
+  const csFires = csTexts(evaluate(['Diclofenac 50mg', 'Rivaroxaban 20mg'], 60)).includes('NSAID + anticoagulant');
   parityCheck('diclofenac + rivaroxaban → NSAID+anticoag', visFires, csFires);
 }
 
@@ -338,7 +277,7 @@ const EXTENDED_NSAIDS = [
   // Same \b-bounded regex construction as visualiser-core's scan loop.
   const visNsaidRe = new RegExp(
     '\\b(' + nsaidEntry.terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b',
-    'i',
+    'i'
   );
   for (const name of EXTENDED_NSAIDS) {
     assert(csFiresNSAIDAnticoag(name), `content.js fires NSAID+anticoag for ${name}`);
@@ -356,7 +295,7 @@ for (const name of ['Acenocoumarol 1mg', 'Phenindione 25mg']) {
   const term = name.split(' ')[0].toLowerCase();
   assert(
     vkaEntry && vkaEntry.terms.some((t) => t.toLowerCase() === term),
-    `visualiser warfarin/VKA entry contains ${name.split(' ')[0]}`,
+    `visualiser warfarin/VKA entry contains ${name.split(' ')[0]}`
   );
 }
 // LMWH/heparin (pinned KD-18..21): content.js includes them; the visualiser
@@ -380,49 +319,47 @@ for (const { name, kdId } of LMWH_KD) {
   assert(!visHasIt, `${kdId} pinned: visualiser HIGH_RISK_DRUGS does NOT contain ${name.split(' ')[0]}`);
 }
 
-// ── 2d: NSAID + antiplatelet (no anticoag) — rule-shape divergence ────────
-console.log('\n--- 2d: NSAID + antiplatelet (no anticoag) — rule-shape divergence ---');
+// ── 2d: NSAID + antiplatelet (no anticoag) — resolved KD-30 ──────────────
+// Both sides now fire this rule (computePINCER gained the rule 2026-06-11).
+// Anticoag-precedence: when an anticoagulant IS present, the anticoag branch wins
+// and the antiplatelet flag must NOT additionally fire (mirrors content.js logic).
+console.log('\n--- 2d: NSAID + antiplatelet (no anticoag) — PARITY (resolved KD-30) ---');
 {
-  // content.js fires "NSAID + antiplatelet"; visualiser has no such rule
-  const csFires = csTexts(evaluate(['Diclofenac 50mg', 'Clopidogrel 75mg'], 55)).includes(
-    'NSAID + antiplatelet',
-  );
-  // For visualiser: diclofenac detected as nsaid_long, clopidogrel as antiplatelet
-  // computePINCER has no NSAID+antiplatelet rule → should NOT fire
-  const visFlags = computePINCER(
-    [],
-    [makeVDrug('nsaid_long'), makeVDrug('antiplatelet')],
-    [],
-    null,
-  );
+  // Both sides must fire when NSAID + antiplatelet, NO anticoagulant.
+  const csFires = csTexts(evaluate(['Diclofenac 50mg', 'Clopidogrel 75mg'], 55)).includes('NSAID + antiplatelet');
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug('antiplatelet')], [], null);
+  // The visualiser rule is named 'NSAID with antiplatelet — GI bleed risk'
   const visFires = visFlags.some(
-    (f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoagulant'),
+    (f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')
   );
-  parityCheck('diclofenac + clopidogrel → NSAID+antiplatelet only', visFires, csFires, 'KD-30');
+  parityCheck('diclofenac + clopidogrel → NSAID+antiplatelet (no anticoag)', visFires, csFires);
+}
+{
+  // Anticoag-precedence: NSAID + anticoag present → antiplatelet flag must NOT fire.
+  const csItems = evaluate(['Diclofenac 50mg', 'Apixaban 5mg', 'Clopidogrel 75mg'], 55);
+  const csAntiplateletFires = csTexts(csItems).includes('NSAID + antiplatelet');
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug('doac'), makeVDrug('antiplatelet')], [], null);
+  const visAntiplateletFires = visFlags.some(
+    (f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')
+  );
+  // Both sides must suppress the NSAID+antiplatelet flag when anticoag also present.
+  parityCheck(
+    'NSAID + anticoag + antiplatelet → antiplatelet flag suppressed',
+    visAntiplateletFires,
+    csAntiplateletFires
+  );
 }
 
-// ── 2e: Triple whammy (NSAID + ACEi/ARB + diuretic) — rule-shape divergence ──
-console.log('\n--- 2e: Triple whammy — rule-shape divergence ---');
+// ── 2e: Triple whammy (NSAID + ACEi/ARB + diuretic) — resolved KD-31 ────
+// Both sides now fire this rule (computePINCER gained the rule 2026-06-11).
+console.log('\n--- 2e: Triple whammy — PARITY (resolved KD-31) ---');
 {
-  // content.js fires "Triple whammy"; visualiser has no triple-whammy rule
-  const csFires = csTexts(
-    evaluate(['Naproxen 250mg', 'Ramipril 5mg', 'Furosemide 40mg'], 68),
-  ).some((t) => t.startsWith('Triple whammy'));
-  // visualiser: naproxen (nsaid_long) + ramipril (acei) + furosemide (diuretic) in drug list
-  // computePINCER checks NSAID+CKD, NSAID+HF, NSAID+anticoag — but NOT NSAID+ACEi+diuretic combo
-  const visFlags = computePINCER(
-    [],
-    [makeVDrug('nsaid_long'), makeVDrug('acei'), makeVDrug('diuretic')],
-    [],
-    null,
+  const csFires = csTexts(evaluate(['Naproxen 250mg', 'Ramipril 5mg', 'Furosemide 40mg'], 68)).some((t) =>
+    t.startsWith('Triple whammy')
   );
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug('acei'), makeVDrug('diuretic')], [], null);
   const visFires = visFlags.some((f) => /triple|whammy/i.test(f.rule));
-  parityCheck(
-    'naproxen + ramipril + furosemide → triple whammy',
-    visFires,
-    csFires,
-    'KD-31',
-  );
+  parityCheck('naproxen + ramipril + furosemide → triple whammy', visFires, csFires);
 }
 
 // ── 2f: Triple whammy — extended ACEi/ARB terms (resolved KD-22..29) ──────
@@ -440,65 +377,108 @@ const EXTENDED_ACEI = [
   'Eprosartan 600mg',
 ];
 for (const name of EXTENDED_ACEI) {
-  assert(
-    csFiresTripleWhammy('Ibuprofen 400mg', name, 'Furosemide 40mg'),
-    `content.js fires triple whammy for ${name}`,
-  );
+  assert(csFiresTripleWhammy('Ibuprofen 400mg', name, 'Furosemide 40mg'), `content.js fires triple whammy for ${name}`);
   const aceiEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'acei');
   const term = name.split(' ')[0].toLowerCase();
   assert(
     aceiEntry && aceiEntry.terms.some((t) => t.toLowerCase() === term),
-    `visualiser acei entry contains ${name.split(' ')[0]}`,
+    `visualiser acei entry contains ${name.split(' ')[0]}`
   );
 }
 
 // ── 2g: Triple whammy — extended diuretic terms (resolved KD-35..37) ──────
 console.log('\n--- 2g: Triple whammy — extended diuretic terms, both sides ---');
 for (const name of ['Torasemide 5mg', 'Hydrochlorothiazide 12.5mg', 'Metolazone 2.5mg']) {
-  assert(
-    csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', name),
-    `content.js fires triple whammy for ${name}`,
-  );
+  assert(csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', name), `content.js fires triple whammy for ${name}`);
   const diureticEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'diuretic');
   const term = name.split(' ')[0].toLowerCase();
   assert(
     diureticEntry && diureticEntry.terms.some((t) => t.toLowerCase() === term),
-    `visualiser diuretic entry contains ${name.split(' ')[0]}`,
+    `visualiser diuretic entry contains ${name.split(' ')[0]}`
   );
 }
 
-// ── 2h: NSAID in age ≥65 without gastroprotection (PINCER #1) ────────────
-console.log('\n--- 2h: NSAID + age ≥65 — rule-shape divergence (visualiser only) ---');
+// ── 2h: NSAID in age ≥65 without gastroprotection (PINCER #1) — resolved KD-32 ──
+// Both sides now fire this rule (content.js gained the rule 2026-06-11).
+// Fail-closed: both sides must stay silent when age is unknown.
+console.log('\n--- 2h: NSAID + age ≥65 — PARITY (resolved KD-32) ---');
 {
-  // visualiser fires this; content.js has no age-gated NSAID rule
+  // Both fire at age 70, no gastroprotection.
   const visFlags = computePINCER([], [makeVDrug('nsaid_long')], [], '70');
   const visFires = visFlags.some(
-    (f) => f.rule.includes('PINCER #1') || (f.rule.includes('NSAID') && f.rule.includes('65')),
+    (f) => f.rule.includes('PINCER #1') || (f.rule.includes('NSAID') && f.rule.includes('65'))
   );
-  // content.js: ibuprofen at age 70, no anticoag/antiplatelet/ACEi+diuretic → no flags
   const csItems = evaluate(['Ibuprofen 400mg'], 70);
-  const csFires = csItems.some((i) =>
-    /age.*65|65.*age|pincer.*1|nsaid.*65/i.test(i.text + (i.detail || '')),
+  const csFires = csItems.some((i) => /age.*65|65.*age|pincer.*1|nsaid.*65/i.test(i.text + (i.detail || '')));
+  parityCheck('NSAID + age 70 → PINCER #1 age-gated flag', visFires, csFires);
+}
+{
+  // Both silent at age 60 (below threshold).
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long')], [], '60');
+  const visFires = visFlags.some(
+    (f) => f.rule.includes('PINCER #1') || (f.rule.includes('NSAID') && f.rule.includes('65'))
   );
-  parityCheck('NSAID + age 70 → age-gated flag', visFires, csFires, 'KD-32');
+  const csItems = evaluate(['Ibuprofen 400mg'], 60);
+  const csFires = csItems.some((i) => /age.*65|65.*age|pincer.*1|nsaid.*65/i.test(i.text + (i.detail || '')));
+  parityCheck('NSAID + age 60 → PINCER #1 does NOT fire', visFires, csFires);
+}
+{
+  // Both silent when age unknown (fail-closed).
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long')], [], null);
+  const visFires = visFlags.some(
+    (f) => f.rule.includes('PINCER #1') || (f.rule.includes('NSAID') && f.rule.includes('65'))
+  );
+  const csItems = evaluate(['Ibuprofen 400mg'], null);
+  const csFires = csItems.some((i) => /age.*65|65.*age|pincer.*1|nsaid.*65/i.test(i.text + (i.detail || '')));
+  parityCheck('NSAID + age unknown → PINCER #1 silent (fail-closed)', visFires, csFires);
 }
 
-// ── 2i: Benzo/Z-drug in age ≥80 — rule-shape divergence (content.js only) ──
-console.log('\n--- 2i: Benzo/Z-drug age ≥80 — rule-shape divergence (content.js only) ---');
+// ── 2i: Benzo/Z-drug in age ≥80 — resolved KD-33 ────────────────────────
+// Both sides now fire this rule (computePINCER + HIGH_RISK_DRUGS benzo_z entry
+// added 2026-06-11). Fail-closed: both silent when age unknown.
+console.log('\n--- 2i: Benzo/Z-drug age ≥80 — PARITY (resolved KD-33) ---');
 {
-  const csFires = csTexts(evaluate(['Zopiclone 7.5mg'], 84)).includes(
-    'Benzodiazepine/Z-drug in age ≥80',
-  );
-  // visualiser: no benzo/Z-drug rule in computePINCER
-  // We can't even feed zopiclone to computePINCER since it's not a HIGH_RISK_DRUGS entry
-  // Assert content.js fires (pinned)
-  const kd = KNOWN_DIVERGENCES.find((k) => k.id === 'KD-33');
-  assert(csFires === kd.cs, `KD-33 pinned: content.js ${kd.cs ? 'fires' : 'silent'} benzo/Z-drug for zopiclone+84`);
-  // Assert visualiser has no benzo/Z-drug rule (none of the HIGH_RISK_DRUGS ids cover it)
-  const visHasBenzo = HIGH_RISK_DRUGS.some((d) =>
-    d.terms && d.terms.some((t) => /zopiclone|zolpidem|zaleplon|diazepam|lorazepam/i.test(t)),
-  );
-  assert(!visHasBenzo && kd.vis === false, `KD-33 pinned: visualiser HIGH_RISK_DRUGS has no benzo/Z-drug terms`);
+  // Both fire at age 84.
+  const csFires = csTexts(evaluate(['Zopiclone 7.5mg'], 84)).includes('Benzodiazepine/Z-drug in age ≥80');
+  const benzoEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'benzo_z');
+  assert(!!benzoEntry, 'visualiser HIGH_RISK_DRUGS now has benzo_z entry');
+  const visFlags = computePINCER([], [makeVDrug('benzo_z')], [], '84');
+  const visFires = visFlags.some((f) => /benzo|z.drug/i.test(f.rule));
+  parityCheck('zopiclone/benzo + age 84 → fires', visFires, csFires);
+}
+{
+  // Both silent when age < 80.
+  const csFires = csTexts(evaluate(['Zopiclone 7.5mg'], 70)).includes('Benzodiazepine/Z-drug in age ≥80');
+  const visFlags = computePINCER([], [makeVDrug('benzo_z')], [], '70');
+  const visFires = visFlags.some((f) => /benzo|z.drug/i.test(f.rule));
+  parityCheck('benzo + age 70 → does NOT fire', visFires, csFires);
+}
+{
+  // Both silent when age unknown (fail-closed).
+  const csFires = csTexts(evaluate(['Zopiclone 7.5mg'], null)).includes('Benzodiazepine/Z-drug in age ≥80');
+  const visFlags = computePINCER([], [makeVDrug('benzo_z')], [], null);
+  const visFires = visFlags.some((f) => /benzo|z.drug/i.test(f.rule));
+  parityCheck('benzo + age unknown → silent (fail-closed)', visFires, csFires);
+}
+{
+  // Verify the terms in HIGH_RISK_DRUGS benzo_z cover the full content.js BENZO_Z set.
+  const benzoEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'benzo_z');
+  const terms = benzoEntry ? benzoEntry.terms.map((t) => t.toLowerCase()) : [];
+  for (const t of [
+    'diazepam',
+    'lorazepam',
+    'temazepam',
+    'nitrazepam',
+    'oxazepam',
+    'chlordiazepoxide',
+    'clonazepam',
+    'alprazolam',
+    'zopiclone',
+    'zolpidem',
+    'zaleplon',
+  ]) {
+    assert(terms.includes(t), `benzo_z terms include ${t}`);
+  }
 }
 
 // ── SECTION 3: Per-drug coverage probes across shared drug classes ─────────
@@ -568,12 +548,7 @@ const SHARED_ANTICOAG_PAIRS = [
 ];
 for (const { cs: anticoag, visId } of SHARED_ANTICOAG_PAIRS) {
   const csFires = csFiresAsAnticoag(anticoag);
-  const visFlags = computePINCER(
-    [],
-    [makeVDrug('nsaid_long'), makeVDrug(visId)],
-    [],
-    null,
-  );
+  const visFlags = computePINCER([], [makeVDrug('nsaid_long'), makeVDrug(visId)], [], null);
   const visFires = visFlags.some((f) => f.rule.toLowerCase().includes('anticoagulant'));
   parityCheck(`${anticoag} as anticoag → NSAID+anticoag`, visFires, csFires);
 }
@@ -581,8 +556,18 @@ for (const { cs: anticoag, visId } of SHARED_ANTICOAG_PAIRS) {
 // 3e: ACEi/ARB terms shared by both sides
 console.log('\n--- 3e: ACEi/ARB terms shared by both sides → triple whammy ---');
 const visACEIEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'acei');
-const SHARED_ACEI = ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril',
-                     'candesartan', 'losartan', 'irbesartan', 'valsartan', 'olmesartan'];
+const SHARED_ACEI = [
+  'ramipril',
+  'lisinopril',
+  'perindopril',
+  'enalapril',
+  'captopril',
+  'candesartan',
+  'losartan',
+  'irbesartan',
+  'valsartan',
+  'olmesartan',
+];
 for (const term of SHARED_ACEI) {
   const inVisualiser = visACEIEntry.terms.includes(term);
   assert(inVisualiser, `visualiser acei entry contains shared term: ${term}`);
@@ -608,12 +593,9 @@ for (const term of SHARED_DIURETICS) {
 {
   assert(
     csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', 'Frusemide 40mg'),
-    'content.js fires triple whammy for frusemide (old UK spelling)',
+    'content.js fires triple whammy for frusemide (old UK spelling)'
   );
-  assert(
-    visDigureticEntry.terms.includes('frusemide'),
-    'visualiser diuretic entry contains frusemide',
-  );
+  assert(visDigureticEntry.terms.includes('frusemide'), 'visualiser diuretic entry contains frusemide');
 }
 
 // ── SECTION 4: Negative controls (both sides agree: no flag) ──────────────
@@ -622,23 +604,23 @@ console.log('\n═══ SECTION 4: Negative controls ═══\n');
 
 {
   // Topical NSAID + anticoag → neither fires NSAID+anticoag
-  const csFires = csTexts(
-    evaluate(['Ibuprofen gel 5%', 'Apixaban 5mg tablets'], 60),
-  ).includes('NSAID + anticoagulant');
+  const csFires = csTexts(evaluate(['Ibuprofen gel 5%', 'Apixaban 5mg tablets'], 60)).includes('NSAID + anticoagulant');
   assert(!csFires, 'PARITY content.js: topical ibuprofen gel + anticoag does NOT fire');
   // visualiser: 'ibuprofen gel' won't match any drug term (terms are bare generic names,
   // detection uses the extracted drug list which excludes topicals at source)
   // We simply note that computePINCER only fires if nsaid_long is in the detected drugs list —
   // topical detection is upstream, so no nsaid_long entry → no flag.
   const visFlags = computePINCER([], [makeVDrug('doac')], [], null);
-  const visFires = visFlags.some((f) => f.rule.toLowerCase().includes('anticoagulant') && f.rule.toLowerCase().includes('nsaid'));
+  const visFires = visFlags.some(
+    (f) => f.rule.toLowerCase().includes('anticoagulant') && f.rule.toLowerCase().includes('nsaid')
+  );
   assert(!visFires, 'PARITY visualiser: anticoag alone (no nsaid_long) does NOT fire NSAID+anticoag');
 }
 {
   // ARB + diuretic WITHOUT NSAID → no triple whammy from either
-  const csFires = csTexts(
-    evaluate(['Losartan 50mg', 'Indapamide 2.5mg'], 68),
-  ).some((t) => t.startsWith('Triple whammy'));
+  const csFires = csTexts(evaluate(['Losartan 50mg', 'Indapamide 2.5mg'], 68)).some((t) =>
+    t.startsWith('Triple whammy')
+  );
   assert(!csFires, 'PARITY content.js: ARB + diuretic (no NSAID) does NOT fire triple whammy');
   // visualiser: no triple whammy rule at all, but also NSAID not present
   const visFlags = computePINCER([], [makeVDrug('acei'), makeVDrug('diuretic')], [], null);
@@ -657,9 +639,8 @@ console.log('\n═══ SECTION 4: Negative controls ═══\n');
 // ── SECTION 5: Print known-divergence summary ────────────────────────────
 
 console.log('\n═══ SECTION 5: Known divergence summary ═══\n');
-console.log(
-  `  ${KNOWN_DIVERGENCES.length} documented divergences — flagged for CSO review (see repo audit T6)\n`,
-);
+console.log(`  ${KNOWN_DIVERGENCES.length} documented divergences — flagged for CSO review (see repo audit T6)\n`);
+console.log('  RESOLVED (2026-06-11, audit B1): KD-30..33 — both sides now in parity.\n');
 const grouped = {};
 for (const kd of KNOWN_DIVERGENCES) {
   const g = kd.side;
@@ -689,17 +670,11 @@ for (const [side, kds] of Object.entries(grouped)) {
 
 const inParityCount = passed; // approximate — most passing tests are parity
 console.log('─'.repeat(60));
-console.log(
-  `Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`,
-);
-console.log(
-  `Known divergences: ${KNOWN_DIVERGENCES.length} (listed above) — THESE ARE CLINICAL GAPS`,
-);
+console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
+console.log(`Known divergences: ${KNOWN_DIVERGENCES.length} (listed above) — THESE ARE CLINICAL GAPS`);
 if (failed > 0) {
   console.error('\nFAIL — new divergence detected or pinned behaviour broken. Fix before shipping.');
   process.exit(1);
 } else {
-  console.log(
-    '\nAll tests passed. No new divergences. Known divergences are pinned for CSO review.',
-  );
+  console.log('\nAll tests passed. No new divergences. Known divergences are pinned for CSO review.');
 }

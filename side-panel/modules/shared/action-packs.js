@@ -255,6 +255,53 @@ export function buildChipActions(chip, patient) {
   };
 }
 
+// ── buildBatchPack ────────────────────────────────────────────────────────────
+
+// Build a combined batch output model for a set of selected worklist patients.
+// Pure: no DOM, no chrome APIs — the caller renders it.
+//
+// items: Array of objects matching the SweepRow shape from sweep-core.js:
+//   { name, time?, clinician?, chips, redCount?, amberCount? }
+//   (At minimum `name` and `chips` are required; all others are optional.)
+//
+// Returns null when items is empty or has no entries with action-needed chips.
+// Otherwise returns:
+//   {
+//     generatedAt: ISO string,
+//     patients: [{
+//       name, time, clinician, redCount, amberCount,
+//       bloodForm: string|null,   // blood form request text
+//       sms: string|null,         // per-patient combined recall SMS
+//       task: string|null,        // per-patient combined task text
+//     }]
+//   }
+//
+// Patients with no action-needed chips produce a section with null fields.
+// Order is preserved (caller passes items in their chosen order).
+export function buildBatchPack(items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const patients = items.map((item) => {
+    const patient = { name: item.name || 'Unknown patient' };
+    const pack = buildPatientActions(item.chips || [], patient);
+    return {
+      name: item.name || 'Unknown patient',
+      time: item.time || null,
+      clinician: item.clinician || null,
+      redCount: item.redCount || 0,
+      amberCount: item.amberCount || 0,
+      bloodForm: pack ? pack.bloodForm : null,
+      sms: pack ? pack.sms : null,
+      task: pack ? pack.task : null,
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    patients,
+  };
+}
+
 // ── buildPatientActions ───────────────────────────────────────────────────────
 
 // Aggregates buildChipActions across all action-needed chips for a patient.
