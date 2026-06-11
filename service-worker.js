@@ -458,6 +458,15 @@ async function runMigration() {
 const RM_ALARM = 'request-monitor-poll';
 const RM_NOTIF_MAP_KEY = 'suite.requestMonitor.notifMap';
 
+// Consecutive-failure counter for RM poll backoff.
+// Intentionally in-memory only (resets on worker restart).  MV3 service
+// workers are ephemeral; persisting this counter would require extra storage
+// overhead and a migration path. A restart is itself a natural back-off
+// (the alarm will not fire again until its next scheduled period), so
+// reset-on-restart is an honest, simpler choice that avoids a permanent
+// "stuck at max backoff" state after a prolonged outage.
+let _rmFailCount = 0;
+
 async function initialiseRequestMonitor() {
   if (!self.RequestMonitor) {
     console.warn('[Request Monitor] module not loaded');
@@ -465,6 +474,7 @@ async function initialiseRequestMonitor() {
   }
   const cfg = await self.RequestMonitor.getConfig();
   if (cfg.enabled && cfg.assigneeId) {
+    _rmFailCount = 0; // reset backoff when config changes / monitor re-initialised
     await scheduleRmAlarm(cfg.pollSeconds);
     // No synchronous pollRequestMonitor() here — the alarm is the single source
     // of polling. MV3 alarms have a ≥30 s minimum delay so one initial poll is
@@ -533,16 +543,37 @@ async function pollRequestMonitor() {
   }
   if (!code) return;
 
-  const result = await self.RequestMonitor.pollAll(code, cfg.assigneeId);
+  let pollOk = false;
+  try {
+    const result = await self.RequestMonitor.pollAll(code, cfg.assigneeId);
+    pollOk = true;
 
-  // Broadcast to side panel so it can re-render without waiting for its own poll
-  broadcastToSidePanel({ type: 'requestMonitor:refresh' });
+    // Broadcast to side panel so it can re-render without waiting for its own poll
+    broadcastToSidePanel({ type: 'requestMonitor:refresh' });
 
-  // Notifications: only fire if explicitly enabled, and skip the very first
-  // poll after install (otherwise everything currently in the queue would
-  // pop a notification — annoying).
-  if (cfg.notifyEnabled && !result.isFirstPoll && Object.keys(result.freshByBucket).length > 0) {
-    await sendRmNotifications(result.freshByBucket, cfg, code);
+    // Notifications: only fire if explicitly enabled, and skip the very first
+    // poll after install (otherwise everything currently in the queue would
+    // pop a notification — annoying).
+    if (cfg.notifyEnabled && !result.isFirstPoll && Object.keys(result.freshByBucket).length > 0) {
+      await sendRmNotifications(result.freshByBucket, cfg, code);
+    }
+  } catch (pollErr) {
+    console.warn('[RM] pollAll failed:', pollErr && pollErr.message);
+  }
+
+  // Failure backoff: consistent with makePoller in panel.js (up to 8× base period).
+  // _rmFailCount resets on worker restart — see comment near its declaration.
+  if (pollOk) {
+    if (_rmFailCount > 0) {
+      _rmFailCount = 0;
+      await scheduleRmAlarm(cfg.pollSeconds); // restore base period on first success
+    }
+  } else {
+    _rmFailCount++;
+    const level = Math.min(_rmFailCount, 3); // 2^3 = 8 → cap at 8×
+    const backoffSeconds = cfg.pollSeconds * Math.pow(2, level);
+    console.warn(`[RM] poll failure #${_rmFailCount}, backing off to ${backoffSeconds}s`);
+    await scheduleRmAlarm(backoffSeconds);
   }
 }
 
@@ -621,6 +652,44 @@ chrome.notifications?.onClosed.addListener(async (notifId, byUser) => {
 // stored latestVersion is newer than the installed manifest version.
 
 const UPDATE_ALARM = 'update-checker-poll';
+const UPDATE_STATUS_KEY = 'suite.updateCheck.status';
+
+// Persist update-check outcome to suite.updateCheck.status.
+// Write-only-on-change: reads first and skips the write if status matches,
+// to avoid unnecessary storage churn on every alarm tick.
+// Schema: { lastSuccess: <ms-timestamp>|null, lastError: { ts, message }|null }
+// No patient data — only timestamps and error message strings.
+async function _recordUpdateCheckStatus(ok, errorMessage) {
+  try {
+    const r = await chrome.storage.local.get(UPDATE_STATUS_KEY);
+    const prev = r[UPDATE_STATUS_KEY] || {};
+    const now = Date.now();
+    const next = ok
+      ? { lastSuccess: now, lastError: null }
+      : { lastSuccess: prev.lastSuccess || null, lastError: { ts: now, message: String(errorMessage || 'unknown') } };
+    // Skip write when nothing changed (avoid storage churn on every poll cycle)
+    if (prev.lastSuccess === next.lastSuccess &&
+        JSON.stringify(prev.lastError) === JSON.stringify(next.lastError)) return;
+    await chrome.storage.local.set({ [UPDATE_STATUS_KEY]: next });
+  } catch (_) {
+    // Storage failure must never propagate — this is diagnostic metadata only.
+  }
+}
+
+async function _runUpdateCheck() {
+  if (!self.UpdateChecker) return;
+  try {
+    const res = await self.UpdateChecker.checkForUpdate();
+    if (res && !res.skipped) {
+      // skipped means within cooldown — don't update status so the last real
+      // outcome (success or failure) is preserved for the options-page display.
+      await _recordUpdateCheckStatus(res.ok !== false, res.error || null);
+    }
+  } catch (e) {
+    console.warn('[Update Checker] check failed:', e && e.message);
+    await _recordUpdateCheckStatus(false, e && e.message);
+  }
+}
 
 async function initialiseUpdateChecker() {
   if (!self.UpdateChecker) {
@@ -631,11 +700,11 @@ async function initialiseUpdateChecker() {
   await chrome.alarms.clear(UPDATE_ALARM);
   await chrome.alarms.create(UPDATE_ALARM, { periodInMinutes: 60 * 24, delayInMinutes: 1 });
   // Initial check (respects internal 23h cooldown so it won't refetch on every reload)
-  self.UpdateChecker.checkForUpdate().catch(e => console.warn('[Update Checker] check failed:', e.message));
+  _runUpdateCheck();
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
-  if (alarm.name === UPDATE_ALARM && self.UpdateChecker) {
-    self.UpdateChecker.checkForUpdate().catch(e => console.warn('[Update Checker]', e.message));
+  if (alarm.name === UPDATE_ALARM) {
+    _runUpdateCheck();
   }
 });

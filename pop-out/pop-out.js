@@ -2,6 +2,8 @@
 
 'use strict';
 
+import { createModuleLoader } from '../side-panel/module-loader.js';
+
 const content    = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
 let activeModule  = null;
@@ -43,13 +45,6 @@ document.addEventListener('suite:slots:count', e => {
 // ── CSS loader ────────────────────────────────────────────────────────────────
 
 const loadedCss = new Set();
-function ensureModuleCss(cssPath) {
-  if (!cssPath || loadedCss.has(cssPath)) return;
-  loadedCss.add(cssPath);
-  const link = document.createElement('link');
-  link.rel = 'stylesheet'; link.href = cssPath;
-  document.head.appendChild(link);
-}
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
@@ -141,47 +136,18 @@ settingsBtn?.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
-async function switchModule(name) {
-  // Sequence guard (mirrors panel.js): if the user switches tabs again before an
-  // earlier init() finishes, the stale chain must not leak its timers/listeners
-  // or overwrite the newer module's cleanup. Each switch claims a sequence number
-  // and bails (cleaning up) if a newer switch has superseded it.
-  const mySeq = ++switchSeq;
-
-  const prevCleanup = moduleCleanup;
-  moduleCleanup = null;
-  if (prevCleanup) { try { prevCleanup(); } catch (_) {} }
-
-  document.querySelectorAll('.nav-tab').forEach(t =>
-    t.classList.toggle('active', t.dataset.module === name)
-  );
-  activeModule = name;
-  content.innerHTML = '';
-
-  // Persist active module for this popout
-  chrome.storage.local.set({ 'popout.activeModule': name });
-
-  const entry = MODULES[name];
-  if (!entry) return;
-
-  ensureModuleCss(entry.css);
-
-  try {
-    const mod = await entry.js();
-    if (mySeq !== switchSeq) return;
-    if (mod.init) {
-      const cleanup = await mod.init(content);
-      if (mySeq !== switchSeq) {
-        if (typeof cleanup === 'function') try { cleanup(); } catch (_) {}
-        return;
-      }
-      moduleCleanup = cleanup;
-    }
-  } catch (err) {
-    if (mySeq !== switchSeq) return;
-    content.innerHTML = `<div class="module-wrap"><div class="banner">Failed to load: ${err.message}</div></div>`;
-  }
-}
+const switchModule = createModuleLoader({
+  modules:      MODULES,
+  container:    content,
+  loadedCss,
+  getSwitchSeq: () => switchSeq,
+  incSwitchSeq: () => ++switchSeq,
+  getCleanup:   () => moduleCleanup,
+  setCleanup:   (fn) => { moduleCleanup = fn; },
+  setActive:    (name) => { activeModule = name; },
+  onPersist:    (name) => { chrome.storage.local.set({ 'popout.activeModule': name }); },
+  errPrefix:    'Failed to load',
+});
 
 // ── Service worker messages ───────────────────────────────────────────────────
 
@@ -200,19 +166,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 (async () => {
-  // Apply display preferences so pop-out matches the main panel's theme/size
-  function applyDisplayPrefs(prefs) {
-    prefs = prefs || {};
-    document.documentElement.setAttribute('data-theme',      prefs.theme      || 'light');
-    document.documentElement.setAttribute('data-size',       prefs.size       || 'medium');
-    document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
-  }
-  const dp = await chrome.storage.local.get('suite.display');
-  applyDisplayPrefs(dp['suite.display'] || {});
-  chrome.storage.onChanged.addListener(changes => {
-    if (changes['suite.display']) applyDisplayPrefs(changes['suite.display'].newValue || {});
-  });
-
+  // Display preferences are applied by shared/display-prefs.js (loaded before this script).
   const r = await chrome.storage.local.get('popout.activeModule');
   const startMod = r['popout.activeModule'] || 'slots';
   switchModule(startMod);

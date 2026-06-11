@@ -1,21 +1,7 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 
-// ══ DISPLAY PREFERENCES ════════════════════════════════════════════════════
-(function applyDisplayPrefs() {
-  function apply(p) {
-    p = p || {};
-    document.documentElement.setAttribute('data-theme', p.theme || 'light');
-    document.documentElement.setAttribute('data-size', p.size || 'medium');
-    document.documentElement.setAttribute('data-colorblind', String(!!p.colorblind));
-  }
-  if (typeof chrome !== 'undefined' && chrome.storage) {
-    chrome.storage.local.get('suite.display', (r) => apply(r['suite.display'] || {}));
-    chrome.storage.onChanged.addListener((c) => {
-      if (c['suite.display']) apply(c['suite.display'].newValue || {});
-    });
-  }
-})();
+// Display preferences are applied by shared/display-prefs.js (loaded before this script).
 
 // ══ PDF.JS WORKER ══════════════════════════════════════════════════════════
 // Worker is shipped as a same-origin extension resource. Use chrome.runtime
@@ -396,7 +382,15 @@ const HIGH_RISK_DRUGS = [
     requires: ['tsh', 'thyroid', 'lft', 'liver function'],
     interval: 183,
   },
-  { id: 'warfarin', label: 'Warfarin', terms: ['warfarin'], requires: ['inr', 'u&e'], interval: 42 },
+  {
+    id: 'warfarin',
+    label: 'Warfarin / VKA',
+    // All UK oral vitamin-K antagonists share INR monitoring (BNF 2.8.2;
+    // acenocoumarol/phenindione emc-corroborated, 2026-06-11 Keeper run).
+    terms: ['warfarin', 'acenocoumarol', 'phenindione'],
+    requires: ['inr', 'u&e'],
+    interval: 42,
+  },
   {
     id: 'doac',
     label: 'DOAC',
@@ -407,17 +401,28 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'acei',
     label: 'ACEi / ARB',
+    // Complete UK ACEi/ARB set (2026-06-11 Keeper, parity with the triage-lens
+    // ACEI_ARB regex; quinapril/imidapril/eprosartan/cilazapril emc-corroborated
+    // that run, the rest are BNF staples already shipped in content.js).
     terms: [
       'ramipril',
       'lisinopril',
       'perindopril',
       'enalapril',
       'captopril',
+      'trandolapril',
+      'fosinopril',
+      'quinapril',
+      'imidapril',
+      'cilazapril',
       'candesartan',
       'losartan',
       'irbesartan',
       'valsartan',
       'olmesartan',
+      'telmisartan',
+      'azilsartan',
+      'eprosartan',
     ],
     requires: ['u&e', 'urea', 'creatinine', 'egfr'],
     interval: 365,
@@ -425,14 +430,30 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'diuretic',
     label: 'Loop / thiazide diuretic',
-    terms: ['furosemide', 'frusemide', 'bumetanide', 'indapamide', 'bendroflumethiazide', 'chlortalidone'],
+    // Parity with content.js DIURETIC regex (torasemide/hydrochlorothiazide/
+    // metolazone already shipped there and in the loop-diuretic drug rules).
+    terms: [
+      'furosemide', 'frusemide', 'bumetanide', 'torasemide', 'indapamide',
+      'bendroflumethiazide', 'hydrochlorothiazide', 'chlortalidone',
+      'chlorthalidone', 'metolazone',
+    ],
     requires: ['u&e', 'urea', 'creatinine', 'egfr', 'sodium', 'potassium'],
     interval: 365,
   },
   {
     id: 'nsaid_long',
     label: 'Long-term NSAID',
-    terms: ['ibuprofen', 'naproxen', 'diclofenac', 'celecoxib', 'etoricoxib', 'meloxicam'],
+    // Complete UK systemic NSAID set (2026-06-11 Keeper, parity with the
+    // triage-lens prescribing flags; emc/BNF-corroborated 2026-06-11 run).
+    // NOTE: matching here is \b-bounded, so derivatives and spelling variants
+    // must be listed explicitly (dexibuprofen, dexketoprofen, indometacin).
+    terms: [
+      'ibuprofen', 'dexibuprofen', 'naproxen', 'diclofenac', 'aceclofenac',
+      'celecoxib', 'etoricoxib', 'meloxicam', 'piroxicam', 'tenoxicam',
+      'indometacin', 'indomethacin', 'sulindac', 'ketoprofen', 'dexketoprofen',
+      'tiaprofenic acid', 'mefenamic acid', 'tolfenamic acid', 'fenoprofen',
+      'nabumetone', 'etodolac', 'flurbiprofen',
+    ],
     requires: ['u&e', 'urea', 'creatinine', 'egfr'],
     interval: 365,
   },
