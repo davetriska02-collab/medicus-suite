@@ -433,9 +433,16 @@ const HIGH_RISK_DRUGS = [
     // Parity with content.js DIURETIC regex (torasemide/hydrochlorothiazide/
     // metolazone already shipped there and in the loop-diuretic drug rules).
     terms: [
-      'furosemide', 'frusemide', 'bumetanide', 'torasemide', 'indapamide',
-      'bendroflumethiazide', 'hydrochlorothiazide', 'chlortalidone',
-      'chlorthalidone', 'metolazone',
+      'furosemide',
+      'frusemide',
+      'bumetanide',
+      'torasemide',
+      'indapamide',
+      'bendroflumethiazide',
+      'hydrochlorothiazide',
+      'chlortalidone',
+      'chlorthalidone',
+      'metolazone',
     ],
     requires: ['u&e', 'urea', 'creatinine', 'egfr', 'sodium', 'potassium'],
     interval: 365,
@@ -448,11 +455,28 @@ const HIGH_RISK_DRUGS = [
     // NOTE: matching here is \b-bounded, so derivatives and spelling variants
     // must be listed explicitly (dexibuprofen, dexketoprofen, indometacin).
     terms: [
-      'ibuprofen', 'dexibuprofen', 'naproxen', 'diclofenac', 'aceclofenac',
-      'celecoxib', 'etoricoxib', 'meloxicam', 'piroxicam', 'tenoxicam',
-      'indometacin', 'indomethacin', 'sulindac', 'ketoprofen', 'dexketoprofen',
-      'tiaprofenic acid', 'mefenamic acid', 'tolfenamic acid', 'fenoprofen',
-      'nabumetone', 'etodolac', 'flurbiprofen',
+      'ibuprofen',
+      'dexibuprofen',
+      'naproxen',
+      'diclofenac',
+      'aceclofenac',
+      'celecoxib',
+      'etoricoxib',
+      'meloxicam',
+      'piroxicam',
+      'tenoxicam',
+      'indometacin',
+      'indomethacin',
+      'sulindac',
+      'ketoprofen',
+      'dexketoprofen',
+      'tiaprofenic acid',
+      'mefenamic acid',
+      'tolfenamic acid',
+      'fenoprofen',
+      'nabumetone',
+      'etodolac',
+      'flurbiprofen',
     ],
     requires: ['u&e', 'urea', 'creatinine', 'egfr'],
     interval: 365,
@@ -530,6 +554,27 @@ const HIGH_RISK_DRUGS = [
     terms: ['olanzapine', 'risperidone', 'quetiapine', 'aripiprazole', 'haloperidol', 'clozapine', 'chlorpromazine'],
     requires: ['fbc', 'full blood count', 'u&e', 'lft', 'glucose', 'hba1c', 'cholesterol'],
     interval: 183,
+  },
+  // Benzodiazepines and Z-drugs: STOPP/PINCER — falls/sedation risk in the elderly.
+  // Parity with the triage-lens BENZO_Z regex (2026-06-11 KD-33 resolution).
+  {
+    id: 'benzo_z',
+    label: 'Benzodiazepine / Z-drug',
+    terms: [
+      'diazepam',
+      'lorazepam',
+      'temazepam',
+      'nitrazepam',
+      'oxazepam',
+      'chlordiazepoxide',
+      'clonazepam',
+      'alprazolam',
+      'zopiclone',
+      'zolpidem',
+      'zaleplon',
+    ],
+    requires: [],
+    interval: 0,
   },
 ];
 
@@ -705,6 +750,48 @@ function computePINCER(allProblems, drugs, entries, ageStr) {
         });
       }
     }
+  }
+
+  // KD-31 — Triple whammy: NSAID + ACEi/ARB + diuretic (PINCER #4 / STOPP)
+  // All three drug classes must be simultaneously present.
+  if (drugFor('nsaid_long') && drugFor('acei') && drugFor('diuretic')) {
+    flags.push({
+      severity: 'high',
+      rule: 'Triple whammy — NSAID + ACEi/ARB + diuretic',
+      detail:
+        'Concurrent NSAID, ACEi/ARB and diuretic significantly increases AKI risk. Review and deprescribe NSAID if possible.',
+      source: 'PINCER #4 / STOPP',
+    });
+  }
+
+  // KD-30 — NSAID + antiplatelet without oral anticoagulant (PINCER #3 / STOPP)
+  // Mirror content.js precedence: anticoag branch wins; only fire when no oral
+  // anticoagulant (warfarin or DOAC) is present — no double-flagging.
+  if (
+    drugFor('nsaid_long') &&
+    (drugFor('antiplatelet') || drugFor('aspirin_ap')) &&
+    !drugFor('warfarin') &&
+    !drugFor('doac')
+  ) {
+    flags.push({
+      severity: 'high',
+      rule: 'NSAID with antiplatelet — GI bleed risk',
+      detail:
+        'NSAID combined with antiplatelet increases GI and systemic bleed risk. Review need for NSAID and consider gastroprotection.',
+      source: 'PINCER #3 / STOPP',
+    });
+  }
+
+  // KD-33 — Benzodiazepine / Z-drug in age ≥80 (STOPP)
+  // Fail-closed: if age unknown, this flag does NOT fire.
+  if (drugFor('benzo_z') && ageKnown && age >= 80) {
+    flags.push({
+      severity: 'high',
+      rule: 'Benzodiazepine / Z-drug in age ≥80',
+      detail:
+        'Benzodiazepine or Z-drug in a patient aged ≥80 — increased risk of falls, fractures and sedation. Consider supervised deprescribing.',
+      source: 'STOPP',
+    });
   }
 
   // PHASE 2 (deferred): LABA-without-ICS in asthma and COCP+VTE history.
