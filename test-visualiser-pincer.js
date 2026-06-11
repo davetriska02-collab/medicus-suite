@@ -274,6 +274,45 @@ console.log('\n--- P-F: ACEi/ARB in age ≥75 without U&E ---');
   assert(!flags.some((f) => f.rule.includes('≥75')), 'P-F does not fire when age unknown (fail-closed)');
 }
 
+// ── Drug-table completeness locks (2026-06-11 Keeper) ─────────────────────
+// The HIGH_RISK_DRUGS tables were completed to parity with the triage-lens
+// prescribing flags. Matching in the visualiser is \b-bounded, so derivatives
+// and spelling variants must be listed explicitly — these locks prevent a
+// future edit silently dropping one.
+console.log('\n── Drug-table completeness locks ──');
+{
+  const termsOf = (id) => (HIGH_RISK_DRUGS.find((d) => d.id === id)?.terms || []).map((t) => t.toLowerCase());
+
+  const nsaids = termsOf('nsaid_long');
+  for (const t of ['ibuprofen', 'dexibuprofen', 'naproxen', 'diclofenac', 'aceclofenac',
+                   'celecoxib', 'etoricoxib', 'meloxicam', 'piroxicam', 'tenoxicam',
+                   'indometacin', 'indomethacin', 'sulindac', 'ketoprofen', 'dexketoprofen',
+                   'tiaprofenic acid', 'mefenamic acid', 'tolfenamic acid', 'fenoprofen',
+                   'nabumetone', 'etodolac', 'flurbiprofen']) {
+    assert(nsaids.includes(t), `nsaid_long terms include "${t}"`);
+  }
+
+  const vka = termsOf('warfarin');
+  for (const t of ['warfarin', 'acenocoumarol', 'phenindione']) {
+    assert(vka.includes(t), `warfarin/VKA terms include "${t}"`);
+  }
+
+  const acei = termsOf('acei');
+  for (const t of ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril',
+                   'trandolapril', 'fosinopril', 'quinapril', 'imidapril', 'cilazapril',
+                   'candesartan', 'losartan', 'irbesartan', 'valsartan', 'olmesartan',
+                   'telmisartan', 'azilsartan', 'eprosartan']) {
+    assert(acei.includes(t), `acei terms include "${t}"`);
+  }
+
+  const diuretics = termsOf('diuretic');
+  for (const t of ['furosemide', 'frusemide', 'bumetanide', 'torasemide', 'indapamide',
+                   'bendroflumethiazide', 'hydrochlorothiazide', 'chlortalidone',
+                   'chlorthalidone', 'metolazone']) {
+    assert(diuretics.includes(t), `diuretic terms include "${t}"`);
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

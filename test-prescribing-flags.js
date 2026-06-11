@@ -71,6 +71,9 @@ check(!texts(r).some(t => t.startsWith('Triple whammy')), 'ARB + diuretic WITHOU
 // 2026-06-11 Keeper: cilazapril added to ACEI_ARB (legacy UK ACEi on repeats).
 r = evaluate(['Ibuprofen 400mg', 'Cilazapril 1mg', 'Bendroflumethiazide 2.5mg'], 70);
 check(texts(r).some(t => t.startsWith('Triple whammy')), 'fires for NSAID + cilazapril + thiazide');
+// 2026-06-11 Keeper: frusemide (old UK spelling) added to DIURETIC.
+r = evaluate(['Naproxen 250mg', 'Ramipril 5mg', 'Frusemide 40mg'], 68);
+check(texts(r).some(t => t.startsWith('Triple whammy')), 'fires for NSAID + ACEi + frusemide (old spelling)');
 
 console.log('\n--- benzodiazepine / Z-drug in the elderly ---');
 r = evaluate(['Zopiclone 7.5mg'], 84);
