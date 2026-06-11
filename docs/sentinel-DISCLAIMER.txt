@@ -359,6 +359,133 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.54.0 addendum ---
+
+This addendum records the state of Medicus Suite at v3.54.0. The following features
+have been added or expanded since the v3.26.4 addendum. In each case the feature
+remains within the intended purpose at section 3 and does not alter the nature of
+the software, its regulatory status, or its data-handling characteristics. New user
+obligations introduced by each surface are stated below.
+
+Pre-Monitoring Sweep (v3.40.x). Runs the Sentinel rules engine as a read-only
+batch against today's booked patients from the Medicus appointment book. The sweep
+makes the same per-patient authenticated API reads as the live Sentinel module; it
+produces a worklist only, does not write to any record, and transmits no data
+externally. Results are in-memory only and discarded when the tab closes or module
+is reloaded. The same patient-data constraints, verification obligations, and "no
+chip ≠ all clear" principle as the live Sentinel module apply without modification
+to every sweep result. A patient that fails to load is never silently skipped.
+
+Reception module (v3.41.x). The guided-capture pathways present a fixed, pre-set
+question set per presenting problem to non-clinical staff. Red-flag questions fire
+an escalation instruction immediately. Generated text is copied to the system
+clipboard for manual paste into Medicus. The output is caller-reported information,
+not clinical findings, and must be reviewed by a clinician. The patient name and
+date of birth are embedded in the generated text specifically to make wrong-record
+pastes detectable. All pathways ship disabled; enabling requires an explicit
+CSO-reviewed disclaimer acceptance. This module does not transmit data externally,
+does not write to any system, and does not make triage decisions. User obligations:
+(1) non-clinical staff must be trained and assessed before using capture pathways;
+(2) every capture output must be reviewed by a clinician before any clinical action;
+(3) a pathway may only be enabled after a clinician has reviewed its content;
+(4) staff must treat a full "no red flags" capture as a structured complaint
+description, not as clinical clearance.
+
+Triage Lens baseline rule expansion (v3.44.x, schema v2). The request-queue
+text-pattern rule set was expanded to 77 rules (schema v2) including 17 explicit
+red emergency-presentation rules (stroke/TIA, sepsis, anaphylaxis, meningitis,
+DKA/HHS, AAA/dissection, testicular torsion, PE/DVT/limb ischaemia, acute surgical
+abdomen, fever in infant under 3 months, paediatric respiratory distress, seizure,
+pregnancy bleeding/pain, reduced fetal movements, pre-eclampsia, sudden visual
+loss/GCA, septic arthritis, psychosis). These expand the patterns the Triage Lens
+recognises; they do not expand the intended purpose. The Triage Lens remains a
+supplementary pattern-recognition aid for trained staff — it does not make triage
+decisions. User obligations: (1) triage staff must not rely solely on the Triage
+Lens to identify emergency presentations; (2) absence of a red chip does not mean
+the presentation is safe to manage routinely; (3) the practice's own clinical
+triage protocol remains the primary safety gate at all times.
+
+PINCER visualiser expansion (v3.47.0). The Visualiser PINCER flag set was expanded
+from 5 to 11 flags. New flags: P-A (NSAID + peptic ulcer/GI bleed history, no
+gastroprotection); P-B (antiplatelet + peptic ulcer history, no gastroprotection);
+P-C (NSAID without gastroprotection, age ≥65); P-D (oral anticoagulant +
+antiplatelet, no gastroprotection); P-E (aspirin + second antiplatelet (P2Y12),
+no PPI); P-F (ACEi/ARB or diuretic, age ≥75, U&E overdue >15 months). Age-gated
+flags (P-C, P-F) fail-closed when age cannot be parsed from the PDF. The PINCER
+implementation remains a subset of the full PINCER tool; absence of a flag is not
+a guarantee of prescribing safety. Medicus's own prescribing safety systems remain
+the primary control.
+
+Vaccine rules — PPV23, shingles, RSV (v3.46.0). Three one-off (lifetime)
+vaccination rules were added: pneumococcal (PPV23, age ≥65, single lifetime dose,
+Green Book chapter 25); shingles (Shingrix, born on or after 1 September 1958 for
+ages 65-69, plus 70-79, Green Book chapter 28a); RSV (age 75-79, single lifetime
+dose, Green Book chapter 27a / JCVI June 2023). The same inferential limitations
+in the v3.26.4 addendum apply to these rules. A bug in which declined-vaccination
+coded records were misclassified as vaccination-given was corrected at v3.46.0.
+User obligations: for one-off lifetime vaccines (PPV23, shingles, RSV), vaccination
+may have been administered years or decades before the current GP registration
+without a local record. The user must verify one-off vaccination status against
+national vaccination records (NIMS/PCSE/SOARIS) before any clinical action;
+a DUE chip for a lifetime vaccine is a prompt to check records, not a confirmed
+statement that the patient has never been vaccinated.
+
+Extraction-drift detection (v3.47.0). A new module records rolling extraction
+counts (integers only, no PII) and fires a side-panel warning banner when the
+extension detects a sustained zero-count pattern suggesting API regression. The
+banner carries no patient data; the stored baseline is excluded from suite backups.
+This feature does not alter the intended purpose or the verification obligations
+at section 5.
+
+Action Packs (v3.48.0). Action Packs generates copy-ready communication templates
+(blood forms, recall SMS/letters, pharmacist tasks) from the current Sentinel chip
+set. Templates include the patient's name, date of birth, NHS number, and relevant
+clinical detail. Template text is placed on the system clipboard by the user's
+deliberate action; the extension does not transmit, send, or store any template
+content — all communication is manual and user-initiated. User obligations: (1)
+verify the patient in the source Medicus record before generating a pack; (2)
+review the template content before sending; (3) confirm the intended recipient
+before dispatching any template; (4) use only information-governance-approved
+channels; (5) treat template content as patient data subject to the practice's
+information-governance policy. Clipboard content management is the practice's
+responsibility.
+
+Pre-consultation Brief (v3.49.0). The pre-consultation brief is a collapsible
+display card at the top of the Sentinel panel that surfaces up to 4 risk-ranked
+action signals and an overflow count. It is an aide to reading the full chip list,
+not a substitute for it. All obligations at section 5 apply with equal force to
+the brief card as to the full chip list.
+
+Patient Passport (v3.50.0). The patient passport is a printable plain-English
+health summary intended to be generated and reviewed by the GP, then handed to
+the patient in the consultation. It includes the patient's name, date of birth,
+NHS number, a list of currently-due monitoring items, and key observation values.
+Patient-identifiable data stored transiently to generate the passport is removed
+from device storage immediately after the print page renders (consume-on-read).
+User obligations: (1) generate the passport from the current Sentinel snapshot
+at the time of the consultation; (2) review the passport before handing it to
+the patient; (3) explain to the patient that the summary is a memory aid and not
+a substitute for clinical advice; (4) not generate a passport outside the
+consultation in which the patient is directly present. The passport does not
+transmit data externally. The patient must be told to contact the practice if
+concerned, not to act on the summary alone.
+
+SMR Workstation — Visualiser (v3.51.0). A Structured Medication Review workstation
+tab was added to the Patient Record Visualiser. It provides: an ACB burden score
+(Boustani scale) with per-drug contribution badges; STOPP/START v3 (2023) criteria
+flags — an implementable subset of 10 STOPP and 3 START criteria; and a printable
+SMR summary document. The SMR Workstation operates on the same PDF export as the
+rest of the Visualiser and inherits all limitations at H-013 (staleness) and H-014
+(silent data omission) of the hazard log. The ACB scores and STOPP/START criteria
+are a starter set that has not yet been formally verified by the Clinical Safety
+Officer against current Boustani guidance and STOPP/START v3 (2023). User
+obligations: (1) until CSO verification is recorded, the SMR Workstation tab must
+be treated as a reference aid only, not as a clinical decision support tool; (2)
+verify every ACB score and STOPP/START flag against the live Medicus prescribing
+record before any medication is changed; (3) do not present the SMR Workstation
+output to a patient or third party as a definitive prescribing-safety assessment.
+
+
 --- v3.26.4 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.26.4. The

@@ -1,7 +1,7 @@
 # Medicus Suite — Intended Purpose Statement
 
-**Version:** 3.16.0  
-**Date:** May 2026  
+**Version:** 3.54.0  
+**Date:** 2026-06  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Status:** Limited distribution — named clinical users only
 
@@ -15,16 +15,18 @@ The extension comprises the following functional modules:
 
 | Module | Function |
 |--------|----------|
-| **Monitoring (Sentinel)** | Displays, against the current patient's record, threshold checks for drug-monitoring intervals and QOF 2025/26 indicator achievement. Passive display only — no clinical recommendation produced. |
-| **Custom Alert Builder** | Form-based authoring of practice custom rules across five rule types (drug-monitoring, drug-combo, qof-indicator, event-count, composite), with an engine-backed live preview against an editable test patient and schema validation on save. Passive — produces rules the Monitoring module later displays. |
+| **Monitoring (Sentinel)** | Displays, against the current patient's record, threshold checks for drug-monitoring intervals and QOF 2025/26 indicator achievement, including flu/COVID-19 vaccination eligibility (JCVI/UKHSA 2025/26) and one-off vaccination rules for PPV23, shingles (Shingrix), and RSV (JCVI/Green Book). Passive display only — no clinical recommendation produced. Sub-features: **Pre-consultation Brief** — collapsible top-4 risk-ranked signal summary card; **Action Packs** — copy-ready blood forms, recall SMS/letters, pharmacist tasks per chip (templates include patient PII; all dispatch is manual); **Patient Passport** — printable plain-English health summary for handing to the patient (consume-on-read PII handling). |
+| **Custom Alert Builder** | Form-based authoring of practice custom rules across six rule types (drug-monitoring, drug-combo, qof-indicator, event-count, observation-alert, composite), with an engine-backed live preview against an editable test patient and schema validation on save. Full engine parity from v3.22.0. Passive — produces rules the Monitoring module later displays. |
 | **Slots** | Displays appointment slot availability data already present in the Medicus scheduling system. |
 | **Capacity Forecast** | Aggregates slot and session data to assist with practice-level capacity visibility. |
-| **Triage Lens** | In-page overlay displaying structured triage information for patients in the current consultation queue, drawn from data already present in Medicus. On the patient record view it also surfaces deterministic STOPP/START-style prescribing-combination prompts, a risk-tool signpost chip (links to the QRISK3 / QCancer / eFI calculators — computes no score), and NHS Pharmacy First pathway signposting reference snippets — all supplementary prompts to review, not clinical decisions. |
+| **Triage Lens** | In-page overlay displaying structured triage information for patients in the current consultation queue, drawn from data already present in Medicus. Request-queue view: text-pattern chips (77 rules, schema v2) including 17 red emergency-presentation rules (stroke/TIA, sepsis, anaphylaxis, meningitis, DKA/HHS, and others), 27 amber rules (NG12 2WW flags, diabetes red flags, etc.), 8 info rules — supplementary prompts to trained triage staff; absence of a chip does not indicate a presentation is low-urgency. Record/medications view: deterministic STOPP/START-style prescribing-combination prompts, a risk-tool signpost chip (links to official calculators — computes no score), and NHS Pharmacy First pathway signposting snippets — all supplementary prompts to review, not clinical decisions. |
+| **Pre-Monitoring Sweep** | Pre-clinic module that runs the Sentinel rules engine as a read-only batch against today's booked patients from the Medicus appointment book. Results are in-memory only; no patient data is stored persistently. A patient that fails to load is never silently skipped. Absence of a chip for a patient in the sweep does not mean monitoring is complete. |
+| **Reception** | Guided non-clinical capture pathways presenting a fixed question set per presenting problem to reception staff. Red-flag questions fire an escalation instruction with an immediate 999/duty-clinician prompt. Generated text is copied to clipboard for manual paste into Medicus. Output is caller-reported information, not clinical findings. All pathways ship disabled; enabling requires CSO-reviewed disclaimer acceptance. Pathway content requires clinical safety officer review. |
 | **Submissions** | Displays submission status counts for QOF and enhanced services as already recorded in Medicus. |
 | **Activity** | Displays aggregated activity data for the current clinical session, drawn from Medicus. |
 | **Referrals Tracker** | Displays referral audit data drawn from Medicus, including specialty, priority, status, and clinician breakdowns. |
 | **Waiting Room / Request Monitor** | Displays live waiting-room patient counts and new-request demand counts with configurable amber/red thresholds. |
-| **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. No patient data leaves the browser at any stage. |
+| **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags (11 flags P-A to P-F and original set, age-gated flags fail-closed), QOF register review status, a D3 swim-lane event timeline, and from v3.51.0 a Structured Medication Review (SMR) Workstation tab with ACB burden scoring (Boustani scale), STOPP/START v3 (2023) criteria flags (10 STOPP + 3 START), and a printable SMR skeleton. The ACB scores and STOPP/START criteria are a starter set pending CSO verification. No patient data leaves the browser at any stage. |
 
 ---
 
