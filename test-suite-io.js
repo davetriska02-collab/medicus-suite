@@ -455,6 +455,52 @@ console.log('\n--- applyWithRollback rollback ---');
 
   global.chrome = savedChrome;
 
+  // ── sentinel-io: resilient custom-rule import (suite restore) ──────────────
+  // A single invalid/legacy custom rule must NOT abort the whole import when
+  // skipInvalidCustomRules is set — the valid rules still import and the rejects
+  // are reported. Default (strict) still throws. Regression for the suite-backup
+  // bug where one bad rule rolled back the entire restore.
+  console.log('\n--- sentinel-io: resilient custom-rule import ---');
+  {
+    const sentImport = sentinelIo.sentinelImport;
+    const validRule = {
+      id: 'custom-b12-ferritin-1', type: 'qof-indicator', enabled: true, label: 'B12/ferritin',
+      indicatorCode: 'LOCAL-B12', indicatorName: 'B12/ferritin',
+      check: { kind: 'observation-alert', observation: ['b12', 'ferritin'], comparator: 'below', amber: 200, red: 100 },
+    };
+    const invalidRule = { id: 'custom-legacy-1', type: 'drug-monitoring', enabled: true, drug: { match: ['x'] }, tests: [] };
+
+    // Strict (default): the bad rule rejects the whole import.
+    let strictThrew = false;
+    try { await sentImport({ customRules: [invalidRule, validRule] }); } catch (e) { strictThrew = true; }
+    assert(strictThrew, 'sentinelImport: strict mode throws on an invalid custom rule (default)');
+
+    // Resilient: valid rule imports, invalid rule reported, restore not aborted.
+    // Clear any prior write first.
+    await chrome.storage.local.remove('sentinel.customRules');
+    const res = await sentImport({ customRules: [invalidRule, validRule] }, { skipInvalidCustomRules: true });
+    const stored = (await chrome.storage.local.get('sentinel.customRules'))['sentinel.customRules'] || [];
+    assert(stored.length === 1 && stored[0].id === 'custom-b12-ferritin-1',
+      'sentinelImport: resilient mode imports the valid custom rule despite an invalid sibling');
+    assert(res && Array.isArray(res.rejectedCustomRules) && res.rejectedCustomRules.length === 1
+      && res.rejectedCustomRules[0].id === 'custom-legacy-1',
+      'sentinelImport: resilient mode reports the rejected custom rule');
+
+    // Round-trip: export → wrap → unwrap → resilient import keeps the valid rule.
+    await chrome.storage.local.set({ 'sentinel.customRules': [invalidRule, validRule] });
+    const exp = await sentinelIo.sentinelExport();
+    const env = suiteEnv.wrap('suite', { sentinel: exp });
+    const parsed = JSON.parse(JSON.stringify(env));
+    await chrome.storage.local.remove('sentinel.customRules');
+    const res2 = await sentImport(parsed.modules.sentinel, { skipInvalidCustomRules: true });
+    const stored2 = (await chrome.storage.local.get('sentinel.customRules'))['sentinel.customRules'] || [];
+    assert(stored2.some((r) => r.id === 'custom-b12-ferritin-1'),
+      'suite round-trip: valid custom rule survives export/import even with an invalid sibling');
+    assert(res2.rejectedCustomRules.length === 1, 'suite round-trip: invalid sibling is reported, not silently dropped');
+
+    await chrome.storage.local.remove('sentinel.customRules');
+  }
+
   // ── Summary ───────────────────────────────────────────────────────────────────
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
