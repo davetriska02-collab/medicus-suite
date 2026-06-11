@@ -462,6 +462,33 @@
       "source": "NICE NG87; BNF / guanfacine (Intuniv) SmPC; Sussex ICS shared care protocol",
       "notes": "Non-stimulant alpha-2A agonist with stricter cardiovascular monitoring than stimulants. BP and pulse 3-monthly (Sentinel enforces 84-day interval as the safer default for year 1; local shared care may permit 6-monthly once stable beyond year 1). Risks: hypotension, bradycardia, syncope, and AV block — check lying and standing BP. Dose must be tapered on discontinuation to avoid rebound hypertension; never abruptly stop. In children, plot height and weight on centile charts 3-monthly (Sentinel confirms measurement recency but cannot verify centile). Contraindicated in significant cardiovascular or cerebrovascular disease and concurrent strong CYP3A4 inhibitors (e.g. ketoconazole, clarithromycin).",
       "sharedCare": true
+    },
+    {
+      "type": "drug-no-monitoring",
+      "enabled": true,
+      "id": "no-monitoring-common",
+      "notes": "Common drugs with no BNF/NICE-mandated routine primary-care blood monitoring protocol. Matched drugs are excluded from the 'Meds without a monitoring rule' diagnostic list to suppress noise. No monitoring chips are generated for these drugs.",
+      "drug": {
+        "match": [
+          "aspirin", "clopidogrel", "dipyridamole", "prasugrel",
+          "amlodipine", "felodipine", "lercanidipine", "nifedipine", "verapamil", "diltiazem",
+          "bisoprolol", "atenolol", "metoprolol", "nebivolol", "propranolol", "carvedilol",
+          "tamsulosin", "alfuzosin", "doxazosin", "terazosin",
+          "finasteride", "dutasteride",
+          "omeprazole", "lansoprazole", "esomeprazole", "pantoprazole", "rabeprazole",
+          "salbutamol", "salmeterol", "formoterol", "indacaterol", "vilanterol", "olodaterol",
+          "beclometasone", "budesonide", "ciclesonide", "mometasone",
+          "fluticasone", "azelastine",
+          "ipratropium", "tiotropium", "aclidinium", "glycopyrronium", "umeclidinium",
+          "montelukast", "zafirlukast",
+          "cetirizine", "loratadine", "fexofenadine", "chlorphenamine", "promethazine",
+          "acrivastine", "bilastine", "desloratadine", "levocetirizine", "rupatadine",
+          "cholecalciferol", "colecalciferol",
+          "calcium carbonate", "calcium citrate",
+          "folic acid",
+          "ferrous sulfate", "ferrous fumarate", "ferrous gluconate"
+        ]
+      }
     }
   ]
 }

@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.56.2] — 2026-06-11
+
+### Bug fixes — Sentinel panel
+
+- **Meds without a monitoring rule — auto-close fixed.** The `<details>` panel was
+  collapsing on every snapshot re-render (≈10–15 s). The open state is now preserved
+  across renders.
+- **Meds without a monitoring rule — noise reduced.** A new `drug-no-monitoring` rule
+  type in `drug-rules.json` marks common drugs that have no BNF/NICE-mandated routine
+  blood monitoring protocol (aspirin, clopidogrel, tamsulosin, fluticasone/azelastine,
+  beta-blockers, CCBs, PPIs, LABAs/LAMAs, antihistamines, etc.). These are now excluded
+  from the unmatched list so it focuses on genuine brand-name mismatches rather than
+  every drug without a monitoring rule.
+- **Custom Drug Monitoring section no longer shows custom QOF indicators.** The
+  `renderCrList()` function in `sentinel-options/options.js` was showing all custom
+  rules regardless of type, causing custom clinical indicators (CHOL004, ferritin
+  alerts, etc.) to appear as "0 tests" entries in the drug monitoring section.
+  Fixed by filtering to `type === 'drug-monitoring'` only.
+
 ## [v3.56.1] — 2026-06-11
 
 ### Security audit remediation (third pass — branch `claude/security-audit-li13eq`)

@@ -77,7 +77,9 @@
   // Sibling of listUnmatchedMedications that explains WHY each med is unmatched.
   // listUnmatchedMedications is kept exactly as-is (existing callers unchanged).
   function listUnmatchedMedicationsDetailed(medications, rules) {
-    const drugMonitoringRules = (rules || []).filter((r) => r.enabled !== false && r.type === 'drug-monitoring');
+    const drugMonitoringRules = (rules || []).filter(
+      (r) => r.enabled !== false && (r.type === 'drug-monitoring' || r.type === 'drug-no-monitoring')
+    );
     const seenLower = new Map(); // lowerName → displayName
     (medications || []).forEach((med) => {
       if (!med || !med.name) return;
@@ -2050,7 +2052,9 @@
   // as unmatched — it has no monitoring rule covering it. This is the key silent-
   // failure surface: an unlisted brand silently produces no alert.
   function listUnmatchedMedications(medications, rules) {
-    const drugMonitoringRules = (rules || []).filter((r) => r.enabled !== false && r.type === 'drug-monitoring');
+    const drugMonitoringRules = (rules || []).filter(
+      (r) => r.enabled !== false && (r.type === 'drug-monitoring' || r.type === 'drug-no-monitoring')
+    );
     // Deduplication: track seen names case-insensitively, keep original display name.
     const seenLower = new Map(); // lowerName → displayName
     (medications || []).forEach((med) => {
