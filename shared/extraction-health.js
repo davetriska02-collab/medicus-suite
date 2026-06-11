@@ -29,6 +29,7 @@
   // ── Constants ─────────────────────────────────────────────────────────────
   const SCHEMA_VERSION = 1;
   const MAX_SAMPLES = 40; // rolling window cap per bucket
+  const MAX_BUCKETS = 50; // hard cap on bucket count — a real practice uses ~5-10
   const RECENT_N = 5; // "recent" comparison window
   const MIN_HISTORY = 10; // samples required (excluding recent) before drift can fire
   const MIN_MEANINGFUL_MEDIAN = 3; // metric must historically yield >= 3 to be drift-eligible
@@ -112,6 +113,22 @@
     const entry = base.buckets[bucket];
     entry.samples = [...entry.samples, sample].slice(-MAX_SAMPLES);
     entry.updatedAt = sample.t;
+
+    // Hard cap: evict oldest buckets (by updatedAt) when the count exceeds MAX_BUCKETS.
+    // A real practice uses ~5-10 view+source combos; 50 leaves ample headroom while
+    // preventing unbounded growth if bucket keys somehow proliferate.
+    const bucketKeys = Object.keys(base.buckets);
+    if (bucketKeys.length > MAX_BUCKETS) {
+      bucketKeys
+        .sort((a, b) => {
+          const ta = base.buckets[a].updatedAt || '';
+          const tb = base.buckets[b].updatedAt || '';
+          return ta < tb ? -1 : ta > tb ? 1 : 0;
+        })
+        .slice(0, bucketKeys.length - MAX_BUCKETS)
+        .forEach((k) => { delete base.buckets[k]; });
+    }
+
     return base;
   }
 
@@ -247,6 +264,7 @@
     constants: {
       SCHEMA_VERSION,
       MAX_SAMPLES,
+      MAX_BUCKETS,
       RECENT_N,
       MIN_HISTORY,
       MIN_MEANINGFUL_MEDIAN,

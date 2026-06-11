@@ -329,6 +329,49 @@ console.log('\n--- Window management ---');
   check(samples[0].t !== '2026-06-10T00:00:00.000Z', 'oldest entry was trimmed (not the very first)');
 }
 
+// ── Bucket cap ───────────────────────────────────────────────────────────────
+console.log('\n--- Bucket cap ---');
+check(typeof EH.constants.MAX_BUCKETS === 'number' && EH.constants.MAX_BUCKETS > 0,
+  `MAX_BUCKETS constant exported (value: ${EH.constants.MAX_BUCKETS})`);
+
+// Seed exactly MAX_BUCKETS + 5 distinct buckets (all with different timestamps so
+// eviction order is deterministic) and confirm the cap is enforced.
+{
+  const MAX_B = EH.constants.MAX_BUCKETS;
+  let b = null;
+  for (let i = 0; i < MAX_B + 5; i++) {
+    const bucketKey = `view-${i}|api`;
+    // Give each bucket a monotonically increasing updatedAt so the oldest are clear
+    const t = `2026-06-${String(10 + Math.floor(i / 10)).padStart(2, '0')}T${String(i % 10).padStart(2, '0')}:00:00.000Z`;
+    b = EH.updateBaseline(b, bucketKey, mkSample(1, 2, 3, 4, t));
+  }
+  const actualCount = Object.keys(b.buckets).length;
+  check(actualCount === MAX_B,
+    `bucket count capped at MAX_BUCKETS after inserting MAX_BUCKETS+5 distinct buckets (got ${actualCount})`);
+
+  // The oldest (lowest index) buckets should have been evicted
+  check(!b.buckets['view-0|api'],
+    'oldest bucket (view-0|api) was evicted when cap exceeded');
+  check(!!b.buckets[`view-${MAX_B + 4}|api`],
+    `newest bucket (view-${MAX_B + 4}|api) is retained after eviction`);
+}
+
+// Adding a sample to an existing bucket when already at cap must not evict that bucket
+{
+  const MAX_B = EH.constants.MAX_BUCKETS;
+  let b = null;
+  // Fill to exactly MAX_B buckets with ascending timestamps
+  for (let i = 0; i < MAX_B; i++) {
+    b = EH.updateBaseline(b, `view-${i}|api`, mkSample(1, 2, 3, 4, `2026-06-10T${String(i).padStart(2, '0')}:00:00.000Z`));
+  }
+  // Update the oldest bucket (view-0) with a newer timestamp
+  b = EH.updateBaseline(b, 'view-0|api', mkSample(1, 2, 3, 4, '2026-06-10T23:59:00.000Z'));
+  check(Object.keys(b.buckets).length === MAX_B,
+    'updating an existing bucket when at cap does not increase the count');
+  check(!!b.buckets['view-0|api'],
+    'the updated bucket is retained (not evicted) when no new buckets are added');
+}
+
 // updateBaseline does not mutate its input (deep-freeze test)
 {
   let b = seed(null, BUCKET_API, 5, HEALTHY);
