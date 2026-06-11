@@ -1060,6 +1060,7 @@
     const ACEI_ARB = /ramipril|lisinopril|perindopril|enalapril|captopril|trandolapril|fosinopril|quinapril|imidapril|cilazapril|losartan|candesartan|valsartan|irbesartan|olmesartan|telmisartan|azilsartan|eprosartan/i;
     const DIURETIC = /furosemide|frusemide|bumetanide|torasemide|bendroflumethiazide|indapamide|hydrochlorothiazide|chlortalidone|chlorthalidone|metolazone/i;
     const BENZO_Z = /diazepam|lorazepam|temazepam|nitrazepam|oxazepam|chlordiazepoxide|clonazepam|alprazolam|zopiclone|zolpidem|zaleplon/i;
+    const GASTRO = /omeprazole|lansoprazole|esomeprazole|pantoprazole|rabeprazole|famotidine|cimetidine|nizatidine|ranitidine/i;
 
     const list = (meds || []).map(m => String(m || ''));
     const has = (re) => list.some(m => re.test(m));
@@ -1076,6 +1077,11 @@
     }
     if (age != null && age >= 80 && has(BENZO_Z)) {
       items.push({ severity: 'amber', text: 'Benzodiazepine/Z-drug in age ≥80', detail: 'STOPP — falls & sedation risk; consider deprescribing' });
+    }
+    // KD-32 — PINCER #1: NSAID in age ≥65 without gastroprotection
+    // Fail-closed: age must be known (age != null) and ≥65.
+    if (systemicNSAID && age != null && age >= 65 && !has(GASTRO)) {
+      items.push({ severity: 'amber', text: 'NSAID in age ≥65 without gastroprotection', detail: 'PINCER #1 — GI bleed risk; consider PPI cover / review NSAID need' });
     }
     return items;
   }
