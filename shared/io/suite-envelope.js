@@ -30,7 +30,7 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception', 'knowledge', 'rxmargin'];
+const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception', 'knowledge'];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -199,12 +199,6 @@ function previewEnvelope(envelope) {
       lines.push(`NOTE: ${unreviewed} AI-generated entr${unreviewed === 1 ? 'y is' : 'ies are'} not yet marked reviewed`);
     }
   } else { const m = missing('Knowledge'); if (m) lines.push(m); }
-
-  if (mods.rxmargin) {
-    const productCount = (mods.rxmargin.products || []).length;
-    const hasConfig = mods.rxmargin.config != null;
-    lines.push(`Dispensing Margin: ${productCount} product(s)${hasConfig ? ', clawback config included' : ''}`);
-  } else { const m = missing('Dispensing Margin'); if (m) lines.push(m); }
 
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
