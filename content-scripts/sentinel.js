@@ -1,0 +1,1359 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Sentinel v0.2 — Content Script
+// Mounts sidebar, fetches data, evaluates rules, renders grouped chip UI.
+
+(function () {
+  'use strict';
+
+  if (window.__sentinelMounted) return;
+  window.__sentinelMounted = true;
+
+  let host = null;
+  let shadowRoot = null;
+  let currentMode = 'live';
+  let dismissedRules = new Set();
+  let lastPatientName = null;
+  let refreshDebounceTimer = null;
+
+  // === UI CONFIG ===
+  // Default config; user overrides loaded from chrome.storage.local.sentinelConfig
+  const DEFAULT_CONFIG = {
+    // Colours
+    chipStyle: 'subtle', // subtle | bold | minimal
+    // Density
+    density: 'normal', // compact | normal | spacious
+    fontSize: 'medium', // small | medium | large
+    sidebarWidth: 380, // 320 | 380 | 440 | 520
+    sidebarSide: 'right', // left | right
+    // Content visibility
+    showAchieved: true,
+    showNoData: true,
+    showDebugPanel: true,
+    showDataSourceLine: true,
+    showRegisterPills: true,
+    showViewLabel: true,
+    expandChipsByDefault: false,
+    // Sorting & grouping
+    chipSort: 'status', // status | name | points
+    chipGrouping: 'by-type', // by-type | flat
+    collapsedSections: [],
+    // Behaviour
+    autoRefresh: true,
+    refreshDebounceMs: 600,
+    defaultMode: 'live', // live | mock
+    // Chip style cycle order (used by the sidebar quick-toggle)
+    _chipStyleCycle: ['subtle', 'bold', 'minimal'],
+  };
+  let CONFIG = { ...DEFAULT_CONFIG };
+  let collapsedSections = new Set();
+
+  const SECTION_LABELS = {
+    'drug-monitoring': 'Drug Monitoring',
+    'qof-register': 'QOF Registers',
+    'qof-indicator': 'QOF Indicators',
+  };
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  function loadSettings(cb) {
+    chrome.storage.local.get(['sentinel.config'], (res) => {
+      const stored = res['sentinel.config'] || {};
+      CONFIG = { ...DEFAULT_CONFIG, ...stored };
+      collapsedSections = new Set(CONFIG.collapsedSections || []);
+      currentMode = CONFIG.defaultMode || 'live';
+      applyConfigToRoot();
+      cb && cb();
+    });
+  }
+
+  function saveSettings() {
+    const toSave = { ...CONFIG, collapsedSections: Array.from(collapsedSections) };
+    delete toSave._chipStyleCycle;
+    chrome.storage.local.set({ 'sentinel.config': toSave });
+  }
+
+  // Apply config to root element via data attributes (CSS targets these)
+  function applyConfigToRoot() {
+    const root = shadowRoot?.querySelector('.sentinel-root');
+    if (!root) return;
+    root.setAttribute('data-chip-style', CONFIG.chipStyle);
+    root.setAttribute('data-density', CONFIG.density);
+    root.setAttribute('data-font-size', CONFIG.fontSize);
+    root.setAttribute('data-expand-chips', CONFIG.expandChipsByDefault ? 'true' : 'false');
+    root.setAttribute('data-show-data-source', CONFIG.showDataSourceLine ? 'true' : 'false');
+    root.setAttribute('data-show-register-pills', CONFIG.showRegisterPills ? 'true' : 'false');
+    root.setAttribute('data-show-view-label', CONFIG.showViewLabel ? 'true' : 'false');
+    root.setAttribute('data-show-debug', CONFIG.showDebugPanel ? 'true' : 'false');
+    // Apply host element width and side
+    if (host) {
+      const w = CONFIG.sidebarWidth || 380;
+      host.style.width = w + 'px';
+      if (CONFIG.sidebarSide === 'left') {
+        host.style.left = '0';
+        host.style.right = 'auto';
+      } else {
+        host.style.right = '0';
+        host.style.left = 'auto';
+      }
+    }
+    // Reflect mode selector
+    const ms = shadowRoot?.querySelector('#mode-select');
+    if (ms) ms.value = currentMode;
+    // Reflect toggles
+    const sa = shadowRoot?.querySelector('#show-achieved-toggle');
+    if (sa) sa.checked = !!CONFIG.showAchieved;
+    const snd = shadowRoot?.querySelector('#show-no-data-toggle');
+    if (snd) snd.checked = !!CONFIG.showNoData;
+  }
+
+  // Listen for config + rule changes from the options page.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    // Rule edits: invalidate the merged-rules cache and re-publish so the side
+    // panel reflects the change immediately. Previously this handler only watched
+    // sentinel.config and called refresh(), which is a no-op in suite mode
+    // (no shadowRoot) — so an edited rule didn't take effect until navigation.
+    if (changes['sentinel.rules'] || changes['sentinel.orgRules'] || changes['sentinel.customRules']) {
+      _mergedRulesCache = null;
+      if (CONFIG.autoRefresh !== false) {
+        loadRules()
+          .then((rules) => evaluateAndPublish(rules))
+          .catch(() => {});
+      }
+    }
+    if (!changes['sentinel.config']) return;
+    const newConfig = changes['sentinel.config'].newValue || {};
+    CONFIG = { ...DEFAULT_CONFIG, ...newConfig };
+    collapsedSections = new Set(CONFIG.collapsedSections || []);
+    applyConfigToRoot();
+    refresh();
+  });
+
+  // ============================================================
+  // SIDEBAR MOUNT
+  // ============================================================
+
+  async function mount() {
+    if (host) return;
+    host = document.createElement('div');
+    host.id = 'sentinel-host';
+    host.style.cssText = 'position:fixed;top:0;right:0;width:380px;height:100vh;z-index:2147483647;';
+    document.documentElement.appendChild(host);
+
+    shadowRoot = host.attachShadow({ mode: 'closed' });
+    const cssUrl = chrome.runtime.getURL('sidebar/sidebar.css');
+    const htmlUrl = chrome.runtime.getURL('sidebar/sidebar.html');
+    const [cssText, htmlText] = await Promise.all([
+      fetch(cssUrl).then((r) => r.text()),
+      fetch(htmlUrl).then((r) => r.text()),
+    ]);
+    const styleEl = document.createElement('style');
+    styleEl.textContent = cssText;
+    shadowRoot.appendChild(styleEl);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = htmlText;
+    while (wrapper.firstChild) shadowRoot.appendChild(wrapper.firstChild);
+    bindControls();
+
+    loadSettings(() => refresh());
+    setupNavWatcher();
+  }
+
+  function toggle() {
+    if (!host) mount();
+    else if (host.style.display === 'none') host.style.display = 'block';
+    else host.style.display = 'none';
+  }
+
+  function bindControls() {
+    shadowRoot.querySelector('#mode-select')?.addEventListener('change', (e) => {
+      currentMode = e.target.value;
+      refresh();
+    });
+    shadowRoot.querySelector('#refresh-btn')?.addEventListener('click', () => refresh());
+    shadowRoot.querySelector('#close-btn')?.addEventListener('click', () => toggle());
+    shadowRoot.querySelector('#settings-btn')?.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ action: 'openOptionsPage' });
+    });
+    shadowRoot.querySelector('#show-achieved-toggle')?.addEventListener('change', (e) => {
+      CONFIG.showAchieved = e.target.checked;
+      saveSettings();
+      refresh();
+    });
+    shadowRoot.querySelector('#show-no-data-toggle')?.addEventListener('change', (e) => {
+      CONFIG.showNoData = e.target.checked;
+      saveSettings();
+      refresh();
+    });
+    shadowRoot.querySelector('#chip-style-cycle')?.addEventListener('click', () => {
+      const cycle = CONFIG._chipStyleCycle || DEFAULT_CONFIG._chipStyleCycle;
+      const idx = cycle.indexOf(CONFIG.chipStyle);
+      CONFIG.chipStyle = cycle[(idx + 1) % cycle.length];
+      saveSettings();
+      applyConfigToRoot();
+    });
+  }
+
+  // ============================================================
+  // REFRESH (fetch + evaluate + render)
+  // ============================================================
+
+  let pendingBannerRetry = null;
+  let lastRetryUrl = null;
+
+  async function refresh() {
+    if (!shadowRoot) return;
+    setStatus('Loading...');
+    try {
+      const data = await window.SentinelDataFetcher.fetchPatientData(currentMode);
+
+      // SPA banner-render race: if we're on a Medicus origin in live mode but ended
+      // up in DOM-fallback because no patient UUID was found, the banner may not
+      // have rendered yet. Schedule a single retry per URL.
+      const onMedicus = /medicus\.health$/i.test(location.hostname);
+      const isFallback = (data.debug?.dataSource || '').startsWith('dom-fallback');
+      const sameUrlAsLastRetry = lastRetryUrl === location.href;
+      if (currentMode === 'live' && onMedicus && isFallback && !sameUrlAsLastRetry) {
+        lastRetryUrl = location.href;
+        if (pendingBannerRetry) clearTimeout(pendingBannerRetry);
+        pendingBannerRetry = setTimeout(() => {
+          pendingBannerRetry = null;
+          refresh();
+        }, 1500);
+      } else if (!isFallback) {
+        // Reset retry latch on successful resolution so a subsequent navigation can retry
+        lastRetryUrl = null;
+      }
+
+      // Patient-change detection
+      const currentName = data.patientContext?.patientName || null;
+      if (lastPatientName && currentName && lastPatientName !== currentName) {
+        dismissedRules.clear();
+      }
+      lastPatientName = currentName;
+
+      if (currentMode === 'discovery') {
+        renderDiscovery(data);
+        return;
+      }
+
+      const rules = await loadRules();
+
+      // Augment observations with encounter-coded journal entries so that indicators
+      // like AST007 (asthma annual review) can find their evidence. The investigation
+      // dashboard only contains explicit investigation results; consultation-coded entries
+      // (annual review codes, smoking status, questionnaire scores) live in the journal.
+      // Patient UUID: try common normaliser field names.
+      // URL regex fallback is restricted to /patient/patient/ paths so we never
+      // accidentally extract an encounter or task UUID on those views (encounter
+      // and task resolvers should always populate patientContext correctly anyway).
+      const _patientUrlMatch =
+        /\/patient\/patient\/[^/]+\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
+          location.pathname
+        );
+      const _resolvedPatientId =
+        data.patientContext?.patientUuid ||
+        data.patientContext?.patientId ||
+        data.patientContext?.id ||
+        data.patientContext?.uuid ||
+        (_patientUrlMatch && _patientUrlMatch[1]) ||
+        null;
+      if (currentMode === 'live' && _resolvedPatientId) {
+        const journalObs = await fetchJournalObservations(_resolvedPatientId, data.observations || []);
+        if (journalObs.length > 0) {
+          data.observations = [...(data.observations || []), ...journalObs];
+          if (data.debug) {
+            data.debug.counts = {
+              ...(data.debug.counts || {}),
+              observations: (data.observations || []).length,
+            };
+          }
+        }
+      }
+
+      const allChips = window.SentinelRules.evaluatePatient(data.medications || [], data.observations || [], rules, {
+        now: new Date().toISOString(),
+        problems: data.problems || [],
+        patientContext: data.patientContext,
+        observationHistory: data.observationHistory || [],
+      });
+
+      renderPatientBanner(data, allChips);
+      renderGroupedChips(allChips, data);
+      // Meds without a monitoring rule (informational, collapsed by default).
+      const _unmatchedForHud = window.SentinelRules.listUnmatchedMedications
+        ? window.SentinelRules.listUnmatchedMedications(data.medications || [], rules)
+        : [];
+      renderUnmatchedMedsHud(_unmatchedForHud);
+      renderDebugPanel(data);
+
+      // Status line: show data source
+      const ds = data.debug?.dataSource || 'unknown';
+      const counts = data.debug?.counts;
+      const countSummary = counts ? ` (${counts.medications}m / ${counts.observations}o / ${counts.problems}p)` : '';
+      setStatus(`Mode: ${data.mode} / ${ds}${countSummary}`);
+
+      // Update show-achieved toggle UI state
+      const toggle = shadowRoot.querySelector('#show-achieved-toggle');
+      if (toggle) toggle.checked = CONFIG.showAchieved;
+    } catch (e) {
+      setStatus('Error: ' + e.message);
+      console.error('[Sentinel]', e);
+    }
+  }
+
+  // Rule caches. The canonical JSON ships with the extension and never changes at
+  // runtime, so we fetch it once. The merged result (canonical + org + individual
+  // + custom) is cached too and invalidated by the storage.onChanged listener
+  // when any rule key changes — previously loadRules did 2× fetch + 1× storage.get
+  // on EVERY evaluation, including the 800ms journal-search re-eval churn.
+  let _canonicalRulesCache = null;
+  let _mergedRulesCache = null;
+  // Rule file metadata (lastUpdated, specVersion) captured from the canonical
+  // JSON at load time. Used by buildTraceEnvelope to stamp the export header.
+  // In-memory only — never written to storage.
+  let _ruleFileMeta = null;
+
+  async function loadRules() {
+    if (_mergedRulesCache) return _mergedRulesCache;
+    // Load both drug-rules.json and qof-rules.json and merge.
+    // Three-tier overrides: canonical -> organisational -> individual -> custom appended.
+    if (!_canonicalRulesCache) {
+      const drugUrl = chrome.runtime.getURL('rules/drug-rules.json');
+      const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
+      const vaccineUrl = chrome.runtime.getURL('rules/vaccine-rules.json');
+      const [drugDoc, qofDoc, vaccineDoc] = await Promise.all([
+        fetch(drugUrl).then((r) => r.json()),
+        fetch(qofUrl).then((r) => r.json()),
+        fetch(vaccineUrl).then((r) => r.json()),
+      ]);
+      _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || []), ...(vaccineDoc.rules || [])];
+      // Capture rule file metadata for trace envelope stamping.
+      _ruleFileMeta = [
+        { id: 'drug', lastUpdated: drugDoc.lastUpdated || null, specVersion: drugDoc.specVersion || null },
+        { id: 'qof', lastUpdated: qofDoc.lastUpdated || null, specVersion: qofDoc.specVersion || null },
+        { id: 'vaccine', lastUpdated: vaccineDoc.lastUpdated || null, specVersion: vaccineDoc.specVersion || null },
+      ];
+    }
+    const canonical = _canonicalRulesCache;
+
+    // Load org + individual overrides + custom rules
+    return new Promise((resolve) => {
+      chrome.storage.local.get(['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'], (res) => {
+        const individual = res['sentinel.rules'] || {};
+        const org = res['sentinel.orgRules'] || null;
+        const customRules = res['sentinel.customRules'] || [];
+        const RIO = window.SentinelRulesetIo;
+        let merged;
+        if (RIO) {
+          merged = RIO.mergeRules(canonical, org, individual);
+        } else {
+          // Fallback: apply individual overrides only
+          merged = canonical.map((rule) => {
+            if (individual[rule.id]) return Object.assign({}, rule, individual[rule.id]);
+            return rule;
+          });
+        }
+        // Append enabled custom rules as additions (not overlays)
+        const enabledCustom = customRules.filter((r) => r.enabled !== false);
+        merged.push(...enabledCustom);
+        _mergedRulesCache = merged;
+        resolve(merged);
+      });
+    });
+  }
+
+  // ============================================================
+  // JOURNAL OBSERVATIONS (for AST007 and future encounter-coded rules)
+  // ============================================================
+
+  // Derive the Medicus API origin from the current page URL.
+  // Pattern: https://england.medicus.health/560b6c/... → https://560b6c.api.england.medicus.health
+  function getMedicusApiOrigin() {
+    const siteCode = location.pathname.split('/').filter(Boolean)[0];
+    if (!siteCode || !/^[a-f0-9]{5,8}$/.test(siteCode)) return null;
+    return `https://${siteCode}.api.${location.hostname}`;
+  }
+
+  // Fetch encounter-coded observations from the patient journal overview endpoint.
+  // The investigation dashboard misses entries coded inside consultations (e.g. asthma annual
+  // review, smoking status, depression questionnaire scores). This function fills that gap
+  // for indicators like AST007 whose evidence lives exclusively in the journal.
+  //
+  // Returns an array of { name, value, date (ISO YYYY-MM-DD), source: 'journal' } objects,
+  // filtered to the last 400 days and de-duplicated against existingObs by name+date.
+  async function fetchJournalObservations(patientId, existingObs) {
+    const apiOrigin = getMedicusApiOrigin();
+    if (!apiOrigin || !patientId) return [];
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 400);
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const resp = await fetch(`${apiOrigin}/clinical/data/patient-journal/overview/${patientId}`, {
+        credentials: 'include',
+        signal: ctrl.signal,
+      });
+      if (!resp.ok) return [];
+      const d = await resp.json();
+
+      const monthIndex = {
+        Jan: 0,
+        Feb: 1,
+        Mar: 2,
+        Apr: 3,
+        May: 4,
+        Jun: 5,
+        Jul: 6,
+        Aug: 7,
+        Sep: 8,
+        Oct: 9,
+        Nov: 10,
+        Dec: 11,
+      };
+
+      // Parse "DD Mon YYYY" (entry.observationDate) or "DayName DD Mon YYYY" (record.title)
+      function parseDisplayDate(str) {
+        if (!str) return null;
+        const parts = str.trim().split(' ').filter(Boolean);
+        // "20 Apr 2026" → [20, Apr, 2026]  or  "Mon 11 May 2026" → [Mon, 11, May, 2026]
+        const dayStr = parts.length === 3 ? parts[0] : parts[1];
+        const monStr = parts.length === 3 ? parts[1] : parts[2];
+        const yearStr = parts.length === 3 ? parts[2] : parts[3];
+        if (!dayStr || !monStr || !yearStr) return null;
+        const mon = monthIndex[monStr];
+        if (mon === undefined) return null;
+        const d = new Date(parseInt(yearStr), mon, parseInt(dayStr));
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // Build a Set of "name|date" keys already present in the investigation dashboard
+      const existingKeys = new Set((existingObs || []).map((o) => `${(o.name || '').toLowerCase()}|${o.date || ''}`));
+
+      const result = [];
+      for (const record of d.patientJournalRecords || []) {
+        const groupDate = parseDisplayDate(record.title);
+        for (const item of record.items || []) {
+          // Only encounter items contain consultation-coded observations
+          if (item.type !== 'encounter') continue;
+          for (const topic of item.data?.consultationTopics || []) {
+            for (const heading of topic.headings || []) {
+              for (const entry of heading.entries || []) {
+                // Skip entries missing a type name, or entries that aren't observations (e.g. medications, problems).
+                if (!entry.type || entry.entryType !== 'observation') continue;
+                const entryDate = parseDisplayDate(entry.observationDate) || groupDate;
+                if (!entryDate || entryDate < cutoff) continue;
+                const isoDate = entryDate.toISOString().split('T')[0];
+                const nameKey = `${entry.type.toLowerCase()}|${isoDate}`;
+                if (existingKeys.has(nameKey)) continue; // already in investigation dashboard
+                existingKeys.add(nameKey); // de-dupe within journal results too
+                result.push({
+                  name: entry.type,
+                  value: typeof entry.value === 'string' ? entry.value : '',
+                  date: isoDate,
+                  source: 'journal',
+                });
+              }
+            }
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      if (e.name === 'AbortError') return [];
+      console.warn('[Sentinel] fetchJournalObservations failed:', e.message);
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function renderPatientBanner(data, allChips) {
+    const banner = shadowRoot.querySelector('.patient-banner');
+    if (!banner) return;
+    const pc = data.patientContext;
+    if (!pc || !pc.patientName) {
+      banner.style.display = 'none';
+      return;
+    }
+    banner.style.display = 'block';
+
+    const registerPills = allChips
+      .filter((c) => c.type === 'qof-register' && c.status === 'achieved')
+      .map(
+        (c) =>
+          `<span class="register-pill" title="${escapeHtml(c.matchedProblem)}">${escapeHtml(c.registerCode)}</span>`
+      )
+      .join('');
+
+    const ageSex = [pc.ageYears != null ? `Age ${pc.ageYears}` : null, pc.sex || null]
+      .filter(Boolean)
+      .join(' &middot; ');
+
+    banner.innerHTML = `
+      <div class="patient-name">${escapeHtml(pc.patientName)}</div>
+      <div class="patient-meta">
+        ${pc.nhsNumber ? `NHS: ${formatNhs(pc.nhsNumber)} &middot; ` : ''}
+        ${pc.dobRaw ? `DOB ${escapeHtml(pc.dobRaw)}` : ''}
+      </div>
+      ${ageSex ? `<div class="patient-meta">${ageSex}</div>` : ''}
+      ${registerPills ? `<div class="register-pills">Registers: ${registerPills}</div>` : ''}
+      ${pc.view && pc.view !== 'unknown' ? `<div class="patient-view">View: ${escapeHtml(pc.view)}</div>` : ''}
+    `;
+  }
+
+  // ============================================================
+  // RENDER: grouped chip sections
+  // ============================================================
+
+  function renderGroupedChips(allChips, data) {
+    const list = shadowRoot.querySelector('.chip-list');
+    if (!list) return;
+
+    // Filter out dismissed
+    let chips = allChips.filter((c) => !dismissedRules.has(c.ruleId));
+
+    // Apply config filters
+    if (!CONFIG.showAchieved) {
+      chips = chips.filter((c) => !(c.status === 'achieved' || c.status === 'in_date'));
+    }
+    if (!CONFIG.showNoData) {
+      chips = chips.filter((c) => c.status !== 'no_data');
+    }
+
+    // Sort
+    if (CONFIG.chipSort === 'name') {
+      chips.sort((a, b) => {
+        const an = a.drugName || a.indicatorCode || a.registerCode || '';
+        const bn = b.drugName || b.indicatorCode || b.registerCode || '';
+        return an.localeCompare(bn);
+      });
+    } else if (CONFIG.chipSort === 'points') {
+      chips.sort((a, b) => (b.points || 0) - (a.points || 0));
+    }
+    // 'status' is the default order already produced by the engine
+
+    // Group by type (default) or flat list
+    const groups = { 'drug-monitoring': [], 'qof-indicator': [], 'qof-register': [] };
+    chips.forEach((c) => {
+      const t = c.type || 'drug-monitoring';
+      if (!groups[t]) groups[t] = [];
+      groups[t].push(c);
+    });
+
+    if (chips.length === 0) {
+      // Before showing the benign "No active alerts", check whether this empty
+      // result is actually a likely extraction failure (Medicus DOM/API drift).
+      // Failing closed here would read as a false "all clear" (H-005).
+      const health = assessExtractionHealth(data);
+      if (health.degraded) {
+        list.innerHTML = `
+          <div class="empty-state" style="border-left:3px solid #c62828;background:rgba(198,40,40,0.08);padding:10px 12px;border-radius:6px">
+            <strong>⚠ Couldn't read this record</strong>
+            <p>${escapeHtml(health.reason)} This is <strong>not</strong> an &ldquo;all clear&rdquo; — verify the patient directly in Medicus, and the extension may need updating.</p>
+          </div>
+        `;
+        updateSummary(allChips);
+        return;
+      }
+      list.innerHTML = `
+        <div class="empty-state">
+          <strong>No active alerts.</strong>
+          <p>${data.mode === 'mock' ? 'Switch off Mock Mode to run on the live page.' : 'No matched rules for this patient on this view.'}</p>
+        </div>
+      `;
+      renderViewHint(data, list);
+      // Drift banner: render even when chip list is empty — drift means chips may
+      // be silently missing and this must NOT read as an all-clear.
+      renderDriftBanner(list, data);
+      updateSummary(allChips);
+      return;
+    }
+
+    list.innerHTML = '';
+    renderViewHint(data, list);
+    // Drift banner: prepend before chips so clinician sees the warning immediately.
+    renderDriftBanner(list, data);
+
+    if (CONFIG.chipGrouping === 'flat') {
+      // One flat list
+      chips.forEach((chip) => {
+        const el = document.createElement('article');
+        el.className = `chip chip-${chip.status}`;
+        el.innerHTML = chipHtml(chip);
+        list.appendChild(el);
+        wireChipEvents(el, chip, allChips, data);
+      });
+    } else {
+      // Grouped sections (default)
+      ['drug-monitoring', 'qof-indicator'].forEach((type) => {
+        const groupChips = groups[type] || [];
+        if (groupChips.length === 0) return;
+        const sectionEl = document.createElement('section');
+        sectionEl.className = 'chip-section';
+        const collapsed = collapsedSections.has(type);
+        sectionEl.innerHTML = `
+          <header class="chip-section-header" data-section="${type}">
+            <span class="chip-section-toggle">${collapsed ? '\u25B6' : '\u25BC'}</span>
+            <span class="chip-section-title">${SECTION_LABELS[type]}</span>
+            <span class="chip-section-count">${groupChips.length}</span>
+          </header>
+          <div class="chip-section-body" ${collapsed ? 'hidden' : ''}></div>
+        `;
+        const body = sectionEl.querySelector('.chip-section-body');
+        groupChips.forEach((chip) => {
+          const el = document.createElement('article');
+          el.className = `chip chip-${chip.status}`;
+          el.innerHTML = chipHtml(chip);
+          body.appendChild(el);
+          wireChipEvents(el, chip, allChips, data);
+        });
+        sectionEl.querySelector('.chip-section-header')?.addEventListener('click', () => {
+          if (collapsedSections.has(type)) collapsedSections.delete(type);
+          else collapsedSections.add(type);
+          CONFIG.collapsedSections = Array.from(collapsedSections);
+          saveSettings();
+          renderGroupedChips(allChips, data);
+        });
+        list.appendChild(sectionEl);
+      });
+    }
+
+    updateSummary(chips);
+  }
+
+  function wireChipEvents(el, chip, allChips, data) {
+    el.querySelector('.chip-dismiss')?.addEventListener('click', () => {
+      dismissedRules.add(chip.ruleId);
+      el.remove();
+      updateSummary(allChips.filter((c) => !dismissedRules.has(c.ruleId)));
+    });
+    el.querySelector('.chip-expand')?.addEventListener('click', () => {
+      el.classList.toggle('expanded');
+    });
+  }
+
+  // Pure: decide whether a zero-result render is genuinely "no matched rules" or a
+  // likely extraction failure (Medicus DOM/API drift) that must NOT read as an
+  // "all clear". Degraded = we are on a live patient view (a patient was
+  // identified) yet extracted no medications, problems, observations AND no
+  // demographics — a real record virtually always has at least demographics, so
+  // an across-the-board blank means our scrapers stopped matching the page.
+  function assessExtractionHealth(data) {
+    if (!data || data.mode !== 'live') return { degraded: false, modules: null };
+    const pc = data.patientContext || {};
+    const onPatientView = !!(pc.patientId || pc.id || pc.uuid || pc.patientName);
+    if (!onPatientView) return { degraded: false, modules: null };
+    const medCount = (data.medications || []).length;
+    const obsCount = (data.observations || []).length;
+    const probCount = (data.problems || []).length;
+    const demographics = !!(pc.dob || pc.dobRaw || pc.ageYears != null || pc.sex || pc.nhsNumber);
+    // Per-module extraction breakdown surfaced (informationally) in the side panel.
+    // A zero count is amber-flagged for the clinician to sanity-check against
+    // Medicus, but is deliberately NOT treated as a failure: real records
+    // legitimately have e.g. no problems or no observations, so per-module zeros
+    // must never raise an alarm on their own. The hard `degraded` signal below —
+    // the across-the-board blank that means our scrapers stopped matching the
+    // page — remains the only thing that must never read as an "all clear".
+    const modules = { medications: medCount, observations: obsCount, problems: probCount, demographics };
+    const clinical = medCount + obsCount + probCount;
+    if (clinical > 0) return { degraded: false, modules };
+    if (demographics) return { degraded: false, modules };
+    return {
+      degraded: true,
+      modules,
+      reason:
+        'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.',
+    };
+  }
+
+  function renderViewHint(data, list) {
+    const obsCount = data.observations?.length || 0;
+    const medCount = data.medications?.length || 0;
+    const probCount = data.problems?.length || 0;
+    if (data.mode !== 'live') return;
+    const missing = [];
+    if (obsCount === 0) missing.push('observations');
+    if (probCount === 0) missing.push('problems');
+    if (missing.length > 0 && (medCount > 0 || probCount > 0)) {
+      const hint = document.createElement('div');
+      hint.className = 'view-hint';
+      hint.innerHTML = `
+        <strong>Limited view.</strong>
+        This page has no ${missing.join(' or ')} extracted.
+        Open a patient summary or prescription request task for full data.
+      `;
+      list.appendChild(hint);
+    }
+  }
+
+  // Render collapsed-by-default "Meds without a monitoring rule" section in HUD.
+  // Informational only — not red/amber. Surfaces the silent-failure mode (unlisted
+  // brand → no alert) for clinicians who inspect the sidebar.
+  function renderUnmatchedMedsHud(unmatchedMeds) {
+    const list = shadowRoot?.querySelector('.chip-list');
+    if (!list) return;
+    // Remove previous section if any (re-renders on refresh)
+    list.querySelector('.unmatched-meds-section')?.remove();
+    if (!unmatchedMeds || unmatchedMeds.length === 0) return;
+    const section = document.createElement('details');
+    section.className = 'unmatched-meds-section';
+    const items = unmatchedMeds.map((n) => `<li>${escapeHtml(n)}</li>`).join('');
+    section.innerHTML = `
+      <summary class="unmatched-meds-summary">Meds without a monitoring rule (${unmatchedMeds.length})</summary>
+      <div class="unmatched-meds-body">
+        <p class="unmatched-meds-note">Most medicines need no routine monitoring. This list exists to spot brand names that SHOULD have matched a monitoring rule but didn't.</p>
+        <ul class="unmatched-meds-list">${items}</ul>
+      </div>`;
+    list.appendChild(section);
+  }
+
+  // Render an amber drift-warning banner at the top of the chip list.
+  // Called only when _lastDrift is set and not muted. Harmlessly skips if
+  // window.ExtractionHealth is not available (e.g. classic-script not loaded yet).
+  function renderDriftBanner(list, data) {
+    // Remove any stale banner from a previous render
+    list.querySelector('.drift-banner')?.remove();
+    if (!_lastDrift || !_lastDrift.drifted) return;
+    const EH = window.ExtractionHealth;
+    if (!EH) return;
+    const banner = document.createElement('div');
+    banner.className = 'drift-banner';
+    banner.innerHTML = `
+      &#x26A0; <strong>Extraction quality has dropped.</strong>
+      <p>${escapeHtml(_lastDrift.reason)} Alerts on this panel may be incomplete — this is NOT an all-clear. Verify in Medicus.</p>
+      <button class="drift-dismiss" type="button">Dismiss for 24h</button>
+    `;
+    // Dismiss handler: mute for 24h via storage key, then remove banner.
+    banner.querySelector('.drift-dismiss')?.addEventListener('click', async () => {
+      try {
+        const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+        const nowIso = new Date().toISOString();
+        const muted = EH.muteBaseline(r['sentinel.extractionBaseline'] || null, nowIso);
+        await chrome.storage.local.set({ 'sentinel.extractionBaseline': muted });
+        _lastDrift = null;
+        banner.remove();
+      } catch (_) {
+        banner.remove();
+      }
+    });
+    // Prepend: drift warning must appear before any chips
+    list.prepend(banner);
+  }
+
+  function updateSummary(chips) {
+    const summary = shadowRoot.querySelector('.summary');
+    if (!summary) return;
+    const counts = chips.reduce((acc, c) => {
+      acc[c.status] = (acc[c.status] || 0) + 1;
+      return acc;
+    }, {});
+    const parts = [];
+    if (counts.not_met) parts.push(`<span class="sum-bad">${counts.not_met} not met</span>`);
+    if (counts.overdue) parts.push(`<span class="sum-bad">${counts.overdue} overdue</span>`);
+    if (counts.alert) parts.push(`<span class="sum-bad">${counts.alert} alert</span>`);
+    if (counts.stale) parts.push(`<span class="sum-warn">${counts.stale} severely overdue</span>`);
+    if (counts.due_soon) parts.push(`<span class="sum-warn">${counts.due_soon} due soon</span>`);
+    if (counts.caution) parts.push(`<span class="sum-warn">${counts.caution} caution</span>`);
+    if (counts.no_data) parts.push(`<span class="sum-meh">${counts.no_data} no data</span>`);
+    if (counts.noted) parts.push(`<span class="sum-meh">${counts.noted} noted</span>`);
+    if (counts.achieved) parts.push(`<span class="sum-good">${counts.achieved} achieved</span>`);
+    if (counts.in_date) parts.push(`<span class="sum-good">${counts.in_date} in date</span>`);
+    if (counts.recently_initiated) parts.push(`<span class="sum-meh">${counts.recently_initiated} new</span>`);
+    summary.innerHTML = parts.length ? parts.join(' &middot; ') : 'No chips';
+  }
+
+  // ============================================================
+  // CHIP HTML
+  // ============================================================
+
+  function chipHtml(chip) {
+    if (chip.type === 'drug-monitoring') return drugChipHtml(chip);
+    if (chip.type === 'qof-indicator') return qofIndicatorChipHtml(chip);
+    if (chip.type === 'qof-register') return qofRegisterChipHtml(chip);
+    // v3 custom-alert chip types delegate to the shared renderer.
+    const CR = typeof window !== 'undefined' ? window.ChipRenderer : null;
+    if (CR) {
+      if (chip.type === 'drug-combo') return CR.renderDrugComboChip(chip);
+      if (chip.type === 'event-count') return CR.renderEventCountChip(chip);
+      if (chip.type === 'composite') return CR.renderCompositeChip(chip);
+    }
+    return '<div>Unknown chip type</div>';
+  }
+
+  function drugChipHtml(chip) {
+    const statusLabel = labelFor(chip.status);
+    const testsLine = (chip.tests || [])
+      .map((t) => {
+        const dateStr = t.latestObs?.date ? ` (${formatDate(t.latestObs.date)}, ${t.days}d)` : '';
+        return `<li class="test-${t.status}">${escapeHtml(t.name)}: ${labelFor(t.status)}${dateStr}</li>`;
+      })
+      .join('');
+    return `
+      <header class="chip-header chip-expand" role="button">
+        <div class="chip-title">
+          <strong>${escapeHtml(chip.drugName)}</strong>
+          ${chip.drugClass ? `<span class="chip-class">${escapeHtml(chip.drugClass)}</span>` : ''}
+        </div>
+        <span class="chip-status">${statusLabel}</span>
+      </header>
+      <div class="chip-body">
+        <ul class="test-list">${testsLine}</ul>
+        <div class="chip-detail">
+          ${chip.source ? `<p><strong>Source:</strong> ${escapeHtml(chip.source)}</p>` : ''}
+          ${chip.sharedCare ? `<p class="shared-care">Shared care: hospital may share monitoring responsibility.</p>` : ''}
+          ${chip.notes ? `<p>${escapeHtml(chip.notes)}</p>` : ''}
+        </div>
+        <div class="chip-actions">
+          <button class="chip-dismiss" type="button">Dismiss</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function qofIndicatorChipHtml(chip) {
+    const statusLabel = labelFor(chip.status);
+    const valueDate = chip.valueText
+      ? `<p class="qof-value">${escapeHtml(chip.valueText)} on ${chip.dateText ? formatDate(chip.dateText) : '?'} (${chip.days}d ago)</p>`
+      : chip.status === 'no_data'
+        ? `<p class="qof-value qof-nodata">No matching observation on this view.</p>`
+        : '';
+    const thresholds = chip.thresholds
+      ? `<p><strong>Achievement band:</strong> ${chip.thresholds.lower}-${chip.thresholds.upper}% / ${chip.points} pts</p>`
+      : '';
+    return `
+      <header class="chip-header chip-expand" role="button">
+        <div class="chip-title">
+          <strong>${escapeHtml(chip.indicatorCode)}</strong>
+          <span class="chip-class">${escapeHtml(chip.indicatorName)}</span>
+        </div>
+        <span class="chip-status">${statusLabel}</span>
+      </header>
+      <div class="chip-body">
+        ${valueDate}
+        <div class="chip-detail">
+          ${chip.requiresRegister ? `<p><strong>Register:</strong> ${escapeHtml(chip.requiresRegister)}</p>` : ''}
+          ${thresholds}
+          ${chip.source ? `<p><strong>Source:</strong> ${escapeHtml(chip.source)}</p>` : ''}
+          ${chip.notes ? `<p>${escapeHtml(chip.notes)}</p>` : ''}
+        </div>
+        <div class="chip-actions">
+          <button class="chip-dismiss" type="button">Dismiss</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function qofRegisterChipHtml(chip) {
+    return `
+      <header class="chip-header chip-expand" role="button">
+        <div class="chip-title">
+          <strong>${escapeHtml(chip.registerCode)}</strong>
+          <span class="chip-class">${escapeHtml(chip.registerName)}</span>
+        </div>
+        <span class="chip-status">On register</span>
+      </header>
+      <div class="chip-body">
+        <p><strong>Matched problem:</strong> ${escapeHtml(chip.matchedProblem)}</p>
+        ${chip.codedDate ? `<p><strong>Coded:</strong> ${formatDate(chip.codedDate)}</p>` : ''}
+        <div class="chip-detail">${chip.source ? `<p><strong>Source:</strong> ${escapeHtml(chip.source)}</p>` : ''}</div>
+        <div class="chip-actions">
+          <button class="chip-dismiss" type="button">Dismiss</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ============================================================
+  // RENDER: discovery (unchanged from v0.1)
+  // ============================================================
+
+  function renderDiscovery(findings) {
+    const list = shadowRoot.querySelector('.chip-list');
+    if (!list) return;
+    list.innerHTML = `
+      <div class="discovery-output">
+        <h3>Discovery findings</h3>
+        <p>${findings.headings?.length || 0} headings, ${findings.definitionLists?.length || 0} definition lists, ${findings.apiCallsObserved?.length || 0} API calls observed</p>
+        <button class="copy-findings">Copy findings JSON</button>
+      </div>
+    `;
+    list.querySelector('.copy-findings')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(findings, null, 2));
+        setStatus('Discovery copied to clipboard');
+      } catch (e) {
+        setStatus('Clipboard failed: ' + e.message);
+      }
+    });
+    setStatus(`Mode: discovery`);
+  }
+
+  // ============================================================
+  // RENDER: debug panel
+  // ============================================================
+
+  function renderDebugPanel(data) {
+    const list = shadowRoot.querySelector('.chip-list');
+    if (!list) return;
+    const existing = list.querySelector('.debug-panel');
+    if (existing) existing.remove();
+    if (data.mode !== 'live') return;
+
+    const meds = data.medications || [];
+    const obs = data.observations || [];
+    const probs = data.problems || [];
+    const fails = data.debug?.parseFailures || [];
+
+    const renderList = (items, fmt, empty) =>
+      items.length === 0
+        ? `<p class="debug-empty">${empty}</p>`
+        : '<ul class="debug-list">' + items.map(fmt).join('') + '</ul>';
+
+    const debugHtml = `
+      <details class="debug-panel">
+        <summary>Show extracted data (${meds.length} meds &middot; ${obs.length} obs &middot; ${probs.length} problems${fails.length ? ` &middot; ${fails.length} fails` : ''})</summary>
+        <div class="debug-content">
+          <h4>Medications</h4>
+          ${renderList(meds, (m) => `<li><strong>${escapeHtml(m.name)}</strong> <small>[${escapeHtml(m.source || '?')}]</small></li>`, 'None extracted.')}
+          <h4>Observations</h4>
+          ${renderList(obs, (o) => `<li><strong>${escapeHtml(o.name)}</strong> = ${escapeHtml(o.value || '-')} <span class="debug-date">(${escapeHtml(o.date || '-')})</span> <small>[${escapeHtml(o.source || '?')}]</small></li>`, 'None extracted.')}
+          <h4>Problems</h4>
+          ${renderList(probs, (p) => `<li><strong>${escapeHtml(p.label)}</strong>${p.codedDate ? ` <span class="debug-date">(${escapeHtml(p.codedDate)})</span>` : ''} <small>[${escapeHtml(p.source || '?')}]</small></li>`, 'None extracted.')}
+          ${
+            fails.length
+              ? `<h4>Parse failures (${fails.length})</h4><ul class="debug-list">${fails
+                  .slice(0, 20)
+                  .map((f) => `<li><small>[${escapeHtml(f.section)}]</small> ${escapeHtml(f.text)}</li>`)
+                  .join('')}</ul>`
+              : ''
+          }
+          <button class="debug-copy" type="button">Copy debug JSON</button>
+        </div>
+      </details>
+    `;
+    list.insertAdjacentHTML('beforeend', debugHtml);
+    list.querySelector('.debug-copy')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(
+          JSON.stringify(
+            {
+              mode: data.mode,
+              patientContext: data.patientContext,
+              medications: meds,
+              observations: obs,
+              problems: probs,
+              parseFailures: fails,
+            },
+            null,
+            2
+          )
+        );
+        setStatus('Debug data copied');
+      } catch (e) {
+        setStatus('Clipboard failed: ' + e.message);
+      }
+    });
+  }
+
+  // ============================================================
+  // NAV WATCHER
+  // ============================================================
+
+  function setupNavWatcher() {
+    if (window.__sentinelNavWatcherInstalled) return;
+    window.__sentinelNavWatcherInstalled = true;
+    const titleObserver = new MutationObserver(() => debouncedRefresh());
+    const titleEl = document.querySelector('title');
+    if (titleEl) titleObserver.observe(titleEl, { childList: true });
+    const pushState = history.pushState;
+    history.pushState = function () {
+      pushState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+    };
+    const replaceState = history.replaceState;
+    history.replaceState = function () {
+      replaceState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+    };
+    window.addEventListener('popstate', () => debouncedRefresh());
+    window.addEventListener('hashchange', () => debouncedRefresh());
+    window.addEventListener('locationchange', () => debouncedRefresh());
+  }
+
+  function debouncedRefresh() {
+    if (!CONFIG.autoRefresh) return;
+    if (refreshDebounceTimer) clearTimeout(refreshDebounceTimer);
+    refreshDebounceTimer = setTimeout(() => refresh(), CONFIG.refreshDebounceMs || 600);
+  }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  function setStatus(text) {
+    const s = shadowRoot?.querySelector('.status');
+    if (s) s.textContent = text;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
+  }
+
+  function formatNhs(n) {
+    if (!n) return '';
+    const d = String(n).replace(/\D/g, '');
+    if (d.length !== 10) return n;
+    return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+
+  function labelFor(status) {
+    const map = {
+      overdue: 'OVERDUE',
+      stale: 'SEVERELY OVERDUE',
+      due_soon: 'DUE SOON',
+      no_data: 'NO DATA',
+      recently_initiated: 'NEW',
+      in_date: 'IN DATE',
+      achieved: 'MET',
+      not_met: 'NOT MET',
+      alert: 'ALERT',
+      caution: 'CAUTION',
+      noted: 'NOTED',
+    };
+    return map[status] || String(status).toUpperCase();
+  }
+
+  // Boot
+  // SUITE MODE: do NOT mount the floating sidebar — UI is in the Chrome side panel.
+  // We still need the data pipeline (fetch + evaluate) to run so the snapshot bridge
+  // has chips to expose to the side panel.
+  bootDataOnly();
+
+  function bootDataOnly() {
+    if (window.__sentinelBootDataObserver) return;
+    loadSettings(async () => {
+      try {
+        const rules = await loadRules();
+        evaluateAndPublish(rules);
+        // Re-evaluate on URL changes inside the SPA. Single observer per page;
+        // the idempotency guard above prevents stacking on re-injection.
+        let lastUrl = location.href;
+        let reevalTimer = null;
+        const obs = new MutationObserver(() => {
+          if (location.href !== lastUrl) {
+            lastUrl = location.href;
+            // A SPA URL change is EITHER a genuine patient change OR same-patient
+            // sub-navigation (journal search, care-record tab switch, a filter).
+            // Only a genuine patient change should blank the panel. Wiping valid
+            // chips on every journal-search URL update is what made the QOF rules
+            // "flash up then get overwritten": invalidate → "Loading…" → re-eval →
+            // chips → next keystroke → invalidate again.
+            const urlPatient = resolveUrlPatientUuid();
+            if (urlPatient && _lastPatientUuid && urlPatient === _lastPatientUuid) {
+              // Same patient still on screen — keep the existing chips untouched.
+              return;
+            }
+            // Genuine navigation (different patient, or patient not resolvable from
+            // the new URL): invalidate immediately so the side panel can never show
+            // the previous patient's chips during the fetch window, then re-evaluate.
+            invalidateSnapshot();
+            if (reevalTimer) clearTimeout(reevalTimer);
+            reevalTimer = setTimeout(async () => {
+              try {
+                evaluateAndPublish(await loadRules());
+              } catch (e) {
+                invalidateSnapshot();
+              }
+            }, 800);
+          }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        window.__sentinelBootDataObserver = obs;
+      } catch (e) {}
+    });
+  }
+
+  function evaluateAndPublish(rules) {
+    // Tag this evaluation so a slow fetch that resolves after a newer evaluation
+    // (or after a navigation) can't publish stale chips over fresh ones — the
+    // journal-search churn fires this repeatedly.
+    const gen = ++_evalGen;
+    try {
+      const fetcher = window.SentinelDataFetcher;
+      if (!fetcher) return;
+      const result = fetcher.fetchPatientData ? fetcher.fetchPatientData(currentMode) : null;
+      Promise.resolve(result)
+        .then(async (data) => {
+          if (gen !== _evalGen) return; // superseded — drop this stale result
+          if (!data || !window.SentinelRules) {
+            invalidateSnapshot();
+            return;
+          }
+          // Assess extraction health so publishSnapshot can stamp the degraded flag
+          // onto the snapshot the side panel reads (the H-005 canary). Kept local to
+          // this call so concurrent evaluations can't cross-contaminate the flag.
+          const health = assessExtractionHealth(data);
+          // Augment observations with encounter/journal-coded entries (annual-review
+          // codes, questionnaire scores, CHA2DS2-VASc, etc.) that never appear in the
+          // investigation dashboard, so indicators whose evidence lives only in the
+          // journal (AST007, COPD010, HF007, DM014, AF006…) can fire in the SIDE
+          // PANEL too — previously this augmentation ran only in the now-dead HUD
+          // refresh() path, so these read no_data in suite mode.
+          const _patientId =
+            data.patientContext?.patientUuid ||
+            data.patientContext?.patientId ||
+            data.patientContext?.id ||
+            data.patientContext?.uuid ||
+            null;
+          if (currentMode === 'live' && _patientId) {
+            try {
+              const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
+              if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
+              if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
+            } catch (_) {
+              /* journal augmentation is best-effort; never block the chip */
+            }
+          }
+          // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
+          // publish them directly. We deliberately do NOT rely on a side effect of
+          // window.SentinelRules.evaluatePatient (see publishSnapshot for why).
+          // options.trace:true produces { chips, trace } instead of a plain array;
+          // the trace is in-memory only and never written to chrome.storage.local.
+          const evalResult = window.SentinelRules.evaluatePatient(
+            data.medications || [],
+            data.observations || [],
+            rules,
+            {
+              now: new Date().toISOString(),
+              problems: data.problems || [],
+              patientContext: data.patientContext,
+              observationHistory: data.observationHistory || [],
+              trace: true,
+            }
+          );
+          if (gen !== _evalGen) return; // a navigation invalidated us mid-evaluation
+          const chips = evalResult.chips || evalResult; // back-compat guard
+          const rawTrace = evalResult.trace || null;
+          // Compute medications with no matching drug-monitoring rule. The detailed
+          // variant explains WHY each med is unmatched (no-rule vs. excluded).
+          const unmatchedMedsDetailed = window.SentinelRules.listUnmatchedMedicationsDetailed
+            ? window.SentinelRules.listUnmatchedMedicationsDetailed(data.medications || [], rules)
+            : [];
+          const unmatchedMeds = unmatchedMedsDetailed.map((u) => u.name);
+          // Stamp rule file metadata onto the trace envelope (captured once at loadRules time).
+          let trace = rawTrace;
+          if (trace && trace.ruleset) {
+            trace.ruleset.files = _ruleFileMeta || trace.ruleset.files || [];
+            // Count custom rules (those appended beyond the canonical set)
+            const customRuleCount = (rules || []).filter((r) => r.id && r.id.startsWith('custom-')).length;
+            trace.ruleset.customRuleCount = customRuleCount;
+          }
+          // Attach unmatched meds detail to trace envelope
+          if (trace) {
+            trace.unmatchedMedications = unmatchedMedsDetailed;
+          }
+          // Assess extraction drift (best-effort — never blocks chip publication).
+          const drift = await recordAndAssessDrift(data);
+          if (gen !== _evalGen) return; // navigation superseded us during drift assess
+          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift);
+        })
+        .catch(() => {
+          if (gen === _evalGen) invalidateSnapshot();
+        });
+    } catch (e) {
+      if (gen === _evalGen) invalidateSnapshot();
+    }
+  }
+
+  // ── Side panel bridge ──────────────────────────────────────────────────────
+  // Stores the last evaluated chip snapshot so the suite side panel can read it
+  // without needing a fresh fetch. Written ONLY by publishSnapshot (called from
+  // evaluateAndPublish with the full merged drug+QOF ruleset). It is deliberately
+  // NOT written as a side effect of window.SentinelRules.evaluatePatient: the
+  // triage-lens HUD (content.js) calls that same global with a drug-rules-only
+  // ruleset on every record/route tick, and a shared side effect let those calls
+  // overwrite the snapshot with QOF-less chips — that was the "QOF rules flash up
+  // then vanish on journal search" bug.
+  let _lastSnapshot = null;
+  // Trend data (observationHistory + problems) cached in lockstep with _lastSnapshot.
+  // Cleared on every invalidation so the trend tabs can never render a previous
+  // patient's readings against the current record. Modules must also assert that
+  // the patientUuid in this payload matches the one in _lastSnapshot before rendering.
+  let _lastTrendData = null;
+  // Monotonic evaluation generation. Bumped on every evaluateAndPublish and on
+  // every invalidateSnapshot so a slow/stale async fetch (e.g. mid journal-search
+  // churn) can't publish chips after a newer evaluation or a navigation.
+  let _evalGen = 0;
+  // UUID of the patient last successfully evaluated. Persists across snapshot
+  // invalidation (which clears patientContext) so the nav watcher can tell a
+  // same-patient sub-navigation (journal search, tab switch) apart from a real
+  // patient change without blanking valid chips.
+  let _lastPatientUuid = null;
+
+  // ── Extraction-drift detection (in-memory state) ───────────────────────────
+  // The UUID/name+bucket key is in-memory only — never written to storage.
+  // Storage only holds integer counts + ISO timestamps (zero PII).
+  let _lastSampleKey = null; // `${patientId}|${bucket}` — in-memory only, never persisted
+  let _lastSampleAt = 0;
+  let _lastDrift = null; // cached so re-renders don't re-read storage
+
+  // Cheap, synchronous "which patient is this URL about?" — used only to decide
+  // whether a SPA URL change is a real patient change or same-patient
+  // sub-navigation. Mirrors the URL-path resolution in detectMedicusContext and
+  // returns null for encounter/task URLs that need async resolution, in which
+  // case we conservatively treat the change as a navigation.
+  function resolveUrlPatientUuid() {
+    try {
+      return window.SentinelApiClient?.detectMedicusContext(location.href)?.patientUuid || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Notify any open side panel that the snapshot changed.
+  function notifySnapshotUpdated() {
+    try {
+      const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) {}
+  }
+
+  // Assess extraction drift and update the per-view baseline in storage.
+  // Entirely wrapped in try/catch — drift detection must NEVER break chip publication.
+  // Returns the drift object if drifted and not muted, otherwise null.
+  async function recordAndAssessDrift(data) {
+    try {
+      const EH = window.ExtractionHealth;
+      if (!EH) return null;
+      const nowIso = new Date().toISOString();
+      const summary = EH.summariseExtraction(data, nowIso);
+      if (!summary) return null;
+
+      const r = await chrome.storage.local.get('sentinel.extractionBaseline');
+      const stored = r['sentinel.extractionBaseline'] || null;
+
+      const drift = EH.assessDrift(stored, summary.bucket, summary.sample);
+
+      // Sample throttle: don't flood storage on every keypress / rapid re-eval.
+      // The in-memory key includes the patient id/name so a patient change always
+      // records immediately.
+      const pc = data.patientContext || {};
+      const patientId = pc.patientUuid || pc.patientId || pc.id || pc.uuid || pc.patientName || '?';
+      const sampleKey = patientId + '|' + summary.bucket;
+      if (EH.shouldRecordSample(_lastSampleKey, _lastSampleAt, sampleKey, Date.now())) {
+        // Read-modify-write. Last-writer-wins across tabs is acceptable for
+        // this telemetry — occasional sample loss does not affect safety.
+        let updated = EH.updateBaseline(stored, summary.bucket, summary.sample);
+        if (drift.drifted) updated = EH.markWarned(updated, nowIso);
+        chrome.storage.local.set({ 'sentinel.extractionBaseline': updated });
+        _lastSampleKey = sampleKey;
+        _lastSampleAt = Date.now();
+      }
+
+      // Only surface drift when not muted.
+      if (drift.drifted && !EH.isMuted(stored, nowIso)) {
+        _lastDrift = drift;
+        return drift;
+      }
+      _lastDrift = null;
+      return null;
+    } catch (_) {
+      // Drift detection must never break chip publication.
+      return null;
+    }
+  }
+
+  // Drop any prior patient's snapshot. Called the instant the SPA navigates and
+  // whenever an extraction fails, so the side panel can never render a previous
+  // patient's chips as if they belonged to the record now on screen. The panel
+  // treats `unavailable` as "refreshing", never as a clinical "all clear".
+  function invalidateSnapshot() {
+    // Cancel any in-flight evaluation so its (now stale) chips can't land after us.
+    _evalGen++;
+    _lastSnapshot = { chips: null, patientContext: null, evaluatedAt: new Date().toISOString(), unavailable: true };
+    _lastTrendData = null;
+    notifySnapshotUpdated();
+  }
+
+  // Publish a fresh snapshot for the side panel. Called only from
+  // evaluateAndPublish, which always uses the full merged drug+QOF ruleset, so
+  // the panel never sees a partial (e.g. drug-only) evaluation. We intentionally
+  // do NOT monkeypatch window.SentinelRules.evaluatePatient: that global is shared
+  // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
+  // drug-rules-only set and would otherwise clobber the QOF chips on every
+  // record/route tick (e.g. when searching the journal).
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift) {
+    // Remember the patient we just evaluated so the nav watcher can recognise
+    // same-patient sub-navigation and avoid blanking these chips.
+    if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
+    _lastSnapshot = {
+      chips,
+      patientContext: pc || null,
+      evaluatedAt: new Date().toISOString(),
+      degraded: !!(health && health.degraded),
+      reason: (health && health.reason) || null,
+      modules: (health && health.modules) || null,
+      unmatchedMeds: unmatchedMeds || [],
+      unmatchedMedsDetailed: unmatchedMedsDetailed || [],
+      // trace is in-memory only — never written to chrome.storage.local.
+      // It is invalidated with the snapshot on navigation (invalidateSnapshot).
+      trace: trace || null,
+      // drift is in-memory only — extraction drift assessment, null when no drift
+      // or when muted by the clinician. Never written to chrome.storage.local.
+      drift: drift || null,
+    };
+    // Cache the raw observation + problem data for the BP/ACR trend tabs.
+    // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,
+    // so the trend data always belongs to the same patient as the chip snapshot.
+    _lastTrendData = rawData
+      ? {
+          observationHistory: rawData.observationHistory || [],
+          problems: rawData.problems || [],
+          patientContext: pc || null,
+        }
+      : null;
+    // Notify any open side panel that a fresh snapshot is available so it can
+    // re-render immediately on patient change instead of waiting for its poll.
+    notifySnapshotUpdated();
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // F5: Only accept messages from this extension's own contexts.
+    if (!sender || sender.id !== chrome.runtime.id) return;
+    if (msg && msg.action === 'getSentinelSnapshot') {
+      sendResponse(_lastSnapshot || { chips: null, patientContext: null, evaluatedAt: null });
+      return false;
+    }
+    if (msg && msg.action === 'getTrendData') {
+      if (!_lastTrendData) {
+        sendResponse(null);
+        return false;
+      }
+      // Attach achieved register chips so trend modules can determine BP targets
+      // without re-evaluating rules. Includes only qof-register chips to keep the
+      // payload small.
+      const registers = ((_lastSnapshot && _lastSnapshot.chips) || [])
+        .filter((c) => c.type === 'qof-register')
+        .map((c) => ({ code: c.registerCode, name: c.registerName, problem: c.matchedProblem }));
+      sendResponse({ ..._lastTrendData, registers });
+      return false;
+    }
+  });
+})();

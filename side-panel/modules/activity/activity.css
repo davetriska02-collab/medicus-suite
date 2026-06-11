@@ -1,0 +1,320 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Activity Report module styles */
+
+.act-module { font-family: var(--sans); }
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+
+.act-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 14px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.act-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.act-date-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--t4);
+  text-transform: uppercase;
+}
+
+.act-date-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--t1);
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+  flex: 1 1 auto;
+  min-width: 130px;
+}
+
+.act-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.act-preset, .act-refresh {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--t3);
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.act-preset:hover, .act-refresh:hover { background: rgba(255, 255, 255, 0.08); color: var(--t1); }
+
+.act-refresh {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+.act-refresh:hover { background: rgba(59, 130, 246, 0.25); color: #bfdbfe; }
+
+.act-spacer { flex: 1; }
+
+.act-ts {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t4);
+  margin-top: 2px;
+}
+
+/* ── Totals card ──────────────────────────────────────────────────────────── */
+
+.act-totals-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.act-totals-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.act-totals-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t4);
+}
+
+.act-totals-period {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t3);
+}
+
+.act-totals-number {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--t1);
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.act-totals-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.act-metric-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.act-metric-swatch {
+  width: 8px;
+  height: 22px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.act-metric-info { flex: 1; min-width: 0; }
+
+.act-metric-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t4);
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.act-metric-count {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--t1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Chart card ───────────────────────────────────────────────────────────── */
+
+.act-chart-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.act-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.act-chart-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t4);
+}
+
+.act-mode-select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--t1);
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.act-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.act-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.act-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.act-legend-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t3);
+}
+
+/* ── Bars ─────────────────────────────────────────────────────────────────── */
+
+.act-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.act-bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+.act-bar-name {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--t2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.act-bar-track {
+  display: flex;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.act-bar-seg {
+  height: 100%;
+  transition: opacity 0.15s;
+}
+.act-bar-seg:hover { opacity: 0.8; }
+
+.act-bar-total {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* ── States ───────────────────────────────────────────────────────────────── */
+
+.act-error {
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #fca5a5;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.act-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--t4);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.act-skeleton { padding: 8px 0; }
+.act-skel-line {
+  height: 14px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  background-size: 400% 100%;
+  animation: act-shimmer 1.4s linear infinite;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+.act-skel-w60 { width: 60%; }
+.act-skel-w70 { width: 70%; }
+.act-skel-w80 { width: 80%; }
+.act-skel-w50 { width: 50%; }
+@keyframes act-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ── Narrow viewport tweaks ───────────────────────────────────────────────── */
+
+@media (max-width: 380px) {
+  .act-bar-row { grid-template-columns: 90px 1fr 40px; }
+  .act-totals-metrics { grid-template-columns: 1fr; }
+  .act-totals-number { font-size: 26px; }
+}

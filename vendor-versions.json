@@ -1,0 +1,46 @@
+{
+  "generated": "2026-06-04",
+  "note": "Vendored library provenance record. SHA-256 checksums computed over the files as shipped. Update this file whenever a vendor library is upgraded.",
+  "libraries": [
+    {
+      "filename": "vendor/pdf.min.js",
+      "library": "PDF.js (pdfjs-dist)",
+      "version": "3.11.174",
+      "version_source": "Version string found in file content: '3.11.174'",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
+      "license": "Apache-2.0",
+      "sha256": "e0e389e9807b2d82bebd05622e2c699a7a9a3ef279b687c1393d81244b0c31f8"
+    },
+    {
+      "filename": "vendor/pdf.worker.min.js",
+      "library": "PDF.js worker (pdfjs-dist)",
+      "version": "3.11.174",
+      "version_source": "Version string found in file content: '3.11.174' — must match pdf.min.js exactly",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
+      "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
+      "license": "Apache-2.0",
+      "sha256": "feabdf309770ed24bba31a5467836cdc8cf639c705af27d52b585b041bb8527b"
+    },
+    {
+      "filename": "vendor/chart.min.js",
+      "library": "Chart.js",
+      "version": "4.4.1",
+      "version_source": "Version string '4.4.1' found in file body (minified); no banner comment present",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
+      "canonical_package": "https://www.npmjs.com/package/chart.js",
+      "license": "MIT",
+      "sha256": "cccb3afc90235f4ce7af254316ff14bd893f35d5a0735813715a21dab8484b95"
+    },
+    {
+      "filename": "vendor/d3.min.js",
+      "library": "D3.js",
+      "version": "7.8.5",
+      "version_source": "Version string 'v7.8.5' found near start of file",
+      "upstream_url": "https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js",
+      "canonical_package": "https://www.npmjs.com/package/d3",
+      "license": "ISC",
+      "sha256": "e331a93976054b950ca42b7276f476de25bb5a5dd50c6de544ca0126a960b918"
+    }
+  ]
+}

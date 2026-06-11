@@ -1,0 +1,17 @@
+{
+  "name": "medicus-suite-devtools",
+  "private": true,
+  "description": "Dev tooling only. The extension is plain unbundled MV3; nothing in node_modules ships (see release.yml excludes).",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test-*.js",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "prepare": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.24.0",
+    "eslint": "9.24.0",
+    "globals": "16.0.0",
+    "prettier": "3.5.3"
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "lastUpdated": "2026-06-10",
+  "specVersion": "Reception capture pathways v1.1 (DRAFT — requires CSO sign-off before live use; escalation re-tiering pass 2026-06-10)",
+  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG51 (sepsis) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
+  "escalations": {
+    "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
+    "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
+  },
+  "closingQuestions": [
+    { "id": "tried", "ask": "Have you tried anything for it already? Did it help?", "type": "text", "label": "Tried so far" },
+    { "id": "lastSeen", "ask": "Who did you last see about this problem (or anything else recently)?", "type": "text", "label": "Last seen" },
+    { "id": "course", "ask": "Is it getting better, worse, or staying the same?", "type": "choice", "options": ["Better", "Worse", "Same", "Comes and goes"], "label": "Course" },
+    { "id": "wants", "ask": "What were you hoping for today?", "type": "choice", "options": ["Appointment", "Telephone call", "Medication / prescription", "Advice", "Other"], "label": "Patient wants" },
+    { "id": "contact", "ask": "Best number to reach you today — and is it OK to leave a message?", "type": "text", "label": "Contact" }
+  ],
+  "pathways": [
+    {
+      "id": "sore-throat",
+      "title": "Sore throat",
+      "appliesTo": "Adults and children",
+      "sources": ["NICE CKS: Sore throat — acute", "NHS Pharmacy First: acute sore throat pathway"],
+      "pharmacyFirst": { "label": "Acute sore throat", "ageMin": 5, "note": "Pharmacy First covers acute sore throat from age 5 — clinician or care navigator to confirm suitability." },
+      "redFlags": [
+        { "id": "rf-breathing", "ask": "Any difficulty breathing, or noisy / high-pitched breathing?", "escalate": "999" },
+        { "id": "rf-drooling", "ask": "Are they drooling, or unable to swallow their own saliva?", "escalate": "999" },
+        { "id": "rf-trismus", "ask": "Unable to open the mouth properly, or voice sounds muffled like a 'hot potato' voice?", "escalate": "duty" },
+        { "id": "rf-onesided", "ask": "Severe pain on ONE side of the throat with swelling of the face or neck?", "escalate": "duty" },
+        { "id": "rf-rash", "ask": "Any rash that does NOT fade when pressed with a glass?", "escalate": "999" },
+        { "id": "rf-immune", "ask": "Do they take any medicine that weakens the immune system — e.g. carbimazole, methotrexate, chemotherapy, or other immune-suppressing tablets?", "escalate": "duty" },
+        { "id": "rf-unwell-child", "ask": "If a child: are they floppy, unusually drowsy, or not drinking at all?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long has the sore throat been going on?", "type": "text", "label": "Duration" },
+        { "id": "fever", "ask": "Any fever in the last 24 hours?", "type": "yesno", "label": "Fever last 24h" },
+        { "id": "eatdrink", "ask": "Are they managing to eat and drink?", "type": "choice", "options": ["Eating and drinking OK", "Drinking but not eating", "Struggling with fluids too"], "label": "Eating/drinking" },
+        { "id": "cough", "ask": "Do they have a cough as well?", "type": "yesno", "label": "Cough present" },
+        { "id": "glands", "ask": "Any swollen or tender glands in the neck?", "type": "yesno", "label": "Neck glands" },
+        { "id": "earache", "ask": "Any earache as well?", "type": "yesno", "label": "Earache" },
+        { "id": "history", "ask": "Any history of repeated tonsillitis or a previous throat abscess (quinsy)?", "type": "text", "label": "Previous throat problems" }
+      ]
+    },
+    {
+      "id": "earache",
+      "title": "Earache",
+      "appliesTo": "Mostly children; also adults",
+      "sources": ["NICE CKS: Otitis media — acute", "NHS Pharmacy First: acute otitis media pathway"],
+      "pharmacyFirst": { "label": "Acute otitis media", "ageMin": 1, "ageMax": 17, "note": "Pharmacy First covers acute middle-ear infection ages 1–17 — clinician or care navigator to confirm suitability." },
+      "redFlags": [
+        { "id": "rf-mastoid", "ask": "Any redness or swelling BEHIND the ear, or does the ear stick out more than usual?", "escalate": "duty" },
+        { "id": "rf-meningism", "ask": "Severe headache with a stiff neck, dislike of light, or a rash that doesn't fade when pressed?", "escalate": "999" },
+        { "id": "rf-head-injury", "ask": "Any recent head injury, or fluid leaking from the ear after a bang to the head?", "escalate": "duty" },
+        { "id": "rf-sudden-deaf", "ask": "Sudden complete hearing loss in that ear?", "escalate": "duty" },
+        { "id": "rf-facial-droop", "ask": "Any drooping, weakness, or loss of movement on one side of the face on the same side as the earache?", "escalate": "duty" },
+        { "id": "rf-unwell-child", "ask": "If a child: floppy, hard to wake, breathing very fast, or not drinking?", "escalate": "999" }
+      ],
+      "questions": [
+        { "id": "which", "ask": "Which ear — left, right, or both?", "type": "choice", "options": ["Left", "Right", "Both"], "label": "Side" },
+        { "id": "duration", "ask": "How long has it been hurting?", "type": "text", "label": "Duration" },
+        { "id": "fever", "ask": "Any fever?", "type": "yesno", "label": "Fever" },
+        { "id": "discharge", "ask": "Any discharge or fluid coming out of the ear?", "type": "yesno", "label": "Discharge" },
+        { "id": "hearing", "ask": "Any change in hearing?", "type": "yesno", "label": "Hearing change" },
+        { "id": "grommets", "ask": "Any grommets or previous ear operations?", "type": "text", "label": "Ear history" },
+        { "id": "analgesia", "ask": "Has pain relief (paracetamol / ibuprofen) been tried, and did it help?", "type": "text", "label": "Pain relief tried" }
+      ]
+    },
+    {
+      "id": "cough",
+      "title": "Cough / chest symptoms (adult)",
+      "appliesTo": "Adults",
+      "sources": ["NICE CKS: Cough — acute with chest signs", "NICE NG12 (urgent referral symptoms captured as history only)", "NICE CKS: Pulmonary embolism (PE red flags, lay-phrased)"],
+      "redFlags": [
+        { "id": "rf-breathless", "ask": "Are they so breathless they can't finish a sentence, or breathless at rest?", "escalate": "999" },
+        { "id": "rf-bluelips", "ask": "Any blue or grey lips or face?", "escalate": "999" },
+        { "id": "rf-haemoptysis", "ask": "Coughing up a large amount of blood, or blood coughed up together with breathlessness or chest pain?", "escalate": "999" },
+        { "id": "rf-haemoptysis-minor", "ask": "Any blood-streaking in the phlegm, even a small amount?", "escalate": "duty" },
+        { "id": "rf-pe", "ask": "Sharp chest pain that gets worse when breathing in, especially with a swollen or painful calf, or after recent surgery or a long flight?", "escalate": "999" },
+        { "id": "rf-chestpain", "ask": "Severe chest pain, or chest pain with breathlessness or sweating?", "escalate": "999" },
+        { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness?", "escalate": "999" },
+        { "id": "rf-asthma", "ask": "Known asthma or COPD and the reliever inhaler is hardly helping?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long have they had the cough?", "type": "text", "label": "Duration" },
+        { "id": "sputum", "ask": "Are they coughing anything up? What colour?", "type": "text", "label": "Phlegm" },
+        { "id": "fever", "ask": "Any fever or shivers?", "type": "yesno", "label": "Fever" },
+        { "id": "wheeze", "ask": "Any wheeze?", "type": "yesno", "label": "Wheeze" },
+        { "id": "exertion", "ask": "More breathless than usual doing normal things (stairs, walking)?", "type": "yesno", "label": "Breathless on exertion" },
+        { "id": "smoker", "ask": "Do they smoke (or vape)?", "type": "choice", "options": ["Smoker", "Ex-smoker", "Never smoked", "Vapes"], "label": "Smoking" },
+        { "id": "weightloss", "ask": "If the cough has lasted over 3 weeks: any weight loss, night sweats, or feeling generally run down?", "type": "text", "label": ">3wk / weight loss / sweats" },
+        { "id": "lungdx", "ask": "Any known lung problems (asthma, COPD) or regular inhalers?", "type": "text", "label": "Lung history" }
+      ]
+    },
+    {
+      "id": "urinary",
+      "title": "Urinary symptoms (woman 16–64)",
+      "appliesTo": "Women aged 16–64. Men, children, and pregnancy go straight to a clinician.",
+      "sources": ["NICE CKS: Urinary tract infection (lower) — women", "TARGET UTI resources", "NHS Pharmacy First: uncomplicated UTI pathway", "NICE NG51: Sepsis (urosepsis cluster)"],
+      "pharmacyFirst": { "label": "Uncomplicated UTI (women 16–64)", "ageMin": 16, "ageMax": 64, "note": "Pharmacy First covers uncomplicated UTI in women 16–64 — clinician or care navigator to confirm suitability." },
+      "redFlags": [
+        { "id": "rf-urosepsis", "ask": "Fever or shivering and shaking chills, together with new confusion or drowsiness, or so unwell they are unable to keep any fluids down?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors) — without the confusion covered above?", "escalate": "duty" },
+        { "id": "rf-loin", "ask": "Pain in the back or side, around kidney level?", "escalate": "duty" },
+        { "id": "rf-vomiting", "ask": "Vomiting and unable to keep fluids down?", "escalate": "duty" },
+        { "id": "rf-pregnant", "ask": "Is there any chance she is pregnant?", "escalate": "duty" },
+        { "id": "rf-male-child", "ask": "Is the patient male, or under 16? (different pathway — needs a clinician)", "escalate": "duty" },
+        { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness (especially in an older person), not already captured above?", "escalate": "999" }
+      ],
+      "questions": [
+        { "id": "symptoms", "ask": "Which of these do they have?", "type": "multi", "options": ["Burning or stinging when passing urine", "Going more often than usual", "Sudden urgency", "Urine looks cloudy or smells", "Blood in the urine", "Low tummy pain"], "label": "Symptoms" },
+        { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },
+        { "id": "discharge", "ask": "Any unusual vaginal discharge or irritation? (suggests a different cause)", "type": "yesno", "label": "Discharge/irritation" },
+        { "id": "previous", "ask": "Had urine infections before? How many in the last year?", "type": "text", "label": "Previous UTIs" },
+        { "id": "abxallergy", "ask": "Any antibiotic allergies?", "type": "text", "label": "Antibiotic allergies" }
+      ]
+    },
+    {
+      "id": "headache",
+      "title": "Headache (adult)",
+      "appliesTo": "Adults",
+      "sources": ["NICE CKS: Headache — assessment", "NICE NG150 (subarachnoid red flags, lay-phrased)"],
+      "redFlags": [
+        { "id": "rf-thunderclap", "ask": "Did it come on suddenly and reach its worst within minutes — like a 'thunderclap' or the worst headache of their life?", "escalate": "999" },
+        { "id": "rf-neuro", "ask": "Any new weakness, slurred speech, vision loss, or one side of the face drooping?", "escalate": "999" },
+        { "id": "rf-meningism", "ask": "Fever with a stiff neck, dislike of bright light, or a rash that doesn't fade when pressed?", "escalate": "999" },
+        { "id": "rf-injury", "ask": "A head injury in the last couple of days, with vomiting or drowsiness?", "escalate": "999" },
+        { "id": "rf-eye", "ask": "A painful red eye, or halos around lights, with the headache?", "escalate": "duty" },
+        { "id": "rf-new50", "ask": "Is this a brand-new type of headache and the patient is over 50, with tenderness at the temple or pain when chewing?", "escalate": "duty" },
+        { "id": "rf-pregnant", "ask": "Pregnant with severe headache, swelling, or vision changes?", "escalate": "duty" },
+        { "id": "rf-thinners", "ask": "On blood thinners (warfarin, a DOAC) — with a new headache AFTER ANY bump or knock to the head? (If yes: 999 now. If new headache on thinners with no head injury, report to duty clinician.)", "escalate": "999" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long has this headache been going on, and is it constant or does it come and go?", "type": "text", "label": "Duration/pattern" },
+        { "id": "location", "ask": "Where is the pain?", "type": "text", "label": "Location" },
+        { "id": "severity", "ask": "Out of 10, how bad is it right now?", "type": "text", "label": "Severity /10" },
+        { "id": "previous", "ask": "Do they get headaches or migraines normally — is this the same or different?", "type": "text", "label": "Usual headaches?" },
+        { "id": "vomiting", "ask": "Any vomiting?", "type": "yesno", "label": "Vomiting" },
+        { "id": "photophobia", "ask": "Bothered by bright light?", "type": "yesno", "label": "Light sensitivity" },
+        { "id": "painkillers", "ask": "How often are they taking painkillers for headaches — most days?", "type": "text", "label": "Painkiller use" }
+      ]
+    },
+    {
+      "id": "backpain",
+      "title": "Low back pain (adult)",
+      "appliesTo": "Adults",
+      "sources": ["NICE CKS: Sciatica / low back pain", "Cauda equina red flags (national CESCQ-style lay phrasing)", "Spinal epidural abscess risk factors (IV drug use / immunosuppression)"],
+      "redFlags": [
+        { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "duty" },
+        { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
+        { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
+        { "id": "rf-cancer", "ask": "Any history of cancer, with this being a new back pain?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long has the back pain been going on?", "type": "text", "label": "Duration" },
+        { "id": "trigger", "ask": "Did anything set it off (lifting, twisting, nothing in particular)?", "type": "text", "label": "Trigger" },
+        { "id": "sciatica", "ask": "Does the pain travel down a leg below the knee?", "type": "choice", "options": ["No", "One leg", "Both legs"], "label": "Leg pain" },
+        { "id": "pinsneedles", "ask": "Any pins and needles or numbness in the legs or feet?", "type": "text", "label": "Pins/needles" },
+        { "id": "function", "ask": "How is it affecting them — can they work / walk / sleep?", "type": "text", "label": "Function" },
+        { "id": "previous", "ask": "Have they had this before? What helped?", "type": "text", "label": "Previous episodes" }
+      ]
+    },
+    {
+      "id": "feverish-child",
+      "title": "Feverish child",
+      "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
+      "sources": ["NICE NG143: Fever in under 5s (traffic-light features, lay-phrased)", "NICE CKS: Feverish children"],
+      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO should confirm whether the local escalation route for this age group is 999 or urgent duty.",
+      "redFlags": [
+        { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
+        { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },
+        { "id": "rf-floppy", "ask": "Floppy, very hard to wake, or an unusual high-pitched or weak cry?", "escalate": "999" },
+        { "id": "rf-breathing", "ask": "Breathing very fast, grunting, or sucking in between the ribs?", "escalate": "999" },
+        { "id": "rf-colour", "ask": "Blue, grey, mottled, or very pale skin or lips?", "escalate": "999" },
+        { "id": "rf-fluids", "ask": "No wet nappy (or not passing urine) for 12 hours, or sunken eyes?", "escalate": "duty" },
+        { "id": "rf-seizure", "ask": "Any fit or seizure?", "escalate": "999" },
+        { "id": "rf-neck", "ask": "Stiff neck or bothered by bright light?", "escalate": "999" }
+      ],
+      "questions": [
+        { "id": "age", "ask": "How old is the child?", "type": "text", "label": "Age" },
+        { "id": "temp", "ask": "Has the temperature been measured? What was it, and how (forehead/ear)?", "type": "text", "label": "Temperature" },
+        { "id": "duration", "ask": "How long have they had the fever?", "type": "text", "label": "Duration" },
+        { "id": "drinking", "ask": "Are they drinking and having wet nappies / passing urine?", "type": "text", "label": "Fluids" },
+        { "id": "behaviour", "ask": "How are they in themselves — playing, clingy, sleepy?", "type": "text", "label": "Behaviour" },
+        { "id": "symptoms", "ask": "Any of these as well?", "type": "multi", "options": ["Cough or cold", "Pulling at ears", "Sore throat", "Vomiting", "Diarrhoea", "Rash (fades when pressed)"], "label": "Other symptoms" },
+        { "id": "antipyretics", "ask": "Has paracetamol or ibuprofen been given? Did the child perk up?", "type": "text", "label": "Calpol/ibuprofen" },
+        { "id": "imms", "ask": "Are their immunisations up to date?", "type": "yesno", "label": "Imms up to date" }
+      ]
+    },
+    {
+      "id": "rash",
+      "title": "Rash / skin problem",
+      "appliesTo": "Adults and children",
+      "sources": ["NICE CKS: Cellulitis — acute; Eczema; Urticaria", "NHS Pharmacy First: impetigo, infected insect bites, shingles pathways"],
+      "pharmacyFirst": { "label": "Impetigo (1+), infected insect bite (1+), shingles (18+)", "ageMin": 1, "note": "Several skin presentations may fit Pharmacy First — clinician or care navigator to confirm suitability." },
+      "redFlags": [
+        { "id": "rf-nonblanching", "ask": "Does the rash fade when a glass is pressed against it? (If it does NOT fade — treat as emergency)", "escalate": "999" },
+        { "id": "rf-anaphylaxis", "ask": "Any swelling of the lips, tongue or face, or any difficulty breathing with the rash?", "escalate": "999" },
+        { "id": "rf-spreading", "ask": "An area of skin that is red, hot, very painful and spreading FAST, AND they feel very unwell, have a fever, or look or sound seriously ill? (Possible necrotising fasciitis — emergency)", "escalate": "999" },
+        { "id": "rf-blistering", "ask": "Widespread blistering, skin peeling, or rawness or blistering also affecting the mouth, eyes, or genitals, with feeling unwell? (Possible SJS/TEN)", "escalate": "duty" },
+        { "id": "rf-meningism", "ask": "Rash with severe headache, stiff neck, or dislike of bright light?", "escalate": "999" },
+        { "id": "rf-newdrug", "ask": "Started a new medicine recently, now a widespread rash and feeling unwell?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "where", "ask": "Where on the body is it?", "type": "text", "label": "Location" },
+        { "id": "duration", "ask": "How long has it been there?", "type": "text", "label": "Duration" },
+        { "id": "spreading", "ask": "Is it spreading?", "type": "yesno", "label": "Spreading" },
+        { "id": "itchpain", "ask": "Is it itchy, painful, or neither?", "type": "choice", "options": ["Itchy", "Painful", "Both", "Neither"], "label": "Itch/pain" },
+        { "id": "blisters", "ask": "Any blisters, crusting, or weeping?", "type": "text", "label": "Blisters/crusting" },
+        { "id": "fever", "ask": "Any fever or feeling unwell with it?", "type": "yesno", "label": "Fever/unwell" },
+        { "id": "exposures", "ask": "Anything new — products, medicines, plants, insect bites? Anyone else in the house affected?", "type": "text", "label": "Exposures/contacts" },
+        { "id": "tried", "ask": "Any creams or treatments tried?", "type": "text", "label": "Creams tried" }
+      ]
+    },
+    {
+      "id": "general",
+      "title": "Something else / general",
+      "appliesTo": "Any problem not covered by a specific pathway",
+      "sources": ["General emergency screening questions (lay-phrased FAST / sepsis / anaphylaxis prompts)"],
+      "redFlags": [
+        { "id": "rf-breathing", "ask": "Severe difficulty breathing right now?", "escalate": "999" },
+        { "id": "rf-chestpain", "ask": "Chest pain or pressure right now?", "escalate": "999" },
+        { "id": "rf-stroke", "ask": "Any signs of a stroke — face drooping, arm weakness, slurred speech?", "escalate": "999" },
+        { "id": "rf-bleeding", "ask": "Heavy bleeding that won't stop?", "escalate": "999" },
+        { "id": "rf-collapse", "ask": "Collapsed, hard to wake, or new confusion?", "escalate": "999" },
+        { "id": "rf-allergy", "ask": "Signs of a severe allergic reaction — swelling of lips or tongue, struggling to breathe?", "escalate": "999" },
+        { "id": "rf-sepsis", "ask": "Shivering or shaking uncontrollably, skin that looks very pale, mottled (blotchy), or feels cold and clammy, or the person is saying they feel like they might die?", "escalate": "999" },
+        { "id": "rf-mentalhealth-attempt", "ask": "Is the patient actively attempting to harm themselves right now, or do they have a plan and the means to carry it out immediately?", "escalate": "999" },
+        { "id": "rf-mentalhealth", "ask": "Is the patient saying they have thoughts of harming themselves or someone else, but no immediate plan or means?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long has this been going on?", "type": "text", "label": "Duration" },
+        { "id": "worst", "ask": "What is the main thing worrying them about it?", "type": "text", "label": "Main concern" },
+        { "id": "impact", "ask": "How is it affecting day-to-day life?", "type": "text", "label": "Impact" }
+      ]
+    }
+  ]
+}
