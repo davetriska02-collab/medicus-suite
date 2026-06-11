@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-06-10",
-  "specVersion": "Reception capture pathways v1.1 (DRAFT — requires CSO sign-off before live use; escalation re-tiering pass 2026-06-10)",
-  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG51 (sepsis) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
+  "lastUpdated": "2026-06-11",
+  "specVersion": "Reception capture pathways v1.2 (DRAFT — requires CSO sign-off before live use; escalation re-tiering pass 2026-06-10; The Keeper currency pass 2026-06-11)",
+  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes; acute sinusitis), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254 (suspected sepsis — adults/over-16s and under-16s; replaced NG51 in Nov 2025) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
     "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
@@ -94,7 +94,7 @@
       "id": "urinary",
       "title": "Urinary symptoms (woman 16–64)",
       "appliesTo": "Women aged 16–64. Men, children, and pregnancy go straight to a clinician.",
-      "sources": ["NICE CKS: Urinary tract infection (lower) — women", "TARGET UTI resources", "NHS Pharmacy First: uncomplicated UTI pathway", "NICE NG51: Sepsis (urosepsis cluster)"],
+      "sources": ["NICE CKS: Urinary tract infection (lower) — women", "TARGET UTI resources", "NHS Pharmacy First: uncomplicated UTI pathway", "NICE NG253: Suspected sepsis — adults and over-16s (urosepsis cluster; replaced NG51 Nov 2025)"],
       "pharmacyFirst": { "label": "Uncomplicated UTI (women 16–64)", "ageMin": 16, "ageMax": 64, "note": "Pharmacy First covers uncomplicated UTI in women 16–64 — clinician or care navigator to confirm suitability." },
       "redFlags": [
         { "id": "rf-urosepsis", "ask": "Fever or shivering and shaking chills, together with new confusion or drowsiness, or so unwell they are unable to keep any fluids down?", "escalate": "999" },
@@ -145,7 +145,8 @@
       "sources": ["NICE CKS: Sciatica / low back pain", "Cauda equina red flags (national CESCQ-style lay phrasing)", "Spinal epidural abscess risk factors (IV drug use / immunosuppression)"],
       "redFlags": [
         { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
-        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, difficulty starting to pass urine or a weaker urine stream than normal, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-rectal", "ask": "Any new loss of the feeling of needing to open the bowels — not noticing when the bowels are full — even if there has not been an accident? (Early warning of a spinal nerve emergency — needs A&E now)", "escalate": "999" },
         { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "duty" },
         { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
         { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
@@ -165,9 +166,9 @@
       "title": "Feverish child",
       "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
       "sources": ["NICE NG143: Fever in under 5s (traffic-light features, lay-phrased)", "NICE CKS: Feverish children"],
-      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO should confirm whether the local escalation route for this age group is 999 or urgent duty.",
+      "notes": "NICE NG143 places temperature ≥38°C in an infant under 3 months in the RED (high-risk) traffic-light group, requiring urgent face-to-face assessment and paediatric referral. This pathway therefore escalates a febrile under-3-month infant to 999 (was 'duty'). CSO to confirm the local route (999 vs immediate duty-clinician handover) before live use.",
       "redFlags": [
-        { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
+        { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "999" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },
         { "id": "rf-floppy", "ask": "Floppy, very hard to wake, or an unusual high-pitched or weak cry?", "escalate": "999" },
         { "id": "rf-breathing", "ask": "Breathing very fast, grunting, or sucking in between the ribs?", "escalate": "999" },
@@ -210,6 +211,27 @@
         { "id": "fever", "ask": "Any fever or feeling unwell with it?", "type": "yesno", "label": "Fever/unwell" },
         { "id": "exposures", "ask": "Anything new — products, medicines, plants, insect bites? Anyone else in the house affected?", "type": "text", "label": "Exposures/contacts" },
         { "id": "tried", "ask": "Any creams or treatments tried?", "type": "text", "label": "Creams tried" }
+      ]
+    },
+    {
+      "id": "sinusitis",
+      "title": "Sinusitis / facial pain",
+      "appliesTo": "Adults and children aged 12 and over",
+      "sources": ["NICE CKS: Sinusitis", "NHS Pharmacy First: acute sinusitis pathway (PGD v1.1, valid from 1 Oct 2025)"],
+      "pharmacyFirst": { "label": "Acute sinusitis", "ageMin": 12, "note": "Pharmacy First covers acute sinusitis from age 12 — clinician or care navigator to confirm suitability. Most cases are viral and self-limiting." },
+      "redFlags": [
+        { "id": "rf-orbital", "ask": "Any swelling, redness, or bulging around or behind an eye, or double vision, or new trouble moving the eye? (Possible orbital infection — emergency)", "escalate": "999" },
+        { "id": "rf-intracranial", "ask": "Severe or worsening frontal headache with a high fever, new confusion or drowsiness, a stiff neck, or dislike of bright light? (Possible spread to the brain — emergency)", "escalate": "999" },
+        { "id": "rf-frontal-swelling", "ask": "Any new swelling or tenderness of the forehead or scalp?", "escalate": "duty" },
+        { "id": "rf-systemically-unwell", "ask": "Are they very unwell in themselves — shaking chills, unable to keep fluids down, or much worse than a typical cold?", "escalate": "duty" },
+        { "id": "rf-immunocompromised", "ask": "Do they have a weakened immune system (e.g. chemotherapy, or immune-suppressing medicines) and are unwell with this?", "escalate": "duty" }
+      ],
+      "questions": [
+        { "id": "duration", "ask": "How long have the symptoms been going on?", "type": "text", "label": "Duration" },
+        { "id": "course", "ask": "Did they start to get better and then get worse again (double-sickening)?", "type": "yesno", "label": "Worsened after improving" },
+        { "id": "symptoms", "ask": "Which of these do they have?", "type": "multi", "options": ["Blocked nose", "Thick or discoloured nasal discharge", "Facial pain or pressure", "Reduced sense of smell", "Toothache / upper jaw pain"], "label": "Symptoms" },
+        { "id": "fever", "ask": "Any fever?", "type": "yesno", "label": "Fever" },
+        { "id": "tried", "ask": "Tried anything so far (decongestant, saline, painkillers)? Did it help?", "type": "text", "label": "Tried so far" }
       ]
     },
     {

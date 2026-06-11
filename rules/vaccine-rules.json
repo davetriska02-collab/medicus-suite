@@ -1,6 +1,6 @@
 {
-  "lastUpdated": "2026-06-10",
-  "specVersion": "JCVI/UKHSA 2025/26 season",
+  "lastUpdated": "2026-06-11",
+  "specVersion": "JCVI/UKHSA 2026/27 season",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
     {
@@ -10,8 +10,8 @@
       "vaccine": "flu",
       "displayName": "Flu vaccine",
       "season": { "startMonth": 9, "startDay": 1, "endMonth": 3, "endDay": 31 },
-      "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2025)",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
+      "source": "JCVI/UKHSA Green Book Chapter 19; national flu immunisation programme letter 2026/27 (cohorts unchanged from 2025/26)",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents, and household/close contacts of immunocompromised people are eligible cohorts that CANNOT be detected from a single patient's record (household composition and carer status are not reliably coded) — check these manually. BMI reading may be out of date.",
       "eligibility": {
         "anyOf": [
           { "kind": "age", "ageMin": 65, "label": "Age 65+" },
@@ -36,7 +36,7 @@
       "vaccine": "covid",
       "displayName": "COVID vaccine",
       "season": { "startMonth": 10, "startDay": 1, "endMonth": 3, "endDay": 31 },
-      "source": "JCVI COVID-19 autumn 2025 eligibility",
+      "source": "JCVI COVID-19 eligibility — autumn 2025 statement, confirmed unchanged for autumn 2026/spring 2027 by JCVI statement of 16 July 2025",
       "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
       "eligibility": {
         "anyOf": [
@@ -57,13 +57,13 @@
       "type": "vaccine",
       "enabled": true,
       "vaccine": "pneumococcal",
-      "displayName": "Pneumococcal vaccine (PPV23)",
+      "displayName": "Pneumococcal vaccine (PPV23/PCV20)",
       "schedule": "once",
-      "source": "UKHSA Green Book Chapter 25 (Pneumococcal) — single PPV23 dose at age 65+; no routine revaccination",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65. Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded.",
+      "source": "UKHSA Green Book Chapter 25 (Pneumococcal, updated 12 June 2025) — single dose at age 65+; routine adult programme transitioned from PPV23 to PCV20 (Prevenar 20) in early 2026 (GOV.UK change-of-vaccine letter); existing PPV23 recipients do NOT need PCV20",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65 (PPV23 historically, PCV20/Prevenar 20 from early 2026). Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded.",
       "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 65, "label": "Age 65+" } ] },
       "statusTerms": {
-        "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pneumococcal immunisation"],
+        "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pneumococcal immunisation", "prevenar 20", "pcv20", "pneumococcal conjugate vaccine 20", "20-valent pneumococcal"],
         "declined": ["pneumococcal vaccination declined", "pneumococcal vaccine declined", "pneumococcal immunisation declined", "pneumococcal vaccination not given"]
       }
     },
@@ -76,7 +76,7 @@
       "displayName": "Shingles vaccine (Shingrix)",
       "schedule": "once",
       "source": "UKHSA Green Book Chapter 28a (Shingles) — phased programme from 1 Sept 2023: routine offer on turning 65 (cohort born on/after 1 Sept 1958) plus existing 70–79 cohort; Shingrix 2 doses 6–12 months apart",
-      "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Shingrix is a 2-dose course (6–12 months apart) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually. People aged 68–69 who turned 65 before 1 Sept 2023 are NOT yet eligible and are correctly not flagged. Severely immunosuppressed 50+ pathway is NOT encoded (engine cannot combine age + clinical criteria in one clause) — assess manually. Historic Zostavax counts as given.",
+      "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Shingrix is a 2-dose course (6–12 months apart) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually. People aged 68–69 who turned 65 before 1 Sept 2023 are NOT yet eligible and are correctly not flagged. Severely immunosuppressed patients are eligible from age 18 (lowered from 50 with effect from 1 Sept 2025) — this pathway is NOT encoded here because the engine cannot combine an age floor with clinical criteria in one clause; assess immunosuppressed patients manually. Historic Zostavax counts as given.",
       "eligibility": { "anyOf": [
         { "kind": "age", "ageMin": 70, "ageMax": 79, "label": "Age 70–79 (routine shingles cohort)" },
         { "kind": "age", "ageMin": 65, "ageMax": 69, "bornOnOrAfter": "1958-09-01", "label": "Turned 65 on/after 1 Sept 2023 (phased cohort)" }
@@ -94,9 +94,9 @@
       "vaccine": "rsv",
       "displayName": "RSV vaccine",
       "schedule": "once",
-      "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice June 2023 — routine offer at 75 with catch-up for 75–79, programme from 1 Sept 2024; single dose",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. The 80+ cohort is not eligible (initial-year transition offer ended 31 Aug 2025). RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note.",
-      "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 75, "ageMax": 79, "label": "Age 75–79" } ] },
+      "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice June 2023; programme expanded from 1 April 2026 to all adults aged 75+ (no upper age limit) and care-home residents of any age — GOV.UK 'Expansion of RSV vaccine eligibility to those aged 80 years and older and residents in care homes for older adults' letter",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. From 1 April 2026 the programme covers (a) all adults aged 75 and over who have not previously had an NHS RSV dose — the earlier 80+ exclusion is superseded — and (b) all residents in care homes for older adults, of any age. Status inferred from coded records only. RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note.",
+      "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 75, "label": "Age 75+" }, { "kind": "problem", "match": ["care home resident","nursing home resident","residential care"], "label": "Care-home resident (any age)" } ] },
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy"],
         "declined": ["rsv vaccination declined", "rsv vaccine declined", "respiratory syncytial virus vaccination declined", "rsv vaccination not given"]

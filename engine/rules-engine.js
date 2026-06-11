@@ -1842,6 +1842,9 @@
           if (!dob) continue; // fail-closed: unknown dob → skip this clause
           const dobParsed = Date.parse(dob);
           if (!Number.isFinite(dobParsed)) continue; // unparseable dob → skip
+          // Lexical string comparison is safe because the patient-context
+          // extractor (parseDob) always emits a zero-padded ISO YYYY-MM-DD;
+          // clause.bornOnOrAfter is authored in the same form.
           if (dob < clause.bornOnOrAfter) continue; // born before threshold → skip
         }
         return clause;
@@ -1971,6 +1974,10 @@
 
     let startIso, seasonLabel;
     if (isOneOff) {
+      // Look back to 1900-01-01 so any historical coded dose counts. Undated
+      // records (no codedDate) pass the date gate and are intentionally treated
+      // as 'given' — for a lifetime vaccine an undated historical dose still
+      // means the patient has had it.
       startIso = '1900-01-01';
       seasonLabel = 'one-off';
     } else {

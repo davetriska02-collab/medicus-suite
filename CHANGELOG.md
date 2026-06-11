@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.52.0] — 2026-06-11
+
+### The Keeper — Sentinel rules currency / red-team pass (vaccines, pathways, QOF)
+
+Red-team review of the vaccine updates and the wider Sentinel rules base. Verified changes
+applied; each carries its source in-file. (Medicines-monitoring half — drugs / alerts /
+med-review instruments — follows in a companion commit.)
+
+**Vaccines (`rules/vaccine-rules.json`):**
+- **RSV programme expansion (1 April 2026)** — removed the `ageMax:79` upper bound (now all
+  adults 75+) and added a care-home-resident eligibility clause (any age). Previously every
+  patient 80+ and every under-75 care-home resident received no RSV chip. (UKHSA/GOV.UK
+  expansion letter; JCVI.)
+- **Pneumococcal PPV23→PCV20** — added PCV20 / Prevenar 20 "given" status terms so the 2026
+  product switch does not mis-read a vaccinated patient as due. Eligibility (65+, one-off)
+  unchanged. (Green Book ch 25, June 2025.)
+- Shingles notes corrected (severely-immunosuppressed eligibility now 18+); flu `specVersion`
+  → 2026/27 with close-contacts cohort documented; COVID source confirmed current.
+
+**Reception pathways (`rules/reception-pathways.json`):**
+- **Under-3-month fever escalation duty → 999** (NICE NG143 red traffic-light tier).
+- Added two updated NICE CKS cauda-equina red flags (difficulty initiating micturition;
+  loss of rectal-fullness sensation).
+- Added the missing **acute sinusitis** Pharmacy First pathway (age 12+).
+- Sepsis source refreshed NG51 → NG253/NG254 (Nov 2025).
+
+**QOF (`rules/qof-rules.json`):** added NDH register + NDH002/NDH003 stubs and the VI
+childhood-immunisation register stub — all **disabled** pending CSO confirmation / engine
+support — for year-on-year diff visibility; documented CHOL004 register scope.
+
+**Engine (`engine/rules-engine.js`):** clarifying comments on the `bornOnOrAfter` zero-padded
+ISO assumption and the one-off undated-record behaviour (no behaviour change).
+
+**Tests:** `test-vaccine-rules.js` (RSV 80+/care-home, PCV20-given) and
+`test-reception-pathways.js` (clinical-content locks for the escalation/flag changes) extended.
+
 ## [v3.51.2] — 2026-06-10
 
 ### Security / bug fixes (2026-06-10 authorised audit)

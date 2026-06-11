@@ -77,5 +77,21 @@ for (const p of doc.pathways || []) {
   }
 }
 
+// ── Clinical-content locks (The Keeper 2026-06-11) ───────────────────────────
+// Safety-critical escalations/flags that must not silently regress.
+console.log('\n--- clinical content locks ---');
+const byId = Object.fromEntries(doc.pathways.map((p) => [p.id, p]));
+const flagsOf = (p) => Object.fromEntries((byId[p]?.redFlags || []).map((f) => [f.id, f]));
+
+const fever = flagsOf('feverish-child');
+check(fever['rf-under3m']?.escalate === '999', 'feverish-child: under-3-month fever escalates to 999 (NICE NG143 red tier)');
+
+const back = flagsOf('backpain');
+check(back['rf-rectal']?.escalate === '999', 'backpain: rf-rectal (loss of rectal-fullness sensation) present, 999');
+check(/starting to pass urine|weaker/i.test(back['rf-bladder']?.ask || ''), 'backpain: rf-bladder includes difficulty initiating micturition wording');
+
+check(!!byId['sinusitis'], 'sinusitis Pharmacy First pathway present');
+check(byId['sinusitis']?.pharmacyFirst?.ageMin === 12, 'sinusitis pathway pharmacyFirst ageMin === 12');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

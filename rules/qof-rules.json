@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-10",
+  "lastUpdated": "2026-06-11",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-06-11 (The Keeper): added NDH register + NDH002 (retired stub) / NDH003 (26/27 draft) and the VI childhood-immunisation register stub, all DISABLED for diff visibility pending CSO confirmation and (for VI) an engine extension; documented CHOL004's CHD+PAD+STIA (not CKD) register scope.",
   "rules": [
 
     {
@@ -137,6 +137,29 @@
       "problemExclude": ["no obesity", "not obese", "family history", "maternal obesity", "history of obesity in family"],
       "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
       "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
+    },
+
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": false,
+      "registerCode": "NDH",
+      "registerName": "Non-Diabetic Hyperglycaemia",
+      "problemMatch": ["non-diabetic hyperglycaemia", "non diabetic hyperglycaemia", "pre-diabetes", "pre diabetes", "prediabetes", "prediabetic", "impaired glucose tolerance", "impaired fasting glucose", "impaired fasting glycaemia", "at risk of diabetes", "history of gestational diabetes"],
+      "problemExclude": ["type 1 diabetes", "type 2 diabetes", "no diabetes"],
+      "source": "QOF 26/27 NDH register (NDH_COD refset approximation, NHS England PRN02356 / business rules v51). DRAFT — corroborated via search, pending primary-source confirmation.",
+      "notes": "NEW disabled stub added by The Keeper 2026-06-11 for year-on-year diff visibility. NDH003 (26/27) replaces NDH002 (25/26) and EXPANDS the cohort to add women with a history of gestational diabetes. Substring approximation of the SNOMED register. CSO to confirm the cohort terms against PRN02356 before enabling — in particular the gestational-diabetes inclusion vs the diabetes-mellitus exclusion interaction (a 'gestational diabetes mellitus' code could be wrongly matched/excluded). Underpins NDH003."
+    },
+    {
+      "id": "qof-reg-vi",
+      "type": "qof-register",
+      "enabled": false,
+      "registerCode": "VI",
+      "registerName": "Vaccination and Immunisation",
+      "problemMatch": [],
+      "problemExclude": [],
+      "source": "QOF 26/27 Vaccination & Immunisation domain (NHS England PRN02356). Public-health childhood-immunisation domain — age-cohort based, NOT a problem-coded register.",
+      "notes": "NEW disabled stub added by The Keeper 2026-06-11 for year-on-year diff visibility. The VI indicators VI001 (DTaP/IPV/Hib/HepB/MenB primary course by ~8 months), VI002 (1st MMR/MMRV by ~18 months) and VI003 (pre-school DTaP/IPV booster + 2 MMR/MMRV by ~5 years) are childhood-immunisation COVERAGE measures defined by age-at-vaccination cohorts, not by a problem code, and 26/27 adds MMRV alongside MMR plus an improvement-route payment. They require age-at-event + immunisation-event logic the current engine cannot express (needs engine extension), so no indicator stubs are encoded and no point values are invented. CSO/engine work needed before these can be represented."
     },
 
     {
@@ -493,7 +516,7 @@
       "thresholds": { "lower": 20, "upper": 50 },
       "points": 44,
       "source": "QOF 26/27 CHOL004 (NICE IND278)",
-      "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned."
+      "notes": "Unchanged in 26/27 (44 points, threshold 20-50). Full rule: LDL ≤2.0 OR non-HDL ≤2.6 mmol/L; LDL takes priority when both present on same date. Highest-value indicator. NICE NG238 aligned. SCOPE: the full QOF CHOL004 register is CHD + PAD + STIA (NOT CKD — note the contrast with CHOL003, which DOES include CKD); Sentinel approximates with CHD only until the rules engine supports multi-register OR logic."
     },
 
     {
@@ -1062,6 +1085,40 @@
       "points": 13,
       "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
       "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+    },
+    {
+      "id": "qof-ndh002",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "NDH002",
+      "indicatorName": "[RETIRED 25/26] HbA1c in non-diabetic hyperglycaemia register",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "haemoglobin a1c", "fasting glucose", "fasting plasma glucose"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 18,
+      "source": "QOF 25/26 NDH002 (retired)",
+      "notes": "Retired in 26/27, replaced by NDH003. Kept as a disabled stub for year-on-year diff visibility. Depends on the NDH register stub (also disabled)."
+    },
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "NDH003",
+      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] HbA1c/FPG in non-diabetic hyperglycaemia (incl. prior gestational diabetes)",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "haemoglobin a1c", "fasting glucose", "fasting plasma glucose"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 20,
+      "source": "QOF 26/27 NDH003 (NHS England PRN02356 / business rules v51) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
+      "notes": "NEW 26/27 indicator (replaces NDH002), shipped DISABLED pending CSO confirmation of points (corroborated 20, up from 18) and thresholds (corroborated 50–90%) against PRN02356. 26/27 change: cohort expanded to include women with a history of gestational diabetes (handled via the NDH register stub). HbA1c OR fasting plasma glucose within the contract year. Flip enabled:true once the register cohort and values are confirmed."
     }
   ]
 }

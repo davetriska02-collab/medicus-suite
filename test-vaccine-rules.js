@@ -93,6 +93,17 @@ console.log('\n--- schedule:once engine behaviour ---');
   assert(chips[0].status === 'vax_declined', 'PPV23: declined → vax_declined');
 }
 
+// PCV20 (Prevenar 20) recorded → vax_given (programme transitioned from PPV23 in 2026)
+{
+  const data = {
+    ...baseData(70),
+    problems: [{ label: 'Prevenar 20 given', codedDate: '2026-02-10', status: 'active' }],
+  };
+  const chips = engine.evaluateVaccineRule(ppv23Rule, data, NOW);
+  assert(chips.length === 1, 'PPV23/PCV20: chip when PCV20 given');
+  assert(chips[0].status === 'vax_given', 'PPV23/PCV20: "Prevenar 20 given" → vax_given');
+}
+
 // seasonLabel should be 'one-off' for schedule:once
 {
   const chips = engine.evaluateVaccineRule(ppv23Rule, baseData(70), NOW);
@@ -237,16 +248,38 @@ console.log('\n--- RSV eligibility ---');
   assert(chips[0].status === 'vax_due', 'RSV: age 75 no event → vax_due');
 }
 
-// Age 79 → chip (within 75-79)
+// Age 79 → chip (within 75+)
 {
   const chips = engine.evaluateVaccineRule(rsvRule, baseData(79), NOW);
   assert(chips.length === 1, 'RSV: age 79 → chip');
 }
 
-// Age 80 → no chip
+// Age 80 → chip (1 April 2026 expansion removed the upper bound)
 {
   const chips = engine.evaluateVaccineRule(rsvRule, baseData(80), NOW);
-  assert(chips.length === 0, 'RSV: age 80 → no chip');
+  assert(chips.length === 1, 'RSV: age 80 → chip (post-April-2026 expansion)');
+  assert(chips[0].status === 'vax_due', 'RSV: age 80 no event → vax_due');
+}
+
+// Age 92 → chip (no upper age limit)
+{
+  const chips = engine.evaluateVaccineRule(rsvRule, baseData(92), NOW);
+  assert(chips.length === 1, 'RSV: age 92 → chip (no upper bound)');
+}
+
+// Care-home resident aged 70 → chip (any age, post-April-2026 expansion)
+{
+  const data = withProblems(baseData(70), [
+    { label: 'Care home resident', codedDate: '2025-02-01', status: 'active' },
+  ]);
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: care-home resident age 70 → chip');
+}
+
+// Age 70, not in a care home → no chip (still below the 75 age floor)
+{
+  const chips = engine.evaluateVaccineRule(rsvRule, baseData(70), NOW);
+  assert(chips.length === 0, 'RSV: age 70 non-care-home → no chip');
 }
 
 // ── Schema: source and notes required on new rules ───────────────────────────
