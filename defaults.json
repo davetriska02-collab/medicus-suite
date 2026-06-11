@@ -2308,25 +2308,51 @@
       ]
     },
     {
-      "id": "diabetes",
+      "id": "dka-hhs",
       "enabled": true,
-      "label": "Diabetes problem",
-      "kind": "amber",
+      "label": "DKA / HHS",
+      "kind": "red",
       "patterns": [
         "diabetic ketoacidosis",
         "DKA",
         "HHS",
         "hyperosmolar",
+        "ketones (high|raised|in my (blood|urine|wee))",
+        "fruity (smelling )?breath",
+        "acetone breath",
+        "diabetes (and|with) (vomiting|can.?t keep (fluids|anything) down|confus\\w*)",
+        "(high|raised) ketones (and|with) (vomiting|unwell|drowsy|breathless)"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Diabetic emergency",
+          "text": "Suspected DKA or HHS → same-day / 999.\n\n• DKA (type 1): vomiting, abdominal pain, raised ketones, deep/fast (Kussmaul) breathing, fruity breath, drowsiness\n• HHS (elderly type 2): very high glucose + marked dehydration + confusion, usually without significant ketones\n\nAction:\n• Check capillary glucose AND ketones now if able\n• Capillary ketones ≥3.0 mmol/L (or urine ketones ++), or vomiting and unable to keep fluids down → emergency admission\n• NEVER omit insulin - arrange immediate transfer"
+        }
+      ]
+    },
+    {
+      "id": "diabetes",
+      "enabled": true,
+      "label": "Diabetes problem",
+      "kind": "amber",
+      "patterns": [
         "(hyperglycaemi|hyperglycemi)\\w*",
         "(hypoglycaemi|hypoglycemi)\\w*",
         "hypo",
         "blood sugars? (too high|very high|sky high|dangerously high|too low|very low|in the \\d+s)",
         "blood sugars? (won.?t come down|keep dropping|all over the place)",
         "(keep having|frequent|lots of) hypos",
-        "ketones (high|raised|in my (blood|urine|wee))",
-        "fruity (smelling )?breath",
-        "acetone breath",
-        "diabetes (and|with) (unwell|vomiting|can.?t keep (fluids|anything) down|confus\\w*)",
         "sick day rules",
         "insulin (not working|isn.?t working|won.?t bring (it|sugars) down)",
         "diabetes (out of control|not controlled|poorly controlled)"

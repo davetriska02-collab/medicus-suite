@@ -1,8 +1,8 @@
 {
-  "version": "1.1",
-  "lastUpdated": "2026-06-04",
-  "specVersion": "PINCER/NICE prescribing-safety alert library v1.1",
-  "keeperNote": "2026-06-04 (The Keeper): completed the shared NSAID drug-set across all NSAID-combo rules — added dexibuprofen, tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid and fenoprofen, which were previously absent and so silently never fired any NSAID PINCER alert. The same completion was applied to the built-in NSAIDS list in content-scripts/triage-lens/content.js (the list that actually fires the shipping prescribing-flag chips). NSAID lists corroborated via search; pending primary-source confirmation.",
+  "version": "1.2",
+  "lastUpdated": "2026-06-11",
+  "specVersion": "PINCER/NICE prescribing-safety alert library v1.2",
+  "keeperNote": "2026-06-11 (The Keeper): triage-lens ruleset review follow-up. (a) NSAID drug-set — added etodolac (Lodine SR, emc 3857, active May 2026) and flurbiprofen (Froben, emc 327/326), which were absent from every NSAID-combo rule AND from the built-in content.js NSAIDS regex, so a patient on either silently fired no NSAID PINCER/STOPP alert; also added the UK dm+d/BNF spelling 'indometacin' (the existing 'indomethacin' does not substring-match the UK spelling — content.js already handled this via 'indometh?acin'). Note: 'dexibuprofen'/'dexketoprofen' are redundant under substring matching ('ibuprofen'/'ketoprofen' already cover them) but kept for explicitness. (b) Anticoagulant set (pincer-2, pincer-13) — added acenocoumarol (Sinthrome) and phenindione (Dindevan), both active UK oral VKAs in BNF 2.8.2, previously listed in content.js's regex but not here. (c) ACEi/ARB set (pincer-4) — added quinapril (Accupro), imidapril (Tanatril), eprosartan (Teveten) and cilazapril (Vascace, discontinued for new patients but legacy repeats persist); moexipril deliberately NOT added (UK-discontinued March 2016). 2026-06-04 prior note: completed shared NSAID set with tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid, fenoprofen. SOURCE GAP this run: bnf.nice.org.uk / OpenPrescribing / MHRA register returned 403; additions corroborated against emc SmPC product IDs + multiple NHS ICB formularies (confidence medium-high; all additive, cannot weaken matching).",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
@@ -18,7 +18,7 @@
         "enabled": true,
         "label": "NSAID without gastroprotection (≥65)",
         "drugSets": [
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine","cimetidine"],
         "ageRange": { "min": 65 },
@@ -43,8 +43,8 @@
         "enabled": true,
         "label": "Anticoagulant + NSAID concurrent",
         "drugSets": [
-          { "name": "Anticoagulant", "match": ["warfarin","apixaban","rivaroxaban","dabigatran","edoxaban"] },
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "Anticoagulant", "match": ["warfarin","acenocoumarol","phenindione","apixaban","rivaroxaban","dabigatran","edoxaban"] },
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -68,7 +68,7 @@
         "label": "Aspirin + NSAID concurrent (no PPI)",
         "drugSets": [
           { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","low-dose aspirin","aspirin tablet"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine"],
         "sex": "any",
@@ -92,8 +92,8 @@
         "enabled": true,
         "label": "ACEi/ARB + NSAID concurrent",
         "drugSets": [
-          { "name": "ACEi/ARB", "match": ["ramipril","lisinopril","perindopril","enalapril","captopril","trandolapril","fosinopril","losartan","candesartan","valsartan","irbesartan","telmisartan","olmesartan","azilsartan","sacubitril"] },
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "ACEi/ARB", "match": ["ramipril","lisinopril","perindopril","enalapril","captopril","trandolapril","fosinopril","quinapril","imidapril","cilazapril","losartan","candesartan","valsartan","irbesartan","telmisartan","olmesartan","azilsartan","eprosartan","sacubitril"] },
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -140,7 +140,7 @@
         "enabled": true,
         "label": "NSAID in heart failure",
         "drugSets": [
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": ["heart failure"],
@@ -286,7 +286,7 @@
         "label": "Lithium + NSAID concurrent",
         "drugSets": [
           { "name": "Lithium", "match": ["lithium"], "exclude": ["shampoo","topical","gel","cream"] },
-          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
+          { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -309,7 +309,7 @@
         "enabled": true,
         "label": "Triple antithrombotic therapy (≥75)",
         "drugSets": [
-          { "name": "Anticoagulant", "match": ["warfarin","apixaban","rivaroxaban","dabigatran","edoxaban"] },
+          { "name": "Anticoagulant", "match": ["warfarin","acenocoumarol","phenindione","apixaban","rivaroxaban","dabigatran","edoxaban"] },
           { "name": "Antiplatelet 1", "match": ["aspirin 75","aspirin 300","aspirin tablet"], "exclude": ["aspirin 500","anadin","migraleve"] },
           { "name": "Antiplatelet 2", "match": ["clopidogrel","ticagrelor","prasugrel"] }
         ],
