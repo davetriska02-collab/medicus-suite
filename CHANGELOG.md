@@ -2,7 +2,10 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.53.1] — 2026-06-11
+## [v3.54.0] — 2026-06-11
+
+> Note: originally drafted as v3.53.0/v3.53.1 on the review branch; renumbered to
+> v3.54.0 because main released unrelated v3.53.x versions in parallel.
 
 ### Clinical rules — The Keeper: visualiser drug-table completion
 
@@ -34,8 +37,6 @@ Tests: parity test rewritten — divergences 36 → 8, resolved sets converted t
 positive both-sides coverage (189 assertions); drug-table completeness locks
 added to `test-visualiser-pincer.js`; frusemide triple-whammy added to
 `test-prescribing-flags.js`. Full suite green (50 suites).
-
-## [v3.53.0] — 2026-06-11
 
 ### Repo-audit fix batch (quick wins + Milestones 0–2)
 
@@ -85,6 +86,94 @@ Implements the actionable findings of the 2026-06-11 repo audit. Six commits
 **Deferred (tracked in the audit report):** T4 safety-doc content refresh (CSO),
 T10 per-section extraction canaries, T11 pdf.js ≥4.2.67 upgrade, T12
 practice-profile refactor.
+## [v3.53.3] — 2026-06-11
+
+### Fixed: resilient Sentinel custom-rule import in suite restore
+
+Whole-suite backup restore now imports custom Sentinel monitoring rules resiliently — a single invalid/legacy custom rule no longer rolls back the entire restore. Valid rules are imported and skipped rules are surfaced in the status message instead of being silently dropped. The dedicated Sentinel-options import was already resilient; this fix brings suite restore into line with it.
+
+## [v3.53.2] — 2026-06-11
+
+### Removed: Dispensing Margin (`rxmargin`) module
+
+The Dispensing Margin module (added in 3.53.0/3.53.1) has been removed from Medicus
+Suite — it is being developed as a standalone product in its own repository rather
+than as a suite module. This reverts the module files, the side-panel/pop-out nav
+entries and registries, the `rxmargin` backup scope and envelope preview, the
+options export card and IO script, and `test-rxmargin-core.js`. No other module is
+affected. (The richer release pipeline added in 3.53.1 — CHANGELOG-derived notes and
+SHA-256 checksums — is retained, as it is independent of the module.)
+
+## [v3.53.1] — 2026-06-11
+
+### Release pipeline — fully-decorated GitHub Releases
+
+The `Release` workflow now publishes a proper release rather than a one-line stub:
+
+- **Real release notes** — the body is generated from this version's `CHANGELOG.md`
+  section, so each GitHub Release shows exactly what changed.
+- **Checksums** — a `SHA256SUMS.txt` is built and attached next to the extension
+  zip, with copy-paste `sha256sum -c` verification instructions.
+- **Inline install steps** — load-unpacked instructions are included in the release
+  body so users don't have to leave the page.
+
+#### Headline of this build — Dispensing Margin (`rxmargin`)
+
+The flagship addition shipping in the 3.53 line: an offline dispensing-margin tool
+for UK dispensing GP practices. It computes net margin after the Drug Tariff
+clawback, finds the cheapest supplier on file, flags loss-making lines, and totals
+the cash freed by switching — with a category breakdown, RAG margin-health bands,
+cost-per-unit comparison, a margin trend sparkline, a one-click "switch all to
+cheapest supplier" action, and a printable board report. All prices are entered or
+CSV-imported by the practice; no licensed price feeds are bundled.
+
+## [v3.53.0] — 2026-06-11
+
+### New module: Dispensing Margin (`rxmargin`) — offline RxMargin alternative
+
+A working, offline alternative to RxMargin (rxmargin.co.uk) for UK dispensing GP
+practices. Dispensing practices buy medicines from wholesalers but are reimbursed
+at Drug Tariff prices minus the NHS discount-deduction "clawback", so a line's
+profit is `tariff x (1 - clawback) - purchase cost`. The module turns each
+practice's own prices into the money decisions that save cash. All prices are
+entered or CSV-imported by the practice; no licensed Drug Tariff / wholesaler
+feeds are bundled, and data stays on the device.
+
+**Core ledger**
+- Per-product margin: net reimbursement after clawback, margin per pack and margin
+  %, monthly/annual profit at the supplier currently used.
+- Best-buy detection and supplier-switch savings, ranked biggest-first; loss-maker
+  flagging where the clawed-back tariff no longer covers purchase cost.
+- Configurable clawback model — dispensing-doctor flat rate (default 11.18%, the
+  SFE reference) or pharmacy group rates (generics 20%, branded 5%, appliances
+  9.85%, DND 0%); all figures user-editable to track the Drug Tariff.
+
+**Market-feature set** (from a competitive scan of UK dispensing/pharmacy margin
+tools — RxMargin, Dispex/DispensingRx, Drug Tariff Pro/PharmData,
+OpenPrescribing/ePACT2, PMR analytics, wholesaler ordering platforms)
+- Cost-per-unit normalisation to compare pack sizes like-for-like.
+- Margin-by-category breakdown (generic / branded / appliance / DND).
+- Configurable RAG margin-health thresholds with per-line badges.
+- "Switch all to cheapest supplier" one-click scenario (fully reversible).
+- Margin trend sparkline backed by a capped monthly history (`rxmargin.history`).
+- Loss -> recovery hint (price concession / out-of-pocket / broken-bulk, or
+  prescribe rather than dispense).
+- Printable board report (KPIs, category breakdown, top switches, loss-makers)
+  via the browser's print-to-PDF.
+
+**UI**: glass design — theme-derived translucent panels with `backdrop-filter`,
+gradient accents, frosted cards/buttons/modals, sticky table header, and a
+`prefers-reduced-motion` fallback; adapts to light/dark/colourblind themes.
+
+**Correctness / security (red-team)**: blank/non-numeric supplier prices are
+treated as unpriced rather than coerced to GBP0 (they had masqueraded as the
+cheapest buy and produced bogus margins/savings); CSV export neutralises
+spreadsheet formula-injection, lossless on re-import; removed a stray NUL byte
+from the product-grouping key.
+
+Wired into the side-panel and pop-out nav, the suite backup envelope (`rxmargin`
+scope, `shared/io/rxmargin-io.js`) and the per-module export cards in Settings.
+Pure margin math is regression-tested in `test-rxmargin-core.js` (70 assertions).
 
 ## [v3.52.0] — 2026-06-11
 
@@ -159,7 +248,6 @@ coverage loop + cilazapril triple-whammy); full rule suite green.
   blood", "fruity breath" + vomiting), while its own action note escalates those to "→ 999".
   Escalating the DKA/HHS-specific subset to a **red** chip is recommended but is a behaviour
   change left for CSO sign-off rather than applied silently.
-
 ## [v3.51.2] — 2026-06-10
 
 ### Security / bug fixes (2026-06-10 authorised audit)

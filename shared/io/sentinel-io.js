@@ -50,11 +50,16 @@ async function sentinelExport() {
 
 // Import a Sentinel data object back into storage.
 // If merge=true, custom rules and individual overrides are merged rather than replaced.
+// If skipInvalidCustomRules=true, invalid custom rules are collected and returned rather
+// than throwing — valid rules still import. Default (strict) throws on the first invalid rule.
 // Throws with a descriptive message if the data shape is invalid.
-async function sentinelImport(data, { merge = false } = {}) {
+async function sentinelImport(data, { merge = false, skipInvalidCustomRules = false } = {}) {
   if (!data || typeof data !== 'object') throw new Error('Sentinel data must be an object.');
 
   const toSet = {};
+  // Rules rejected by validateCustomRule when skipInvalidCustomRules is on. Returned
+  // so callers (suite restore) can SURFACE them — never drop a clinical rule silently.
+  const rejectedCustomRules = [];
 
   if (data.config !== undefined) {
     if (typeof data.config !== 'object' || Array.isArray(data.config)) {
@@ -87,18 +92,40 @@ async function sentinelImport(data, { merge = false } = {}) {
     if (!Array.isArray(data.customRules)) {
       throw new Error('sentinel.customRules must be an array.');
     }
-    data.customRules.forEach((rule, i) => validateCustomRule(rule, i));
+    let incoming;
+    if (skipInvalidCustomRules) {
+      // Resilient mode (suite restore): validate per-rule, keep the valid ones,
+      // and record the rejects so the caller can surface them. A single legacy/
+      // malformed rule must NOT abort the whole restore.
+      incoming = [];
+      data.customRules.forEach((rule, i) => {
+        try {
+          validateCustomRule(rule, i);
+          incoming.push(rule);
+        } catch (e) {
+          rejectedCustomRules.push({
+            id: (rule && rule.id) || null,
+            label: (rule && rule.label) || null,
+            error: e.message,
+          });
+        }
+      });
+    } else {
+      // Strict mode (default): any invalid rule rejects the whole import.
+      data.customRules.forEach((rule, i) => validateCustomRule(rule, i));
+      incoming = data.customRules;
+    }
     if (merge) {
       const existing = await chrome.storage.local.get('sentinel.customRules');
       const existingRules = existing['sentinel.customRules'] || [];
       const existingIds = new Set(existingRules.map((r) => r.id));
       const merged = [...existingRules];
-      data.customRules.forEach((rule) => {
+      incoming.forEach((rule) => {
         if (!existingIds.has(rule.id)) merged.push(rule);
       });
       toSet['sentinel.customRules'] = merged;
     } else {
-      toSet['sentinel.customRules'] = data.customRules;
+      toSet['sentinel.customRules'] = incoming;
     }
   }
 
@@ -156,6 +183,7 @@ async function sentinelImport(data, { merge = false } = {}) {
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
   }
+  return { rejectedCustomRules };
 }
 
 // Validate a custom rule object. Throws on failure.
