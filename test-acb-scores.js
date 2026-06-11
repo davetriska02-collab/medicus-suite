@@ -129,6 +129,63 @@ console.log('\n--- UK brand names ---');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
 }
 
+// ── 2026-06-11 Keeper additions: TCAs, antihistamines, urological, score-2 ──
+console.log('\n--- Keeper 2026-06-11: additional TCAs ---');
+{
+  const r = computeACB(['Dosulepin 75mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'dosulepin scores 3');
+}
+{
+  const r = computeACB(['Prothiaden 75mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'Prothiaden (dosulepin brand) scores 3');
+}
+{
+  const r = computeACB(['Lofepramine 70mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'lofepramine scores 3');
+}
+{
+  const r = computeACB(['Lomont 70mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'Lomont (lofepramine brand) scores 3');
+}
+{
+  const r = computeACB(['Trimipramine 50mg capsules']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'trimipramine scores 3');
+}
+{
+  const r = computeACB(['Surmontil 25mg capsules']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'Surmontil (trimipramine brand) scores 3');
+}
+
+console.log('\n--- Keeper 2026-06-11: sedating antihistamines ---');
+{
+  const r = computeACB(['Alimemazine tartrate 5mg/5ml oral solution']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'alimemazine scores 3');
+}
+{
+  const r = computeACB(['Vallergan Forte syrup']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'Vallergan (alimemazine brand) scores 3');
+}
+
+console.log('\n--- Keeper 2026-06-11: urological additions ---');
+{
+  const r = computeACB(['Darifenacin 7.5mg modified-release tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'darifenacin scores 3');
+}
+{
+  const r = computeACB(['Emselex 7.5mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 3, 'Emselex (darifenacin brand) scores 3');
+}
+
+console.log('\n--- Keeper 2026-06-11: score-2 entries ---');
+{
+  const r = computeACB(['Carbamazepine 200mg tablets']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 2, 'carbamazepine scores 2');
+}
+{
+  const r = computeACB(['Amantadine 100mg capsules']);
+  assert(r.perDrug.length === 1 && r.perDrug[0].score === 2, 'amantadine scores 2');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

@@ -1,6 +1,6 @@
 {
   "version": "1.2",
-  "lastUpdated": "2026-06-11",
+  "lastUpdated": "2026-06-11 (Keeper pass 2)",
   "specVersion": "PINCER/NICE prescribing-safety alert library v1.2",
   "keeperNote": "2026-06-11 (The Keeper): triage-lens ruleset review follow-up. (a) NSAID drug-set — added etodolac (Lodine SR, emc 3857, active May 2026) and flurbiprofen (Froben, emc 327/326), which were absent from every NSAID-combo rule AND from the built-in content.js NSAIDS regex, so a patient on either silently fired no NSAID PINCER/STOPP alert; also added the UK dm+d/BNF spelling 'indometacin' (the existing 'indomethacin' does not substring-match the UK spelling — content.js already handled this via 'indometh?acin'). Note: 'dexibuprofen'/'dexketoprofen' are redundant under substring matching ('ibuprofen'/'ketoprofen' already cover them) but kept for explicitness. (b) Anticoagulant set (pincer-2, pincer-13) — added acenocoumarol (Sinthrome) and phenindione (Dindevan), both active UK oral VKAs in BNF 2.8.2, previously listed in content.js's regex but not here. (c) ACEi/ARB set (pincer-4) — added quinapril (Accupro), imidapril (Tanatril), eprosartan (Teveten) and cilazapril (Vascace, discontinued for new patients but legacy repeats persist); moexipril deliberately NOT added (UK-discontinued March 2016). 2026-06-04 prior note: completed shared NSAID set with tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid, fenoprofen. SOURCE GAP this run: bnf.nice.org.uk / OpenPrescribing / MHRA register returned 403; additions corroborated against emc SmPC product IDs + multiple NHS ICB formularies (confidence medium-high; all additive, cannot weaken matching).",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
@@ -335,15 +335,62 @@
         "enabled": true,
         "label": "Valproate — female childbearing age",
         "drugSets": [
-          { "name": "Valproate", "match": ["sodium valproate","valproic acid","valproate","epilim","depakote","convulex"] }
+          { "name": "Valproate", "match": ["sodium valproate","valproic acid","valproate","epilim","depakote","convulex","belvo","dyzantil","episenta","epival","syonell","chronosphere"] }
         ],
         "ageRange": { "min": 12, "max": 55 },
         "sex": "F",
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "red",
-        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
-        "source": "MHRA Drug Safety Update"
+        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero. 2026-06-11 Keeper: added valproate brands belvo, dyzantil, episenta, epival, syonell, chronosphere per MHRA DSU June 2025 brand list update.",
+        "source": "MHRA Drug Safety Update (including June 2025 update)"
+      }
+    },
+
+    {
+      "libId": "mhra-valproate-males",
+      "category": "Prescribing safety",
+      "subcategory": "Reproductive safety",
+      "title": "Valproate in male under 55",
+      "description": "Valproate (sodium valproate / valproic acid) in male aged 12–55 — MHRA extended Valproate Patient Safety Programme to males June 2025 (paternal exposure risk).",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Valproate — male reproductive age",
+        "drugSets": [
+          { "name": "Valproate", "match": ["sodium valproate","valproic acid","valproate","epilim","depakote","convulex","belvo","dyzantil","episenta","epival","syonell","chronosphere"] }
+        ],
+        "ageRange": { "min": 12, "max": 55 },
+        "sex": "M",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update June 2025: valproate Pregnancy Prevention Programme extended to include males aged 12–55. Evidence of paternal valproate exposure associated with increased risk of neurodevelopmental disorders in offspring. Males on valproate in this age group require: annual review by specialist; counselling on risk to offspring; consideration of contraception for the partner. New prescriptions in this age group require two-specialist review. Existing patients: structured annual review.",
+        "source": "MHRA Drug Safety Update June 2025"
+      }
+    },
+
+    {
+      "libId": "mhra-glp1-pancreatitis",
+      "category": "Prescribing safety",
+      "subcategory": "GI safety",
+      "title": "GLP-1/GIP receptor agonist with active pancreatitis",
+      "description": "GLP-1 or GIP/GLP-1 dual agonist prescribed in patient with active or recent pancreatitis — MHRA DSU Jan 2026: discontinue and do not restart if pancreatitis confirmed.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "GLP-1 RA — active pancreatitis",
+        "drugSets": [
+          { "name": "GLP-1/GIP RA", "match": ["semaglutide","liraglutide","dulaglutide","exenatide","tirzepatide","ozempic","wegovy","rybelsus","victoza","saxenda","trulicity","byetta","bydureon","mounjaro","lyxumia","lixisenatide","xultophy"] }
+        ],
+        "sex": "any",
+        "requiresProblem": ["pancreatitis"],
+        "excludesProblem": [],
+        "severity": "red",
+        "notes": "MHRA Drug Safety Update 29 January 2026: GLP-1 receptor agonists (including tirzepatide) should be discontinued and NOT restarted if acute pancreatitis is confirmed. Patients with a history of pancreatitis should be assessed for ongoing risk before initiation. This alert fires when a GLP-1/GIP RA is co-prescribed in a patient with a pancreatitis problem coded — clinician must determine whether this is active/recent or resolved historic pancreatitis.",
+        "source": "MHRA Drug Safety Update 29 Jan 2026"
       }
     },
 
@@ -433,15 +480,15 @@
         "enabled": true,
         "label": "QTc-prolonging drug combination",
         "drugSets": [
-          { "name": "QTc drug A", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] },
-          { "name": "QTc drug B", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] }
+          { "name": "QTc drug A", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine","tamoxifen","nolvadex"] },
+          { "name": "QTc drug B", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine","tamoxifen","nolvadex"] }
         ],
         "sex": "any",
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "amber",
-        "notes": "Note: this rule will fire when any two drugs from the QTc list are co-prescribed, including the same drug in different formulations. Review the matchSummary in the chip to confirm these are genuinely two different QTc-prolonging agents. Consider ECG monitoring, especially if patient has hypokalaemia, bradycardia, or prior QTc prolongation.",
-        "source": "crediblemeds.org"
+        "notes": "Note: this rule will fire when any two drugs from the QTc list are co-prescribed, including the same drug in different formulations. Review the matchSummary in the chip to confirm these are genuinely two different QTc-prolonging agents. Consider ECG monitoring, especially if patient has hypokalaemia, bradycardia, or prior QTc prolongation. 2026-06-11 Keeper: tamoxifen (Nolvadex) added per MHRA Safety Roundup Nov 2025 — tamoxifen has a well-established QTc-prolonging effect, particularly relevant when combined with other QTc agents in breast cancer patients on concurrent cardiac medications.",
+        "source": "crediblemeds.org; MHRA Safety Roundup Nov 2025 (tamoxifen QTc)"
       }
     },
 

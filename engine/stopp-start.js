@@ -31,7 +31,9 @@
   // These mirror the terms in HIGH_RISK_DRUGS (visualiser-core.js) where the
   // loading model does not allow direct reuse. Comments reference the source.
 
-  // NSAIDs — from HIGH_RISK_DRUGS id:'nsaid_long' + common UK brands
+  // NSAIDs — from HIGH_RISK_DRUGS id:'nsaid_long' + complete UK oral NSAID set
+  // (2026-06-11 Keeper: expanded to cover full BNF 10.1.1 oral NSAID list;
+  //  previously missing entries silently failed to fire any NSAID combo check)
   const NSAID_TERMS = [
     'ibuprofen',
     'naproxen',
@@ -39,16 +41,37 @@
     'celecoxib',
     'etoricoxib',
     'meloxicam',
+    'aceclofenac',
+    'piroxicam',
+    'tenoxicam',
+    'indometacin',  // UK INN spelling
+    'indomethacin', // US/older spelling; separate entry as substring differs
+    'sulindac',
+    'ketoprofen',
+    'dexibuprofen',     // covered by 'ibuprofen' substring but kept explicit
+    'dexketoprofen',    // covered by 'ketoprofen' substring but kept explicit
+    'tiaprofenic acid',
+    'mefenamic acid',
+    'tolfenamic acid',
+    'fenoprofen',
+    'nabumetone',
+    'etodolac',
+    'flurbiprofen',
     // Common UK brand names that may appear in med lists without generic name:
-    'brufen', // ibuprofen
-    'nurofen', // ibuprofen (OTC brand; may appear on acute prescription)
-    'voltarol', // diclofenac
-    'arcoxia', // etoricoxib
-    'mobic', // meloxicam
+    'brufen',    // ibuprofen
+    'nurofen',   // ibuprofen (OTC brand; may appear on acute prescription)
+    'voltarol',  // diclofenac
+    'arcoxia',   // etoricoxib
+    'mobic',     // meloxicam
+    'ponstan',   // mefenamic acid
+    'feldene',   // piroxicam
+    'lodine',    // etodolac
+    'froben',    // flurbiprofen
   ];
 
   // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
-  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide'];
+  // torasemide added 2026-06-11 (Keeper): BNF-listed UK loop diuretic
+  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide', 'torasemide'];
 
   // Benzodiazepines — standard UK generics
   const BENZO_TERMS = [
@@ -84,11 +107,13 @@
   // exclusions minimal. A simple prefix check for low-dose forms:
   const ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible'];
 
-  // Long-acting sulfonylureas (glibenclamide, glimepiride)
-  const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];
+  // Long-acting sulfonylureas (glibenclamide, glimepiride, chlorpropamide)
+  // chlorpropamide added 2026-06-11 (Keeper): longest-acting SU, still on legacy repeats
+  const LONG_SU_TERMS = ['glibenclamide', 'glimepiride', 'chlorpropamide'];
 
   // Statins — from HIGH_RISK_DRUGS id:'statin'
-  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];
+  // pitavastatin/livazo added 2026-06-11 (Keeper): present in drug-rules.json but missing here
+  const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin', 'livazo'];
 
   // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first 5 entries are ACEi)
   const ACEI_TERMS = ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril'];
@@ -165,7 +190,7 @@
     'bypass',
   ];
 
-  // Coronary / ischaemic heart disease (for statin START)
+  // Coronary / ischaemic heart disease (now part of broader CVD for statin START)
   const IHD_TERMS = [
     'coronary artery disease',
     'ischaemic heart disease',
@@ -180,6 +205,96 @@
     'cabg',
     'percutaneous coronary',
     'coronary stent',
+  ];
+
+  // Cerebrovascular disease (for start_statin_cvd — STOPP/START v3 START Section A)
+  const CEREBRO_TERMS = [
+    'stroke',
+    'tia',
+    'transient ischaemic',
+    'transient ischemic',
+    'cerebrovascular',
+  ];
+
+  // Peripheral vascular disease (for start_statin_cvd)
+  const PERIPHERAL_VASC_TERMS = [
+    'peripheral arterial disease',
+    'peripheral vascular disease',
+    'claudication',
+    'intermittent claudication',
+    ' pvd',
+    ' pad',
+  ];
+
+  // Heart failure (for start_sglt2_hf — STOPP/START v3 START Section A)
+  const HF_TERMS = [
+    'heart failure',
+    'hfref',
+    'hfpef',
+    'left ventricular dysfunction',
+    'lv dysfunction',
+    'reduced ejection fraction',
+    'preserved ejection fraction',
+    'cardiomyopathy',
+  ];
+
+  // SGLT2 inhibitors (for start_sglt2_hf)
+  const SGLT2_TERMS = [
+    'dapagliflozin',
+    'empagliflozin',
+    'canagliflozin',
+    'ertugliflozin',
+    'forxiga',
+    'jardiance',
+    'invokana',
+    'steglatro',
+  ];
+
+  // Opioids (for stopp_opioid_no_laxative)
+  const OPIOID_TERMS = [
+    'morphine',
+    'oxycodone',
+    'fentanyl',
+    'buprenorphine',
+    'tramadol',
+    'codeine',
+    'dihydrocodeine',
+    'co-codamol',
+    'cocodamol',
+    'co-dydramol',
+    'codydramol',
+    'zomorph',
+    'oramorph',
+    'mst continus',
+    'oxynorm',
+    'targinact',
+    'longtec',
+    'shortec',
+    'hydromorphone',
+    'pethidine',
+    'tapentadol',
+    'palexia',
+    'pentazocine',
+  ];
+
+  // Laxatives (for stopp_opioid_no_laxative)
+  const LAXATIVE_TERMS = [
+    'lactulose',
+    'senna',
+    'bisacodyl',
+    'docusate',
+    'macrogol',
+    'movicol',
+    'laxido',
+    'cosmocol',
+    'fybogel',
+    'ispaghula',
+    'methylcellulose',
+    'glycerol suppository',
+    'glycerin suppository',
+    'sodium picosulfate',
+    'picolax',
+    'sodium docusate',
   ];
 
   // Diabetes
@@ -408,18 +523,64 @@
 
     // ── START ─────────────────────────────────────────────────────────────────
 
-    // START 11: Coronary/IHD present AND no statin (amber)
-    if (hasProblem(problems, IHD_TERMS) && !hasDrug(drugs, STATIN_TERMS)) {
+    // START 11: CVD present (IHD, cerebrovascular, or peripheral vascular) AND no statin (amber)
+    // 2026-06-11 Keeper: expanded from IHD-only to full CVD per STOPP/START v3 START Section A,
+    // which requires statin in all three: IHD, cerebrovascular disease, AND peripheral vascular disease.
+    const hasCvd =
+      hasProblem(problems, IHD_TERMS) ||
+      hasProblem(problems, CEREBRO_TERMS) ||
+      hasProblem(problems, PERIPHERAL_VASC_TERMS);
+    if (hasCvd && !hasDrug(drugs, STATIN_TERMS)) {
       flags.push({
-        id: 'start_statin_ihd',
+        id: 'start_statin_cvd',
         kind: 'start',
-        criterion: 'Consider statin in established coronary/ischaemic heart disease',
+        criterion: 'Consider statin in established cardiovascular disease (coronary, cerebrovascular, or peripheral vascular)',
         detail:
-          'Coronary or ischaemic heart disease problem coded but no statin detected. ' +
-          'Statins reduce mortality and major cardiovascular events in established IHD (NICE CG181). ' +
-          'Check whether statin therapy was declined, not tolerated, or is prescribed elsewhere.',
+          'Cardiovascular disease problem coded (coronary heart disease, stroke/TIA, or peripheral vascular disease) ' +
+          'but no statin detected. Statins reduce mortality and major cardiovascular events in all three established ' +
+          'CVD categories (NICE CG181 / STOPP/START v3). Check whether statin therapy was declined, not tolerated, ' +
+          'or is prescribed elsewhere.',
         severity: 'amber',
         source: 'STOPP/START v3 (2023) — START Section A: Cardiovascular',
+      });
+    }
+
+    // START 11b: Heart failure present AND no SGLT2 inhibitor (amber)
+    // STOPP/START v3 START Section A: SGLT2i in symptomatic heart failure to reduce hospitalisation.
+    // Fail-closed: ejection fraction not knowable from problem list — flags all coded HF;
+    // clinician must verify EF and confirm dapagliflozin (all HF) vs empagliflozin (HFrEF) indication.
+    if (hasProblem(problems, HF_TERMS) && !hasDrug(drugs, SGLT2_TERMS)) {
+      flags.push({
+        id: 'start_sglt2_hf',
+        kind: 'start',
+        criterion: 'Consider SGLT2 inhibitor in heart failure',
+        detail:
+          'Heart failure problem coded but no SGLT2 inhibitor detected. ' +
+          'Dapagliflozin and empagliflozin reduce heart-failure hospitalisation and cardiovascular death in HF ' +
+          '(NICE TA679 / TA773; STOPP/START v3 START Section A). Dapagliflozin is licensed in all HF regardless of EF; ' +
+          'empagliflozin in HFrEF (EF ≤40%) and HFmrEF. Note: ejection fraction cannot be determined from coded ' +
+          'problems — clinician must confirm indication and contraindications.',
+        severity: 'amber',
+        source: 'STOPP/START v3 (2023) — START Section A: Cardiovascular',
+      });
+    }
+
+    // START 11c: Opioid present without co-prescribed laxative (amber)
+    // STOPP/START v3 Section L: prescribe laxative with opioid to prevent constipation.
+    // Limitation: this is a point-in-time snapshot — patient may have a PRN laxative not visible
+    // as an active repeat. Detail text includes this caveat.
+    if (hasDrug(drugs, OPIOID_TERMS) && !hasDrug(drugs, LAXATIVE_TERMS)) {
+      flags.push({
+        id: 'stopp_opioid_no_laxative',
+        kind: 'stopp',
+        criterion: 'Opioid without co-prescribed laxative',
+        detail:
+          'Opioid analgesic detected without a co-prescribed laxative. Opioid-induced constipation ' +
+          'is almost universal; prophylactic laxative (e.g. senna, macrogol, lactulose) should be co-prescribed ' +
+          'unless specifically contraindicated (STOPP/START v3 Section L). Note: this is a point-in-time snapshot — ' +
+          'an available PRN laxative or OTC purchase may not appear in the repeat list. Verify against the full record.',
+        severity: 'amber',
+        source: 'STOPP/START v3 (2023) — Section L: Analgesic',
       });
     }
 

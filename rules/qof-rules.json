@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-10",
+  "lastUpdated": "2026-06-11",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
@@ -130,13 +130,25 @@
     {
       "id": "qof-reg-ob",
       "type": "qof-register",
-      "enabled": false,
+      "enabled": true,
       "registerCode": "OB",
       "registerName": "Obesity",
       "problemMatch": ["obesity", "obese", "morbid obesity", "severe obesity"],
       "problemExclude": ["no obesity", "not obese", "family history", "maternal obesity", "history of obesity in family"],
-      "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
-      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
+      "source": "QOF 26/27 OB register (NHS England PRN02356). Confirmed active 2026/27 clinical area.",
+      "notes": "NEW for 26/27 — ENABLED 2026-06-11 (Keeper; PRN02356 confirmed). CSO GATE NOTE: The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for South Asian/Chinese/other Asian/Middle Eastern/Black African/African-Caribbean background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership requires a BMI-observation-based register engine extension (needs_engine_change:true). This approximation was presented to the CSO (Dave Triska) as part of the June 2026 Keeper run — enabling provides utility as a prompt register while the engine limitation is acknowledged. Underpins indicators OB004/OB005."
+    },
+
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "NDH",
+      "registerName": "Non-diabetic hyperglycaemia",
+      "problemMatch": ["non-diabetic hyperglycaemia", "pre-diabetes", "prediabetes", "pre diabetes", "prediabetic", "pre-diabetic", "impaired fasting glucose", "impaired glucose tolerance", "borderline diabetes", "at risk of diabetes"],
+      "problemExclude": ["diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "gestational diabetes"],
+      "source": "QOF 26/27 NDH register (NHS England PRN02356). NEW for 2026/27.",
+      "notes": "NEW for 26/27. Non-diabetic hyperglycaemia register (also known as pre-diabetes). Defined as HbA1c 42–47 mmol/mol or fasting plasma glucose 5.5–6.9 mmol/L. Problem-label matching approximates SNOMED refset — patients coded only with an out-of-range HbA1c observation and no problem label will be missed; engine extension required for full accuracy. Underpins indicator NDH003."
     },
 
     {
@@ -1033,9 +1045,9 @@
     {
       "id": "qof-ob004",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB004",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "indicatorName": "Offer of referral to a weight-management programme in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "observation-recent",
@@ -1044,15 +1056,15 @@
       },
       "thresholds": { "lower": 10, "upper": 30 },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 26/27 OB004 (NHS England PRN02356). Confirmed 5 points, 10–30% thresholds.",
+      "notes": "NEW 26/27 indicator — ENABLED 2026-06-11 (Keeper; values confirmed via PRN02356). The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Depends on the OB register, which is itself a problem-label approximation of a BMI-driven register (see OB register note — CSO aware)."
     },
     {
       "id": "qof-ob005",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB005",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "indicatorName": "Weight-management pharmacotherapy / shared decision-making in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "medication-present",
@@ -1060,8 +1072,81 @@
       },
       "thresholds": { "lower": 50, "upper": 80 },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026. Confirmed 13 points, 50–80% thresholds.",
+      "notes": "NEW 26/27 indicator — ENABLED 2026-06-11 (Keeper; values confirmed via PRN02356). The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Depends on the OB register (CSO-aware BMI approximation)."
     }
+    ,
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "NDH003",
+      "indicatorName": "HbA1c or fasting plasma glucose in non-diabetic hyperglycaemia (preceding 12 months)",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "fasting plasma glucose", "fasting glucose", "fasting blood glucose", "fpg"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 20,
+      "source": "QOF 26/27 NDH003 (NHS England PRN02356). NEW for 2026/27.",
+      "notes": "NEW 26/27 indicator. Patients with non-diabetic hyperglycaemia (pre-diabetes) should have an HbA1c or fasting plasma glucose recorded within the preceding 12 months to monitor progression to T2DM. NDH003 definition: the percentage of patients with non-diabetic hyperglycaemia who have had an HbA1c or fasting plasma glucose recorded in the preceding 12 months. This is a surveillance indicator — early identification of progression enables lifestyle intervention and reduces T2DM incidence. QOF year floor applies."
+    },
+
+    {
+      "id": "qof-vi001",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "VI001",
+      "indicatorName": "[DISABLED — needs engine: dose-counting] DTaP/IPV/Hib/HepB primary course before 8 months",
+      "requiresRegister": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["dtap","diphtheria tetanus pertussis","hexavalent","infanrix","pediarix","6-in-1"],
+        "withinDays": 240
+      },
+      "thresholds": { "lower": 70, "upper": 90 },
+      "points": 21,
+      "source": "QOF 26/27 VI001 (NHS England PRN02356). Childhood immunisation indicator.",
+      "notes": "DISABLED: VI001 requires counting ≥3 doses of the hexavalent primary course (DTaP/IPV/Hib/HepB) completed before the child's 8th month of age. Sentinel's observation-recent check cannot count doses or gate on age-at-vaccination — this rule is a placeholder disabled pending rules-engine dose-counting support (needs_engine_change:true). Do not enable without engine support. The indicator is worth 21 points in QOF 26/27."
+    },
+
+    {
+      "id": "qof-vi002",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "VI002",
+      "indicatorName": "[DISABLED — needs engine: dose-counting] MMR/MMRV first dose by 18 months",
+      "requiresRegister": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["mmr","measles mumps rubella","mmrv","priorix","m-m-rvaxpro"],
+        "withinDays": 548
+      },
+      "thresholds": { "lower": 70, "upper": 90 },
+      "points": 18,
+      "source": "QOF 26/27 VI002 (NHS England PRN02356). Childhood immunisation indicator.",
+      "notes": "DISABLED: VI002 requires evidence of ≥1 MMR/MMRV dose given by 18 months of age. Sentinel cannot gate on age-at-vaccination — placeholder disabled pending dose-counting engine support (needs_engine_change:true). Worth 18 points in QOF 26/27."
+    },
+
+    {
+      "id": "qof-vi003",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "VI003",
+      "indicatorName": "[DISABLED — needs engine: dose-counting] DTaP booster + ≥2 MMR doses by age 5",
+      "requiresRegister": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["dtap booster","4-in-1 pre-school booster","infanrix ipv","repevax","mmr","mmrv"],
+        "withinDays": 1826
+      },
+      "thresholds": { "lower": 70, "upper": 90 },
+      "points": 11,
+      "source": "QOF 26/27 VI003 (NHS England PRN02356). Childhood immunisation indicator.",
+      "notes": "DISABLED: VI003 requires evidence of the DTaP/IPV pre-school booster AND ≥2 MMR/MMRV doses, all by age 5. Sentinel cannot count doses or gate on age-at-vaccination — placeholder disabled pending dose-counting engine support (needs_engine_change:true). Worth 11 points in QOF 26/27."
+    }
+
   ]
 }

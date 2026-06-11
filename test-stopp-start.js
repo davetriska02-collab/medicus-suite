@@ -61,6 +61,16 @@ console.log('\n--- STOPP 2: NSAID + loop diuretic ---');
   assert(f.severity === 'amber', 'STOPP 2 severity = amber');
 }
 {
+  // Torasemide: loop diuretic added 2026-06-11
+  const flags = computeStoppStart({ drugs: ['aceclofenac 100mg', 'torasemide 5mg'], problems: [], ageYears: 68, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: aceclofenac + torasemide');
+}
+{
+  // Piroxicam: expanded NSAID set
+  const flags = computeStoppStart({ drugs: ['piroxicam 20mg', 'furosemide 40mg'], problems: [], ageYears: 68, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: piroxicam + furosemide');
+}
+{
   // No loop diuretic → no STOPP 2
   const flags = computeStoppStart({ drugs: ['naproxen 500mg', 'indapamide'], problems: [], ageYears: 65, egfr: 60 });
   assert(!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 does NOT fire: naproxen + indapamide (thiazide, not loop)');
@@ -246,6 +256,11 @@ console.log('\n--- STOPP 10: Long-acting sulfonylurea in age >=65 ---');
   assert(!!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 fires: glimepiride + age 68');
 }
 {
+  // Chlorpropamide: added 2026-06-11 (longest-acting SU, legacy prescribing)
+  const flags = computeStoppStart({ drugs: ['chlorpropamide 250mg'], problems: [], ageYears: 72, egfr: null });
+  assert(!!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 fires: chlorpropamide + age 72');
+}
+{
   // Age 64 → no flag
   const flags = computeStoppStart({ drugs: ['glibenclamide 5mg'], problems: [], ageYears: 64, egfr: null });
   assert(!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 does NOT fire at age 64');
@@ -256,8 +271,8 @@ console.log('\n--- STOPP 10: Long-acting sulfonylurea in age >=65 ---');
   assert(!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 does NOT fire for gliclazide');
 }
 
-// ── START 11: IHD + no statin ─────────────────────────────────────────────
-console.log('\n--- START 11: IHD + no statin ---');
+// ── START 11: CVD (IHD/stroke/PAD) + no statin → renamed start_statin_cvd ──
+console.log('\n--- START 11: CVD + no statin (start_statin_cvd) ---');
 {
   const flags = computeStoppStart({
     drugs: ['aspirin 75mg', 'ramipril 5mg'],
@@ -265,10 +280,30 @@ console.log('\n--- START 11: IHD + no statin ---');
     ageYears: 65,
     egfr: null,
   });
-  const f = find(flags, 'start_statin_ihd');
+  const f = find(flags, 'start_statin_cvd');
   assert(!!f, 'START 11 fires: IHD coded, no statin');
   assert(f.kind === 'start', 'START 11 kind = start');
   assert(f.severity === 'amber', 'START 11 severity = amber');
+}
+{
+  // Stroke → fires start_statin_cvd (new: was not covered by start_statin_ihd)
+  const flags = computeStoppStart({
+    drugs: ['ramipril 5mg', 'aspirin 75mg'],
+    problems: [{ name: 'stroke' }],
+    ageYears: 70,
+    egfr: null,
+  });
+  assert(!!find(flags, 'start_statin_cvd'), 'START 11 fires: stroke coded, no statin');
+}
+{
+  // Peripheral arterial disease → fires start_statin_cvd
+  const flags = computeStoppStart({
+    drugs: ['aspirin 75mg'],
+    problems: [{ name: 'peripheral arterial disease' }],
+    ageYears: 68,
+    egfr: null,
+  });
+  assert(!!find(flags, 'start_statin_cvd'), 'START 11 fires: PAD coded, no statin');
 }
 {
   // Statin present → no START 11
@@ -278,17 +313,87 @@ console.log('\n--- START 11: IHD + no statin ---');
     ageYears: 65,
     egfr: null,
   });
-  assert(!find(flags, 'start_statin_ihd'), 'START 11 does NOT fire: statin present');
+  assert(!find(flags, 'start_statin_cvd'), 'START 11 does NOT fire: statin present');
 }
 {
-  // No IHD problem → no START 11
+  // No CVD problem → no START 11
   const flags = computeStoppStart({
     drugs: ['ramipril 5mg'],
     problems: [{ name: 'hypertension' }],
     ageYears: 65,
     egfr: null,
   });
-  assert(!find(flags, 'start_statin_ihd'), 'START 11 does NOT fire: no IHD problem');
+  assert(!find(flags, 'start_statin_cvd'), 'START 11 does NOT fire: no CVD problem');
+}
+{
+  // Pitavastatin: newly added to STATIN_TERMS — should suppress flag
+  const flags = computeStoppStart({
+    drugs: ['pitavastatin 2mg'],
+    problems: [{ name: 'ischaemic heart disease' }],
+    ageYears: 65,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_statin_cvd'), 'START 11 does NOT fire: pitavastatin present');
+}
+
+// ── STOPP opioid + no laxative ─────────────────────────────────────────────
+console.log('\n--- STOPP: opioid without laxative ---');
+{
+  const flags = computeStoppStart({ drugs: ['morphine sulphate 10mg MR'], problems: [], ageYears: 75, egfr: null });
+  const f = find(flags, 'stopp_opioid_no_laxative');
+  assert(!!f, 'STOPP fires: morphine without laxative');
+  assert(f.severity === 'amber', 'stopp_opioid_no_laxative severity = amber');
+  assert(f.detail.includes('snapshot'), 'detail includes PRN snapshot caveat');
+}
+{
+  // Co-codamol (combo opioid)
+  const flags = computeStoppStart({ drugs: ['co-codamol 30/500 tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_opioid_no_laxative'), 'STOPP fires: co-codamol without laxative');
+}
+{
+  // Opioid + laxative → no flag
+  const flags = computeStoppStart({ drugs: ['oramorph 10mg/5ml', 'lactulose 10ml solution'], problems: [], ageYears: 75, egfr: null });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP does NOT fire: opioid with lactulose');
+}
+{
+  // No opioid → no flag
+  const flags = computeStoppStart({ drugs: ['paracetamol 1g'], problems: [], ageYears: 75, egfr: null });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP does NOT fire: no opioid');
+}
+
+// ── START SGLT2i in heart failure ──────────────────────────────────────────
+console.log('\n--- START: SGLT2i in heart failure ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['bisoprolol 5mg', 'ramipril 5mg'],
+    problems: [{ name: 'heart failure' }],
+    ageYears: 72,
+    egfr: 55,
+  });
+  const f = find(flags, 'start_sglt2_hf');
+  assert(!!f, 'START fires: heart failure coded, no SGLT2i');
+  assert(f.kind === 'start', 'start_sglt2_hf kind = start');
+  assert(f.severity === 'amber', 'start_sglt2_hf severity = amber');
+}
+{
+  // SGLT2i present → no flag
+  const flags = computeStoppStart({
+    drugs: ['dapagliflozin 10mg', 'bisoprolol 5mg'],
+    problems: [{ name: 'heart failure with reduced ejection fraction' }],
+    ageYears: 72,
+    egfr: 55,
+  });
+  assert(!find(flags, 'start_sglt2_hf'), 'START does NOT fire: dapagliflozin present');
+}
+{
+  // No HF problem → no flag
+  const flags = computeStoppStart({
+    drugs: ['metformin 500mg'],
+    problems: [{ name: 'type 2 diabetes' }],
+    ageYears: 65,
+    egfr: 65,
+  });
+  assert(!find(flags, 'start_sglt2_hf'), 'START does NOT fire: no heart failure problem');
 }
 
 // ── START 12: Diabetes + CKD + no ACEi/ARB ───────────────────────────────
@@ -402,7 +507,7 @@ console.log('\n--- Negative control: clean patient ---');
   });
   // aspirin+IHD → no primary-prevention flag; statin present → no START 11
   assert(!find(flags, 'stopp_aspirin_primary_prev'), 'Clean: aspirin+IHD → no primary-prevention flag');
-  assert(!find(flags, 'start_statin_ihd'), 'Clean: statin present → no START 11');
+  assert(!find(flags, 'start_statin_cvd'), 'Clean: statin present → no start_statin_cvd');
   assert(!find(flags, 'stopp_nsaid_ckd'), 'Clean: no NSAID → no STOPP 1');
 }
 

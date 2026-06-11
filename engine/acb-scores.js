@@ -33,6 +33,13 @@
     { term: 'imipramine', score: 3 },
     { term: 'clomipramine', score: 3 },
     { term: 'doxepin', score: 3 },
+    { term: 'dosulepin', score: 3 },
+    { term: 'dothiepin', score: 3, note: 'older INN for dosulepin' },
+    { term: 'prothiaden', score: 3, note: 'brand: dosulepin' },
+    { term: 'lofepramine', score: 3 },
+    { term: 'lomont', score: 3, note: 'brand: lofepramine' },
+    { term: 'trimipramine', score: 3 },
+    { term: 'surmontil', score: 3, note: 'brand: trimipramine' },
     // ── Score 3: SSRIs/SNRIs with notable ACB ───────────────────────────────
     { term: 'paroxetine', score: 3 },
     // ── Score 3: Urological / bladder antispasmodics ─────────────────────────
@@ -46,6 +53,12 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3 },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin' },
+    { term: 'flavoxate', score: 3 },
+    { term: 'urispas', score: 3, note: 'brand: flavoxate' },
+    { term: 'ditrospam', score: 3, note: 'brand: oxybutynin' },
+    { term: 'aquiette', score: 3, note: 'brand: oxybutynin 2.5mg' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -62,6 +75,9 @@
     { term: 'hydroxyzine', score: 3 },
     { term: 'diphenhydramine', score: 3 },
     { term: 'cyclizine', score: 3 },
+    { term: 'alimemazine', score: 3 },
+    { term: 'trimeprazine', score: 3, note: 'older INN for alimemazine' },
+    { term: 'vallergan', score: 3, note: 'brand: alimemazine' },
     // ── Score 3: Antipsychotics with high ACB ────────────────────────────────
     { term: 'olanzapine', score: 3 },
     { term: 'quetiapine', score: 3 },
@@ -73,12 +89,18 @@
     { term: 'trihexyphenidyl', score: 3 },
     // ── Score 3: Antiemetic ───────────────────────────────────────────────────
     { term: 'prochlorperazine', score: 3 },
+    // ── Score 2: Moderate anticholinergic activity ───────────────────────────
+    // Limited entries on the Boustani/ACBcalc list at this tier.
+    { term: 'carbamazepine', score: 2 },
+    { term: 'amantadine', score: 2 },
     // ── Score 1: Mild / possible anticholinergic effect ──────────────────────
     // These are on the Boustani ACB score-1 list. Confidence: high.
     { term: 'cetirizine', score: 1 },
     { term: 'loratadine', score: 1 },
     // fexofenadine: some lists omit it (low affinity); NOT included as evidence
     // is weak and omitting it is the safer conservative choice.
+    // ranitidine: UK marketing authorisation suspended Nov 2020 (NDMA contamination);
+    // not currently prescribable. Retained for legacy records only.
     { term: 'ranitidine', score: 1 },
     { term: 'metoprolol', score: 1 },
     { term: 'atenolol', score: 1 },

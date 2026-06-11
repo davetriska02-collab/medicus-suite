@@ -68,6 +68,7 @@ const EXPECTED = {
     'Enalapril 10mg', 'Innovace 10mg', 'Innozide 20mg/12.5mg',
     'Captopril 25mg', 'Capoten 25mg', 'Noyada 5mg/5ml oral solution',
     'Trandolapril 2mg', 'Gopten 2mg', 'Fosinopril 10mg', 'Staril 10mg',
+    'Quinapril 5mg tablets', 'Accupro 5mg tablets',
     'Losartan 50mg', 'Cozaar 50mg', 'Hyzaar 50/12.5', 'Arbli 12.5mg/2.5ml',
     'Candesartan 8mg', 'Amias 8mg', 'Valsartan 80mg', 'Diovan 80mg',
     'Co-Diovan 160/25', 'Exforge 5mg/160mg', 'Irbesartan 150mg', 'Aprovel 150mg',
@@ -109,7 +110,7 @@ const EXPECTED = {
     'Olanzapine 10mg', 'Zyprexa 10mg', 'Zalasta 10mg', 'ZypAdhera 300mg depot',
     'Risperidone 2mg', 'Risperdal Consta 25mg', 'Okedi 75mg',
     'Quetiapine 200mg', 'Seroquel XL 200mg', 'Atrolak XL 200mg', 'Biquelle XL 200mg',
-    'Zaluron XL 200mg', 'Aripiprazole 10mg', 'Abilify Maintena 400mg',
+    'Zaluron XL 200mg', 'Tenprolide XL 200mg', 'Sondate XL 300mg', 'Aripiprazole 10mg', 'Abilify Maintena 400mg',
     'Haloperidol 1.5mg', 'Serenace 1.5mg', 'Dozic 5mg/5ml', 'Haldol decanoate 50mg',
     'Chlorpromazine 25mg', 'Largactil 25mg', 'Amisulpride 200mg', 'Solian 200mg',
     'Paliperidone 6mg', 'Invega 6mg', 'Xeplion 75mg', 'Trevicta 175mg', 'Byannli 700mg',
@@ -130,13 +131,13 @@ const EXPECTED = {
     'Medikinet XL 20mg', 'methylphenidate', 'Tranquilyn 10mg', 'Ritalin 10mg',
     'Affenid 18mg', 'Atenza 27mg', 'Concerta XL 36mg', 'Delmosart 18mg',
     'Kixel 30mg', 'Matoride XL 18mg', 'Xaggitin XL 18mg', 'Xenidate XL 18mg',
-    'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg'
+    'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg', 'Exattent XL 20mg'
   ],
   'adhd-stimulant-adult': [
     'Medikinet XL 20mg', 'methylphenidate', 'Tranquilyn 10mg', 'Ritalin 10mg',
     'Affenid 18mg', 'Atenza 27mg', 'Concerta XL 36mg', 'Delmosart 18mg',
     'Kixel 30mg', 'Matoride XL 18mg', 'Xaggitin XL 18mg', 'Xenidate XL 18mg',
-    'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg'
+    'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg', 'Exattent XL 20mg'
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
   'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg']
@@ -157,6 +158,9 @@ const MUST_NOT = [
   ['lithium-maintenance', 'Amlodipine 5mg tablets'],
   ['methotrexate-maintenance', 'Amoxicillin 500mg capsules'],
   ['adhd-stimulant-adult', 'Sertraline 50mg tablets'],
+  // vyvanse is a US-only brand (not UK-licensed); removed from match list 2026-06-11
+  ['adhd-stimulant-adult', 'Vyvanse 30mg capsules'],
+  ['adhd-stimulant-paediatric', 'Vyvanse 30mg capsules'],
   ['statin', 'Paracetamol 500mg tablets'],
   // clozapine is deliberately excluded — monitored under the national CPMS protocol
   ['antipsychotic', 'Clozapine 100mg tablets'],

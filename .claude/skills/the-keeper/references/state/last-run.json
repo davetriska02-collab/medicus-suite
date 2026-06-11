@@ -1,26 +1,51 @@
 {
   "last_run": "2026-06-11",
-  "scope": "visualiser drug-table completion (parity with triage-lens flags)",
+  "scope": "Full QOF/monitoring/pathway horizon scan — all six scanner domains",
+  "manifest_version_after": "3.55.0",
+  "branch": "claude/zen-ramanujan-gigjlt",
   "rule_file_lastUpdated": {
-    "alert-library.json": "2026-06-11 (v1.2)"
+    "rules/drug-rules.json": "2026-06-11",
+    "rules/alert-library.json": "2026-06-11",
+    "rules/vaccine-rules.json": "2026-06-11",
+    "rules/qof-rules.json": "2026-06-11",
+    "rules/reception-pathways.json": "2026-06-11",
+    "engine/acb-scores.js": "2026-06-11",
+    "engine/stopp-start.js": "2026-06-11"
   },
-  "manifest_version_after": "3.51.3",
   "sources_checked": [
-    "https://www.medicines.org.uk/emc/product/3857/smpc",
-    "https://www.medicines.org.uk/emc/product/327/smpc",
-    "https://www.medicines.org.uk/emc/ingredient/480",
-    "https://www.medicines.org.uk/emc/product/2058/smpc",
-    "https://www.medicines.org.uk/emc/product/5677/smpc",
-    "https://www.medicines.org.uk/emc/product/1965/smpc",
-    "https://cks.nice.org.uk/topics/diabetes-type-2/"
+    "https://bnf.nice.org.uk",
+    "https://academic.oup.com/rheumatology/article/doi/10.1093/rheumatology/keaf522",
+    "https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-risk-of-acute-pancreatitis",
+    "https://www.gov.uk/drug-safety-update/valproate-medicines-new-measures-to-prevent-use-in-pregnancy-update",
+    "https://www.nice.org.uk/standards-and-indicators/qofindicators",
+    "https://www.nice.org.uk/guidance/ng143",
+    "https://www.nice.org.uk/guidance/ng253",
+    "https://www.england.nhs.uk/primary-care/pharmacy/pharmacy-first/",
+    "https://www.gov.uk/government/publications/rsv-vaccination-programme-jcvi-advice",
+    "https://www.gov.uk/government/collections/immunisation-against-infectious-disease-the-green-book",
+    "https://www.gov.uk/government/publications/shingles-vaccination-programme-jcvi-advice",
+    "https://pubmed.ncbi.nlm.nih.gov/37389344/",
+    "https://www.acbcalc.com"
+  ],
+  "changes_applied": 31,
+  "changes_killed": 11,
+  "change_ids_applied": [
+    "drug-001", "drug-002", "drug-003", "drug-004", "drug-005",
+    "acb-001", "acb-002", "acb-003", "acb-004",
+    "stopp-001", "stopp-002", "stopp-003", "stopp-004", "stopp-005", "stopp-006", "stopp-007",
+    "alert-001", "alert-002", "alert-003", "alert-004",
+    "vax-001", "vax-002", "vax-003",
+    "qof-001", "qof-002", "qof-003",
+    "path-001", "path-002", "path-003", "path-004", "path-005"
   ],
   "open_proposals": [
-    "KD-30..33 rule-shape gaps (triple-whammy/NSAID+antiplatelet/benzo>=80 missing in visualiser; PINCER#1 age-gate missing in HUD) \u2014 needs logic, CSO to prioritise",
-    "KD-18..21 LMWH/heparin deliberately excluded from visualiser anticoag set \u2014 CSO may revisit"
+    "VI001/VI002/VI003 QOF childhood immunisation indicators (50pts) need dose-counting engine — currently disabled placeholders",
+    "test-vaccine-eligibility.js not yet created — RSV, shingles immunosuppressed, and PCV20 changes are not regression-locked",
+    "KD-30..33 rule-shape gaps (triple-whammy/NSAID+antiplatelet/benzo>=80 missing in visualiser; PINCER#1 age-gate missing in HUD) — needs logic, CSO to prioritise",
+    "KD-18..21 LMWH/heparin deliberately excluded from visualiser anticoag set — CSO may revisit"
   ],
   "source_gaps": [
-    "bnf.nice.org.uk 403",
-    "openprescribing.net 403",
-    "products.mhra.gov.uk 403"
+    "Local West of Waverley ICB / Surrey Heartlands formulary not checked",
+    "MHRA products.mhra.gov.uk returned 403 during session"
   ]
 }

@@ -2,6 +2,84 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.55.0] — 2026-06-11
+
+### Clinical rules — The Keeper: full QOF/monitoring/pathway horizon scan
+
+Verified, sourced rule-file updates across all six scanner domains. 31 changes
+applied (9 Red patient-safety, 20 Amber, 2 Green). All 16 test files pass.
+**This is a CSO review branch — do not auto-merge.**
+
+#### Most critical safety corrections (Red)
+
+- **`rules/reception-pathways.json` — feverish child rf-under3m**: escalation
+  corrected from `duty` to `999` per NICE NG143. Fever in infant <3 months is
+  a Red Feature requiring immediate emergency assessment — previous value would
+  have prompted a duty callback instead of a 999 call. _(NICE NG143)_
+- **`rules/drug-rules.json` — antipsychotic**: added Tenprolide XL and Sondate XL
+  (quetiapine brands) to match list — silent monitoring gap for patients on these
+  UK-licensed brands. _(BNF / dm+d)_
+- **`rules/drug-rules.json` — ace-arb**: added quinapril/Accupro — silent U&E
+  monitoring gap for legacy repeat prescriptions. _(BNF 2.5.5.1)_
+- **`rules/alert-library.json` — mhra-valproate-ppg**: added 6 brands (belvo,
+  dyzantil, episenta, epival, syonell, chronosphere) listed in MHRA DSU June 2025.
+- **`rules/alert-library.json` — mhra-valproate-males** (new rule): valproate in
+  males 12–55; MHRA DSU June 2025 extended VPPP to males. 12-month gap closed.
+- **`rules/alert-library.json` — mhra-glp1-pancreatitis** (new rule): GLP-1 RA
+  with pancreatitis coded; MHRA DSU Jan 2026 — do not restart.
+- **`rules/vaccine-rules.json` — vax-rsv**: removed ageMax:79 (all 75+ now eligible
+  from April 2026); added care home resident eligibility. Previous notes incorrectly
+  stated "80+ not eligible". _(NHS England RSV programme expansion April 2026)_
+- **`engine/acb-scores.js` — TCA additions**: dosulepin/prothiaden, lofepramine/
+  lomont, trimipramine/surmontil added at score 3. Silent ACB undercount for
+  common legacy antidepressants. _(ACBcalc / Boustani)_
+- **`engine/stopp-start.js` — NSAID_TERMS**: expanded to full BNF 10.1.1 oral NSAID
+  set (~30 terms). Patients on 16 agents silently missed STOPP NSAID checks.
+  _(STOPP/START v3 2023)_
+
+#### Amber (update to stay current)
+
+- **QOF 26/27**: enabled OB register + OB004/OB005 (obesity; CSO gate note retained).
+  Added NDH register + NDH003 indicator (pre-diabetes metabolic monitoring, 20pts).
+  Added VI001/VI002/VI003 as disabled placeholders (50pts; needs dose-counting engine).
+  _(NHS England PRN02356)_
+- **Vaccines**: added shingles eligibility for immunosuppressed 18+ from 1 Sept 2025.
+  Added PCV20 (Apexxnar/Prevenar 20) status terms to prevent false re-vaccination.
+  _(JCVI 2025 / UKHSA Green Book)_
+- **`engine/stopp-start.js`**: added torasemide (loop diuretic), chlorpropamide
+  (STOPP J3), pitavastatin/livazo (statin). Renamed `start_statin_ihd` →
+  `start_statin_cvd` with cerebrovascular + PAD coverage _(STOPP/START v3)_.
+  New criterion `stopp_opioid_no_laxative` (STOPP L1). New criterion
+  `start_sglt2_hf` (STOPP/START v3 START A + NICE TA679/TA773).
+- **`engine/acb-scores.js`**: added alimemazine/vallergan (score 3); darifenacin/
+  emselex, flavoxate/urispas, ditrospam, aquiette (urological, score 3);
+  carbamazepine (score 2), amantadine (score 2). _(ACBcalc / Boustani)_
+- **`rules/reception-pathways.json`**: added feverish-child rf-hightemp3to6m
+  (3–6m ≥39°C → duty, NICE NG143); expanded backpain rf-bladder to include urinary
+  retention (NICE CKS CES); added full sinusitis pathway (Pharmacy First 12+,
+  7 red flags). _(NICE NG143, NICE CKS, NHS Pharmacy First)_
+- **`rules/drug-rules.json`**: DMARD source updated to BSR keaf522 (Feb 2026);
+  Vyvanse removed (US-only); Exattent XL added (ADHD); Zepbound removed (US-only);
+  GLP-1 source updated with MHRA DSU Jan/Dec 2025 and Feb 2026.
+- **`rules/alert-library.json`**: tamoxifen/nolvadex added to QTc combination rule
+  _(MHRA Safety Roundup Nov 2025)_.
+
+#### Green (housekeeping)
+
+- Updated NG51 references to NG253/NG254/NG255 (NICE sepsis guidelines replaced
+  Nov 2025). No behaviour change.
+
+#### Regression tests updated
+
+- `test-drug-brand-coverage.js`: tenprolide, sondate, quinapril/accupro, exattent
+  added to EXPECTED; vyvanse added to MUST_NOT for both ADHD rules.
+- `test-acb-scores.js`: 14 new tests (dosulepin, prothiaden, lofepramine, lomont,
+  trimipramine, surmontil, alimemazine, vallergan, darifenacin, emselex,
+  carbamazepine, amantadine).
+- `test-stopp-start.js`: torasemide, aceclofenac, piroxicam, chlorpropamide tests;
+  `start_statin_ihd` → `start_statin_cvd` rename; stroke/PAD/pitavastatin tests;
+  `stopp_opioid_no_laxative` (4 tests); `start_sglt2_hf` (3 tests).
+
 ## [v3.54.0] — 2026-06-11
 
 > Note: originally drafted as v3.53.0/v3.53.1 on the review branch; renumbered to

@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-06-04",
+  "lastUpdated": "2026-06-11",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - June 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation.",
+  "specVersion": "Sentinel drug rules - June 2026 review (The Keeper 2026-06-11)",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-11 (The Keeper): (a) methotrexate/DMARDs source updated to BSR keaf522 (pub Feb 2026); (b) antipsychotic match extended with tenprolide/sondate (quetiapine brands, dm+d confirmed); (c) ADHD match: vyvanse (US-only brand) removed, exattent (Exattent XL, UK-launched methylphenidate brand, MHRA licence confirmed) added; (d) ace-arb match: quinapril/accupro added (legacy UK ACEi, BNF 2.5.5.1); (e) glp1: zepbound (US-only tirzepatide brand) removed, source updated for MHRA DSU Jan 2026 (pancreatitis) and Dec 2025 (Rybelsus new strengths).",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -19,8 +19,8 @@
         { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 },
         { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
       ],
-      "source": "BNF / BSR DMARD shared care guideline (2024 update)",
-      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR 2024 guideline now permits 6-monthly monitoring after 12 months of stable treatment with normal results — Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
+      "source": "BNF / BSR guideline for csDMARDs in inflammatory arthritis (Rheumatology keaf522, pub Feb 2026)",
+      "notes": "Intensive monitoring (every 2 weeks) for first 6 weeks, then 4-weekly until stable, then 12-weekly. BSR keaf522 (Feb 2026) introduces risk-adaptive monitoring: 6-monthly intervals may be considered after ≥12 months of stable treatment with all normal results (haematological, renal and hepatic parameters). Sentinel keeps the 12-week baseline as the safer default; clinicians may extend intervals via Options if local shared care permits.",
       "sharedCare": true
     },
     {
@@ -40,7 +40,7 @@
         { "name": "BP", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 84, "dueSoonDays": 14 },
         { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 84, "dueSoonDays": 14 }
       ],
-      "source": "BNF / BSR leflunomide shared care",
+      "source": "BNF / BSR guideline for csDMARDs in inflammatory arthritis (Rheumatology keaf522, pub Feb 2026)",
       "notes": "Monthly FBC/U&E/LFT/BP/weight for first 6 months on initiation, then 12-weekly when stable. Hypertension is a recognised adverse effect. Long half-life (washout with cholestyramine if severe toxicity).",
       "sharedCare": true
     },
@@ -78,7 +78,7 @@
         { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 },
         { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile"], "snomed": ["1019331000000106"], "intervalDays": 84, "dueSoonDays": 14 }
       ],
-      "source": "BNF / BSR shared care",
+      "source": "BNF / BSR guideline for csDMARDs in inflammatory arthritis (Rheumatology keaf522, pub Feb 2026)",
       "notes": "TPMT activity should be checked before initiation. Intensive monitoring in first 8 weeks.",
       "sharedCare": true
     },
@@ -96,7 +96,7 @@
         { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 84, "dueSoonDays": 14 },
         { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 84, "dueSoonDays": 14 }
       ],
-      "source": "BNF / BSR shared care",
+      "source": "BNF / BSR guideline for csDMARDs in inflammatory arthritis (Rheumatology keaf522, pub Feb 2026)",
       "notes": "Monitoring may be discontinued after 12 months of stable treatment per some shared care protocols. Check local guidance.",
       "sharedCare": true
     },
@@ -185,7 +185,7 @@
       "id": "ace-arb",
       "drugClass": "RAAS blocker",
       "drug": {
-        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto"]
+        "match": ["ramipril", "tritace", "triapin", "lisinopril", "zestril", "carace", "zestoretic", "perindopril", "coversyl", "enalapril", "innovace", "innozide", "captopril", "capoten", "noyada", "trandolapril", "gopten", "fosinopril", "staril", "quinapril", "accupro", "losartan", "cozaar", "hyzaar", "arbli", "candesartan", "amias", "valsartan", "diovan", "exforge", "irbesartan", "aprovel", "karvea", "telmisartan", "micardis", "pritor", "tolura", "olmesartan", "olmetec", "sevikar", "azilsartan", "edarbi", "sacubitril", "entresto"]
       },
       "phase": "maintenance",
       "tests": [
@@ -236,15 +236,15 @@
       "id": "glp1-receptor-agonist",
       "drugClass": "GLP-1 receptor agonist",
       "drug": {
-        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
+        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
       },
       "phase": "maintenance",
       "tests": [
         { "name": "Annual review", "match": ["glp-1 review", "weight management review", "diabetes annual review", "obesity review"], "intervalDays": 365, "dueSoonDays": 30 },
         { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
-      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024",
-      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations.",
+      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024; MHRA DSU 29 Jan 2026 (pancreatitis: discontinue and do not restart if confirmed); MHRA DSU 17 Dec 2025 (Rybelsus new 1.5/4/9mg strengths); MHRA DSU Feb 2026 (semaglutide: NAION signal)",
+      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs (MHRA DSU Jan 2026: discontinue and do not restart if pancreatitis confirmed), dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Rybelsus (oral semaglutide): new 1.5/4/9mg tablet strengths launched Dec 2025 — one tablet per day only, not interchangeable with old 3/7/14mg strengths (MHRA DHPC Dec 2025). NAION (non-arteritic anterior ischaemic optic neuropathy): emerging safety signal for semaglutide (MHRA DSU Feb 2026) — advise patients to report sudden vision change. Tirzepatide requires renal function assessment pre-initiation. Zepbound (tirzepatide US brand) is not UK-licensed and has been removed from the match list. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations.",
       "sharedCare": false
     },
     {
@@ -305,7 +305,7 @@
       "id": "antipsychotic",
       "drugClass": "Antipsychotic",
       "drug": {
-        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila"],
+        "match": ["olanzapine", "zyprexa", "zalasta", "zypadhera", "risperidone", "risperdal", "okedi", "quetiapine", "seroquel", "atrolak", "biquelle", "zaluron", "tenprolide", "sondate", "aripiprazole", "abilify", "haloperidol", "serenace", "dozic", "haldol", "chlorpromazine", "largactil", "amisulpride", "solian", "paliperidone", "invega", "xeplion", "trevicta", "byannli", "lurasidone", "latuda", "asenapine", "sycrest", "cariprazine", "reagila"],
         "exclude": ["clozapine"]
       },
       "phase": "maintenance",
@@ -387,7 +387,7 @@
       "ageRange": { "max": 17 },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "exattent", "lisdexamfetamine", "elvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
@@ -409,7 +409,7 @@
       "ageRange": { "min": 18 },
       "sex": "any",
       "drug": {
-        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "lisdexamfetamine", "elvanse", "vyvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
+        "match": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xenidate", "delmosart", "tranquilyn", "affenid", "atenza", "kixel", "matoride", "xaggitin", "focusim", "meflynate", "metyrol", "exattent", "lisdexamfetamine", "elvanse", "dexamfetamine", "dexedrine", "amfexa", "amphetamine"],
         "snomed": ["372574004", "387340002", "31994002"]
       },
       "phase": "maintenance",
