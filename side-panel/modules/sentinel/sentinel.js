@@ -942,6 +942,7 @@ function render(payload) {
     : '';
 
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
+  const _unmatchedWasOpen = container.querySelector('.sent-unmatched-section')?.open ?? false;
 
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
@@ -1120,6 +1121,12 @@ function render(payload) {
     else _openEvidenceKey = null;
   } else {
     _openEvidenceKey = null;
+  }
+
+  // Restore the unmatched-meds <details> open state across re-renders.
+  if (_unmatchedWasOpen) {
+    const unmatchedEl = container.querySelector('.sent-unmatched-section');
+    if (unmatchedEl) unmatchedEl.open = true;
   }
 }
 

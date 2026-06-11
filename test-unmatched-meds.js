@@ -164,6 +164,41 @@ console.log('\n--- non-drug-monitoring rules ignored ---');
   check(unmatched.length === 1, 'qof-indicator rule does not count as drug coverage');
 }
 
+// ── 9. drug-no-monitoring suppresses from unmatched list ─────────────────────
+
+console.log('\n--- drug-no-monitoring type suppresses unmatched list ---');
+
+{
+  const noMonRule = {
+    id: 'no-mon-001',
+    type: 'drug-no-monitoring',
+    enabled: true,
+    drug: { match: ['clopidogrel', 'tamsulosin'] },
+  };
+  const meds = [
+    med('Clopidogrel 75mg tablets'),
+    med('Tamsulosin 400microgram modified-release capsules'),
+    med('Aspirin 75mg tablets'),
+  ];
+  const unmatched = listUnmatchedMedications(meds, [noMonRule]);
+  check(!unmatched.some(n => /clopidogrel/i.test(n)), 'clopidogrel suppressed by drug-no-monitoring rule');
+  check(!unmatched.some(n => /tamsulosin/i.test(n)), 'tamsulosin suppressed by drug-no-monitoring rule');
+  check(unmatched.some(n => /aspirin/i.test(n)), 'aspirin still unmatched (not in no-monitoring rule)');
+}
+
+{
+  // Disabled drug-no-monitoring rule must NOT suppress
+  const noMonRuleDisabled = {
+    id: 'no-mon-002',
+    type: 'drug-no-monitoring',
+    enabled: false,
+    drug: { match: ['clopidogrel'] },
+  };
+  const meds = [ med('Clopidogrel 75mg tablets') ];
+  const unmatched = listUnmatchedMedications(meds, [noMonRuleDisabled]);
+  check(unmatched.some(n => /clopidogrel/i.test(n)), 'disabled drug-no-monitoring rule does not suppress');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
