@@ -4,28 +4,43 @@ import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-char
 
 // ── Observation metrics (passive display — no clinical thresholds) ─────────────
 const OBS_METRICS = [
-  { key: 'hba1c',  label: 'HbA1c',       unit: 'mmol/mol',
-    match: ['hba1c', 'glycated haemoglobin', 'haemoglobin a1c'], exclude: [] },
-  { key: 'chol',   label: 'Cholesterol', unit: 'mmol/L',
-    match: ['cholesterol'], exclude: ['hdl', 'ldl', 'ratio', 'non-hdl', 'non hdl'] },
-  { key: 'weight', label: 'Weight',      unit: 'kg',
-    match: ['weight', 'body weight'], exclude: ['weight loss', 'birth weight', 'ideal body weight', 'loss'] },
+  {
+    key: 'hba1c',
+    label: 'HbA1c',
+    unit: 'mmol/mol',
+    match: ['hba1c', 'glycated haemoglobin', 'haemoglobin a1c'],
+    exclude: [],
+  },
+  {
+    key: 'chol',
+    label: 'Cholesterol',
+    unit: 'mmol/L',
+    match: ['cholesterol'],
+    exclude: ['hdl', 'ldl', 'ratio', 'non-hdl', 'non hdl'],
+  },
+  {
+    key: 'weight',
+    label: 'Weight',
+    unit: 'kg',
+    match: ['weight', 'body weight'],
+    exclude: ['weight loss', 'birth weight', 'ideal body weight', 'loss'],
+  },
 ];
 
 // ── BP constants ───────────────────────────────────────────────────────────────
 const BP_NAMES = ['blood pressure', 'bp', 'arterial blood pressure'];
 
 // ── Renal constants ────────────────────────────────────────────────────────────
-const ACR_NAMES  = ['acr', 'albumin creatinine ratio', 'albumin:creatinine', 'albumin/creatinine'];
+const ACR_NAMES = ['acr', 'albumin creatinine ratio', 'albumin:creatinine', 'albumin/creatinine'];
 const EGFR_NAMES = ['egfr', 'estimated glomerular filtration rate', 'estimated gfr'];
 
 const KDIGO = {
-  G1:  { A1: '0–1', A2: '1',   A3: '1+' },
-  G2:  { A1: '0–1', A2: '1',   A3: '1+' },
-  G3a: { A1: '1',   A2: '1',   A3: '2'  },
-  G3b: { A1: '1–2', A2: '2',   A3: '2+' },
-  G4:  { A1: '2',   A2: '2',   A3: '3'  },
-  G5:  { A1: '4+',  A2: '4+',  A3: '4+' },
+  G1: { A1: '0–1', A2: '1', A3: '1+' },
+  G2: { A1: '0–1', A2: '1', A3: '1+' },
+  G3a: { A1: '1', A2: '1', A3: '2' },
+  G3b: { A1: '1–2', A2: '2', A3: '2+' },
+  G4: { A1: '2', A2: '2', A3: '3' },
+  G5: { A1: '4+', A2: '4+', A3: '4+' },
 };
 
 function gStage(e) {
@@ -39,7 +54,7 @@ function gStage(e) {
 }
 function aStage(a) {
   if (a == null || !Number.isFinite(a)) return null;
-  if (a < 3)   return 'A1';
+  if (a < 3) return 'A1';
   if (a <= 30) return 'A2';
   return 'A3';
 }
@@ -48,7 +63,7 @@ function aStage(a) {
 let container = null;
 let pollTimer = null;
 let onRuntimeMsg = null;
-let selectedView = 'bp';  // 'bp' | 'renal' | 'hba1c' | 'chol' | 'weight'
+let selectedView = 'bp'; // 'bp' | 'renal' | 'hba1c' | 'chol' | 'weight'
 let lastData = null;
 
 export async function init(el) {
@@ -56,7 +71,10 @@ export async function init(el) {
   render({ state: 'loading' });
   await refresh();
   pollTimer = setInterval(refresh, 15000);
-  onRuntimeMsg = msg => { if (msg && msg.type === 'sentinel:snapshot-updated') refresh(); };
+  onRuntimeMsg = (msg, sender) => {
+    if (!sender || sender.id !== chrome.runtime.id) return;
+    if (msg && msg.type === 'sentinel:snapshot-updated') refresh();
+  };
   chrome.runtime.onMessage.addListener(onRuntimeMsg);
   return cleanup;
 }
@@ -64,7 +82,10 @@ export async function init(el) {
 export function cleanup() {
   clearInterval(pollTimer);
   pollTimer = null;
-  if (onRuntimeMsg) { chrome.runtime.onMessage.removeListener(onRuntimeMsg); onRuntimeMsg = null; }
+  if (onRuntimeMsg) {
+    chrome.runtime.onMessage.removeListener(onRuntimeMsg);
+    onRuntimeMsg = null;
+  }
   container = null;
   lastData = null;
 }
@@ -73,14 +94,22 @@ async function refresh() {
   if (!container) return;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.url || !/medicus\.health/.test(tab.url)) { lastData = null; render({ state: 'no-medicus' }); return; }
+    if (!tab?.url || !/medicus\.health/.test(tab.url)) {
+      lastData = null;
+      render({ state: 'no-medicus' });
+      return;
+    }
     const data = await new Promise((res, rej) => {
-      chrome.tabs.sendMessage(tab.id, { action: 'getTrendData' }, r => {
+      chrome.tabs.sendMessage(tab.id, { action: 'getTrendData' }, (r) => {
         if (chrome.runtime.lastError) rej(chrome.runtime.lastError);
         else res(r);
       });
     }).catch(() => null);
-    if (!data) { lastData = null; render({ state: 'no-data' }); return; }
+    if (!data) {
+      lastData = null;
+      render({ state: 'no-data' });
+      return;
+    }
     lastData = data;
     render({ state: 'ok' });
   } catch (_) {
@@ -90,22 +119,27 @@ async function refresh() {
 
 // ── Picker ─────────────────────────────────────────────────────────────────────
 const VIEWS = [
-  { key: 'bp',     label: 'BP' },
-  { key: 'renal',  label: 'Renal' },
-  { key: 'hba1c',  label: 'HbA1c' },
-  { key: 'chol',   label: 'Cholesterol' },
+  { key: 'bp', label: 'BP' },
+  { key: 'renal', label: 'Renal' },
+  { key: 'hba1c', label: 'HbA1c' },
+  { key: 'chol', label: 'Cholesterol' },
   { key: 'weight', label: 'Weight' },
 ];
 
 function pickerHtml() {
-  return `<div class="trends-picker" role="tablist">` + VIEWS.map(v =>
-    `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}">${esc(v.label)}</button>`
-  ).join('') + `</div>`;
+  return (
+    `<div class="trends-picker" role="tablist">` +
+    VIEWS.map(
+      (v) =>
+        `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}">${esc(v.label)}</button>`
+    ).join('') +
+    `</div>`
+  );
 }
 
 function wirePicker() {
   if (!container) return;
-  container.querySelectorAll('.trends-tab').forEach(b => {
+  container.querySelectorAll('.trends-tab').forEach((b) => {
     b.addEventListener('click', () => {
       const k = b.dataset.view;
       if (k === selectedView) return;
@@ -128,9 +162,9 @@ function render(m) {
   }
 
   let body;
-  if (selectedView === 'bp')    body = renderBp(m);
+  if (selectedView === 'bp') body = renderBp(m);
   else if (selectedView === 'renal') body = renderRenal(m);
-  else                          body = renderObs(m);
+  else body = renderObs(m);
 
   container.innerHTML = `<div class="trends-module">${pickerHtml()}${body}</div>`;
   wirePicker();
@@ -139,43 +173,46 @@ function render(m) {
 // ── BP ─────────────────────────────────────────────────────────────────────────
 function buildBpModel(data) {
   const history = data.observationHistory || [];
-  const row = history.find(o =>
-    BP_NAMES.some(n => (o.name || '').toLowerCase().includes(n)));
+  const row = history.find((o) => BP_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
 
   let pairs = (row?.history || [])
-    .map(h => ({ date: h.date, bp: parseBp(h.rawValue) }))
-    .filter(p => p.bp)
+    .map((h) => ({ date: h.date, bp: parseBp(h.rawValue) }))
+    .filter((p) => p.bp)
     .reverse();
 
   // Fallback: merge separate systolic/diastolic rows
   if (pairs.length === 0) {
-    const sysRow = history.find(o => /systolic\s+blood\s+pressure/i.test(o.name || ''));
-    const diaRow = history.find(o => /diastolic\s+blood\s+pressure/i.test(o.name || ''));
+    const sysRow = history.find((o) => /systolic\s+blood\s+pressure/i.test(o.name || ''));
+    const diaRow = history.find((o) => /diastolic\s+blood\s+pressure/i.test(o.name || ''));
     if (sysRow && diaRow) {
       const diaByDate = {};
-      (diaRow.history || []).forEach(h => { diaByDate[h.date] = h.rawValue; });
+      (diaRow.history || []).forEach((h) => {
+        diaByDate[h.date] = h.rawValue;
+      });
       pairs = (sysRow.history || [])
-        .filter(h => diaByDate[h.date] != null)
-        .map(h => ({ date: h.date, bp: parseBp(`${h.rawValue}/${diaByDate[h.date]}`) }))
-        .filter(p => p.bp)
+        .filter((h) => diaByDate[h.date] != null)
+        .map((h) => ({ date: h.date, bp: parseBp(`${h.rawValue}/${diaByDate[h.date]}`) }))
+        .filter((p) => p.bp)
         .reverse();
     }
   }
 
   const age = computeAge(data.patientContext);
   const registers = data.registers || [];
-  const acrRow = history.find(o => ACR_NAMES.some(n => (o.name || '').toLowerCase().includes(n)));
+  const acrRow = history.find((o) => ACR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
   const latestAcr = acrRow?.history?.[0]?.value;
   const acrOver70 = Number.isFinite(latestAcr) && latestAcr >= 70;
   const target = bpTarget(registers, age, acrOver70);
 
   const sysSeries = {
-    cls: 'tc-sys', label: 'Systolic',
-    points: pairs.map(p => ({ date: p.date, value: p.bp.systolic, flag: target && p.bp.systolic > target.sys })),
+    cls: 'tc-sys',
+    label: 'Systolic',
+    points: pairs.map((p) => ({ date: p.date, value: p.bp.systolic, flag: target && p.bp.systolic > target.sys })),
   };
   const diaSeries = {
-    cls: 'tc-dia', label: 'Diastolic',
-    points: pairs.map(p => ({ date: p.date, value: p.bp.diastolic, flag: target && p.bp.diastolic > target.dia })),
+    cls: 'tc-dia',
+    label: 'Diastolic',
+    points: pairs.map((p) => ({ date: p.date, value: p.bp.diastolic, flag: target && p.bp.diastolic > target.dia })),
   };
   return { pairs, target, age, registers, series: [sysSeries, diaSeries] };
 }
@@ -204,22 +241,27 @@ function renderBp(m) {
   const t = bm.target;
   const above = t && (latest.bp.systolic > t.sys || latest.bp.diastolic > t.dia);
   const targets = t
-    ? [{ value: t.sys, label: `sys ≤${t.sys}` }, { value: t.dia, label: `dia ≤${t.dia}` }]
+    ? [
+        { value: t.sys, label: `sys ≤${t.sys}` },
+        { value: t.dia, label: `dia ≤${t.dia}` },
+      ]
     : [];
   const registersHtml = bm.registers.length
-    ? bm.registers.map(r => `<span class="bpt-reg">${esc(r.name || r.code)}</span>`).join('')
+    ? bm.registers.map((r) => `<span class="bpt-reg">${esc(r.name || r.code)}</span>`).join('')
     : '<span class="bpt-reg bpt-reg-none">No qualifying register</span>';
-  const paedNote = bm.age != null && bm.age < 18
-    ? `<div class="bpt-note">⚠ Paediatric patient — adult thresholds shown. Use age/height centile charts to determine actual BP target.</div>`
-    : '';
+  const paedNote =
+    bm.age != null && bm.age < 18
+      ? `<div class="bpt-note">⚠ Paediatric patient — adult thresholds shown. Use age/height centile charts to determine actual BP target.</div>`
+      : '';
 
   return `
     <div class="bpt-module">
       <div class="bpt-head">
         <span class="bpt-latest">${latest.bp.systolic}/${latest.bp.diastolic} <small>mmHg · ${esc(fmtDate(latest.date))}</small></span>
-        ${t
-          ? `<span class="bpt-pill ${above ? 'bpt-above' : 'bpt-met'}">${above ? 'ABOVE TARGET' : 'AT TARGET'} · ≤${t.sys}/${t.dia} <span class="bpt-tgt-lbl">(${esc(t.label)})</span></span>`
-          : `<span class="bpt-pill bpt-neutral">No BP target register</span>`
+        ${
+          t
+            ? `<span class="bpt-pill ${above ? 'bpt-above' : 'bpt-met'}">${above ? 'ABOVE TARGET' : 'AT TARGET'} · ≤${t.sys}/${t.dia} <span class="bpt-tgt-lbl">(${esc(t.label)})</span></span>`
+            : `<span class="bpt-pill bpt-neutral">No BP target register</span>`
         }
       </div>
       <div class="bpt-registers">${registersHtml}</div>
@@ -238,20 +280,20 @@ function renderBp(m) {
 function buildRenalModel(data) {
   const history = data.observationHistory || [];
 
-  const acrRow = history.find(o => ACR_NAMES.some(n => (o.name || '').toLowerCase().includes(n)));
+  const acrRow = history.find((o) => ACR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
   const acrPts = (acrRow?.history || [])
-    .filter(h => Number.isFinite(h.value))
+    .filter((h) => Number.isFinite(h.value))
     .reverse()
-    .map(h => ({ date: h.date, value: h.value }));
+    .map((h) => ({ date: h.date, value: h.value }));
 
-  const egfrRow = history.find(o => EGFR_NAMES.some(n => (o.name || '').toLowerCase().includes(n)));
+  const egfrRow = history.find((o) => EGFR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
   const egfrPts = (egfrRow?.history || [])
-    .filter(h => Number.isFinite(h.value))
+    .filter((h) => Number.isFinite(h.value))
     .reverse()
-    .map(h => ({ date: h.date, value: h.value }));
+    .map((h) => ({ date: h.date, value: h.value }));
 
-  const latestAcr  = acrPts.length  ? acrPts[acrPts.length - 1].value  : null;
-  const prevAcr    = acrPts.length  > 1 ? acrPts[acrPts.length - 2].value : null;
+  const latestAcr = acrPts.length ? acrPts[acrPts.length - 1].value : null;
+  const prevAcr = acrPts.length > 1 ? acrPts[acrPts.length - 2].value : null;
   const latestEgfr = egfrPts.length ? egfrPts[egfrPts.length - 1].value : null;
 
   const gs = gStage(latestEgfr);
@@ -260,24 +302,48 @@ function buildRenalModel(data) {
 
   const referralFlag = latestAcr != null && latestAcr >= 70;
   const doublingFlag = latestAcr != null && prevAcr != null && latestAcr >= prevAcr * 2;
-  const crossingFlag = prevAcr != null && latestAcr != null && aStage(prevAcr) !== as &&
+  const crossingFlag =
+    prevAcr != null &&
+    latestAcr != null &&
+    aStage(prevAcr) !== as &&
     ['A1', 'A2', 'A3'].indexOf(as) > ['A1', 'A2', 'A3'].indexOf(aStage(prevAcr));
 
-  const acrSeries = [{
-    cls: 'tc-acr', label: 'ACR',
-    points: acrPts.map(p => ({
-      date: p.date, value: Math.min(p.value, 100), flag: p.value >= 30, offScale: p.value > 100,
-    })),
-  }];
+  const acrSeries = [
+    {
+      cls: 'tc-acr',
+      label: 'ACR',
+      points: acrPts.map((p) => ({
+        date: p.date,
+        value: Math.min(p.value, 100),
+        flag: p.value >= 30,
+        offScale: p.value > 100,
+      })),
+    },
+  ];
   const acrBands = [
-    { lo: 0,  hi: 3,   cls: 'tc-a1' },
-    { lo: 3,  hi: 30,  cls: 'tc-a2' },
+    { lo: 0, hi: 3, cls: 'tc-a1' },
+    { lo: 3, hi: 30, cls: 'tc-a2' },
     { lo: 30, hi: 100, cls: 'tc-a3' },
   ];
-  const acrUnit  = acrRow?.unit  || 'mg/mmol';
+  const acrUnit = acrRow?.unit || 'mg/mmol';
   const egfrUnit = egfrRow?.unit || 'mL/min/1.73m²';
 
-  return { acrPts, egfrPts, latestAcr, latestEgfr, gs, as, kdigoFreq, referralFlag, doublingFlag, crossingFlag, acrSeries, acrBands, acrUnit, egfrUnit };
+  return {
+    acrPts,
+    egfrPts,
+    latestAcr,
+    latestEgfr,
+    gs,
+    as,
+    kdigoFreq,
+    referralFlag,
+    doublingFlag,
+    crossingFlag,
+    acrSeries,
+    acrBands,
+    acrUnit,
+    egfrUnit,
+  };
 }
 
 function renderRenal(m) {
@@ -290,25 +356,41 @@ function renderRenal(m) {
   }
 
   const banners = [];
-  if (rm.referralFlag) banners.push(`<div class="acrt-banner acrt-banner-red">⚠ ACR ≥70 mg/mmol — consider nephrology referral (NICE NG203)</div>`);
-  if (rm.doublingFlag) banners.push(`<div class="acrt-banner acrt-banner-amber">ACR has doubled since previous reading — review and repeat</div>`);
-  if (rm.crossingFlag) banners.push(`<div class="acrt-banner acrt-banner-amber">ACR category has increased (${esc(rm.as)}) — escalate monitoring frequency</div>`);
+  if (rm.referralFlag)
+    banners.push(
+      `<div class="acrt-banner acrt-banner-red">⚠ ACR ≥70 mg/mmol — consider nephrology referral (NICE NG203)</div>`
+    );
+  if (rm.doublingFlag)
+    banners.push(
+      `<div class="acrt-banner acrt-banner-amber">ACR has doubled since previous reading — review and repeat</div>`
+    );
+  if (rm.crossingFlag)
+    banners.push(
+      `<div class="acrt-banner acrt-banner-amber">ACR category has increased (${esc(rm.as)}) — escalate monitoring frequency</div>`
+    );
 
-  const kdigoHtml = rm.gs && rm.as ? `
+  const kdigoHtml =
+    rm.gs && rm.as
+      ? `
     <div class="acrt-kdigo">
       <span class="acrt-kdigo-cell acrt-${rm.as?.toLowerCase()}">${esc(rm.gs)}${esc(rm.as)}</span>
       <span class="acrt-kdigo-freq">${rm.kdigoFreq ? `${esc(rm.kdigoFreq)} check${rm.kdigoFreq === '1' ? '' : 's'}/year` : ''}</span>
       <span class="acrt-kdigo-lbl">KDIGO staging</span>
-    </div>` : '';
+    </div>`
+      : '';
 
   const latestHtml = `
     <div class="acrt-head">
-      ${rm.latestAcr != null
-        ? `<div class="acrt-val"><span class="acrt-num">${rm.latestAcr > 100 ? '>100' : rm.latestAcr.toFixed(1)}</span> <span class="acrt-unit">${esc(rm.acrUnit)} ACR</span> <span class="acrt-stage acrt-${rm.as?.toLowerCase()}">${esc(rm.as || '')}</span></div>`
-        : `<div class="acrt-val acrt-no-val">No ACR data</div>`}
-      ${rm.latestEgfr != null
-        ? `<div class="acrt-val"><span class="acrt-num">${Math.round(rm.latestEgfr)}</span> <span class="acrt-unit">${esc(rm.egfrUnit)} eGFR</span> <span class="acrt-stage acrt-g${rm.gs?.toLowerCase().slice(1)}">${esc(rm.gs || '')}</span></div>`
-        : `<div class="acrt-val acrt-no-val">No eGFR data</div>`}
+      ${
+        rm.latestAcr != null
+          ? `<div class="acrt-val"><span class="acrt-num">${rm.latestAcr > 100 ? '>100' : rm.latestAcr.toFixed(1)}</span> <span class="acrt-unit">${esc(rm.acrUnit)} ACR</span> <span class="acrt-stage acrt-${rm.as?.toLowerCase()}">${esc(rm.as || '')}</span></div>`
+          : `<div class="acrt-val acrt-no-val">No ACR data</div>`
+      }
+      ${
+        rm.latestEgfr != null
+          ? `<div class="acrt-val"><span class="acrt-num">${Math.round(rm.latestEgfr)}</span> <span class="acrt-unit">${esc(rm.egfrUnit)} eGFR</span> <span class="acrt-stage acrt-g${rm.gs?.toLowerCase().slice(1)}">${esc(rm.gs || '')}</span></div>`
+          : `<div class="acrt-val acrt-no-val">No eGFR data</div>`
+      }
       ${kdigoHtml}
     </div>`;
 
@@ -319,16 +401,22 @@ function renderRenal(m) {
     : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
 
   const egfrBands = [
-    { lo: 90,  hi: 200, cls: 'tc-g1' },
-    { lo: 60,  hi: 90,  cls: 'tc-g2' },
-    { lo: 45,  hi: 60,  cls: 'tc-g3a' },
-    { lo: 30,  hi: 45,  cls: 'tc-g3b' },
-    { lo: 15,  hi: 30,  cls: 'tc-g4' },
-    { lo: 0,   hi: 15,  cls: 'tc-g5' },
+    { lo: 90, hi: 200, cls: 'tc-g1' },
+    { lo: 60, hi: 90, cls: 'tc-g2' },
+    { lo: 45, hi: 60, cls: 'tc-g3a' },
+    { lo: 30, hi: 45, cls: 'tc-g3b' },
+    { lo: 15, hi: 30, cls: 'tc-g4' },
+    { lo: 0, hi: 15, cls: 'tc-g5' },
   ];
   const egfrChart = rm.egfrPts.length
     ? `<div class="acrt-section-lbl">eGFR trend (mL/min/1.73m²)</div>` +
-      lineChart({ series: [{ cls: 'tc-egfr', label: 'eGFR', points: rm.egfrPts }], bands: egfrBands, yMin: 0, yMax: 120, unit: rm.egfrUnit })
+      lineChart({
+        series: [{ cls: 'tc-egfr', label: 'eGFR', points: rm.egfrPts }],
+        bands: egfrBands,
+        yMin: 0,
+        yMax: 120,
+        unit: rm.egfrUnit,
+      })
     : '';
 
   return `
@@ -348,22 +436,24 @@ function renderRenal(m) {
 // ── Observations (HbA1c / Cholesterol / Weight) ────────────────────────────────
 function seriesFor(metric, data) {
   const history = data.observationHistory || [];
-  const row = history.find(o => {
+  const row = history.find((o) => {
     const name = (o.name || '').toLowerCase();
-    return metric.match.some(n => name.includes(n)) && !metric.exclude.some(x => name.includes(x));
+    return metric.match.some((n) => name.includes(n)) && !metric.exclude.some((x) => name.includes(x));
   });
   const pts = (row?.history || [])
-    .filter(h => Number.isFinite(h.value))
+    .filter((h) => Number.isFinite(h.value))
     .slice()
     .reverse()
-    .map(h => ({ date: h.date, value: h.value }));
+    .map((h) => ({ date: h.date, value: h.value }));
   return { pts, unit: row?.unit || metric.unit };
 }
 
-function round(v) { return Math.round(v * 10) / 10; }
+function round(v) {
+  return Math.round(v * 10) / 10;
+}
 
 function renderObs(m) {
-  const metric = OBS_METRICS.find(x => x.key === selectedView) || OBS_METRICS[0];
+  const metric = OBS_METRICS.find((x) => x.key === selectedView) || OBS_METRICS[0];
   if (m.state === 'no-data' || !lastData) {
     return `<div class="trends-msg">No observation data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
   }
@@ -377,7 +467,8 @@ function renderObs(m) {
   const delta = prev ? latest.value - prev.value : null;
   const arrow = delta == null ? '' : delta > 0 ? '▲' : delta < 0 ? '▼' : '▬';
   const deltaCls = delta == null ? '' : delta > 0 ? 'trends-up' : delta < 0 ? 'trends-down' : 'trends-flat';
-  const first = pts[0], last = pts[pts.length - 1];
+  const first = pts[0],
+    last = pts[pts.length - 1];
   const chart = lineChart({ series: [{ cls: 'tc-trend', label: metric.label, points: pts }], unit });
 
   return `

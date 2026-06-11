@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.51.2] — 2026-06-10
+
+### Security / bug fixes (2026-06-10 authorised audit)
+
+Four fixes from the 2026-06-10 authorised security and correctness audit:
+
+1. **Transient print keys consumed on read** (`side-panel/modules/sentinel/passport.js`,
+   `side-panel/modules/sweep/handout.js`): `sentinel.passport` and `sweep.handout` are now
+   removed from `chrome.storage.local` immediately after the DOM is rendered. Patient-
+   identifiable data (name, DOB, NHS number, observations) no longer lingers on shared GP
+   workstations. A manual page refresh after printing will show the empty state — this is
+   intentional.
+
+2. **Prototype-pollution defence on clinical-rules import/merge path**
+   (`shared/io/sentinel-io.js`, `shared/io/practice-profile.js`): `Object.assign` merges of
+   untrusted backup data into clinical rules and reception config now strip `__proto__`,
+   `constructor`, and `prototype` keys from the untrusted operand before merging. Mirrors the
+   `safeCopy` pattern already in `engine/ruleset-io.js`.
+
+3. **Trends `onMessage` sender-identity guard** (`side-panel/modules/trends/trends.js`):
+   The `onRuntimeMsg` handler now checks `sender.id === chrome.runtime.id` before processing,
+   matching the guard pattern used by every other `onMessage` handler in the suite.
+
+4. **passport-core.js eGFR / HbA1c trend delta uses raw values**
+   (`side-panel/modules/sentinel/passport-core.js`): Trend-sentence functions now receive
+   raw (unrounded) observation values so threshold checks operate on full precision. The
+   displayed value is still the rounded integer. This corrects cases where rounding caused a
+   real ≥15% eGFR decline to go unreported, or a sub-threshold HbA1c delta to fire spuriously.
+
 ## [v3.51.1] — 2026-06-10
 
 ### Maintenance: The Keeper re-aimed at every clinical rule set in the repo

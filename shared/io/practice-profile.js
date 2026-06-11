@@ -36,6 +36,19 @@
 
 'use strict';
 
+// Defence-in-depth: strip keys that could trigger prototype-pollution when
+// merging IMPORTED/untrusted profile data via Object.assign. Mirrors
+// engine/ruleset-io.js safeCopy — applied to the untrusted operand only.
+const _PP_DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+function _stripDangerousKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  Object.keys(obj).forEach((k) => {
+    if (!_PP_DANGEROUS_KEYS.includes(k)) out[k] = obj[k];
+  });
+  return out;
+}
+
 const PracticeProfile = (() => {
   const META_KEY = 'suite.practiceProfile';
   const NOTIFIED_KEY = 'suite.practiceProfile.notifiedVersions';
@@ -50,9 +63,9 @@ const PracticeProfile = (() => {
   function _io(name) {
     // Prefer explicit globals (node tests), then self.<name> (browser/SW).
     // Check for both function and object (e.g. KnowledgeUtils is an object, not a function).
-    const fromGlobal = (typeof global !== 'undefined') ? global[name] : undefined;
+    const fromGlobal = typeof global !== 'undefined' ? global[name] : undefined;
     if (fromGlobal != null) return fromGlobal;
-    const fromSelf = (typeof self !== 'undefined') ? self[name] : undefined;
+    const fromSelf = typeof self !== 'undefined' ? self[name] : undefined;
     if (fromSelf != null) return fromSelf;
     return null;
   }
@@ -115,9 +128,9 @@ const PracticeProfile = (() => {
       throw new Error('Invalid practice profile: missing envelope or profileVersion.');
     }
 
-    const cfg     = profile.apply || {};
-    const mode    = cfg.mode || 'mergeMissing';
-    const modMap  = _resolveModuleMap(cfg);
+    const cfg = profile.apply || {};
+    const mode = cfg.mode || 'mergeMissing';
+    const modMap = _resolveModuleMap(cfg);
 
     if (!force) {
       const status = await getStatus();
@@ -129,9 +142,9 @@ const PracticeProfile = (() => {
       }
     }
 
-    const mods   = profile.envelope.modules || {};
+    const mods = profile.envelope.modules || {};
     const applied = [];
-    const errors  = [];
+    const errors = [];
 
     // ── Sentinel ───────────────────────────────────────────────────────────────
     if (modMap.has('sentinel') && mods.sentinel && typeof mods.sentinel === 'object') {
@@ -154,16 +167,17 @@ const PracticeProfile = (() => {
               // rules is a { drugId: override } map — local keys win
               const ex = await chrome.storage.local.get('sentinel.rules');
               const local = ex['sentinel.rules'] || {};
-              // Incoming rule overrides fill only absent rule IDs
-              const merged = Object.assign({}, payload.rules, local);
+              // Incoming rule overrides fill only absent rule IDs.
+              // Strip dangerous keys from the untrusted payload before merging.
+              const merged = Object.assign({}, _stripDangerousKeys(payload.rules), local);
               if (Object.keys(merged).length > 0) safe.rules = merged;
             }
             if (Array.isArray(payload.customRules)) {
               // Custom rules merged by id — incoming ids not already present locally
               const ex = await chrome.storage.local.get('sentinel.customRules');
               const existing = ex['sentinel.customRules'] || [];
-              const existingIds = new Set(existing.map(r => r.id));
-              const incoming = payload.customRules.filter(r => !existingIds.has(r.id));
+              const existingIds = new Set(existing.map((r) => r.id));
+              const incoming = payload.customRules.filter((r) => !existingIds.has(r.id));
               if (incoming.length > 0) safe.customRules = [...existing, ...incoming];
             }
             if (payload.config && !Array.isArray(payload.config)) {
@@ -187,7 +201,12 @@ const PracticeProfile = (() => {
           if (payload.rules && !Array.isArray(payload.rules)) {
             if (merge) {
               const ex = await chrome.storage.local.get('sentinel.rules');
-              toSet['sentinel.rules'] = Object.assign({}, payload.rules, ex['sentinel.rules'] || {});
+              // Strip dangerous keys from the untrusted payload before merging.
+              toSet['sentinel.rules'] = Object.assign(
+                {},
+                _stripDangerousKeys(payload.rules),
+                ex['sentinel.rules'] || {}
+              );
             } else {
               toSet['sentinel.rules'] = payload.rules;
             }
@@ -196,8 +215,8 @@ const PracticeProfile = (() => {
             if (merge) {
               const ex = await chrome.storage.local.get('sentinel.customRules');
               const existing = ex['sentinel.customRules'] || [];
-              const existingIds = new Set(existing.map(r => r.id));
-              const incoming = payload.customRules.filter(r => !existingIds.has(r.id));
+              const existingIds = new Set(existing.map((r) => r.id));
+              const incoming = payload.customRules.filter((r) => !existingIds.has(r.id));
               toSet['sentinel.customRules'] = [...existing, ...incoming];
             } else {
               toSet['sentinel.customRules'] = payload.customRules;
@@ -276,7 +295,7 @@ const PracticeProfile = (() => {
             }
           } else {
             const payload = {};
-            if (sub.config)     payload.config     = sub.config;
+            if (sub.config) payload.config = sub.config;
             if (sub.thresholds) payload.thresholds = sub.thresholds;
             if (sub.practiceCode) payload.practiceCode = sub.practiceCode;
             if (Object.keys(payload).length > 0) {
@@ -346,7 +365,7 @@ const PracticeProfile = (() => {
           } else {
             const payload = {};
             if (sl.hiddenTypes !== undefined) payload.hiddenTypes = sl.hiddenTypes;
-            if (sl.alertRules  !== undefined) payload.alertRules  = sl.alertRules;
+            if (sl.alertRules !== undefined) payload.alertRules = sl.alertRules;
             if (Object.keys(payload).length > 0) {
               await slotCounterImport(payload);
               applied.push('slots');
@@ -384,7 +403,12 @@ const PracticeProfile = (() => {
     }
 
     // ── Capacity ───────────────────────────────────────────────────────────────
-    if (modMap.has('capacity') && mods.capacity && Array.isArray(mods.capacity.presets) && mods.capacity.presets.length > 0) {
+    if (
+      modMap.has('capacity') &&
+      mods.capacity &&
+      Array.isArray(mods.capacity.presets) &&
+      mods.capacity.presets.length > 0
+    ) {
       try {
         const merge = modMap.get('capacity') === 'merge';
         const capacityImport = _io('capacityImport');
@@ -433,11 +457,10 @@ const PracticeProfile = (() => {
             if (!Array.isArray(payload.items)) throw new Error('knowledge.items must be an array.');
             const ex = await chrome.storage.local.get('knowledge.items');
             const local = ex['knowledge.items'] || [];
-            const localIds = new Set(local.map(i => i.id));
+            const localIds = new Set(local.map((i) => i.id));
 
             // KnowledgeUtils.findSimilar is used for near-duplicate title detection.
-            const KU = _io('KnowledgeUtils') ||
-              (typeof self !== 'undefined' && self.KnowledgeUtils) || null;
+            const KU = _io('KnowledgeUtils') || (typeof self !== 'undefined' && self.KnowledgeUtils) || null;
             const incoming = [];
             for (const item of payload.items) {
               if (!item || typeof item !== 'object') continue;
@@ -455,8 +478,8 @@ const PracticeProfile = (() => {
             // Append categories with missing ids
             const ex = await chrome.storage.local.get('knowledge.categories');
             const localCats = ex['knowledge.categories'] || [];
-            const localCatIds = new Set(localCats.map(c => c.id));
-            const newCats = payload.categories.filter(c => c && c.id && !localCatIds.has(c.id));
+            const localCatIds = new Set(localCats.map((c) => c.id));
+            const newCats = payload.categories.filter((c) => c && c.id && !localCatIds.has(c.id));
             if (newCats.length > 0) safe.categories = [...localCats, ...newCats];
           }
 
@@ -494,8 +517,8 @@ const PracticeProfile = (() => {
           if (Array.isArray(rc.customPathways)) {
             const ex = await chrome.storage.local.get('reception.customPathways');
             const local = ex['reception.customPathways'] || [];
-            const localIds = new Set(local.map(p => p.id));
-            const incoming = rc.customPathways.filter(p => p && p.id && !localIds.has(p.id));
+            const localIds = new Set(local.map((p) => p.id));
+            const incoming = rc.customPathways.filter((p) => p && p.id && !localIds.has(p.id));
             if (incoming.length > 0) safe.customPathways = incoming; // receptionImport appends?
             // receptionImport replaces the whole array, so merge manually:
             if (incoming.length > 0) safe.customPathways = [...local, ...incoming];
@@ -506,7 +529,8 @@ const PracticeProfile = (() => {
             const ex = await chrome.storage.local.get('reception.pathwayOverrides');
             const local = ex['reception.pathwayOverrides'] || {};
             const incoming = {};
-            for (const [id, ov] of Object.entries(rc.pathwayOverrides)) {
+            // Strip dangerous keys from the untrusted incoming override map.
+            for (const [id, ov] of Object.entries(_stripDangerousKeys(rc.pathwayOverrides))) {
               if (!local[id]) incoming[id] = ov;
             }
             if (Object.keys(incoming).length > 0) {
@@ -523,7 +547,8 @@ const PracticeProfile = (() => {
             if (rc.config.enabledPathways && typeof rc.config.enabledPathways === 'object') {
               const localFlags = localCfg.enabledPathways || {};
               const incoming = {};
-              for (const [id, val] of Object.entries(rc.config.enabledPathways)) {
+              // Strip dangerous keys from the untrusted incoming enabledPathways map.
+              for (const [id, val] of Object.entries(_stripDangerousKeys(rc.config.enabledPathways))) {
                 // Only add ids not already present locally — never overwrite a local flag
                 if (!(id in localFlags)) incoming[id] = val;
               }
@@ -535,7 +560,8 @@ const PracticeProfile = (() => {
             if (rc.config.hiddenChipRules && typeof rc.config.hiddenChipRules === 'object') {
               const localRules = localCfg.hiddenChipRules || {};
               const incoming = {};
-              for (const [id, val] of Object.entries(rc.config.hiddenChipRules)) {
+              // Strip dangerous keys from the untrusted incoming hiddenChipRules map.
+              for (const [id, val] of Object.entries(_stripDangerousKeys(rc.config.hiddenChipRules))) {
                 if (!(id in localRules)) incoming[id] = val;
               }
               if (Object.keys(incoming).length > 0) {
@@ -585,8 +611,8 @@ const PracticeProfile = (() => {
           if (merge) {
             // Merge by rule key: existing local rules win; add absent keys from profile
             const existingRules = await TriageAlertIO.getRules();
-            const existingKeys = new Set(existingRules.map(r => r.key));
-            const incoming = ta.rules.filter(r => r && r.key && !existingKeys.has(r.key));
+            const existingKeys = new Set(existingRules.map((r) => r.key));
+            const incoming = ta.rules.filter((r) => r && r.key && !existingKeys.has(r.key));
             if (incoming.length > 0) {
               await TriageAlertIO.importData({ rules: [...existingRules, ...incoming] });
               applied.push('triageAlerts');
@@ -640,17 +666,23 @@ const PracticeProfile = (() => {
         if (merge) {
           // Merge: only write keys absent locally
           const RM_KEYS = [
-            'suite.requestMonitor.enabled', 'suite.requestMonitor.assigneeId',
-            'suite.requestMonitor.pollSeconds', 'suite.requestMonitor.notifyEnabled',
+            'suite.requestMonitor.enabled',
+            'suite.requestMonitor.assigneeId',
+            'suite.requestMonitor.pollSeconds',
+            'suite.requestMonitor.notifyEnabled',
             'suite.requestMonitor.notifySound',
           ];
           const ex = await chrome.storage.local.get(RM_KEYS);
           const safe = {};
-          if (rm.enabled       !== undefined && ex['suite.requestMonitor.enabled']       == null) safe.enabled       = rm.enabled;
-          if (rm.assigneeId    !== undefined && ex['suite.requestMonitor.assigneeId']    == null) safe.assigneeId    = rm.assigneeId;
-          if (rm.pollSeconds   !== undefined && ex['suite.requestMonitor.pollSeconds']   == null) safe.pollSeconds   = rm.pollSeconds;
-          if (rm.notifyEnabled !== undefined && ex['suite.requestMonitor.notifyEnabled'] == null) safe.notifyEnabled = rm.notifyEnabled;
-          if (rm.notifySound   !== undefined && ex['suite.requestMonitor.notifySound']   == null) safe.notifySound   = rm.notifySound;
+          if (rm.enabled !== undefined && ex['suite.requestMonitor.enabled'] == null) safe.enabled = rm.enabled;
+          if (rm.assigneeId !== undefined && ex['suite.requestMonitor.assigneeId'] == null)
+            safe.assigneeId = rm.assigneeId;
+          if (rm.pollSeconds !== undefined && ex['suite.requestMonitor.pollSeconds'] == null)
+            safe.pollSeconds = rm.pollSeconds;
+          if (rm.notifyEnabled !== undefined && ex['suite.requestMonitor.notifyEnabled'] == null)
+            safe.notifyEnabled = rm.notifyEnabled;
+          if (rm.notifySound !== undefined && ex['suite.requestMonitor.notifySound'] == null)
+            safe.notifySound = rm.notifySound;
           if (Object.keys(safe).length > 0) {
             await requestMonitorImport(safe);
             applied.push('requestMonitor');
@@ -667,7 +699,8 @@ const PracticeProfile = (() => {
     // ── Suite: practiceCode + feedbackEmail only (v2 new) ─────────────────────
     // NEVER push display, tabOrder, or any other suite.* key — those are
     // personal preferences of the individual user, not practice-wide config.
-    const suiteModData = mods.suite ||
+    const suiteModData =
+      mods.suite ||
       // v1 fallback: practiceCode may have lived under mods.submissions (already
       // handled above). mods.suite is new in v2; accept it if present.
       null;
@@ -704,11 +737,11 @@ const PracticeProfile = (() => {
     // Silently ignore: condor, popout (unsupported, see task spec).
 
     await _recordApplication({
-      profileVersion:  profile.profileVersion,
-      profileLabel:    profile.profileLabel || '',
-      modeSummary:     _buildModeSummary(modMap),
-      appliedAt:       new Date().toISOString(),
-      modulesApplied:  applied,
+      profileVersion: profile.profileVersion,
+      profileLabel: profile.profileLabel || '',
+      modeSummary: _buildModeSummary(modMap),
+      appliedAt: new Date().toISOString(),
+      modulesApplied: applied,
       errors,
     });
 
@@ -725,11 +758,11 @@ const PracticeProfile = (() => {
   async function _recordApplication(entry) {
     const r = await chrome.storage.local.get(META_KEY);
     const meta = r[META_KEY] || {};
-    meta.lastAppliedVersion  = entry.profileVersion;
-    meta.lastAppliedAt       = entry.appliedAt;
-    meta.lastAppliedLabel    = entry.profileLabel;
-    meta.lastAppliedMode     = entry.modeSummary;
-    meta.lastCheckedAt       = entry.appliedAt; // also set on every check — see checkAndApply
+    meta.lastAppliedVersion = entry.profileVersion;
+    meta.lastAppliedAt = entry.appliedAt;
+    meta.lastAppliedLabel = entry.profileLabel;
+    meta.lastAppliedMode = entry.modeSummary;
+    meta.lastCheckedAt = entry.appliedAt; // also set on every check — see checkAndApply
     const history = meta.history || [];
     history.unshift(entry);
     meta.history = history.slice(0, 10);
@@ -750,12 +783,12 @@ const PracticeProfile = (() => {
       if (notified.includes(profile.profileVersion)) return;
       if (typeof chrome !== 'undefined' && chrome.notifications?.create) {
         chrome.notifications.create(`pp_${Date.now()}`, {
-          type:     'basic',
-          iconUrl:  'icons/icon-128.png',
-          title:    'Practice settings updated',
-          message:  profile.profileLabel || `Profile ${profile.profileVersion} applied`,
+          type: 'basic',
+          iconUrl: 'icons/icon-128.png',
+          title: 'Practice settings updated',
+          message: profile.profileLabel || `Profile ${profile.profileVersion} applied`,
           priority: 0,
-          silent:   true,
+          silent: true,
         });
       }
       const updated = [...notified, profile.profileVersion].slice(-20);
@@ -771,20 +804,25 @@ const PracticeProfile = (() => {
       await _updateLastChecked();
       if (!profile) return { present: false };
 
-      const status    = await getStatus();
-      const current   = status?.lastAppliedVersion;
-      const incoming  = profile.profileVersion;
+      const status = await getStatus();
+      const current = status?.lastAppliedVersion;
+      const incoming = profile.profileVersion;
       const autoApply = profile.apply?.autoApplyOnStartup !== false;
 
       if (current === incoming) return { present: true, current: true };
-      if (!autoApply)           return { present: true, current: false, pendingVersion: incoming };
+      if (!autoApply) return { present: true, current: false, pendingVersion: incoming };
 
       const result = await applyProfile(profile);
       if (!result.skipped && profile.apply?.notifyUserOnApply) {
         await _maybeNotify(profile);
       }
-      console.log('[Practice Profile] Applied version', incoming, '— modules:', result.modulesApplied,
-        result.errors?.length ? `— errors: ${result.errors.join('; ')}` : '');
+      console.log(
+        '[Practice Profile] Applied version',
+        incoming,
+        '— modules:',
+        result.modulesApplied,
+        result.errors?.length ? `— errors: ${result.errors.join('; ')}` : ''
+      );
       return { present: true, applied: !result.skipped, result };
     } catch (e) {
       console.warn('[Practice Profile] checkAndApply failed:', e.message);
