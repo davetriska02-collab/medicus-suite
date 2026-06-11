@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.1] — 2026-06-11
+
+### Clinical rules — The Keeper: visualiser drug-table completion
+
+Closes 28 of the 36 divergences documented by `test-pincer-parity.js` between
+the visualiser's `HIGH_RISK_DRUGS` tables and the active triage-lens
+prescribing flags. Data-table edits only; provenance reused from the
+2026-06-11 emc-corroborated Keeper run. Same patient, same record — the
+visualiser and the triage HUD now flag the same drug sets.
+
+- **`nsaid_long`**: completed to the full UK systemic NSAID set (16 terms
+  added, incl. both `indometacin`/`indomethacin` spellings and the dex-
+  derivatives — the visualiser matches with `\b` word boundaries, so
+  substring coverage from `ibuprofen`/`ketoprofen` did not apply).
+- **`warfarin` → `Warfarin / VKA`**: added `acenocoumarol` and `phenindione`
+  (all UK oral VKAs share INR/42-day monitoring, BNF 2.8.2).
+- **`acei`**: added trandolapril, fosinopril, quinapril, imidapril,
+  cilazapril, telmisartan, azilsartan, eprosartan.
+- **`diuretic`**: added torasemide, hydrochlorothiazide, chlorthalidone,
+  metolazone; and `frusemide` (old UK spelling) added to the triage-lens
+  `DIURETIC` regex in the other direction.
+- **Deliberately NOT changed** (pinned in `test-pincer-parity.js` for CSO):
+  LMWH/heparin stay out of the visualiser anticoag set (KD-18..21 — would
+  need a logic change and the verifier advised against LMWH in oral-
+  anticoagulant PINCER lists); the four rule-shape gaps (KD-30..33: no
+  triple-whammy / NSAID+antiplatelet / benzo≥80 rule in the visualiser, no
+  PINCER#1 age-gate in the HUD) need logic, not data.
+
+Tests: parity test rewritten — divergences 36 → 8, resolved sets converted to
+positive both-sides coverage (189 assertions); drug-table completeness locks
+added to `test-visualiser-pincer.js`; frusemide triple-whammy added to
+`test-prescribing-flags.js`. Full suite green (50 suites).
+
 ## [v3.53.0] — 2026-06-11
 
 ### Repo-audit fix batch (quick wins + Milestones 0–2)

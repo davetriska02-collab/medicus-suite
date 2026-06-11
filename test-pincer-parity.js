@@ -24,49 +24,33 @@
 // KNOWN_DIVERGENCES — flagged for CSO review — see repo audit T6
 // ---------------------------------------------------------------
 //
-// NSAID drug-set divergence (visualiser HIGH_RISK_DRUGS nsaid_long is incomplete):
-//   KD-01  piroxicam       content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-02  tenoxicam       content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-03  indomethacin    content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (UK spelling: indometacin — same gap)
-//   KD-04  sulindac        content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-05  ketoprofen      content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-06  dexketoprofen   content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (covered by substring "ketoprofen" — same gap)
-//   KD-07  tiaprofenic acid content.js fires "NSAID+anticoag"  visualiser MISSES
-//          (content.js matches via "tiaprofenic" substring)
-//   KD-08  mefenamic acid  content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (content.js matches via "mefenamic" substring)
-//   KD-09  tolfenamic acid content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (content.js matches via "tolfenamic" substring)
-//   KD-10  fenoprofen      content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-11  aceclofenac     content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-12  nabumetone      content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-13  etodolac        content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-14  flurbiprofen    content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-15  dexibuprofen    content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (covered by "ibuprofen" substring in content.js — visualiser misses)
+// RESOLVED 2026-06-11 (The Keeper, visualiser drug-table completion):
+//   KD-01..15 (NSAID drug-set) — visualiser nsaid_long now carries the complete
+//     UK systemic NSAID set incl. both indometacin/indomethacin spellings and the
+//     dex- derivatives (the visualiser matches with \b word boundaries, so
+//     derivatives must be listed explicitly, unlike content.js's bare substring).
+//   KD-16..17 (acenocoumarol, phenindione) — visualiser 'warfarin' entry is now
+//     'Warfarin / VKA' covering all UK oral vitamin-K antagonists (INR-monitored).
+//   KD-22..29 (ACEi/ARB set) — visualiser acei entry completed to parity with
+//     content.js ACEI_ARB.
+//   KD-35..37 (torasemide, hydrochlorothiazide, metolazone) — visualiser diuretic
+//     entry completed; 'frusemide' added to content.js DIURETIC in the same pass.
+//   These now appear as positive both-sides coverage assertions below.
 //
-// Anticoagulant drug-set divergence (content.js has more anticoags):
-//   KD-16  acenocoumarol   content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (not in visualiser's warfarin or doac entry)
-//   KD-17  phenindione     content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (not in visualiser's warfarin or doac entry)
-//   KD-18  enoxaparin      content.js fires "NSAID+anticoag"   visualiser MISSES
-//          (LMWH — debatable but content.js includes it)
-//   KD-19  dalteparin      content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-20  tinzaparin      content.js fires "NSAID+anticoag"   visualiser MISSES
-//   KD-21  heparin         content.js fires "NSAID+anticoag"   visualiser MISSES
+// REMAINING known divergences (deliberate, pinned):
 //
-// ACEi/ARB drug-set divergence (content.js ACEI_ARB has more agents):
-//   KD-22  trandolapril    content.js fires "Triple whammy"    visualiser MISSES
-//   KD-23  fosinopril      content.js fires "Triple whammy"    visualiser MISSES
-//   KD-24  quinapril       content.js fires "Triple whammy"    visualiser MISSES
-//   KD-25  imidapril       content.js fires "Triple whammy"    visualiser MISSES
-//   KD-26  cilazapril      content.js fires "Triple whammy"    visualiser MISSES
-//   KD-27  telmisartan     content.js fires "Triple whammy"    visualiser MISSES
-//   KD-28  azilsartan      content.js fires "Triple whammy"    visualiser MISSES
-//   KD-29  eprosartan      content.js fires "Triple whammy"    visualiser MISSES
+// Anticoagulant drug-set — LMWH/heparin (content.js includes them, visualiser
+// deliberately does NOT):
+//   KD-18  enoxaparin      content.js fires "NSAID+anticoag"   visualiser silent
+//   KD-19  dalteparin      content.js fires "NSAID+anticoag"   visualiser silent
+//   KD-20  tinzaparin      content.js fires "NSAID+anticoag"   visualiser silent
+//   KD-21  heparin         content.js fires "NSAID+anticoag"   visualiser silent
+//          Rationale (2026-06-11 Keeper): the visualiser's flag is worded
+//          "NSAID with oral anticoagulant" and is driven by the warfarin/doac
+//          monitoring entries; folding parenteral heparins in would need a new
+//          table entry referenced by computePINCER (a logic change, out of the
+//          Keeper's data-only remit) and the prior verifier advised against
+//          LMWH in oral-anticoagulant PINCER lists. CSO may revisit.
 //
 // Rule-shape divergence (one side has a rule the other lacks entirely):
 //   KD-30  NSAID + antiplatelet (no anticoag)
@@ -90,21 +74,6 @@
 //   KD-34  NSAID + anticoagulant: content.js does NOT have gastroprotection suppression;
 //          visualiser also does NOT suppress on gastroprotection for this combo — PARITY OK
 //          (documented for completeness — not a divergence)
-//
-//   KD-35  Diuretic term: torasemide
-//          content.js DIURETIC includes "torasemide"
-//          visualiser diuretic entry does NOT include torasemide (only furosemide, frusemide,
-//          bumetanide, indapamide, bendroflumethiazide, chlortalidone)
-//          → a patient on torasemide: content.js fires triple-whammy, visualiser MISSES
-//          (subsumed under KD-31 for the triple-whammy rule, recorded separately as drug-set gap)
-//
-//   KD-36  Diuretic term: hydrochlorothiazide
-//          content.js DIURETIC includes "hydrochlorothiazide"
-//          visualiser diuretic entry does NOT include it
-//
-//   KD-37  Diuretic term: metolazone
-//          content.js DIURETIC includes "metolazone"
-//          visualiser diuretic entry does NOT include it
 
 'use strict';
 
@@ -233,48 +202,11 @@ function csFiresTripleWhammy(nsaid, acei, diuretic) {
 // It is ALSO printed in the summary for CSO review.
 
 const KNOWN_DIVERGENCES = [
-  // NSAID drug-set gaps in visualiser
-  { id: 'KD-01', drug: 'Piroxicam 20mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-02', drug: 'Tenoxicam 20mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-03', drug: 'Indometacin 25mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-04', drug: 'Sulindac 200mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-05', drug: 'Ketoprofen 100mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-06', drug: 'Dexketoprofen 25mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-07', drug: 'Tiaprofenic acid 300mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-08', drug: 'Mefenamic acid 500mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-09', drug: 'Tolfenamic acid 200mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-10', drug: 'Fenoprofen 300mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-11', drug: 'Aceclofenac 100mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-12', drug: 'Nabumetone 500mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-13', drug: 'Etodolac 600mg SR', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-14', drug: 'Flurbiprofen 100mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  { id: 'KD-15', drug: 'Dexibuprofen 400mg', side: 'nsaid_anticoag', vis: false, cs: true },
-  // Anticoagulant drug-set gaps in visualiser
-  { id: 'KD-16', drug: 'Acenocoumarol 1mg', side: 'anticoag_detection', vis: false, cs: true },
-  { id: 'KD-17', drug: 'Phenindione 25mg', side: 'anticoag_detection', vis: false, cs: true },
+  // LMWH/heparin in content.js only — deliberate, see header rationale
   { id: 'KD-18', drug: 'Enoxaparin 40mg', side: 'anticoag_detection', vis: false, cs: true },
   { id: 'KD-19', drug: 'Dalteparin 5000 units', side: 'anticoag_detection', vis: false, cs: true },
   { id: 'KD-20', drug: 'Tinzaparin 3500 units', side: 'anticoag_detection', vis: false, cs: true },
   { id: 'KD-21', drug: 'Heparin 5000 units', side: 'anticoag_detection', vis: false, cs: true },
-  // ACEi/ARB gaps in visualiser (triple whammy via NSAID+ACEi+diuretic)
-  { id: 'KD-22', drug: 'Trandolapril 2mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-23', drug: 'Fosinopril 10mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-24', drug: 'Quinapril 5mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-25', drug: 'Imidapril 5mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-26', drug: 'Cilazapril 1mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-27', drug: 'Telmisartan 40mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-28', drug: 'Azilsartan 40mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  { id: 'KD-29', drug: 'Eprosartan 600mg', side: 'triple_whammy_acei', vis: false, cs: true },
-  // Diuretic drug-set gaps in visualiser
-  { id: 'KD-35', drug: 'Torasemide 5mg', side: 'triple_whammy_diuretic', vis: false, cs: true },
-  {
-    id: 'KD-36',
-    drug: 'Hydrochlorothiazide 12.5mg',
-    side: 'triple_whammy_diuretic',
-    vis: false,
-    cs: true,
-  },
-  { id: 'KD-37', drug: 'Metolazone 2.5mg', side: 'triple_whammy_diuretic', vis: false, cs: true },
   // Rule-shape divergences (one side lacks the rule entirely)
   {
     id: 'KD-30',
@@ -379,55 +311,67 @@ console.log('--- 2a: NSAID + anticoagulant (drugs known to both sides) ---');
   parityCheck('diclofenac + rivaroxaban → NSAID+anticoag', visFires, csFires);
 }
 
-// ── 2b: NSAID + anticoagulant — extended NSAIDs present in content.js but absent from visualiser ──
-console.log('\n--- 2b: NSAID+anticoag — NSAIDs absent from visualiser HIGH_RISK_DRUGS ---');
-// For these we can't synthesize a proper visualiser drug object (the drug isn't
-// detected by computePINCER's term-matching because the terms aren't listed).
-// We document the divergence via the KNOWN_DIVERGENCES probes in section 3.
-// Here we just confirm content.js fires for each:
-const EXTENDED_NSAIDS_KD = [
-  { name: 'Piroxicam 20mg', kdId: 'KD-01' },
-  { name: 'Tenoxicam 20mg', kdId: 'KD-02' },
-  { name: 'Indometacin 25mg', kdId: 'KD-03' },
-  { name: 'Sulindac 200mg', kdId: 'KD-04' },
-  { name: 'Ketoprofen 100mg', kdId: 'KD-05' },
-  { name: 'Dexketoprofen 25mg', kdId: 'KD-06' },
-  { name: 'Tiaprofenic acid 300mg', kdId: 'KD-07' },
-  { name: 'Mefenamic acid 500mg', kdId: 'KD-08' },
-  { name: 'Tolfenamic acid 200mg', kdId: 'KD-09' },
-  { name: 'Fenoprofen 300mg', kdId: 'KD-10' },
-  { name: 'Aceclofenac 100mg', kdId: 'KD-11' },
-  { name: 'Nabumetone 500mg', kdId: 'KD-12' },
-  { name: 'Etodolac 600mg SR', kdId: 'KD-13' },
-  { name: 'Flurbiprofen 100mg', kdId: 'KD-14' },
-  { name: 'Dexibuprofen 400mg', kdId: 'KD-15' },
+// ── 2b: NSAID + anticoagulant — extended NSAIDs (resolved KD-01..15) ───────
+// 2026-06-11 Keeper: the visualiser nsaid_long entry was completed to the full
+// UK systemic NSAID set. Both sides must now detect every one of these.
+console.log('\n--- 2b: NSAID+anticoag — extended NSAIDs, both sides (resolved KD-01..15) ---');
+const EXTENDED_NSAIDS = [
+  'Piroxicam 20mg',
+  'Tenoxicam 20mg',
+  'Indometacin 25mg',
+  'Indomethacin 25mg',
+  'Sulindac 200mg',
+  'Ketoprofen 100mg',
+  'Dexketoprofen 25mg',
+  'Tiaprofenic acid 300mg',
+  'Mefenamic acid 500mg',
+  'Tolfenamic acid 200mg',
+  'Fenoprofen 300mg',
+  'Aceclofenac 100mg',
+  'Nabumetone 500mg',
+  'Etodolac 600mg SR',
+  'Flurbiprofen 100mg',
+  'Dexibuprofen 400mg',
 ];
-for (const { name, kdId } of EXTENDED_NSAIDS_KD) {
-  const csFires = csFiresNSAIDAnticoag(name);
-  const kd = KNOWN_DIVERGENCES.find((k) => k.id === kdId);
-  // content.js must fire (pinned cs: true); visualiser misses (pinned vis: false — not testable
-  // as a computePINCER call because the drug isn't in HIGH_RISK_DRUGS terms)
-  assert(csFires === kd.cs, `${kdId} pinned: content.js ${kd.cs ? 'fires' : 'silent'} for ${name}`);
+{
+  const nsaidEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'nsaid_long');
+  // Same \b-bounded regex construction as visualiser-core's scan loop.
+  const visNsaidRe = new RegExp(
+    '\\b(' + nsaidEntry.terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b',
+    'i',
+  );
+  for (const name of EXTENDED_NSAIDS) {
+    assert(csFiresNSAIDAnticoag(name), `content.js fires NSAID+anticoag for ${name}`);
+    assert(visNsaidRe.test(name), `visualiser nsaid_long terms match ${name}`);
+  }
 }
 
-// ── 2c: Anticoagulant drug-set — agents present in content.js but absent from visualiser ──
-console.log('\n--- 2c: Anticoagulant drug-set — agents absent from visualiser ---');
-const EXTRA_ANTICOAGS_KD = [
-  { name: 'Acenocoumarol 1mg', kdId: 'KD-16' },
-  { name: 'Phenindione 25mg', kdId: 'KD-17' },
+// ── 2c: Anticoagulant drug-set ─────────────────────────────────────────────
+// VKAs (resolved KD-16..17): the visualiser 'warfarin' entry is now 'Warfarin /
+// VKA' and carries acenocoumarol + phenindione — both sides must detect them.
+console.log('\n--- 2c: Anticoagulant drug-set — VKAs both sides (resolved KD-16..17) ---');
+for (const name of ['Acenocoumarol 1mg', 'Phenindione 25mg']) {
+  assert(csFiresAsAnticoag(name), `content.js fires for ${name} as anticoag`);
+  const vkaEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'warfarin');
+  const term = name.split(' ')[0].toLowerCase();
+  assert(
+    vkaEntry && vkaEntry.terms.some((t) => t.toLowerCase() === term),
+    `visualiser warfarin/VKA entry contains ${name.split(' ')[0]}`,
+  );
+}
+// LMWH/heparin (pinned KD-18..21): content.js includes them; the visualiser
+// deliberately does not (see header rationale).
+console.log('\n--- 2c2: LMWH/heparin — pinned divergence (KD-18..21) ---');
+const LMWH_KD = [
   { name: 'Enoxaparin 40mg', kdId: 'KD-18' },
   { name: 'Dalteparin 5000 units', kdId: 'KD-19' },
   { name: 'Tinzaparin 3500 units', kdId: 'KD-20' },
   { name: 'Heparin 5000 units', kdId: 'KD-21' },
 ];
-for (const { name, kdId } of EXTRA_ANTICOAGS_KD) {
+for (const { name, kdId } of LMWH_KD) {
   const csFires = csFiresAsAnticoag(name);
   const kd = KNOWN_DIVERGENCES.find((k) => k.id === kdId);
   assert(csFires === kd.cs, `${kdId} pinned: content.js ${kd.cs ? 'fires' : 'silent'} for ${name} as anticoag`);
-  // visualiser: these aren't in warfarin or doac entry — verify by constructing
-  // the drug list without them (expect no flag from visualiser for this anticoag type)
-  // We can only test the negative for warfarin/doac — we simply confirm visualiser does
-  // NOT have these terms by checking HIGH_RISK_DRUGS
   const visHasIt = ['warfarin', 'doac'].some((id) => {
     const entry = HIGH_RISK_DRUGS.find((d) => d.id === id);
     const term = name.split(' ')[0].toLowerCase();
@@ -481,50 +425,46 @@ console.log('\n--- 2e: Triple whammy — rule-shape divergence ---');
   );
 }
 
-// ── 2f: Triple whammy — ACEi/ARB drug-set gaps in visualiser ─────────────
-console.log('\n--- 2f: Triple whammy — ACEi/ARB terms absent from visualiser ---');
-const EXTRA_ACEI_KD = [
-  { name: 'Trandolapril 2mg', kdId: 'KD-22' },
-  { name: 'Fosinopril 10mg', kdId: 'KD-23' },
-  { name: 'Quinapril 5mg', kdId: 'KD-24' },
-  { name: 'Imidapril 5mg', kdId: 'KD-25' },
-  { name: 'Cilazapril 1mg', kdId: 'KD-26' },
-  { name: 'Telmisartan 40mg', kdId: 'KD-27' },
-  { name: 'Azilsartan 40mg', kdId: 'KD-28' },
-  { name: 'Eprosartan 600mg', kdId: 'KD-29' },
+// ── 2f: Triple whammy — extended ACEi/ARB terms (resolved KD-22..29) ──────
+// 2026-06-11 Keeper: visualiser acei entry completed. content.js must fire the
+// triple whammy AND the visualiser acei entry must carry the term.
+console.log('\n--- 2f: Triple whammy — extended ACEi/ARB terms, both sides ---');
+const EXTENDED_ACEI = [
+  'Trandolapril 2mg',
+  'Fosinopril 10mg',
+  'Quinapril 5mg',
+  'Imidapril 5mg',
+  'Cilazapril 1mg',
+  'Telmisartan 40mg',
+  'Azilsartan 40mg',
+  'Eprosartan 600mg',
 ];
-for (const { name, kdId } of EXTRA_ACEI_KD) {
-  const csFires = csFiresTripleWhammy('Ibuprofen 400mg', name, 'Furosemide 40mg');
-  const kd = KNOWN_DIVERGENCES.find((k) => k.id === kdId);
+for (const name of EXTENDED_ACEI) {
   assert(
-    csFires === kd.cs,
-    `${kdId} pinned: content.js ${kd.cs ? 'fires' : 'silent'} triple whammy for ${name}`,
+    csFiresTripleWhammy('Ibuprofen 400mg', name, 'Furosemide 40mg'),
+    `content.js fires triple whammy for ${name}`,
   );
-  // Verify the term is absent from visualiser acei entry
   const aceiEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'acei');
   const term = name.split(' ')[0].toLowerCase();
-  const visHasIt = aceiEntry && aceiEntry.terms.some((t) => t.toLowerCase().includes(term));
-  assert(!visHasIt, `${kdId} pinned: visualiser acei entry does NOT contain ${name.split(' ')[0]}`);
+  assert(
+    aceiEntry && aceiEntry.terms.some((t) => t.toLowerCase() === term),
+    `visualiser acei entry contains ${name.split(' ')[0]}`,
+  );
 }
 
-// ── 2g: Triple whammy — diuretic drug-set gaps in visualiser ─────────────
-console.log('\n--- 2g: Triple whammy — diuretic terms absent from visualiser ---');
-const EXTRA_DIURETIC_KD = [
-  { name: 'Torasemide 5mg', kdId: 'KD-35' },
-  { name: 'Hydrochlorothiazide 12.5mg', kdId: 'KD-36' },
-  { name: 'Metolazone 2.5mg', kdId: 'KD-37' },
-];
-for (const { name, kdId } of EXTRA_DIURETIC_KD) {
-  const csFires = csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', name);
-  const kd = KNOWN_DIVERGENCES.find((k) => k.id === kdId);
+// ── 2g: Triple whammy — extended diuretic terms (resolved KD-35..37) ──────
+console.log('\n--- 2g: Triple whammy — extended diuretic terms, both sides ---');
+for (const name of ['Torasemide 5mg', 'Hydrochlorothiazide 12.5mg', 'Metolazone 2.5mg']) {
   assert(
-    csFires === kd.cs,
-    `${kdId} pinned: content.js ${kd.cs ? 'fires' : 'silent'} triple whammy for ${name}`,
+    csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', name),
+    `content.js fires triple whammy for ${name}`,
   );
   const diureticEntry = HIGH_RISK_DRUGS.find((d) => d.id === 'diuretic');
   const term = name.split(' ')[0].toLowerCase();
-  const visHasIt = diureticEntry && diureticEntry.terms.some((t) => t.toLowerCase().includes(term));
-  assert(!visHasIt, `${kdId} pinned: visualiser diuretic entry does NOT contain ${name.split(' ')[0]}`);
+  assert(
+    diureticEntry && diureticEntry.terms.some((t) => t.toLowerCase() === term),
+    `visualiser diuretic entry contains ${name.split(' ')[0]}`,
+  );
 }
 
 // ── 2h: NSAID in age ≥65 without gastroprotection (PINCER #1) ────────────
@@ -663,21 +603,17 @@ for (const term of SHARED_DIURETICS) {
   assert(csFires, `content.js fires triple whammy for ${term}`);
 }
 
-// Note: 'frusemide' (old UK spelling) is in visualiser but NOT in content.js DIURETIC.
-// Check whether content.js fires for frusemide:
+// 'frusemide' (old UK spelling): present in the visualiser diuretic entry and —
+// since the 2026-06-11 Keeper pass — in content.js DIURETIC too. Both sides.
 {
-  const csFires = csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', 'Frusemide 40mg');
-  // content.js uses 'furosemide' (not 'frusemide') — frusemide won't match
-  // This is a known asymmetry the other direction: visualiser has it, content.js may not
-  if (!csFires) {
-    // Not yet a KNOWN_DIVERGENCES entry — it's content.js missing frusemide, not the other
-    // way around. Document with a soft note rather than failing.
-    console.log(`  NOTE  frusemide (old UK spelling): visualiser has it, content.js DIURETIC does NOT — triple whammy silent in content.js for frusemide`);
-    // We do NOT assert(false) here as it is a content.js limitation, not a vis gap;
-    // record as informational.
-  } else {
-    assert(true, `content.js also fires triple whammy for frusemide`);
-  }
+  assert(
+    csFiresTripleWhammy('Ibuprofen 400mg', 'Ramipril 5mg', 'Frusemide 40mg'),
+    'content.js fires triple whammy for frusemide (old UK spelling)',
+  );
+  assert(
+    visDigureticEntry.terms.includes('frusemide'),
+    'visualiser diuretic entry contains frusemide',
+  );
 }
 
 // ── SECTION 4: Negative controls (both sides agree: no flag) ──────────────

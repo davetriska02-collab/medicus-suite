@@ -1058,7 +1058,7 @@
     const ANTICOAG = /warfarin|apixaban|rivaroxaban|edoxaban|dabigatran|acenocoumarol|phenindione|enoxaparin|dalteparin|tinzaparin|heparin/i;
     const ANTIPLATELET = /aspirin|clopidogrel|ticagrelor|prasugrel|dipyridamole/i;
     const ACEI_ARB = /ramipril|lisinopril|perindopril|enalapril|captopril|trandolapril|fosinopril|quinapril|imidapril|cilazapril|losartan|candesartan|valsartan|irbesartan|olmesartan|telmisartan|azilsartan|eprosartan/i;
-    const DIURETIC = /furosemide|bumetanide|torasemide|bendroflumethiazide|indapamide|hydrochlorothiazide|chlortalidone|chlorthalidone|metolazone/i;
+    const DIURETIC = /furosemide|frusemide|bumetanide|torasemide|bendroflumethiazide|indapamide|hydrochlorothiazide|chlortalidone|chlorthalidone|metolazone/i;
     const BENZO_Z = /diazepam|lorazepam|temazepam|nitrazepam|oxazepam|chlordiazepoxide|clonazepam|alprazolam|zopiclone|zolpidem|zaleplon/i;
 
     const list = (meds || []).map(m => String(m || ''));
