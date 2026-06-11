@@ -43,7 +43,11 @@ console.log('\n--- extended UK oral NSAID coverage (The Keeper completion) ---')
 // Previously-missing UK oral NSAIDs must now fire the NSAID combos, else a
 // patient on one silently never triggers any NSAID prescribing flag.
 for (const nsaid of ['Tiaprofenic acid 300mg', 'Tolfenamic acid 200mg', 'Dexketoprofen 25mg',
-                     'Fenoprofen 300mg', 'Tenoxicam 20mg', 'Sulindac 200mg', 'Nabumetone 500mg']) {
+                     'Fenoprofen 300mg', 'Tenoxicam 20mg', 'Sulindac 200mg', 'Nabumetone 500mg',
+                     // 2026-06-11 Keeper: previously absent from the NSAIDS regex entirely.
+                     'Etodolac 600mg SR', 'Flurbiprofen 100mg',
+                     // covered by the 'ibuprofen'/'ketoprofen' substrings — locks that coverage.
+                     'Dexibuprofen 400mg']) {
   r = evaluate([nsaid, 'Apixaban 5mg tablets'], 60);
   check(texts(r).includes('NSAID + anticoagulant'), `fires for ${nsaid.split(' ')[0]} + apixaban`);
 }
@@ -64,6 +68,9 @@ r = evaluate(['Naproxen 250mg', 'Ramipril 5mg', 'Furosemide 40mg'], 68);
 check(texts(r).some(t => t.startsWith('Triple whammy')), 'fires for NSAID + ACEi + loop diuretic');
 r = evaluate(['Losartan 50mg', 'Indapamide 2.5mg'], 68);
 check(!texts(r).some(t => t.startsWith('Triple whammy')), 'ARB + diuretic WITHOUT NSAID does not fire');
+// 2026-06-11 Keeper: cilazapril added to ACEI_ARB (legacy UK ACEi on repeats).
+r = evaluate(['Ibuprofen 400mg', 'Cilazapril 1mg', 'Bendroflumethiazide 2.5mg'], 70);
+check(texts(r).some(t => t.startsWith('Triple whammy')), 'fires for NSAID + cilazapril + thiazide');
 
 console.log('\n--- benzodiazepine / Z-drug in the elderly ---');
 r = evaluate(['Zopiclone 7.5mg'], 84);

@@ -1,0 +1,17 @@
+{
+  "last_run": "2026-06-11",
+  "scope": "triage-lens ruleset review follow-up (targeted, not full sweep)",
+  "rule_file_lastUpdated": { "alert-library.json": "2026-06-11 (v1.2)" },
+  "manifest_version_after": "3.51.3",
+  "sources_checked": [
+    "https://www.medicines.org.uk/emc/product/3857/smpc",
+    "https://www.medicines.org.uk/emc/product/327/smpc",
+    "https://www.medicines.org.uk/emc/ingredient/480",
+    "https://www.medicines.org.uk/emc/product/2058/smpc",
+    "https://www.medicines.org.uk/emc/product/5677/smpc",
+    "https://www.medicines.org.uk/emc/product/1965/smpc",
+    "https://cks.nice.org.uk/topics/diabetes-type-2/"
+  ],
+  "open_proposals": ["alerts-005: diabetes DKA/HHS chip red-tiering — awaiting CSO decision"],
+  "source_gaps": ["bnf.nice.org.uk 403", "openprescribing.net 403", "products.mhra.gov.uk 403"]
+}

@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.52.0] — 2026-06-11
+## [v3.53.0] — 2026-06-11
 
 ### The Keeper — Sentinel rules currency / red-team pass (vaccines, pathways, QOF)
 
@@ -37,6 +37,80 @@ ISO assumption and the one-off undated-record behaviour (no behaviour change).
 
 **Tests:** `test-vaccine-rules.js` (RSV 80+/care-home, PCV20-given) and
 `test-reception-pathways.js` (clinical-content locks for the escalation/flag changes) extended.
+
+## [v3.52.0] — 2026-06-11
+
+### Triage Lens — engine hardening (red-team follow-up) + DKA/HHS red flag
+
+Engine-level fixes from the triage-lens red-team, plus the CSO-approved diabetes
+re-tiering.
+
+1. **Dropped patterns are no longer silent** (`content-scripts/triage-lens/content.js`,
+   `compileRule`): a pattern that fails to compile now logs a `console.warn` naming
+   the rule and pattern, and a rule left with no usable patterns logs that it will
+   never fire. The options editor already blocked invalid regex at author time
+   (`validateTriageRule`); this covers anything reaching runtime (legacy imports,
+   regressions) so a clinical gap is visible rather than invisible.
+
+2. **Curly quotes/apostrophes normalised before matching** (`content.js`, `getText`):
+   pasted clinical-letter punctuation (’ “ ”) is folded to ASCII on both the
+   `innerText` and DOM-walk paths, so patterns written with a straight apostrophe
+   (e.g. `can't cope`) match regardless of the source punctuation.
+
+3. **Threshold rules reject non-numeric thresholds** (`engine/triage-alert-engine.js`
+   and the event-count path in `engine/rules-engine.js`): a `""`/`null`/missing
+   threshold from an imported or hand-edited rule previously coerced silently
+   (`count < ""` → never fires; `< null` → always fires). Both now coerce with
+   `Number()` and skip the rule with a warning instead of mis-firing.
+
+4. **New red flag `dka-hhs` (CSO-approved)** (`defaults.json`): explicit
+   diabetic-emergency phrasing (diabetic ketoacidosis, DKA, HHS, hyperosmolar,
+   raised ketones, fruity/acetone breath, diabetes + vomiting/can't-keep-fluids/
+   confusion) now fires a **red** chip with a same-day/999 clinical note. The
+   `diabetes` rule keeps routine glycaemic-control phrasing as **amber**. This
+   resolves the prior amber-chip-vs-999-note mismatch. Derived defaults copies
+   regenerated; rule pattern/schema tests green (77 rules).
+
+## [v3.51.3] — 2026-06-11
+
+### Clinical rules — The Keeper pass (triage-lens ruleset review follow-up)
+
+Source-verified, additive drug-set completions arising from the triage-lens red-team. All
+changes extend match lists only (no interval lengthened, no rule weakened); regression tests
+added. Sources corroborated against emc SmPC product IDs and multiple NHS ICB formularies —
+bnf.nice.org.uk / OpenPrescribing / MHRA register were unreachable (HTTP 403) this run, so
+confidence is medium-high rather than direct-BNF; flagged for CSO awareness.
+
+1. **NSAID drug-set — added `etodolac` and `flurbiprofen`** to the built-in prescribing-flag
+   regex (`content-scripts/triage-lens/content.js`) and to every NSAID-combo rule in
+   `rules/alert-library.json`. Both are currently UK-marketed oral systemic NSAIDs (Lodine SR,
+   emc 3857; Froben, emc 327/326) that were absent from every list — a patient on either
+   silently fired no NSAID PINCER/STOPP alert. Also added the UK dm+d/BNF spelling
+   `indometacin` to the library (the existing `indomethacin` does not substring-match it;
+   `content.js` already handled this via `indometh?acin`). Note: `dexibuprofen`/`dexketoprofen`
+   are already covered under substring matching by `ibuprofen`/`ketoprofen` — the earlier
+   red-team "missing dexibuprofen" flag did not hold; explicit entries kept for readability only.
+
+2. **Anticoagulant set (alert-library `pincer-2`, `pincer-13`) — added `acenocoumarol`
+   (Sinthrome) and `phenindione` (Dindevan)**, both active UK oral vitamin-K antagonists in
+   BNF 2.8.2. These were already present in the active `content.js` anticoagulant regex; this
+   removes the inconsistency in the importable PINCER library.
+
+3. **ACEi/ARB set (alert-library `pincer-4`) — added `quinapril`, `imidapril`, `eprosartan`
+   and `cilazapril`** (the last discontinued for new patients but persisting on legacy
+   repeats). `moexipril` deliberately NOT added (UK-discontinued March 2016). `cilazapril`
+   also added to the `content.js` ACEi/ARB regex for the triple-whammy flag.
+
+Bumped `alert-library.json` to v1.2. Tests: extended `test-prescribing-flags.js` (NSAID
+coverage loop + cilazapril triple-whammy); full rule suite green.
+
+### Proposed, NOT applied — awaiting CSO decision
+
+- **Diabetes triage chip tiering.** The `diabetes` rule (`defaults.json`) renders an **amber**
+  chip even when the request text is explicit DKA/HHS ("diabetic ketoacidosis", "ketones in my
+  blood", "fruity breath" + vomiting), while its own action note escalates those to "→ 999".
+  Escalating the DKA/HHS-specific subset to a **red** chip is recommended but is a behaviour
+  change left for CSO sign-off rather than applied silently.
 
 ## [v3.51.2] — 2026-06-10
 
