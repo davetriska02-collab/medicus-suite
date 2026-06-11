@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+
+## [v3.53.0] — 2026-06-11
+
+### New module: Dispensing Margin (`rxmargin`) — offline RxMargin alternative
+
+A working, offline alternative to RxMargin (rxmargin.co.uk) for UK dispensing GP
+practices. Dispensing practices buy medicines from wholesalers but are reimbursed
+at Drug Tariff prices minus the NHS discount-deduction "clawback", so a line's
+profit is `tariff x (1 - clawback) - purchase cost`. The module turns each
+practice's own prices into the money decisions that save cash. All prices are
+entered or CSV-imported by the practice; no licensed Drug Tariff / wholesaler
+feeds are bundled, and data stays on the device.
+
+**Core ledger**
+- Per-product margin: net reimbursement after clawback, margin per pack and margin
+  %, monthly/annual profit at the supplier currently used.
+- Best-buy detection and supplier-switch savings, ranked biggest-first; loss-maker
+  flagging where the clawed-back tariff no longer covers purchase cost.
+- Configurable clawback model — dispensing-doctor flat rate (default 11.18%, the
+  SFE reference) or pharmacy group rates (generics 20%, branded 5%, appliances
+  9.85%, DND 0%); all figures user-editable to track the Drug Tariff.
+
+**Market-feature set** (from a competitive scan of UK dispensing/pharmacy margin
+tools — RxMargin, Dispex/DispensingRx, Drug Tariff Pro/PharmData,
+OpenPrescribing/ePACT2, PMR analytics, wholesaler ordering platforms)
+- Cost-per-unit normalisation to compare pack sizes like-for-like.
+- Margin-by-category breakdown (generic / branded / appliance / DND).
+- Configurable RAG margin-health thresholds with per-line badges.
+- "Switch all to cheapest supplier" one-click scenario (fully reversible).
+- Margin trend sparkline backed by a capped monthly history (`rxmargin.history`).
+- Loss -> recovery hint (price concession / out-of-pocket / broken-bulk, or
+  prescribe rather than dispense).
+- Printable board report (KPIs, category breakdown, top switches, loss-makers)
+  via the browser's print-to-PDF.
+
+**UI**: glass design — theme-derived translucent panels with `backdrop-filter`,
+gradient accents, frosted cards/buttons/modals, sticky table header, and a
+`prefers-reduced-motion` fallback; adapts to light/dark/colourblind themes.
+
+**Correctness / security (red-team)**: blank/non-numeric supplier prices are
+treated as unpriced rather than coerced to GBP0 (they had masqueraded as the
+cheapest buy and produced bogus margins/savings); CSV export neutralises
+spreadsheet formula-injection, lossless on re-import; removed a stray NUL byte
+from the product-grouping key.
+
+Wired into the side-panel and pop-out nav, the suite backup envelope (`rxmargin`
+scope, `shared/io/rxmargin-io.js`) and the per-module export cards in Settings.
+Pure margin math is regression-tested in `test-rxmargin-core.js` (70 assertions).
+
 ## [v3.52.0] — 2026-06-11
 
 ### Triage Lens — engine hardening (red-team follow-up) + DKA/HHS red flag
@@ -75,7 +124,6 @@ coverage loop + cilazapril triple-whammy); full rule suite green.
   blood", "fruity breath" + vomiting), while its own action note escalates those to "→ 999".
   Escalating the DKA/HHS-specific subset to a **red** chip is recommended but is a behaviour
   change left for CSO sign-off rather than applied silently.
-
 ## [v3.51.2] — 2026-06-10
 
 ### Security / bug fixes (2026-06-10 authorised audit)

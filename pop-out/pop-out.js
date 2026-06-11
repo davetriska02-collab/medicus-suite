@@ -22,6 +22,7 @@ const MODULES = {
   reception:   { js: () => import('../side-panel/modules/reception/reception.js'),   css: '../side-panel/modules/reception/reception.css' },
   sweep:       { js: () => import('../side-panel/modules/sweep/sweep.js'),           css: '../side-panel/modules/sweep/sweep.css' },
   knowledge:   { js: () => import('../side-panel/modules/knowledge/knowledge.js'),   css: '../side-panel/modules/knowledge/knowledge.css' },
+  rxmargin:    { js: () => import('../side-panel/modules/rxmargin/rxmargin.js'),     css: '../side-panel/modules/rxmargin/rxmargin.css' },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────
