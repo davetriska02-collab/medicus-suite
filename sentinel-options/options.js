@@ -175,7 +175,7 @@ function defaultDueSoon(intervalDays) {
 // Render the custom rules list
 async function renderCrList() {
   const res = await chrome.storage.local.get('sentinel.customRules');
-  const rules = res['sentinel.customRules'] || [];
+  const rules = (res['sentinel.customRules'] || []).filter(r => !r.type || r.type === 'drug-monitoring');
   const list = getEl('crList');
   if (!list) return;
   if (rules.length === 0) {
