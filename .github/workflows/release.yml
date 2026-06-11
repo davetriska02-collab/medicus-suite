@@ -70,17 +70,56 @@ jobs:
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/
 
+      - name: Generate SHA-256 checksum
+        if: steps.check.outputs.release_exists == 'false'
+        run: |
+          sha256sum "medicus-suite-v${{ steps.version.outputs.version }}.zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Build release notes from CHANGELOG
+        if: steps.check.outputs.release_exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Extract the section for this version from CHANGELOG.md (everything
+          # between this version's "## [vX.Y.Z]" header and the next "## [v" header).
+          awk -v ver="## [v${VERSION}]" '
+            index($0, ver) == 1 { grab = 1; next }
+            grab && /^## \[v/ { exit }
+            grab { print }
+          ' CHANGELOG.md > _section.md
+          {
+            if [ -s _section.md ]; then
+              sed -e '1{/^$/d}' _section.md
+            else
+              echo "Maintenance release. See CHANGELOG.md for details."
+            fi
+            echo
+            echo "---"
+            echo
+            echo "### Install (unpacked — Chrome / Edge)"
+            echo "1. Download \`medicus-suite-v${VERSION}.zip\` below and unzip it."
+            echo "2. Open \`chrome://extensions\` and enable **Developer mode** (top-right)."
+            echo "3. Click **Load unpacked** and select the unzipped \`medicus-suite-v${VERSION}\` folder."
+            echo "4. Pin the extension and open the side panel. Full steps: [README](https://github.com/${{ github.repository }}/blob/main/README.md)."
+            echo
+            echo "### Verify your download"
+            echo "Download \`SHA256SUMS.txt\` alongside the zip, then:"
+            echo '```'
+            echo "sha256sum -c SHA256SUMS.txt"
+            echo '```'
+          } > RELEASE_NOTES.md
+          echo "----- RELEASE_NOTES.md -----"
+          cat RELEASE_NOTES.md
+
       - name: Create GitHub release
         if: steps.check.outputs.release_exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Medicus Suite ${{ steps.version.outputs.tag }}
-          body: |
-            Medicus Suite ${{ steps.version.outputs.tag }}.
-
-            Download `medicus-suite-v${{ steps.version.outputs.version }}.zip` below.
-            Installation steps are in the [README](https://github.com/davetriska02-collab/medicus-suite/blob/main/README.md).
-          files: medicus-suite-v${{ steps.version.outputs.version }}.zip
+          body_path: RELEASE_NOTES.md
+          files: |
+            medicus-suite-v${{ steps.version.outputs.version }}.zip
+            SHA256SUMS.txt
           draft: false
           prerelease: false
