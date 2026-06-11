@@ -274,6 +274,126 @@ console.log('\n--- P-F: ACEi/ARB in age ≥75 without U&E ---');
   assert(!flags.some((f) => f.rule.includes('≥75')), 'P-F does not fire when age unknown (fail-closed)');
 }
 
+// ── KD-31: Triple whammy (NSAID + ACEi/ARB + diuretic) ────────────────────
+console.log('\n--- KD-31: Triple whammy (resolved 2026-06-11) ---');
+{
+  // All three present → fires
+  const flags = computePINCER(
+    [],
+    [makeDetectedDrug('nsaid_long'), makeDetectedDrug('acei'), makeDetectedDrug('diuretic')],
+    [],
+    null
+  );
+  assert(
+    flags.some((f) => /triple|whammy/i.test(f.rule)),
+    'KD-31: NSAID + ACEi + diuretic fires Triple whammy'
+  );
+  const flag = flags.find((f) => /triple|whammy/i.test(f.rule));
+  assert(flag && flag.severity === 'high', 'KD-31: Triple whammy severity is high');
+  assert(
+    flag && /PINCER #4.*STOPP|STOPP.*PINCER #4/i.test(flag.source),
+    'KD-31: Triple whammy source cites PINCER #4 / STOPP'
+  );
+}
+{
+  // NSAID + ACEi only (no diuretic) → does NOT fire
+  const flags = computePINCER([], [makeDetectedDrug('nsaid_long'), makeDetectedDrug('acei')], [], null);
+  assert(!flags.some((f) => /triple|whammy/i.test(f.rule)), 'KD-31: NSAID + ACEi alone does NOT fire triple whammy');
+}
+{
+  // NSAID + diuretic only (no ACEi) → does NOT fire
+  const flags = computePINCER([], [makeDetectedDrug('nsaid_long'), makeDetectedDrug('diuretic')], [], null);
+  assert(
+    !flags.some((f) => /triple|whammy/i.test(f.rule)),
+    'KD-31: NSAID + diuretic alone does NOT fire triple whammy'
+  );
+}
+
+// ── KD-30: NSAID + antiplatelet (anticoag-precedence) ─────────────────────
+console.log('\n--- KD-30: NSAID + antiplatelet (resolved 2026-06-11) ---');
+{
+  // NSAID + antiplatelet, no anticoag → fires
+  const flags = computePINCER([], [makeDetectedDrug('nsaid_long'), makeDetectedDrug('antiplatelet')], [], null);
+  assert(
+    flags.some((f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')),
+    'KD-30: NSAID + antiplatelet (no anticoag) fires'
+  );
+  const flag = flags.find(
+    (f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')
+  );
+  assert(flag && flag.severity === 'high', 'KD-30: NSAID+antiplatelet severity is high');
+  assert(
+    flag && /PINCER #3.*STOPP|STOPP.*PINCER #3/i.test(flag.source),
+    'KD-30: NSAID+antiplatelet source cites PINCER #3 / STOPP'
+  );
+}
+{
+  // NSAID + aspirin_ap (no oral anticoag) → fires
+  const flags = computePINCER([], [makeDetectedDrug('nsaid_long'), makeDetectedDrug('aspirin_ap')], [], null);
+  assert(
+    flags.some((f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')),
+    'KD-30: NSAID + aspirin_ap (no anticoag) fires'
+  );
+}
+{
+  // Anticoag-precedence: NSAID + anticoag + antiplatelet → antiplatelet flag must NOT fire
+  const flags = computePINCER(
+    [],
+    [makeDetectedDrug('nsaid_long'), makeDetectedDrug('doac'), makeDetectedDrug('antiplatelet')],
+    [],
+    null
+  );
+  assert(
+    !flags.some((f) => f.rule.toLowerCase().includes('antiplatelet') && !f.rule.toLowerCase().includes('anticoag')),
+    'KD-30: anticoag present → NSAID+antiplatelet flag suppressed (anticoag-precedence)'
+  );
+  // The NSAID+anticoagulant flag must still fire
+  assert(
+    flags.some((f) => f.rule.toLowerCase().includes('anticoagulant')),
+    'KD-30: NSAID+anticoag flag still fires when anticoag present'
+  );
+}
+
+// ── KD-33: Benzo/Z-drug in age ≥80 ───────────────────────────────────────
+console.log('\n--- KD-33: Benzo/Z-drug in age ≥80 (resolved 2026-06-11) ---');
+{
+  // Fires at age 80
+  const flags = computePINCER([], [makeDetectedDrug('benzo_z')], [], '80');
+  assert(
+    flags.some((f) => /benzo|z.drug/i.test(f.rule)),
+    'KD-33: benzo_z + age 80 fires'
+  );
+  const flag = flags.find((f) => /benzo|z.drug/i.test(f.rule));
+  assert(flag && flag.severity === 'high', 'KD-33: benzo/Z-drug severity is high');
+  assert(flag && /STOPP/i.test(flag.source), 'KD-33: benzo/Z-drug source cites STOPP');
+}
+{
+  // Fires at age 90
+  const flags = computePINCER([], [makeDetectedDrug('benzo_z')], [], '90');
+  assert(
+    flags.some((f) => /benzo|z.drug/i.test(f.rule)),
+    'KD-33: benzo_z + age 90 fires'
+  );
+}
+{
+  // Age 79 (just below threshold) → does NOT fire
+  const flags = computePINCER([], [makeDetectedDrug('benzo_z')], [], '79');
+  assert(!flags.some((f) => /benzo|z.drug/i.test(f.rule)), 'KD-33: benzo_z + age 79 does NOT fire');
+}
+{
+  // Age unknown → does NOT fire (fail-closed)
+  const flags = computePINCER([], [makeDetectedDrug('benzo_z')], [], null);
+  assert(!flags.some((f) => /benzo|z.drug/i.test(f.rule)), 'KD-33: benzo_z + age unknown does NOT fire (fail-closed)');
+}
+{
+  // Age unknown via undefined → does NOT fire (fail-closed)
+  const flags = computePINCER([], [makeDetectedDrug('benzo_z')], [], undefined);
+  assert(
+    !flags.some((f) => /benzo|z.drug/i.test(f.rule)),
+    'KD-33: benzo_z + age undefined does NOT fire (fail-closed)'
+  );
+}
+
 // ── Drug-table completeness locks (2026-06-11 Keeper) ─────────────────────
 // The HIGH_RISK_DRUGS tables were completed to parity with the triage-lens
 // prescribing flags. Matching in the visualiser is \b-bounded, so derivatives
@@ -284,11 +404,30 @@ console.log('\n── Drug-table completeness locks ──');
   const termsOf = (id) => (HIGH_RISK_DRUGS.find((d) => d.id === id)?.terms || []).map((t) => t.toLowerCase());
 
   const nsaids = termsOf('nsaid_long');
-  for (const t of ['ibuprofen', 'dexibuprofen', 'naproxen', 'diclofenac', 'aceclofenac',
-                   'celecoxib', 'etoricoxib', 'meloxicam', 'piroxicam', 'tenoxicam',
-                   'indometacin', 'indomethacin', 'sulindac', 'ketoprofen', 'dexketoprofen',
-                   'tiaprofenic acid', 'mefenamic acid', 'tolfenamic acid', 'fenoprofen',
-                   'nabumetone', 'etodolac', 'flurbiprofen']) {
+  for (const t of [
+    'ibuprofen',
+    'dexibuprofen',
+    'naproxen',
+    'diclofenac',
+    'aceclofenac',
+    'celecoxib',
+    'etoricoxib',
+    'meloxicam',
+    'piroxicam',
+    'tenoxicam',
+    'indometacin',
+    'indomethacin',
+    'sulindac',
+    'ketoprofen',
+    'dexketoprofen',
+    'tiaprofenic acid',
+    'mefenamic acid',
+    'tolfenamic acid',
+    'fenoprofen',
+    'nabumetone',
+    'etodolac',
+    'flurbiprofen',
+  ]) {
     assert(nsaids.includes(t), `nsaid_long terms include "${t}"`);
   }
 
@@ -298,18 +437,61 @@ console.log('\n── Drug-table completeness locks ──');
   }
 
   const acei = termsOf('acei');
-  for (const t of ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril',
-                   'trandolapril', 'fosinopril', 'quinapril', 'imidapril', 'cilazapril',
-                   'candesartan', 'losartan', 'irbesartan', 'valsartan', 'olmesartan',
-                   'telmisartan', 'azilsartan', 'eprosartan']) {
+  for (const t of [
+    'ramipril',
+    'lisinopril',
+    'perindopril',
+    'enalapril',
+    'captopril',
+    'trandolapril',
+    'fosinopril',
+    'quinapril',
+    'imidapril',
+    'cilazapril',
+    'candesartan',
+    'losartan',
+    'irbesartan',
+    'valsartan',
+    'olmesartan',
+    'telmisartan',
+    'azilsartan',
+    'eprosartan',
+  ]) {
     assert(acei.includes(t), `acei terms include "${t}"`);
   }
 
   const diuretics = termsOf('diuretic');
-  for (const t of ['furosemide', 'frusemide', 'bumetanide', 'torasemide', 'indapamide',
-                   'bendroflumethiazide', 'hydrochlorothiazide', 'chlortalidone',
-                   'chlorthalidone', 'metolazone']) {
+  for (const t of [
+    'furosemide',
+    'frusemide',
+    'bumetanide',
+    'torasemide',
+    'indapamide',
+    'bendroflumethiazide',
+    'hydrochlorothiazide',
+    'chlortalidone',
+    'chlorthalidone',
+    'metolazone',
+  ]) {
     assert(diuretics.includes(t), `diuretic terms include "${t}"`);
+  }
+
+  // benzo_z entry (2026-06-11 KD-33 resolution) — parity with content.js BENZO_Z.
+  const benzo = termsOf('benzo_z');
+  for (const t of [
+    'diazepam',
+    'lorazepam',
+    'temazepam',
+    'nitrazepam',
+    'oxazepam',
+    'chlordiazepoxide',
+    'clonazepam',
+    'alprazolam',
+    'zopiclone',
+    'zolpidem',
+    'zaleplon',
+  ]) {
+    assert(benzo.includes(t), `benzo_z terms include "${t}"`);
   }
 }
 

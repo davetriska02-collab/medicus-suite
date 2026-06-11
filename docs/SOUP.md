@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-SOUP-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.33.0
-**Document version:** 1.0
-**Date issued:** 2026-06-07
+**Product version:** 3.56.0
+**Document version:** 1.1
+**Date issued:** 2026-06-11
 **Author:** Dr Dave Triska, Graysbrook Ltd
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP
 **Status:** Live — reviewed at each minor or major release, and whenever a vendored library is upgraded
@@ -43,7 +43,20 @@ This containment is the primary risk control for the entire SOUP set: a defect o
 | 3 | **Chart.js** (`vendor/chart.min.js`) | 4.4.1 | Chart.js contributors, via npm `chart.js` (jsDelivr CDN build) | MIT | Renders the investigation-trend line charts in the visualiser from local numeric arrays. | No known anomaly affecting this use. Operates only on already-parsed numeric series; no PDF, network or untrusted-markup input. | No action required. | Current within the 4.4.x line; reviewed at each release. |
 | 4 | **D3.js** (`vendor/d3.min.js`) | 7.8.5 | Mike Bostock / D3 contributors, via npm `d3` (jsDelivr CDN build) | ISC | Drives the swim-lane event timeline and supporting visualisations in the visualiser. | No known anomaly affecting this use. Consumes already-parsed local data structures; no network or eval-style input. | No action required. | Current within the 7.8.x line; reviewed at each release. |
 
-## 4. SOUP verification and maintenance procedure
+## 4. Non-shipped development dependencies (devDependencies)
+
+The following packages are listed in `package.json` as `devDependencies` and are used **exclusively** for local linting, formatting, and the pre-commit hook during development. They are not vendored, not bundled, and do not ship inside the extension zip. They are therefore not SOUP for the purposes of this register. They are noted here for completeness.
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `eslint` | 9.24.0 | Static code linting |
+| `@eslint/js` | 9.24.0 | ESLint JS rule set |
+| `globals` | 16.0.0 | Global identifier definitions for ESLint |
+| `prettier` | 3.5.3 | Code format checking |
+
+These packages are never executed in the browser and have no access to patient data. No CVE disposition is required.
+
+## 5. SOUP verification and maintenance procedure
 
 When any item above is added, upgraded or removed:
 
@@ -53,8 +66,9 @@ When any item above is added, upgraded or removed:
 4. Record the change in `CHANGELOG.md` and bump `manifest.json` per the versioning policy.
 5. If the change alters a clinical-safety control (e.g. the PDF.js anomaly mitigation), reflect it in `docs/HAZARD-LOG.md`.
 
-## 5. Document history
+## 6. Document history
 
 | Date | Version | Author | Change |
 |------|---------|--------|--------|
 | 2026-06-07 | 1.0 | DT | Initial SOUP register, synchronised to Medicus Suite v3.33.0 and `vendor-versions.json` (generated 2026-06-04). Captures PDF.js 3.11.174 (+ worker), Chart.js 4.4.1, D3.js 7.8.5, including the CVE-2024-4367 mitigation and the deferred PDF.js upgrade (NF6). |
+| 2026-06-11 | 1.1 | DT | Synchronised to Medicus Suite v3.56.0. **SOUP items (§3) verified** against `vendor-versions.json`: PDF.js 3.11.174 (+ worker), Chart.js 4.4.1, D3.js 7.8.5 — all versions unchanged; CVE-2024-4367 mitigation and NF6 deferred-upgrade status unchanged. **Added §4 (non-shipped devDependencies):** ESLint 9.24.0, @eslint/js 9.24.0, globals 16.0.0, Prettier 3.5.3 — dev-only, not shipped, no patient-data access. |
