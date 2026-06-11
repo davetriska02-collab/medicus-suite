@@ -1,0 +1,619 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+:host, .sentinel-root {
+  all: initial;
+  display: block;
+  height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  background: #ffffff;
+  border-left: 1px solid #d1d5db;
+  box-shadow: -2px 0 12px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+* { box-sizing: border-box; }
+
+.sb-header {
+  background: #1e3a5f;
+  color: #ffffff;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sb-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sb-icon { font-size: 14px; }
+.sb-version { opacity: 0.7; font-size: 11px; }
+
+.icon-btn {
+  background: transparent;
+  color: #ffffff;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 6px;
+}
+
+.sb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.data-source-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-source-text {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.5px;
+}
+
+.mode-select {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  background: #ffffff;
+}
+
+.text-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #374151;
+}
+
+.text-btn:hover { background: #f3f4f6; }
+
+.sb-status-row {
+  padding: 6px 14px;
+  background: #f9fafb;
+  font-size: 11px;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.patient-banner {
+  padding: 10px 14px;
+  background: #eef2f7;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.patient-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e3a5f;
+  margin-bottom: 2px;
+}
+
+.patient-meta {
+  font-size: 11px;
+  color: #4b5563;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.patient-view {
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.register-pills {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.register-pill {
+  display: inline-block;
+  background: #1e3a5f;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-right: 4px;
+  letter-spacing: 0.3px;
+  cursor: help;
+}
+
+.sb-summary {
+  padding: 8px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.summary .sum-bad { color: #b91c1c; font-weight: 600; }
+.summary .sum-warn { color: #b45309; font-weight: 600; }
+.summary .sum-good { color: #047857; }
+.summary .sum-meh { color: #6b7280; }
+
+.sb-filter {
+  padding: 6px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.show-achieved-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.show-achieved-label input { margin: 0; }
+
+.chip-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+  background: #fafafa;
+}
+
+.chip-section {
+  margin-bottom: 12px;
+}
+
+.chip-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 6px;
+}
+
+.chip-section-header:hover { background: #f3f4f6; }
+
+.chip-section-toggle {
+  font-size: 10px;
+  color: #6b7280;
+  width: 12px;
+}
+
+.chip-section-title {
+  flex: 1;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.chip-section-count {
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.chip-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chip {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.chip-title { flex: 1; }
+.chip-title strong { font-size: 13px; }
+
+.chip-class {
+  display: block;
+  font-size: 10px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+}
+
+.chip-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.chip-overdue, .chip-not_met { border-left: 4px solid #b91c1c; }
+.chip-overdue .chip-status, .chip-not_met .chip-status { background: #fee2e2; color: #b91c1c; }
+.chip-stale { border-left: 4px solid #d97706; }
+.chip-stale .chip-status { background: #fef3c7; color: #b45309; }
+.chip-due_soon { border-left: 4px solid #d97706; }
+.chip-due_soon .chip-status { background: #fef3c7; color: #b45309; }
+.chip-no_data { border-left: 4px solid #6b7280; }
+.chip-no_data .chip-status { background: #f3f4f6; color: #6b7280; }
+.chip-in_date, .chip-achieved { border-left: 4px solid #059669; }
+.chip-in_date .chip-status, .chip-achieved .chip-status { background: #d1fae5; color: #047857; }
+.chip-recently_initiated { border-left: 4px solid #1d4ed8; }
+.chip-recently_initiated .chip-status { background: #dbeafe; color: #1d4ed8; }
+
+.chip-body {
+  padding: 0 10px 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.test-list, .qof-value {
+  list-style: none;
+  padding: 6px 0 0;
+  margin: 0;
+  font-size: 11px;
+}
+
+.test-list li {
+  padding: 2px 0;
+  display: flex;
+  justify-content: space-between;
+  color: #4b5563;
+}
+
+.test-overdue, .test-stale { color: #b91c1c; font-weight: 600; }
+.test-due_soon { color: #b45309; }
+
+.qof-value { padding: 6px 0; color: #1f2937; }
+.qof-nodata { color: #6b7280; font-style: italic; }
+
+.chip-detail {
+  display: none;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.chip-detail p { margin: 3px 0; }
+.chip-detail .shared-care { color: #1d4ed8; font-style: italic; }
+
+.chip.expanded .chip-detail { display: block; }
+
+.chip-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.chip-dismiss {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.chip-dismiss:hover { background: #f3f4f6; color: #374151; }
+
+.empty-state {
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.empty-state strong { display: block; margin-bottom: 8px; font-size: 13px; color: #374151; }
+.empty-state p { margin: 0; font-size: 12px; }
+
+/* Extraction drift banner (amber — distinct from red degraded state) */
+.drift-banner {
+  border-left: 3px solid #b45309;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #374151;
+}
+.drift-banner strong { color: #1f2937; }
+.drift-banner p { margin: 4px 0 0; font-size: 11px; color: #6b7280; line-height: 1.5; }
+.drift-dismiss {
+  display: inline-block;
+  margin-top: 6px;
+  background: transparent;
+  border: 1px solid rgba(180, 83, 9, 0.4);
+  border-radius: 4px;
+  color: #b45309;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.drift-dismiss:hover { background: rgba(180, 83, 9, 0.1); }
+
+.view-hint {
+  background: #eff6ff;
+  border-left: 3px solid #1e3a5f;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #1e3a5f;
+  border-radius: 0 4px 4px 0;
+}
+
+.view-hint strong { display: block; margin-bottom: 2px; font-size: 12px; }
+
+.discovery-output {
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+
+.discovery-output h3 { font-size: 13px; margin: 0 0 8px; color: #374151; }
+.discovery-output p { font-size: 11px; margin: 0 0 10px; color: #6b7280; }
+
+.copy-findings {
+  font-size: 11px;
+  padding: 6px 12px;
+  background: #1e3a5f;
+  color: #ffffff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.copy-findings:hover { background: #1e2c4a; }
+
+.debug-panel {
+  margin-top: 14px;
+  border: 1px dashed #9ca3af;
+  border-radius: 4px;
+  background: #f9fafb;
+  font-size: 11px;
+}
+
+.debug-panel summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #4b5563;
+  font-weight: 500;
+  user-select: none;
+}
+
+.debug-panel[open] summary { border-bottom: 1px dashed #d1d5db; }
+
+.debug-content { padding: 8px 10px 10px; }
+
+.debug-content h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #6b7280;
+  margin: 8px 0 4px;
+}
+
+.debug-content h4:first-child { margin-top: 0; }
+
+.debug-list { list-style: none; margin: 0; padding: 0; }
+
+.debug-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 11px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.debug-list li:last-child { border-bottom: none; }
+
+.debug-list small {
+  color: #9ca3af;
+  font-size: 10px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.debug-date {
+  color: #6b7280;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.debug-empty { margin: 0; font-style: italic; color: #9ca3af; font-size: 11px; }
+
+.debug-copy {
+  margin-top: 10px;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #374151;
+}
+
+.debug-copy:hover { background: #f3f4f6; }
+
+.sb-footer {
+  padding: 8px 14px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+/* ============================================================
+ * UI CONFIG VARIANTS (v0.3.1)
+ * Toggled via data attributes on .sentinel-root
+ * ============================================================ */
+
+.text-btn-tiny {
+  font-size: 10px;
+  padding: 3px 6px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #6b7280;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.text-btn-tiny:hover { background: #f3f4f6; color: #374151; }
+
+.sb-header-actions { display: flex; gap: 4px; align-items: center; }
+
+.sb-filter {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sb-filter label { flex: 0 0 auto; }
+.sb-filter > button { margin-left: auto; }
+
+/* ---- CHIP STYLE: bold ---- */
+.sentinel-root[data-chip-style="bold"] .chip {
+  border-left-width: 0;
+  border: none;
+  color: #1f2937;
+}
+.sentinel-root[data-chip-style="bold"] .chip-overdue,
+.sentinel-root[data-chip-style="bold"] .chip-not_met {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+}
+.sentinel-root[data-chip-style="bold"] .chip-overdue .chip-status,
+.sentinel-root[data-chip-style="bold"] .chip-not_met .chip-status {
+  background: #b91c1c;
+  color: #ffffff;
+}
+.sentinel-root[data-chip-style="bold"] .chip-stale,
+.sentinel-root[data-chip-style="bold"] .chip-due_soon {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+}
+.sentinel-root[data-chip-style="bold"] .chip-stale .chip-status,
+.sentinel-root[data-chip-style="bold"] .chip-due_soon .chip-status {
+  background: #b45309;
+  color: #ffffff;
+}
+.sentinel-root[data-chip-style="bold"] .chip-no_data {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+}
+.sentinel-root[data-chip-style="bold"] .chip-no_data .chip-status {
+  background: #6b7280;
+  color: #ffffff;
+}
+.sentinel-root[data-chip-style="bold"] .chip-in_date,
+.sentinel-root[data-chip-style="bold"] .chip-achieved {
+  background: #d1fae5;
+  border: 1px solid #86efac;
+}
+.sentinel-root[data-chip-style="bold"] .chip-in_date .chip-status,
+.sentinel-root[data-chip-style="bold"] .chip-achieved .chip-status {
+  background: #047857;
+  color: #ffffff;
+}
+.sentinel-root[data-chip-style="bold"] .chip-recently_initiated {
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+}
+.sentinel-root[data-chip-style="bold"] .chip-recently_initiated .chip-status {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+.sentinel-root[data-chip-style="bold"] .chip-body {
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+/* ---- CHIP STYLE: minimal (no colour at all) ---- */
+.sentinel-root[data-chip-style="minimal"] .chip {
+  border-left-width: 0;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+.sentinel-root[data-chip-style="minimal"] .chip-status {
+  background: transparent;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+}
+
+/* ---- DENSITY: compact ---- */
+.sentinel-root[data-density="compact"] .chip-header { padding: 5px 8px; }
+.sentinel-root[data-density="compact"] .chip-body { padding: 0 8px 6px; }
+.sentinel-root[data-density="compact"] .chip-title strong { font-size: 12px; }
+.sentinel-root[data-density="compact"] .chip-class { font-size: 9px; }
+.sentinel-root[data-density="compact"] .test-list li { padding: 1px 0; font-size: 10px; }
+.sentinel-root[data-density="compact"] .chip-section { margin-bottom: 8px; }
+.sentinel-root[data-density="compact"] .chip-section-header { padding: 4px 6px; }
+.sentinel-root[data-density="compact"] .chip-section-body { gap: 5px; }
+.sentinel-root[data-density="compact"] .chip-list { padding: 6px 10px; }
+.sentinel-root[data-density="compact"] .patient-banner { padding: 6px 10px; }
+.sentinel-root[data-density="compact"] .sb-toolbar { padding: 6px 10px; }
+.sentinel-root[data-density="compact"] .sb-summary,
+.sentinel-root[data-density="compact"] .sb-filter { padding: 4px 10px; }
+
+/* ---- DENSITY: spacious ---- */
+.sentinel-root[data-density="spacious"] .chip-header { padding: 12px 14px; }
+.sentinel-root[data-density="spacious"] .chip-body { padding: 0 14px 14px; }
+.sentinel-root[data-density="spacious"] .chip-section-body { gap: 12px; }
+.sentinel-root[data-density="spacious"] .chip-section { margin-bottom: 16px; }
+.sentinel-root[data-density="spacious"] .chip-list { padding: 14px 18px; }
+.sentinel-root[data-density="spacious"] .patient-banner { padding: 14px 18px; }
+
+/* ---- FONT SIZE ---- */
+.sentinel-root[data-font-size="small"] { font-size: 12px; }
+.sentinel-root[data-font-size="small"] .chip-title strong { font-size: 12px; }
+.sentinel-root[data-font-size="small"] .patient-name { font-size: 13px; }
+
+.sentinel-root[data-font-size="large"] { font-size: 14px; }
+.sentinel-root[data-font-size="large"] .chip-title strong { font-size: 15px; }
+.sentinel-root[data-font-size="large"] .patient-name { font-size: 16px; }
+.sentinel-root[data-font-size="large"] .chip-status { font-size: 11px; }
+
+/* ---- EXPAND CHIPS BY DEFAULT ---- */
+.sentinel-root[data-expand-chips="true"] .chip .chip-detail { display: block; }
+.sentinel-root[data-expand-chips="true"] .chip-body { display: block !important; }
+
+/* ---- HIDE SECTIONS BY CONFIG ---- */
+.sentinel-root[data-show-data-source="false"] .sb-status-row { display: none; }
+.sentinel-root[data-show-register-pills="false"] .register-pills { display: none; }
+.sentinel-root[data-show-view-label="false"] .patient-view { display: none; }
+.sentinel-root[data-show-debug="false"] .debug-panel { display: none; }

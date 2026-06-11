@@ -1,0 +1,4 @@
+# The Keeper writes last-run.json here after a successful run.
+# It records the run date, each rule file's lastUpdated/specVersion at the time,
+# and the list of source URLs checked — so the next run can show what changed
+# since, and mark changes proposed in a prior run as "previously flagged, still open".

@@ -1,0 +1,1337 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Sentinel module styles */
+
+.sent-module {
+  font-family: var(--sans);
+  position: relative;
+}
+.sent-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2px;
+}
+
+/* Patient banner */
+.sent-patient-banner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.sent-patient-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-1);
+  margin-bottom: 3px;
+}
+.sent-patient-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.03em;
+}
+
+/* Extraction drift banner (amber — distinct from red degraded state) */
+.sent-drift-banner {
+  border-left: 3px solid #b45309;
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sent-drift-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.sent-drift-icon {
+  color: #b45309;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.sent-drift-head strong {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-1);
+}
+.sent-drift-dismiss {
+  background: transparent;
+  border: 1px solid rgba(180, 83, 9, 0.4);
+  border-radius: 4px;
+  color: #b45309;
+  font-size: 10px;
+  font-family: var(--mono);
+  cursor: pointer;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sent-drift-dismiss:hover {
+  background: rgba(180, 83, 9, 0.1);
+}
+.sent-drift-body {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* Filter bar */
+.sent-filter-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+.sent-filter-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 5px 4px;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.sent-filter-btn:hover {
+  color: var(--text-2);
+}
+.sent-filter-btn.active {
+  background: var(--bg-mid);
+  color: var(--text-2);
+  border: 1px solid var(--border-hi);
+}
+.sent-filter-btn.active.action {
+  color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+.sent-filter-btn.active.clear {
+  color: var(--green);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+/* Groups */
+.sent-group {
+  margin-bottom: 14px;
+}
+.sent-group-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.sent-chip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Chips — Medicus sidebar style: left colour bar + right status badge */
+.sent-chip {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  padding: 7px 10px;
+  border-left-width: 3px;
+  position: relative;
+}
+
+.sent-chip-red {
+  border-left-color: var(--red);
+  background: rgba(248, 113, 113, 0.06);
+}
+.sent-chip-amber {
+  border-left-color: var(--amber);
+  background: rgba(251, 191, 36, 0.06);
+}
+.sent-chip-green {
+  border-left-color: var(--green);
+  background: rgba(74, 222, 128, 0.04);
+}
+.sent-chip-neutral {
+  border-left-color: var(--border-hi);
+}
+
+.sent-chip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.sent-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+}
+.sent-chip-cat {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.sent-chip-obs {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+  font-family: var(--mono);
+}
+
+/* Status badge — the "flash" on the right */
+.sent-chip-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.sent-badge-red {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.sent-badge-amber {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--amber);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.sent-badge-green {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.sent-badge-neutral {
+  background: var(--bg-mid);
+  color: var(--text-5);
+  border: 1px solid var(--border);
+}
+
+/* Test rows */
+.sent-test-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.sent-test-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sent-test-name {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.sent-test-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  text-align: right;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.sent-test-red {
+  color: var(--red) !important;
+}
+.sent-test-amber {
+  color: var(--amber) !important;
+}
+.sent-test-green {
+  color: var(--green) !important;
+}
+.sent-test-neutral {
+  color: var(--text-4);
+}
+
+/* Registers dim */
+.sent-group-dim {
+  opacity: 0.55;
+}
+.sent-group-dim .sent-chip {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* Skeleton */
+.sent-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.sent-skel-chip {
+  height: 52px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Footer */
+.sent-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.sent-footer-left {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.sent-ts {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-5);
+  letter-spacing: 0.06em;
+}
+.sent-empty {
+  font-size: 12px;
+  color: var(--text-4);
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ── Waiting Room pinned block ───────────────────────────────────────────────── */
+
+.wr-pinned {
+  border-radius: 7px;
+  border: 1px solid var(--border-hi);
+  padding: 0;
+  margin-bottom: 12px;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.wr-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+}
+
+.wr-pin-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.wr-pin-label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.wr-pin-label strong {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.wr-pin-ts {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-5);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* States */
+.wr-loading {
+  background: var(--bg-elev);
+  opacity: 0.6;
+}
+.wr-error {
+  background: rgba(248, 113, 113, 0.06);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+.wr-error .wr-pin-label {
+  color: var(--red);
+}
+
+.wr-clear {
+  background: rgba(74, 222, 128, 0.04);
+  border-color: rgba(74, 222, 128, 0.18);
+}
+.wr-clear .wr-pin-label {
+  color: var(--green);
+}
+
+.wr-waiting {
+  background: rgba(251, 191, 36, 0.05);
+  border-color: rgba(251, 191, 36, 0.25);
+  border-left: 3px solid var(--amber);
+}
+
+.wr-pin-head {
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(251, 191, 36, 0.15);
+}
+
+/* Patient rows */
+.wr-rows {
+  padding: 4px 0 3px;
+}
+
+.wr-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.wr-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wr-row-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  min-width: 30px;
+  flex-shrink: 0;
+}
+
+.wr-row-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wr-row-wait {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+/* Wait duration colour escalation */
+.wr-row-amber .wr-row-wait {
+  color: var(--amber);
+}
+.wr-row-amber .wr-row-name {
+  color: var(--text-1);
+}
+.wr-row-red .wr-row-wait {
+  color: var(--red);
+}
+.wr-row-red .wr-row-name {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+/* QOF year label on indicator chips */
+.sent-qof-year {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border-hi);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+/* HRT progestogen context line */
+.sent-chip-hrt-ctx {
+  font-size: 10.5px;
+  font-family: var(--mono);
+  padding: 4px 0 2px;
+  margin-top: 3px;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.02em;
+}
+.hrt-ctx-ok {
+  color: var(--green);
+}
+.hrt-ctx-warn {
+  color: var(--amber);
+}
+
+/* Custom rule tag on drug-monitoring chips */
+.sent-custom-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 8.5px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+/* === Evidence panel (click-to-detail) === */
+.sent-chip-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: box-shadow 120ms;
+}
+.sent-chip-clickable:hover {
+  box-shadow: 0 0 0 1px var(--accent, #4f7cff) inset;
+}
+.sent-chip-clickable:focus {
+  outline: 2px solid var(--accent, #4f7cff);
+  outline-offset: 1px;
+}
+.sent-chip-clickable.sent-chip-open {
+  box-shadow: 0 0 0 2px var(--accent, #4f7cff) inset;
+}
+.sent-chip-info {
+  font-size: 10px;
+  opacity: 0.55;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: normal;
+}
+.sent-chip-clickable:hover .sent-chip-info,
+.sent-chip-clickable.sent-chip-open .sent-chip-info {
+  opacity: 1;
+}
+
+/* === Vaccine chip (compact + expandable) === */
+.sent-vax-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sent-vax-reason {
+  flex: 1;
+  min-width: 0;
+}
+.sent-vax-season {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sent-vax-details {
+  margin-top: 6px;
+}
+.sent-vax-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10px;
+  color: var(--text-4);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.sent-vax-summary::-webkit-details-marker {
+  display: none;
+}
+.sent-vax-summary:hover {
+  color: var(--text-2);
+}
+.sent-vax-summary .sent-chip-info {
+  opacity: 0.7;
+  margin-left: 0;
+}
+.sent-vax-summary:hover .sent-chip-info {
+  opacity: 1;
+}
+.sent-vax-details[open] .sent-vax-summary {
+  color: var(--text-2);
+}
+.sent-vax-detail-body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border, #2a3146);
+  animation: sent-ev-fade 120ms ease;
+}
+.sent-vax-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-family: var(--mono);
+  color: var(--text-3);
+}
+.sent-vax-row-label {
+  color: var(--text-4);
+  min-width: 72px;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.sent-vax-row-val {
+  color: var(--text-2);
+}
+.sent-vax-note {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--amber, #e0a23b);
+  background: rgba(224, 162, 59, 0.08);
+  border-left: 2px solid var(--amber, #e0a23b);
+  border-radius: 0 4px 4px 0;
+  padding: 6px 8px;
+}
+.sent-chip-source {
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 4px;
+}
+
+.sent-evidence-wrapper {
+  margin: 0 0 8px 0;
+}
+.sent-evidence-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border, #2a3146);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-top: -4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2, #c9d1e0);
+  animation: sent-ev-fade 120ms ease;
+}
+@keyframes sent-ev-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.sent-ev-summary {
+  font-weight: 600;
+  color: var(--text-1, #e2e8f0);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border, #2a3146);
+}
+.sent-ev-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sent-ev-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+}
+.sent-ev-label {
+  color: var(--text-3, #8a96aa);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding-top: 1px;
+}
+.sent-ev-value {
+  color: var(--text-1, #e2e8f0);
+  word-break: break-word;
+}
+.sent-ev-date {
+  color: var(--text-3, #8a96aa);
+  font-size: 11px;
+}
+.sent-ev-detail {
+  color: var(--text-3, #8a96aa);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.sent-ev-sparkline {
+  background: var(--bg-deep);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 4px 0 10px 0;
+}
+.sent-ev-sparkline svg {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
+.sent-spark-line {
+  stroke-width: 1.8;
+}
+.sent-spark-line.rising {
+  stroke: #e57373;
+}
+.sent-spark-line.falling {
+  stroke: #64b5f6;
+}
+.sent-spark-line.steady {
+  stroke: #94a3b8;
+}
+.sent-ev-sparkline svg circle {
+  fill: var(--text-2, #c9d1e0);
+}
+.sent-ev-sparkline-legend {
+  font-size: 11px;
+  color: var(--text-3, #8a96aa);
+  text-align: right;
+  margin-top: 2px;
+}
+
+.sent-ev-refs {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #2a3146);
+}
+.sent-ev-refs-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-3, #8a96aa);
+  margin-bottom: 4px;
+}
+.sent-ev-ref {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border, #2a3146);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 2px 0;
+  color: var(--text-2, #c9d1e0);
+  font: inherit;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.sent-ev-ref:hover {
+  background: var(--bg-hover);
+}
+.sent-ev-ref.fired {
+  color: var(--text-1, #e2e8f0);
+}
+.sent-ev-ref-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3, #8a96aa);
+  flex-shrink: 0;
+}
+.sent-ev-ref-dot.on {
+  background: #e57373;
+}
+.sent-ev-ref-label {
+  flex: 1;
+}
+.sent-ev-ref-state {
+  font-size: 11px;
+  color: var(--text-3, #8a96aa);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sent-ev-foot {
+  margin-top: 10px;
+  text-align: right;
+}
+.sent-ev-close {
+  background: transparent;
+  border: 1px solid var(--border, #2a3146);
+  border-radius: 4px;
+  padding: 4px 10px;
+  color: var(--text-2, #c9d1e0);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sent-ev-close:hover {
+  background: var(--bg-hover);
+}
+
+/* ── Per-rule dismiss / snooze button ──────────────────────────────────────── */
+.sent-chip-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 2px;
+  line-height: 1;
+}
+.sent-chip {
+  position: relative;
+}
+.sent-chip:hover .sent-chip-dismiss {
+  opacity: 0.6;
+}
+.sent-chip-dismiss:hover {
+  opacity: 1 !important;
+  color: var(--text);
+}
+
+/* Per-module extraction breakdown (H-005 transparency, informational only) */
+.sent-extraction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.03em;
+}
+.sent-ext-label {
+  color: var(--text-5);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sent-ext-item {
+  color: var(--text-3);
+}
+.sent-ext-zero {
+  color: var(--amber);
+}
+
+/* ── Patient banner row (holds name + verify button) ──────────────────────── */
+.sent-patient-banner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+/* ── Verify in Medicus button (H-007 anti-automation-bias affordance) ──────── */
+/* Appears next to the patient name banner and inside chip evidence panels. */
+.sent-verify-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-hi, #3d5070);
+  border-radius: 4px;
+  color: var(--accent, #4a7fb8);
+  font-size: 10px;
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 3px 8px;
+  white-space: nowrap;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+.sent-verify-btn:hover {
+  background: rgba(74, 127, 184, 0.12);
+  border-color: var(--accent, #4a7fb8);
+}
+.sent-verify-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sent-ev-verify-btn {
+  background: transparent;
+  border: 1px solid var(--border, #2a3146);
+  border-radius: 4px;
+  padding: 4px 10px;
+  color: var(--accent, #4a7fb8);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  margin-right: 6px;
+}
+.sent-ev-verify-btn:hover {
+  background: rgba(74, 127, 184, 0.12);
+  border-color: var(--accent, #4a7fb8);
+}
+.sent-ev-verify-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Rule currency footer ─────────────────────────────────────────────────── */
+/* One-line footer below the chip area. Neutral when green, amber when stale. */
+.sent-rules-footer {
+  margin-top: 10px;
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+.sent-rules-footer-green {
+  color: var(--text-5, #3d5070);
+  background: transparent;
+}
+.sent-rules-footer-amber {
+  color: var(--amber, #b45309);
+  background: rgba(180, 83, 9, 0.06);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+}
+.sent-rules-footer-red {
+  color: var(--red, #d4351c);
+  background: rgba(212, 53, 28, 0.07);
+  border: 1px solid rgba(212, 53, 28, 0.25);
+}
+.sent-rules-footer-icon {
+  margin-right: 4px;
+}
+
+/* ── Appointments summary modal ─────────────────────────────────────────────── */
+.sent-appt-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.88);
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: stretch;
+  padding: 12px;
+  border-radius: inherit;
+}
+.sent-appt-modal-inner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+.sent-appt-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.sent-appt-modal-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sent-appt-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.sent-appt-modal-close:hover {
+  color: var(--text-2);
+}
+.sent-appt-modal-text {
+  width: 100%;
+  min-height: 160px;
+  resize: vertical;
+  background: var(--bg-deep, #0a0e1a);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+.sent-appt-modal-foot {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.sent-appt-modal-copy {
+  background: var(--accent, #4a7fb8);
+  border: none;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+.sent-appt-modal-copy:hover {
+  opacity: 0.85;
+}
+
+/* ── Evaluation audit trail: "Why?" block inside evidence panel ─────────────── */
+.sent-ev-why {
+  margin: 8px 0 6px;
+  padding: 7px 10px;
+  background: rgba(74, 127, 184, 0.07);
+  border-left: 3px solid var(--accent, #4a7fb8);
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.sent-ev-why-label {
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent, #4a7fb8);
+  margin-bottom: 3px;
+}
+.sent-ev-why-text {
+  color: var(--text-2, #c8d0e0);
+}
+.sent-ev-why-source {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-5, #3d5070);
+  font-family: var(--mono, monospace);
+}
+
+/* ── Action Packs — per-chip and patient-level copy-ready action text ──────── */
+
+/* Thin row injected under each action-needed chip */
+.sent-act-row {
+  margin: 0 0 6px 0;
+  padding: 2px 0 0 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* "Actions" trigger button — compact, ghost-style, accent coloured */
+.sent-act-btn {
+  background: transparent;
+  border: 1px solid rgba(74, 127, 184, 0.35);
+  border-radius: 4px;
+  color: var(--accent, #4a7fb8);
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 3px 9px;
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+  white-space: nowrap;
+}
+.sent-act-btn:hover {
+  background: rgba(74, 127, 184, 0.1);
+  border-color: var(--accent, #4a7fb8);
+}
+
+/* Action pack modal — overlays the sentinel module pane */
+.sent-act-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.9);
+  z-index: 51;
+  display: flex;
+  align-items: flex-start;
+  justify-content: stretch;
+  padding: 12px;
+  border-radius: inherit;
+  overflow-y: auto;
+}
+
+.sent-act-modal-inner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Sections container — scrollable area between header and bottom padding */
+.sent-act-sections {
+  padding: 6px 0 8px;
+  overflow-y: auto;
+  max-height: calc(100vh - 180px);
+}
+
+/* Each labelled section (Blood form, Recall SMS, etc.) */
+.sent-act-section {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sent-act-section:last-child {
+  border-bottom: none;
+}
+
+.sent-act-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.sent-act-section-label {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+/* Per-section Copy button */
+.sent-act-copy-btn {
+  background: var(--accent, #4a7fb8);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: opacity 0.1s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sent-act-copy-btn:hover {
+  opacity: 0.82;
+}
+
+/* Read-only textarea showing the copy text */
+.sent-act-textarea {
+  width: 100%;
+  min-height: 52px;
+  resize: vertical;
+  background: var(--bg-deep, #0a0e1a);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-2);
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  line-height: 1.55;
+  padding: 6px 8px;
+  outline: none;
+  box-sizing: border-box;
+}
+.sent-act-textarea:focus {
+  border-color: var(--accent, #4a7fb8);
+}
+
+/* ── Pre-Consultation Brief card ──────────────────────────────────────────── */
+/* Collapsible 30-second risk-ranked glance at the top of the Sentinel panel.  */
+/* CSS prefix: sent-brief-*                                                     */
+
+.sent-brief-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 7px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+/* Header row: clickable toggle bar */
+.sent-brief-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 7px;
+  transition: background 0.1s;
+}
+.sent-brief-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.sent-brief-header:focus {
+  outline: 2px solid var(--accent, #4a7fb8);
+  outline-offset: -2px;
+}
+
+.sent-brief-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+.sent-brief-patient {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-brief-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.sent-brief-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.sent-brief-badge-red {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--red, #f87171);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.sent-brief-badge-amber {
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--amber, #fbbf24);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+.sent-brief-chevron {
+  font-size: 9px;
+  color: var(--text-5);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+/* Body: signals + trend notes */
+.sent-brief-body {
+  padding: 0 10px 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* When collapsed the body is absent — card has no bottom content */
+.sent-brief-collapsed .sent-brief-header {
+  border-radius: 7px;
+}
+
+/* Signal lines */
+.sent-brief-signal {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.sent-brief-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-4);
+}
+.sent-brief-signal-red .sent-brief-dot {
+  background: var(--red, #f87171);
+}
+.sent-brief-signal-amber .sent-brief-dot {
+  background: var(--amber, #fbbf24);
+}
+.sent-brief-signal-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Trend notes */
+.sent-brief-trend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.sent-brief-trend-arrow {
+  flex-shrink: 0;
+  font-size: 12px;
+  width: 7px;
+  text-align: center;
+  color: var(--text-4);
+}
+.sent-brief-trend-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "+N more below" line */
+.sent-brief-more {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-5);
+  padding-top: 4px;
+  text-transform: uppercase;
+}
+
+/* ── Unmatched meds: excluded-by annotation ───────────────────────────────── */
+/* Amber inline annotation shown next to meds silently suppressed by an
+   exclude term — surfaces the "wrong injection suppresses everything" class of
+   silent failure without being alarming (it's informational, not an error). */
+.sent-unmatched-excluded {
+  font-size: 10px;
+  font-family: var(--mono, monospace);
+  color: var(--amber, #b45309);
+  margin-left: 4px;
+  opacity: 0.85;
+}

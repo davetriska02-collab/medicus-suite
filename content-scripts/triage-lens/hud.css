@@ -1,0 +1,229 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Triage Lens styles
+   Two scopes:
+   1. #medicus-clinical-hud — the floating panel (record + detail pages)
+   2. .ch-queue-chips — chips injected into Medicus DOM (queue page)
+*/
+
+/* ---- Universal chip — usable inside HUD and inline in Medicus DOM ---- */
+.ch-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+}
+.ch-chip-red    { background: #fbe6e7; color: #b8262e; border-color: rgba(184,38,46,0.25); }
+.ch-chip-amber  { background: #fdf3e1; color: #b8771a; border-color: rgba(184,119,26,0.25); }
+.ch-chip-green  { background: #e8f4ec; color: #2f8a4a; border-color: rgba(47,138,74,0.25); }
+.ch-chip-info   { background: #e7eef7; color: #2a4d7a; border-color: rgba(42,77,122,0.20); }
+
+/* ---- Queue row chips ---- */
+.ch-queue-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.ch-queue-chips .ch-chip {
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 9px;
+}
+
+/* ---- HUD panel ---- */
+#medicus-clinical-hud {
+  position: fixed;
+  top: 88px;
+  right: 16px;
+  width: 340px;
+  max-height: calc(100vh - 110px);
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #1c2733;
+  background: #ffffff;
+  border: 1px solid #cdd6e0;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(20, 30, 50, 0.18);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#medicus-clinical-hud * { box-sizing: border-box; }
+
+#medicus-clinical-hud .ch-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px;
+  background: #1f3a5f; color: #fff;
+  border-bottom: 1px solid #15294a;
+}
+#medicus-clinical-hud .ch-title { font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
+#medicus-clinical-hud .ch-ver { font-weight: 400; opacity: 0.7; font-size: 10px; margin-left: 4px; }
+#medicus-clinical-hud .ch-actions { display: flex; gap: 4px; }
+#medicus-clinical-hud .ch-btn {
+  background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.25);
+  width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  padding: 0; display: inline-flex; align-items: center; justify-content: center;
+}
+#medicus-clinical-hud .ch-btn:hover { background: rgba(255,255,255,0.12); }
+
+#medicus-clinical-hud .ch-body { padding: 10px; overflow-y: auto; }
+#medicus-clinical-hud.ch-min .ch-body { display: none; }
+
+#medicus-clinical-hud .ch-patient {
+  display: block; width: 100%; box-sizing: border-box;
+  background: #eef2f7; color: #1f3a5f;
+  border: 1px solid #cdd6e0; border-radius: 4px;
+  padding: 4px 8px; margin-bottom: 8px;
+  font-size: 11px; font-weight: 600; text-align: left; cursor: pointer;
+  font-family: inherit;
+}
+#medicus-clinical-hud .ch-patient:hover { background: #1f3a5f; color: #fff; border-color: #1f3a5f; }
+
+#medicus-clinical-hud .ch-request {
+  border: 1px solid #cdd6e0; border-radius: 6px; background: #f5f7fa;
+  padding: 7px 8px; margin-bottom: 10px;
+}
+#medicus-clinical-hud .ch-request-head {
+  font-weight: 600; font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.05em; color: #5a6878; margin-bottom: 5px;
+}
+#medicus-clinical-hud .ch-request-row {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px;
+}
+#medicus-clinical-hud .ch-request-row:last-child { margin-bottom: 0; }
+#medicus-clinical-hud .ch-request-snippet {
+  margin-top: 5px; font-size: 11px; color: #4a5568;
+  border-top: 1px dashed #cdd6e0; padding-top: 5px;
+  font-style: italic; max-height: 70px; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+}
+
+#medicus-clinical-hud .ch-chips {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 10px;
+}
+
+#medicus-clinical-hud .ch-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  margin-bottom: 10px;
+}
+#medicus-clinical-hud .ch-tile {
+  background: #f5f7fa; border: 1px solid #dde3eb; border-radius: 6px;
+  padding: 6px 8px; cursor: pointer; transition: transform 0.06s, border-color 0.1s;
+  display: flex; flex-direction: column; gap: 2px;
+}
+#medicus-clinical-hud .ch-tile:hover { border-color: #1f3a5f; transform: translateY(-1px); }
+#medicus-clinical-hud .ch-tile.ch-tile-sel { border-color: #1f3a5f; box-shadow: 0 0 0 2px rgba(31,58,95,0.15); }
+#medicus-clinical-hud .ch-tile-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5a6878; }
+#medicus-clinical-hud .ch-tile-status { font-size: 13px; font-weight: 700; }
+#medicus-clinical-hud .ch-tile-count { font-size: 10px; color: #5a6878; }
+
+#medicus-clinical-hud .ch-tile.ch-red { background: #fbe6e7; border-color: rgba(184,38,46,0.4); }
+#medicus-clinical-hud .ch-tile.ch-red .ch-tile-status { color: #b8262e; }
+#medicus-clinical-hud .ch-tile.ch-amber { background: #fdf3e1; border-color: rgba(184,119,26,0.4); }
+#medicus-clinical-hud .ch-tile.ch-amber .ch-tile-status { color: #b8771a; }
+#medicus-clinical-hud .ch-tile.ch-green { background: #e8f4ec; border-color: rgba(47,138,74,0.3); }
+#medicus-clinical-hud .ch-tile.ch-green .ch-tile-status { color: #2f8a4a; }
+
+#medicus-clinical-hud .ch-detail {
+  border: 1px solid #e2e7ee; border-radius: 6px;
+  background: #fafbfd; padding: 8px; margin-bottom: 8px;
+  min-height: 60px;
+}
+#medicus-clinical-hud .ch-detail-head {
+  font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.03em; color: #1f3a5f; margin-bottom: 6px;
+}
+#medicus-clinical-hud .ch-detail-row {
+  border-left: 3px solid #dde3eb; padding: 4px 8px;
+  margin-bottom: 4px; background: #fff; border-radius: 0 4px 4px 0;
+}
+#medicus-clinical-hud .ch-detail-row.ch-red { border-left-color: #b8262e; }
+#medicus-clinical-hud .ch-detail-row.ch-amber { border-left-color: #b8771a; }
+#medicus-clinical-hud .ch-detail-row.ch-green { border-left-color: #2f8a4a; }
+#medicus-clinical-hud .ch-detail-text { font-weight: 500; font-size: 11.5px; }
+#medicus-clinical-hud .ch-detail-sub { font-size: 10.5px; color: #5a6878; margin-top: 2px; }
+#medicus-clinical-hud .ch-detail-empty { color: #8a96a4; font-style: italic; font-size: 11px; }
+
+#medicus-clinical-hud .ch-foot {
+  font-size: 10px; color: #8a96a4; padding-top: 6px;
+  border-top: 1px dashed #dde3eb; text-align: center;
+}
+
+/* ---- Action menu popover (works for HUD chips and queue chips) ---- */
+.ch-action-menu {
+  background: #ffffff;
+  border: 1px solid #cdd6e0;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(20, 30, 50, 0.22);
+  min-width: 220px;
+  max-width: 320px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #1c2733;
+  overflow: hidden;
+}
+.ch-action-menu * { box-sizing: border-box; }
+.ch-action-menu-head {
+  padding: 8px 10px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e2e7ee;
+  display: flex; align-items: center; gap: 8px;
+}
+.ch-action-note-title {
+  font-weight: 600;
+  font-size: 11px;
+  color: #1f3a5f;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ch-action-back {
+  background: transparent;
+  border: 1px solid #cdd6e0;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  color: #1f3a5f;
+}
+.ch-action-back:hover { background: #eef2f7; }
+.ch-action-menu-empty {
+  padding: 10px;
+  color: #8a96a4;
+  font-style: italic;
+  font-size: 11px;
+}
+.ch-action-menu-item {
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f3f7;
+}
+.ch-action-menu-item:last-child { border-bottom: none; }
+.ch-action-menu-item:hover { background: #eef2f7; }
+.ch-action-icon { font-size: 13px; opacity: 0.8; flex-shrink: 0; width: 18px; text-align: center; }
+.ch-action-label { flex: 1; }
+
+.ch-action-menu-note {
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  font-size: 11.5px;
+  max-height: 360px;
+  overflow-y: auto;
+  color: #1c2733;
+}
+
+/* Actionable chip cursor + chevron */
+.ch-chip-actionable { cursor: pointer; }
+.ch-chip-actionable:hover { filter: brightness(0.96); }
+.ch-chev { opacity: 0.55; font-size: 9px; margin-left: 2px; }
