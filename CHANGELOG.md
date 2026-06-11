@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.56.1] — 2026-06-11
+
+### Bug fixes (post-release bug bash)
+
+- **HTML attribute escaping (XSS hardening).** Three escape functions that
+  were used in double-quoted HTML attribute contexts (`title=`, `data-*`,
+  `aria-label=`) did not escape `"` → `&quot;`, meaning an exception message
+  or drug/rule label containing a double-quote would prematurely truncate the
+  attribute. Fixed in `escHtml` (sentinel panel), `escStrip` (panel.js strip
+  renderer) and `chip-renderer.js` title attributes (switched from `escHtml`
+  to the existing `escAttr` helper which already escapes `"`). Risk was low in
+  practice (exception messages and rule IDs rarely contain `"`) but correctness
+  is required.
+
+- **Test coverage: PINCER#1 combined-scenario.** Added two assertions to
+  `test-prescribing-flags.js` documenting the intentional double-flag for a
+  patient ≥65 with NSAID + anticoagulant + no gastroprotection: the
+  drug-interaction alert ("NSAID + anticoagulant") and the age/gastroprotection
+  alert (PINCER#1) fire independently because they represent distinct clinical
+  risks. Adding omeprazole suppresses only PINCER#1. Regression-guards this
+  behavior for future refactoring.
+
 ## [v3.56.0] — 2026-06-11
 
 ### CSO review decisions (recorded 2026-06-11, PR #78)

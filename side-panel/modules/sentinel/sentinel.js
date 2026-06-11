@@ -1552,7 +1552,8 @@ function escHtml(s) {
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // Cached feedback email (suite.feedbackEmail) loaded at render time.

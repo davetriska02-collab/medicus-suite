@@ -113,7 +113,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = isCustom && tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const customTag = isCustom ? `<span class="sent-custom-tag">Custom</span>` : '';
 
     let hrtCtxHtml = '';
@@ -195,7 +195,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = isCustom && tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
 
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
@@ -327,7 +327,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
@@ -354,7 +354,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
@@ -379,7 +379,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';

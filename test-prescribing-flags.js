@@ -153,6 +153,20 @@ check(!texts(r).includes('NSAID in age ≥65 without gastroprotection'), 'PINCER
 r = evaluate(['Diclofenac 50mg'], 65);
 check(texts(r).includes('NSAID in age ≥65 without gastroprotection'), 'PINCER #1 fires at the threshold age 65');
 
+// Combined: NSAID + anticoag + age ≥65 + no gastroprotection → both rules fire independently
+// NSAID+anticoag (drug interaction) and NSAID≥65 without gastroprotection (PINCER#1) are distinct
+// risks — both are valid and clinically actionable simultaneously.
+r = evaluate(['Ibuprofen 400mg', 'Warfarin 5mg'], 70);
+check(
+  texts(r).includes('NSAID + anticoagulant') && texts(r).includes('NSAID in age ≥65 without gastroprotection'),
+  'NSAID+anticoag+age70+no_gastropro: both anticoag rule and PINCER#1 fire (intentional double-flag)'
+);
+r = evaluate(['Ibuprofen 400mg', 'Warfarin 5mg', 'Omeprazole 20mg'], 70);
+check(
+  texts(r).includes('NSAID + anticoagulant') && !texts(r).includes('NSAID in age ≥65 without gastroprotection'),
+  'NSAID+anticoag+age70+omeprazole: anticoag rule fires, PINCER#1 suppressed by PPI'
+);
+
 console.log('\n--- clean list ---');
 r = evaluate(['Amlodipine 5mg', 'Atorvastatin 20mg', 'Paracetamol 1g'], 70);
 check(r.length === 0, 'no flags for an unremarkable list');
