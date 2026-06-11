@@ -49,7 +49,6 @@ const KNOWN_STALE = {
   'docs/CLINICAL-SAFETY-NOTICE.md': '3.26.4',
   'docs/HAZARD-LOG.md': '3.33.0',
   'docs/SOUP.md': '3.33.0',
-  'docs/feature-list.md': '3.31.2',
 };
 
 function majorMinor(ver) {
