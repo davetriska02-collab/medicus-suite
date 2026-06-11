@@ -1750,7 +1750,16 @@ rmSaveBtn?.addEventListener('click', async () => {
     const installed = window.UpdateChecker.getInstalledVersion();
     if (!result) return;
     if (state.error) {
-      result.textContent = `Last check failed: ${state.error}`;
+      // Also show when the failure occurred, if the service worker recorded it.
+      let failedAt = '';
+      try {
+        const sr = await chrome.storage.local.get('suite.updateCheck.status');
+        const status = sr['suite.updateCheck.status'];
+        if (status && status.lastError && status.lastError.ts) {
+          failedAt = ' (' + formatTimeAgo(status.lastError.ts) + ')';
+        }
+      } catch (_) {}
+      result.textContent = `Last check failed: ${state.error}${failedAt}`;
       result.style.color = '#f59e0b';
       return;
     }

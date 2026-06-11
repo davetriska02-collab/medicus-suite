@@ -180,6 +180,10 @@ const ALLOWLIST = new Set([
   'suite.update.error',
   'suite.update.etag',
 
+  // Diagnostic update-check outcome written by service-worker.js — timestamps and
+  // error strings only, no patient data. Transient; not user config:
+  'suite.updateCheck.status',
+
   // Legacy migration key — the bare 'config' key was the old triagelens.config
   // location. The triage IO migrates it on import; only read during migration.
   'config',

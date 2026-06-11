@@ -1122,13 +1122,22 @@
             data.patientContext?.id ||
             data.patientContext?.uuid ||
             null;
+          let _journalAugmentFailed = false;
+          let _journalAugmentError = null;
           if (currentMode === 'live' && _patientId) {
             try {
               const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
               if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
               if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
-            } catch (_) {
-              /* journal augmentation is best-effort; never block the chip */
+            } catch (journalErr) {
+              // Journal augmentation is best-effort; never block the chip. Record
+              // the failure so the side panel can surface a non-blocking warning —
+              // QOF chips that rely on journal codes (AST007, COPD010, HF007, etc.)
+              // may show no_data when they should not, which is a silent clinical gap.
+              // No patient data in the error message — only the error type/message.
+              _journalAugmentFailed = true;
+              _journalAugmentError = (journalErr && journalErr.message) ? String(journalErr.message) : 'unknown error';
+              console.warn('[Sentinel] Journal augmentation failed — QOF journal-coded indicators may show no_data:', _journalAugmentError);
             }
           }
           // Evaluate with the FULL merged drug+QOF ruleset, capture the chips, and
@@ -1172,7 +1181,7 @@
           // Assess extraction drift (best-effort — never blocks chip publication).
           const drift = await recordAndAssessDrift(data);
           if (gen !== _evalGen) return; // navigation superseded us during drift assess
-          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift);
+          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift, _journalAugmentFailed, _journalAugmentError);
         })
         .catch(() => {
           if (gen === _evalGen) invalidateSnapshot();
@@ -1299,7 +1308,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift) {
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift, journalAugmentFailed, journalAugmentError) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1318,6 +1327,11 @@
       // drift is in-memory only — extraction drift assessment, null when no drift
       // or when muted by the clinician. Never written to chrome.storage.local.
       drift: drift || null,
+      // journalAugmentFailed: true when fetchJournalObservations threw.
+      // QOF chips that rely on journal codes may show no_data incorrectly.
+      // In-memory only — no patient data stored, only the error message string.
+      journalAugmentFailed: journalAugmentFailed === true,
+      journalAugmentError: journalAugmentFailed ? (journalAugmentError || 'unknown error') : null,
     };
     // Cache the raw observation + problem data for the BP/ACR trend tabs.
     // Written in lockstep with _lastSnapshot and cleared in invalidateSnapshot,
