@@ -43,6 +43,7 @@ import {
   buildHandout,
   MAX_SWEEP_PATIENTS,
 } from './sweep-core.js';
+import { buildBatchPack } from '../shared/action-packs.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,30 +51,39 @@ const BATCH_SIZE = MAX_SWEEP_PATIENTS; // patients evaluated per batch (40)
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
-let container  = null;
-let _abortFlag = false;   // set to true to stop the in-progress sweep loop
+let container = null;
+let _abortFlag = false; // set to true to stop the in-progress sweep loop
 let _selectedClinician = ''; // '' = all clinicians
-let _running   = false;   // true while a batch is in progress
+let _running = false; // true while a batch is in progress
 
 // Sequential sweep state — preserved across "Continue" clicks within one session
-let _allPatients       = [];   // full sorted patient list from last appointment-book fetch
-let _sweepOffset       = 0;    // index into _allPatients: next unprocessed patient
-let _cumulativeResults = [];   // per-patient results accumulated across batches
-let _sweepRules        = null; // rules loaded at sweep start (cached for continue)
-let _sweepHiddenRules  = {};   // hidden rules snapshot for current sweep session
-let _sweepApiBase      = '';   // API base URL for current sweep session
-let _sweepMeta         = null; // { missingUuidCount, runAt }
-let _lastActionRows    = [];   // action rows from the last render — source for the printable handout
+let _allPatients = []; // full sorted patient list from last appointment-book fetch
+let _sweepOffset = 0; // index into _allPatients: next unprocessed patient
+let _cumulativeResults = []; // per-patient results accumulated across batches
+let _sweepRules = null; // rules loaded at sweep start (cached for continue)
+let _sweepHiddenRules = {}; // hidden rules snapshot for current sweep session
+let _sweepApiBase = ''; // API base URL for current sweep session
+let _sweepMeta = null; // { missingUuidCount, runAt }
+let _lastActionRows = []; // action rows from the last render — source for the printable handout
+
+// Batch selection state — ephemeral, lives in module memory only.
+// Cleared on regenerate (renderResults) and cleanup().
+let _selectedUuids = new Set(); // UUIDs of currently-checked action rows
 
 // Cached rules (invalidated on storage change, same as sentinel.js)
-let _mergedRulesCache     = null;
-let _canonicalRulesCache  = null;
+let _mergedRulesCache = null;
+let _canonicalRulesCache = null;
 let _storageListener = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function formatTime(t) {
@@ -84,7 +94,7 @@ function formatTime(t) {
 
 function fmtTs(d) {
   // Accept either a Date or an ISO string (runAt is now an ISO string).
-  const date = (d instanceof Date) ? d : new Date(d);
+  const date = d instanceof Date ? d : new Date(d);
   try {
     return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch (_) {
@@ -93,7 +103,7 @@ function fmtTs(d) {
 }
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function setProgress(msg) {
@@ -107,51 +117,42 @@ async function loadRules() {
   if (_mergedRulesCache) return _mergedRulesCache;
 
   if (!_canonicalRulesCache) {
-    const drugUrl    = chrome.runtime.getURL('rules/drug-rules.json');
-    const qofUrl     = chrome.runtime.getURL('rules/qof-rules.json');
+    const drugUrl = chrome.runtime.getURL('rules/drug-rules.json');
+    const qofUrl = chrome.runtime.getURL('rules/qof-rules.json');
     const vaccineUrl = chrome.runtime.getURL('rules/vaccine-rules.json');
     const [drugDoc, qofDoc, vaccineDoc] = await Promise.all([
-      fetch(drugUrl).then(r => r.json()),
-      fetch(qofUrl).then(r => r.json()),
-      fetch(vaccineUrl).then(r => r.json()),
+      fetch(drugUrl).then((r) => r.json()),
+      fetch(qofUrl).then((r) => r.json()),
+      fetch(vaccineUrl).then((r) => r.json()),
     ]);
-    _canonicalRulesCache = [
-      ...(drugDoc.rules   || []),
-      ...(qofDoc.rules    || []),
-      ...(vaccineDoc.rules || []),
-    ];
+    _canonicalRulesCache = [...(drugDoc.rules || []), ...(qofDoc.rules || []), ...(vaccineDoc.rules || [])];
   }
 
   const canonical = _canonicalRulesCache;
-  return new Promise(resolve => {
-    chrome.storage.local.get(
-      ['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'],
-      res => {
-        const individual  = res['sentinel.rules']       || {};
-        const org         = res['sentinel.orgRules']    || null;
-        const customRules = res['sentinel.customRules'] || [];
-        const RIO = window.SentinelRulesetIo;
-        let merged;
-        if (RIO) {
-          merged = RIO.mergeRules(canonical, org, individual);
-        } else {
-          merged = canonical.map(rule =>
-            individual[rule.id] ? Object.assign({}, rule, individual[rule.id]) : rule
-          );
-        }
-        const enabledCustom = customRules.filter(r => r.enabled !== false);
-        merged.push(...enabledCustom);
-        _mergedRulesCache = merged;
-        resolve(merged);
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'], (res) => {
+      const individual = res['sentinel.rules'] || {};
+      const org = res['sentinel.orgRules'] || null;
+      const customRules = res['sentinel.customRules'] || [];
+      const RIO = window.SentinelRulesetIo;
+      let merged;
+      if (RIO) {
+        merged = RIO.mergeRules(canonical, org, individual);
+      } else {
+        merged = canonical.map((rule) => (individual[rule.id] ? Object.assign({}, rule, individual[rule.id]) : rule));
       }
-    );
+      const enabledCustom = customRules.filter((r) => r.enabled !== false);
+      merged.push(...enabledCustom);
+      _mergedRulesCache = merged;
+      resolve(merged);
+    });
   });
 }
 
 // ── Per-patient evaluation ────────────────────────────────────────────────────
 
 async function evaluatePatient(apiBase, patientUuid, rules) {
-  const apiClient   = window.SentinelApiClient;
+  const apiClient = window.SentinelApiClient;
   const normalisers = window.SentinelNormalisers;
   const rulesEngine = window.SentinelRules;
 
@@ -163,33 +164,30 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
 
   const failedEndpoints = Object.keys(raw.errors || {});
   if (!raw.banner) {
-    throw new Error('patient banner unavailable — record not read' +
-      (failedEndpoints.length ? ` (${failedEndpoints.join(', ')} failed)` : ''));
+    throw new Error(
+      'patient banner unavailable — record not read' +
+        (failedEndpoints.length ? ` (${failedEndpoints.join(', ')} failed)` : '')
+    );
   }
   if (failedEndpoints.length > 0) {
     throw new Error(`incomplete record read — ${failedEndpoints.join(', ')} failed`);
   }
 
   const urlContext = {
-    url:         `https://england.medicus.health/${apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'unknown'}/patient/${patientUuid}/`,
-    title:       'Sweep',
-    view:        'sweep',
+    url: `https://england.medicus.health/${apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? 'unknown'}/patient/${patientUuid}/`,
+    title: 'Sweep',
+    view: 'sweep',
     patientUuid: patientUuid,
   };
 
   const data = normalisers.normaliseAll(raw, urlContext);
 
-  const chips = rulesEngine.evaluatePatient(
-    data.medications        || [],
-    data.observations       || [],
-    rules,
-    {
-      now:                new Date().toISOString(),
-      problems:           data.problems            || [],
-      patientContext:     data.patientContext,
-      observationHistory: data.observationHistory  || [],
-    }
-  );
+  const chips = rulesEngine.evaluatePatient(data.medications || [], data.observations || [], rules, {
+    now: new Date().toISOString(),
+    problems: data.problems || [],
+    patientContext: data.patientContext,
+    observationHistory: data.observationHistory || [],
+  });
 
   return chips;
 }
@@ -202,7 +200,9 @@ async function preloadClinicians() {
   try {
     const res = await window.PracticeCode.resolve();
     code = res.code;
-  } catch (_) { return; }
+  } catch (_) {
+    return;
+  }
   if (!code) return;
 
   try {
@@ -227,8 +227,10 @@ async function runSweep(apiBase, hiddenRules) {
   }
 
   // limit: null — fetch the full list; sweep.js handles batching
-  const { patients, clinicians, missingUuidCount, diagnosticMessage } =
-    extractBookedPatients(raw, { clinician: _selectedClinician || null, limit: null });
+  const { patients, clinicians, missingUuidCount, diagnosticMessage } = extractBookedPatients(raw, {
+    clinician: _selectedClinician || null,
+    limit: null,
+  });
 
   populateClinicianSelect(clinicians);
 
@@ -249,15 +251,15 @@ async function runSweep(apiBase, hiddenRules) {
   }
 
   // Store session state for sequential batching
-  _allPatients       = patients;
-  _sweepOffset       = 0;
+  _allPatients = patients;
+  _sweepOffset = 0;
   _cumulativeResults = [];
-  _sweepRules        = rules;
-  _sweepHiddenRules  = hiddenRules;
-  _sweepApiBase      = apiBase;
+  _sweepRules = rules;
+  _sweepHiddenRules = hiddenRules;
+  _sweepApiBase = apiBase;
   // ISO string, not a Date: chrome.storage.local serialises Date objects to {},
   // which would break the printable handout (it reads runAt back from storage).
-  _sweepMeta         = { missingUuidCount, runAt: new Date().toISOString() };
+  _sweepMeta = { missingUuidCount, runAt: new Date().toISOString() };
 
   await runNextBatch();
 }
@@ -300,9 +302,9 @@ async function runNextBatch() {
     }
 
     _cumulativeResults.push({
-      uuid:      patient.uuid,
-      name:      patient.name,
-      time:      patient.time,
+      uuid: patient.uuid,
+      name: patient.name,
+      time: patient.time,
       clinician: patient.clinician,
       chips,
       error,
@@ -322,10 +324,10 @@ async function runNextBatch() {
     actionRows,
     clearRows,
     errorRows,
-    processedCount:   _sweepOffset,
-    totalCount:       total,
+    processedCount: _sweepOffset,
+    totalCount: total,
     missingUuidCount: _sweepMeta.missingUuidCount,
-    runAt:            _sweepMeta.runAt,
+    runAt: _sweepMeta.runAt,
     aborted,
   });
 }
@@ -333,25 +335,33 @@ async function runNextBatch() {
 // ── Render helpers ────────────────────────────────────────────────────────────
 
 function chipSummaryHtml(chips) {
-  const actionChips = (chips || []).filter(c => isActionNeeded(c.status));
+  const actionChips = (chips || []).filter((c) => isActionNeeded(c.status));
   if (actionChips.length === 0) return '';
-  return actionChips.map(c => {
-    const label = esc(c.drugName || c.indicatorCode || c.label || c.displayName || c.ruleId || '');
-    const statusLabel = esc(
-      { overdue:'OVERDUE', not_met:'NOT MET', alert:'ALERT', stale:'SEV.OVERDUE',
-        due_soon:'DUE SOON', caution:'CAUTION', vax_due:'VAX DUE' }[c.status]
-      || String(c.status || '').toUpperCase()
-    );
-    const colour = (c.status === 'overdue' || c.status === 'not_met' || c.status === 'alert') ? 'red' : 'amber';
-    return `<span class="sweep-chip sweep-chip-${colour}">${label} <em>${statusLabel}</em></span>`;
-  }).join('');
+  return actionChips
+    .map((c) => {
+      const label = esc(c.drugName || c.indicatorCode || c.label || c.displayName || c.ruleId || '');
+      const statusLabel = esc(
+        {
+          overdue: 'OVERDUE',
+          not_met: 'NOT MET',
+          alert: 'ALERT',
+          stale: 'SEV.OVERDUE',
+          due_soon: 'DUE SOON',
+          caution: 'CAUTION',
+          vax_due: 'VAX DUE',
+        }[c.status] || String(c.status || '').toUpperCase()
+      );
+      const colour = c.status === 'overdue' || c.status === 'not_met' || c.status === 'alert' ? 'red' : 'amber';
+      return `<span class="sweep-chip sweep-chip-${colour}">${label} <em>${statusLabel}</em></span>`;
+    })
+    .join('');
 }
 
-function patientRowHtml(row, apiBase, siteId) {
-  const name    = esc(row.name);
+function patientRowHtml(row, apiBase, siteId, selectable) {
+  const name = esc(row.name);
   const timeStr = row.time ? `<span class="sweep-row-time">${formatTime(row.time)}</span>` : '';
   const clinStr = row.clinician ? `<span class="sweep-row-clin">${esc(row.clinician)}</span>` : '';
-  const recUrl  = `https://england.medicus.health/${esc(siteId)}/patient/${esc(row.uuid)}/`;
+  const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(row.uuid)}/`;
 
   if (row.error) {
     return `<div class="sweep-row sweep-row-error">
@@ -363,11 +373,11 @@ function patientRowHtml(row, apiBase, siteId) {
     </div>`;
   }
 
-  const redCount    = row.redCount   ?? 0;
-  const amberCount  = row.amberCount ?? 0;
+  const redCount = row.redCount ?? 0;
+  const amberCount = row.amberCount ?? 0;
 
   const badgeParts = [];
-  if (redCount   > 0) badgeParts.push(`<span class="sweep-badge sweep-badge-red">${redCount} red</span>`);
+  if (redCount > 0) badgeParts.push(`<span class="sweep-badge sweep-badge-red">${redCount} red</span>`);
   if (amberCount > 0) badgeParts.push(`<span class="sweep-badge sweep-badge-amber">${amberCount} amber</span>`);
 
   const hiddenNote = row.hasHiddenActionChips
@@ -376,9 +386,17 @@ function patientRowHtml(row, apiBase, siteId) {
 
   const chipHtml = chipSummaryHtml(row.chips);
 
-  return `<div class="sweep-row">
+  // Checkbox for batch selection — only on action rows
+  const checkboxHtml = selectable
+    ? `<label class="sweep-row-check" title="Select for batch">
+         <input type="checkbox" class="sweep-batch-cb" data-uuid="${esc(row.uuid)}"
+           ${_selectedUuids.has(row.uuid) ? 'checked' : ''}>
+       </label>`
+    : '';
+
+  return `<div class="sweep-row${_selectedUuids.has(row.uuid) ? ' sweep-row-selected' : ''}">
     <div class="sweep-row-head">
-      ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
+      ${checkboxHtml}${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
       <span class="sweep-row-badges">${badgeParts.join('')}</span>
       <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a>
     </div>
@@ -387,21 +405,33 @@ function patientRowHtml(row, apiBase, siteId) {
   </div>`;
 }
 
-function renderResults({ actionRows, clearRows, errorRows, processedCount, totalCount, missingUuidCount, runAt, aborted }) {
+function renderResults({
+  actionRows,
+  clearRows,
+  errorRows,
+  processedCount,
+  totalCount,
+  missingUuidCount,
+  runAt,
+  aborted,
+}) {
   if (!container) return;
 
-  const siteIdMatch = (window.PracticeCode?.getPracticeCodeSync
-    ? window.PracticeCode.getPracticeCodeSync()
-    : null) || '';
+  // Clear batch selection on every fresh render (new results supersede old picks)
+  _selectedUuids = new Set();
+
+  const siteIdMatch =
+    (window.PracticeCode?.getPracticeCodeSync ? window.PracticeCode.getPracticeCodeSync() : null) || '';
   const apiBase = siteIdMatch ? `https://${siteIdMatch}.api.england.medicus.health` : '';
 
   const actionCount = actionRows.length;
-  const clearCount  = clearRows.length;
-  const errorCount  = errorRows.length;
+  const clearCount = clearRows.length;
+  const errorCount = errorRows.length;
 
-  const missingNote = missingUuidCount > 0
-    ? `<div class="sweep-notice sweep-notice-warn">${missingUuidCount} appointment entr${missingUuidCount === 1 ? 'y' : 'ies'} could not be identified (no patient UUID found) and were skipped.</div>`
-    : '';
+  const missingNote =
+    missingUuidCount > 0
+      ? `<div class="sweep-notice sweep-notice-warn">${missingUuidCount} appointment entr${missingUuidCount === 1 ? 'y' : 'ies'} could not be identified (no patient UUID found) and were skipped.</div>`
+      : '';
 
   // Progress across batches
   const remaining = totalCount - processedCount;
@@ -418,36 +448,54 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
     batchNote = `<div class="sweep-notice sweep-notice-ok">All ${totalCount} booked patients checked.</div>`;
   }
 
-  const actionHtml = actionRows.map(r => patientRowHtml(r, apiBase, siteIdMatch)).join('');
-  const errorHtml  = errorRows.map(r => patientRowHtml(r, apiBase, siteIdMatch)).join('');
+  const actionHtml = actionRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, true)).join('');
+  const errorHtml = errorRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, false)).join('');
 
-  const clearSection = clearRows.length > 0
-    ? `<details class="sweep-clear-section">
+  const clearSection =
+    clearRows.length > 0
+      ? `<details class="sweep-clear-section">
          <summary class="sweep-clear-summary">No action-needed alerts (${clearRows.length})</summary>
          <div class="sweep-clear-body">
-           ${clearRows.map(r => {
-             const name = esc(r.name);
-             const timeStr = r.time ? `<span class="sweep-row-time">${formatTime(r.time)}</span>` : '';
-             const clinStr = r.clinician ? `<span class="sweep-row-clin">${esc(r.clinician)}</span>` : '';
-             const recUrl = `https://england.medicus.health/${esc(siteIdMatch)}/patient/${esc(r.uuid)}/`;
-             return `<div class="sweep-row sweep-row-clear">
+           ${clearRows
+             .map((r) => {
+               const name = esc(r.name);
+               const timeStr = r.time ? `<span class="sweep-row-time">${formatTime(r.time)}</span>` : '';
+               const clinStr = r.clinician ? `<span class="sweep-row-clin">${esc(r.clinician)}</span>` : '';
+               const recUrl = `https://england.medicus.health/${esc(siteIdMatch)}/patient/${esc(r.uuid)}/`;
+               return `<div class="sweep-row sweep-row-clear">
                <div class="sweep-row-head">
                  ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
                  <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
                </div>
              </div>`;
-           }).join('')}
+             })
+             .join('')}
          </div>
        </details>`
-    : '';
+      : '';
 
-  const summaryLine = actionCount > 0
-    ? `<strong>${actionCount} of ${processedCount}</strong> patients checked so far have action-needed alerts.`
-    : `<strong>No action-needed alerts</strong> found across ${processedCount} patient${processedCount === 1 ? '' : 's'} checked.`;
+  const summaryLine =
+    actionCount > 0
+      ? `<strong>${actionCount} of ${processedCount}</strong> patients checked so far have action-needed alerts.`
+      : `<strong>No action-needed alerts</strong> found across ${processedCount} patient${processedCount === 1 ? '' : 's'} checked.`;
 
-  const printBtn = actionCount > 0
-    ? `<button class="sweep-print-btn" type="button" title="Open a printable to-do list for reception">Print reception handout</button>`
-    : '';
+  const printBtn =
+    actionCount > 0
+      ? `<button class="sweep-print-btn" type="button" title="Open a printable to-do list for reception">Print reception handout</button>`
+      : '';
+
+  // Batch toolbar — only shown when there are action rows to select
+  const batchToolbar =
+    actionCount > 0
+      ? `<div class="sweep-batch-toolbar" id="sweepBatchToolbar">
+         <label class="sweep-select-all-label">
+           <input type="checkbox" id="sweepSelectAll" title="Select / deselect all">
+           <span class="sweep-select-all-text">Select all</span>
+         </label>
+         <span class="sweep-batch-count" id="sweepBatchCount">0 selected</span>
+         <button class="sweep-batch-btn" id="sweepBatchBtn" type="button" disabled>Generate batch</button>
+       </div>`
+      : '';
 
   const resultsHtml = `
     <div class="sweep-results" id="sweepResults">
@@ -467,7 +515,11 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
       ${missingNote}${batchNote}
 
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
-      ${actionRows.length > 0 ? `<div class="sweep-section-head">Action needed (${actionCount})</div>${actionHtml}` : ''}
+      ${
+        actionRows.length > 0
+          ? `<div class="sweep-section-head sweep-section-head-action-wrap">${`<span>Action needed (${actionCount})</span>${batchToolbar}`}</div>${actionHtml}`
+          : ''
+      }
       ${clearSection}
     </div>`;
 
@@ -481,6 +533,8 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
     if (continueBtn) continueBtn.addEventListener('click', onContinueClick);
     const handoutBtn = runArea.querySelector('.sweep-print-btn');
     if (handoutBtn) handoutBtn.addEventListener('click', onPrintHandout);
+    // Batch selection wiring
+    wireBatchSelection(runArea, actionRows);
   }
 
   // Reset Run sweep button
@@ -490,6 +544,69 @@ function renderResults({ actionRows, clearRows, errorRows, processedCount, total
     btn.disabled = false;
   }
   _running = false;
+}
+
+// ── Batch selection wiring ────────────────────────────────────────────────────
+
+function wireBatchSelection(runArea, actionRows) {
+  const selectAllCb = runArea.querySelector('#sweepSelectAll');
+  const batchCountEl = runArea.querySelector('#sweepBatchCount');
+  const batchBtn = runArea.querySelector('#sweepBatchBtn');
+
+  if (!selectAllCb || !batchCountEl || !batchBtn) return;
+
+  function updateBatchBar() {
+    const count = _selectedUuids.size;
+    batchCountEl.textContent = count === 1 ? '1 selected' : `${count} selected`;
+    batchBtn.disabled = count === 0;
+    // Update select-all indeterminate state
+    const total = actionRows.length;
+    if (count === 0) {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = false;
+    } else if (count === total) {
+      selectAllCb.checked = true;
+      selectAllCb.indeterminate = false;
+    } else {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = true;
+    }
+  }
+
+  // Individual row checkboxes
+  runArea.querySelectorAll('.sweep-batch-cb').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const uuid = cb.dataset.uuid;
+      if (cb.checked) {
+        _selectedUuids.add(uuid);
+        cb.closest('.sweep-row')?.classList.add('sweep-row-selected');
+      } else {
+        _selectedUuids.delete(uuid);
+        cb.closest('.sweep-row')?.classList.remove('sweep-row-selected');
+      }
+      updateBatchBar();
+    });
+  });
+
+  // Select-all
+  selectAllCb.addEventListener('change', () => {
+    const checking = selectAllCb.checked;
+    runArea.querySelectorAll('.sweep-batch-cb').forEach((cb) => {
+      cb.checked = checking;
+      const uuid = cb.dataset.uuid;
+      if (checking) {
+        _selectedUuids.add(uuid);
+        cb.closest('.sweep-row')?.classList.add('sweep-row-selected');
+      } else {
+        _selectedUuids.delete(uuid);
+        cb.closest('.sweep-row')?.classList.remove('sweep-row-selected');
+      }
+    });
+    updateBatchBar();
+  });
+
+  // Generate batch
+  batchBtn.addEventListener('click', onGenerateBatch);
 }
 
 // Build the printable reception handout from the latest results and open it
@@ -507,13 +624,36 @@ async function onPrintHandout() {
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/handout.html') });
 }
 
+// Build and open the batch print view for the currently-selected action rows.
+// Uses the same transient-storage + new-tab pattern as onPrintHandout.
+async function onGenerateBatch() {
+  if (_selectedUuids.size === 0) return;
+
+  const selectedRows = _lastActionRows.filter((r) => _selectedUuids.has(r.uuid));
+  if (selectedRows.length === 0) return;
+
+  const batchPack = buildBatchPack(selectedRows);
+  if (!batchPack) return;
+
+  // Annotate with meta for the renderer
+  batchPack.runAt = _sweepMeta?.runAt || new Date().toISOString();
+  batchPack.clinician = _selectedClinician || null;
+  batchPack.suiteVersion = chrome.runtime.getManifest().version;
+
+  await chrome.storage.local.set({ 'sweep.batchPack': batchPack });
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/batch-handout.html') });
+}
+
 // Neutral notice (e.g. genuinely empty appointment book) — not a failure.
 function renderNotice(message) {
   if (!container) return;
   const runArea = container.querySelector('.sweep-run-area');
   if (runArea) runArea.innerHTML = `<div class="sweep-notice">${message}</div>`;
   const btn = container.querySelector('.sweep-run-btn');
-  if (btn) { btn.textContent = 'Run sweep'; btn.disabled = false; }
+  if (btn) {
+    btn.textContent = 'Run sweep';
+    btn.disabled = false;
+  }
   _running = false;
 }
 
@@ -523,8 +663,9 @@ function populateClinicianSelect(clinicians) {
   const sel = container?.querySelector('#sweepClinician');
   if (!sel || !Array.isArray(clinicians)) return;
   const current = _selectedClinician;
-  sel.innerHTML = `<option value="">All clinicians</option>` +
-    clinicians.map(c => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  sel.innerHTML =
+    `<option value="">All clinicians</option>` +
+    clinicians.map((c) => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('');
   if (current && !clinicians.includes(current)) {
     _selectedClinician = '';
     sel.value = '';
@@ -538,19 +679,23 @@ function renderError(message) {
     runArea.innerHTML = `<div class="sweep-error-box"><strong>Sweep failed:</strong> ${message}</div>`;
   }
   const btn = container.querySelector('.sweep-run-btn');
-  if (btn) { btn.textContent = 'Run sweep'; btn.disabled = false; }
+  if (btn) {
+    btn.textContent = 'Run sweep';
+    btn.disabled = false;
+  }
   _running = false;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export async function init(el) {
-  container  = el;
+  container = el;
   _abortFlag = false;
-  _running   = false;
+  _running = false;
   _allPatients = [];
   _sweepOffset = 0;
   _cumulativeResults = [];
+  _selectedUuids = new Set();
 
   container.innerHTML = `
     <div class="sweep-module">
@@ -584,7 +729,7 @@ export async function init(el) {
 
   const btn = container.querySelector('.sweep-run-btn');
   btn.addEventListener('click', onRunClick);
-  container.querySelector('#sweepClinician')?.addEventListener('change', e => {
+  container.querySelector('#sweepClinician')?.addEventListener('change', (e) => {
     _selectedClinician = e.target.value || '';
   });
 
@@ -613,11 +758,14 @@ async function onRunClick() {
     return;
   }
 
-  _running   = true;
+  _running = true;
   _abortFlag = false;
 
   const btn = container?.querySelector('.sweep-run-btn');
-  if (btn) { btn.textContent = 'Cancel'; btn.disabled = false; }
+  if (btn) {
+    btn.textContent = 'Cancel';
+    btn.disabled = false;
+  }
 
   const runArea = container?.querySelector('.sweep-run-area');
   if (runArea) {
@@ -653,11 +801,14 @@ async function onRunClick() {
 async function onContinueClick() {
   if (_running || _sweepOffset >= _allPatients.length) return;
 
-  _running   = true;
+  _running = true;
   _abortFlag = false;
 
   const btn = container?.querySelector('.sweep-run-btn');
-  if (btn) { btn.textContent = 'Cancel'; btn.disabled = false; }
+  if (btn) {
+    btn.textContent = 'Cancel';
+    btn.disabled = false;
+  }
 
   try {
     await runNextBatch();
@@ -668,9 +819,10 @@ async function onContinueClick() {
 
 function cleanup() {
   _abortFlag = true;
-  _running   = false;
+  _running = false;
   _allPatients = [];
   _cumulativeResults = [];
+  _selectedUuids = new Set(); // clear batch selection (ephemeral — must not survive module switch)
   if (_storageListener) {
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;

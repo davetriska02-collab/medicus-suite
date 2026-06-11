@@ -161,6 +161,11 @@ const ALLOWLIST = new Set([
   // side-panel/modules/sweep/sweep.js):
   'sweep.handout',
 
+  // Transient batch-output payload — written on "Generate batch", read once by
+  // batch-handout.html, overwritten on every generate. Not user config (mirrors
+  // sweep.handout; see side-panel/modules/sweep/sweep.js):
+  'sweep.batchPack',
+
   // Transient print payload — written on "Print patient summary", read by
   // passport.html, overwritten on every print. Not user config (mirrors the
   // sweep.handout convention — see side-panel/modules/sentinel/sentinel.js):
