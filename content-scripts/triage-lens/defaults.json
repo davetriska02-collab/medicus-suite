@@ -233,7 +233,35 @@
         "chest and jaw pain",
         "myocardial",
         "nstemi",
-        "stemi"
+        "stemi",
+        "jaw pain and arm",
+        "jaw pain with arm",
+        "jaw pain and shoulder",
+        "jaw pain with shoulder",
+        "neck pain and arm",
+        "neck pain with arm",
+        "neck pain and shoulder",
+        "neck pain with shoulder",
+        "pain in my left arm and sweat",
+        "pain in my left arm with sweat",
+        "pain in my left arm and nausea",
+        "pain in my left arm with nausea",
+        "pain in my right arm and sweat",
+        "pain in my right arm with sweat",
+        "pain in my left shoulder and sweat",
+        "pain in my left shoulder with sweat",
+        "indigestion and arm pain",
+        "indigestion with arm pain",
+        "heartburn and arm pain",
+        "heartburn with arm pain",
+        "indigestion and jaw pain",
+        "indigestion with jaw pain",
+        "heartburn and jaw pain",
+        "heartburn with jaw pain",
+        "indigestion and sweating",
+        "indigestion with sweating",
+        "heartburn and sweating",
+        "heartburn with sweating"
       ],
       "regex": false,
       "fields": [
@@ -305,7 +333,9 @@
         "leaking (from|stool|bowel)",
         "back pain with (bladder|bowel|numb\\w*|incontinence|retention)",
         "leg weakness with (bladder|bowel|numb\\w*|incontinence|retention)",
-        "sciatica (and|with) (bladder|bowel|incontinence|numb\\w*|retention)"
+        "sciatica (and|with) (bladder|bowel|incontinence|numb\\w*|retention)",
+        "lost all (feeling|sensation) down (there|below)",
+        "can.?t feel (myself |when I )?(pee|wee|go to the toilet)"
       ],
       "regex": true,
       "fields": [
@@ -367,7 +397,17 @@
         "worst pain ever in my head",
         "10 out of 10 headache",
         "10/10 headache",
-        "headache ten out of ten"
+        "headache ten out of ten",
+        "sudden headache and stiff neck",
+        "sudden headache with stiff neck",
+        "sudden severe headache and stiff neck",
+        "sudden severe headache with stiff neck",
+        "sudden headache and sore neck",
+        "sudden headache with sore neck",
+        "sudden headache and painful neck",
+        "sudden headache with painful neck",
+        "worst headache and neck pain",
+        "worst headache with neck pain"
       ],
       "regex": false,
       "fields": [
@@ -599,7 +639,11 @@
         "smelly (urine|wee|pee)\\w*",
         "pain (passing|when passing) (water|urine)\\w*",
         "frequent urination\\w*",
-        "urine inf\\w*"
+        "urine inf\\w*",
+        "can.?t (pee|pass water)",
+        "unable to (wee|pee|pass water)",
+        "nothing comes? out (when I try to )?(wee|pee)",
+        "struggling to pass (urine|water)"
       ],
       "regex": true,
       "fields": [
@@ -659,7 +703,9 @@
         "peritonsillar\\w*",
         "tonsils (are |is )?(sore|swollen|infected|inflamed|painful)\\w*",
         "swollen tonsils?\\w*",
-        "throat infection\\w*"
+        "throat infection\\w*",
+        "(drooling|can.?t swallow (my )?(own )?(saliva|spit))",
+        "(muffled|hot.?potato) voice"
       ],
       "regex": true,
       "fields": [
@@ -806,7 +852,11 @@
         "infected sting\\w*",
         "bite (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)",
         "sting (that('?s| is| has)? )?(gone )?(red|infected|swollen|hot|spreading)",
-        "bitten by (an? )?(insect|mosquito|spider|midge|wasp|bee)\\w*"
+        "bitten by (an? )?(insect|mosquito|spider|midge|wasp|bee)\\w*",
+        "tick bite\\w*",
+        "bitten by a tick",
+        "(bull.?s.?eye|circular|ring.?shaped) rash",
+        "lyme disease"
       ],
       "regex": true,
       "fields": [
@@ -881,7 +931,8 @@
         "blistering rash",
         "band of blister\\w*",
         "painful rash (on )?one side",
-        "rash (on )?one side of (my )?(face|body|chest|back|torso)"
+        "rash (on )?one side of (my )?(face|body|chest|back|torso)",
+        "burning pain (on |down )?(one side|the left|the right)( of my (chest|back|body|face))?"
       ],
       "regex": true,
       "fields": [
@@ -1461,7 +1512,10 @@
         "mini.?stroke",
         "funny turn (down|on) one side",
         "went (numb|weak) down one side",
-        "sudden (loss of )?vision in one eye"
+        "sudden (loss of )?vision in one eye",
+        "can.?t (get (my )?words out|speak properly)",
+        "(lost|losing) (the ability|my ability) to (speak|talk)",
+        "both (my )?arms? (have )?(suddenly )?(gone )?(weak|numb|heavy)"
       ],
       "regex": true,
       "fields": [
@@ -1506,7 +1560,10 @@
         "fever (and|with) (not passing|no) urine",
         "flu.?like (and|with) (collaps\\w*|can.?t get up|can.?t stand)",
         "felt (the )?worst (i.?ve|i have) ever (felt|been) (and|with) (fever|temperature)",
-        "non.?blanching rash"
+        "non.?blanching rash",
+        "(fever|temperature|burning up) (and|with) feel\\w* (absolutely )?(terrible|dreadful|awful)",
+        "(hot and cold|cold and hot) (sweats|shivers|all over)",
+        "(shaking|shivering) uncontrollably"
       ],
       "regex": true,
       "fields": [
@@ -1599,7 +1656,9 @@
         "light (hurts|is hurting) (my )?eyes",
         "severe headache (and|with) (fever|neck stiffness|rash|vomiting)",
         "fever (and|with) (rash|confus\\w*|drowsy|very sleepy)",
-        "bruis\\w*.?like rash (with|and) fever"
+        "bruis\\w*.?like rash (with|and) fever",
+        "(fever|temperature) (and|with) (a )?(purple|non.?blanching|blotchy) (rash|spots)",
+        "(rash|spots) (that )?(doesn.?t|don.?t|won.?t) (fade|go away|disappear) (under|with) (a )?glass"
       ],
       "regex": true,
       "fields": [

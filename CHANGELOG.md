@@ -35,8 +35,20 @@ All notable changes to Medicus Suite are documented here.
    `KNOWN_STALE` pins in `scripts/check-doc-versions.js` are removed —
    the CI doc-version guard now fully enforces.
 
-_(L1 — triage red-flag phrasing extensions — lands in a follow-up commit
-within this version; see below entry once merged.)_
+4. **Triage red-flag phrasing extensions (L1).** Additive lay-phrasing
+   coverage from the 2026-06-11 red-team, applied to defaults.json and
+   regenerated into the derived copies: stroke-tia (can't get words out /
+   both arms weak), sepsis (fever + feeling dreadful, uncontrollable
+   shivering), meningitis (non-blanching rash phrasings incl. the glass
+   test), chest-pain (22 atypical-MI literals: jaw/neck/arm + sweat,
+   indigestion + arm), thunderclap (+ stiff-neck combinations),
+   cauda-equina (lost sensation down below), uti (retention phrasings,
+   deduplicated against cauda-equina), insect-bite (tick / bull's-eye
+   rash / Lyme), shingles (unilateral burning prodrome). One pattern
+   REJECTED as over-match-prone ("trouble speaking" — benign collisions);
+   epiglottitis signs (drooling, hot-potato voice) added to sore-throat
+   at AMBER pending a CSO decision on a dedicated adult red rule.
+   +36 pattern assertions with negative controls (675 green).
 
 ## [v3.55.0] — 2026-06-11
 
