@@ -665,3 +665,8 @@ I confirm that I have reviewed each hazard recorded in this log, that the contro
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
 **Date:** 2026-06-11 *(reviewed and reissued with v3.56.0)*
+
+> Sign-off recorded 2026-06-11 on PR #78: CSO approved the v3.56.0 reissue including
+> H-022..H-026, directed promotion of adult epiglottitis presentations to a dedicated
+> red triage rule (applied in the same release), and confirmed LMWH/heparin remain
+> excluded from the visualiser oral-anticoagulant set (test-pincer-parity.js KD-18..21).

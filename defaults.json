@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "rules": [
     {
       "id": "mh-crisis",
@@ -686,6 +686,34 @@
       ]
     },
     {
+      "id": "epiglottitis",
+      "enabled": true,
+      "label": "Epiglottitis",
+      "kind": "red",
+      "patterns": [
+        "epiglottit\\w*",
+        "(drooling|can.?t swallow (my )?(own )?(saliva|spit))",
+        "(muffled|hot.?potato) voice"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Airway emergency",
+          "text": "Suspected adult epiglottitis / supraglottitis \u2192 999 / same-day ED.\n\nRed flags (any): drooling or unable to swallow saliva, muffled \u201chot potato\u201d voice, stridor, sitting forward to breathe, severe sore throat with a normal-looking oropharynx, rapid deterioration.\n\nAction:\n\u2022 Do NOT attempt to examine the throat or use a tongue depressor \u2014 risk of precipitating airway obstruction\n\u2022 Keep the patient sitting upright; do not lie flat\n\u2022 999 transfer / immediate ENT-anaesthetics involvement\n\u2022 Differential: quinsy, deep neck-space infection, anaphylaxis"
+        }
+      ]
+    },
+    {
       "id": "sore-throat",
       "enabled": true,
       "label": "Sore throat",
@@ -703,9 +731,7 @@
         "peritonsillar\\w*",
         "tonsils (are |is )?(sore|swollen|infected|inflamed|painful)\\w*",
         "swollen tonsils?\\w*",
-        "throat infection\\w*",
-        "(drooling|can.?t swallow (my )?(own )?(saliva|spit))",
-        "(muffled|hot.?potato) voice"
+        "throat infection\\w*"
       ],
       "regex": true,
       "fields": [
