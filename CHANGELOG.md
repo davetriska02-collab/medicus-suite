@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.1] — 2026-06-11
+
+### Release pipeline — fully-decorated GitHub Releases
+
+The `Release` workflow now publishes a proper release rather than a one-line stub:
+
+- **Real release notes** — the body is generated from this version's `CHANGELOG.md`
+  section, so each GitHub Release shows exactly what changed.
+- **Checksums** — a `SHA256SUMS.txt` is built and attached next to the extension
+  zip, with copy-paste `sha256sum -c` verification instructions.
+- **Inline install steps** — load-unpacked instructions are included in the release
+  body so users don't have to leave the page.
+
+#### Headline of this build — Dispensing Margin (`rxmargin`)
+
+The flagship addition shipping in the 3.53 line: an offline dispensing-margin tool
+for UK dispensing GP practices. It computes net margin after the Drug Tariff
+clawback, finds the cheapest supplier on file, flags loss-making lines, and totals
+the cash freed by switching — with a category breakdown, RAG margin-health bands,
+cost-per-unit comparison, a margin trend sparkline, a one-click "switch all to
+cheapest supplier" action, and a printable board report. All prices are entered or
+CSV-imported by the practice; no licensed price feeds are bundled.
+
 ## [v3.53.0] — 2026-06-11
 
 ### Dispensing Margin — glass UI refresh + market-feature expansion
