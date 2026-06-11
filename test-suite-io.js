@@ -12,6 +12,7 @@ const triageIo = require('./shared/io/triage-io.js');
 const slotIo = require('./shared/io/slot-counter-io.js');
 const subIo = require('./shared/io/submissions-io.js');
 const suiteIo = require('./shared/io/suite-io.js');
+const referralsIo = require('./shared/io/referrals-io.js');
 
 let passed = 0;
 let failed = 0;
@@ -499,6 +500,53 @@ console.log('\n--- applyWithRollback rollback ---');
     assert(res2.rejectedCustomRules.length === 1, 'suite round-trip: invalid sibling is reported, not silently dropped');
 
     await chrome.storage.local.remove('sentinel.customRules');
+  }
+
+  // ── referrals-io: audit M1 — discovery never exported or imported ──────────
+  // (a) referralsExport returns config but NOT discovery.
+  // (b) referralsImport({ discovery, config }) writes config but NOT discovery.
+
+  console.log('\n--- referrals-io: audit M1 PHI containment ---');
+
+  {
+    const refStore = {};
+    const savedChrome2 = global.chrome;
+    global.chrome = {
+      storage: { local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+          const out = {};
+          ks.forEach(k => { if (k in refStore) out[k] = refStore[k]; });
+          return out;
+        },
+        async set(obj) { Object.assign(refStore, obj); },
+      }},
+    };
+
+    // Seed both keys.
+    refStore['referrals.discovery'] = { url: 'https://api.example.com/referrals', discoveredAt: '2026-01-01T00:00:00.000Z' };
+    refStore['referrals.config']    = { url: 'https://api.example.com/config', discoveredAt: '2026-01-01T00:00:00.000Z', data: { priorityOptions: [], statusOptions: [] } };
+
+    // (a) Export must not include discovery.
+    const exported = await referralsIo.referralsExport();
+    assert(!Object.prototype.hasOwnProperty.call(exported, 'discovery') || exported.discovery == null,
+      'referralsExport: does NOT include discovery key (audit M1)');
+    assert(Object.prototype.hasOwnProperty.call(exported, 'config'),
+      'referralsExport: DOES include config key');
+
+    // (b) Import with both keys must only write config; discovery must not be touched.
+    delete refStore['referrals.discovery'];
+    delete refStore['referrals.config'];
+    await referralsIo.referralsImport({
+      discovery: { url: 'https://api.example.com/referrals', discoveredAt: '2026-01-01T00:00:00.000Z' },
+      config:    { url: 'https://api.example.com/config', data: { priorityOptions: [], statusOptions: [] } },
+    });
+    assert(!Object.prototype.hasOwnProperty.call(refStore, 'referrals.discovery'),
+      'referralsImport: does NOT write referrals.discovery (audit M1)');
+    assert(Object.prototype.hasOwnProperty.call(refStore, 'referrals.config'),
+      'referralsImport: DOES write referrals.config');
+
+    global.chrome = savedChrome2;
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────────
