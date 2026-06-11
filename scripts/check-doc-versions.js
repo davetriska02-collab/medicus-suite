@@ -45,11 +45,12 @@ const DOCS = [
 // string the doc currently contains that is known-stale but CSO-approved to
 // remain so until audit task T4 doc refresh is complete.
 // Remove an entry here once the CSO has updated the corresponding doc.
-const KNOWN_STALE = {
-  'docs/CLINICAL-SAFETY-NOTICE.md': '3.26.4',
-  'docs/HAZARD-LOG.md': '3.33.0',
-  'docs/SOUP.md': '3.33.0',
-};
+// NOTE: All three T4 docs (CLINICAL-SAFETY-NOTICE, HAZARD-LOG, SOUP) were
+// updated to v3.56.0 on 2026-06-11 by the CSO (Dr Dave Triska). Their pins
+// have been removed. The docs are now at v3.56.0; this guard will fail until
+// manifest.json is bumped to 3.56.0 in the same release commit (which is
+// intentional and expected — the orchestrator bumps the manifest last).
+const KNOWN_STALE = {};
 
 function majorMinor(ver) {
   const parts = ver.split('.');
