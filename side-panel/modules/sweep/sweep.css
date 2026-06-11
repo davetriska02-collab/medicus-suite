@@ -317,12 +317,19 @@
   color: var(--text-4);
   user-select: none;
   list-style: none;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
 }
 
-.sweep-clear-summary:hover { background: var(--bg-hover); color: var(--text-3); }
+.sweep-clear-summary:hover {
+  background: var(--bg-hover);
+  color: var(--text-3);
+}
 
-.sweep-clear-summary::-webkit-details-marker { display: none; }
+.sweep-clear-summary::-webkit-details-marker {
+  display: none;
+}
 
 .sweep-clear-summary::before {
   content: '\25B6\0020';
@@ -354,7 +361,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
 }
 
 .sweep-continue-btn:hover {
@@ -389,7 +398,9 @@
   max-width: 180px;
   transition: border-color var(--fast) var(--ease);
 }
-.sweep-clin-label select:focus { border-color: var(--accent); }
+.sweep-clin-label select:focus {
+  border-color: var(--accent);
+}
 .sweep-row-clin {
   font-family: var(--mono);
   font-size: 10px;
@@ -411,9 +422,114 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
 }
 .sweep-print-btn:hover {
   background: var(--accent);
   color: #fff;
+}
+
+/* ── Batch selection ──────────────────────────────────────────────────────── */
+
+/* Section head row: label + batch toolbar side-by-side */
+.sweep-section-head-action-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sweep-section-head-action-wrap > span {
+  /* inherits sweep-section-head mono/small-caps styling from parent */
+  flex-shrink: 0;
+}
+
+/* Batch toolbar — sits inline after the section label */
+.sweep-batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto; /* push to the right */
+}
+
+/* Select-all label */
+.sweep-select-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  user-select: none;
+}
+.sweep-select-all-label input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+.sweep-select-all-text {
+  white-space: nowrap;
+}
+
+/* Selected count */
+.sweep-batch-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  white-space: nowrap;
+  min-width: 6em;
+  text-align: right;
+}
+
+/* "Generate batch" button — ghost style matching sweep-continue-btn */
+.sweep-batch-btn {
+  background: var(--bg-mid);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.sweep-batch-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.sweep-batch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Per-row checkbox */
+.sweep-row-check {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+.sweep-row-check input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+}
+
+/* Selected row highlight — accent wash + line (matches token-canon selected/active recipe) */
+.sweep-row-selected {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
 }

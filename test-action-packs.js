@@ -30,13 +30,15 @@ async function runTests() {
   const modPath = new URL('side-panel/modules/shared/action-packs.js', `file://${process.cwd().replace(/\\/g, '/')}/`)
     .href;
 
-  let buildChipActions, buildPatientActions;
+  let buildChipActions, buildPatientActions, buildBatchPack;
   try {
     const mod = await import(modPath);
     buildChipActions = mod.buildChipActions;
     buildPatientActions = mod.buildPatientActions;
+    buildBatchPack = mod.buildBatchPack;
     check(typeof buildChipActions === 'function', 'buildChipActions imported');
     check(typeof buildPatientActions === 'function', 'buildPatientActions imported');
+    check(typeof buildBatchPack === 'function', 'buildBatchPack imported');
   } catch (e) {
     console.error('FATAL: could not import action-packs.js:', e.message);
     process.exitCode = 1;
@@ -280,6 +282,104 @@ async function runTests() {
   const noNamePack = buildChipActions(mtxChip, noNamePatient);
   check(noNamePack !== null, 'no-name patient: pack non-null');
   check(noNamePack.sms.startsWith('Dear patient,'), 'no-name patient: sms falls back to "Dear patient,"');
+
+  // ── 9. buildBatchPack ─────────────────────────────────────────────────────
+  console.log('\n--- buildBatchPack ---');
+
+  // Empty / null → null
+  check(buildBatchPack([]) === null, 'buildBatchPack([]) → null');
+  check(buildBatchPack(null) === null, 'buildBatchPack(null) → null');
+
+  // Single item
+  const bpItem1 = {
+    name: 'Smith, Alice',
+    time: '2026-06-11T09:00:00Z',
+    clinician: 'Dr Jones',
+    redCount: 1,
+    amberCount: 0,
+    chips: [
+      {
+        type: 'drug-monitoring',
+        ruleId: 'methotrexate-maintenance',
+        status: 'overdue',
+        drugName: 'Methotrexate',
+        tests: [
+          { name: 'FBC', status: 'overdue' },
+          { name: 'LFT', status: 'overdue' },
+          { name: 'U&E', status: 'in_date' },
+        ],
+        source: 'BNF',
+      },
+    ],
+  };
+
+  const bpSingle = buildBatchPack([bpItem1]);
+  check(bpSingle !== null, 'buildBatchPack with 1 item → non-null');
+  check(Array.isArray(bpSingle.patients) && bpSingle.patients.length === 1, 'single item → 1 patient section');
+  check(typeof bpSingle.generatedAt === 'string', 'generatedAt is a string');
+  check(bpSingle.patients[0].name === 'Smith, Alice', 'patient name preserved');
+  check(bpSingle.patients[0].time === '2026-06-11T09:00:00Z', 'time preserved');
+  check(bpSingle.patients[0].clinician === 'Dr Jones', 'clinician preserved');
+  check(bpSingle.patients[0].redCount === 1, 'redCount preserved');
+  check(typeof bpSingle.patients[0].bloodForm === 'string', 'bloodForm is a string');
+  check(bpSingle.patients[0].bloodForm.includes('FBC'), 'bloodForm includes overdue test');
+  check(!bpSingle.patients[0].bloodForm.includes('U&E'), 'bloodForm excludes in_date test');
+  check(typeof bpSingle.patients[0].sms === 'string', 'sms is a string');
+  check(/Methotrexate|methotrexate/i.test(bpSingle.patients[0].sms), 'sms references drug');
+
+  // Verify single-patient batch matches what buildPatientActions would produce
+  const directPack = buildPatientActions(bpItem1.chips, { name: bpItem1.name });
+  check(
+    bpSingle.patients[0].bloodForm === directPack.bloodForm,
+    'buildBatchPack bloodForm matches buildPatientActions for same input'
+  );
+  check(bpSingle.patients[0].sms === directPack.sms, 'buildBatchPack sms matches buildPatientActions for same input');
+
+  // N items → N sections
+  const bpItem2 = {
+    name: 'Jones, Bob',
+    time: '2026-06-11T09:30:00Z',
+    clinician: 'Dr Jones',
+    redCount: 0,
+    amberCount: 1,
+    chips: [
+      {
+        type: 'qof-indicator',
+        status: 'not_met',
+        ruleId: 'hyp010',
+        indicatorCode: 'HYP010',
+        indicatorName: 'BP ≤140/90',
+      },
+    ],
+  };
+
+  const bpTwo = buildBatchPack([bpItem1, bpItem2]);
+  check(bpTwo !== null, 'buildBatchPack with 2 items → non-null');
+  check(bpTwo.patients.length === 2, '2 items → 2 patient sections');
+  check(bpTwo.patients[0].name === 'Smith, Alice', 'first patient name correct');
+  check(bpTwo.patients[1].name === 'Jones, Bob', 'second patient name correct');
+  // QOF chip → sms present, bloodForm null
+  check(bpTwo.patients[1].bloodForm === null, 'QOF chip patient has no bloodForm');
+  check(typeof bpTwo.patients[1].sms === 'string', 'QOF chip patient has sms');
+
+  // Patient with no action-needed chips → null fields (not removed from list)
+  const bpItemClear = {
+    name: 'Clear, Patient',
+    time: null,
+    clinician: null,
+    redCount: 0,
+    amberCount: 0,
+    chips: [{ type: 'drug-monitoring', status: 'in_date', drugName: 'X', tests: [] }],
+  };
+  const bpWithClear = buildBatchPack([bpItem1, bpItemClear]);
+  check(bpWithClear.patients.length === 2, 'item with no action chips still produces a section');
+  check(bpWithClear.patients[1].sms === null, 'patient with no action chips has null sms');
+  check(bpWithClear.patients[1].bloodForm === null, 'patient with no action chips has null bloodForm');
+
+  // Order preserved (not re-sorted)
+  const bpOrder = buildBatchPack([bpItem2, bpItem1]);
+  check(bpOrder.patients[0].name === 'Jones, Bob', 'order preserved: first passed is first in output');
+  check(bpOrder.patients[1].name === 'Smith, Alice', 'order preserved: second passed is second in output');
 
   // ── Final results ─────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
