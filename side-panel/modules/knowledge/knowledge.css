@@ -10,8 +10,8 @@
 /* ── First-open notice ── */
 .kb-notice {
   display: flex; gap: 12px; align-items: center;
-  background: rgba(180,83,9,0.08); border: 1px solid rgba(180,83,9,0.35);
-  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+  background: var(--amber-dim); border: 1px solid var(--amber-line);
+  border-radius: var(--r-lg); padding: 10px 12px; margin-bottom: 12px;
   font-size: 12px; color: var(--text-2); line-height: 1.5;
 }
 
@@ -19,45 +19,55 @@
 .kb-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
 .kb-search {
   flex: 1; min-width: 0; background: var(--bg-elev); border: 1px solid var(--border);
-  color: var(--text-1); border-radius: 6px; padding: 6px 10px; font-size: 12px;
-  font-family: var(--sans); outline: none;
+  color: var(--text-1); border-radius: var(--r-md); padding: 6px 10px; font-size: 12px;
+  font-family: var(--sans);
+  transition: border-color var(--fast) var(--ease);
 }
-.kb-search:focus { border-color: var(--border-acc); }
+.kb-search:focus { border-color: var(--accent); }
 
 .kb-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .kb-pill {
   background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-3);
-  border-radius: 999px; padding: 3px 11px; font-size: 11px; cursor: pointer;
-  font-family: var(--sans);
+  border-radius: var(--r-pill); padding: 2px 10px;
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
-.kb-pill:hover { background: var(--bg-hover); color: var(--text-2); }
-.kb-pill-on { background: var(--accent-dim); border-color: var(--border-acc); color: var(--text-1); }
+.kb-pill:hover { background: var(--bg-hover); color: var(--text-2); border-color: var(--border-hi); }
+.kb-pill-on { background: var(--accent-dim); border-color: var(--accent-line); color: var(--text-1); }
 
 /* ── Buttons ── */
 .kb-btn {
   background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-2);
-  border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+  border-radius: var(--r-md); padding: 6px 12px; font-size: 12px; cursor: pointer;
   font-family: var(--sans); white-space: nowrap;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
-.kb-btn:hover { background: var(--bg-hover); }
+.kb-btn:hover { background: var(--bg-hover); border-color: var(--border-hi); }
+.kb-btn:disabled { opacity: .45; cursor: not-allowed; }
 .kb-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.kb-btn-primary:hover { opacity: 0.9; background: var(--accent); }
+.kb-btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); opacity: 1; }
+.kb-btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 .kb-btn-sm { padding: 3px 9px; font-size: 11px; }
-.kb-btn-danger { color: var(--red); border-color: var(--red); }
+.kb-btn-danger { color: var(--red); border-color: var(--red-line); }
+.kb-btn-danger:hover { background: var(--red-dim); border-color: var(--red); }
+.kb-btn-danger:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ── Cards ── */
 .kb-list { display: flex; flex-direction: column; gap: 8px; }
 .kb-card {
-  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
   padding: 10px 12px; cursor: pointer;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
-.kb-card:hover { border-color: var(--border-hi); }
-.kb-card-open { border-color: var(--border-acc); cursor: default; }
+.kb-card:hover { border-color: var(--border-hi); box-shadow: var(--shadow-2); }
+.kb-card-open { border-color: var(--accent); box-shadow: var(--shadow-1); cursor: default; }
 .kb-card-top { display: flex; align-items: baseline; gap: 8px; }
 .kb-card-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-1); }
 .kb-cat-chip {
   font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-4); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px;
+  color: var(--text-4); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 1px 6px;
   white-space: nowrap;
 }
 .kb-card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; align-items: center; }
@@ -67,15 +77,15 @@
 }
 
 .kb-badge {
-  font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 7px;
+  font-size: 10px; font-weight: 700; border-radius: var(--r-sm); padding: 1px 7px;
   text-transform: uppercase; letter-spacing: 0.04em;
 }
-.kb-badge-amber { background: rgba(180,83,9,0.12); color: var(--amber); border: 1px solid rgba(180,83,9,0.4); }
+.kb-badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-line); }
 .kb-badge-grey  { background: var(--bg-mid); color: var(--text-4); border: 1px solid var(--border); }
 
 .kb-tag {
   font-family: var(--mono); font-size: 10px; color: var(--text-4);
-  background: var(--bg-mid); border-radius: 3px; padding: 1px 6px;
+  background: var(--bg-mid); border-radius: var(--r-sm); padding: 1px 6px;
 }
 
 /* ── Card detail ── */
@@ -98,7 +108,7 @@
 
 /* ── Add/edit form ── */
 .kb-form {
-  background: var(--bg-elev); border: 1px solid var(--border-acc); border-radius: 8px;
+  background: var(--bg-elev); border: 1px solid var(--accent); border-radius: var(--r-lg);
   padding: 12px; margin-bottom: 12px; cursor: default;
 }
 .kb-form-title { font-size: 13px; font-weight: 600; color: var(--text-1); margin-bottom: 10px; }
@@ -108,10 +118,11 @@
 }
 .kb-input {
   width: 100%; box-sizing: border-box; background: var(--bg-deep); border: 1px solid var(--border);
-  color: var(--text-1); border-radius: 6px; padding: 6px 9px; font-size: 12px;
-  font-family: var(--sans); outline: none; resize: vertical;
+  color: var(--text-1); border-radius: var(--r-md); padding: 6px 9px; font-size: 12px;
+  font-family: var(--sans); resize: vertical;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
 }
-.kb-input:focus { border-color: var(--border-acc); }
+.kb-input:focus { border-color: var(--accent); background: var(--bg-elev); }
 .kb-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .kb-hidden { display: none; }
 .kb-form-error { color: var(--red); font-size: 11px; min-height: 14px; margin-top: 6px; }
@@ -119,7 +130,7 @@
 
 /* ── Create-from-LLM block (inside the add form) ── */
 .kb-llm-block {
-  border: 1px solid var(--border); border-radius: 6px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
   margin-bottom: 4px; overflow: hidden;
 }
 .kb-llm-block summary {
@@ -138,8 +149,8 @@
 
 /* ── Near-duplicate warning ── */
 .kb-similar {
-  background: rgba(180,83,9,0.07); border: 1px solid rgba(180,83,9,0.3);
-  border-radius: 6px; padding: 8px 10px; margin-top: 6px;
+  background: var(--amber-dim); border: 1px solid var(--amber-line);
+  border-radius: var(--r-md); padding: 8px 10px; margin-top: 6px;
 }
 .kb-similar-head { font-size: 11px; font-weight: 600; color: var(--amber); margin-bottom: 6px; }
 .kb-similar-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 4px; }

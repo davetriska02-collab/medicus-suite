@@ -1,3 +1,4 @@
+/* global process, console, URL */
 // Atelier verify stage — headless renders of the suite's entry points.
 // Usage: node .claude/skills/ui-design/screenshot.mjs [outDir]
 // Writes <page>-<theme>.png to outDir (default /tmp/ui-design/).
