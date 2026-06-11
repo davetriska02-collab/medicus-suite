@@ -25,6 +25,28 @@ async function submissionsImport(data, _opts = {}) {
     if (typeof data.thresholds !== 'object' || Array.isArray(data.thresholds)) {
       throw new Error('submissions.thresholds must be an object.');
     }
+    // M2: validate each category's numeric thresholds so a crafted backup with a
+    // string/NaN/Infinity threshold cannot reach the consumer where
+    // `value >= NaN` is always false and alerts silently never fire.
+    for (const [cat, entry] of Object.entries(data.thresholds)) {
+      if (entry == null || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new Error(`submissions.thresholds.${cat} must be a non-null object.`);
+      }
+      for (const field of ['amber', 'red']) {
+        if (entry[field] != null) {
+          if (!Number.isFinite(entry[field]) || entry[field] <= 0) {
+            throw new Error(
+              `submissions.thresholds.${cat}.${field} must be a finite positive number (got ${JSON.stringify(entry[field])}).`
+            );
+          }
+        }
+      }
+      if (entry.enabled != null && typeof entry.enabled !== 'boolean') {
+        throw new Error(
+          `submissions.thresholds.${cat}.enabled must be a boolean (got ${JSON.stringify(entry.enabled)}).`
+        );
+      }
+    }
     toSet['submissions.thresholds'] = data.thresholds;
   }
   // Legacy-tolerated: standalone submissions backups carried practiceCode; owner is suite-io.

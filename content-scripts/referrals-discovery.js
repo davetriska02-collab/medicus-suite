@@ -95,28 +95,37 @@
   async function storeConfig(url, data) {
     if (configCaptured) return;
     configCaptured = true;
-    // Skip write if the non-timestamp portion is unchanged (avoids per-page-load storage churn)
+    // Audit M1 — no PHI persisted: store only the fields the side panel actually
+    // reads (priorityOptions, statusOptions). The full `data` object is still
+    // passed to tryDataEndpoints() below because it needs defaultReferralStartDate
+    // / defaultReferralEndDate to build the data query.
+    const trimmed = {
+      priorityOptions: data.priorityOptions ?? [],
+      statusOptions:   data.statusOptions   ?? [],
+    };
+    // Skip write if the stored copy is for the same URL (avoids per-page-load storage churn)
     const existing = (await chrome.storage.local.get(CONFIG_KEY))[CONFIG_KEY];
-    if (existing && existing.url === url && JSON.stringify(existing.data) === JSON.stringify(data)) {
+    if (existing && existing.url === url) {
       tryDataEndpoints(url, data);
       return;
     }
-    await chrome.storage.local.set({ [CONFIG_KEY]: { url, discoveredAt: new Date().toISOString(), data } });
+    await chrome.storage.local.set({ [CONFIG_KEY]: { url, discoveredAt: new Date().toISOString(), data: trimmed } });
     // No runtime message needed: the side panel listens to chrome.storage.onChanged
     // for referrals.config and referrals.discovery and reacts automatically.
     // Immediately try to fetch the actual data using the config values
     tryDataEndpoints(url, data);
   }
 
-  async function storeDataDiscovery(url, data) {
+  async function storeDataDiscovery(url, data) { // eslint-disable-line no-unused-vars
     if (dataCaptured) return;
     dataCaptured = true;
-    // Skip write if the non-timestamp portion is unchanged (avoids per-page-load storage churn)
+    // Audit M1 — no PHI persisted: store URL only; the patient-identifiable row
+    // data (`data`) is intentionally NOT written to storage.
     const existing = (await chrome.storage.local.get(DISCOVERY_KEY))[DISCOVERY_KEY];
-    if (existing && existing.url === url && JSON.stringify(existing.sample) === JSON.stringify(data)) {
+    if (existing && existing.url === url) {
       return;
     }
-    const discovery = { url, discoveredAt: new Date().toISOString(), sample: data };
+    const discovery = { url, discoveredAt: new Date().toISOString() };
     await chrome.storage.local.set({ [DISCOVERY_KEY]: discovery });
     // No runtime message needed: the side panel listens to chrome.storage.onChanged
     // for referrals.config and referrals.discovery and reacts automatically.

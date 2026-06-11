@@ -621,6 +621,9 @@ async function onPrintHandout() {
     suiteVersion: chrome.runtime.getManifest().version,
   });
   await chrome.storage.local.set({ 'sweep.handout': model });
+  // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
+  // in the print tab; this covers the case where the tab never renders.
+  setTimeout(() => { chrome.storage.local.remove('sweep.handout'); }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/handout.html') });
 }
 
@@ -641,6 +644,9 @@ async function onGenerateBatch() {
   batchPack.suiteVersion = chrome.runtime.getManifest().version;
 
   await chrome.storage.local.set({ 'sweep.batchPack': batchPack });
+  // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
+  // in the print tab; this covers the case where the tab never renders.
+  setTimeout(() => { chrome.storage.local.remove('sweep.batchPack'); }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/batch-handout.html') });
 }
 

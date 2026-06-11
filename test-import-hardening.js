@@ -748,6 +748,252 @@ const { sentinelImport } = require('./shared/io/sentinel-io.js');
     );
   }
 
+  // ── (h) M2 submissions threshold validation ───────────────────────────────────
+  // Regression: a malicious backup with string/NaN/Infinity thresholds must be
+  // rejected rather than silently stored, where `value >= NaN` is always false
+  // and alerts would silently never fire — a patient-safety risk.
+
+  console.log('\n--- (h) M2 submissions threshold validation ---');
+
+  const { submissionsImport } = require('./shared/io/submissions-io.js');
+
+  async function expectSubmissionsReject(data, msgFragment, label) {
+    try {
+      await submissionsImport(data);
+      assert(false, `${label}: should have thrown`);
+    } catch (e) {
+      assert(e.message.includes(msgFragment), `${label}: error mentions "${msgFragment}" (got: ${e.message})`);
+    }
+  }
+  async function expectSubmissionsResolve(data, label) {
+    try {
+      await submissionsImport(data);
+      assert(true, `${label}: valid data accepted without error`);
+    } catch (e) {
+      assert(false, `${label}: unexpectedly threw: ${e.message}`);
+    }
+  }
+
+  // string red must throw
+  await expectSubmissionsReject(
+    { thresholds: { medical: { red: '60', amber: 30, enabled: true } } },
+    'finite positive number',
+    'submissions.thresholds.medical.red as string'
+  );
+
+  // NaN red must throw
+  await expectSubmissionsReject(
+    { thresholds: { medical: { red: NaN } } },
+    'finite positive number',
+    'submissions.thresholds.medical.red as NaN'
+  );
+
+  // Infinity red must throw
+  await expectSubmissionsReject(
+    { thresholds: { medical: { red: Infinity } } },
+    'finite positive number',
+    'submissions.thresholds.medical.red as Infinity'
+  );
+
+  // Negative red must throw
+  await expectSubmissionsReject(
+    { thresholds: { medical: { red: -10 } } },
+    'finite positive number',
+    'submissions.thresholds.medical.red as negative'
+  );
+
+  // non-boolean enabled must throw
+  await expectSubmissionsReject(
+    { thresholds: { medical: { red: 60, amber: 30, enabled: 'yes' } } },
+    'boolean',
+    'submissions.thresholds.medical.enabled as string'
+  );
+
+  // fully valid entry must succeed and write
+  await expectSubmissionsResolve(
+    { thresholds: { medical: { red: 60, amber: 30, enabled: true } } },
+    'submissions valid: medical thresholds with all fields'
+  );
+
+  // empty thresholds object must succeed (no categories to validate)
+  await expectSubmissionsResolve({ thresholds: {} }, 'submissions valid: empty thresholds object');
+
+  // partial entry (only some fields present) must succeed
+  await expectSubmissionsResolve(
+    { thresholds: { admin: { amber: 15 } } },
+    'submissions valid: partial admin entry (amber only)'
+  );
+
+  // unknown category key must be tolerated
+  await expectSubmissionsResolve(
+    { thresholds: { unknownCategory: { red: 5, amber: 3 } } },
+    'submissions valid: unknown category key tolerated'
+  );
+
+  // ── (i) M2 triage-alert rule validation ──────────────────────────────────────
+  // Regression: same class of attack via triage-alert backup with string/NaN
+  // thresholds that survive import and reach `value >= NaN` → always false.
+
+  console.log('\n--- (i) M2 triage-alert rule validation ---');
+
+  const TriageAlertIO = require('./shared/io/triage-alert-io.js');
+
+  async function expectTriageReject(data, msgFragment, label) {
+    try {
+      await TriageAlertIO.importData(data);
+      assert(false, `${label}: should have thrown`);
+    } catch (e) {
+      assert(e.message.includes(msgFragment), `${label}: error mentions "${msgFragment}" (got: ${e.message})`);
+    }
+  }
+  async function expectTriageResolve(data, label) {
+    try {
+      await TriageAlertIO.importData(data);
+      assert(true, `${label}: valid data accepted without error`);
+    } catch (e) {
+      assert(false, `${label}: unexpectedly threw: ${e.message}`);
+    }
+  }
+
+  // string threshold must throw
+  await expectTriageReject(
+    { rules: [{ key: 'medNew', label: 'x', threshold: '10', enabled: true }] },
+    'finite positive number',
+    'triageAlert.rules[0].threshold as string'
+  );
+
+  // NaN threshold must throw
+  await expectTriageReject(
+    { rules: [{ key: 'medNew', label: 'x', threshold: NaN }] },
+    'finite positive number',
+    'triageAlert.rules[0].threshold as NaN'
+  );
+
+  // Infinity threshold must throw
+  await expectTriageReject(
+    { rules: [{ key: 'medNew', label: 'x', threshold: Infinity }] },
+    'finite positive number',
+    'triageAlert.rules[0].threshold as Infinity'
+  );
+
+  // zero threshold must throw (must be positive, not zero)
+  await expectTriageReject(
+    { rules: [{ key: 'medNew', label: 'x', threshold: 0 }] },
+    'finite positive number',
+    'triageAlert.rules[0].threshold as zero'
+  );
+
+  // empty key must throw
+  await expectTriageReject(
+    { rules: [{ key: '', label: 'x', threshold: 10 }] },
+    'non-empty string',
+    'triageAlert.rules[0].key as empty string'
+  );
+
+  // valid numeric threshold must write
+  await expectTriageResolve(
+    { rules: [{ key: 'medNew', label: 'New medical', threshold: 10, enabled: false }] },
+    'triageAlert valid: finite positive threshold accepted'
+  );
+
+  // ── (j) L1 sentinel non-merge dangerous-key stripping ────────────────────────
+  // Regression: sentinelImport with merge:false previously wrote data.rules raw,
+  // allowing __proto__/constructor/prototype to be stored and later cause
+  // prototype-pollution when the stored object is spread at runtime.
+
+  console.log('\n--- (j) L1 sentinel non-merge dangerous-key stripping ---');
+
+  {
+    const _storeRef = global.chrome.storage.local;
+    // Reset store so previous tests don't interfere.
+    await _storeRef.set({ 'sentinel.rules': {} });
+
+    const maliciousRules = {};
+    Object.defineProperty(maliciousRules, '__proto__', {
+      value: { polluted: 'nonmerge' },
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(maliciousRules, 'constructor', {
+      value: { stolen: true },
+      enumerable: true,
+      configurable: true,
+    });
+    maliciousRules['good'] = { enabled: false };
+
+    try {
+      await sentinelImport({ rules: maliciousRules }, { merge: false });
+      assert(true, 'sentinel non-merge __proto__: sentinelImport does not throw');
+    } catch (e) {
+      assert(false, `sentinel non-merge __proto__: sentinelImport unexpectedly threw: ${e.message}`);
+    }
+
+    // Object.prototype must not have been polluted.
+    assert({}.polluted !== 'nonmerge', 'sentinel non-merge: Object.prototype not polluted');
+
+    const stored = await _storeRef.get('sentinel.rules');
+    const storedRules = stored['sentinel.rules'] || {};
+
+    // Dangerous keys must be absent from stored result.
+    assert(
+      !Object.prototype.hasOwnProperty.call(storedRules, '__proto__'),
+      'sentinel non-merge: __proto__ key absent from stored result'
+    );
+    assert(
+      !Object.prototype.hasOwnProperty.call(storedRules, 'constructor'),
+      'sentinel non-merge: constructor key absent from stored result'
+    );
+    assert(
+      !Object.prototype.hasOwnProperty.call(storedRules, 'prototype'),
+      'sentinel non-merge: prototype key absent from stored result'
+    );
+
+    // The legitimate key must survive.
+    assert(
+      storedRules['good'] && storedRules['good'].enabled === false,
+      'sentinel non-merge: legitimate key "good" retained in stored result'
+    );
+  }
+
+  {
+    // Also verify merge:true path strips dangerous keys (already existed; lock it in).
+    const _storeRef = global.chrome.storage.local;
+    await _storeRef.set({ 'sentinel.rules': { existing: { intervalDays: 84 } } });
+
+    const maliciousRules = {};
+    Object.defineProperty(maliciousRules, '__proto__', {
+      value: { polluted: 'merge' },
+      enumerable: true,
+      configurable: true,
+    });
+    maliciousRules['good'] = { enabled: false };
+
+    try {
+      await sentinelImport({ rules: maliciousRules }, { merge: true });
+      assert(true, 'sentinel merge __proto__: sentinelImport does not throw');
+    } catch (e) {
+      assert(false, `sentinel merge __proto__: sentinelImport unexpectedly threw: ${e.message}`);
+    }
+
+    assert({}.polluted !== 'merge', 'sentinel merge: Object.prototype not polluted');
+
+    const stored = await _storeRef.get('sentinel.rules');
+    const storedRules = stored['sentinel.rules'] || {};
+
+    assert(
+      !Object.prototype.hasOwnProperty.call(storedRules, '__proto__'),
+      'sentinel merge: __proto__ key absent from stored result'
+    );
+    assert(
+      storedRules['good'] && storedRules['good'].enabled === false,
+      'sentinel merge: legitimate key "good" retained in stored result'
+    );
+    assert(
+      storedRules['existing'] && storedRules['existing'].intervalDays === 84,
+      'sentinel merge: pre-existing key survived merge'
+    );
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();
