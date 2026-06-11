@@ -1134,6 +1134,9 @@ async function onPrintPassport(snapshot) {
   const model = buildPassport(snapshot, _lastTrendData);
   if (!model) return;
   await chrome.storage.local.set({ 'sentinel.passport': model });
+  // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
+  // in the print tab; this covers the case where the tab never renders.
+  setTimeout(() => { chrome.storage.local.remove('sentinel.passport'); }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sentinel/passport.html') });
 }
 

@@ -77,7 +77,10 @@ async function sentinelImport(data, { merge = false, skipInvalidCustomRules = fa
       // Strip dangerous keys from the untrusted import operand before merging.
       toSet['sentinel.rules'] = Object.assign({}, existing['sentinel.rules'] || {}, _stripDangerousKeys(data.rules));
     } else {
-      toSet['sentinel.rules'] = data.rules;
+      // L1: non-merge path must also strip dangerous keys so __proto__/constructor/
+      // prototype cannot be persisted and later trigger prototype-pollution when
+      // the stored object is spread or Object.assign'd at runtime.
+      toSet['sentinel.rules'] = _stripDangerousKeys(data.rules);
     }
   }
 

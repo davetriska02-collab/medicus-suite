@@ -44,6 +44,7 @@ let state = {
 function resolveStored(stored) {
   const cfgData = stored[CONFIG_KEY]?.data || {};
   return {
+    // Audit M1: discovery stores URL only — no .sample/.data rows are persisted.
     discoveryUrl: stored[DISCOVERY_KEY]?.url || null,
     configUrl:    stored[CONFIG_KEY]?.url    || null,
     priorities:   (cfgData.priorityOptions || []).map(o => o.value).filter(Boolean),

@@ -164,9 +164,9 @@ function previewEnvelope(envelope) {
   } else { const m = missing('Pop-out'); if (m) lines.push(m); }
 
   if (mods.referrals) {
-    const discoveryCount = Array.isArray(mods.referrals.discovery) ? mods.referrals.discovery.length : (mods.referrals.discovery != null ? 1 : 0);
+    // Audit M1: discovery is never exported, so only config presence is reported.
     const hasConfig = mods.referrals.config != null;
-    lines.push(`Referrals: ${discoveryCount} discovered, config ${hasConfig ? 'present' : 'absent'}`);
+    lines.push(`Referrals: config ${hasConfig ? 'present' : 'absent'}`);
   } else { const m = missing('Referrals'); if (m) lines.push(m); }
 
   if (mods.requestMonitor) {
