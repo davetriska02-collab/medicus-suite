@@ -97,7 +97,6 @@ const MODULES = {
   reception:   { js: () => import('./modules/reception/reception.js'),   css: './modules/reception/reception.css' },
   sweep:       { js: () => import('./modules/sweep/sweep.js'),           css: './modules/sweep/sweep.css' },
   knowledge:   { js: () => import('./modules/knowledge/knowledge.js'),   css: './modules/knowledge/knowledge.css' },
-  rxmargin:    { js: () => import('./modules/rxmargin/rxmargin.js'),     css: './modules/rxmargin/rxmargin.css' },
   about:       null,
 };
 

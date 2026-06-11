@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.2] — 2026-06-11
+
+### Removed: Dispensing Margin (`rxmargin`) module
+
+The Dispensing Margin module (added in 3.53.0/3.53.1) has been removed from Medicus
+Suite — it is being developed as a standalone product in its own repository rather
+than as a suite module. This reverts the module files, the side-panel/pop-out nav
+entries and registries, the `rxmargin` backup scope and envelope preview, the
+options export card and IO script, and `test-rxmargin-core.js`. No other module is
+affected. (The richer release pipeline added in 3.53.1 — CHANGELOG-derived notes and
+SHA-256 checksums — is retained, as it is independent of the module.)
+
 ## [v3.53.1] — 2026-06-11
 
 ### Release pipeline — fully-decorated GitHub Releases

@@ -482,7 +482,6 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
-    rxmargin,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -496,7 +495,6 @@ async function doFullExport() {
     condorExport(),
     receptionExport(),
     knowledgeExport(),
-    rxmarginExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -512,7 +510,6 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
-    rxmargin,
     suite,
   });
 }
@@ -531,7 +528,6 @@ async function doModuleExport(scope) {
     condor: () => condorExport(),
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
-    rxmargin: () => rxmarginExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -556,7 +552,6 @@ async function applyEnvelope(envelope) {
     mods.condor && (() => condorImport(mods.condor)),
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
-    mods.rxmargin && (() => rxmarginImport(mods.rxmargin)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
