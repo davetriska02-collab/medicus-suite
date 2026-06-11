@@ -3,19 +3,7 @@
 
 'use strict';
 
-// ── Apply display preferences (theme/size/colorblind) ─────────────────────────
-(function applyDisplayPrefs() {
-  function apply(prefs) {
-    prefs = prefs || {};
-    document.documentElement.setAttribute('data-theme', prefs.theme || 'light');
-    document.documentElement.setAttribute('data-size', prefs.size || 'medium');
-    document.documentElement.setAttribute('data-colorblind', String(!!prefs.colorblind));
-  }
-  chrome.storage.local.get('suite.display', (r) => apply(r['suite.display'] || {}));
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes['suite.display']) apply(changes['suite.display'].newValue || {});
-  });
-})();
+// Display preferences are applied by shared/display-prefs.js (loaded before this script).
 
 // ── Inject current extension version into header badges ───────────────────────
 // Both badges used to be hard-coded; they drifted out of sync with manifest.json
