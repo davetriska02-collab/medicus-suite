@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.52.0] — 2026-06-11
+
+### Triage Lens — engine hardening (red-team follow-up) + DKA/HHS red flag
+
+Engine-level fixes from the triage-lens red-team, plus the CSO-approved diabetes
+re-tiering.
+
+1. **Dropped patterns are no longer silent** (`content-scripts/triage-lens/content.js`,
+   `compileRule`): a pattern that fails to compile now logs a `console.warn` naming
+   the rule and pattern, and a rule left with no usable patterns logs that it will
+   never fire. The options editor already blocked invalid regex at author time
+   (`validateTriageRule`); this covers anything reaching runtime (legacy imports,
+   regressions) so a clinical gap is visible rather than invisible.
+
+2. **Curly quotes/apostrophes normalised before matching** (`content.js`, `getText`):
+   pasted clinical-letter punctuation (’ “ ”) is folded to ASCII on both the
+   `innerText` and DOM-walk paths, so patterns written with a straight apostrophe
+   (e.g. `can't cope`) match regardless of the source punctuation.
+
+3. **Threshold rules reject non-numeric thresholds** (`engine/triage-alert-engine.js`
+   and the event-count path in `engine/rules-engine.js`): a `""`/`null`/missing
+   threshold from an imported or hand-edited rule previously coerced silently
+   (`count < ""` → never fires; `< null` → always fires). Both now coerce with
+   `Number()` and skip the rule with a warning instead of mis-firing.
+
+4. **New red flag `dka-hhs` (CSO-approved)** (`defaults.json`): explicit
+   diabetic-emergency phrasing (diabetic ketoacidosis, DKA, HHS, hyperosmolar,
+   raised ketones, fruity/acetone breath, diabetes + vomiting/can't-keep-fluids/
+   confusion) now fires a **red** chip with a same-day/999 clinical note. The
+   `diabetes` rule keeps routine glycaemic-control phrasing as **amber**. This
+   resolves the prior amber-chip-vs-999-note mismatch. Derived defaults copies
+   regenerated; rule pattern/schema tests green (77 rules).
+
 ## [v3.51.3] — 2026-06-11
 
 ### Clinical rules — The Keeper pass (triage-lens ruleset review follow-up)

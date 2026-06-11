@@ -1013,12 +1013,21 @@
     }
 
     const count = items.length;
-    const threshold = rule.countThreshold;
+    const threshold = Number(rule.countThreshold);
     const op = rule.operator;
     const validOps = ['>=', '>', '=', '<=', '<'];
     if (!validOps.includes(op)) {
       console.warn(
         `[Sentinel] event-count rule "${rule.label || rule.id}" has unknown operator "${op}" — rule will never fire`
+      );
+      return [];
+    }
+    // A non-numeric countThreshold (string/null/undefined from an imported or
+    // hand-edited rule) silently coerces in the comparisons below — e.g. against
+    // null it fires for any count. Reject it explicitly rather than mis-fire.
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      console.warn(
+        `[Sentinel] event-count rule "${rule.label || rule.id}" has invalid countThreshold ${JSON.stringify(rule.countThreshold)} — rule will never fire`
       );
       return [];
     }
