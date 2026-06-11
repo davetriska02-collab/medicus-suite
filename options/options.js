@@ -536,11 +536,18 @@ async function doModuleExport(scope) {
 
 async function applyEnvelope(envelope) {
   const mods = envelope.modules || {};
+  const notes = [];
   // Build task list in the same order as doFullExport to make auditing straightforward.
   // Only include modules that are present in this backup (same mods.X && gating).
   // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
   const tasks = [
-    mods.sentinel && (() => sentinelImport(mods.sentinel)),
+    mods.sentinel && (async () => {
+      const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
+      if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
+        const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
+        notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
+      }
+    }),
     mods.capacity && (() => capacityImport(mods.capacity)),
     mods.triage && (() => triageImport(mods.triage)),
     mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
@@ -555,6 +562,7 @@ async function applyEnvelope(envelope) {
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
+  return { notes };
 }
 
 function downloadJson(obj, filename) {
@@ -630,11 +638,12 @@ document.getElementById('importSuiteFile')?.addEventListener('change', async (e)
 document.getElementById('confirmImportBtn')?.addEventListener('click', async () => {
   if (!pendingEnvelope) return;
   try {
-    await applyEnvelope(pendingEnvelope);
+    const result = await applyEnvelope(pendingEnvelope);
     pendingEnvelope = null;
     const previewWrap = document.getElementById('importPreviewWrap');
     if (previewWrap) previewWrap.style.display = 'none';
-    setBackupStatus('Restore complete — reloading settings page…');
+    const noteSuffix = result && result.notes && result.notes.length ? ` (${result.notes.join('; ')})` : '';
+    setBackupStatus(`Restore complete${noteSuffix} — reloading settings page…`);
     setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
     setBackupStatus('Restore failed: ' + err.message, true);
@@ -695,8 +704,9 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
       const lines = window.SuiteEnvelope.previewEnvelope(envelope);
       const msg = `Import ${scope}?\n\n${lines.join('\n')}${warnings.length ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`;
       if (!confirm(msg)) return;
-      await applyEnvelope(envelope);
-      setBackupStatus(`${scope} restored — reloading settings page…`);
+      const result = await applyEnvelope(envelope);
+      const noteSuffix = result && result.notes && result.notes.length ? ` (${result.notes.join('; ')})` : '';
+      setBackupStatus(`${scope} restored${noteSuffix} — reloading settings page…`);
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       setBackupStatus('Import failed: ' + err.message, true);

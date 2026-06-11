@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.53.3] — 2026-06-11
+
+### Fixed: resilient Sentinel custom-rule import in suite restore
+
+Whole-suite backup restore now imports custom Sentinel monitoring rules resiliently — a single invalid/legacy custom rule no longer rolls back the entire restore. Valid rules are imported and skipped rules are surfaced in the status message instead of being silently dropped. The dedicated Sentinel-options import was already resilient; this fix brings suite restore into line with it.
+
 ## [v3.53.2] — 2026-06-11
 
 ### Removed: Dispensing Margin (`rxmargin`) module
