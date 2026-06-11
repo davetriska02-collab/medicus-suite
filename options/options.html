@@ -9,20 +9,72 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg-deep: #f8fafc; --bg-mid: #f1f5f9; --bg-elev: #ffffff;
-      --border: #cbd5e1; --border-hi: #94a3b8; --accent: #2563eb;
-      --text-1: #0f172a; --text-2: #1e3a5f; --text-3: #475569;
-      --text-4: #64748b; --text-5: #94a3b8;
-      --green: #16a34a; --amber: #b45309; --red: #dc2626;
-      --mono: 'JetBrains Mono', monospace;
+      --bg-deep:    #f8fafc;
+      --bg-mid:     #f1f5f9;
+      --bg-elev:    #ffffff;
+      --bg-hover:   #e2eaf5;
+      --border:     #cbd5e1;
+      --border-hi:  #94a3b8;
+      --accent:       #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-dim:   rgba(37,99,235,0.09);
+      --accent-line:  rgba(37,99,235,0.30);
+      --text-1: #0f172a;
+      --text-2: #1e3a5f;
+      --text-3: #475569;
+      --text-4: #64748b;
+      --text-5: #94a3b8;
+      --green:      #16a34a;
+      --green-dim:  rgba(22,163,74,0.09);
+      --green-line: rgba(22,163,74,0.30);
+      --amber:      #b45309;
+      --amber-dim:  rgba(180,83,9,0.09);
+      --amber-line: rgba(180,83,9,0.32);
+      --red:        #dc2626;
+      --red-dim:    rgba(220,38,38,0.08);
+      --red-line:   rgba(220,38,38,0.30);
+      --r-sm:   4px;
+      --r-md:   6px;
+      --r-lg:   8px;
+      --r-pill: 999px;
+      --shadow-1: 0 1px 2px rgba(15,23,42,0.05);
+      --shadow-2: 0 2px 8px rgba(15,23,42,0.08);
+      --shadow-3: 0 8px 28px rgba(15,23,42,0.14);
+      --ease: cubic-bezier(0.2, 0, 0, 1);
+      --fast: 120ms;
+      --med:  200ms;
+      --mono: 'JetBrains Mono', 'Courier New', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
     html[data-theme="dark"] {
-      --bg-deep: #050a14; --bg-mid: #0b1424; --bg-elev: #131e34;
-      --border: #142340; --border-hi: #1e3050; --accent: #4a7fb8;
-      --text-1: #f1f5f9; --text-2: #cfe1ff; --text-3: #93a8c5;
-      --text-4: #5d7a9d; --text-5: #3d5070;
-      --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+      --bg-deep:    #050a14;
+      --bg-mid:     #0b1424;
+      --bg-elev:    #131e34;
+      --bg-hover:   #1a2a44;
+      --border:     #1c2e4e;
+      --border-hi:  #2a4060;
+      --accent:       #5b8fc7;
+      --accent-hover: #7eaad6;
+      --accent-dim:   rgba(91,143,199,0.14);
+      --accent-line:  rgba(91,143,199,0.35);
+      --text-1: #f1f5f9;
+      --text-2: #cfe1ff;
+      --text-3: #93a8c5;
+      --text-4: #5d7a9d;
+      --text-5: #3d5070;
+      --green:      #4ade80;
+      --green-dim:  rgba(74,222,128,0.12);
+      --green-line: rgba(74,222,128,0.32);
+      --amber:      #fbbf24;
+      --amber-dim:  rgba(251,191,36,0.12);
+      --amber-line: rgba(251,191,36,0.32);
+      --red:        #f87171;
+      --red-dim:    rgba(248,113,113,0.13);
+      --red-line:   rgba(248,113,113,0.34);
+      --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-2: 0 4px 12px rgba(0,0,0,0.45);
+      --shadow-3: 0 10px 32px rgba(0,0,0,0.55);
     }
 
     html[data-size="small"]  { zoom: 0.85; }
@@ -31,7 +83,7 @@
 
     html[data-colorblind="true"] { --red: #ea580c; --green: #2563eb; }
 
-    html, body { height: 100%; background: var(--bg-deep); color: var(--text-1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; }
+    html, body { height: 100%; background: var(--bg-deep); color: var(--text-1); font-family: var(--sans); font-size: 13px; }
 
     .layout { display: flex; height: 100vh; }
 
@@ -59,13 +111,14 @@
       display: block; width: 100%;
       padding: 8px 16px;
       background: transparent; border: none;
+      border-right: 2px solid transparent;
       color: var(--text-4);
       font-size: 13px; text-align: left;
       cursor: pointer;
-      transition: background 0.1s, color 0.1s;
+      transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
     }
-    .nav-item:hover { background: rgba(255,255,255,0.03); color: var(--text-2); }
-    .nav-item.active { background: rgba(74,127,184,0.12); color: var(--text-2); border-right: 2px solid var(--accent); }
+    .nav-item:hover { background: var(--bg-hover); color: var(--text-2); }
+    .nav-item.active { background: var(--accent-dim); color: var(--text-2); border-right-color: var(--accent); }
 
     /* Content area */
     .opt-content {
@@ -91,39 +144,51 @@
     }
     .field-help { display: block; font-size: 11px; color: var(--text-4); margin-top: 4px; line-height: 1.5; }
 
-    input[type=text] {
-      width: 100%; background: rgba(255,255,255,0.03);
+    input[type=text], input[type=email], input[type=number] {
+      width: 100%; background: var(--bg-mid);
       border: 1px solid var(--border); color: var(--text-1);
       font-family: var(--mono); font-size: 13px;
-      border-radius: 8px; padding: 10px 12px; outline: none;
+      border-radius: var(--r-md); padding: 10px 12px;
     }
-    input[type=text]:focus { border-color: var(--accent); }
+    input[type=text]:focus, input[type=email]:focus, input[type=number]:focus { border-color: var(--accent); background: var(--bg-elev); }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
 
     .actions { display: flex; gap: 8px; align-items: center; margin-top: 28px; }
 
     button.primary {
-      background: linear-gradient(135deg, rgba(74,127,184,0.25), rgba(74,127,184,0.1));
-      border: 1px solid rgba(74,127,184,0.4); color: var(--text-2);
+      background: var(--accent);
+      border: none; color: #fff;
       font-family: var(--mono); font-size: 11px;
       font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: 8px; padding: 10px 18px;
-      transition: all 0.15s;
+      cursor: pointer; border-radius: var(--r-md); padding: 10px 18px;
+      transition: background var(--fast) var(--ease);
     }
-    button.primary:hover { background: rgba(74,127,184,0.3); }
+    button.primary:hover { background: var(--accent-hover); }
+    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
     button.ghost {
       background: transparent;
-      border: 1px solid var(--border); color: var(--text-3);
+      border: 1px solid var(--border-hi); color: var(--text-3);
       font-family: var(--mono); font-size: 11px;
       font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: 8px; padding: 10px 18px;
-      transition: all 0.15s;
+      cursor: pointer; border-radius: var(--r-md); padding: 10px 18px;
+      transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
     }
-    button.ghost:hover { border-color: var(--border-hi); color: var(--text-2); background: var(--bg-mid); }
+    button.ghost:hover { border-color: var(--accent); color: var(--text-2); background: var(--accent-dim); }
+    button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .saved {
-      color: #4ade80; font-family: var(--mono); font-size: 11px;
-      letter-spacing: 0.06em; opacity: 0; transition: opacity 0.3s;
+      color: var(--green); font-family: var(--mono); font-size: 11px;
+      letter-spacing: 0.06em; opacity: 0; transition: opacity var(--med) var(--ease);
     }
     .saved.show { opacity: 1; }
 
@@ -131,7 +196,8 @@
     .safety-doc-link {
       display: block; text-decoration: none;
       background: var(--bg-elev); border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px 14px; transition: all 0.15s;
+      border-radius: var(--r-lg); padding: 12px 14px;
+      transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
     }
     .safety-doc-link:hover { border-color: var(--border-hi); background: var(--bg-mid); }
     .safety-doc-title { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 3px; }
@@ -143,7 +209,7 @@
       height: calc(100vh - 120px);
       min-height: 500px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-lg);
       background: var(--bg-mid);
       display: block;
     }
@@ -152,7 +218,7 @@
       display: inline-block;
       font-family: var(--mono); font-size: 9px;
       background: var(--bg-elev); border: 1px solid var(--border);
-      border-radius: 4px; padding: 1px 6px;
+      border-radius: var(--r-sm); padding: 1px 6px;
       color: var(--text-4); margin-left: 8px; vertical-align: middle;
     }
 
@@ -164,7 +230,7 @@
     .module-export-card {
       background: var(--bg-elev);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-lg);
       padding: 12px 14px;
       display: flex;
       align-items: center;
@@ -181,7 +247,7 @@
       background: var(--bg-elev);
       border: 1px solid var(--border);
       border-left: 3px solid var(--accent);
-      border-radius: 8px;
+      border-radius: var(--r-lg);
       padding: 12px 14px;
     }
     .preset-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
@@ -190,10 +256,11 @@
     .pc-btn {
       background: transparent; border: 1px solid var(--border-hi); color: var(--text-3);
       font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
-      cursor: pointer; border-radius: 5px; padding: 3px 8px;
+      cursor: pointer; border-radius: var(--r-md); padding: 3px 8px;
+      transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
     }
     .pc-btn:hover { color: var(--text-1); border-color: var(--accent); }
-    .pc-btn.danger:hover { color: #f87171; border-color: rgba(248,113,113,0.5); }
+    .pc-btn.danger:hover { color: var(--red); border-color: var(--red-line); }
     .preset-card-meta {
       font-family: var(--mono); font-size: 10px;
       color: var(--text-4); display: flex; gap: 10px; flex-wrap: wrap;
@@ -203,9 +270,9 @@
     }
 
     .preset-form {
-      background: rgba(255,255,255,0.02);
+      background: var(--bg-mid);
       border: 1px solid var(--border-hi);
-      border-radius: 10px;
+      border-radius: var(--r-lg);
       padding: 18px;
       margin-top: 14px;
     }
@@ -214,11 +281,11 @@
     .form-row.full { grid-template-columns: 1fr; }
     .form-row label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-4); margin-bottom: 5px; }
     .form-row input[type=text], .form-row input[type=number] {
-      width: 100%; background: var(--bg-mid); border: 1px solid var(--border-hi);
+      width: 100%; background: var(--bg-elev); border: 1px solid var(--border-hi);
       color: var(--text-1); font-family: var(--mono); font-size: 12px;
-      border-radius: 6px; padding: 7px 10px; outline: none;
+      border-radius: var(--r-md); padding: 7px 10px;
     }
-    .form-row input:focus { border-color: var(--accent); }
+    .form-row input:focus { border-color: var(--accent); background: var(--bg-elev); }
 
     .types-multiselect {
       max-height: 200px;
@@ -237,7 +304,7 @@
       cursor: pointer;
       transition: background 0.1s;
     }
-    .type-check-row:hover { background: rgba(255,255,255,0.03); }
+    .type-check-row:hover { background: var(--bg-hover); }
     .type-check-row input { accent-color: var(--accent); cursor: pointer; }
     .type-check-row label { font-size: 11px; color: var(--text-2); cursor: pointer; font-family: var(--sans); text-transform: none; letter-spacing: 0; margin: 0; flex: 1; }
 
@@ -276,20 +343,22 @@
 
     .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
     .add-preset-btn {
-      background: linear-gradient(135deg, rgba(74,127,184,0.25), rgba(74,127,184,0.1));
-      border: 1px solid rgba(74,127,184,0.4);
-      color: var(--text-2);
+      background: var(--accent);
+      border: none; color: #fff;
       font-family: var(--mono); font-size: 10px; font-weight: 600;
       letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: 7px; padding: 8px 14px;
+      cursor: pointer; border-radius: var(--r-md); padding: 8px 14px;
+      transition: background var(--fast) var(--ease);
     }
-    .add-preset-btn:hover { background: rgba(74,127,184,0.3); }
+    .add-preset-btn:hover { background: var(--accent-hover); }
+    .add-preset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     .ghost-btn-opt {
       background: transparent; border: 1px solid var(--border-hi); color: var(--text-3);
       font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-      cursor: pointer; border-radius: 6px; padding: 7px 14px;
+      cursor: pointer; border-radius: var(--r-md); padding: 7px 14px;
+      transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
     }
-    .ghost-btn-opt:hover { color: var(--text-1); }
+    .ghost-btn-opt:hover { color: var(--text-2); border-color: var(--accent); background: var(--accent-dim); }
   </style>
 </head>
 <body>
@@ -318,12 +387,12 @@
 
         <!-- Update available banner (v1.4.2) — hidden by default; populated by JS from storage. -->
         <div id="updateBanner" style="display:none; margin: 0 0 18px; padding: 12px 14px;
-             background: linear-gradient(90deg, rgba(74,222,128,0.10), rgba(74,222,128,0.03));
-             border: 1px solid rgba(74,222,128,0.3); border-radius: 8px;
+             background: var(--green-dim);
+             border: 1px solid var(--green-line); border-radius: 8px;
              font-size: 12px; line-height: 1.5;">
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <span style="font-size:14px;">🎉</span>
-            <span><strong style="color:#4ade80;">Update available:</strong>
+            <span><strong style="color:var(--green);">Update available:</strong>
               <span id="updateBannerVersion" style="font-family:var(--mono);"></span>
               (installed: <span id="updateBannerInstalled" style="font-family:var(--mono); color:var(--text-3);"></span>)</span>
             <span style="flex:1;"></span>
@@ -339,11 +408,11 @@
         <div class="field">
           <label class="field-label">Practice code (Medicus site ID)</label>
           <div id="codeDetectedRow" style="display:none; align-items:center; gap:10px; margin-bottom:8px;">
-            <span style="font-family:var(--mono); font-size:11px; color:#4ade80;">&#10003; Auto-detected:</span>
-            <code id="codeDetectedValue" style="font-family:var(--mono); font-size:12px; color:var(--text-1); background:rgba(255,255,255,0.06); padding:3px 8px; border-radius:4px;"></code>
+            <span style="font-family:var(--mono); font-size:11px; color:var(--green);">&#10003; Auto-detected:</span>
+            <code id="codeDetectedValue" style="font-family:var(--mono); font-size:12px; color:var(--text-1); background:var(--bg-mid); padding:3px 8px; border-radius:var(--r-sm);"></code>
           </div>
           <div id="codeNotDetectedRow" style="display:none; margin-bottom:8px;">
-            <span style="font-family:var(--mono); font-size:11px; color:#f59e0b;">&#9888; No Medicus tab open — using saved value below.</span>
+            <span style="font-family:var(--mono); font-size:11px; color:var(--amber);">&#9888; No Medicus tab open — using saved value below.</span>
           </div>
           <input type="text" id="practiceCode" placeholder="Auto-detected from Medicus tab — or enter manually" maxlength="20" />
           <span class="field-help">
@@ -457,7 +526,7 @@
             </div>
             <a href="https://buymeacoffee.com/davetriska" target="_blank" rel="noopener"
                style="display:inline-flex; align-items:center; gap:8px; padding:10px 18px;
-                      background:#FFDD00; color:#0f172a; text-decoration:none;
+                      background:#FFDD00; color:var(--text-1); text-decoration:none;
                       font-weight:700; font-size:13px; border-radius:6px;
                       border:1px solid #e6c700; white-space:nowrap;">
               ☕ Buy me a coffee
@@ -575,15 +644,15 @@
             </p>
             <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
               <button class="ghost" id="rcpoLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
-              <span id="rcpoLlmCopied" style="font-family:var(--mono); font-size:11px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied.</span>
+              <span id="rcpoLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
             </div>
             <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
               Paste LLM JSON output here
             </label>
             <textarea id="rcpoLlmJson" rows="8" placeholder='Paste the JSON object (or array) returned by the LLM here, then click "Import pathway".'
-              style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.03); border:1px solid var(--border-hi);
-                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:6px;
-                     padding:8px 10px; resize:vertical; outline:none; line-height:1.5;"></textarea>
+              style="width:100%; box-sizing:border-box; background:var(--bg-mid); border:1px solid var(--border-hi);
+                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:var(--r-md);
+                     padding:8px 10px; resize:vertical; line-height:1.5;"></textarea>
             <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
               <button class="primary" id="rcpoLlmImport" style="font-size:11px; padding:5px 14px;">Import pathway</button>
               <span id="rcpoLlmStatus" style="font-size:12px; line-height:1.5;"></span>
@@ -618,20 +687,20 @@
             </p>
             <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
               <button class="ghost" id="kboLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
-              <span id="kboLlmCopied" style="font-family:var(--mono); font-size:11px; color:#4ade80; opacity:0; transition:opacity 0.3s;">Copied.</span>
+              <span id="kboLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
             </div>
             <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
               Paste LLM JSON output here
             </label>
             <textarea id="kboLlmJson" rows="8" placeholder='Paste the JSON returned by the LLM here, then click "Validate &amp; import".'
-              style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.03); border:1px solid var(--border-hi);
-                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:6px;
-                     padding:8px 10px; resize:vertical; outline:none; line-height:1.5;"></textarea>
+              style="width:100%; box-sizing:border-box; background:var(--bg-mid); border:1px solid var(--border-hi);
+                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:var(--r-md);
+                     padding:8px 10px; resize:vertical; line-height:1.5;"></textarea>
             <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
               <button class="primary" id="kboLlmImport" style="font-size:11px; padding:5px 14px;">Validate &amp; import</button>
               <span id="kboLlmStatus" style="font-size:12px; line-height:1.5;"></span>
             </div>
-            <div id="kboLlmWarnings" style="font-size:12px; color:var(--amber, #b45309); margin-top:8px; line-height:1.6;"></div>
+            <div id="kboLlmWarnings" style="font-size:12px; color:var(--amber); margin-top:8px; line-height:1.6;"></div>
           </div>
         </details>
       </section>
@@ -705,7 +774,7 @@
               <div style="font-weight:600; font-size:13px; color:var(--text-1);">Practice Profile</div>
               <div style="font-size:11px; color:var(--text-3); margin-top:2px;">Automatically sync default settings across every PC at your practice</div>
             </div>
-            <span id="ppBadge" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 9px; border-radius:3px; background:rgba(74,127,184,0.18); color:var(--accent);">Update available</span>
+            <span id="ppBadge" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 9px; border-radius:3px; background:var(--accent-dim); color:var(--accent);">Update available</span>
           </div>
 
           <!-- Status + actions -->
@@ -725,12 +794,12 @@
               <div>
                 <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Profile label</label>
                 <input type="text" id="ppLabelInput" placeholder="e.g. Acme Surgery — practice defaults"
-                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg-elev); color:var(--text-1);" />
+                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-mid); color:var(--text-1);" />
               </div>
               <div>
                 <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Published by</label>
                 <input type="text" id="ppPublishedByInput" placeholder="your@email.nhs.uk"
-                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--bg-elev); color:var(--text-1);" />
+                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-mid); color:var(--text-1);" />
               </div>
             </div>
 
@@ -819,7 +888,7 @@
           <div class="field">
             <label class="field-label">Import preview</label>
             <div id="importPreviewBox" style="
-              background: rgba(255,255,255,0.04);
+              background: var(--bg-mid);
               border: 1px solid var(--border-hi);
               border-radius: 8px;
               padding: 14px 16px;
@@ -829,7 +898,7 @@
               line-height: 1.7;
               margin-bottom: 12px;
             "></div>
-            <div id="importWarnings" style="color:#f59e0b; font-size:11px; margin-bottom:12px;"></div>
+            <div id="importWarnings" style="color:var(--amber); font-size:11px; margin-bottom:12px;"></div>
             <div class="actions">
               <button class="primary" id="confirmImportBtn">Restore from this backup</button>
               <button class="ghost" id="cancelImportBtn">Cancel</button>
@@ -841,7 +910,7 @@
           <label class="field-label">Reset to defaults</label>
           <p class="field-help">Clears all extension storage, resetting every module to factory defaults. This cannot be undone without a backup.</p>
           <div class="actions" style="margin-top:10px">
-            <button class="ghost" id="resetAllBtn" style="border-color: rgba(239,68,68,0.4); color:#ef4444;">Reset all settings</button>
+            <button class="ghost" id="resetAllBtn" style="border-color: var(--red-line); color:var(--red);">Reset all settings</button>
           </div>
         </div>
 
@@ -959,7 +1028,7 @@
         <div class="field">
           <label class="field-label">Current state</label>
           <div id="debugState" style="
-            background: rgba(255,255,255,0.04);
+            background: var(--bg-mid);
             border: 1px solid var(--border-hi);
             border-radius: 8px;
             padding: 12px 14px;
@@ -974,7 +1043,7 @@
             <button class="ghost" id="debugRefreshBtn">Refresh</button>
             <button class="ghost" id="debugCopyBtn">Copy to clipboard</button>
             <button class="ghost" id="debugClearLogBtn">Clear API log</button>
-            <span id="debugCopyStatus" style="font-family:var(--mono); font-size:10px; color:#4ade80;"></span>
+            <span id="debugCopyStatus" style="font-family:var(--mono); font-size:10px; color:var(--green);"></span>
           </div>
         </div>
 

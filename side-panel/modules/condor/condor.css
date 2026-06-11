@@ -52,33 +52,42 @@
 /* ── Card base ────────────────────────────────────────────────────────────── */
 
 .condor-card {
-  background: color-mix(in srgb, var(--border) 15%, transparent);
+  background: var(--bg-mid);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
   padding: 12px;
   font-family: var(--sans);
 }
 
 .condor-card-title {
-  font-size: 10px;
+  font-family: var(--mono);
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-3);
+  letter-spacing: 0.10em;
+  color: var(--text-4);
   margin-bottom: 6px;
 }
 
 /* ── State helpers ────────────────────────────────────────────────────────── */
 
 .condor-loading {
-  color: var(--text-3);
-  padding: 20px 16px;
-  font-size: 13px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 24px 16px;
+  text-align: center;
 }
 
 .condor-placeholder {
-  color: var(--text-3);
-  font-size: 12px;
-  padding: 20px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 24px;
   text-align: center;
 }
 
@@ -87,7 +96,9 @@
 .condor-num-lg {
   font-size: 24px;
   font-weight: 700;
-  color: var(--t1);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
   line-height: 1;
 }
 
@@ -101,30 +112,37 @@
 .condor-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
-  padding: 1px 7px;
-  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 9px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
   line-height: 1.6;
 }
 
+/* CLINICAL RAG fills — kept at full strength intentionally (safety signal).
+   Text uses --bg-deep rather than #fff for dark-theme contrast. */
 .condor-pill-green {
   background: var(--green);
-  color: #fff;
+  color: var(--bg-deep);
 }
 
 .condor-pill-amber {
   background: var(--amber);
-  color: #fff;
+  color: var(--bg-deep);
 }
 
 .condor-pill-red {
   background: var(--red);
-  color: #fff;
+  color: var(--bg-deep);
 }
 
+/* Neutral / informational state — wash + border, no full-strength fill */
 .condor-pill-neutral {
-  background: var(--border);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
   color: var(--text-3);
 }
 
@@ -139,12 +157,12 @@
 .condor-bar-wrap {
   width: 100%;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 
 .condor-bar {
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   display: flex;
   overflow: hidden;
 }

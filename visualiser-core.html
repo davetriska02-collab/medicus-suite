@@ -16,13 +16,14 @@
 html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14px;color:var(--text);background:var(--nhs-pale)}
 #drop-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:20px;padding:40px}
 #drop-zone.drag-over{background:#e8f0fa}
-.drop-box{border:2px dashed var(--border);border-radius:12px;padding:48px 60px;text-align:center;cursor:pointer;transition:var(--tr);background:var(--card)}
+.drop-box{border:2px dashed var(--border);border-radius:calc(var(--r) * 2);padding:48px 60px;text-align:center;cursor:pointer;transition:var(--tr);background:var(--card)}
 .drop-box:hover,.drop-box.drag-over{border-color:var(--nhs-blue);background:var(--nhs-light)}
 .drop-icon{font-size:48px;margin-bottom:12px;opacity:.5}
 .drop-title{font-size:20px;font-weight:700;color:var(--nhs-blue);margin-bottom:8px}
 .drop-sub{font-size:13px;color:var(--text2)}
 .drop-btn{display:inline-block;margin-top:16px;padding:10px 24px;background:var(--nhs-blue);color:#fff;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;border:none}
 .drop-btn:hover{background:var(--nhs-dark)}
+.drop-btn:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:2px}
 #app{display:none;flex-direction:column;height:100vh;overflow:hidden}
 #patient-banner{background:var(--nhs-blue);color:#fff;padding:10px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;flex-shrink:0}
 .pb-name{font-size:17px;font-weight:700}
@@ -32,6 +33,7 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .tab-btn{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:var(--tr)}
 .tab-btn:hover{color:var(--nhs-blue)}
 .tab-btn.active{color:var(--nhs-blue);border-bottom-color:var(--nhs-blue)}
+.tab-btn:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:-2px}
 /* Filter bar */
 #filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:8px 24px;background:#fafbfc;border-bottom:1px solid var(--border);flex-shrink:0;font-size:12px}
 .fb-group{display:flex;align-items:center;gap:6px}
@@ -39,9 +41,11 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .fb-preset{padding:3px 10px;border:1px solid var(--border);background:#fff;border-radius:14px;font-size:11px;cursor:pointer;color:var(--text2);font-weight:600;transition:var(--tr)}
 .fb-preset:hover{background:var(--nhs-light);border-color:var(--nhs-blue);color:var(--nhs-blue)}
 .fb-preset.active{background:var(--nhs-blue);border-color:var(--nhs-blue);color:#fff}
+.fb-preset:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:2px}
 .fb-select{padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--text);max-width:180px}
 #fb-clear{padding:4px 10px;font-size:11px;background:none;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;color:var(--text2);font-weight:600}
 #fb-clear:hover{background:#fee;border-color:var(--nhs-red);color:var(--nhs-red)}
+#fb-clear:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:2px}
 .fb-summary{margin-left:auto;font-size:11px;color:var(--text2);font-style:italic}
 .fb-brush-svg .selection{fill:var(--nhs-blue);fill-opacity:.18;stroke:var(--nhs-blue);stroke-width:1}
 .fb-brush-svg .handle{fill:var(--nhs-blue)}
@@ -71,7 +75,9 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 /* Investigations table sort/filter */
 .inv-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .inv-toolbar input[type="text"]{flex:1;min-width:180px;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--r)}
+.inv-toolbar input[type="text"]:focus{border-color:var(--nhs-blue);outline:none}
 .inv-toolbar select{padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:#fff}
+.inv-toolbar select:focus{border-color:var(--nhs-blue);outline:none}
 .inv-toolbar label{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer}
 .sortable-th{cursor:pointer;user-select:none}
 .sortable-th:hover{background:var(--nhs-light)!important;color:var(--nhs-blue)}
@@ -127,6 +133,7 @@ html,body{height:100%;font-family:"Helvetica Neue",Arial,sans-serif;font-size:14
 .prob-date{font-size:11px;color:var(--text2)}
 .prob-past{opacity:.55}
 .collapsible-toggle{background:none;border:none;color:var(--nhs-blue);font-size:12px;cursor:pointer;padding:4px 0;text-decoration:underline}
+.collapsible-toggle:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:2px}
 /* Table */
 .data-table{width:100%;border-collapse:collapse;font-size:13px}
 .data-table th{background:var(--nhs-pale);padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);border-bottom:2px solid var(--border)}
@@ -192,6 +199,26 @@ html[data-theme="dark"] .prob-item{border-bottom-color:#1e3050}
 html[data-theme="dark"] .pincer-item{background:#1a0d0d}
 html[data-theme="dark"] .pincer-item.high{background:#2a1010}
 html[data-theme="dark"] .pincer-item.med{background:#1e1a08}
+/* dark: .pincer-item.low sits on --nhs-pale (#0b1424) which matches page bg — lift it one step */
+html[data-theme="dark"] .pincer-item.low{background:#131e34}
+/* dark: table/drug-row hairlines (#f0f0f0 is invisible on dark) */
+html[data-theme="dark"] .data-table td{border-bottom-color:#1e3050}
+html[data-theme="dark"] .drug-row{border-bottom-color:#1e3050}
+/* dark: badge wash backgrounds have no dark overrides — use dark-tinted washes */
+html[data-theme="dark"] .badge-red{background:rgba(212,53,28,.18);color:#f87171}
+html[data-theme="dark"] .badge-amber{background:rgba(180,83,9,.18);color:#fbbf24}
+html[data-theme="dark"] .badge-green{background:rgba(0,127,59,.18);color:#4ade80}
+html[data-theme="dark"] .acb-badge-1{background:rgba(180,83,9,.18);color:#fbbf24}
+html[data-theme="dark"] .acb-badge-2{background:rgba(212,53,28,.18);color:#f87171}
+/* dark: :focus-visible rings need a lighter blue for sufficient contrast on dark surfaces */
+html[data-theme="dark"] .drop-btn:focus-visible,
+html[data-theme="dark"] .tab-btn:focus-visible,
+html[data-theme="dark"] .fb-preset:focus-visible,
+html[data-theme="dark"] #fb-clear:focus-visible,
+html[data-theme="dark"] .collapsible-toggle:focus-visible,
+html[data-theme="dark"] .smr-print-btn:focus-visible{outline-color:#41b3e0}
+html[data-theme="dark"] .inv-toolbar input[type="text"]:focus,
+html[data-theme="dark"] .inv-toolbar select:focus{border-color:#41b3e0}
 html[data-size="small"]{zoom:0.85}
 html[data-size="medium"]{zoom:1}
 html[data-size="large"]{zoom:1.25}
@@ -212,8 +239,11 @@ html[data-size="large"]{zoom:1.25}
 .smr-caveat{font-size:11px;color:#856404;background:#fff9e6;border:1px solid #ffe082;border-radius:4px;padding:8px 10px;margin-bottom:12px}
 .smr-print-btn{display:inline-block;padding:8px 18px;background:var(--nhs-blue);color:#fff;border:none;border-radius:var(--r);font-size:13px;font-weight:600;cursor:pointer;margin-top:12px}
 .smr-print-btn:hover{background:var(--nhs-dark)}
+.smr-print-btn:focus-visible{outline:2px solid var(--nhs-blue);outline-offset:2px}
 /* Print: only show #smr-print-block when body has .smr-printing class */
 @media print{
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
   body:not(.smr-printing) #smr-print-block{display:none}
   body.smr-printing #app,body.smr-printing #drop-zone{display:none!important}
   body.smr-printing #smr-print-block{display:block!important}

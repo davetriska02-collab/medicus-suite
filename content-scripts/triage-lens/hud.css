@@ -5,22 +5,102 @@
    2. .ch-queue-chips — chips injected into Medicus DOM (queue page)
 */
 
+/*
+ * Self-contained token block — mirror of side-panel/panel.css light canon;
+ * see .claude/skills/ui-design/TOKENS.md §Injected surfaces.
+ * Applies to every top-level selector this file styles: the HUD panel,
+ * queue chip containers, and the action-menu which is appended to <body>.
+ * Host page is always light — no dark-theme override block needed.
+ */
+#medicus-clinical-hud,
+.ch-queue-chips,
+.ch-action-menu {
+  /* Surfaces */
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --bg-hover: #e2eaf5;
+  /* Borders */
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  /* Text tiers */
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --text-4: #64748b;
+  --text-5: #94a3b8;
+  /* Accent triad */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  /* Status triads: ink / wash / line */
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --green-line: rgba(22, 163, 74, 0.3);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
+  /* Shape */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  /* Depth */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
+  /* Typography — no @import (host-page CSP); system stacks only */
+  --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Brand header — deliberate navy matching suite --text-2; intentionally
+     not a neutral surface token so the header reads as branded chrome.
+     Canonical value is #1e3a5f — heals the #1f3a5f vs #1e3a5f drift in hud.css. */
+  --header-bg: #1e3a5f;
+  /* Header bottom edge — darkened border via overlay rather than a new token */
+  --header-border: rgba(0, 0, 0, 0.25);
+}
+
 /* ---- Universal chip — usable inside HUD and inline in Medicus DOM ---- */
 .ch-chip {
   display: inline-block;
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: var(--r-pill);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1.4;
   border: 1px solid transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
   white-space: nowrap;
 }
-.ch-chip-red    { background: #fbe6e7; color: #b8262e; border-color: rgba(184,38,46,0.25); }
-.ch-chip-amber  { background: #fdf3e1; color: #b8771a; border-color: rgba(184,119,26,0.25); }
-.ch-chip-green  { background: #e8f4ec; color: #2f8a4a; border-color: rgba(47,138,74,0.25); }
-.ch-chip-info   { background: #e7eef7; color: #2a4d7a; border-color: rgba(42,77,122,0.20); }
+/* Status chip triads — aligned to canon (heals mismatch vs sidebar chips) */
+.ch-chip-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+.ch-chip-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+.ch-chip-green {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+}
+.ch-chip-info {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {
@@ -33,7 +113,7 @@
 .ch-queue-chips .ch-chip {
   padding: 1px 6px;
   font-size: 10px;
-  border-radius: 9px;
+  border-radius: var(--r-pill);
 }
 
 /* ---- HUD panel ---- */
@@ -44,175 +124,371 @@
   width: 340px;
   max-height: calc(100vh - 110px);
   z-index: 99999;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   line-height: 1.4;
-  color: #1c2733;
-  background: #ffffff;
-  border: 1px solid #cdd6e0;
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgba(20, 30, 50, 0.18);
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-#medicus-clinical-hud * { box-sizing: border-box; }
+#medicus-clinical-hud * {
+  box-sizing: border-box;
+}
 
 #medicus-clinical-hud .ch-head {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 8px 12px;
-  background: #1f3a5f; color: #fff;
-  border-bottom: 1px solid #15294a;
+  background: var(--header-bg);
+  color: #fff;
+  border-bottom: 1px solid var(--header-border);
 }
-#medicus-clinical-hud .ch-title { font-weight: 600; font-size: 12px; letter-spacing: 0.02em; }
-#medicus-clinical-hud .ch-ver { font-weight: 400; opacity: 0.7; font-size: 10px; margin-left: 4px; }
-#medicus-clinical-hud .ch-actions { display: flex; gap: 4px; }
+#medicus-clinical-hud .ch-title {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+#medicus-clinical-hud .ch-ver {
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 10px;
+  margin-left: 4px;
+}
+#medicus-clinical-hud .ch-actions {
+  display: flex;
+  gap: 4px;
+}
 #medicus-clinical-hud .ch-btn {
-  background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.25);
-  width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 12px;
-  padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--fast) var(--ease);
 }
-#medicus-clinical-hud .ch-btn:hover { background: rgba(255,255,255,0.12); }
+#medicus-clinical-hud .ch-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+#medicus-clinical-hud .ch-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+}
+#medicus-clinical-hud .ch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
-#medicus-clinical-hud .ch-body { padding: 10px; overflow-y: auto; }
-#medicus-clinical-hud.ch-min .ch-body { display: none; }
+#medicus-clinical-hud .ch-body {
+  padding: 10px;
+  overflow-y: auto;
+}
+#medicus-clinical-hud.ch-min .ch-body {
+  display: none;
+}
 
 #medicus-clinical-hud .ch-patient {
-  display: block; width: 100%; box-sizing: border-box;
-  background: #eef2f7; color: #1f3a5f;
-  border: 1px solid #cdd6e0; border-radius: 4px;
-  padding: 4px 8px; margin-bottom: 8px;
-  font-size: 11px; font-weight: 600; text-align: left; cursor: pointer;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-mid);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
   font-family: inherit;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-#medicus-clinical-hud .ch-patient:hover { background: #1f3a5f; color: #fff; border-color: #1f3a5f; }
+#medicus-clinical-hud .ch-patient:hover {
+  background: var(--header-bg);
+  color: #fff;
+  border-color: var(--header-bg);
+}
+#medicus-clinical-hud .ch-patient:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 #medicus-clinical-hud .ch-request {
-  border: 1px solid #cdd6e0; border-radius: 6px; background: #f5f7fa;
-  padding: 7px 8px; margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  padding: 7px 8px;
+  margin-bottom: 10px;
 }
 #medicus-clinical-hud .ch-request-head {
-  font-weight: 600; font-size: 9.5px; text-transform: uppercase;
-  letter-spacing: 0.05em; color: #5a6878; margin-bottom: 5px;
+  font-weight: 600;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-4);
+  margin-bottom: 5px;
+  font-family: var(--mono);
 }
 #medicus-clinical-hud .ch-request-row {
-  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
 }
-#medicus-clinical-hud .ch-request-row:last-child { margin-bottom: 0; }
+#medicus-clinical-hud .ch-request-row:last-child {
+  margin-bottom: 0;
+}
 #medicus-clinical-hud .ch-request-snippet {
-  margin-top: 5px; font-size: 11px; color: #4a5568;
-  border-top: 1px dashed #cdd6e0; padding-top: 5px;
-  font-style: italic; max-height: 70px; overflow: hidden;
-  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  border-top: 1px dashed var(--border);
+  padding-top: 5px;
+  font-style: italic;
+  max-height: 70px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
 
 #medicus-clinical-hud .ch-chips {
-  display: flex; flex-wrap: wrap; gap: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 10px;
 }
 
 #medicus-clinical-hud .ch-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
   margin-bottom: 10px;
 }
 #medicus-clinical-hud .ch-tile {
-  background: #f5f7fa; border: 1px solid #dde3eb; border-radius: 6px;
-  padding: 6px 8px; cursor: pointer; transition: transform 0.06s, border-color 0.1s;
-  display: flex; flex-direction: column; gap: 2px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 6px 8px;
+  cursor: pointer;
+  transition:
+    transform var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-#medicus-clinical-hud .ch-tile:hover { border-color: #1f3a5f; transform: translateY(-1px); }
-#medicus-clinical-hud .ch-tile.ch-tile-sel { border-color: #1f3a5f; box-shadow: 0 0 0 2px rgba(31,58,95,0.15); }
-#medicus-clinical-hud .ch-tile-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #5a6878; }
-#medicus-clinical-hud .ch-tile-status { font-size: 13px; font-weight: 700; }
-#medicus-clinical-hud .ch-tile-count { font-size: 10px; color: #5a6878; }
+#medicus-clinical-hud .ch-tile:hover {
+  border-color: var(--header-bg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+/* Selected tile — accent triad; border reserved at rest to avoid layout shift */
+#medicus-clinical-hud .ch-tile.ch-tile-sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-line);
+}
+#medicus-clinical-hud .ch-tile-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  font-family: var(--mono);
+}
+#medicus-clinical-hud .ch-tile-status {
+  font-size: 13px;
+  font-weight: 700;
+}
+#medicus-clinical-hud .ch-tile-count {
+  font-size: 10px;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
 
-#medicus-clinical-hud .ch-tile.ch-red { background: #fbe6e7; border-color: rgba(184,38,46,0.4); }
-#medicus-clinical-hud .ch-tile.ch-red .ch-tile-status { color: #b8262e; }
-#medicus-clinical-hud .ch-tile.ch-amber { background: #fdf3e1; border-color: rgba(184,119,26,0.4); }
-#medicus-clinical-hud .ch-tile.ch-amber .ch-tile-status { color: #b8771a; }
-#medicus-clinical-hud .ch-tile.ch-green { background: #e8f4ec; border-color: rgba(47,138,74,0.3); }
-#medicus-clinical-hud .ch-tile.ch-green .ch-tile-status { color: #2f8a4a; }
+/* Status tiles — canon triads (heals HUD-vs-sidebar color mismatch) */
+#medicus-clinical-hud .ch-tile.ch-red {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+#medicus-clinical-hud .ch-tile.ch-red .ch-tile-status {
+  color: var(--red);
+}
+#medicus-clinical-hud .ch-tile.ch-amber {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+#medicus-clinical-hud .ch-tile.ch-amber .ch-tile-status {
+  color: var(--amber);
+}
+#medicus-clinical-hud .ch-tile.ch-green {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+#medicus-clinical-hud .ch-tile.ch-green .ch-tile-status {
+  color: var(--green);
+}
 
 #medicus-clinical-hud .ch-detail {
-  border: 1px solid #e2e7ee; border-radius: 6px;
-  background: #fafbfd; padding: 8px; margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  padding: 8px;
+  margin-bottom: 8px;
   min-height: 60px;
 }
 #medicus-clinical-hud .ch-detail-head {
-  font-weight: 600; font-size: 11px; text-transform: uppercase;
-  letter-spacing: 0.03em; color: #1f3a5f; margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  font-family: var(--mono);
 }
 #medicus-clinical-hud .ch-detail-row {
-  border-left: 3px solid #dde3eb; padding: 4px 8px;
-  margin-bottom: 4px; background: #fff; border-radius: 0 4px 4px 0;
+  border-left: 3px solid var(--border);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  background: var(--bg-elev);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
 }
-#medicus-clinical-hud .ch-detail-row.ch-red { border-left-color: #b8262e; }
-#medicus-clinical-hud .ch-detail-row.ch-amber { border-left-color: #b8771a; }
-#medicus-clinical-hud .ch-detail-row.ch-green { border-left-color: #2f8a4a; }
-#medicus-clinical-hud .ch-detail-text { font-weight: 500; font-size: 11.5px; }
-#medicus-clinical-hud .ch-detail-sub { font-size: 10.5px; color: #5a6878; margin-top: 2px; }
-#medicus-clinical-hud .ch-detail-empty { color: #8a96a4; font-style: italic; font-size: 11px; }
+/* Detail row severity indicators — canon ink values */
+#medicus-clinical-hud .ch-detail-row.ch-red {
+  border-left-color: var(--red);
+}
+#medicus-clinical-hud .ch-detail-row.ch-amber {
+  border-left-color: var(--amber);
+}
+#medicus-clinical-hud .ch-detail-row.ch-green {
+  border-left-color: var(--green);
+}
+#medicus-clinical-hud .ch-detail-text {
+  font-weight: 500;
+  font-size: 11.5px;
+}
+#medicus-clinical-hud .ch-detail-sub {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+#medicus-clinical-hud .ch-detail-empty {
+  color: var(--text-5);
+  font-style: italic;
+  font-size: 11px;
+}
 
 #medicus-clinical-hud .ch-foot {
-  font-size: 10px; color: #8a96a4; padding-top: 6px;
-  border-top: 1px dashed #dde3eb; text-align: center;
+  font-size: 10px;
+  color: var(--text-5);
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  text-align: center;
 }
 
 /* ---- Action menu popover (works for HUD chips and queue chips) ---- */
 .ch-action-menu {
-  background: #ffffff;
-  border: 1px solid #cdd6e0;
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(20, 30, 50, 0.22);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
   min-width: 220px;
   max-width: 320px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   line-height: 1.4;
-  color: #1c2733;
+  color: var(--text-1);
   overflow: hidden;
 }
-.ch-action-menu * { box-sizing: border-box; }
+.ch-action-menu * {
+  box-sizing: border-box;
+}
 .ch-action-menu-head {
   padding: 8px 10px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e2e7ee;
-  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ch-action-note-title {
   font-weight: 600;
   font-size: 11px;
-  color: #1f3a5f;
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  font-family: var(--mono);
 }
 .ch-action-back {
   background: transparent;
-  border: 1px solid #cdd6e0;
-  border-radius: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 2px 6px;
   cursor: pointer;
   font: inherit;
   font-size: 11px;
-  color: #1f3a5f;
+  color: var(--text-2);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ch-action-back:hover { background: #eef2f7; }
+.ch-action-back:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
 .ch-action-menu-empty {
   padding: 10px;
-  color: #8a96a4;
+  color: var(--text-5);
   font-style: italic;
   font-size: 11px;
 }
 .ch-action-menu-item {
   padding: 8px 12px;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-  border-bottom: 1px solid #f0f3f7;
+  border-bottom: 1px solid var(--bg-hover);
+  transition: background var(--fast) var(--ease);
 }
-.ch-action-menu-item:last-child { border-bottom: none; }
-.ch-action-menu-item:hover { background: #eef2f7; }
-.ch-action-icon { font-size: 13px; opacity: 0.8; flex-shrink: 0; width: 18px; text-align: center; }
-.ch-action-label { flex: 1; }
+.ch-action-menu-item:last-child {
+  border-bottom: none;
+}
+.ch-action-menu-item:hover {
+  background: var(--bg-hover);
+}
+.ch-action-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.ch-action-icon {
+  font-size: 13px;
+  opacity: 0.8;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+.ch-action-label {
+  flex: 1;
+}
 
 .ch-action-menu-note {
   padding: 10px 12px;
@@ -220,10 +496,18 @@
   font-size: 11.5px;
   max-height: 360px;
   overflow-y: auto;
-  color: #1c2733;
+  color: var(--text-1);
 }
 
 /* Actionable chip cursor + chevron */
-.ch-chip-actionable { cursor: pointer; }
-.ch-chip-actionable:hover { filter: brightness(0.96); }
-.ch-chev { opacity: 0.55; font-size: 9px; margin-left: 2px; }
+.ch-chip-actionable {
+  cursor: pointer;
+}
+.ch-chip-actionable:hover {
+  filter: brightness(0.96);
+}
+.ch-chev {
+  opacity: 0.55;
+  font-size: 9px;
+  margin-left: 2px;
+}

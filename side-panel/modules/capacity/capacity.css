@@ -5,7 +5,11 @@
 
 /* Status colour system */
 .cap-status-sufficient { --c: var(--green); }
-.cap-status-tight      { --c: #facc15; }
+/* "tight" sits between sufficient and low — slightly below the amber token hue;
+   kept as a scoped local to preserve the four-step RAG ladder legibility.
+   Light: warm yellow-600 (#ca8a04) — sufficient contrast on --bg-elev (#fff).
+   Dark: yellow-400 (#facc15) swaps in via dark theme token override below.     */
+.cap-status-tight      { --c: #ca8a04; }
 .cap-status-low        { --c: var(--amber); }
 .cap-status-critical   { --c: var(--red); }
 .cap-status-closed     { --c: var(--text-5); }
@@ -13,11 +17,14 @@
 .cap-status-loading    { --c: var(--text-5); }
 .cap-status-empty      { --c: var(--text-5); }
 
+/* Dark-theme "tight" — bump to the brighter yellow-400 for legibility on dark bg */
+html[data-theme="dark"] .cap-status-tight { --c: #facc15; }
+
 /* Onboarding */
 .cap-onboard {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 24px 20px;
   margin-top: 12px;
 }
@@ -28,21 +35,23 @@
   margin-bottom: 10px;
 }
 .primary-btn {
-  background: linear-gradient(135deg, rgba(74,127,184,0.3), rgba(74,127,184,0.15));
-  border: 1px solid rgba(74,127,184,0.5);
-  color: var(--text-1);
+  background: var(--accent);
+  border: 1px solid var(--accent-line);
+  color: #fff;
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 9px 16px;
   margin-top: 10px;
-  transition: all 0.15s;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
-.primary-btn:hover { background: rgba(74,127,184,0.35); }
+.primary-btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.primary-btn:active { opacity: 0.9; }
+.primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Controls */
 .cap-controls { margin-bottom: 14px; }
@@ -68,24 +77,25 @@
   color: var(--text-2);
   font-size: 11px;
   font-family: var(--mono);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 5px 8px;
-  outline: none;
   cursor: pointer;
+  transition: border-color var(--fast) var(--ease);
 }
 .cap-preset-select:focus { border-color: var(--accent); }
+.cap-preset-select:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .cap-mode-bar {
   display: flex;
   gap: 3px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--r-lg);
   padding: 2px;
 }
 .cap-mode-btn {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-4);
   font-family: var(--mono);
   font-size: 9px;
@@ -93,12 +103,13 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 5px;
+  border-radius: var(--r-md);
   padding: 4px 11px;
-  transition: all 0.1s;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
-.cap-mode-btn:hover { color: var(--text-2); }
-.cap-mode-btn.active { background: var(--accent-dim); color: var(--text-2); border: 1px solid rgba(74,127,184,0.25); }
+.cap-mode-btn:hover { color: var(--text-2); background: var(--bg-hover); }
+.cap-mode-btn.active { background: var(--accent-dim); color: var(--text-2); border-color: var(--accent-line); }
+.cap-mode-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Empty state */
 .cap-empty {
@@ -127,11 +138,13 @@
   border: 1px solid var(--border);
   color: var(--text-3);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 4px 9px;
   font-size: 10px;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 .cap-nav-btn:hover { color: var(--text-1); border-color: var(--border-hi); }
+.cap-nav-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .cap-date-presets {
   display: flex;
@@ -147,17 +160,18 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 4px 10px;
-  transition: all 0.1s;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 .preset-btn:hover { border-color: var(--border-hi); color: var(--text-3); }
-.preset-btn.active { background: var(--accent-dim); border-color: rgba(74,127,184,0.3); color: var(--text-2); }
+.preset-btn.active { background: var(--accent-dim); border-color: var(--accent-line); color: var(--text-2); }
+.preset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .cap-day-hero {
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: 18px 16px;
   text-align: center;
   margin-bottom: 14px;
@@ -169,6 +183,7 @@
   line-height: 1;
   color: var(--c);
   letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .cap-day-meta {
   display: flex;
@@ -186,7 +201,7 @@
 .cap-status-pill {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--r-pill);
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
@@ -205,7 +220,7 @@
 }
 .cap-day-skel {
   height: 70px;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   background: var(--bg-mid);
   animation: pulse 1.4s ease-in-out infinite;
 }
@@ -233,11 +248,11 @@
   padding: 5px 9px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .cap-type-row.cap-type-full {
-  background: rgba(248,113,113,0.08);
-  border-color: rgba(248,113,113,0.3);
+  background: var(--red-dim);
+  border-color: var(--red-line);
 }
 .cap-type-name { font-size: 11px; color: var(--text-2); }
 .cap-type-count {
@@ -245,6 +260,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--green);
+  font-variant-numeric: tabular-nums;
 }
 .cap-type-full .cap-type-count { color: var(--red); font-size: 10px; letter-spacing: 0.1em; }
 .cap-type-full .cap-type-name { color: var(--text-3); }
@@ -257,7 +273,7 @@
   padding: 4px 9px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   font-size: 11px;
 }
 .cap-staff-name { color: var(--text-3); }
@@ -265,6 +281,7 @@
   font-family: var(--mono);
   color: var(--green);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Week view ──────────────────────────────────────────────────────────── */
@@ -304,7 +321,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
   border-left: 3px solid var(--c);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 10px 14px;
   margin-bottom: 12px;
   display: flex;
@@ -323,6 +340,7 @@
   font-size: 22px;
   font-weight: 700;
   color: var(--c);
+  font-variant-numeric: tabular-nums;
 }
 .cap-summary-vs {
   font-family: var(--mono);
@@ -339,10 +357,10 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-left: 3px solid var(--c);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 8px 10px;
   cursor: pointer;
-  transition: transform 0.1s, border-color 0.1s;
+  transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease);
   text-align: center;
 }
 .cap-day-pill:hover { transform: translateY(-1px); border-color: var(--c); }
@@ -362,6 +380,7 @@
   font-weight: 700;
   color: var(--c);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .cap-day-pill-min {
   font-family: var(--mono);
@@ -407,15 +426,15 @@
 }
 .cap-month-cell {
   aspect-ratio: 1;
-  background: var(--bg-elev);
+  /* Dead: background: var(--bg-elev) — overridden by color-mix line below */
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: transform 0.08s, border-color 0.08s;
+  transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease);
   background: color-mix(in srgb, var(--c) 10%, var(--bg-elev));
   border-color: color-mix(in srgb, var(--c) 25%, var(--border));
 }
@@ -430,6 +449,7 @@
   font-size: 11px;
   color: var(--text-2);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .cap-month-count {
   font-family: var(--mono);
@@ -437,6 +457,7 @@
   color: var(--c);
   font-weight: 700;
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .cap-month-legend {
@@ -464,6 +485,9 @@
 @keyframes pulse {
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cap-day-skel { animation: none; opacity: 0.7; }
 }
 
 /* Scrollbar */
@@ -494,7 +518,7 @@
 
 .cap-danger:hover {
   color: var(--red);
-  border-color: rgba(248,113,113,0.4);
+  border-color: var(--red-line);
 }
 
 .cap-form { display: flex; flex-direction: column; gap: 16px; }
@@ -530,12 +554,13 @@
   color: var(--text-1);
   font-family: var(--mono);
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 7px 10px;
-  outline: none;
   width: 100%;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
 }
-.cap-input:focus { border-color: var(--accent); }
+.cap-input:focus { border-color: var(--accent); background: var(--bg-elev); }
+.cap-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .cap-input-num { max-width: 100px; }
 .cap-input-tiny { max-width: 56px; padding: 5px 7px; text-align: center; font-size: 11px; }
@@ -586,6 +611,7 @@
   cursor: pointer;
   padding: 0;
   letter-spacing: 0.03em;
+  transition: color var(--fast) var(--ease);
 }
 .cap-link-btn:hover { text-decoration: underline; }
 
@@ -603,7 +629,7 @@
 .cap-types-empty {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 14px;
   font-size: 11px;
   color: var(--text-4);
@@ -620,7 +646,7 @@
   max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--border-hi);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg-mid);
   padding: 4px;
   display: flex;
@@ -633,11 +659,11 @@
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--fast) var(--ease);
 }
-.cap-type-check:hover { background: rgba(255,255,255,0.03); }
+.cap-type-check:hover { background: var(--bg-hover); }
 .cap-type-check input {
   accent-color: var(--accent);
   cursor: pointer;

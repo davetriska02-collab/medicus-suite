@@ -17,7 +17,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
   border-left: 3px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 8px 12px;
   margin-bottom: 10px;
 }
@@ -36,9 +36,9 @@
 
 /* Extraction drift banner (amber — distinct from red degraded state) */
 .sent-drift-banner {
-  border-left: 3px solid #b45309;
-  background: rgba(245, 158, 11, 0.08);
-  border-radius: 6px;
+  border-left: 3px solid var(--amber);
+  background: var(--amber-dim);
+  border-radius: var(--r-md);
   padding: 8px 12px;
   margin-bottom: 10px;
   font-size: 12px;
@@ -51,7 +51,7 @@
   margin-bottom: 4px;
 }
 .sent-drift-icon {
-  color: #b45309;
+  color: var(--amber);
   font-size: 14px;
   flex-shrink: 0;
 }
@@ -62,9 +62,9 @@
 }
 .sent-drift-dismiss {
   background: transparent;
-  border: 1px solid rgba(180, 83, 9, 0.4);
-  border-radius: 4px;
-  color: #b45309;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  color: var(--amber);
   font-size: 10px;
   font-family: var(--mono);
   cursor: pointer;
@@ -72,9 +72,10 @@
   letter-spacing: 0.04em;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: background var(--fast) var(--ease);
 }
 .sent-drift-dismiss:hover {
-  background: rgba(180, 83, 9, 0.1);
+  background: var(--amber-dim);
 }
 .sent-drift-body {
   margin: 0;
@@ -89,14 +90,14 @@
   gap: 4px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 3px;
   margin-bottom: 14px;
 }
 .sent-filter-btn {
   flex: 1;
   background: transparent;
-  border: none;
+  border: 1px solid transparent; /* reserved — active state adds border without layout shift */
   color: var(--text-4);
   font-family: var(--mono);
   font-size: 9px;
@@ -104,26 +105,31 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 5px;
+  border-radius: var(--r-md);
   padding: 5px 4px;
-  transition: all 0.1s;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
 .sent-filter-btn:hover {
   color: var(--text-2);
+  background: var(--bg-hover);
+}
+.sent-filter-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .sent-filter-btn.active {
   background: var(--bg-mid);
   color: var(--text-2);
-  border: 1px solid var(--border-hi);
+  border-color: var(--border-hi);
 }
 .sent-filter-btn.active.action {
   color: var(--amber);
-  border-color: rgba(251, 191, 36, 0.3);
+  border-color: var(--amber-line);
 }
 .sent-filter-btn.active.clear {
   color: var(--green);
-  border-color: rgba(74, 222, 128, 0.3);
+  border-color: var(--green-line);
 }
 
 /* Groups */
@@ -148,7 +154,7 @@
 
 /* Chips — Medicus sidebar style: left colour bar + right status badge */
 .sent-chip {
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--bg-elev);
   padding: 7px 10px;
@@ -158,15 +164,15 @@
 
 .sent-chip-red {
   border-left-color: var(--red);
-  background: rgba(248, 113, 113, 0.06);
+  background: var(--red-dim);
 }
 .sent-chip-amber {
   border-left-color: var(--amber);
-  background: rgba(251, 191, 36, 0.06);
+  background: var(--amber-dim);
 }
 .sent-chip-green {
   border-left-color: var(--green);
-  background: rgba(74, 222, 128, 0.04);
+  background: var(--green-dim);
 }
 .sent-chip-neutral {
   border-left-color: var(--border-hi);
@@ -207,24 +213,25 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .sent-badge-red {
-  background: rgba(248, 113, 113, 0.2);
+  background: var(--red-dim);
   color: var(--red);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  border: 1px solid var(--red-line);
 }
 .sent-badge-amber {
-  background: rgba(251, 191, 36, 0.15);
+  background: var(--amber-dim);
   color: var(--amber);
-  border: 1px solid rgba(251, 191, 36, 0.3);
+  border: 1px solid var(--amber-line);
 }
 .sent-badge-green {
-  background: rgba(74, 222, 128, 0.12);
+  background: var(--green-dim);
   color: var(--green);
-  border: 1px solid rgba(74, 222, 128, 0.25);
+  border: 1px solid var(--green-line);
 }
 .sent-badge-neutral {
   background: var(--bg-mid);
@@ -239,7 +246,7 @@
   gap: 2px;
   margin-top: 6px;
   padding-top: 5px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border);
 }
 .sent-test-row {
   display: flex;
@@ -290,7 +297,7 @@
 }
 .sent-skel-chip {
   height: 52px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   border: 1px solid var(--border);
   animation: pulse 1.4s ease-in-out infinite;
@@ -326,7 +333,7 @@
 /* ── Waiting Room pinned block ───────────────────────────────────────────────── */
 
 .wr-pinned {
-  border-radius: 7px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--border-hi);
   padding: 0;
   margin-bottom: 12px;
@@ -372,30 +379,30 @@
   opacity: 0.6;
 }
 .wr-error {
-  background: rgba(248, 113, 113, 0.06);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: var(--red-dim);
+  border-color: var(--red-line);
 }
 .wr-error .wr-pin-label {
   color: var(--red);
 }
 
 .wr-clear {
-  background: rgba(74, 222, 128, 0.04);
-  border-color: rgba(74, 222, 128, 0.18);
+  background: var(--green-dim);
+  border-color: var(--green-line);
 }
 .wr-clear .wr-pin-label {
   color: var(--green);
 }
 
 .wr-waiting {
-  background: rgba(251, 191, 36, 0.05);
-  border-color: rgba(251, 191, 36, 0.25);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
   border-left: 3px solid var(--amber);
 }
 
 .wr-pin-head {
   padding-bottom: 5px;
-  border-bottom: 1px solid rgba(251, 191, 36, 0.15);
+  border-bottom: 1px solid var(--amber-line);
 }
 
 /* Patient rows */
@@ -408,11 +415,11 @@
   align-items: center;
   gap: 7px;
   padding: 4px 10px;
-  border-radius: 4px;
-  transition: background 0.1s;
+  border-radius: var(--r-sm);
+  transition: background var(--fast) var(--ease);
 }
 .wr-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-hover);
 }
 
 .wr-row-time {
@@ -421,6 +428,7 @@
   color: var(--text-4);
   min-width: 30px;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .wr-row-name {
@@ -439,6 +447,7 @@
   font-weight: 700;
   color: var(--text-4);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Wait duration colour escalation */
@@ -467,7 +476,7 @@
   color: var(--text-4);
   background: var(--bg-mid);
   border: 1px solid var(--border-hi);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
   vertical-align: middle;
   text-transform: uppercase;
@@ -490,17 +499,22 @@
 }
 
 /* Custom rule tag on drug-monitoring chips */
+/* Violet is intentional — distinguishes custom/user-defined rules from RAG clinical triads.
+   Not in the global canon; scoped here as local properties. */
 .sent-custom-tag {
+  --tag-ink: #a78bfa;       /* violet-400 — deliberate off-triad hue */
+  --tag-dim: rgba(167, 139, 250, 0.12);
+  --tag-line: rgba(167, 139, 250, 0.30);
   display: inline-block;
   margin-left: 6px;
   font-size: 8.5px;
   font-family: var(--mono);
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.12);
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  border-radius: 3px;
+  color: var(--tag-ink);
+  background: var(--tag-dim);
+  border: 1px solid var(--tag-line);
+  border-radius: var(--r-sm);
   padding: 1px 5px;
   vertical-align: middle;
   text-transform: uppercase;
@@ -510,17 +524,17 @@
 .sent-chip-clickable {
   cursor: pointer;
   user-select: none;
-  transition: box-shadow 120ms;
+  transition: box-shadow var(--fast) var(--ease);
 }
 .sent-chip-clickable:hover {
-  box-shadow: 0 0 0 1px var(--accent, #4f7cff) inset;
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
-.sent-chip-clickable:focus {
-  outline: 2px solid var(--accent, #4f7cff);
+.sent-chip-clickable:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 .sent-chip-clickable.sent-chip-open {
-  box-shadow: 0 0 0 2px var(--accent, #4f7cff) inset;
+  box-shadow: 0 0 0 2px var(--accent) inset;
 }
 .sent-chip-info {
   font-size: 10px;
@@ -584,7 +598,7 @@
 .sent-vax-detail-body {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--border, #2a3146);
+  border-top: 1px solid var(--border);
   animation: sent-ev-fade 120ms ease;
 }
 .sent-vax-row {
@@ -610,10 +624,10 @@
   margin-top: 8px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--amber, #e0a23b);
-  background: rgba(224, 162, 59, 0.08);
-  border-left: 2px solid var(--amber, #e0a23b);
-  border-radius: 0 4px 4px 0;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-left: 2px solid var(--amber);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   padding: 6px 8px;
 }
 .sent-chip-source {
@@ -627,13 +641,14 @@
 }
 .sent-evidence-panel {
   background: var(--bg-elev);
-  border: 1px solid var(--border, #2a3146);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
   padding: 10px 12px;
   margin-top: -4px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-2, #c9d1e0);
+  color: var(--text-2);
   animation: sent-ev-fade 120ms ease;
 }
 @keyframes sent-ev-fade {
@@ -648,10 +663,10 @@
 }
 .sent-ev-summary {
   font-weight: 600;
-  color: var(--text-1, #e2e8f0);
+  color: var(--text-1);
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--border, #2a3146);
+  border-bottom: 1px solid var(--border);
 }
 .sent-ev-rows {
   display: flex;
@@ -665,29 +680,29 @@
   padding: 2px 0;
 }
 .sent-ev-label {
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   padding-top: 1px;
 }
 .sent-ev-value {
-  color: var(--text-1, #e2e8f0);
+  color: var(--text-1);
   word-break: break-word;
 }
 .sent-ev-date {
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   font-size: 11px;
 }
 .sent-ev-detail {
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   font-size: 11px;
   font-style: italic;
 }
 
 .sent-ev-sparkline {
   background: var(--bg-deep);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 6px 8px;
   margin: 4px 0 10px 0;
 }
@@ -700,20 +715,20 @@
   stroke-width: 1.8;
 }
 .sent-spark-line.rising {
-  stroke: #e57373;
+  stroke: var(--red);
 }
 .sent-spark-line.falling {
-  stroke: #64b5f6;
+  stroke: var(--accent);
 }
 .sent-spark-line.steady {
-  stroke: #94a3b8;
+  stroke: var(--text-5);
 }
 .sent-ev-sparkline svg circle {
-  fill: var(--text-2, #c9d1e0);
+  fill: var(--text-2);
 }
 .sent-ev-sparkline-legend {
   font-size: 11px;
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   text-align: right;
   margin-top: 2px;
 }
@@ -721,13 +736,13 @@
 .sent-ev-refs {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid var(--border, #2a3146);
+  border-top: 1px solid var(--border);
 }
 .sent-ev-refs-head {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   margin-bottom: 4px;
 }
 .sent-ev-ref {
@@ -737,38 +752,42 @@
   width: 100%;
   text-align: left;
   background: transparent;
-  border: 1px solid var(--border, #2a3146);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 6px 8px;
   margin: 2px 0;
-  color: var(--text-2, #c9d1e0);
+  color: var(--text-2);
   font: inherit;
   cursor: pointer;
-  transition: background 100ms;
+  transition: background var(--fast) var(--ease);
 }
 .sent-ev-ref:hover {
   background: var(--bg-hover);
 }
+.sent-ev-ref:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .sent-ev-ref.fired {
-  color: var(--text-1, #e2e8f0);
+  color: var(--text-1);
 }
 .sent-ev-ref-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-3, #8a96aa);
+  background: var(--text-3);
   flex-shrink: 0;
 }
 .sent-ev-ref-dot.on {
-  background: #e57373;
+  background: var(--red);
 }
 .sent-ev-ref-label {
   flex: 1;
 }
 .sent-ev-ref-state {
   font-size: 11px;
-  color: var(--text-3, #8a96aa);
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -779,16 +798,18 @@
 }
 .sent-ev-close {
   background: transparent;
-  border: 1px solid var(--border, #2a3146);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 4px 10px;
-  color: var(--text-2, #c9d1e0);
+  color: var(--text-2);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 .sent-ev-close:hover {
   background: var(--bg-hover);
+  border-color: var(--border-hi);
 }
 
 /* ── Per-rule dismiss / snooze button ──────────────────────────────────────── */
@@ -798,11 +819,11 @@
   right: 4px;
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-4);
   font-size: 11px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--fast) var(--ease);
   padding: 0 2px;
   line-height: 1;
 }
@@ -814,7 +835,7 @@
 }
 .sent-chip-dismiss:hover {
   opacity: 1 !important;
-  color: var(--text);
+  color: var(--text-1);
 }
 
 /* Per-module extraction breakdown (H-005 transparency, informational only) */
@@ -855,22 +876,20 @@
 .sent-verify-btn {
   flex-shrink: 0;
   background: transparent;
-  border: 1px solid var(--border-hi, #3d5070);
-  border-radius: 4px;
-  color: var(--accent, #4a7fb8);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  color: var(--accent);
   font-size: 10px;
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   letter-spacing: 0.04em;
   cursor: pointer;
   padding: 3px 8px;
   white-space: nowrap;
-  transition:
-    background 0.1s,
-    border-color 0.1s;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 .sent-verify-btn:hover {
-  background: rgba(74, 127, 184, 0.12);
-  border-color: var(--accent, #4a7fb8);
+  background: var(--accent-dim);
+  border-color: var(--accent);
 }
 .sent-verify-btn:disabled {
   opacity: 0.5;
@@ -879,18 +898,19 @@
 
 .sent-ev-verify-btn {
   background: transparent;
-  border: 1px solid var(--border, #2a3146);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 4px 10px;
-  color: var(--accent, #4a7fb8);
+  color: var(--accent);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
   margin-right: 6px;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
 .sent-ev-verify-btn:hover {
-  background: rgba(74, 127, 184, 0.12);
-  border-color: var(--accent, #4a7fb8);
+  background: var(--accent-dim);
+  border-color: var(--accent);
 }
 .sent-ev-verify-btn:disabled {
   opacity: 0.5;
@@ -901,26 +921,26 @@
 /* One-line footer below the chip area. Neutral when green, amber when stale. */
 .sent-rules-footer {
   margin-top: 10px;
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.03em;
   line-height: 1.5;
   padding: 5px 8px;
-  border-radius: 5px;
+  border-radius: var(--r-md);
 }
 .sent-rules-footer-green {
-  color: var(--text-5, #3d5070);
+  color: var(--text-5);
   background: transparent;
 }
 .sent-rules-footer-amber {
-  color: var(--amber, #b45309);
-  background: rgba(180, 83, 9, 0.06);
-  border: 1px solid rgba(180, 83, 9, 0.2);
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
 }
 .sent-rules-footer-red {
-  color: var(--red, #d4351c);
-  background: rgba(212, 53, 28, 0.07);
-  border: 1px solid rgba(212, 53, 28, 0.25);
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
 }
 .sent-rules-footer-icon {
   margin-right: 4px;
@@ -930,7 +950,9 @@
 .sent-appt-modal {
   position: absolute;
   inset: 0;
-  background: rgba(10, 14, 26, 0.88);
+  /* Scrim: intentionally dark in both themes — standard modal practice;
+     slightly lighter than the original to be less oppressive on light theme */
+  background: rgba(15, 23, 42, 0.55);
   z-index: 50;
   display: flex;
   align-items: flex-start;
@@ -941,12 +963,12 @@
 .sent-appt-modal-inner {
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-3);
 }
 .sent-appt-modal-head {
   display: flex;
@@ -968,6 +990,7 @@
   cursor: pointer;
   padding: 0 2px;
   line-height: 1;
+  transition: color var(--fast) var(--ease);
 }
 .sent-appt-modal-close:hover {
   color: var(--text-2);
@@ -976,7 +999,7 @@
   width: 100%;
   min-height: 160px;
   resize: vertical;
-  background: var(--bg-deep, #0a0e1a);
+  background: var(--bg-deep);
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text-2);
@@ -984,7 +1007,6 @@
   font-size: 11px;
   line-height: 1.6;
   padding: 10px 12px;
-  outline: none;
   box-sizing: border-box;
 }
 .sent-appt-modal-foot {
@@ -993,28 +1015,28 @@
   justify-content: flex-end;
 }
 .sent-appt-modal-copy {
-  background: var(--accent, #4a7fb8);
+  background: var(--accent);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-md);
   color: #fff;
   font-size: 11px;
   font-family: var(--mono);
   letter-spacing: 0.04em;
   padding: 6px 14px;
   cursor: pointer;
-  transition: opacity 0.1s;
+  transition: background var(--fast) var(--ease);
 }
 .sent-appt-modal-copy:hover {
-  opacity: 0.85;
+  background: var(--accent-hover);
 }
 
 /* ── Evaluation audit trail: "Why?" block inside evidence panel ─────────────── */
 .sent-ev-why {
   margin: 8px 0 6px;
   padding: 7px 10px;
-  background: rgba(74, 127, 184, 0.07);
-  border-left: 3px solid var(--accent, #4a7fb8);
-  border-radius: 0 4px 4px 0;
+  background: var(--accent-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   font-size: 11px;
   line-height: 1.55;
 }
@@ -1023,17 +1045,17 @@
   font-size: 10px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--accent, #4a7fb8);
+  color: var(--accent);
   margin-bottom: 3px;
 }
 .sent-ev-why-text {
-  color: var(--text-2, #c8d0e0);
+  color: var(--text-2);
 }
 .sent-ev-why-source {
   margin-top: 4px;
   font-size: 10px;
-  color: var(--text-5, #3d5070);
-  font-family: var(--mono, monospace);
+  color: var(--text-5);
+  font-family: var(--mono);
 }
 
 /* ── Action Packs — per-chip and patient-level copy-ready action text ──────── */
@@ -1049,31 +1071,34 @@
 /* "Actions" trigger button — compact, ghost-style, accent coloured */
 .sent-act-btn {
   background: transparent;
-  border: 1px solid rgba(74, 127, 184, 0.35);
-  border-radius: 4px;
-  color: var(--accent, #4a7fb8);
-  font-family: var(--mono, monospace);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  color: var(--accent);
+  font-family: var(--mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
   padding: 3px 9px;
-  transition:
-    background 0.1s,
-    border-color 0.1s;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
 .sent-act-btn:hover {
-  background: rgba(74, 127, 184, 0.1);
-  border-color: var(--accent, #4a7fb8);
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.sent-act-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Action pack modal — overlays the sentinel module pane */
 .sent-act-modal {
   position: absolute;
   inset: 0;
-  background: rgba(10, 14, 26, 0.9);
+  /* Scrim: intentionally dark in both themes — consistent with .sent-appt-modal */
+  background: rgba(15, 23, 42, 0.55);
   z-index: 51;
   display: flex;
   align-items: flex-start;
@@ -1086,12 +1111,12 @@
 .sent-act-modal-inner {
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-3);
 }
 
 /* Sections container — scrollable area between header and bottom padding */
@@ -1118,7 +1143,7 @@
 }
 
 .sent-act-section-label {
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1128,22 +1153,22 @@
 
 /* Per-section Copy button */
 .sent-act-copy-btn {
-  background: var(--accent, #4a7fb8);
+  background: var(--accent);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   color: #fff;
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.05em;
   padding: 3px 10px;
   cursor: pointer;
-  transition: opacity 0.1s;
+  transition: background var(--fast) var(--ease);
   white-space: nowrap;
   flex-shrink: 0;
 }
 .sent-act-copy-btn:hover {
-  opacity: 0.82;
+  background: var(--accent-hover);
 }
 
 /* Read-only textarea showing the copy text */
@@ -1151,19 +1176,18 @@
   width: 100%;
   min-height: 52px;
   resize: vertical;
-  background: var(--bg-deep, #0a0e1a);
+  background: var(--bg-deep);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   color: var(--text-2);
-  font-family: var(--mono, monospace);
+  font-family: var(--mono);
   font-size: 10.5px;
   line-height: 1.55;
   padding: 6px 8px;
-  outline: none;
   box-sizing: border-box;
 }
 .sent-act-textarea:focus {
-  border-color: var(--accent, #4a7fb8);
+  border-color: var(--accent);
 }
 
 /* ── Pre-Consultation Brief card ──────────────────────────────────────────── */
@@ -1173,7 +1197,8 @@
 .sent-brief-card {
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
-  border-radius: 7px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
   margin-bottom: 10px;
   overflow: hidden;
 }
@@ -1186,14 +1211,14 @@
   padding: 7px 10px;
   cursor: pointer;
   user-select: none;
-  border-radius: 7px;
-  transition: background 0.1s;
+  border-radius: var(--r-lg);
+  transition: background var(--fast) var(--ease);
 }
 .sent-brief-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-hover);
 }
-.sent-brief-header:focus {
-  outline: 2px solid var(--accent, #4a7fb8);
+.sent-brief-header:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -1231,25 +1256,26 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .sent-brief-badge-red {
-  background: rgba(248, 113, 113, 0.18);
-  color: var(--red, #f87171);
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
 }
 .sent-brief-badge-amber {
-  background: rgba(251, 191, 36, 0.14);
-  color: var(--amber, #fbbf24);
-  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
 }
 
 .sent-brief-chevron {
   font-size: 9px;
   color: var(--text-5);
   flex-shrink: 0;
-  transition: transform 0.15s;
+  transition: transform var(--fast) var(--ease);
 }
 
 /* Body: signals + trend notes */
@@ -1260,7 +1286,7 @@
 
 /* When collapsed the body is absent — card has no bottom content */
 .sent-brief-collapsed .sent-brief-header {
-  border-radius: 7px;
+  border-radius: var(--r-lg);
 }
 
 /* Signal lines */
@@ -1281,10 +1307,10 @@
   background: var(--text-4);
 }
 .sent-brief-signal-red .sent-brief-dot {
-  background: var(--red, #f87171);
+  background: var(--red);
 }
 .sent-brief-signal-amber .sent-brief-dot {
-  background: var(--amber, #fbbf24);
+  background: var(--amber);
 }
 .sent-brief-signal-text {
   flex: 1;
@@ -1330,8 +1356,8 @@
    silent failure without being alarming (it's informational, not an error). */
 .sent-unmatched-excluded {
   font-size: 10px;
-  font-family: var(--mono, monospace);
-  color: var(--amber, #b45309);
+  font-family: var(--mono);
+  color: var(--amber);
   margin-left: 4px;
   opacity: 0.85;
 }
