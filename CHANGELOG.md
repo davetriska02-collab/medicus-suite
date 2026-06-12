@@ -4,6 +4,35 @@ All notable changes to Medicus Suite are documented here.
 
 ## [v3.60.6] — 2026-06-12
 
+### Monitoring — design-crit pass (three-critic review via /design-crit)
+
+- **Hierarchy under alert fixed**: the pre-consultation BRIEF (red/amber
+  summary) now leads the stack; the waiting-room block is demoted below the
+  action bar and de-amberised (neutral card + amber left bar — per-row
+  red/amber minute counts unchanged), so operational throughput no longer
+  out-shouts clinical risk and amber is reserved for signal.
+- **Canon**: dark-theme `--red-dim`/`--amber-dim` raised to .17/.16 so the
+  red-vs-amber tier survives on dark; new `--violet` triad promotes the
+  custom-rule accent into the token canon (TOKENS.md updated).
+- **Chip anatomy**: test rows are a three-column grid with a right-aligned
+  mono days rail (122d/43d… scan as a column); the invisible ⓘ evidence
+  affordance is now a rotating chevron on every evidence-bearing chip; the
+  floating ACTIONS pill is a docked "Copy actions" card footer.
+- **Designed idle states** (no-Medicus / not-mounted) with icon + mono label;
+  raw "Failed to fetch" replaced with human copy; the degraded H-005 warning
+  copy and salience untouched, with dead action-bar chrome hidden in
+  no-patient states; version pill de-emphasised to metadata.
+- **Accessibility sweep**: focus-visible/active states on every interactive
+  (chip dismiss ×, drift dismiss, modal close, evidence buttons); modals get
+  role=dialog/aria-modal/labelled titles + focus restore to opener;
+  aria-live on the auto-refreshing chip region; filter bar aria-pressed
+  group; emoji replaced with Feather strokes in the waiting-room block;
+  contrast and mono-voice corrections; seven previously unstyled classes
+  (journal warning, RESURFACED banner, unmatched-meds section) given
+  token-recipe styling.
+
+## [v3.60.6] — 2026-06-12
+
 ### Monitoring (Sentinel) — design-crit fixes
 
 - **A** Scaffold slot order: brief above waiting room (brief → action bar → WR block).
