@@ -4,10 +4,11 @@
 'use strict';
 
 async function slotCounterExport() {
-  const r = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules']);
+  const r = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'slots.pillPrefs']);
   return {
     hiddenTypes: r['slots.hiddenTypes'] ?? [],
-    alertRules:  r['slots.alertRules']  ?? [],
+    alertRules: r['slots.alertRules'] ?? [],
+    pillPrefs: r['slots.pillPrefs'] ?? { order: [], colours: {} },
   };
 }
 
@@ -20,6 +21,11 @@ async function slotCounterImport(data, _opts = {}) {
   if (data.alertRules !== undefined) {
     if (!Array.isArray(data.alertRules)) throw new Error('slots.alertRules must be an array.');
     await chrome.storage.local.set({ 'slots.alertRules': data.alertRules });
+  }
+  if (data.pillPrefs !== undefined) {
+    if (!data.pillPrefs || typeof data.pillPrefs !== 'object' || Array.isArray(data.pillPrefs))
+      throw new Error('slots.pillPrefs must be an object.');
+    await chrome.storage.local.set({ 'slots.pillPrefs': data.pillPrefs });
   }
 }
 

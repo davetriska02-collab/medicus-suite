@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.3] — 2026-06-12
+
+### Slots pill configuration + "Choose your tabs"
+
+- **Slots pills are now fully user-configurable**: an organise mode (✎ on the
+  pill row) gives drag-to-reorder and a per-type colour palette (the same
+  10-colour set as Reception's tiles). Alert amber/red ALWAYS overrides a
+  custom colour — safety salience is not configurable away. Preferences are
+  user config (`slots.pillPrefs`), included in suite backups.
+- **Per-clinician bars**: each BY CLINICIAN row gains a share-of-total wash
+  and a proportional AM|PM strip along its bottom edge.
+- **Choose your tabs** — new setup-checklist step and Ctrl+K command ("Choose
+  tabs…"): role presets (GP/clinician, Reception, Practice manager,
+  Everything) plus per-tab toggle cards, each with a one-line explainer of
+  what the tab does (new users don't know what "Condor" is). Changes apply
+  live; hidden tabs stay reachable from the palette; at least one tab always
+  stays visible. The choice is **user-owned**: stored in `suite.hiddenTabs`,
+  carried in the user's own backup, and architecturally unreachable by
+  practice-profile central deployment (profiles never push `suite.*`
+  preference keys). Tab metadata lives in `side-panel/tab-catalog.js` with a
+  new CI guard (`test-tab-catalog.js`) keeping it in lock-step with the real
+  nav, mirroring the tour guard.
+
 ## [v3.60.2] — 2026-06-12
 
 ### Slots — glanceable redesign (hero card, type pills, share bars)

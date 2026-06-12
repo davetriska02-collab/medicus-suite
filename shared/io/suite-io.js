@@ -9,12 +9,7 @@
 
 'use strict';
 
-const SUITE_KEYS = [
-  'suite.display',
-  'suite.practiceCode',
-  'suite.feedbackEmail',
-  'suite.tabOrder',
-];
+const SUITE_KEYS = ['suite.display', 'suite.practiceCode', 'suite.feedbackEmail', 'suite.tabOrder', 'suite.hiddenTabs'];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
 const TAB_ID_RE = /^[a-z0-9][a-z0-9-]{0,40}$/i;
@@ -22,10 +17,11 @@ const TAB_ID_RE = /^[a-z0-9][a-z0-9-]{0,40}$/i;
 async function suiteExport() {
   const r = await chrome.storage.local.get(SUITE_KEYS);
   return {
-    display:       r['suite.display']       ?? null,
-    practiceCode:  r['suite.practiceCode']  ?? null,
+    display: r['suite.display'] ?? null,
+    practiceCode: r['suite.practiceCode'] ?? null,
     feedbackEmail: r['suite.feedbackEmail'] ?? null,
-    tabOrder:      r['suite.tabOrder']       ?? null,
+    tabOrder: r['suite.tabOrder'] ?? null,
+    hiddenTabs: r['suite.hiddenTabs'] ?? null,
   };
 }
 
@@ -48,10 +44,17 @@ async function suiteImport(data) {
   }
   if (data.tabOrder != null) {
     if (!Array.isArray(data.tabOrder)) throw new Error('suite.tabOrder must be an array.');
-    if (!data.tabOrder.every(id => typeof id === 'string' && TAB_ID_RE.test(id))) {
+    if (!data.tabOrder.every((id) => typeof id === 'string' && TAB_ID_RE.test(id))) {
       throw new Error('suite.tabOrder must be an array of tab-id strings.');
     }
     toSet['suite.tabOrder'] = data.tabOrder;
+  }
+  if (data.hiddenTabs != null) {
+    if (!Array.isArray(data.hiddenTabs)) throw new Error('suite.hiddenTabs must be an array.');
+    if (!data.hiddenTabs.every((id) => typeof id === 'string' && TAB_ID_RE.test(id))) {
+      throw new Error('suite.hiddenTabs must be an array of tab-id strings.');
+    }
+    toSet['suite.hiddenTabs'] = data.hiddenTabs;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

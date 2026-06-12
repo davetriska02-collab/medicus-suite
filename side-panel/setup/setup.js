@@ -33,6 +33,7 @@ let _stepStatus = {
   practiceCode: { done: false, detected: null },
   connection: { done: false, result: null }, // result: 'ok'|'fail'|null
   notifications: { done: false, permission: 'default' },
+  tabs: { done: false, visible: 0, total: 0, optional: true },
   triage: { done: false, optional: true },
 };
 let _visible = false;
@@ -66,7 +67,23 @@ async function evaluateSteps() {
   _stepStatus.notifications.permission = perm;
   _stepStatus.notifications.done = perm === 'granted' || _setupState.skippedNotifications;
 
-  // Step 4: triage (optional)
+  // Step 4: tabs chosen (recommended) — done once the user has made any
+  // conscious choice (the chooser's Done always writes suite.hiddenTabs, even
+  // when the answer is "everything"). User-owned key; never profile-pushed.
+  try {
+    const [{ TAB_CATALOG }, rt] = await Promise.all([
+      import('../tab-catalog.js'),
+      chrome.storage.local.get('suite.hiddenTabs'),
+    ]);
+    const hidden = Array.isArray(rt['suite.hiddenTabs']) ? rt['suite.hiddenTabs'].length : 0;
+    _stepStatus.tabs.total = TAB_CATALOG.length;
+    _stepStatus.tabs.visible = TAB_CATALOG.length - hidden;
+    _stepStatus.tabs.done = rt['suite.hiddenTabs'] !== undefined;
+  } catch (_) {
+    _stepStatus.tabs.done = false;
+  }
+
+  // Step 5: triage (optional)
   if (window.RequestMonitor && typeof window.RequestMonitor.getConfig === 'function') {
     try {
       const cfg = await window.RequestMonitor.getConfig();
@@ -184,6 +201,24 @@ function renderNotificationsStep() {
     </li>`;
 }
 
+function renderTabsStep() {
+  const { done, visible, total } = _stepStatus.tabs;
+  const detail = done
+    ? `<span class="setup-result setup-result--ok">Showing ${visible} of ${total} tabs</span>`
+    : `<span class="setup-step-detail">Pick the tabs you actually use — a GP rarely needs Reception; reception rarely needs Slots. Everything stays reachable via Ctrl+K, and your choice is never overwritten by practice-pushed config.</span>`;
+  return `
+    <li class="setup-step${done ? ' setup-step--done' : ''}">
+      ${stepIcon(done)}
+      <div class="setup-step-body">
+        <span class="setup-step-label">Choose your tabs</span>
+        ${detail}
+        <div class="setup-step-actions">
+          <button class="ghost-btn setup-choose-tabs">${done ? 'Change tabs' : 'Choose tabs'}</button>
+        </div>
+      </div>
+    </li>`;
+}
+
 function renderTriageStep() {
   const { done } = _stepStatus.triage;
   return `
@@ -212,6 +247,7 @@ function renderCard() {
         ${renderPracticeCodeStep()}
         ${renderConnectionStep()}
         ${renderNotificationsStep()}
+        ${renderTabsStep()}
         ${renderTriageStep()}
       </ol>
       <div class="setup-card-footer">
@@ -292,6 +328,11 @@ function wireEvents() {
     await saveSetupState();
     renderInto(_host);
     wireEvents();
+  });
+
+  // Choose tabs — opens the tab chooser overlay
+  _host.querySelector('.setup-choose-tabs')?.addEventListener('click', () => {
+    import('../tabs-chooser/tabs-chooser.js').then((m) => m.openTabsChooser());
   });
 
   // Options deep-links (manual entry + triage config)
@@ -402,6 +443,7 @@ export async function initSetup(hostEl) {
   // Re-evaluate when practice code or setup state changes in storage
   chrome.storage.onChanged.addListener((changes) => {
     if (changes[PRACTICE_CODE_KEY]) refresh();
+    if (changes['suite.hiddenTabs']) refresh();
     if (changes[STORAGE_KEY]) {
       const v = changes[STORAGE_KEY].newValue || {};
       _setupState.dismissedAt = v.dismissedAt || null;

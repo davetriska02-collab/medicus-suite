@@ -1880,3 +1880,203 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .quiet-pill-hidden {
   display: none;
 }
+
+/* ── Tab visibility (suite.hiddenTabs) ──────────────────────────────────────
+   Hidden tabs leave the nav but remain reachable via the Ctrl+K palette. */
+.nav-tab-hidden {
+  display: none !important;
+}
+
+/* ── Tab chooser ("Choose your tabs") ───────────────────────────────────────
+   Engine: side-panel/tabs-chooser/tabs-chooser.js · data: tab-catalog.js. */
+.suite-tabs-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 92; /* over the palette, under the tour */
+  background: rgba(15, 23, 42, 0.55);
+  font-family: var(--sans);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 28px 12px;
+}
+.suite-tabs-sheet {
+  width: min(440px, 100%);
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  padding: 14px;
+}
+.suite-tabs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.suite-tabs-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.suite-tabs-sub {
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.suite-tabs-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 3px 9px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.suite-tabs-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.suite-tabs-presets-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-right: 2px;
+}
+.suite-tabs-preset {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.suite-tabs-preset:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+.suite-tabs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.suite-tabs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 8px 9px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    opacity var(--fast) var(--ease);
+  opacity: 0.62;
+}
+.suite-tabs-card:hover {
+  border-color: var(--border-hi);
+  opacity: 0.85;
+}
+.suite-tabs-card.on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  opacity: 1;
+}
+.suite-tabs-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.suite-tabs-card-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+.suite-tabs-card.on .suite-tabs-card-icon {
+  color: var(--accent);
+}
+.suite-tabs-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suite-tabs-card.on .suite-tabs-card-name {
+  color: var(--text-1);
+}
+.suite-tabs-card-state {
+  font-size: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+.suite-tabs-card-blurb {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-4);
+}
+.suite-tabs-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+.suite-tabs-hint {
+  font-size: 10px;
+  color: var(--text-4);
+  line-height: 1.4;
+  transition: color var(--fast) var(--ease);
+}
+.suite-tabs-hint.flash {
+  color: var(--amber);
+  font-weight: 600;
+}
+.suite-tabs-done {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--fast) var(--ease);
+}
+.suite-tabs-done:hover {
+  background: var(--accent-hover);
+}

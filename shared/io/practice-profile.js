@@ -697,7 +697,8 @@ const PracticeProfile = (() => {
     }
 
     // ── Suite: practiceCode + feedbackEmail only (v2 new) ─────────────────────
-    // NEVER push display, tabOrder, or any other suite.* key — those are
+    // NEVER push display, tabOrder, hiddenTabs (the user's tab choice is
+    // theirs alone — see side-panel/tab-catalog.js), or any other suite.* key — those are
     // personal preferences of the individual user, not practice-wide config.
     const suiteModData =
       mods.suite ||
