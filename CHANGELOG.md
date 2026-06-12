@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.6] — 2026-06-12
+
+### Monitoring (Sentinel) — design-crit fixes
+
+- **A** Scaffold slot order: brief above waiting room (brief → action bar → WR block).
+- **B** WR block de-amberised: calm `--bg-elev` surface, left `3px solid var(--amber)` bar only. Feather SVG icons replace emoji. WR fetch error humanised.
+- **C** Action bar hidden (`.sent-actionbar-empty`) when no data context.
+- **D** Version pill de-emphasised: transparent bg, no border.
+- **E** Test-row three-slot grid: name / status+value+date / days (`38px` rail, `sent-test-days` inherits status colour).
+- **F** Evidence affordance: chevron (`▸`) replaces ⓘ on all clickable chip-heads. Vaccine summary ⓘ left intact.
+- **G** ACTIONS row docked footer; button label → "Copy actions"; `:focus-visible` ring.
+- **H** Brief dot 7→8px; `title` attribute on patientLine span.
+- **I** Filter bar active state uses accent triad; `aria-pressed` + `role="group"` added.
+- **J** Idle states render canon empty-state (monitor icon, mono heading, sans body). Error/degraded blocks moved from inline `style=` to CSS classes.
+- **K** A11y sweep: focus-visible + active on dismiss, vax-summary, modal-close, drift-dismiss, ev-close, ev-verify, act-copy; `aria-live="polite"` on `#sentDynamic`; letter-spacing/mono on ev-label/refs-head/ref-state; `--text-2` on patient-meta; violet triad tokens on custom-tag; verify-button voice unification; badge shared selector.
+- **L** Seven previously unstyled classes styled: `sent-journal-warn`, `sent-chip-resurfaced`, `sent-unmatched-section/*`, `sent-chip-more`.
+
 ## [v3.60.5] — 2026-06-12
 
 ### New repo skill: design-crit
