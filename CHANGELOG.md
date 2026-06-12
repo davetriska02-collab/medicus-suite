@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.2] — 2026-06-12
+
+### Slots — glanceable redesign (hero card, type pills, share bars)
+
+- **Hero card**: headline total, AM/PM chips and a proportional AM|PM split
+  bar in one card; the "available slots" label now inherits the alert state
+  (green when calm, amber/red when any slot-alert rule has tripped).
+- **Type pills**: one pill per included type under the hero — dot + name +
+  bold count, biggest first. The dot is slate normally and turns amber/red
+  when that type is at/below its configured alert threshold, so colour
+  carries signal rather than decoration (cf. the Medicus internal mock's
+  categorical dots).
+- **BY TYPE rows de-noised**: bold totals form a scannable right-hand column,
+  AM/PM demoted to muted detail, the always-on percentage replaced by a
+  subtle share-of-total micro-bar behind each row (exact % in the tooltip).
+
 ## [v3.60.1] — 2026-06-12
 
 ### Safety-doc reissue for the 3.57–3.60 releases (CSO-directed)
