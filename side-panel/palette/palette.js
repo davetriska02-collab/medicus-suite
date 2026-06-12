@@ -94,11 +94,13 @@ function buildCommands() {
   // Navigation — one command per nav tab in this context.
   document.querySelectorAll('.nav-tab').forEach((tab) => {
     const label = tab.getAttribute('aria-label') || tab.querySelector('span')?.textContent || tab.dataset.module;
+    // Hidden tabs (suite.hiddenTabs) stay reachable here — the palette is the
+    // escape hatch that makes hiding a tab de-cluttering, not lock-out.
     cmds.push({
       id: `nav:${tab.dataset.module}`,
       label: `Go to ${label}`,
       group: 'Tab',
-      keywords: tab.dataset.module,
+      keywords: tab.dataset.module + (tab.classList.contains('nav-tab-hidden') ? ' hidden' : ''),
       icon: tab.querySelector('svg')?.outerHTML || GENERIC_ICONS.doc,
       run: () => tab.click(),
     });
@@ -150,6 +152,16 @@ function buildCommands() {
       const r = await chrome.storage.local.get('suite.display');
       await setDisplay({ colorblind: !(r['suite.display'] || {}).colorblind });
     },
+  });
+
+  // Tab chooser — role presets + per-tab show/hide (user-owned)
+  cmds.push({
+    id: 'tabs:choose',
+    label: 'Choose tabs…',
+    group: 'Display',
+    keywords: 'customise tabs show hide nav role preset gp reception manager',
+    icon: GENERIC_ICONS.window,
+    run: () => import('../tabs-chooser/tabs-chooser.js').then((m) => m.openTabsChooser()),
   });
 
   // Quiet mode / clinic mode commands

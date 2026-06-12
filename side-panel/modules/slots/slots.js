@@ -25,7 +25,35 @@ let state = {
   showExcluded: false,
   lastFetched: null,
   alertRules: [],
+  // Pill preferences — USER CONFIG (order + colour per type), persisted to
+  // 'slots.pillPrefs' and included in suite backups via slot-counter-io.js.
+  pillPrefs: { order: [], colours: {} },
+  organisePills: false, // ephemeral: reorder/colour mode
+  openColourFor: null, // type whose colour palette is open, or null
 };
+
+// Palette for colour-coding pills (organising only — NOT a clinical flag).
+// Keys mirror Reception's TILE_COLOUR_KEYS; each maps to a pill-c-<key> CSS
+// class in slots.css. Status amber/red from alert rules ALWAYS overrides a
+// custom colour — safety salience is never user-configurable away.
+const PILL_COLOUR_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
+
+function sanitisePillPrefs(raw) {
+  const out = { order: [], colours: {} };
+  if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.order)) out.order = raw.order.filter((t) => typeof t === 'string');
+    if (raw.colours && typeof raw.colours === 'object') {
+      for (const [t, k] of Object.entries(raw.colours)) {
+        if (typeof t === 'string' && PILL_COLOUR_KEYS.includes(k) && k !== 'default') out.colours[t] = k;
+      }
+    }
+  }
+  return out;
+}
+
+function savePillPrefs() {
+  chrome.storage.local.set({ 'slots.pillPrefs': { order: state.pillPrefs.order, colours: state.pillPrefs.colours } });
+}
 
 let container = null;
 let _inFlight = false;
@@ -36,9 +64,15 @@ export async function init(el) {
   container = el;
 
   // Load persisted hidden types, alert rules, and practice code
-  const stored = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'suite.practiceCode']);
+  const stored = await chrome.storage.local.get([
+    'slots.hiddenTypes',
+    'slots.alertRules',
+    'slots.pillPrefs',
+    'suite.practiceCode',
+  ]);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
   if (stored['slots.alertRules']) state.alertRules = stored['slots.alertRules'];
+  state.pillPrefs = sanitisePillPrefs(stored['slots.pillPrefs']);
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
@@ -85,6 +119,10 @@ function onStorageChange(changes) {
   }
   if (changes['slots.alertRules']) {
     state.alertRules = changes['slots.alertRules'].newValue || [];
+    render();
+  }
+  if (changes['slots.pillPrefs']) {
+    state.pillPrefs = sanitisePillPrefs(changes['slots.pillPrefs'].newValue);
     render();
   }
   if (changes['suite.practiceCode']) {
@@ -249,6 +287,31 @@ function visibleTotal(byType, hiddenTypes) {
   return out;
 }
 
+// ── Alert levels ──────────────────────────────────────────────────────────────
+// One source of truth for "is this type running dry?" — consumed by the alert
+// ribbon, the hero label, and the type pills, so they can never disagree.
+
+// 'red' (zero left), 'amber' (at/below threshold), or null for a single type.
+function typeAlertLevel(typeName, count) {
+  for (const rule of state.alertRules || []) {
+    if (!rule.enabled || rule.typeName !== typeName) continue;
+    if (count <= rule.threshold) return count === 0 ? 'red' : 'amber';
+  }
+  return null;
+}
+
+// Highest triggered level across all enabled rules, or null when all calm.
+function overallAlertLevel(byType) {
+  let level = null;
+  for (const rule of state.alertRules || []) {
+    if (!rule.enabled) continue;
+    const l = typeAlertLevel(rule.typeName, sumAmPm(byType[rule.typeName]));
+    if (l === 'red') return 'red';
+    if (l === 'amber') level = 'amber';
+  }
+  return level;
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
@@ -280,39 +343,127 @@ function render() {
 }
 
 function renderHeader(visible, visibleSum) {
-  const isToday = state.data?.isToday;
-  const splitLine =
-    !state.loading && state.data
-      ? `<div class="slots-ampm-split">
-         <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
-         <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
-       </div>`
-      : '';
   return `
     <div class="mod-header">
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
-        ${
-          !state.loading
-            ? `
-          <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
-          <div class="slots-count-label${visibleSum === 0 ? ' zero' : ''}">
-            ${isToday ? 'slots remaining today' : 'available slots'}
-          </div>
-          ${splitLine}`
-            : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`
-        }
+        ${state.loading ? `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>` : ''}
       </div>
       <div class="header-actions" style="align-self:flex-start;margin-top:2px">
         <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
         <button class="ghost-btn" id="refreshSlots" title="Refresh">↻</button>
       </div>
     </div>
+    ${!state.loading && state.data ? renderHeroCard(visible, visibleSum) : ''}
     <div class="date-presets">
       <button class="preset-btn${state.date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
       <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
     </div>
   `;
+}
+
+// Hero card: headline total, AM/PM chips, a proportional AM|PM split bar, and
+// the per-type pill row. The label inherits the alert state (green when calm,
+// amber/red when any slot-alert rule has tripped) so the headline is a signal,
+// not a decoration.
+function renderHeroCard(visible, visibleSum) {
+  const d = state.data;
+  const isToday = d.isToday;
+  const level = overallAlertLevel(d.byType);
+  const labelCls = visibleSum === 0 ? ' zero' : level ? ` ${level}` : '';
+
+  const amPct = visibleSum > 0 ? Math.round((visible.am / visibleSum) * 100) : 0;
+  const splitBar =
+    visibleSum > 0
+      ? `<div class="slots-split-bar" title="AM ${visible.am} · PM ${visible.pm}" aria-hidden="true">
+           <span class="split-am" style="width:${amPct}%"></span><span class="split-pm" style="width:${100 - amPct}%"></span>
+         </div>`
+      : '';
+
+  return `
+    <div class="slots-hero-card">
+      <div class="slots-hero-main">
+        <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
+        <div class="slots-hero-right">
+          <div class="slots-count-label${labelCls}">${isToday ? 'slots remaining today' : 'available slots'}</div>
+          <div class="slots-ampm-split">
+            <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
+            <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
+          </div>
+        </div>
+      </div>
+      ${splitBar}
+      ${renderTypePills(d.byType, visibleSum)}
+    </div>
+  `;
+}
+
+// One pill per included type: dot + name + count. Order and outline colour
+// are user-configurable (drag to reorder, click to colour, in organise mode);
+// default order is biggest first. The dot/outline is slate (or the user's
+// chosen colour) when calm and ALWAYS goes amber/red when that type is
+// at/below its configured alert threshold — status overrides custom colour.
+function orderedPillEntries(byType) {
+  const byCount = Object.entries(byType)
+    .filter(([t]) => !state.hiddenTypes.has(t))
+    .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
+  const saved = state.pillPrefs.order || [];
+  if (saved.length === 0) return byCount;
+  const present = new Map(byCount);
+  const out = [];
+  for (const t of saved) {
+    if (present.has(t)) {
+      out.push([t, present.get(t)]);
+      present.delete(t);
+    }
+  }
+  for (const [t, n] of byCount) if (present.has(t)) out.push([t, n]);
+  return out;
+}
+
+function renderTypePills(byType, visibleSum) {
+  const entries = orderedPillEntries(byType);
+  if (entries.length === 0 || visibleSum === 0) return '';
+  const organising = state.organisePills;
+
+  const pills = entries
+    .map(([type, n]) => {
+      const total = sumAmPm(n);
+      const level = typeAlertLevel(type, total);
+      const colourKey = state.pillPrefs.colours[type];
+      const customCls = !level && colourKey ? ` pill-c-${colourKey}` : '';
+      const cls =
+        (level ? ` pill-${level}` : total === 0 ? ' pill-zero' : '') +
+        customCls +
+        (organising ? ' pill-organising' : '');
+      const title = organising
+        ? 'Drag to reorder · click to set colour'
+        : `${escHtml(type)} — ${n.am} am · ${n.pm} pm${level ? ' · below alert threshold' : ''}`;
+      return `<span class="slot-pill${cls}" data-pill-type="${escHtml(type)}"${organising ? ' draggable="true"' : ''} title="${title}">
+        <span class="slot-pill-dot" aria-hidden="true"></span>
+        <span class="slot-pill-name">${escHtml(type)}</span>
+        <span class="slot-pill-num">${total.toLocaleString('en-GB')}</span>
+      </span>`;
+    })
+    .join('');
+
+  const palette =
+    organising && state.openColourFor
+      ? `<div class="pill-palette">
+          <span class="pill-palette-label">Colour — ${escHtml(state.openColourFor)}</span>
+          <span class="pill-swatches">${PILL_COLOUR_KEYS.map(
+            (k) =>
+              `<button class="pill-swatch pill-c-${k}${(state.pillPrefs.colours[state.openColourFor] || 'default') === k ? ' active' : ''}" data-swatch="${k}" title="${k === 'default' ? 'No colour' : k}"></button>`
+          ).join('')}</span>
+        </div>`
+      : '';
+
+  return `<div class="slots-pill-row${organising ? ' organising' : ''}" id="pillRow">
+      ${pills}
+      <button class="pill-organise-btn${organising ? ' active' : ''}" id="pillOrganiseBtn" title="${organising ? 'Finish organising' : 'Organise pills — drag to reorder, click a pill to colour it'}">${organising ? 'Done' : '✎'}</button>
+    </div>
+    ${palette}
+    ${organising ? '<div class="pill-organise-hint">Drag to reorder · click a pill to colour it · alert amber/red always overrides colour</div>' : ''}`;
 }
 
 function renderAlertRibbon(byType) {
@@ -359,24 +510,28 @@ function renderData(d, visible, visibleSum) {
   const unticked = entries.filter(([t]) => state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;
 
+  // Count cell: muted am/pm breakdown, then the bold total at the right edge —
+  // totals form a scannable column. Share-of-total moved off the line into the
+  // row's micro-bar (and the tooltip), so the count is the first read.
   const countCell = (n, pct) => {
     const total = sumAmPm(n);
     return `
-      <span class="slot-count-group${total === 0 ? ' zero' : ''}">
+      <span class="slot-count-group${total === 0 ? ' zero' : ''}"${pct != null ? ` title="${pct}% of visible total"` : ''}>
         <span class="slot-count-ampm" title="Morning">${n.am}<span class="ampm-tag-inline">am</span></span>
         <span class="slot-count-sep">·</span>
         <span class="slot-count-ampm" title="Afternoon">${n.pm}<span class="ampm-tag-inline">pm</span></span>
-        <span class="slot-count-sep">·</span>
         <span class="slot-count slot-count-total">${total}</span>
-        ${pct != null ? `<span class="slot-count-pct" title="Share of visible total">${pct}%</span>` : ''}
       </span>
     `;
   };
 
   const row = (type, n, hidden) => {
     const pct = !hidden && visibleSum > 0 ? Math.round((sumAmPm(n) / visibleSum) * 100) : null;
+    const share =
+      pct != null && pct > 0 ? `<span class="slot-share" style="width:${pct}%" aria-hidden="true"></span>` : '';
     return `
       <div class="slot-row${hidden ? ' row-hidden' : ''}">
+        ${share}
         <label class="slot-label">
           <input type="checkbox" class="type-toggle" data-type="${escHtml(type)}" ${hidden ? '' : 'checked'} />
           <span class="slot-type">${escHtml(type)}</span>
@@ -402,9 +557,13 @@ function renderData(d, visible, visibleSum) {
       const isExpanded = state.expanded.has(s.name);
       const staffVisible = visibleTotal(s.byType, state.hiddenTypes);
       const staffSum = sumAmPm(staffVisible);
+      const staffPct = visibleSum > 0 ? Math.round((staffSum / visibleSum) * 100) : 0;
+      const staffAmPct = staffSum > 0 ? Math.round((staffVisible.am / staffSum) * 100) : 0;
       return `
       <div class="staff-row">
-        <button class="staff-toggle" data-staff="${escHtml(s.name)}">
+        <button class="staff-toggle" data-staff="${escHtml(s.name)}" title="${staffPct}% of visible total · AM ${staffVisible.am} · PM ${staffVisible.pm}">
+          ${staffPct > 0 ? `<span class="staff-share" style="width:${staffPct}%" aria-hidden="true"></span>` : ''}
+          ${staffSum > 0 ? `<span class="staff-split" aria-hidden="true"><span class="split-am" style="width:${staffAmPct}%"></span><span class="split-pm" style="width:${100 - staffAmPct}%"></span></span>` : ''}
           <span class="staff-chevron">${isExpanded ? '▾' : '▸'}</span>
           <span class="staff-name">${escHtml(s.name)}</span>
           <span class="staff-count-mini">
@@ -515,6 +674,82 @@ function bindEvents() {
       render();
     });
   });
+
+  // Pill organise mode: toggle, drag-to-reorder, colour palette
+  container.querySelector('#pillOrganiseBtn')?.addEventListener('click', () => {
+    state.organisePills = !state.organisePills;
+    state.openColourFor = null;
+    render();
+  });
+
+  if (state.organisePills) {
+    const pillRow = container.querySelector('#pillRow');
+    let dragSrc = null;
+
+    const persistOrderFromDom = () => {
+      if (!pillRow) return;
+      state.pillPrefs = {
+        ...state.pillPrefs,
+        order: [...pillRow.querySelectorAll('.slot-pill[data-pill-type]')].map((p) => p.dataset.pillType),
+      };
+      savePillPrefs(); // storage echo re-renders via onStorageChange
+    };
+
+    container.querySelectorAll('.slot-pill[data-pill-type]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        if (dragSrc) return; // a drag that ends on the source still fires click
+        const t = pill.dataset.pillType;
+        state.openColourFor = state.openColourFor === t ? null : t;
+        render();
+      });
+      pill.addEventListener('dragstart', (e) => {
+        dragSrc = pill;
+        pill.classList.add('pill-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+          e.dataTransfer.setData('text/plain', pill.dataset.pillType);
+        } catch (_) {
+          /* some browsers require setData for the drag to start */
+        }
+      });
+      pill.addEventListener('dragend', () => {
+        pill.classList.remove('pill-dragging');
+        setTimeout(() => {
+          dragSrc = null;
+        }, 0);
+      });
+      pill.addEventListener('dragover', (e) => {
+        if (!dragSrc || dragSrc === pill) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const r = pill.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        pillRow.insertBefore(dragSrc, after ? pill.nextSibling : pill);
+      });
+      pill.addEventListener('drop', (e) => {
+        e.preventDefault();
+        persistOrderFromDom();
+      });
+    });
+    pillRow?.addEventListener('dragover', (e) => e.preventDefault());
+    pillRow?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      persistOrderFromDom();
+    });
+
+    container.querySelectorAll('.pill-swatch').forEach((sw) => {
+      sw.addEventListener('click', () => {
+        if (!state.openColourFor) return;
+        const k = sw.dataset.swatch;
+        const colours = { ...state.pillPrefs.colours };
+        if (k === 'default') delete colours[state.openColourFor];
+        else colours[state.openColourFor] = k;
+        state.pillPrefs = { ...state.pillPrefs, colours };
+        savePillPrefs();
+        render();
+      });
+    });
+  }
 
   container.querySelectorAll('.staff-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {

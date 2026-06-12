@@ -5,6 +5,7 @@
 import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
 import { initPalette } from '../side-panel/palette/palette.js';
+import { sanitiseHiddenTabs } from '../side-panel/tab-catalog.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -193,6 +194,17 @@ const switchModule = createModuleLoader({
   errPrefix: 'Failed to load',
 });
 
+// Tab visibility — same user-owned suite.hiddenTabs set as the side panel.
+function applyTabVisibility(raw) {
+  const hidden = new Set(sanitiseHiddenTabs(raw));
+  document.querySelectorAll('.nav-tab').forEach((t) => {
+    t.classList.toggle('nav-tab-hidden', hidden.has(t.dataset.module));
+  });
+}
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['suite.hiddenTabs']) applyTabVisibility(changes['suite.hiddenTabs'].newValue);
+});
+
 // Guided tour: replay-only in the pop-out (auto-start is the side panel's
 // job). Module-scoped steps switch tabs via this window's loader; steps whose
 // anchors don't exist here (e.g. panel-only tabs) skip silently.
@@ -266,6 +278,18 @@ _updatePopoutQuietPill();
   // Guard against a stale module name persisted by an older version (mirrors
   // the panel boot's validation) — an unknown name would blank the content area.
   const saved = r['popout.activeModule'];
-  const startMod = saved && saved in MODULES && MODULES[saved] ? saved : 'today';
-  switchModule(startMod);
+  const rh = await chrome.storage.local.get('suite.hiddenTabs');
+  applyTabVisibility(rh['suite.hiddenTabs']);
+  const hiddenSet = new Set(sanitiseHiddenTabs(rh['suite.hiddenTabs']));
+  const usable = (m) => m && m in MODULES && MODULES[m] && !hiddenSet.has(m);
+  let startMod = usable(saved) ? saved : usable('today') ? 'today' : null;
+  if (!startMod) {
+    for (const t of document.querySelectorAll('.nav-tab')) {
+      if (usable(t.dataset.module)) {
+        startMod = t.dataset.module;
+        break;
+      }
+    }
+  }
+  switchModule(startMod || 'today');
 })();
