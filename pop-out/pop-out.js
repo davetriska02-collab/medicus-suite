@@ -263,6 +263,9 @@ _updatePopoutQuietPill();
 (async () => {
   // Display preferences are applied by shared/display-prefs.js (loaded before this script).
   const r = await chrome.storage.local.get('popout.activeModule');
-  const startMod = r['popout.activeModule'] || 'today';
+  // Guard against a stale module name persisted by an older version (mirrors
+  // the panel boot's validation) — an unknown name would blank the content area.
+  const saved = r['popout.activeModule'];
+  const startMod = saved && saved in MODULES && MODULES[saved] ? saved : 'today';
   switchModule(startMod);
 })();

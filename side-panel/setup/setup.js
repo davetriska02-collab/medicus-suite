@@ -271,7 +271,14 @@ function wireEvents() {
   // Enable notifications
   _host.querySelector('.setup-enable-notif')?.addEventListener('click', async () => {
     if (typeof Notification === 'undefined') return;
-    const perm = await Notification.requestPermission();
+    // requestPermission can reject in some contexts — treat as denied so the
+    // checklist always reflects an outcome rather than a stale button.
+    let perm = 'denied';
+    try {
+      perm = await Notification.requestPermission();
+    } catch (_) {
+      perm = 'denied';
+    }
     _stepStatus.notifications.permission = perm;
     _stepStatus.notifications.done = perm === 'granted';
     renderInto(_host);

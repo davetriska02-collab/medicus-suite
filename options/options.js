@@ -1726,7 +1726,10 @@ rmSaveBtn?.addEventListener('click', async () => {
     });
     document.getElementById('quietBtnUntil18')?.addEventListener('click', async () => {
       const now = new Date();
-      const until18 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0).getTime();
+      let until18 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0).getTime();
+      // Past 18:00 already? Roll to tomorrow's 18:00 so the button is never a
+      // dead click that silently leaves clinic mode off.
+      if (until18 <= Date.now()) until18 += 24 * 60 * 60 * 1000;
       await window.QuietMode?.set(until18);
       renderQuietStatus();
     });

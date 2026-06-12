@@ -685,6 +685,9 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['suite.notifications']) {
     const prefs = changes['suite.notifications'].newValue || {};
     _badgeEnabled = prefs.badgeEnabled !== false;
+    // Clear a stale count immediately on disable rather than waiting for the
+    // next waiting-room poll (≤30s) to notice.
+    if (!_badgeEnabled) chrome.action.setBadgeText({ text: '' });
   }
 });
 
