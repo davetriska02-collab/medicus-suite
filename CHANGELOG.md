@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.58.1] — 2026-06-12
+
+### Tour staleness guard (CI) + practice-push deployment guidance
+
+- **New regression test `test-tour-steps.js`** keeps the guided walkthrough in
+  lock-step with the UI: it fails CI when a tour step's anchor selector is no
+  longer rendered by any source, when a new side-panel tab ships that is
+  neither taught by a step nor consciously recorded as overview-only
+  (`NAV_COVERED_BY_OVERVIEW`), or when step structure / `addedIn` version tags
+  are malformed. Adding a module now forces a tour decision on the same PR.
+- **`update-tour` skill** updated to reference the guard, and gained a
+  "Practice-pushed deployments" section: the tour's new-user/returning-user
+  split is profile-based (full tour for untouched profiles, "What's new" pass
+  only when `TOUR_VERSION` is deliberately bumped), so shared-folder overwrites
+  need no install hooks — plus the same-folder-path caveat (a path change
+  resets the unpacked extension's ID and all its state) and the
+  shared-Chrome-profile note for rollout comms.
+
 ## [v3.58.0] — 2026-06-12
 
 ### Suite-wide first-run walkthrough + Monitoring action bar relocation (Sentinel v0.5.1)
