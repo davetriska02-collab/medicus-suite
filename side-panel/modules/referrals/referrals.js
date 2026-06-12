@@ -3,42 +3,46 @@
 
 'use strict';
 
-function ApiNs() { return (typeof window !== 'undefined') ? window.ReferralsApi : null; }
+import { loadUiState, saveUiState } from '../shared/ui-state.js';
+
+function ApiNs() {
+  return typeof window !== 'undefined' ? window.ReferralsApi : null;
+}
 
 const DEFAULT_PRESET = 'last12m';
-const TOP_N          = 15;
-const STALE_MS       = 30 * 60 * 1000;
-const DISCOVERY_KEY  = 'referrals.discovery';
-const CONFIG_KEY     = 'referrals.config';
+const TOP_N = 15;
+const STALE_MS = 30 * 60 * 1000;
+const DISCOVERY_KEY = 'referrals.discovery';
+const CONFIG_KEY = 'referrals.config';
 
-let container      = null;
+let container = null;
 let stalenessTimer = null;
-let _inFlight      = false;
+let _inFlight = false;
 
 let state = {
-  discoveryUrl:     null,
-  configUrl:        null,
+  discoveryUrl: null,
+  configUrl: null,
   configPriorities: [],
-  configStatuses:   [],
-  startDate:        null,
-  endDate:          null,
-  rawReferrals:     null,
-  totalCount:       0,
-  aggregated:       null,
-  loading:          false,
-  loadingProgress:  null,
-  error:            null,
-  chartView:        'clinician',
-  chartExpanded:    false,
-  clinicianSearch:  '',
+  configStatuses: [],
+  startDate: null,
+  endDate: null,
+  rawReferrals: null,
+  totalCount: 0,
+  aggregated: null,
+  loading: false,
+  loadingProgress: null,
+  error: null,
+  chartView: 'clinician',
+  chartExpanded: false,
+  clinicianSearch: '',
   activePriorities: new Set(['Routine', 'Urgent', 'TwoWeekWait']),
-  activeStatuses:   new Set(['Completed', 'Incomplete', 'Cancelled']),
-  lastFetched:      null,
+  activeStatuses: new Set(['Completed', 'Incomplete', 'Cancelled']),
+  lastFetched: null,
   lastAttemptedUrl: null,
-  showDiagnostics:  false,
-  activityData:     null,
-  activityError:    null,
-  activityLoading:  false,
+  showDiagnostics: false,
+  activityData: null,
+  activityError: null,
+  activityLoading: false,
 };
 
 function resolveStored(stored) {
@@ -46,9 +50,9 @@ function resolveStored(stored) {
   return {
     // Audit M1: discovery stores URL only — no .sample/.data rows are persisted.
     discoveryUrl: stored[DISCOVERY_KEY]?.url || null,
-    configUrl:    stored[CONFIG_KEY]?.url    || null,
-    priorities:   (cfgData.priorityOptions || []).map(o => o.value).filter(Boolean),
-    statuses:     (cfgData.statusOptions   || []).map(o => o.value).filter(Boolean),
+    configUrl: stored[CONFIG_KEY]?.url || null,
+    priorities: (cfgData.priorityOptions || []).map((o) => o.value).filter(Boolean),
+    statuses: (cfgData.statusOptions || []).map((o) => o.value).filter(Boolean),
   };
 }
 
@@ -59,11 +63,11 @@ function getFilteredAggregated() {
   if (!api || !state.rawReferrals) return state.aggregated;
   const allP = ['Routine', 'Urgent', 'TwoWeekWait'];
   const allS = ['Completed', 'Incomplete', 'Cancelled'];
-  if (state.activePriorities.size === allP.length && state.activeStatuses.size === allS.length)
-    return state.aggregated;
-  const filtered = state.rawReferrals.filter(r =>
-    state.activePriorities.has(api.normalisePriority(r.priority || '')) &&
-    state.activeStatuses.has(r.displayStatus || '')
+  if (state.activePriorities.size === allP.length && state.activeStatuses.size === allS.length) return state.aggregated;
+  const filtered = state.rawReferrals.filter(
+    (r) =>
+      state.activePriorities.has(api.normalisePriority(r.priority || '')) &&
+      state.activeStatuses.has(r.displayStatus || '')
   );
   return api.aggregate(filtered);
 }
@@ -82,7 +86,7 @@ function buildRateRows() {
   const a = getFilteredAggregated() || state.aggregated;
   let rows = [];
   for (const c of a.byClinician) {
-    const key          = c.name.toLowerCase().trim();
+    const key = c.name.toLowerCase().trim();
     const consultations = consultMap.get(key);
     if (consultations == null || consultations === 0) continue;
     rows.push({ name: c.name, referrals: c.count, consultations, rate: c.count / consultations });
@@ -90,7 +94,7 @@ function buildRateRows() {
 
   if (state.clinicianSearch) {
     const q = state.clinicianSearch.toLowerCase();
-    rows = rows.filter(r => r.name.toLowerCase().includes(q));
+    rows = rows.filter((r) => r.name.toLowerCase().includes(q));
   }
 
   return rows.sort((a, b) => b.rate - a.rate);
@@ -102,15 +106,37 @@ export async function init(el) {
   const api = ApiNs();
   if (api) {
     const range = api.preset(DEFAULT_PRESET);
-    if (range) { state.startDate = range[0]; state.endDate = range[1]; }
+    if (range) {
+      state.startDate = range[0];
+      state.endDate = range[1];
+    }
   }
 
   const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
   const r = resolveStored(stored);
-  state.discoveryUrl     = r.discoveryUrl;
-  state.configUrl        = r.configUrl;
+  state.discoveryUrl = r.discoveryUrl;
+  state.configUrl = r.configUrl;
   state.configPriorities = r.priorities;
-  state.configStatuses   = r.statuses;
+  state.configStatuses = r.statuses;
+
+  // Restore persisted view state (filters, chart view, search)
+  const savedUi = await loadUiState('referrals');
+  if (savedUi) {
+    const VALID_PRIORITIES = ['Routine', 'Urgent', 'TwoWeekWait'];
+    const VALID_STATUSES = ['Completed', 'Incomplete', 'Cancelled'];
+    const VALID_VIEWS = ['clinician', 'specialty', 'hospital', 'rate'];
+    if (Array.isArray(savedUi.activePriorities)) {
+      const ps = savedUi.activePriorities.filter((p) => VALID_PRIORITIES.includes(p));
+      if (ps.length > 0) state.activePriorities = new Set(ps);
+    }
+    if (Array.isArray(savedUi.activeStatuses)) {
+      const ss = savedUi.activeStatuses.filter((s) => VALID_STATUSES.includes(s));
+      if (ss.length > 0) state.activeStatuses = new Set(ss);
+    }
+    if (typeof savedUi.chartView === 'string' && VALID_VIEWS.includes(savedUi.chartView))
+      state.chartView = savedUi.chartView;
+    if (typeof savedUi.clinicianSearch === 'string') state.clinicianSearch = savedUi.clinicianSearch;
+  }
 
   render();
   if (state.discoveryUrl || state.configUrl) fetchAndRender();
@@ -126,16 +152,19 @@ export async function init(el) {
     tsEl.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   }, 60_000);
 
-  const onChange = ch => {
-    if (ch['suite.practiceCode']) { fetchAndRender(); return; }
+  const onChange = (ch) => {
+    if (ch['suite.practiceCode']) {
+      fetchAndRender();
+      return;
+    }
     if (ch[DISCOVERY_KEY] || ch[CONFIG_KEY]) {
-      chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]).then(s => {
+      chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]).then((s) => {
         const r = resolveStored(s);
         const changed = r.discoveryUrl !== state.discoveryUrl || r.configUrl !== state.configUrl;
-        state.discoveryUrl     = r.discoveryUrl;
-        state.configUrl        = r.configUrl;
+        state.discoveryUrl = r.discoveryUrl;
+        state.configUrl = r.configUrl;
         state.configPriorities = r.priorities;
-        state.configStatuses   = r.statuses;
+        state.configStatuses = r.statuses;
         if (changed || (!state.aggregated && !state.loading)) fetchAndRender();
       });
     }
@@ -160,34 +189,54 @@ async function fetchAndRender() {
   if (refreshBtn) refreshBtn.disabled = true;
   try {
     const api = ApiNs();
-    if (!api) { state.error = 'Referrals API module not loaded'; render(); return; }
-    if (!state.discoveryUrl) { render(); return; }
+    if (!api) {
+      state.error = 'Referrals API module not loaded';
+      render();
+      return;
+    }
+    if (!state.discoveryUrl) {
+      render();
+      return;
+    }
 
     const { code, source } = await window.PracticeCode.resolve();
 
-    state.loading        = true;
-    state.error          = null;
-    state.loadingProgress  = null;
-    state.activityLoading  = true;
-    state.activityError    = null;
+    state.loading = true;
+    state.error = null;
+    state.loadingProgress = null;
+    state.activityLoading = true;
+    state.activityError = null;
     state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
     render();
 
     const actFetch = window.ActivityApi
       ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
-          fetch: (url, init) => window.ApiDiag.fetch({
-            module: 'referrals-rate', url, code: code || '(auto)', codeSource: source || 'tab', init,
-          }),
+          fetch: (url, init) =>
+            window.ApiDiag.fetch({
+              module: 'referrals-rate',
+              url,
+              code: code || '(auto)',
+              codeSource: source || 'tab',
+              init,
+            }),
         })
       : Promise.reject(new Error('Activity module not loaded'));
 
     const [refResult, actResult] = await Promise.allSettled([
       api.fetchReferrals(code, state.startDate, state.endDate, {
         templateUrl: state.discoveryUrl,
-        onProgress: (loaded, total) => { state.loadingProgress = { loaded, total }; render(); },
-        fetch: (url, init) => window.ApiDiag.fetch({
-          module: 'referrals', url, code: code || '(auto)', codeSource: source || 'tab', init,
-        }),
+        onProgress: (loaded, total) => {
+          state.loadingProgress = { loaded, total };
+          render();
+        },
+        fetch: (url, init) =>
+          window.ApiDiag.fetch({
+            module: 'referrals',
+            url,
+            code: code || '(auto)',
+            codeSource: source || 'tab',
+            init,
+          }),
       }),
       actFetch,
     ]);
@@ -195,10 +244,10 @@ async function fetchAndRender() {
     if (refResult.status === 'fulfilled') {
       const result = refResult.value;
       state.rawReferrals = result.referrals;
-      state.totalCount   = result.totalCount;
-      state.aggregated   = api.aggregate(result.referrals);
-      state.lastFetched  = new Date();
-      state.error        = null;
+      state.totalCount = result.totalCount;
+      state.aggregated = api.aggregate(result.referrals);
+      state.lastFetched = new Date();
+      state.error = null;
       if (result.url) state.lastAttemptedUrl = result.url;
     } else {
       state.error = refResult.reason?.message || String(refResult.reason);
@@ -206,14 +255,14 @@ async function fetchAndRender() {
     }
 
     if (actResult.status === 'fulfilled') {
-      state.activityData  = actResult.value?.rowData || [];
+      state.activityData = actResult.value?.rowData || [];
       state.activityError = null;
     } else {
-      state.activityData  = null;
+      state.activityData = null;
       state.activityError = actResult.reason?.message || String(actResult.reason);
     }
 
-    state.loading         = false;
+    state.loading = false;
     state.loadingProgress = null;
     state.activityLoading = false;
     render();
@@ -237,10 +286,17 @@ function render() {
         <div class="module-subtitle">Referral audit data from Medicus</div>
       </div>
       ${renderControls()}
-      ${state.loading        ? renderSkeleton()         :
-        state.error          ? renderError()            :
-        !state.discoveryUrl  ? renderDiscoveryPrompt()  :
-        state.aggregated     ? renderData()             : ''}
+      ${
+        state.loading
+          ? renderSkeleton()
+          : state.error
+            ? renderError()
+            : !state.discoveryUrl
+              ? renderDiscoveryPrompt()
+              : state.aggregated
+                ? renderData()
+                : ''
+      }
       ${renderDiagnostics()}
     </div>
   `;
@@ -329,18 +385,22 @@ function renderDiagnostics() {
   const o = state.showDiagnostics;
   const lines = [
     `Discovery URL: ${state.discoveryUrl || '(none)'}`,
-    `Config URL:    ${state.configUrl    || '(none)'}`,
+    `Config URL:    ${state.configUrl || '(none)'}`,
     `Priorities (from config.priorityOptions[*].value): ${state.configPriorities.length ? state.configPriorities.join(', ') : '(none)'}`,
-    `Statuses   (from config.statusOptions[*].value):  ${state.configStatuses.length   ? state.configStatuses.join(', ')   : '(none)'}`,
+    `Statuses   (from config.statusOptions[*].value):  ${state.configStatuses.length ? state.configStatuses.join(', ') : '(none)'}`,
     `Last attempted URL: ${state.lastAttemptedUrl || '(none yet)'}`,
   ];
   return `
     <div class="ref-diag">
       <button class="ref-diag-toggle" id="refDiagToggle">${o ? '▾' : '▸'} Diagnostics</button>
-      ${o ? `<pre class="ref-diag-body">${escHtml(lines.join('\n'))}</pre>
+      ${
+        o
+          ? `<pre class="ref-diag-body">${escHtml(lines.join('\n'))}</pre>
             <div class="ref-diag-actions">
               <button class="ref-btn-secondary" id="refDiagClear">Clear stored discovery</button>
-            </div>` : ''}
+            </div>`
+          : ''
+      }
     </div>
   `;
 }
@@ -349,13 +409,14 @@ function renderData() {
   const a = getFilteredAggregated() || state.aggregated;
   if (!a || a.total === 0) return `<div class="ref-empty">No referrals in this date range.</div>`;
 
-  const total   = a.total;
+  const total = a.total;
   const dbTotal = state.totalCount;
-  const shown   = state.rawReferrals?.length || total;
+  const shown = state.rawReferrals?.length || total;
 
-  const periodLabel = state.startDate === state.endDate
-    ? formatDateLabel(state.startDate)
-    : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
+  const periodLabel =
+    state.startDate === state.endDate
+      ? formatDateLabel(state.startDate)
+      : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
 
   return `
     ${dbTotal > shown ? renderPageNotice(shown, dbTotal) : ''}
@@ -382,11 +443,11 @@ function renderData() {
         <div class="ref-chart-tabs">
           <button class="ref-chart-tab ${state.chartView === 'clinician' ? 'active' : ''}" data-view="clinician">By clinician</button>
           <button class="ref-chart-tab ${state.chartView === 'specialty' ? 'active' : ''}" data-view="specialty">By specialty</button>
-          <button class="ref-chart-tab ${state.chartView === 'hospital'  ? 'active' : ''}" data-view="hospital">By hospital</button>
-          <button class="ref-chart-tab ${state.chartView === 'rate'      ? 'active' : ''}" data-view="rate">Rate</button>
+          <button class="ref-chart-tab ${state.chartView === 'hospital' ? 'active' : ''}" data-view="hospital">By hospital</button>
+          <button class="ref-chart-tab ${state.chartView === 'rate' ? 'active' : ''}" data-view="rate">Rate</button>
         </div>
       </div>
-      ${(state.chartView === 'clinician' || state.chartView === 'rate') ? renderClinicianSearch() : ''}
+      ${state.chartView === 'clinician' || state.chartView === 'rate' ? renderClinicianSearch() : ''}
       <div class="ref-bars">${state.chartView === 'rate' ? renderRateChart() : renderBars(a)}</div>
     </div>
   `;
@@ -395,24 +456,27 @@ function renderData() {
 function renderFilterChips() {
   const api = ApiNs();
   const pDefs = [
-    { key: 'Routine',     label: 'Routine', colour: api.PRIORITY_COLOURS['Routine'] },
-    { key: 'Urgent',      label: 'Urgent',  colour: api.PRIORITY_COLOURS['Urgent'] },
-    { key: 'TwoWeekWait', label: '2WW',     colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
+    { key: 'Routine', label: 'Routine', colour: api.PRIORITY_COLOURS['Routine'] },
+    { key: 'Urgent', label: 'Urgent', colour: api.PRIORITY_COLOURS['Urgent'] },
+    { key: 'TwoWeekWait', label: '2WW', colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
   ];
   const sDefs = [
-    { key: 'Completed',  label: 'Completed',  colour: api.STATUS_COLOURS['Completed'] },
+    { key: 'Completed', label: 'Completed', colour: api.STATUS_COLOURS['Completed'] },
     { key: 'Incomplete', label: 'Incomplete', colour: api.STATUS_COLOURS['Incomplete'] },
-    { key: 'Cancelled',  label: 'Cancelled',  colour: api.STATUS_COLOURS['Cancelled'] },
+    { key: 'Cancelled', label: 'Cancelled', colour: api.STATUS_COLOURS['Cancelled'] },
   ];
 
-  const chipHtml = (defs, attr) => defs.map(d => {
-    const on = attr === 'priority' ? state.activePriorities.has(d.key) : state.activeStatuses.has(d.key);
-    return `<button class="ref-chip${on ? ' active' : ''}" data-chip-${attr}="${escAttr(d.key)}"
+  const chipHtml = (defs, attr) =>
+    defs
+      .map((d) => {
+        const on = attr === 'priority' ? state.activePriorities.has(d.key) : state.activeStatuses.has(d.key);
+        return `<button class="ref-chip${on ? ' active' : ''}" data-chip-${attr}="${escAttr(d.key)}"
               ${on ? `style="--chip-colour:${d.colour}"` : ''}>
               ${on ? `<span class="ref-chip-dot" style="background:${d.colour}"></span>` : ''}
               ${escHtml(d.label)}
             </button>`;
-  }).join('');
+      })
+      .join('');
 
   return `
     <div class="ref-chips-row">
@@ -447,13 +511,14 @@ function renderPageNotice(shown, total) {
 function renderPriorityTiles(byPriority, total) {
   const api = ApiNs();
   return [
-    { key: 'Routine',     label: 'Routine', colour: api.PRIORITY_COLOURS['Routine'] },
-    { key: 'Urgent',      label: 'Urgent',  colour: api.PRIORITY_COLOURS['Urgent'] },
-    { key: 'TwoWeekWait', label: '2WW',     colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
-  ].map(p => {
-    const n   = byPriority[p.key] || 0;
-    const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-    return `
+    { key: 'Routine', label: 'Routine', colour: api.PRIORITY_COLOURS['Routine'] },
+    { key: 'Urgent', label: 'Urgent', colour: api.PRIORITY_COLOURS['Urgent'] },
+    { key: 'TwoWeekWait', label: '2WW', colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
+  ]
+    .map((p) => {
+      const n = byPriority[p.key] || 0;
+      const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+      return `
       <div class="ref-priority-tile">
         <div class="ref-priority-swatch" style="background:${p.colour}"></div>
         <div class="ref-priority-info">
@@ -463,15 +528,17 @@ function renderPriorityTiles(byPriority, total) {
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 }
 
 function renderStatusTiles(byStatus, total) {
   const api = ApiNs();
-  return Object.entries(byStatus).map(([key, n]) => {
-    const colour = api.STATUS_COLOURS[key] || '#94a3b8';
-    const pct    = total > 0 ? Math.round((n / total) * 100) : 0;
-    return `
+  return Object.entries(byStatus)
+    .map(([key, n]) => {
+      const colour = api.STATUS_COLOURS[key] || '#94a3b8';
+      const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+      return `
       <div class="ref-status-tile">
         <div class="ref-status-dot" style="background:${colour}"></div>
         <div class="ref-status-info">
@@ -480,7 +547,8 @@ function renderStatusTiles(byStatus, total) {
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 }
 
 function renderBars(a) {
@@ -492,7 +560,7 @@ function renderBars(a) {
     allRows = a.byClinician;
     if (state.clinicianSearch) {
       const q = state.clinicianSearch.toLowerCase();
-      allRows = allRows.filter(r => r.name.toLowerCase().includes(q));
+      allRows = allRows.filter((r) => r.name.toLowerCase().includes(q));
     }
   } else if (state.chartView === 'specialty') {
     allRows = a.bySpecialty;
@@ -501,37 +569,42 @@ function renderBars(a) {
   }
 
   const totalRows = allRows.length;
-  const rows      = state.chartExpanded ? allRows : allRows.slice(0, TOP_N);
+  const rows = state.chartExpanded ? allRows : allRows.slice(0, TOP_N);
   if (rows.length === 0) return '<div class="ref-empty">No data.</div>';
 
   const maxCount = rows[0].count;
 
   let barsHtml;
   if (state.chartView === 'clinician') {
-    barsHtml = rows.map(r => {
-      const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
-      const segs = [
-        { key: 'Routine',     colour: api.PRIORITY_COLOURS['Routine'] },
-        { key: 'Urgent',      colour: api.PRIORITY_COLOURS['Urgent'] },
-        { key: 'TwoWeekWait', colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
-      ].map(p => {
-        const v = r.priorities[p.key] || 0;
-        if (!v) return '';
-        const segPct = r.count > 0 ? (v / r.count) * barPct : 0;
-        return `<div class="ref-bar-seg" style="width:${segPct.toFixed(2)}%;background:${p.colour}" title="${escAttr(p.key)}: ${v}"></div>`;
-      }).join('');
-      return `
+    barsHtml = rows
+      .map((r) => {
+        const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
+        const segs = [
+          { key: 'Routine', colour: api.PRIORITY_COLOURS['Routine'] },
+          { key: 'Urgent', colour: api.PRIORITY_COLOURS['Urgent'] },
+          { key: 'TwoWeekWait', colour: api.PRIORITY_COLOURS['TwoWeekWait'] },
+        ]
+          .map((p) => {
+            const v = r.priorities[p.key] || 0;
+            if (!v) return '';
+            const segPct = r.count > 0 ? (v / r.count) * barPct : 0;
+            return `<div class="ref-bar-seg" style="width:${segPct.toFixed(2)}%;background:${p.colour}" title="${escAttr(p.key)}: ${v}"></div>`;
+          })
+          .join('');
+        return `
         <div class="ref-bar-row">
           <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
           <div class="ref-bar-track">${segs}</div>
           <div class="ref-bar-total">${r.count.toLocaleString('en-GB')}</div>
         </div>`;
-    }).join('');
+      })
+      .join('');
   } else {
     const colour = state.chartView === 'specialty' ? '#3b82f6' : '#a78bfa';
-    barsHtml = rows.map(r => {
-      const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
-      return `
+    barsHtml = rows
+      .map((r) => {
+        const barPct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
+        return `
         <div class="ref-bar-row">
           <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
           <div class="ref-bar-track">
@@ -539,15 +612,19 @@ function renderBars(a) {
           </div>
           <div class="ref-bar-total">${r.count.toLocaleString('en-GB')}</div>
         </div>`;
-    }).join('');
+      })
+      .join('');
   }
 
-  const viewLabel = state.chartView === 'clinician' ? 'clinicians'
-                  : state.chartView === 'specialty' ? 'specialties' : 'hospitals';
-  const showAllBtn = totalRows > TOP_N ? `
+  const viewLabel =
+    state.chartView === 'clinician' ? 'clinicians' : state.chartView === 'specialty' ? 'specialties' : 'hospitals';
+  const showAllBtn =
+    totalRows > TOP_N
+      ? `
     <button class="ref-show-all" id="refShowAll">
       ${state.chartExpanded ? `▴ Show top ${TOP_N}` : `▾ Show all ${totalRows} ${viewLabel}`}
-    </button>` : '';
+    </button>`
+      : '';
 
   return barsHtml + showAllBtn;
 }
@@ -574,18 +651,19 @@ function renderRateChart() {
   }
 
   // Count clinicians excluded due to missing activity data
-  const a        = getFilteredAggregated() || state.aggregated;
-  const actNames = new Set(state.activityData.map(r => (r.name || '').toLowerCase().trim()));
-  const excluded = a.byClinician.filter(c => !actNames.has(c.name.toLowerCase().trim())).length;
+  const a = getFilteredAggregated() || state.aggregated;
+  const actNames = new Set(state.activityData.map((r) => (r.name || '').toLowerCase().trim()));
+  const excluded = a.byClinician.filter((c) => !actNames.has(c.name.toLowerCase().trim())).length;
 
   const totalRows = allRows.length;
-  const rows      = state.chartExpanded ? allRows : allRows.slice(0, TOP_N);
-  const maxRate   = rows[0].rate || 1;
+  const rows = state.chartExpanded ? allRows : allRows.slice(0, TOP_N);
+  const maxRate = rows[0].rate || 1;
 
-  const barsHtml = rows.map(r => {
-    const barPct  = (r.rate / maxRate) * 100;
-    const pctDisp = (r.rate * 100).toFixed(1);
-    return `
+  const barsHtml = rows
+    .map((r) => {
+      const barPct = (r.rate / maxRate) * 100;
+      const pctDisp = (r.rate * 100).toFixed(1);
+      return `
       <div class="ref-bar-row ref-bar-row--rate">
         <div class="ref-bar-name" title="${escAttr(r.name)}">${escHtml(r.name)}</div>
         <div class="ref-bar-track">
@@ -597,16 +675,21 @@ function renderRateChart() {
           <span class="ref-rate-counts">${r.referrals}/${r.consultations}</span>
         </div>
       </div>`;
-  }).join('');
+    })
+    .join('');
 
-  const missingNote = excluded > 0
-    ? `<div class="ref-rate-missing-note">${excluded} clinician${excluded > 1 ? 's' : ''} excluded — no matching activity data</div>`
-    : '';
+  const missingNote =
+    excluded > 0
+      ? `<div class="ref-rate-missing-note">${excluded} clinician${excluded > 1 ? 's' : ''} excluded — no matching activity data</div>`
+      : '';
 
-  const showAllBtn = totalRows > TOP_N ? `
+  const showAllBtn =
+    totalRows > TOP_N
+      ? `
     <button class="ref-show-all" id="refShowAll">
       ${state.chartExpanded ? `▴ Show top ${TOP_N}` : `▾ Show all ${totalRows} clinicians`}
-    </button>` : '';
+    </button>`
+      : '';
 
   return missingNote + barsHtml + showAllBtn;
 }
@@ -615,16 +698,28 @@ function renderRateChart() {
 
 function wireControls() {
   const startEl = container.querySelector('#refStart');
-  const endEl   = container.querySelector('#refEnd');
-  if (startEl) startEl.addEventListener('change', () => { state.startDate = startEl.value; fetchAndRender(); });
-  if (endEl)   endEl.addEventListener('change',   () => { state.endDate   = endEl.value;   fetchAndRender(); });
+  const endEl = container.querySelector('#refEnd');
+  if (startEl)
+    startEl.addEventListener('change', () => {
+      state.startDate = startEl.value;
+      fetchAndRender();
+    });
+  if (endEl)
+    endEl.addEventListener('change', () => {
+      state.endDate = endEl.value;
+      fetchAndRender();
+    });
 
-  container.querySelectorAll('.ref-preset').forEach(btn => {
+  container.querySelectorAll('.ref-preset').forEach((btn) => {
     btn.addEventListener('click', () => {
       const api = ApiNs();
       if (!api) return;
       const range = api.preset(btn.dataset.preset);
-      if (range) { state.startDate = range[0]; state.endDate = range[1]; fetchAndRender(); }
+      if (range) {
+        state.startDate = range[0];
+        state.endDate = range[1];
+        fetchAndRender();
+      }
     });
   });
 
@@ -632,16 +727,22 @@ function wireControls() {
   container.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   container.querySelector('#refCsvBtn')?.addEventListener('click', downloadCSV);
 
-  container.querySelectorAll('.ref-chart-tab').forEach(btn => {
+  container.querySelectorAll('.ref-chart-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.chartView       = btn.dataset.view;
-      state.chartExpanded   = false;
+      state.chartView = btn.dataset.view;
+      state.chartExpanded = false;
       state.clinicianSearch = '';
+      saveUiState('referrals', {
+        activePriorities: [...state.activePriorities],
+        activeStatuses: [...state.activeStatuses],
+        chartView: state.chartView,
+        clinicianSearch: state.clinicianSearch,
+      });
       render();
     });
   });
 
-  container.querySelectorAll('[data-chip-priority]').forEach(btn => {
+  container.querySelectorAll('[data-chip-priority]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.chipPriority;
       if (state.activePriorities.has(key)) {
@@ -649,11 +750,17 @@ function wireControls() {
       } else {
         state.activePriorities.add(key);
       }
+      saveUiState('referrals', {
+        activePriorities: [...state.activePriorities],
+        activeStatuses: [...state.activeStatuses],
+        chartView: state.chartView,
+        clinicianSearch: state.clinicianSearch,
+      });
       render();
     });
   });
 
-  container.querySelectorAll('[data-chip-status]').forEach(btn => {
+  container.querySelectorAll('[data-chip-status]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.chipStatus;
       if (state.activeStatuses.has(key)) {
@@ -661,6 +768,12 @@ function wireControls() {
       } else {
         state.activeStatuses.add(key);
       }
+      saveUiState('referrals', {
+        activePriorities: [...state.activePriorities],
+        activeStatuses: [...state.activeStatuses],
+        chartView: state.chartView,
+        clinicianSearch: state.clinicianSearch,
+      });
       render();
     });
   });
@@ -674,12 +787,24 @@ function wireControls() {
   if (searchEl) {
     searchEl.addEventListener('input', () => {
       state.clinicianSearch = searchEl.value;
-      state.chartExpanded   = false;
+      state.chartExpanded = false;
+      saveUiState('referrals', {
+        activePriorities: [...state.activePriorities],
+        activeStatuses: [...state.activeStatuses],
+        chartView: state.chartView,
+        clinicianSearch: state.clinicianSearch,
+      });
       render();
     });
   }
   container.querySelector('#refSearchClear')?.addEventListener('click', () => {
     state.clinicianSearch = '';
+    saveUiState('referrals', {
+      activePriorities: [...state.activePriorities],
+      activeStatuses: [...state.activeStatuses],
+      chartView: state.chartView,
+      clinicianSearch: state.clinicianSearch,
+    });
     render();
   });
 
@@ -691,8 +816,14 @@ function wireControls() {
   container.querySelector('#refDiagClear')?.addEventListener('click', async () => {
     await chrome.storage.local.remove([DISCOVERY_KEY, CONFIG_KEY]);
     Object.assign(state, {
-      discoveryUrl: null, configUrl: null, configPriorities: [], configStatuses: [],
-      aggregated: null, rawReferrals: null, error: null, lastAttemptedUrl: null,
+      discoveryUrl: null,
+      configUrl: null,
+      configPriorities: [],
+      configStatuses: [],
+      aggregated: null,
+      rawReferrals: null,
+      error: null,
+      lastAttemptedUrl: null,
     });
     render();
   });
@@ -701,33 +832,46 @@ function wireControls() {
 // ── CSV Export ────────────────────────────────────────────────────────────────
 
 function downloadCSV() {
-  const api  = ApiNs();
+  const api = ApiNs();
   const rows = state.rawReferrals;
   if (!api || !rows?.length) return;
 
-  const header = ['Date','Patient First Name','Patient Last Name','Clinician','Specialty','Hospital','Priority','Status','e-Referral','Manual'];
-  const lines  = [header.join(',')];
+  const header = [
+    'Date',
+    'Patient First Name',
+    'Patient Last Name',
+    'Clinician',
+    'Specialty',
+    'Hospital',
+    'Priority',
+    'Status',
+    'e-Referral',
+    'Manual',
+  ];
+  const lines = [header.join(',')];
 
   for (const r of rows) {
     const { specialty, hospital } = api.parseReferralService(r.referralService);
-    lines.push([
-      csvCell(r.referralDate      || ''),
-      csvCell(r.patientGivenName  || ''),
-      csvCell(r.patientFamilyName || ''),
-      csvCell(r.referringClinician || ''),
-      csvCell(specialty),
-      csvCell(hospital),
-      csvCell(r.priority      || ''),
-      csvCell(r.displayStatus || ''),
-      r.isNhsEReferral   ? 'Y' : 'N',
-      r.isManualReferral ? 'Y' : 'N',
-    ].join(','));
+    lines.push(
+      [
+        csvCell(r.referralDate || ''),
+        csvCell(r.patientGivenName || ''),
+        csvCell(r.patientFamilyName || ''),
+        csvCell(r.referringClinician || ''),
+        csvCell(specialty),
+        csvCell(hospital),
+        csvCell(r.priority || ''),
+        csvCell(r.displayStatus || ''),
+        r.isNhsEReferral ? 'Y' : 'N',
+        r.isManualReferral ? 'Y' : 'N',
+      ].join(',')
+    );
   }
 
   const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   a.download = `referrals-${state.startDate}-to-${state.endDate}.csv`;
   a.click();
   URL.revokeObjectURL(url);
@@ -742,24 +886,32 @@ function csvCell(val) {
 
 function relativeTime(date) {
   const mins = Math.round((Date.now() - date.getTime()) / 60_000);
-  if (mins < 1)  return 'just now';
+  if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   return `${Math.round(mins / 60)}h ago`;
 }
 
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDateLabel(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
-  return new Date(Number(y), Number(m) - 1, Number(d))
-    .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function escHtml(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
-function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, '&quot;');
+}

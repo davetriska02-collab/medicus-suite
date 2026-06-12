@@ -6,6 +6,8 @@
 
 'use strict';
 
+import { loadUiState, saveUiState } from '../shared/ui-state.js';
+
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
 let SITE_ID = null;
@@ -36,10 +38,22 @@ export async function init(el) {
   // Load persisted hidden types, alert rules, and practice code
   const stored = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'suite.practiceCode']);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
-  if (stored['slots.alertRules'])  state.alertRules = stored['slots.alertRules'];
+  if (stored['slots.alertRules']) state.alertRules = stored['slots.alertRules'];
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
+  }
+
+  // Restore persisted view state (expanded staff rows, showExcluded flag)
+  // hiddenTypes is already covered by slots.hiddenTypes in chrome.storage;
+  // expanded and showExcluded are lightweight ephemeral UI state.
+  const savedUi = await loadUiState('slots');
+  if (savedUi) {
+    if (Array.isArray(savedUi.hiddenTypes))
+      state.hiddenTypes = new Set(savedUi.hiddenTypes.filter((t) => typeof t === 'string'));
+    if (typeof savedUi.showExcluded === 'boolean') state.showExcluded = savedUi.showExcluded;
+    if (Array.isArray(savedUi.expanded))
+      state.expanded = new Set(savedUi.expanded.filter((t) => typeof t === 'string'));
   }
 
   render();
@@ -112,7 +126,8 @@ async function fetchAndRender() {
       const url = `${API_BASE}/scheduling/data/appointment-book/embedded-overview?date=${state.date}&filterByUsualLocation=false`;
       const resp = await fetch(url, { credentials: 'include' });
       if (!resp.ok) {
-        if (resp.status === 401 || resp.status === 403) throw new Error('Not signed in to Medicus. Open Medicus in a tab and sign in.');
+        if (resp.status === 401 || resp.status === 403)
+          throw new Error('Not signed in to Medicus. Open Medicus in a tab and sign in.');
         throw new Error(`API error ${resp.status}`);
       }
       const raw = await resp.json();
@@ -142,7 +157,9 @@ function bucketOf(entry) {
   return hour < 12 ? 'am' : 'pm';
 }
 
-function emptyAmPm() { return { am: 0, pm: 0 }; }
+function emptyAmPm() {
+  return { am: 0, pm: 0 };
+}
 
 function aggregate(raw, forDate) {
   const byType = {};
@@ -153,12 +170,12 @@ function aggregate(raw, forDate) {
   const isToday = forDate === todayISO();
   const now = new Date();
 
-  (raw.staffSchedules || []).forEach(staff => {
+  (raw.staffSchedules || []).forEach((staff) => {
     const staffTotal = emptyAmPm();
     const staffByType = {};
 
-    (staff.schedule || []).forEach(session => {
-      (session.entries || []).forEach(entry => {
+    (staff.schedule || []).forEach((session) => {
+      (session.entries || []).forEach((entry) => {
         if (entry.diaryEntryType?.value !== 'slot') return;
 
         // Time filter for today: skip slots whose start is in the past
@@ -187,7 +204,9 @@ function aggregate(raw, forDate) {
   return { total, byType, byStaff, isToday };
 }
 
-function sumAmPm(o) { return (o?.am || 0) + (o?.pm || 0); }
+function sumAmPm(o) {
+  return (o?.am || 0) + (o?.pm || 0);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -203,10 +222,12 @@ function nextWorkingDayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function pad(n) { return String(n).padStart(2, '0'); }
+function pad(n) {
+  return String(n).padStart(2, '0');
+}
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function formatDate(iso) {
@@ -238,7 +259,9 @@ function render() {
   const visibleSum = sumAmPm(visible);
 
   // Dispatch count for nav badge — sum AM+PM so badge shows day total
-  document.dispatchEvent(new CustomEvent('suite:slots:count', { detail: { count: state.loading ? null : visibleSum } }));
+  document.dispatchEvent(
+    new CustomEvent('suite:slots:count', { detail: { count: state.loading ? null : visibleSum } })
+  );
 
   container.innerHTML = `
     <div class="module-wrap slots-module">
@@ -247,7 +270,7 @@ function render() {
         ${escHtml(state.error || '')}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
-      ${state.loading ? renderSkeleton() : (d ? renderData(d, visible, visibleSum) : '')}
+      ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
       <div class="foot">${state.lastFetched ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
     </div>
   `;
@@ -257,22 +280,27 @@ function render() {
 
 function renderHeader(visible, visibleSum) {
   const isToday = state.data?.isToday;
-  const splitLine = !state.loading && state.data
-    ? `<div class="slots-ampm-split">
+  const splitLine =
+    !state.loading && state.data
+      ? `<div class="slots-ampm-split">
          <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
          <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
        </div>`
-    : '';
+      : '';
   return `
     <div class="mod-header">
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
-        ${!state.loading ? `
+        ${
+          !state.loading
+            ? `
           <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
-          <div class="slots-count-label${visibleSum===0?' zero':''}">
+          <div class="slots-count-label${visibleSum === 0 ? ' zero' : ''}">
             ${isToday ? 'slots remaining today' : 'available slots'}
           </div>
-          ${splitLine}` : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`}
+          ${splitLine}`
+            : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`
+        }
       </div>
       <div class="header-actions" style="align-self:flex-start;margin-top:2px">
         <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
@@ -297,14 +325,17 @@ function renderAlertRibbon(byType) {
     }
   }
   if (triggered.length === 0) return '';
-  const topLevel = triggered.some(t => t.level === 'red') ? 'red' : 'amber';
+  const topLevel = triggered.some((t) => t.level === 'red') ? 'red' : 'amber';
   const icon = topLevel === 'red' ? '⛔' : '⚠';
-  const items = triggered.map(t => {
-    const msg = t.count === 0
-      ? `No ${escHtml(t.typeName)} slots`
-      : `${escHtml(t.typeName)}: <span class="slots-alert-count">${t.count.toLocaleString('en-GB')}</span> slot${t.count !== 1 ? 's' : ''} remaining`;
-    return `<div class="slots-alert-item">${msg}</div>`;
-  }).join('');
+  const items = triggered
+    .map((t) => {
+      const msg =
+        t.count === 0
+          ? `No ${escHtml(t.typeName)} slots`
+          : `${escHtml(t.typeName)}: <span class="slots-alert-count">${t.count.toLocaleString('en-GB')}</span> slot${t.count !== 1 ? 's' : ''} remaining`;
+      return `<div class="slots-alert-item">${msg}</div>`;
+    })
+    .join('');
   return `
     <div class="slots-alert-ribbon slots-alert-ribbon-${topLevel}">
       <span class="slots-alert-icon">${icon}</span>
@@ -323,8 +354,8 @@ function renderData(d, visible, visibleSum) {
   }
 
   const entries = Object.entries(d.byType).sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
-  const ticked   = entries.filter(([t]) => !state.hiddenTypes.has(t));
-  const unticked = entries.filter(([t]) =>  state.hiddenTypes.has(t));
+  const ticked = entries.filter(([t]) => !state.hiddenTypes.has(t));
+  const unticked = entries.filter(([t]) => state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;
 
   const countCell = (n, pct) => {
@@ -342,7 +373,7 @@ function renderData(d, visible, visibleSum) {
   };
 
   const row = (type, n, hidden) => {
-    const pct = (!hidden && visibleSum > 0) ? Math.round((sumAmPm(n) / visibleSum) * 100) : null;
+    const pct = !hidden && visibleSum > 0 ? Math.round((sumAmPm(n) / visibleSum) * 100) : null;
     return `
       <div class="slot-row${hidden ? ' row-hidden' : ''}">
         <label class="slot-label">
@@ -354,19 +385,23 @@ function renderData(d, visible, visibleSum) {
     `;
   };
 
-  const excludedSection = unticked.length === 0 ? '' : `
+  const excludedSection =
+    unticked.length === 0
+      ? ''
+      : `
     <div class="excluded-toggle" id="excludedToggle">
       <span>${showExcluded ? '▾' : '▸'}</span>
       <span>${unticked.length} excluded type${unticked.length !== 1 ? 's' : ''}</span>
     </div>
-    ${showExcluded ? `<div class="excluded-list">${unticked.map(([t,n]) => row(t, n, true)).join('')}</div>` : ''}
+    ${showExcluded ? `<div class="excluded-list">${unticked.map(([t, n]) => row(t, n, true)).join('')}</div>` : ''}
   `;
 
-  const staffRows = d.byStaff.map(s => {
-    const isExpanded = state.expanded.has(s.name);
-    const staffVisible = visibleTotal(s.byType, state.hiddenTypes);
-    const staffSum = sumAmPm(staffVisible);
-    return `
+  const staffRows = d.byStaff
+    .map((s) => {
+      const isExpanded = state.expanded.has(s.name);
+      const staffVisible = visibleTotal(s.byType, state.hiddenTypes);
+      const staffSum = sumAmPm(staffVisible);
+      return `
       <div class="staff-row">
         <button class="staff-toggle" data-staff="${escHtml(s.name)}">
           <span class="staff-chevron">${isExpanded ? '▾' : '▸'}</span>
@@ -379,11 +414,14 @@ function renderData(d, visible, visibleSum) {
             <span class="staff-count">${staffSum}</span>
           </span>
         </button>
-        ${isExpanded ? `<div class="staff-detail">
+        ${
+          isExpanded
+            ? `<div class="staff-detail">
           ${Object.entries(s.byType)
             .filter(([t]) => !state.hiddenTypes.has(t))
-            .sort((a,b) => sumAmPm(b[1]) - sumAmPm(a[1]))
-            .map(([t,n]) => `<div class="staff-type-row">
+            .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]))
+            .map(
+              ([t, n]) => `<div class="staff-type-row">
               <span>${escHtml(t)}</span>
               <span class="staff-type-counts">
                 <span>${n.am}<span class="ampm-tag-inline">am</span></span>
@@ -392,28 +430,36 @@ function renderData(d, visible, visibleSum) {
                 <span class="slot-count-sep">·</span>
                 <span class="staff-type-total">${sumAmPm(n)}</span>
               </span>
-            </div>`)
+            </div>`
+            )
             .join('')}
-        </div>` : ''}
+        </div>`
+            : ''
+        }
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   return `
     <section class="slots-section">
       <div class="section-label">By type</div>
       <div class="slot-list">
-        ${ticked.map(([t,n]) => row(t, n, false)).join('')}
+        ${ticked.map(([t, n]) => row(t, n, false)).join('')}
         ${excludedSection}
       </div>
       <div class="section-hint">Untick a type to exclude it from the total.</div>
     </section>
 
-    ${d.byStaff.length > 0 ? `
+    ${
+      d.byStaff.length > 0
+        ? `
     <section class="slots-section">
       <div class="section-label">By clinician</div>
       <div class="staff-list">${staffRows}</div>
-    </section>` : ''}
+    </section>`
+        : ''
+    }
   `;
 }
 
@@ -424,12 +470,12 @@ function bindEvents() {
 
   container.querySelector('#refreshSlots')?.addEventListener('click', () => fetchAndRender());
 
-  container.querySelector('#slotsDate')?.addEventListener('change', e => {
+  container.querySelector('#slotsDate')?.addEventListener('change', (e) => {
     state.date = e.target.value;
     fetchAndRender();
   });
 
-  container.querySelectorAll('.preset-btn').forEach(btn => {
+  container.querySelectorAll('.preset-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.date = btn.dataset.date;
       fetchAndRender();
@@ -438,24 +484,39 @@ function bindEvents() {
 
   container.querySelector('#excludedToggle')?.addEventListener('click', () => {
     state.showExcluded = !state.showExcluded;
+    saveUiState('slots', {
+      hiddenTypes: [...state.hiddenTypes],
+      showExcluded: state.showExcluded,
+      expanded: [...state.expanded],
+    });
     render();
   });
 
-  container.querySelectorAll('.type-toggle').forEach(cb => {
+  container.querySelectorAll('.type-toggle').forEach((cb) => {
     cb.addEventListener('change', () => {
       const type = cb.dataset.type;
       if (cb.checked) state.hiddenTypes.delete(type);
       else state.hiddenTypes.add(type);
       chrome.storage.local.set({ 'slots.hiddenTypes': [...state.hiddenTypes] });
+      saveUiState('slots', {
+        hiddenTypes: [...state.hiddenTypes],
+        showExcluded: state.showExcluded,
+        expanded: [...state.expanded],
+      });
       render();
     });
   });
 
-  container.querySelectorAll('.staff-toggle').forEach(btn => {
+  container.querySelectorAll('.staff-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       const name = btn.dataset.staff;
       if (state.expanded.has(name)) state.expanded.delete(name);
       else state.expanded.add(name);
+      saveUiState('slots', {
+        hiddenTypes: [...state.hiddenTypes],
+        showExcluded: state.showExcluded,
+        expanded: [...state.expanded],
+      });
       render();
     });
   });
