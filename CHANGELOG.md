@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.57.0] — 2026-06-12
+
+### Monitoring panel — header toolbar, flicker fix, guided tour (Sentinel v0.5.0)
+
+- **Actions moved into a sticky header toolbar.** The footer buttons (Settings,
+  Appts Summary, Copy All Actions, Print Patient Summary, Export Evaluation Log)
+  were below the fold. They are now compact icon buttons with tooltips in a
+  toolbar that sticks to the top of the panel; rarely-used actions (Monitoring
+  settings, Export evaluation log, Replay the guided tour) live behind a single
+  ⋯ overflow menu. The footer keeps only passive metadata ("Data at HH:MM" and
+  the rules-currency line).
+- **Popup flicker fixed at the root.** Modals opened from the action buttons
+  were being destroyed by the 10-second snapshot re-render, which replaced the
+  module's entire DOM (including any open modal) on every poll tick. The module
+  now renders a persistent scaffold once and re-renders only the data section —
+  and skips even that when the generated content is unchanged. Modals live in a
+  host node outside the re-rendered region, so they survive refreshes; they are
+  also now viewport-fixed (always fully visible regardless of scroll) and close
+  on Escape.
+- **Actions renamed for clarity** (sentence case, one-line tooltips on
+  everything): "Appts summary" → **Appointments needed** (it builds a copyable
+  list of the appointments this patient is due, for admin to book); footer
+  "Settings →" → **Monitoring settings** in the overflow menu (it duplicated
+  the nav-bar gear, so it no longer takes prime toolbar space).
+- **First-run guided tour.** A spotlight step-through of the waiting-room
+  block, pre-consultation brief, Verify in Medicus, meds-without-a-monitoring-
+  rule and the new toolbar. Versioned — steps added later show as a short
+  "What's new" pass; restartable from the ⋯ menu or Options → Suite. Steps are
+  pure data in `side-panel/modules/sentinel/tour-steps.js`; a new
+  `update-tour` skill documents the maintenance procedure.
+
 ## [v3.56.2] — 2026-06-11
 
 ### Bug fixes — Sentinel panel

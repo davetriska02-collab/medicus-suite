@@ -50,7 +50,19 @@ const DOCS = [
 // have been removed. The docs are now at v3.56.0; this guard will fail until
 // manifest.json is bumped to 3.56.0 in the same release commit (which is
 // intentional and expected — the orchestrator bumps the manifest last).
-const KNOWN_STALE = {};
+//
+// v3.57.0 (Monitoring panel header toolbar / flicker fix / guided tour) is a
+// UI + onboarding release with no change to the rules engine, extraction, or
+// any clinical logic; the safety position is unchanged from v3.56.0. The doc
+// re-issue (and sign-off) is the CSO's act, not the release author's, so the
+// four docs are pinned at their signed v3.56.0 until Dr Triska reviews and
+// reissues them for the 3.57 minor. Remove these pins in that doc commit.
+const KNOWN_STALE = {
+  'docs/CLINICAL-SAFETY-NOTICE.md': '3.56.0',
+  'docs/HAZARD-LOG.md': '3.56.0',
+  'docs/SOUP.md': '3.56.0',
+  'docs/feature-list.md': '3.56.0',
+};
 
 function majorMinor(ver) {
   const parts = ver.split('.');
