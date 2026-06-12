@@ -367,6 +367,20 @@
   opacity: 0.65;
 }
 
+/* Oldest-unanswered line — the Triage card's altitude over the strip's counts */
+.today-rm-oldest {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.today-rm-oldest strong {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
 /* ── Demand rows ─────────────────────────────────────────────────────────────── */
 
 /* Decision J: count leads left, label follows, chip trails */
@@ -421,6 +435,42 @@
   background: var(--red-dim);
   color: var(--red);
   border: 1px solid var(--red-line);
+}
+
+/* Headroom meter — count's position against the amber/red thresholds.
+   The tick marks the amber threshold; the fill colour is the current level. */
+.today-demand-meter {
+  position: relative;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin: 2px 0 6px;
+}
+
+.today-demand-meter-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--fast) var(--ease);
+}
+
+.today-demand-meter-fill--amber {
+  background: var(--amber);
+}
+
+.today-demand-meter-fill--red {
+  background: var(--red);
+}
+
+.today-demand-meter-tick {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--text-4);
+  opacity: 0.6;
 }
 
 /* ── Sweep ───────────────────────────────────────────────────────────────────── */
