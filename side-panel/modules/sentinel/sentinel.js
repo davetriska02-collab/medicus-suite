@@ -8,6 +8,7 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
+import { startTour, maybeAutoStartTour, stopTour } from './tour.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -48,17 +49,30 @@ function statusSeverityRank(status) {
   return colour !== undefined ? (COLOUR_RANK[colour] ?? 3) : 3;
 }
 
+// Modals live in #sentModalHost — a persistent node OUTSIDE the re-rendered
+// #sentDynamic section, so the periodic snapshot re-render can never destroy an
+// open modal mid-interaction (this was the "popup flicker" bug).
+function modalHost() {
+  if (!container) return null;
+  return container.querySelector('#sentModalHost') || container.querySelector('.sent-module');
+}
+
+function closeModals(host) {
+  host.querySelector('.sent-appt-modal')?.remove();
+  host.querySelector('.sent-act-modal')?.remove();
+}
+
 function showAdminSummaryModal(text) {
-  const moduleEl = container.querySelector('.sent-module');
-  if (!moduleEl) return;
-  moduleEl.querySelector('.sent-appt-modal')?.remove();
+  const host = modalHost();
+  if (!host) return;
+  closeModals(host);
 
   const modal = document.createElement('div');
   modal.className = 'sent-appt-modal';
   modal.innerHTML = `
     <div class="sent-appt-modal-inner">
       <div class="sent-appt-modal-head">
-        <span class="sent-appt-modal-title">Appointments summary</span>
+        <span class="sent-appt-modal-title">Appointments needed</span>
         <button class="sent-appt-modal-close" id="sentApptModalClose" aria-label="Close">&#x2715;</button>
       </div>
       <textarea class="sent-appt-modal-text" id="sentApptModalText" readonly spellcheck="false">${escHtml(text)}</textarea>
@@ -67,11 +81,14 @@ function showAdminSummaryModal(text) {
       </div>
     </div>`;
 
-  moduleEl.appendChild(modal);
+  host.appendChild(modal);
 
   modal.querySelector('#sentApptModalClose').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
+  });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') modal.remove();
   });
 
   const copyBtn = modal.querySelector('#sentApptModalCopy');
@@ -94,10 +111,9 @@ function showAdminSummaryModal(text) {
 // `title` — chip name shown in the modal header.
 // `pack`  — result of buildChipActions(chip, patient).
 function showActionPackModal(title, pack) {
-  const moduleEl = container.querySelector('.sent-module');
-  if (!moduleEl) return;
-  moduleEl.querySelector('.sent-appt-modal')?.remove();
-  moduleEl.querySelector('.sent-act-modal')?.remove();
+  const host = modalHost();
+  if (!host) return;
+  closeModals(host);
 
   const sections = [
     { key: 'bloodForm', label: 'Blood form' },
@@ -133,11 +149,14 @@ function showActionPackModal(title, pack) {
       <div class="sent-act-sections">${sectionsHtml}</div>
     </div>`;
 
-  moduleEl.appendChild(modal);
+  host.appendChild(modal);
 
   modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
+  });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') modal.remove();
   });
 
   // Per-section copy buttons
@@ -164,10 +183,9 @@ function showAllActionsModal(chips, patient) {
   const pack = buildPatientActions(chips, patient);
   if (!pack) return;
 
-  const moduleEl = container.querySelector('.sent-module');
-  if (!moduleEl) return;
-  moduleEl.querySelector('.sent-appt-modal')?.remove();
-  moduleEl.querySelector('.sent-act-modal')?.remove();
+  const host = modalHost();
+  if (!host) return;
+  closeModals(host);
 
   const sections = [
     { key: 'bloodForm', label: 'Blood forms' },
@@ -201,11 +219,14 @@ function showAllActionsModal(chips, patient) {
       <div class="sent-act-sections">${sectionsHtml}</div>
     </div>`;
 
-  moduleEl.appendChild(modal);
+  host.appendChild(modal);
 
   modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
+  });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') modal.remove();
   });
 
   modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
@@ -230,6 +251,21 @@ let container = null;
 let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
+
+// Re-render minimisation: render() writes only #sentDynamic, and skips the DOM
+// write entirely when the freshly generated HTML matches the last one. This is
+// the anti-flicker contract — open modals, the overflow menu, evidence panels
+// and <details> state all survive the 10s poll untouched.
+let _lastDynamicHtml = null;
+
+// Data context behind the header toolbar. Toolbar buttons are wired ONCE in
+// init() and read this at click time, so they never need re-wiring per render.
+// null until the first successful 'data' render.
+let _renderCtx = null; // { chips, patient, actionCount, trace }
+
+// Overflow ("⋯") menu handlers — document-level, removed in cleanup().
+let _menuCloseHandler = null;
+let _menuKeyHandler = null;
 
 // Pre-consultation brief state: collapse preference persisted in storage.
 let _briefCollapsed = false;
@@ -325,6 +361,15 @@ let wrPollTimer = null;
 
 export async function init(el) {
   container = el;
+  _lastDynamicHtml = null;
+  _renderCtx = null;
+
+  // Persistent scaffold: header + toolbar, waiting-room slot, dynamic content
+  // area, passive footer, modal host. Built exactly once per module life;
+  // render() only ever touches #sentDynamic and the footer slots.
+  container.innerHTML = scaffoldHtml();
+  wireToolbar();
+  attachEvidenceHandlers();
   render({ state: 'loading' });
 
   // Start waiting room fetch in parallel with sentinel chip poll
@@ -343,6 +388,12 @@ export async function init(el) {
   pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
+
+  // First-run guided tour / "What's new" pass. Deferred so the first real
+  // render has settled and step anchors that depend on it exist.
+  setTimeout(() => {
+    if (container) maybeAutoStartTour();
+  }, 600);
 
   // Listen for refresh signals: waiting-room polls (Pusher) + sentinel snapshot
   // updates pushed by the content script when the patient context changes.
@@ -422,9 +473,18 @@ async function cleanup() {
   clearInterval(wrPollTimer);
   chrome.tabs.onActivated.removeListener(refresh);
   chrome.tabs.onUpdated.removeListener(onUpdated);
+  stopTour();
   if (_refreshBtnHandler) {
     document.removeEventListener('click', _refreshBtnHandler);
     _refreshBtnHandler = null;
+  }
+  if (_menuCloseHandler) {
+    document.removeEventListener('click', _menuCloseHandler);
+    _menuCloseHandler = null;
+  }
+  if (_menuKeyHandler) {
+    document.removeEventListener('keydown', _menuKeyHandler);
+    _menuKeyHandler = null;
   }
   if (_dismissHandler) {
     document.removeEventListener('click', _dismissHandler, true);
@@ -443,6 +503,13 @@ async function cleanup() {
     document.removeEventListener('keydown', _evidenceKeydownHandler);
     _evidenceKeydownHandler = null;
   }
+  // The shell reuses the same container element across module switches —
+  // without these removals the listeners stack on re-init and every chip
+  // click would toggle its evidence panel twice (open-then-shut).
+  if (container && _evidenceHandlersAttached) {
+    container.removeEventListener('click', onEvidenceClick);
+    container.removeEventListener('keydown', onEvidenceKeydown);
+  }
   _evidenceHandlersAttached = false;
   _openEvidenceKey = null;
   _evidenceByKey.clear();
@@ -452,6 +519,8 @@ async function cleanup() {
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
   _lastTrendData = null;
+  _lastDynamicHtml = null;
+  _renderCtx = null;
   container = null;
 }
 
@@ -517,6 +586,14 @@ async function loadRuleCurrencyFooter() {
     // Non-critical: suppress errors in currency footer silently
     _ruleCurrencyFooter = '';
   }
+  updateRulesSlot();
+}
+
+// Push the rule-currency line into its persistent footer slot. Safe to call
+// any time; no-ops until the scaffold exists / the footer has loaded.
+function updateRulesSlot() {
+  const slot = container?.querySelector('#sentRulesSlot');
+  if (slot) slot.innerHTML = _ruleCurrencyFooter || '';
 }
 
 // ── Waiting room ─────────────────────────────────────────────────────────────
@@ -741,37 +818,54 @@ async function refresh() {
   }
 }
 
+// Replace #sentDynamic's content — but only when it actually changed.
+// Returns true when the DOM was rewritten (callers must then re-wire per-render
+// handlers); false when the existing DOM was left untouched.
+function setDynamic(html) {
+  const dyn = container?.querySelector('#sentDynamic');
+  if (!dyn) return false;
+  if (html === _lastDynamicHtml) return false;
+  dyn.innerHTML = html;
+  _lastDynamicHtml = html;
+  return true;
+}
+
+function updateFooterTs(ts) {
+  const el = container?.querySelector('#sentFooterTs');
+  if (el) el.textContent = ts ? `Data at ${ts}` : '';
+}
+
 function render(payload) {
   if (!container) return;
   const { state, snapshot, message } = payload;
 
+  if (state !== 'data') {
+    // No usable data behind the toolbar in these states.
+    _renderCtx = null;
+    updateToolbarState();
+    updateFooterTs('');
+  }
+
   if (state === 'loading') {
-    container.innerHTML = shell(
-      '',
-      `<div class="sent-skeleton">${Array(4).fill('<div class="sent-skel-chip"></div>').join('')}</div>`
-    );
+    setDynamic(`<div class="sent-skeleton">${Array(4).fill('<div class="sent-skel-chip"></div>').join('')}</div>`);
     return;
   }
   if (state === 'no-medicus') {
-    container.innerHTML = shell('', statusBlock('idle', 'No Medicus tab active', 'Open Medicus to use Sentinel.'));
+    setDynamic(statusBlock('idle', 'No Medicus tab active', 'Open Medicus to use Sentinel.'));
     return;
   }
   if (state === 'not-mounted') {
-    container.innerHTML = shell(
-      '',
+    setDynamic(
       statusBlock('idle', 'Navigate to a patient record', 'Sentinel activates on patient record and triage task pages.')
     );
     return;
   }
   if (state === 'no-chips') {
-    container.innerHTML = shell(
-      '',
-      statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.')
-    );
+    setDynamic(statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.'));
     return;
   }
   if (state === 'error') {
-    container.innerHTML = shell('', statusBlock('error', 'Could not connect to Sentinel', message || ''));
+    setDynamic(statusBlock('error', 'Could not connect to Sentinel', message || ''));
     return;
   }
   if (state === 'degraded') {
@@ -780,8 +874,7 @@ function render(payload) {
     const reason =
       (snapshot && snapshot.reason) ||
       'A patient was identified, but no medications, problems, observations or demographics could be extracted from this page — Medicus may have changed its layout.';
-    container.innerHTML = shell(
-      '',
+    setDynamic(
       statusBlock(
         'error',
         "⚠ Couldn't read this record",
@@ -955,33 +1048,17 @@ function render(payload) {
       `</div>`
     : '';
 
-  // Rule currency footer (one line, neutral if green, amber with first warning if amber).
-  const currencyFooterHtml = _ruleCurrencyFooter || '';
-
   // Pre-consultation brief — build and render above the patient banner.
   const brief = buildBrief(snapshot, _lastTrendData);
   const briefHtml = brief ? renderBriefCard(brief) : '';
 
-  container.innerHTML = shell(
-    briefHtml + patientHtml + driftHtml + filterHtml,
-    groupsHtml +
-      emptyMsg +
-      unmatchedHtml +
-      extractionHtml +
-      journalAugmentHtml +
-      currencyFooterHtml +
-      `
-    <div class="sent-footer">
-      <div class="sent-footer-left">
-        <button class="ghost-btn" id="sentSettingsBtn">Settings →</button>
-        <button class="ghost-btn" id="sentApptSummaryBtn" title="Generate a summary for admin to arrange monitoring appointments">Appts summary</button>
-        <button class="ghost-btn" id="sentCopyAllActionsBtn" title="Copy-ready blood forms, recall SMS and tasks for all action-needed chips"${actionCount > 0 ? '' : ' disabled'}>Copy all actions</button>
-        <button class="ghost-btn sent-pass-btn" id="sentPrintPassportBtn" title="Print a plain-English health summary for the patient"${patient ? '' : ' disabled'}>Print patient summary</button>
-        <button class="ghost-btn" id="sentExportLogBtn" title="Contains patient-identifiable data — handle per your practice's IG policy." ${trace ? '' : 'disabled'}>Export evaluation log</button>
-      </div>
-      <span class="sent-ts">${ts ? `Data at ${ts}` : ''}</span>
-    </div>`
-  );
+  // ── Data-derived state: always refreshed, even when the DOM write below is
+  // skipped, so the one-time toolbar/delegated handlers act on current data. ──
+
+  _renderCtx = { chips, patient, actionCount, trace };
+  updateToolbarState();
+  updateFooterTs(ts);
+  updateRulesSlot();
 
   // Build evidence-key → chip lookup for this render so the click handler can
   // find the chip object without re-parsing DOM.
@@ -1003,53 +1080,48 @@ function render(payload) {
     });
   }
 
-  container.querySelector('#sentSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  container
-    .querySelector('#sentApptSummaryBtn')
-    ?.addEventListener('click', () => showAdminSummaryModal(buildAdminSummaryText(chips, patient)));
-
-  container
-    .querySelector('#sentCopyAllActionsBtn')
-    ?.addEventListener('click', () => showAllActionsModal(chips, patient));
-
-  // Inject per-chip "Actions" buttons under each action-needed chip rendered in the DOM.
-  // Rebuild _chipActionsMap so the delegated click handler can retrieve packs by key.
+  // Rebuild the per-chip action-pack map (delegated click handler reads it).
   _chipActionsMap.clear();
   const actionNeededChips = visibleChips.filter((c) => isChipActionNeeded(c.status));
-  if (actionNeededChips.length > 0) {
-    // Build lookup: evidence key → chip (matches format used by ChipRenderer's data-evidence-key).
-    const chipByKey = new Map();
-    actionNeededChips.forEach((c) => {
-      const key = (c.ruleId || '') + (c.type === 'drug-monitoring' ? '|' + (c.drugName || '') : '');
-      if (key) chipByKey.set(key, c);
-    });
+  actionNeededChips.forEach((chip) => {
+    const key = (chip.ruleId || '') + (chip.type === 'drug-monitoring' ? '|' + (chip.drugName || '') : '');
+    if (!key) return;
+    const pack = buildChipActions(chip, patient);
+    if (!pack) return;
+    const chipName = chip.drugName || chip.indicatorCode || chip.displayName || chip.ruleName || chip.ruleId || 'chip';
+    _chipActionsMap.set(key, { chip, pack, chipName });
+  });
 
-    // Walk the rendered chips. Chips with data-evidence-key are wired by ChipRenderer.
-    container.querySelectorAll('.sent-chip[data-evidence-key]').forEach((chipEl) => {
-      const key = chipEl.dataset.evidenceKey;
-      const chip = chipByKey.get(key);
-      if (!chip) return; // not action-needed or key not in our map
-      const pack = buildChipActions(chip, patient);
-      if (!pack) return;
+  // ── DOM write — skipped entirely when nothing visible changed, so open
+  // modals, the overflow menu, evidence panels and scroll position survive
+  // every poll tick that brings back the same data. ──
 
-      // Derive a human-readable title for the modal
-      const chipName =
-        chip.drugName || chip.indicatorCode || chip.displayName || chip.ruleName || chip.ruleId || 'chip';
+  const changed = setDynamic(
+    briefHtml +
+      patientHtml +
+      driftHtml +
+      filterHtml +
+      groupsHtml +
+      emptyMsg +
+      unmatchedHtml +
+      extractionHtml +
+      journalAugmentHtml
+  );
+  if (!changed) return;
 
-      // Populate the module-level map for use by the delegated click handler
-      _chipActionsMap.set(key, { chip, pack, chipName });
-
-      // Remove any stale actions row from a previous render
-      const nextSib = chipEl.nextElementSibling;
-      if (nextSib && nextSib.classList.contains('sent-act-row')) nextSib.remove();
-
-      const row = document.createElement('div');
-      row.className = 'sent-act-row';
-      row.dataset.actKey = key;
-      row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Actions</button>`;
-      chipEl.insertAdjacentElement('afterend', row);
-    });
-  }
+  // Inject per-chip "Actions" buttons under each action-needed chip in the
+  // fresh DOM. Chips with data-evidence-key are wired by ChipRenderer.
+  container.querySelectorAll('.sent-chip[data-evidence-key]').forEach((chipEl) => {
+    const key = chipEl.dataset.evidenceKey;
+    if (!_chipActionsMap.has(key)) return; // not action-needed
+    const nextSib = chipEl.nextElementSibling;
+    if (nextSib && nextSib.classList.contains('sent-act-row')) nextSib.remove();
+    const row = document.createElement('div');
+    row.className = 'sent-act-row';
+    row.dataset.actKey = key;
+    row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Actions</button>`;
+    chipEl.insertAdjacentElement('afterend', row);
+  });
 
   // Drift banner dismiss: mute for 24h via shared storage key. The content
   // script's next publish reads mutedUntil and stops stamping drift, so the
@@ -1066,37 +1138,6 @@ function render(payload) {
     container.querySelector('.sent-drift-banner')?.remove();
   });
 
-  // Export evaluation log button: download the trace as a JSON file.
-  const exportLogBtn = container.querySelector('#sentExportLogBtn');
-  if (exportLogBtn) {
-    if (trace) {
-      exportLogBtn.disabled = false;
-      exportLogBtn.addEventListener('click', () => {
-        const pc = _currentSnapshot && _currentSnapshot.patientContext;
-        const id = (pc && (pc.nhsNumber || pc.patientUuid || pc.uuid)) || 'unknown';
-        const safeId = String(id).replace(/[^a-zA-Z0-9-]/g, '');
-        const today = new Date().toISOString().slice(0, 10);
-        const filename = `sentinel-evaluation-log-${safeId}-${today}.json`;
-        const blob = new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-    } else {
-      exportLogBtn.disabled = true;
-    }
-  }
-
-  // Print patient summary (passport) button: build a plain-English health summary
-  // for the patient, write to transient 'sentinel.passport' key, open passport.html.
-  const passportBtn = container.querySelector('#sentPrintPassportBtn');
-  if (passportBtn && patient) {
-    passportBtn.addEventListener('click', () => onPrintPassport(snapshot));
-  }
-
   // "Verify in Medicus" banner button — focus the source tab (H-007 mitigation).
   container.querySelector('#sentVerifyBannerBtn')?.addEventListener('click', focusMedicusTab);
 
@@ -1110,7 +1151,6 @@ function render(payload) {
     });
   });
 
-  attachEvidenceHandlers();
   attachBriefToggle();
 
   // Restore the evidence panel that was open before this re-render, if its chip
@@ -1143,7 +1183,9 @@ async function onPrintPassport(snapshot) {
   await chrome.storage.local.set({ 'sentinel.passport': model });
   // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
   // in the print tab; this covers the case where the tab never renders.
-  setTimeout(() => { chrome.storage.local.remove('sentinel.passport'); }, 60000);
+  setTimeout(() => {
+    chrome.storage.local.remove('sentinel.passport');
+  }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sentinel/passport.html') });
 }
 
@@ -1526,19 +1568,153 @@ function attachBriefToggle() {
   });
 }
 
-function shell(top, inner) {
+// ── Persistent scaffold ───────────────────────────────────────────────────────
+// Rendered once per module life in init(). render() only ever rewrites
+// #sentDynamic; the header/toolbar, waiting-room slot, footer and modal host
+// survive every refresh untouched (anti-flicker contract).
+
+function toolIcon(paths) {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+const TOOL_ICONS = {
+  refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+  calendar:
+    '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  clipboard:
+    '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
+  printer:
+    '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+};
+
+function scaffoldHtml() {
   return `<div class="module-wrap sent-module">
-    <div class="sent-header-row">
-      <div class="mod-eyebrow">Clinical Monitoring</div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <span class="module-ver">v0.4.2</span>
-        <button class="icon-btn" id="sentRefreshBtn" title="Refresh">↻</button>
+    <div class="sent-header">
+      <div class="sent-header-row">
+        <div class="sent-header-id">
+          <div class="mod-eyebrow">Clinical Monitoring</div>
+          <div class="mod-title">Monitoring</div>
+        </div>
+        <div class="sent-toolbar" role="toolbar" aria-label="Monitoring actions">
+          <span class="module-ver">v0.5.0</span>
+          <button class="sent-tool-btn" id="sentRefreshBtn" title="Refresh now (the panel also refreshes itself every 10 seconds)" aria-label="Refresh">${toolIcon(TOOL_ICONS.refresh)}</button>
+          <button class="sent-tool-btn" id="sentApptSummaryBtn" disabled title="Appointments needed — copyable list of the appointments this patient is due, for admin to book" aria-label="Appointments needed">${toolIcon(TOOL_ICONS.calendar)}</button>
+          <button class="sent-tool-btn" id="sentCopyAllActionsBtn" disabled title="Copy all actions — copy-ready blood forms, recall SMS and tasks for every alert needing action" aria-label="Copy all actions">${toolIcon(TOOL_ICONS.clipboard)}</button>
+          <button class="sent-tool-btn" id="sentPrintPassportBtn" disabled title="Print patient summary — plain-English health summary to hand to the patient" aria-label="Print patient summary">${toolIcon(TOOL_ICONS.printer)}</button>
+          <div class="sent-overflow-wrap">
+            <button class="sent-tool-btn" id="sentOverflowBtn" title="More tools" aria-label="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}</button>
+            <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
+              <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
+              <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
+              <div class="sent-menu-sep" role="separator"></div>
+              <button class="sent-menu-item" id="sentTourBtn" role="menuitem" title="Step through the guided tour of this panel again">Replay the guided tour</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="mod-title" style="margin-bottom:10px">Monitoring</div>
-    ${renderWaitingRoomBlock()}
-    ${top}${inner}
+    <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
+    <div id="sentDynamic"></div>
+    <div class="sent-footer">
+      <span class="sent-ts" id="sentFooterTs"></span>
+      <span class="sent-rules-slot" id="sentRulesSlot"></span>
+    </div>
+    <div id="sentModalHost"></div>
   </div>`;
+}
+
+// Wire the toolbar exactly once per module life (scaffold is never re-rendered).
+// Handlers read _renderCtx / _currentSnapshot at click time, so they stay
+// current without any per-render re-wiring.
+function wireToolbar() {
+  const $ = (id) => container.querySelector('#' + id);
+
+  $('sentApptSummaryBtn')?.addEventListener('click', () => {
+    if (!_renderCtx) return;
+    showAdminSummaryModal(buildAdminSummaryText(_renderCtx.chips, _renderCtx.patient));
+  });
+  $('sentCopyAllActionsBtn')?.addEventListener('click', () => {
+    if (!_renderCtx) return;
+    showAllActionsModal(_renderCtx.chips, _renderCtx.patient);
+  });
+  $('sentPrintPassportBtn')?.addEventListener('click', () => {
+    if (_currentSnapshot) onPrintPassport(_currentSnapshot);
+  });
+  $('sentSettingsBtn')?.addEventListener('click', () => {
+    closeOverflowMenu();
+    chrome.runtime.openOptionsPage();
+  });
+  $('sentExportLogBtn')?.addEventListener('click', () => {
+    closeOverflowMenu();
+    exportEvaluationLog();
+  });
+  $('sentTourBtn')?.addEventListener('click', () => {
+    closeOverflowMenu();
+    startTour();
+  });
+
+  $('sentOverflowBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleOverflowMenu();
+  });
+  _menuCloseHandler = (e) => {
+    if (!e.target.closest?.('.sent-overflow-wrap')) closeOverflowMenu();
+  };
+  document.addEventListener('click', _menuCloseHandler);
+  _menuKeyHandler = (e) => {
+    if (e.key === 'Escape') closeOverflowMenu();
+  };
+  document.addEventListener('keydown', _menuKeyHandler);
+}
+
+function toggleOverflowMenu() {
+  const menu = container?.querySelector('#sentOverflowMenu');
+  const btn = container?.querySelector('#sentOverflowBtn');
+  if (!menu || !btn) return;
+  menu.hidden = !menu.hidden;
+  btn.setAttribute('aria-expanded', String(!menu.hidden));
+}
+
+function closeOverflowMenu() {
+  const menu = container?.querySelector('#sentOverflowMenu');
+  const btn = container?.querySelector('#sentOverflowBtn');
+  if (menu && !menu.hidden) {
+    menu.hidden = true;
+    btn?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+// Enable/disable toolbar actions to match the current data context.
+function updateToolbarState() {
+  if (!container) return;
+  const ctx = _renderCtx;
+  const set = (id, enabled) => {
+    const b = container.querySelector('#' + id);
+    if (b) b.disabled = !enabled;
+  };
+  set('sentApptSummaryBtn', !!ctx);
+  set('sentCopyAllActionsBtn', !!ctx && ctx.actionCount > 0);
+  set('sentPrintPassportBtn', !!ctx && !!ctx.patient);
+  set('sentExportLogBtn', !!ctx && !!ctx.trace);
+}
+
+// Download the current snapshot's rule-evaluation trace as a JSON file.
+function exportEvaluationLog() {
+  const trace = _renderCtx?.trace;
+  if (!trace) return;
+  const pc = _currentSnapshot && _currentSnapshot.patientContext;
+  const id = (pc && (pc.nhsNumber || pc.patientUuid || pc.uuid)) || 'unknown';
+  const safeId = String(id).replace(/[^a-zA-Z0-9-]/g, '');
+  const today = new Date().toISOString().slice(0, 10);
+  const filename = `sentinel-evaluation-log-${safeId}-${today}.json`;
+  const blob = new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function statusBlock(level, heading, body) {

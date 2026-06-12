@@ -171,6 +171,11 @@ const ALLOWLIST = new Set([
   // sweep.handout convention — see side-panel/modules/sentinel/sentinel.js):
   'sentinel.passport',
 
+  // Guided-tour seen marker — localStorage, NOT chrome.storage (per-machine
+  // onboarding state, deliberately excluded from backups so a restore onto a
+  // new machine still offers the tour). See side-panel/modules/sentinel/tour.js:
+  'suite.tour.seenVersion',
+
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile', // applied-profile metadata (version etc.)
   'suite.practiceProfile.notifiedVersions', // which profile versions have been notified

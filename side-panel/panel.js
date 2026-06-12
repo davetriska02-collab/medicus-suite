@@ -361,7 +361,7 @@ function renderAbout() {
       <div class="module-card">
         <div class="module-card-header">
           <span class="module-card-name">Monitoring (Sentinel)</span>
-          <span class="module-card-version">v0.4.2</span>
+          <span class="module-card-version">v0.5.0</span>
         </div>
         <div class="module-card-desc">
           Clinical context sidebar on patient records. Drug monitoring and QOF 25/26 indicators.
