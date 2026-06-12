@@ -14,13 +14,27 @@ let panelDisplayPrefs = { theme: 'light', size: 'medium', colorblind: false };
 let displayOpen = false;
 let _dpCloseHandler = null;
 
-
 function buildDisplayPopoverHTML() {
   const p = panelDisplayPrefs;
-  const themeOpts = [['light','Light'],['dark','Dark']].map(([v,l]) =>
-    `<button class="dp-seg${p.theme===v?' active':''}" data-dp-key="theme" data-dp-val="${v}">${l}</button>`).join('');
-  const sizeOpts = [['small','S'],['medium','M'],['large','L']].map(([v,l]) =>
-    `<button class="dp-seg${p.size===v?' active':''}" data-dp-key="size" data-dp-val="${v}">${l}</button>`).join('');
+  const themeOpts = [
+    ['light', 'Light'],
+    ['dark', 'Dark'],
+  ]
+    .map(
+      ([v, l]) =>
+        `<button class="dp-seg${p.theme === v ? ' active' : ''}" data-dp-key="theme" data-dp-val="${v}">${l}</button>`
+    )
+    .join('');
+  const sizeOpts = [
+    ['small', 'S'],
+    ['medium', 'M'],
+    ['large', 'L'],
+  ]
+    .map(
+      ([v, l]) =>
+        `<button class="dp-seg${p.size === v ? ' active' : ''}" data-dp-key="size" data-dp-val="${v}">${l}</button>`
+    )
+    .join('');
   return `<div class="dp-popover" id="dpPopover">
     <div class="dp-title">Display</div>
     <div class="dp-row">
@@ -47,14 +61,14 @@ function renderDisplayPopover() {
   host.innerHTML = displayOpen ? buildDisplayPopoverHTML() : '';
   if (!displayOpen) return;
 
-  host.querySelectorAll('[data-dp-key]').forEach(btn => {
+  host.querySelectorAll('[data-dp-key]').forEach((btn) => {
     btn.addEventListener('click', () => {
       panelDisplayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
       chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
       renderDisplayPopover();
     });
   });
-  host.querySelector('#dpColorblind')?.addEventListener('change', e => {
+  host.querySelector('#dpColorblind')?.addEventListener('change', (e) => {
     panelDisplayPrefs.colorblind = e.target.checked;
     chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
     renderDisplayPopover();
@@ -77,52 +91,54 @@ function renderDisplayPopover() {
 // ── Module registry ───────────────────────────────────────────────────────────
 
 const MODULES = {
-  slots:       { js: () => import('./modules/slots/slots.js'),           css: './modules/slots/slots.css' },
-  capacity:    { js: () => import('./modules/capacity/capacity.js'),      css: './modules/capacity/capacity.css' },
-  submissions: { js: () => import('./modules/submissions/submissions.js'), css: './modules/submissions/submissions.css' },
-  sentinel:    { js: () => import('./modules/sentinel/sentinel.js'),      css: './modules/sentinel/sentinel.css' },
-  activity:    { js: () => import('./modules/activity/activity.js'),     css: './modules/activity/activity.css' },
-  referrals:   { js: () => import('./modules/referrals/referrals.js'),   css: './modules/referrals/referrals.css' },
-  condor:      { js: () => import('./modules/condor/condor.js'),         css: './modules/condor/condor.css' },
-  trends:      { js: () => import('./modules/trends/trends.js'),         css: './modules/trends/trends.css' },
-  reception:   { js: () => import('./modules/reception/reception.js'),   css: './modules/reception/reception.css' },
-  sweep:       { js: () => import('./modules/sweep/sweep.js'),           css: './modules/sweep/sweep.css' },
-  knowledge:   { js: () => import('./modules/knowledge/knowledge.js'),   css: './modules/knowledge/knowledge.css' },
-  about:       null,
+  slots: { js: () => import('./modules/slots/slots.js'), css: './modules/slots/slots.css' },
+  capacity: { js: () => import('./modules/capacity/capacity.js'), css: './modules/capacity/capacity.css' },
+  submissions: {
+    js: () => import('./modules/submissions/submissions.js'),
+    css: './modules/submissions/submissions.css',
+  },
+  sentinel: { js: () => import('./modules/sentinel/sentinel.js'), css: './modules/sentinel/sentinel.css' },
+  activity: { js: () => import('./modules/activity/activity.js'), css: './modules/activity/activity.css' },
+  referrals: { js: () => import('./modules/referrals/referrals.js'), css: './modules/referrals/referrals.css' },
+  condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
+  trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
+  reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
+  sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
+  knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  about: null,
 };
-
 
 // ── Nav overflow detection ────────────────────────────────────────────────────
 
 const navEl = document.querySelector('.suite-nav');
 const navTabsEl = document.querySelector('.nav-tabs');
 const navIndicatorRight = document.querySelector('.nav-scroll-right');
-const navIndicatorLeft  = document.querySelector('.nav-scroll-left');
+const navIndicatorLeft = document.querySelector('.nav-scroll-left');
 
 function updateNavOverflow() {
   if (!navTabsEl) return;
   const sl = navTabsEl.scrollLeft;
-  const hasRight = navTabsEl.scrollWidth > navTabsEl.clientWidth + 4
-                && (sl + navTabsEl.clientWidth) < (navTabsEl.scrollWidth - 4);
-  const hasLeft  = sl > 4;
+  const hasRight =
+    navTabsEl.scrollWidth > navTabsEl.clientWidth + 4 && sl + navTabsEl.clientWidth < navTabsEl.scrollWidth - 4;
+  const hasLeft = sl > 4;
   navEl.classList.toggle('has-overflow-right', hasRight);
-  navEl.classList.toggle('has-overflow-left',  hasLeft);
+  navEl.classList.toggle('has-overflow-left', hasLeft);
 }
 
 navTabsEl?.addEventListener('scroll', updateNavOverflow);
 if (navTabsEl) new ResizeObserver(updateNavOverflow).observe(navTabsEl);
 updateNavOverflow();
 
-[navIndicatorRight, navIndicatorLeft].forEach(el => {
+[navIndicatorRight, navIndicatorLeft].forEach((el) => {
   if (!el) return;
   el.style.setProperty('pointer-events', 'auto');
   el.style.setProperty('cursor', 'pointer');
 });
-navIndicatorRight?.addEventListener('click', () => navTabsEl?.scrollBy({ left:  120, behavior: 'smooth' }));
-navIndicatorLeft?.addEventListener('click',  () => navTabsEl?.scrollBy({ left: -120, behavior: 'smooth' }));
+navIndicatorRight?.addEventListener('click', () => navTabsEl?.scrollBy({ left: 120, behavior: 'smooth' }));
+navIndicatorLeft?.addEventListener('click', () => navTabsEl?.scrollBy({ left: -120, behavior: 'smooth' }));
 
 // ── Slots nav badge ───────────────────────────────────────────────────────────
-document.addEventListener('suite:slots:count', e => {
+document.addEventListener('suite:slots:count', (e) => {
   const tab = document.querySelector('[data-module="slots"]');
   if (!tab) return;
   let badge = tab.querySelector('.nav-badge');
@@ -133,7 +149,7 @@ document.addEventListener('suite:slots:count', e => {
   }
   const n = e.detail.count;
   badge.textContent = n != null ? String(n) : '';
-  badge.style.display = (n != null && n >= 0) ? '' : 'none';
+  badge.style.display = n != null && n >= 0 ? '' : 'none';
 });
 
 // CSS dedup set for module stylesheets — passed to createModuleLoader
@@ -141,11 +157,14 @@ const loadedCss = new Set();
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-document.querySelectorAll('.nav-tab').forEach(tab => {
+document.querySelectorAll('.nav-tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     // A drag that ends on the same tab still fires a click; suppress it so a
     // reorder doesn't also switch module.
-    if (tab.dataset.dragged === '1') { delete tab.dataset.dragged; return; }
+    if (tab.dataset.dragged === '1') {
+      delete tab.dataset.dragged;
+      return;
+    }
     const mod = tab.dataset.module;
     if (mod === 'visualiser') {
       chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
@@ -164,13 +183,12 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   const { reconcileTabOrder, STORAGE_KEY } = await import('./tab-order.js');
   if (!navTabsEl) return;
 
-  const tabIds = () =>
-    [...navTabsEl.querySelectorAll('.nav-tab')].map(t => t.dataset.module);
+  const tabIds = () => [...navTabsEl.querySelectorAll('.nav-tab')].map((t) => t.dataset.module);
 
   // Apply a stored order by reordering existing nodes (listeners survive).
   function applyOrder(stored) {
     const order = reconcileTabOrder(tabIds(), stored);
-    order.forEach(id => {
+    order.forEach((id) => {
       const el = navTabsEl.querySelector(`.nav-tab[data-module="${id}"]`);
       if (el) navTabsEl.appendChild(el);
     });
@@ -182,7 +200,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   applyOrder(r[STORAGE_KEY]);
 
   // Live sync: re-apply when another context changes the order.
-  chrome.storage.onChanged.addListener(changes => {
+  chrome.storage.onChanged.addListener((changes) => {
     if (changes[STORAGE_KEY]) applyOrder(changes[STORAGE_KEY].newValue);
   });
 
@@ -194,37 +212,43 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     tab.setAttribute('draggable', 'true');
     tab.title = tab.title || 'Drag to reorder';
 
-    tab.addEventListener('dragstart', e => {
+    tab.addEventListener('dragstart', (e) => {
       dragSrc = tab;
       tab.classList.add('nav-tab-dragging');
       e.dataTransfer.effectAllowed = 'move';
       // Some browsers require data to be set for the drag to start.
-      try { e.dataTransfer.setData('text/plain', tab.dataset.module); } catch (_) {}
+      try {
+        e.dataTransfer.setData('text/plain', tab.dataset.module);
+      } catch (_) {}
     });
 
     tab.addEventListener('dragend', () => {
       tab.classList.add('nav-tab-just-dragged');
       // Mark so the synthesised click after a drag is swallowed, then clear.
       tab.dataset.dragged = '1';
-      setTimeout(() => { delete tab.dataset.dragged; }, 0);
+      setTimeout(() => {
+        delete tab.dataset.dragged;
+      }, 0);
       tab.classList.remove('nav-tab-dragging', 'nav-tab-just-dragged');
-      navTabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
-        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      navTabsEl
+        .querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach((t) => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
       dragSrc = null;
     });
 
-    tab.addEventListener('dragover', e => {
+    tab.addEventListener('dragover', (e) => {
       if (!dragSrc || dragSrc === tab) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       const rect = tab.getBoundingClientRect();
       const after = e.clientX > rect.left + rect.width / 2;
-      navTabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
-        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      navTabsEl
+        .querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach((t) => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
       tab.classList.add(after ? 'nav-tab-drop-after' : 'nav-tab-drop-before');
     });
 
-    tab.addEventListener('drop', e => {
+    tab.addEventListener('drop', (e) => {
       e.preventDefault();
       if (!dragSrc || dragSrc === tab) return;
       const rect = tab.getBoundingClientRect();
@@ -265,16 +289,23 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 updatePopoutBtn();
 
 const switchModule = createModuleLoader({
-  modules:      MODULES,
-  container:    content,
+  modules: MODULES,
+  container: content,
   loadedCss,
   getSwitchSeq: () => switchSeq,
   incSwitchSeq: () => ++switchSeq,
-  getCleanup:   () => moduleCleanup,
-  setCleanup:   (fn) => { moduleCleanup = fn; },
-  setActive:    (name) => { activeModule = name; },
-  onSpecial:    (name) => {
-    if (name === 'about') { renderAbout(); return true; }
+  getCleanup: () => moduleCleanup,
+  setCleanup: (fn) => {
+    moduleCleanup = fn;
+  },
+  setActive: (name) => {
+    activeModule = name;
+  },
+  onSpecial: (name) => {
+    if (name === 'about') {
+      renderAbout();
+      return true;
+    }
     return false;
   },
   escFn: escStrip,
@@ -330,7 +361,7 @@ function renderAbout() {
       <div class="module-card">
         <div class="module-card-header">
           <span class="module-card-name">Monitoring (Sentinel)</span>
-          <span class="module-card-version">v0.4.2</span>
+          <span class="module-card-version">v0.5.0</span>
         </div>
         <div class="module-card-desc">
           Clinical context sidebar on patient records. Drug monitoring and QOF 25/26 indicators.
@@ -458,10 +489,12 @@ function renderAbout() {
   // to the default below when unset.
   const FEEDBACK_EMAIL_DEFAULT = 'davetriska02@gmail.com';
   const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
-  fbTypeBtns.forEach(b => b.addEventListener('click', () => {
-    fbTypeBtns.forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-  }));
+  fbTypeBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      fbTypeBtns.forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+    })
+  );
 
   document.getElementById('fbSendBtn')?.addEventListener('click', async () => {
     const status = document.getElementById('fbStatus');
@@ -472,7 +505,10 @@ function renderAbout() {
     const details = (detailsEl?.value || '').trim();
 
     if (!subject && !details) {
-      if (status) { status.style.color = 'var(--red)'; status.textContent = 'Add a subject or details first'; }
+      if (status) {
+        status.style.color = 'var(--red)';
+        status.textContent = 'Add a subject or details first';
+      }
       subjectEl?.focus();
       return;
     }
@@ -501,7 +537,10 @@ function renderAbout() {
     a.click();
     a.remove();
 
-    if (status) { status.style.color = 'var(--green)'; status.textContent = 'Opening your email client…'; }
+    if (status) {
+      status.style.color = 'var(--green)';
+      status.textContent = 'Opening your email client…';
+    }
   });
 }
 
@@ -515,13 +554,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
-
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
-let SITE_ID_WR    = null;
-let WR_API        = null;
-const WR_POLL_MS  = 30 * 1000;
-const wrStripEl   = document.getElementById('wrStrip');
+let SITE_ID_WR = null;
+let WR_API = null;
+const WR_POLL_MS = 30 * 1000;
+const wrStripEl = document.getElementById('wrStrip');
 
 let wrPoller = null;
 
@@ -546,17 +584,17 @@ async function fetchAndRenderStrip(bypassCache = false) {
       code: SITE_ID_WR,
       codeSource: source,
     });
-    const raw   = await r.json();
+    const raw = await r.json();
     const arrived = (raw?.schedule?.schedule ?? [])
-      .flatMap(d => d.entries ?? [])
-      .filter(e => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
-      .map(e => ({
-        name:           e.patient?.name ?? 'Unknown',
-        start:          e.start ?? '',
-        startDateTime:  e.startDateTime ?? null,
+      .flatMap((d) => d.entries ?? [])
+      .filter((e) => e?.diaryEntryType?.value === 'appointment' && e?.displayStatus?.value === 'arrived')
+      .map((e) => ({
+        name: e.patient?.name ?? 'Unknown',
+        start: e.start ?? '',
+        startDateTime: e.startDateTime ?? null,
         minutesWaiting: calcStripWait(e.startDateTime),
       }))
-      .sort((a, b) => a.start < b.start ? -1 : 1);
+      .sort((a, b) => (a.start < b.start ? -1 : 1));
 
     renderStrip(arrived);
     updateStripBadge(arrived.length);
@@ -583,20 +621,21 @@ function renderStrip(patients) {
     return;
   }
 
-  const maxWait = Math.max(...patients.map(p => p.minutesWaiting ?? 0));
+  const maxWait = Math.max(...patients.map((p) => p.minutesWaiting ?? 0));
   const urgency = maxWait >= 20 ? 'red' : maxWait >= 10 ? 'amber' : 'green';
 
   // Build name chips — show up to 3, then "+N more"
-  const shown  = patients.slice(0, 3);
-  const extra  = patients.length - shown.length;
-  const chips  = shown.map(p => {
-    const mins = p.minutesWaiting;
-    const cls  = mins != null && mins >= 20 ? 'wr-chip-red'
-               : mins != null && mins >= 10 ? 'wr-chip-amber'
-               : 'wr-chip-ok';
-    const wait = mins != null ? ` · ${mins}m` : '';
-    return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
-  }).join('');
+  const shown = patients.slice(0, 3);
+  const extra = patients.length - shown.length;
+  const chips = shown
+    .map((p) => {
+      const mins = p.minutesWaiting;
+      const cls =
+        mins != null && mins >= 20 ? 'wr-chip-red' : mins != null && mins >= 10 ? 'wr-chip-amber' : 'wr-chip-ok';
+      const wait = mins != null ? ` · ${mins}m` : '';
+      return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
+    })
+    .join('');
   const extraChip = extra > 0 ? `<span class="wr-chip wr-chip-more">+${extra} more</span>` : '';
 
   wrStripEl.className = `wr-strip wr-strip-${urgency}`;
@@ -623,7 +662,10 @@ function updateStripBadge(count) {
 }
 
 function escStrip(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // ── Failure-backoff poller ────────────────────────────────────────────────────
@@ -639,10 +681,10 @@ function escStrip(s) {
 // the in-progress tick from stacking a second setTimeout on top.
 
 function makePoller(fn, baseMs, label) {
-  let _timer          = null;
-  let _failCount      = 0;
-  let _currentBaseMs  = baseMs;
-  let _startedDuring  = false; // set if start() called while tick is running
+  let _timer = null;
+  let _failCount = 0;
+  let _currentBaseMs = baseMs;
+  let _startedDuring = false; // set if start() called while tick is running
 
   function _schedule(delayMs) {
     if (_timer) clearTimeout(_timer);
@@ -650,13 +692,13 @@ function makePoller(fn, baseMs, label) {
   }
 
   async function _tick() {
-    _timer         = null;
+    _timer = null;
     _startedDuring = false;
     const ok = await fn();
     if (_startedDuring) return; // start() rescheduled us already — don't double-schedule
     if (ok === false) {
       _failCount++;
-      const level = Math.min(_failCount, 3);          // 2^3 = 8 → cap at 8×
+      const level = Math.min(_failCount, 3); // 2^3 = 8 → cap at 8×
       const delay = _currentBaseMs * Math.pow(2, level);
       console.warn(`[${label}] poll failure #${_failCount}, backing off to ${delay}ms`);
       _schedule(delay);
@@ -668,15 +710,18 @@ function makePoller(fn, baseMs, label) {
 
   return {
     start(overrideMs) {
-      _startedDuring = true;           // suppress any in-progress tick's post-schedule
+      _startedDuring = true; // suppress any in-progress tick's post-schedule
       if (overrideMs != null) _currentBaseMs = overrideMs;
       _failCount = 0;
-      _schedule(0);                    // fire first tick immediately
+      _schedule(0); // fire first tick immediately
       return this;
     },
     stop() {
       _startedDuring = true;
-      if (_timer) { clearTimeout(_timer); _timer = null; }
+      if (_timer) {
+        clearTimeout(_timer);
+        _timer = null;
+      }
     },
   };
 }
@@ -747,25 +792,23 @@ async function fetchAndRenderRmStrip() {
 function renderRmStrip(result, practiceCode, assigneeId) {
   if (!rmStripEl) return;
   const buckets = window.RequestMonitor.BUCKETS;
-  const pills = buckets.map(b => {
-    const data = result.buckets?.[b.key];
-    const count = data?.count ?? 0;
-    const isReply = b.status === 'reply-received';
-    const cls = [
-      'rm-pill',
-      isReply ? 'rm-pill-reply' : 'rm-pill-new',
-      count > 0 ? 'rm-pill-active' : '',
-    ].filter(Boolean).join(' ');
-    const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
-    return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
+  const pills = buckets
+    .map((b) => {
+      const data = result.buckets?.[b.key];
+      const count = data?.count ?? 0;
+      const isReply = b.status === 'reply-received';
+      const cls = ['rm-pill', isReply ? 'rm-pill-reply' : 'rm-pill-new', count > 0 ? 'rm-pill-active' : '']
+        .filter(Boolean)
+        .join(' ');
+      const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
+      return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
       <span class="rm-pill-label">${escStrip(b.short)}</span>
       <span class="rm-pill-count">${count}</span>
     </span>`;
-  }).join('');
+    })
+    .join('');
 
-  const errorBlock = result.error
-    ? `<span class="rm-strip-error">${escStrip(result.error)}</span>`
-    : '';
+  const errorBlock = result.error ? `<span class="rm-strip-error">${escStrip(result.error)}</span>` : '';
 
   rmStripEl.className = 'rm-strip';
   rmStripEl.innerHTML = `
@@ -776,7 +819,7 @@ function renderRmStrip(result, practiceCode, assigneeId) {
   `;
 
   // Wire click handlers
-  rmStripEl.querySelectorAll('.rm-pill[data-rm-url]').forEach(el => {
+  rmStripEl.querySelectorAll('.rm-pill[data-rm-url]').forEach((el) => {
     el.addEventListener('click', () => {
       const url = el.dataset.rmUrl;
       if (url) chrome.tabs.create({ url });
@@ -815,16 +858,16 @@ async function applyTriageAlerts(buckets) {
   }
   // Clear alerted state for buckets that dropped back below threshold
   for (const [key, _] of _triageAlertedBuckets) {
-    if (!triggered.find(t => t.key === key)) _triageAlertedBuckets.delete(key);
+    if (!triggered.find((t) => t.key === key)) _triageAlertedBuckets.delete(key);
   }
 }
 
 // React to config changes — re-render immediately
-chrome.storage.onChanged.addListener(changes => {
-  if (Object.keys(changes).some(k => k.startsWith('suite.requestMonitor.'))) {
+chrome.storage.onChanged.addListener((changes) => {
+  if (Object.keys(changes).some((k) => k.startsWith('suite.requestMonitor.'))) {
     fetchAndRenderRmStrip();
   }
-  if (Object.keys(changes).some(k => k.startsWith('suite.triageAlert.'))) {
+  if (Object.keys(changes).some((k) => k.startsWith('suite.triageAlert.'))) {
     fetchAndRenderRmStrip();
   }
   if (changes['submissions.thresholds']) {
@@ -840,23 +883,23 @@ rmPoller = makePoller(fetchAndRenderRmStrip, rmPollSeconds * 1000, 'rm-strip').s
 // Shows amber/red when medical or admin request counts hit configured thresholds.
 // Polls every 60s, but only makes API calls when at least one threshold is enabled.
 
-const subRagStripEl    = document.getElementById('subRagStrip');
-const SUB_RAG_POLL_MS  = 60 * 1000;
+const subRagStripEl = document.getElementById('subRagStrip');
+const SUB_RAG_POLL_MS = 60 * 1000;
 
 const SUB_RAG_TYPES = [
   { key: 'medical', label: 'Medical', apiType: 'medical_patient_request_task' },
-  { key: 'admin',   label: 'Admin',   apiType: 'admin_patient_request_task'   },
+  { key: 'admin', label: 'Admin', apiType: 'admin_patient_request_task' },
 ];
 
 const DEFAULT_SUB_THRESHOLDS = {
   medical: { amber: 30, red: 60, enabled: false },
-  admin:   { amber: 20, red: 40, enabled: false },
+  admin: { amber: 20, red: 40, enabled: false },
 };
 
 function _subRagLevel(key, value, thresholds) {
   const t = { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) };
   if (!t.enabled) return null;
-  if (value >= (t.red   || Infinity)) return 'red';
+  if (value >= (t.red || Infinity)) return 'red';
   if (value >= (t.amber || Infinity)) return 'amber';
   return null;
 }
@@ -868,7 +911,7 @@ async function fetchAndRenderSubRagStrip() {
   const stored = await chrome.storage.local.get('submissions.thresholds');
   const thresholds = { ...DEFAULT_SUB_THRESHOLDS, ...(stored['submissions.thresholds'] || {}) };
 
-  const anyEnabled = SUB_RAG_TYPES.some(t => thresholds[t.key]?.enabled);
+  const anyEnabled = SUB_RAG_TYPES.some((t) => thresholds[t.key]?.enabled);
   if (!anyEnabled) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
@@ -880,7 +923,7 @@ async function fetchAndRenderSubRagStrip() {
 
   const today = new Date().toISOString().slice(0, 10);
   const results = await Promise.allSettled(
-    SUB_RAG_TYPES.map(async tt => {
+    SUB_RAG_TYPES.map(async (tt) => {
       const url = `https://${code}.api.england.medicus.health/tasks/data/${tt.apiType}/task-list?createdAt_startDate=${today}&createdAt_endDate=${today}`;
       // Route through ApiDiag so SubRag errors/latency show in the Debug panel,
       // consistent with the WR and Request-Monitor strips.
@@ -892,7 +935,7 @@ async function fetchAndRenderSubRagStrip() {
   );
 
   // A failure in any sub-request counts as a polling failure for backoff purposes
-  const anyFailed = results.some(r => r.status === 'rejected');
+  const anyFailed = results.some((r) => r.status === 'rejected');
 
   const triggered = [];
   let maxLevel = null;
@@ -913,9 +956,9 @@ async function fetchAndRenderSubRagStrip() {
     return !anyFailed;
   }
 
-  const pills = triggered.map(t =>
-    `<span class="sub-rag-pill sub-rag-pill--${t.level}">${t.label}: ${t.count}</span>`
-  ).join('');
+  const pills = triggered
+    .map((t) => `<span class="sub-rag-pill sub-rag-pill--${t.level}">${t.label}: ${t.count}</span>`)
+    .join('');
 
   subRagStripEl.className = `sub-rag-strip sub-rag-strip--${maxLevel}`;
   subRagStripEl.innerHTML = `
@@ -944,8 +987,8 @@ document.addEventListener('visibilitychange', () => {
 // extension reload without a browser restart) the old timers would otherwise
 // keep running and a fresh set would stack on top.
 window.addEventListener('pagehide', () => {
-  if (wrPoller)     wrPoller.stop();
-  if (rmPoller)     rmPoller.stop();
+  if (wrPoller) wrPoller.stop();
+  if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
 });
 
@@ -955,11 +998,11 @@ window.addEventListener('pagehide', () => {
 // HTML attributes (data-theme etc.) are applied by shared/display-prefs.js.
 function _syncPanelDisplayPrefs(p) {
   p = p || {};
-  panelDisplayPrefs.theme      = p.theme      || 'light';
-  panelDisplayPrefs.size       = p.size       || 'medium';
+  panelDisplayPrefs.theme = p.theme || 'light';
+  panelDisplayPrefs.size = p.size || 'medium';
   panelDisplayPrefs.colorblind = !!p.colorblind;
 }
-chrome.storage.local.get('suite.display').then(r => {
+chrome.storage.local.get('suite.display').then((r) => {
   _syncPanelDisplayPrefs(r['suite.display'] || {});
 });
 chrome.storage.onChanged.addListener((changes) => {
@@ -967,7 +1010,7 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 // Wire display button
-document.getElementById('displayBtn')?.addEventListener('click', e => {
+document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   e.stopPropagation();
   displayOpen = !displayOpen;
   renderDisplayPopover();

@@ -138,6 +138,23 @@ saveSuiteBtn?.addEventListener('click', async () => {
   }
 });
 
+// Guided tour replay — clears the seen-version marker (localStorage is shared
+// across extension pages, so the Monitoring panel sees the reset immediately
+// and re-runs the tour next time it opens). Key must match
+// side-panel/modules/sentinel/tour.js TOUR_SEEN_KEY.
+document.getElementById('replayTourBtn')?.addEventListener('click', () => {
+  try {
+    localStorage.removeItem('suite.tour.seenVersion');
+  } catch (_) {}
+  const status = document.getElementById('replayTourStatus');
+  if (status) {
+    status.textContent = 'Tour will run next time you open the Monitoring panel ✓';
+    setTimeout(() => {
+      status.textContent = '';
+    }, 4000);
+  }
+});
+
 testConnectionBtn?.addEventListener('click', async () => {
   if (testConnectionResult) {
     testConnectionResult.textContent = 'Testing...';
@@ -529,13 +546,14 @@ async function applyEnvelope(envelope) {
   // Only include modules that are present in this backup (same mods.X && gating).
   // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
   const tasks = [
-    mods.sentinel && (async () => {
-      const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
-      if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
-        const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
-        notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
-      }
-    }),
+    mods.sentinel &&
+      (async () => {
+        const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
+        if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
+          const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
+          notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
+        }
+      }),
     mods.capacity && (() => capacityImport(mods.capacity)),
     mods.triage && (() => triageImport(mods.triage)),
     mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),

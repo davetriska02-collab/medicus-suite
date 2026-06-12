@@ -5,11 +5,126 @@
   font-family: var(--sans);
   position: relative;
 }
+
+/* ── Sticky header + toolbar ─────────────────────────────────────────────────
+   The header (title + action toolbar) sticks to the top of the scroll
+   container so actions are always reachable without scrolling. Full-bleed via
+   negative margins against .module-wrap's 16px padding. */
+.sent-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-deep);
+  margin: -16px -16px 10px;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
 .sent-header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2px;
+  gap: 8px;
+}
+.sent-header-id {
+  min-width: 0;
+}
+
+.sent-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.sent-toolbar .module-ver {
+  margin-top: 0;
+  margin-right: 4px;
+  align-self: center;
+}
+
+/* Icon action button — ghost, reserved border so states never shift layout */
+.sent-tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.sent-tool-btn:hover {
+  color: var(--text-2);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.sent-tool-btn:active {
+  background: var(--bg-hover);
+}
+.sent-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-4);
+}
+.sent-tool-btn[aria-expanded='true'] {
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border-color: var(--border-hi);
+}
+
+/* Overflow ("⋯") menu */
+.sent-overflow-wrap {
+  position: relative;
+}
+.sent-overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 192px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}
+.sent-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.sent-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.sent-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+}
+.sent-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
 }
 
 /* Patient banner */
@@ -107,7 +222,10 @@
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 4px;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
 .sent-filter-btn:hover {
@@ -303,19 +421,17 @@
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-/* Footer */
+/* Footer — passive metadata only (actions live in the header toolbar) */
 .sent-footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 14px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
-.sent-footer-left {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+.sent-rules-slot .sent-rules-footer {
+  margin-top: 0;
 }
 .sent-ts {
   font-family: var(--mono);
@@ -502,9 +618,9 @@
 /* Violet is intentional — distinguishes custom/user-defined rules from RAG clinical triads.
    Not in the global canon; scoped here as local properties. */
 .sent-custom-tag {
-  --tag-ink: #a78bfa;       /* violet-400 — deliberate off-triad hue */
+  --tag-ink: #a78bfa; /* violet-400 — deliberate off-triad hue */
   --tag-dim: rgba(167, 139, 250, 0.12);
-  --tag-line: rgba(167, 139, 250, 0.30);
+  --tag-line: rgba(167, 139, 250, 0.3);
   display: inline-block;
   margin-left: 6px;
   font-size: 8.5px;
@@ -805,7 +921,9 @@
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 .sent-ev-close:hover {
   background: var(--bg-hover);
@@ -885,7 +1003,9 @@
   cursor: pointer;
   padding: 3px 8px;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 .sent-verify-btn:hover {
   background: var(--accent-dim);
@@ -906,7 +1026,9 @@
   font-size: 11px;
   cursor: pointer;
   margin-right: 6px;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 .sent-ev-verify-btn:hover {
   background: var(--accent-dim);
@@ -948,7 +1070,9 @@
 
 /* ── Appointments summary modal ─────────────────────────────────────────────── */
 .sent-appt-modal {
-  position: absolute;
+  /* Fixed to the viewport (not the module) so it is always fully visible
+     regardless of how far the chip list is scrolled. */
+  position: fixed;
   inset: 0;
   /* Scrim: intentionally dark in both themes — standard modal practice;
      slightly lighter than the original to be less oppressive on light theme */
@@ -958,13 +1082,13 @@
   align-items: flex-start;
   justify-content: stretch;
   padding: 12px;
-  border-radius: inherit;
 }
 .sent-appt-modal-inner {
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
   border-radius: var(--r-lg);
   width: 100%;
+  max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1081,7 +1205,9 @@
   text-transform: uppercase;
   cursor: pointer;
   padding: 3px 9px;
-  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
 .sent-act-btn:hover {
@@ -1093,9 +1219,9 @@
   cursor: not-allowed;
 }
 
-/* Action pack modal — overlays the sentinel module pane */
+/* Action pack modal — fixed to the viewport, same rationale as .sent-appt-modal */
 .sent-act-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
   /* Scrim: intentionally dark in both themes — consistent with .sent-appt-modal */
   background: rgba(15, 23, 42, 0.55);
@@ -1104,7 +1230,6 @@
   align-items: flex-start;
   justify-content: stretch;
   padding: 12px;
-  border-radius: inherit;
   overflow-y: auto;
 }
 
@@ -1113,6 +1238,7 @@
   border: 1px solid var(--border-hi);
   border-radius: var(--r-lg);
   width: 100%;
+  max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1360,4 +1486,131 @@
   color: var(--amber);
   margin-left: 4px;
   opacity: 0.85;
+}
+
+/* ── Guided tour (spotlight step-through) ─────────────────────────────────────
+   Engine: side-panel/modules/sentinel/tour.js · steps: tour-steps.js.
+   The layer blocks interaction; the spotlight cuts a hole in the scrim via an
+   oversized box-shadow so the highlighted element shows through at full
+   brightness. */
+.sent-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  font-family: var(--sans);
+}
+.sent-tour-spot {
+  position: fixed;
+  border-radius: var(--r-md);
+  /* Scrim drawn as the spotlight's shadow — same dark scrim as the modals */
+  box-shadow:
+    0 0 0 9999px rgba(15, 23, 42, 0.55),
+    0 0 0 2px var(--accent);
+  transition:
+    left var(--med) var(--ease),
+    top var(--med) var(--ease),
+    width var(--med) var(--ease),
+    height var(--med) var(--ease);
+  pointer-events: none;
+}
+/* Centred (no-target) steps: no cutout — the layer itself carries the scrim.
+   (A parked/zero-size spotlight can't do it: Chromium culls box-shadow
+   painting for offscreen/zero-area boxes.) */
+.sent-tour-layer.sent-tour-center {
+  background: rgba(15, 23, 42, 0.55);
+}
+.sent-tour-center .sent-tour-spot {
+  display: none;
+}
+.sent-tour-card {
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  transition:
+    left var(--med) var(--ease),
+    top var(--med) var(--ease);
+}
+.sent-tour-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.sent-tour-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+.sent-tour-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.sent-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+.sent-tour-progress {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.sent-tour-btns {
+  display: flex;
+  gap: 4px;
+}
+.sent-tour-btn {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.sent-tour-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+.sent-tour-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sent-tour-next {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sent-tour-next:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sent-tour-spot,
+  .sent-tour-card {
+    transition: none;
+  }
 }
