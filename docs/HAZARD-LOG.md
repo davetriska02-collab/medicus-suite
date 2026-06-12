@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-HL-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.56.0  
-**Document version:** 3.5  
-**Date issued:** 2026-06-11  
+**Product version:** 3.60.0  
+**Document version:** 3.6  
+**Date issued:** 2026-06-12  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
 **Status:** Live — reviewed at each minor or major release  
@@ -25,7 +25,7 @@ The log is intended to be read alongside:
 
 ## 2. Scope
 
-This hazard log applies to all functional modules of Medicus Suite v3.56.0, namely:
+This hazard log applies to all functional modules of Medicus Suite v3.60.0, namely:
 
 - **Monitoring (Sentinel)** — HUD display of practice-authored clinical rules, QOF indicators, drug-monitoring intervals, waiting-room list. Since v3.16.0 this includes: **falling eGFR trend** (NICE NG203: ≥15 mL/min/1.73m² fall across ≥3 readings within 12 months) and **hyperkalaemia (K⁺) RAG-banded alerts** (amber 5.5–5.9 mmol/L, red ≥6.0 mmol/L per NICE/UK Kidney Association) using a new `observation-alert` check kind (v3.18.0); a **rising HbA1c trend** rule scoped to the DM register (≥10 mmol/mol rise across ≥3 readings within 24 months, NICE NG28/NG17) (v3.19.0); **journal-coded observations** now evaluated in the side-panel path (v3.21.0); **ADHD medication monitoring** (stimulants paediatric/adult, atomoxetine, guanfacine — NICE NG87/BNF), **smoking status indicators** across 9 QOF registers, **carbamazepine monitoring** (FBC/LFT/U&E/sodium/drug level/lipids), and the `observation-bundle` check kind enabling DM037 (v3.26.x); **flu and COVID-19 vaccination eligibility alerts** using JCVI/UKHSA 2025/26 criteria, with inferred DUE/GIVEN/DECLINED status (v3.26.0); and **per-rule hide/snooze** controls (permanent hide for drug-monitoring and QOF rules; snooze-until-season for vaccine rules) (v3.26.3). From v3.33.0 the side panel displays a **per-module extraction breakdown** (`Extracted: N meds · N obs · N problems`, amber on zero) as an informational transparency measure. From v3.37.0 permanently hidden chips now record status-at-dismissal and automatically resurface if the chip's current status becomes more severe than it was at dismissal. From v3.47.0 a **live extraction-health drift detector** fires an amber banner when a sustained multi-sample zero is detected on a previously non-zero metric. From v3.49.0 a **Pre-Consultation Brief** collapsible card provides a risk-ranked patient overview at the top of the Sentinel panel. From v3.50.0 a **Patient Passport** one-click printable plain-English summary can be generated.
 - **Custom Alert Builder (Sentinel options)** — form-based authoring of practice custom rules across six check kinds (drug-monitoring, drug-combo, qof-indicator, event-count, observation-alert, composite), with an engine-backed live "would this fire?" preview against an editable test patient and schema validation on save (v3.15.0–v3.16.0); from v3.22.0 the builder exposes full engine parity: `requiresProblem`/`requiresAnyProblem`/`excludeIfProblem`, sex, age range, `mustNotBePresent` drug-absence gate, per-test SNOMED aliases, and the `medicationExclude` field now correctly applied by the engine (previously saved but silently unevaluated). From v3.48.0 every action-needed chip carries **Action Packs** (copy-ready blood-form requests, recall SMS messages, letters, tasks).
@@ -41,6 +41,8 @@ This hazard log applies to all functional modules of Medicus Suite v3.56.0, name
 - **Sweep** — Pre-clinic Monitoring Sweep (v3.37.0): runs the Sentinel rules engine against today's booked patients from the practice appointment book to produce a morning worklist. From v3.44.0 generates a printable reception handout with per-patient booking instructions. From v3.56.0 generates batch Action-Pack artefacts for all action-needed patients in a sweep run — see H-023.
 - **Reception** — guided capture for non-clinical front-desk staff (v3.38.0); structured question sets per presenting problem with red-flag escalation gates; all pathways ship disabled pending practice CSO/GP review — see H-024.
 - **Knowledge** — practice-owned reference base for referral criteria, contacts, and internal pathways (v3.42.0). Reference material only; not clinical decision support.
+- **Today** — morning command-centre tab (v3.60.0) aggregating existing administrative feeds (waiting room, triage load, demand counts, slot availability, last Sweep summary, recent alert log) into one view; administrative glance only — see CSN limitation 33.
+- **Suite chrome and onboarding (v3.57.0–v3.60.0)** — suite-wide guided tour, first-run setup checklist, command palette (Ctrl+K), view-state continuity, consolidated Notifications settings with **clinic mode** (temporary mute of the extension's own desktop pop-ups and sounds only — never strips, badges, chips or in-page surfaces; see H-028), **reception capture drafts** (≤4h local working copy — see H-029) and **resumable Sweep** (≤2h local working copy — see H-027). No change to the rules engine, extraction logic, or any clinical threshold in these releases.
 - **Patient Record Visualiser** — offline PDF-based multi-tab clinical dashboard, including: continuity-of-care indices, investigation trends with clinical zone bands, high-risk drug monitoring compliance, Electronic Frailty Index (eFI), PINCER-style prescribing safety flags, QOF register review status, swim-lane event timeline, and from v3.51.0 an **SMR tab** with ACB burden scoring (Boustani scale), STOPP/START v3 prescribing flags (13 criteria, starter set), and a printable NHS DES-aligned SMR documentation skeleton. From v3.56.0 four additional PINCER rule-shape checks (triple-whammy, NSAID+antiplatelet, benzo≥80, PINCER#1 age-gate) are added to `computePINCER`, closing gaps that previously existed between the visualiser and the live triage-lens HUD.
 
 It covers hazards arising from the technical operation of the extension, from the human factors of its use by trained GP practice staff, and from foreseeable failure modes of the surrounding environment (browser, network, Medicus platform).
@@ -322,7 +324,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Initial severity** | 3 (Moderate) |
 | **Initial likelihood** | 3 (Possible) |
 | **Initial risk** | 9 |
-| **Controls / mitigations** | (a) The deploying practice is asked to curate its rule set rather than enabling everything by default. (b) Custom rules can be disabled individually via the Options page. (c) Chips are colour-coded so that the user's eye is drawn to the most clinically relevant. (d) The Clinical Safety Notice frames the extension as a memory aid, not a workflow gate. (e) The CSO recommends that practices monitor for "alert fatigue" anecdotally and adjust rule sets accordingly. (f) **Per-rule hide/snooze (v3.26.3):** individual chips can be dismissed with an unobtrusive ×; vaccine chips snooze until the season end (auto-resurface), drug-monitoring and QOF indicator chips can be permanently hidden from a user's panel. This provides a targeted mechanism to suppress persistent false positives without disabling an entire rule. **Caution:** permanently hidden chips introduce the risk described in H-021; the practice must brief users and the rules owner must review suppressions periodically. |
+| **Controls / mitigations** | (a) The deploying practice is asked to curate its rule set rather than enabling everything by default. (b) Custom rules can be disabled individually via the Options page. (c) Chips are colour-coded so that the user's eye is drawn to the most clinically relevant. (d) The Clinical Safety Notice frames the extension as a memory aid, not a workflow gate. (e) The CSO recommends that practices monitor for "alert fatigue" anecdotally and adjust rule sets accordingly. (f) **Per-rule hide/snooze (v3.26.3):** individual chips can be dismissed with an unobtrusive ×; vaccine chips snooze until the season end (auto-resurface), drug-monitoring and QOF indicator chips can be permanently hidden from a user's panel. This provides a targeted mechanism to suppress persistent false positives without disabling an entire rule. **Caution:** permanently hidden chips introduce the risk described in H-021; the practice must brief users and the rules owner must review suppressions periodically. (g) **Clinic mode (v3.60.0):** a user-controlled temporary mute of the extension's own desktop pop-up notifications and sounds gives users a sanctioned way to manage interruption load during consultations instead of disabling notification channels permanently. It is bounded to intrusive channels only — on-screen strips, badges and all clinical chip surfaces are never muted (enforced at the notification emission points) — and it expires automatically. **Caution:** introduces the awareness-delay risk described in H-028. |
 | **Residual severity** | 3 |
 | **Residual likelihood** | 2 |
 | **Residual risk** | 6 — Acceptable (ALARP) |
@@ -596,6 +598,63 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-027 — Resumed Sweep treated as current (stale worklist)
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-027 |
+| **Description** | From v3.60.0 the last Sweep run (results and batch selections) persists locally for up to 2 hours so that a tab switch or panel reload does not destroy the morning worklist. A user resumes a previous run and treats it as the current state of the records — arranging recalls, generating handouts or batch Action-Pack artefacts from data that is up to 2 hours old, during which bloods may have been filed, medications changed, or appointments altered. |
+| **Potential causes** | User resumes out of convenience rather than re-running; user does not register the run timestamp on the resume card; a colleague re-ran the sweep on another workstation (runs are per-workstation, so the local copy does not reflect it). |
+| **Affected users / components** | Clinicians and reception/admin staff using the Sweep worklist. Components: `side-panel/modules/sweep/sweep.js` (`sweep.lastRun`). |
+| **Initial severity** | 3 (Moderate — the consequence is an unnecessary or missed *administrative* booking action; the artefacts are booking/recall instructions, not clinical decisions, and limitation 26's point-in-time caution already applies to a fresh run) |
+| **Initial likelihood** | 3 (Possible — resuming is the convenient default within the window) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) The resume card displays the run time and clinician filter ("Last sweep HH:MM …"), so staleness is visible at the point of choice. (b) The stored run expires after 2 hours and is deleted on sight thereafter; resume is then impossible. (c) A fresh "Run sweep" replaces the stored run — resume never wins over a newer run on the same workstation. (d) The Clinical Safety Notice (limitations 26 and 34) instructs users to re-run rather than resume when currency matters, and the existing "point-in-time snapshot" caution applies to all sweep output. (e) The stored run is a per-workstation working copy, excluded from suite backups, and carries the same per-patient identity display as a fresh run (H-023 controls unchanged). |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. The resume window is deliberately short (2h); the alternative — losing the worklist on every tab switch — was itself a driver of re-run errors and workflow abandonment. |
+
+---
+
+### H-028 — Clinic mode delays awareness of operational alerts
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-028 |
+| **Description** | From v3.60.0 a user can temporarily mute the extension's desktop pop-up notifications and notification sounds ("clinic mode": 30 minutes, 1 hour, or until 18:00). During a muted period the user is not interrupted by pop-ups for triage-threshold crossings or new-request notifications and may become aware of a building triage queue later than they otherwise would. A secondary risk is forgetting that clinic mode is active. |
+| **Potential causes** | User enables clinic mode for a consultation block and does not glance at the panel strips during it; user forgets the mute is active (mitigated by auto-expiry and the visible pill); user expects "until 18:00" to behave differently around the 18:00 boundary. |
+| **Affected users / components** | Users who enable clinic mode. Components: `shared/quiet-mode.js`, `side-panel/panel.js` (notification emission), `service-worker.js` (RM notifications), Options → Notifications. |
+| **Initial severity** | 3 (Moderate — the muted channels are operational/administrative pop-ups; the underlying strips, badges, and all clinical chip surfaces continue to display and update throughout, and desktop notifications are themselves a best-effort channel the browser may suppress) |
+| **Initial likelihood** | 3 (Possible — muting during consultations is the feature's intended use) |
+| **Initial risk** | 9 |
+| **Controls / mitigations** | (a) **Bounded scope, enforced in code:** the quiet check exists only at the desktop-notification/sound emission points; strips, toolbar badge, nav badges, Sentinel chips, Triage Lens HUD and in-module banners are architecturally incapable of being muted by clinic mode. (b) The active state is continuously visible as a 🔕 pill in the panel (and pop-out) header showing the expiry time; one click cancels it. (c) Clinic mode always expires automatically; there is no indefinite mute. (d) An "Until 18:00" selection made after 18:00 rolls to the next day rather than silently failing to activate. (e) Alert events that fire during a muted period are still recorded in the recent-alerts log (Today tab), so a muted hour is reviewable afterwards. (f) The settings UI states the boundary verbatim: "Clinic mode silences desktop pop-ups and sounds only. On-screen strips, badges and clinical alerts in the patient record are never muted." (g) The Clinical Safety Notice (limitation 32) and the deployment briefing list (§9.1) cover the residual need to glance at the panel during a muted period. |
+| **Residual severity** | 3 |
+| **Residual likelihood** | 2 |
+| **Residual risk** | 6 — Acceptable (ALARP) |
+| **Acceptability** | Accepted. The failure direction is conservative: a fault in clinic mode's activation leaves notifications ON (fail-open). The alternative — users disabling notification channels permanently to manage interruption load — carries a worse and unbounded version of the same risk (see H-012 control g). |
+
+---
+
+### H-029 — Reception capture draft restored against the wrong contact
+
+| Field | Value |
+|-------|-------|
+| **Hazard ID** | H-029 |
+| **Description** | From v3.60.0 an in-progress reception guided capture is auto-saved as a local draft (≤4 hours) so a tab switch does not destroy a 10–15 question phone capture. A receptionist taking a *different* patient's call later restores the earlier draft and submits a generated history that mixes two contacts' information, or attributes one caller's answers to another. |
+| **Potential causes** | Busy front desk with interleaved calls; the receptionist recognises the pathway tile's "draft" pill and assumes it relates to the current caller; a colleague's draft is restored on a shared workstation profile. |
+| **Affected users / components** | Non-clinical reception staff; the clinician reviewing the generated text. Components: `side-panel/modules/reception/reception.js` (`reception.captureDraft`). |
+| **Initial severity** | 4 (Major — wrong-context documentation in a structured complaint description could mislead the reviewing clinician, analogous to H-023's wrong-patient class) |
+| **Initial likelihood** | 2 (Unlikely — restoring requires an explicit choice from a time-stamped banner, and the draft is scoped to a single pathway) |
+| **Initial risk** | 8 |
+| **Controls / mitigations** | (a) Restore is never automatic: a banner showing the draft's saved time offers an explicit "Restore / Discard" choice, and discard deletes the draft. (b) The draft is scoped to one pathway; opening a different pathway does not surface it. (c) The draft expires after 4 hours and is deleted on sight thereafter; generation or discard clears it immediately. (d) The existing wrong-patient-paste control is unchanged: when a patient record is open, the patient's name/DOB is embedded in the generated text header so a wrong-record paste is detectable on reading (limitation 27). (e) Every capture is reviewed by a clinician against the actual contact — the output remains an unverified structured complaint description, never clinical findings. (f) The Clinical Safety Notice (limitations 27 and 34) requires staff to confirm a draft belongs to the current contact before restoring, and this is added to the deployment briefing list. (g) The draft is a per-workstation working copy excluded from suite backups. |
+| **Residual severity** | 4 |
+| **Residual likelihood** | 1 |
+| **Residual risk** | 4 — Acceptable |
+| **Acceptability** | Accepted — monitor. Any report of a mixed-contact capture is treated as a significant event and will prompt reconsideration of the draft feature's design (e.g. embedding caller identity in the draft banner). |
+
+---
+
 ## 6. Hazard summary
 
 | ID | Hazard | Initial S×L | Initial risk | Residual S×L | Residual risk | Status |
@@ -626,8 +685,11 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-024 | Reception guided capture — non-clinical staff over-reliance | 4×2 | 8 | 4×2 | 8 | Accepted (ALARP) — monitor |
 | H-025 | Trends charts — sparse data misread as trend | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
 | H-026 | Triage Lens red-flag expansion — false-negative reliance | 4×3 | 12 | 4×2 | 8 | Accepted (ALARP) — monitor |
+| H-027 | Resumed Sweep treated as current — stale worklist | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-028 | Clinic mode — delayed awareness of operational alerts | 3×3 | 9 | 3×2 | 6 | Accepted (ALARP) |
+| H-029 | Reception draft restored against wrong contact | 4×2 | 8 | 4×1 | 4 | Accepted — monitor |
 
-No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.56.0 is approved by the Clinical Safety Officer on the basis of this hazard log.
+No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. The release of v3.60.0 is approved by the Clinical Safety Officer on the basis of this hazard log.
 
 ## 7. Review and reporting
 
@@ -656,15 +718,16 @@ If an incident meeting the threshold of a patient safety incident is identified,
 | 2026-06-03 | 3.3 | DT | Synchronised to v3.26.4. **New hazards:** H-020 (vaccination eligibility inferred status and DUE/GIVEN/DECLINED — includes record of v3.26.0 critical false-positive affecting all patients, corrected in v3.26.1); H-021 (permanent chip suppression via hide/snooze, v3.26.3 — permanent suppression could mask a future true-positive drug-monitoring alert). **Scope updated** to reflect new modules since v3.16.0: falling eGFR trend and hyperkalaemia alerts (v3.18.0, new `observation-alert` check kind); rising HbA1c trend (v3.19.0); journal-coded observations in side-panel evaluation (v3.21.0); full Custom Alert Builder engine parity (v3.22.0); BP Trend and ACR Trend side-panel tabs (v3.25.0); ADHD monitoring rules, smoking status indicators, carbamazepine, `observation-bundle` check kind (v3.26.x); flu/COVID vaccination eligibility alerts (v3.26.0); per-rule hide/snooze (v3.26.3). **Updated hazards:** H-001 (added v3.17.2 snapshot invalidation, v3.21.2 DOM-fallback UUID fix, v3.25.0 `_lastTrendData` guard); H-002 (added v3.20.0 age-filter fail-open, register/indicator logic corrections, v3.21.0 journal observations, v3.26.2 UUID regex, HRT false-negative fixes); H-003 (added v3.20.0 DM021/DM035/HF009 false-positive fixes, v3.26.4 hysterectomy detection, v3.26.1 vaccine false positive); H-004 (added v3.22.0 form-builder parity, medicationExclude now applied); H-005 (added v3.17.0 CI pipeline); H-006 (updated test count to 440+, 17 test files; added CI pipeline note); H-007 (added BP/ACR Trend, vaccination, eGFR/K⁺ alert surface notes, ACR referral-trigger banner wording); H-012 (added v3.26.3 hide/snooze as positive control). Aligned with `CLINICAL-SAFETY-NOTICE.md` v3.3. |
 | 2026-06-07 | 3.4 | DT | Synchronised to v3.33.0. Added new supporting document `docs/SOUP.md` (Software of Unknown Provenance register for the vendored visualiser libraries) to the §1 document set. Updated H-005 with control (j): the per-module extraction breakdown now surfaced in the Sentinel side panel (`Extracted: N meds · N obs · N problems`, zero counts amber-flagged), which narrows the detection gap between the whole-record `degraded` banner and a partial scraper failure — informational only, so no new false-reassurance or alert-fatigue risk; regression-guarded by `test-extraction-health.js` and `test-sentinel-panel-state.js`. |
 | 2026-06-11 | 3.5 | DT | Synchronised to v3.56.0. **Scope (§2) updated** to include all modules added since v3.33.0: unified Trends tab (v3.34.0); Condor operational dashboard (v3.35.0); Pre-clinic Monitoring Sweep + reception handout + Action Packs + batch artefact generation (v3.37.0, v3.44.0, v3.48.0, v3.56.0); Reception guided capture (v3.38.0); Knowledge module (v3.42.0); Triage Lens major red-flag expansion and engine hardening (v3.46.0, v3.52.0); live extraction-health drift detection + evaluation audit trail (v3.47.0); Patient Passport (v3.50.0); Pre-Consultation Brief (v3.49.0); SMR tab in Visualiser with ACB/STOPP/START v3 (v3.51.0); PINCER parity work — drug-table completion and rule-shape gaps closed (v3.54.0, v3.56.0). **New hazards:** H-022 (Condor stale metrics — staffing decisions); H-023 (Sweep batch artefacts — wrong-patient action); H-024 (Reception guided capture — non-clinical staff over-reliance); H-025 (Trends sparse data — misread trend); H-026 (Triage Lens red-flag expansion — false-negative reliance). **Updated hazards:** H-005 controls (k) journal-augmentation failure surfaced (v3.54.0), (l) rolling drift detection (v3.47.0), global extraction-health banner extended to all modules (v3.30.0); H-016 controls (g) visualiser drug-table completion (v3.54.0), (h) PINCER rule-shape gaps closed (v3.56.0). **Hazard summary** updated to include H-022–H-026; release statement updated to v3.56.0. |
+| 2026-06-12 | 3.6 | DT | Synchronised to v3.60.0 (UX/onboarding releases v3.57.0–v3.60.0; no change to rules engine, extraction, or clinical thresholds). **Scope (§2) updated:** Today tab; suite chrome and onboarding (guided tour, setup checklist, command palette, view-state continuity); consolidated Notifications + clinic mode; reception capture drafts; resumable Sweep. **New hazards:** H-027 (resumed Sweep treated as current — stale worklist); H-028 (clinic mode — delayed awareness of operational pop-ups; scope bounded in code to desktop pop-ups/sounds, never strips/badges/clinical surfaces); H-029 (reception draft restored against the wrong contact). **Updated hazards:** H-012 control (g) — clinic mode recorded as a bounded, auto-expiring interruption-management control with cross-reference to H-028. **Hazard summary** updated to include H-027–H-029; release statement updated to v3.60.0. Release content was additionally bug-bashed pre-merge (three reviewers + independent verification pass; no red findings; four minor fixes applied — see CHANGELOG v3.60.0). |
 
 ## 9. Clinical Safety Officer sign-off
 
-I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.56.0, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
+I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.60.0, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
 **Dr Dave Triska, GMC 7534932**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
-**Date:** 2026-06-11 *(reviewed and reissued with v3.56.0)*
+**Date:** 2026-06-12 *(reviewed and reissued with v3.60.0)*
 
 > Sign-off recorded 2026-06-11 on PR #78: CSO approved the v3.56.0 reissue including
 > H-022..H-026, directed promotion of adult epiglottitis presentations to a dedicated

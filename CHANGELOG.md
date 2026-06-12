@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.1] — 2026-06-12
+
+### Safety-doc reissue for the 3.57–3.60 releases (CSO-directed)
+
+- **CLINICAL-SAFETY-NOTICE v3.5** — intended purpose, regulatory assertions and
+  limitations updated for the UX/onboarding releases: limitation 26 corrected
+  ("Results are not stored" → sweep results persist ≤2h for resume, with
+  staleness caution), limitation 27 updated for capture drafts, and new
+  limitations 32 (clinic mode — desktop pop-ups/sounds only, never clinical
+  surfaces), 33 (Today tab — administrative glance; alert log is a convenience
+  record, not an audit trail) and 34 (drafts/resumed sweeps are point-in-time
+  working copies). DOES-NOT item 8 now honestly enumerates the short-lived
+  local working copies that contain patient data and their TTLs.
+- **HAZARD-LOG v3.6** — new hazards H-027 (resumed sweep staleness), H-028
+  (clinic mode awareness delay; fail-open, code-bounded scope) and H-029
+  (reception draft restored against the wrong contact — monitor); H-012 gains
+  clinic mode as a bounded interruption-management control.
+- **SOUP v1.2** — no SOUP changes in v3.57–v3.60 (all new code first-party);
+  vendored set re-verified unchanged.
+- **feature-list** regenerated at v3.60.0 (Today tab, palette, tour/setup,
+  notifications/clinic mode, continuity, drafts/resume).
+- `scripts/check-doc-versions.js` known-stale pins removed — the guard is
+  fully strict again.
+
 ## [v3.60.0] — 2026-06-12
 
 ### Five-workstream UX release
