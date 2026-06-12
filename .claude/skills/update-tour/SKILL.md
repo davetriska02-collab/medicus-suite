@@ -53,6 +53,15 @@ Engine contract (enforced by `tour.js`):
 
 ## Procedure
 
+> **CI backstop:** `test-tour-steps.js` runs in the normal test suite and
+> fails the build when (a) a step's selector token is no longer rendered by
+> any JS/HTML source, (b) a new `data-module` tab exists in `panel.html` that
+> is neither taught by a step nor consciously listed in its
+> `NAV_COVERED_BY_OVERVIEW` set, or (c) step structure/`addedIn` tags are
+> malformed. So UI changes that outrun the tour surface as red CI on the PR
+> that ships them — this skill is the procedure you run to make that green
+> again (or proactively, before it ever goes red).
+
 ### 1. Find what changed since the last tour bump
 
 ```
@@ -105,10 +114,38 @@ action bar).
 
 ### 5. Sanity checks before committing
 
-- `npx eslint side-panel/tour/`
-- `npm test` (the tour is data-only; failures mean you strayed elsewhere)
+- `node test-tour-steps.js` — the staleness guard (structure, selector
+  tokens, nav coverage). If you added a module step, remove that module from
+  `NAV_COVERED_BY_OVERVIEW`; if a new tab is deliberately overview-only, add
+  it there with the others.
+- `npx eslint side-panel/tour/ test-tour-steps.js`
+- `npm test` (the tour is data-only; other failures mean you strayed elsewhere)
 - Every step has `id`, `addedIn`, `title`, `body`, and either `target` or
   `center: true`. No step body over 2 sentences. No ALL-CAPS labels.
+
+## Practice-pushed deployments (shared-folder updates)
+
+Most users receive updates as a practice-pushed overwrite of a shared
+unpacked-extension folder, not an individual install. The tour is designed
+for that:
+
+- **No install hooks needed.** `suite.tour.seenVersion` lives in the browser
+  profile's localStorage. A profile that has never seen the tour (genuinely
+  new user, new machine) gets the **full** walkthrough on first panel open; a
+  profile that completed version N gets a **"What's new"** pass only when
+  `TOUR_VERSION` > N. A folder push by itself triggers nothing.
+- **Bumping `TOUR_VERSION` is therefore a release decision**: bump it when a
+  push carries user-facing features worth announcing, leave it alone for
+  fixes — that keeps routine pushes silent instead of nagging a whole
+  practice.
+- **Deployment caveat to relay to whoever runs the push:** an unpacked
+  extension's ID is derived from its folder path. Pushing to a *new* path
+  (e.g. versioned folders) changes the ID and resets ALL extension state —
+  chrome.storage config, not just the tour. Overwrite the same path.
+- **Shared Chrome profiles** (hot-desking on a generic login) see the tour
+  once per profile, not per person. Colleagues who missed it can replay from
+  Options → Suite or the Monitoring **More** menu — worth a line in any
+  practice rollout note.
 
 ## What NOT to do
 
