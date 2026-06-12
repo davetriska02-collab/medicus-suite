@@ -62,6 +62,26 @@ function closeModals(host) {
   host.querySelector('.sent-act-modal')?.remove();
 }
 
+// Keep Tab cycling INSIDE an open modal — aria-modal alone doesn't trap focus,
+// so without this Tab walks out into the (inert-looking) panel behind the scrim.
+function trapModalTab(modal, e) {
+  if (e.key !== 'Tab') return;
+  const focusables = Array.from(
+    modal.querySelectorAll('button, textarea, input, select, a[href], [tabindex]:not([tabindex="-1"])')
+  ).filter((el) => !el.disabled && el.offsetParent !== null);
+  if (focusables.length === 0) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey && (active === first || !modal.contains(active))) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (active === last || !modal.contains(active))) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 function showAdminSummaryModal(text) {
   const host = modalHost();
   if (!host) return;
@@ -98,6 +118,7 @@ function showAdminSummaryModal(text) {
   });
   modal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    trapModalTab(modal, e);
   });
 
   const copyBtn = modal.querySelector('#sentApptModalCopy');
@@ -173,6 +194,7 @@ function showActionPackModal(title, pack) {
   });
   modal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    trapModalTab(modal, e);
   });
   modal.querySelector('.sent-appt-modal-close')?.focus();
 
@@ -251,6 +273,7 @@ function showAllActionsModal(chips, patient) {
   });
   modal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    trapModalTab(modal, e);
   });
   modal.querySelector('.sent-appt-modal-close')?.focus();
 
