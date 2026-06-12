@@ -3,32 +3,60 @@
 'use strict';
 
 import { createModuleLoader } from '../side-panel/module-loader.js';
+import { initTour } from '../side-panel/tour/tour.js';
 
-const content    = document.getElementById('popoutContent');
+const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
-let activeModule  = null;
+let activeModule = null;
 let moduleCleanup = null;
-let switchSeq     = 0;
+let switchSeq = 0;
 
 // ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
 
 const MODULES = {
-  slots:       { js: () => import('../side-panel/modules/slots/slots.js'),           css: '../side-panel/modules/slots/slots.css' },
-  capacity:    { js: () => import('../side-panel/modules/capacity/capacity.js'),      css: '../side-panel/modules/capacity/capacity.css' },
-  submissions: { js: () => import('../side-panel/modules/submissions/submissions.js'), css: '../side-panel/modules/submissions/submissions.css' },
-  sentinel:    { js: () => import('../side-panel/modules/sentinel/sentinel.js'),      css: '../side-panel/modules/sentinel/sentinel.css' },
-  activity:    { js: () => import('../side-panel/modules/activity/activity.js'),     css: '../side-panel/modules/activity/activity.css' },
-  referrals:   { js: () => import('../side-panel/modules/referrals/referrals.js'),   css: '../side-panel/modules/referrals/referrals.css' },
-  condor:      { js: () => import('../side-panel/modules/condor/condor.js'),         css: '../side-panel/modules/condor/condor.css' },
-  trends:      { js: () => import('../side-panel/modules/trends/trends.js'),         css: '../side-panel/modules/trends/trends.css' },
-  reception:   { js: () => import('../side-panel/modules/reception/reception.js'),   css: '../side-panel/modules/reception/reception.css' },
-  sweep:       { js: () => import('../side-panel/modules/sweep/sweep.js'),           css: '../side-panel/modules/sweep/sweep.css' },
-  knowledge:   { js: () => import('../side-panel/modules/knowledge/knowledge.js'),   css: '../side-panel/modules/knowledge/knowledge.css' },
+  slots: { js: () => import('../side-panel/modules/slots/slots.js'), css: '../side-panel/modules/slots/slots.css' },
+  capacity: {
+    js: () => import('../side-panel/modules/capacity/capacity.js'),
+    css: '../side-panel/modules/capacity/capacity.css',
+  },
+  submissions: {
+    js: () => import('../side-panel/modules/submissions/submissions.js'),
+    css: '../side-panel/modules/submissions/submissions.css',
+  },
+  sentinel: {
+    js: () => import('../side-panel/modules/sentinel/sentinel.js'),
+    css: '../side-panel/modules/sentinel/sentinel.css',
+  },
+  activity: {
+    js: () => import('../side-panel/modules/activity/activity.js'),
+    css: '../side-panel/modules/activity/activity.css',
+  },
+  referrals: {
+    js: () => import('../side-panel/modules/referrals/referrals.js'),
+    css: '../side-panel/modules/referrals/referrals.css',
+  },
+  condor: {
+    js: () => import('../side-panel/modules/condor/condor.js'),
+    css: '../side-panel/modules/condor/condor.css',
+  },
+  trends: {
+    js: () => import('../side-panel/modules/trends/trends.js'),
+    css: '../side-panel/modules/trends/trends.css',
+  },
+  reception: {
+    js: () => import('../side-panel/modules/reception/reception.js'),
+    css: '../side-panel/modules/reception/reception.css',
+  },
+  sweep: { js: () => import('../side-panel/modules/sweep/sweep.js'), css: '../side-panel/modules/sweep/sweep.css' },
+  knowledge: {
+    js: () => import('../side-panel/modules/knowledge/knowledge.js'),
+    css: '../side-panel/modules/knowledge/knowledge.css',
+  },
 };
 
 // ── Slots badge ───────────────────────────────────────────────────────────────
 
-document.addEventListener('suite:slots:count', e => {
+document.addEventListener('suite:slots:count', (e) => {
   const tab = document.querySelector('[data-module="slots"]');
   if (!tab) return;
   let badge = tab.querySelector('.nav-badge');
@@ -39,7 +67,7 @@ document.addEventListener('suite:slots:count', e => {
   }
   const n = e.detail.count;
   badge.textContent = n != null ? String(n) : '';
-  badge.style.display = (n != null && n >= 0) ? '' : 'none';
+  badge.style.display = n != null && n >= 0 ? '' : 'none';
 });
 
 // ── CSS loader ────────────────────────────────────────────────────────────────
@@ -48,11 +76,14 @@ const loadedCss = new Set();
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-document.querySelectorAll('.nav-tab').forEach(tab => {
+document.querySelectorAll('.nav-tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     // A drag that ends on the same tab still fires a click; suppress it so a
     // reorder doesn't also switch module.
-    if (tab.dataset.dragged === '1') { delete tab.dataset.dragged; return; }
+    if (tab.dataset.dragged === '1') {
+      delete tab.dataset.dragged;
+      return;
+    }
     const mod = tab.dataset.module;
     if (mod === activeModule) return;
     switchModule(mod);
@@ -68,12 +99,11 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   const tabsEl = document.getElementById('popoutTabs');
   if (!tabsEl) return;
 
-  const tabIds = () =>
-    [...tabsEl.querySelectorAll('.nav-tab')].map(t => t.dataset.module);
+  const tabIds = () => [...tabsEl.querySelectorAll('.nav-tab')].map((t) => t.dataset.module);
 
   function applyOrder(stored) {
     const order = reconcileTabOrder(tabIds(), stored);
-    order.forEach(id => {
+    order.forEach((id) => {
       const el = tabsEl.querySelector(`.nav-tab[data-module="${id}"]`);
       if (el) tabsEl.appendChild(el);
     });
@@ -82,7 +112,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   const r = await chrome.storage.local.get(STORAGE_KEY);
   applyOrder(r[STORAGE_KEY]);
 
-  chrome.storage.onChanged.addListener(changes => {
+  chrome.storage.onChanged.addListener((changes) => {
     if (changes[STORAGE_KEY]) applyOrder(changes[STORAGE_KEY].newValue);
   });
 
@@ -94,34 +124,40 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     tab.setAttribute('draggable', 'true');
     tab.title = tab.title || 'Drag to reorder';
 
-    tab.addEventListener('dragstart', e => {
+    tab.addEventListener('dragstart', (e) => {
       dragSrc = tab;
       tab.classList.add('nav-tab-dragging');
       e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', tab.dataset.module); } catch (_) {}
+      try {
+        e.dataTransfer.setData('text/plain', tab.dataset.module);
+      } catch (_) {}
     });
 
     tab.addEventListener('dragend', () => {
       tab.dataset.dragged = '1';
-      setTimeout(() => { delete tab.dataset.dragged; }, 0);
+      setTimeout(() => {
+        delete tab.dataset.dragged;
+      }, 0);
       tab.classList.remove('nav-tab-dragging');
-      tabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
-        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      tabsEl
+        .querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach((t) => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
       dragSrc = null;
     });
 
-    tab.addEventListener('dragover', e => {
+    tab.addEventListener('dragover', (e) => {
       if (!dragSrc || dragSrc === tab) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       const rect = tab.getBoundingClientRect();
       const after = e.clientX > rect.left + rect.width / 2;
-      tabsEl.querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
-        .forEach(t => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
+      tabsEl
+        .querySelectorAll('.nav-tab-drop-before, .nav-tab-drop-after')
+        .forEach((t) => t.classList.remove('nav-tab-drop-before', 'nav-tab-drop-after'));
       tab.classList.add(after ? 'nav-tab-drop-after' : 'nav-tab-drop-before');
     });
 
-    tab.addEventListener('drop', e => {
+    tab.addEventListener('drop', (e) => {
       e.preventDefault();
       if (!dragSrc || dragSrc === tab) return;
       const rect = tab.getBoundingClientRect();
@@ -137,17 +173,28 @@ settingsBtn?.addEventListener('click', () => {
 });
 
 const switchModule = createModuleLoader({
-  modules:      MODULES,
-  container:    content,
+  modules: MODULES,
+  container: content,
   loadedCss,
   getSwitchSeq: () => switchSeq,
   incSwitchSeq: () => ++switchSeq,
-  getCleanup:   () => moduleCleanup,
-  setCleanup:   (fn) => { moduleCleanup = fn; },
-  setActive:    (name) => { activeModule = name; },
-  onPersist:    (name) => { chrome.storage.local.set({ 'popout.activeModule': name }); },
-  errPrefix:    'Failed to load',
+  getCleanup: () => moduleCleanup,
+  setCleanup: (fn) => {
+    moduleCleanup = fn;
+  },
+  setActive: (name) => {
+    activeModule = name;
+  },
+  onPersist: (name) => {
+    chrome.storage.local.set({ 'popout.activeModule': name });
+  },
+  errPrefix: 'Failed to load',
 });
+
+// Guided tour: replay-only in the pop-out (auto-start is the side panel's
+// job). Module-scoped steps switch tabs via this window's loader; steps whose
+// anchors don't exist here (e.g. panel-only tabs) skip silently.
+initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
 
 // ── Service worker messages ───────────────────────────────────────────────────
 
