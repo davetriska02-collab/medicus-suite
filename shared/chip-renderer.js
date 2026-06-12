@@ -101,10 +101,13 @@
           t.latestObs && t.latestObs.value != null
             ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
             : '';
-        const dayStr = t.days != null ? ` · ${t.days}d` : '';
+        // E: Split into three slots: name / status+value+date / days column
+        const statusText = `${tLbl}${valStr}${dateStr ? ` · ${dateStr}` : ''}`;
+        const daysText = t.days != null ? `${t.days}d` : '';
         return `<div class="sent-test-row">
         <span class="sent-test-name">${escHtml(t.testName || t.name || '')}</span>
-        <span class="sent-test-status sent-test-${tCol}">${tLbl}${valStr}${dateStr ? ` · ${dateStr}${dayStr}` : ''}</span>
+        <span class="sent-test-status sent-test-${tCol}">${statusText}</span>
+        <span class="sent-test-days sent-test-${tCol}">${daysText}</span>
       </div>`;
       })
       .join('');
@@ -148,13 +151,15 @@
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
       : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+          ${evChevron}
         </div>
         ${chip.drugClass ? `<div class="sent-chip-cat">${escHtml(chip.drugClass)}</div>` : ''}
         ${hrtCtxHtml}
@@ -200,13 +205,15 @@
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${pointsText}</span>
+          ${evChevron}
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearOrCustomTag}</div>` : yearOrCustomTag}
         ${obs ? `<div class="sent-chip-obs">${obs}</div>` : ''}
@@ -331,12 +338,14 @@
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+          ${evChevron}
         </div>
         ${setsText ? `<div class="sent-chip-obs">${setsText}</div>` : ''}
         <div class="sent-chip-cat"><span class="sent-custom-tag">Custom</span></div>
@@ -358,12 +367,14 @@
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+          ${evChevron}
         </div>
         <div class="sent-chip-obs">${escHtml(summary)}</div>
         ${sample ? `<div class="sent-chip-cat">${sample}${moreSuffix}</div>` : ''}
@@ -383,12 +394,14 @@
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
-    const evHint = chip.evidence ? `<span class="sent-chip-info" aria-hidden="true">ⓘ</span>` : '';
+    // F: Chevron at end of chip-head instead of ⓘ next to name
+    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}${evHint}</span>
+          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
+          ${evChevron}
         </div>
         <div class="sent-chip-obs">${fired} rule${fired === 1 ? '' : 's'} fired (${escHtml(op)})</div>
         <div class="sent-chip-cat"><span class="sent-custom-tag">Composite</span></div>

@@ -117,6 +117,7 @@ export async function shoot(
     apiFixture = null,
     actions = null,
     settleMs = 600,
+    shimExtra = '', // script appended AFTER the base shim — may override window.chrome.* members (e.g. tabs.sendMessage fixtures for content-script-fed modules like Sentinel)
   }
 ) {
   await mkdir(out, { recursive: true });
@@ -130,7 +131,7 @@ export async function shoot(
   const tab = await ctx.newPage();
   const errors = [];
   tab.on('pageerror', (e) => errors.push(e.message));
-  await tab.addInitScript(chromeShim(theme, store));
+  await tab.addInitScript(chromeShim(theme, store) + '\n' + shimExtra);
   await tab.goto(`http://127.0.0.1:${port}${page}`, { waitUntil: 'networkidle', timeout: 15000 });
   await tab.waitForTimeout(settleMs);
   if (actions) await actions(tab);

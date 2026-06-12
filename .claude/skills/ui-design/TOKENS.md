@@ -38,8 +38,15 @@ wash as text = bug.
 | `--accent` / `--accent-dim` / `--accent-line` | `#2563eb` / `rgba(37,99,235,.09)` / `rgba(37,99,235,.30)` | `#5b8fc7` / `rgba(91,143,199,.14)` / `rgba(91,143,199,.35)` |
 | `--accent-hover` | `#1d4ed8` | `#7eaad6` |
 | `--green` / `--green-dim` / `--green-line` | `#16a34a` / `rgba(22,163,74,.09)` / `rgba(22,163,74,.30)` | `#4ade80` / `rgba(74,222,128,.12)` / `rgba(74,222,128,.32)` |
-| `--amber` / `--amber-dim` / `--amber-line` | `#b45309` / `rgba(180,83,9,.09)` / `rgba(180,83,9,.32)` | `#fbbf24` / `rgba(251,191,36,.12)` / `rgba(251,191,36,.32)` |
-| `--red` / `--red-dim` / `--red-line` | `#dc2626` / `rgba(220,38,38,.08)` / `rgba(220,38,38,.30)` | `#f87171` / `rgba(248,113,113,.13)` / `rgba(248,113,113,.34)` |
+| `--amber` / `--amber-dim` / `--amber-line` | `#b45309` / `rgba(180,83,9,.09)` / `rgba(180,83,9,.32)` | `#fbbf24` / `rgba(251,191,36,.16)` / `rgba(251,191,36,.32)` |
+| `--red` / `--red-dim` / `--red-line` | `#dc2626` / `rgba(220,38,38,.08)` / `rgba(220,38,38,.30)` | `#f87171` / `rgba(248,113,113,.17)` / `rgba(248,113,113,.34)` |
+| `--violet` / `--violet-dim` / `--violet-line` | `#7c3aed` / `rgba(124,58,237,.09)` / `rgba(124,58,237,.30)` | `#a78bfa` / `rgba(167,139,250,.14)` / `rgba(167,139,250,.35)` |
+
+The violet triad is the **custom/user-defined accent** (custom-rule tags and
+similar user-authored markers) — it is deliberately NOT a clinical status and
+colorblind mode leaves it alone. Dark `--red-dim`/`--amber-dim` were raised to
+.17/.16 (2026-06-12 Monitoring crit) so the red-vs-amber tier survives on
+`#0b1424`.
 
 Colorblind mode (`html[data-colorblind="true"]`) re-points the **whole red
 and green triads** (red→orange `#ea580c`, green→blue `#2563eb` + matching
