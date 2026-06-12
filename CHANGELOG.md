@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.7] — 2026-06-12
+
+### Sweep + Trends — design-crit pass (three-critic review via /design-crit)
+
+- **Resume selection bug fixed**: after resuming a stored sweep, the batch
+  bar showed "0 selected" and Generate batch stayed disabled even though the
+  restored checkboxes were ticked — the bar state is now initialised at
+  wire-up, so a resumed selection is immediately actionable.
+- **Disclaimer tells the truth**: the in-results disclaimer claimed "Results
+  are not stored; re-run to refresh", contradicting the 2-hour
+  persistence/resume feature. Sweep now carries ONE authoritative disclaimer
+  (header), with all safety phrases intact and the storage copy corrected
+  ("kept for 2 hours so you can resume; re-run to refresh").
+- **Row anatomy**: action rows are two lines — name + red/amber count badges
+  lead, clinician + Open record sit on a meta line — so names no longer wrap
+  through the controls at panel width. Error rows use the proper badge class
+  (was an undefined class name). Patient names stay verbatim from the
+  appointment book (no case transforms).
+- **Chart calming (Trends)**: KDIGO/ACR reference bands are dim washes with
+  1px dashed boundary edges instead of saturated fills, data lines thickened,
+  and the eGFR series moved from grey (failed non-text contrast) to the
+  violet ink. Red alert dots and full-ink stage pills unchanged.
+- **Plain English**: "clamped at 100" → "values above 100 plotted at 100";
+  "No BP target register" → "No BP target (no qualifying register)" with a
+  register-list tooltip; KDIGO cell gets an explainer tooltip; BP view gains
+  a "Default NICE/QOF thresholds — verify any personalised target in
+  Medicus" footnote when a target line is drawn.
+- **Accessibility**: every chart gets a descriptive aria-label (was six
+  identical "Trend chart"s); sweep progress is an aria-live region; renal
+  banners announce via role=alert; the Trends tab picker is a proper ARIA
+  tabs pattern (aria-controls + tabpanel); row checkboxes are labelled per
+  patient with a hover wash; :active/:focus-visible/:disabled states filled
+  in across sweep buttons; on-accent button ink uses var(--bg-deep).
+
+### Fixed
+
+- **Infinite Triage-strip poll loop**: the side panel re-polled the request
+  monitor on any `suite.requestMonitor.*` storage change — including the
+  state write each poll itself makes — so an enabled triage monitor polled
+  the Medicus task-list API continuously instead of every 60s. The listener
+  now reacts to the five config keys only (mirrors the service worker's
+  existing guard).
+
 ## [v3.60.6] — 2026-06-12
 
 ### Monitoring — design-crit pass (three-critic review via /design-crit)
