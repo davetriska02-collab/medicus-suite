@@ -20,10 +20,12 @@
 //   1 — Monitoring-panel-only tour (v3.57.0)
 //   2 — Suite-wide walkthrough on first install; Monitoring action bar
 //       relocated under the pre-consultation brief (v3.58.0)
+//   3 — Command palette (Ctrl+K) step (v3.59.0)
+//   4 — Today tab — morning command centre (v3.60.0)
 
 'use strict';
 
-export const TOUR_VERSION = 2;
+export const TOUR_VERSION = 4;
 
 export const TOUR_STEPS = [
   {
@@ -47,6 +49,14 @@ export const TOUR_STEPS = [
     centerFallback: true,
     title: 'Global alert strips',
     body: 'When patients are waiting, triage queues build, or demand thresholds trip, alert strips appear just under the tab bar — on every tab, so nothing is missed.',
+  },
+  {
+    id: 'today',
+    addedIn: 4,
+    module: 'today',
+    target: ['.today-module'],
+    title: 'Today — your morning at a glance',
+    body: 'One screen shows waiting patients, triage load, demand counts, available slots and the pre-clinic sweep result so you can start clinic fully briefed.',
   },
   {
     id: 'slots',
@@ -103,6 +113,13 @@ export const TOUR_STEPS = [
     target: ['.sent-unmatched-section'],
     title: 'Meds without a monitoring rule',
     body: 'Most medicines need no routine monitoring. Scan this list for brand names that should have matched a rule but didn’t — and report any you spot.',
+  },
+  {
+    id: 'palette',
+    addedIn: 3,
+    target: ['#paletteBtn'],
+    title: 'One keystroke to anywhere',
+    body: 'Press Ctrl+K (or click here) for the command palette: jump to any tab, change theme or text size, open the right settings section, or replay this tour.',
   },
   {
     id: 'display',

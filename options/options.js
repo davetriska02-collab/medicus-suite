@@ -69,6 +69,18 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   });
 });
 
+// Deep-linking: options.html#sect-<name> opens straight onto that section.
+// Used by the command palette and the Monitoring panel's settings item; also
+// honoured on in-page hash changes so links can retarget an open options tab.
+function activateSectionFromHash() {
+  const m = /^#sect-([a-z-]+)$/.exec(location.hash || '');
+  if (!m) return;
+  const btn = document.querySelector(`.nav-item[data-section="${m[1]}"]`);
+  if (btn) btn.click();
+}
+activateSectionFromHash();
+window.addEventListener('hashchange', activateSectionFromHash);
+
 // ── Suite settings (practice code) ────────────────────────────────────────────
 
 const practiceCodeInput = document.getElementById('practiceCode');
@@ -487,6 +499,7 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
+    notifications,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -500,6 +513,7 @@ async function doFullExport() {
     condorExport(),
     receptionExport(),
     knowledgeExport(),
+    notificationsExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -515,6 +529,7 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
+    notifications,
     suite,
   });
 }
@@ -533,6 +548,7 @@ async function doModuleExport(scope) {
     condor: () => condorExport(),
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
+    notifications: () => notificationsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -565,6 +581,7 @@ async function applyEnvelope(envelope) {
     mods.condor && (() => condorImport(mods.condor)),
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
+    mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1617,6 +1634,131 @@ rmSaveBtn?.addEventListener('click', async () => {
     });
   } catch (e) {
     console.warn('[Triage alerts init]', e.message);
+  }
+})();
+
+// ── Notifications section ─────────────────────────────────────────────────────
+
+(async function initNotificationsSection() {
+  try {
+    const desktopCb = document.getElementById('notifDesktopEnabled');
+    const soundCb = document.getElementById('notifSoundEnabled');
+    const badgeCb = document.getElementById('notifBadgeEnabled');
+    const savedTag = document.getElementById('notifChannelSaved');
+    const quietStatusEl = document.getElementById('quietStatusText');
+    if (!desktopCb || !soundCb || !badgeCb) return;
+
+    // ── Helper: HH:MM format ──────────────────────────────────────────────────
+    function fmtHHMM(epochMs) {
+      const d = new Date(epochMs);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
+    // ── Render quiet mode status ──────────────────────────────────────────────
+    async function renderQuietStatus() {
+      if (!quietStatusEl) return;
+      try {
+        const r = await chrome.storage.local.get('suite.quietUntil');
+        const until = r['suite.quietUntil'];
+        const isActive = until && typeof until === 'number' && until > Date.now();
+        quietStatusEl.textContent = isActive ? `Quiet until ${fmtHHMM(until)}` : 'Off';
+        quietStatusEl.style.color = isActive ? 'var(--amber)' : 'var(--text-2)';
+      } catch (_) {}
+    }
+
+    // ── Load current values via RequestMonitor.getConfig + notifications prefs ─
+    // Use RequestMonitor.getConfig() so we never touch the bare suite.requestMonitor
+    // key directly — the IO file covers the sub-keys. Badge pref uses suite.notifications.
+    const notifPrefKey = 'suite.notifications';
+
+    const [rmCfg, notifRes] = await Promise.all([
+      window.RequestMonitor ? window.RequestMonitor.getConfig() : Promise.resolve({}),
+      chrome.storage.local.get(notifPrefKey),
+    ]);
+    const notifPrefs = notifRes[notifPrefKey] || {};
+
+    desktopCb.checked = rmCfg.notifyEnabled !== false;
+    soundCb.checked = rmCfg.notifySound !== false;
+    badgeCb.checked = notifPrefs.badgeEnabled !== false; // default true
+
+    await renderQuietStatus();
+
+    // ── Flash saved ───────────────────────────────────────────────────────────
+    function flashSaved() {
+      if (!savedTag) return;
+      savedTag.classList.add('show');
+      setTimeout(() => savedTag.classList.remove('show'), 2000);
+    }
+
+    // ── Instant-save checkboxes ───────────────────────────────────────────────
+    async function saveDesktopSound() {
+      if (window.RequestMonitor) {
+        const cur = await window.RequestMonitor.getConfig();
+        await window.RequestMonitor.setConfig({
+          ...cur,
+          notifyEnabled: desktopCb.checked,
+          notifySound: soundCb.checked,
+        });
+      }
+      flashSaved();
+    }
+
+    async function saveBadge() {
+      const cur = (await chrome.storage.local.get(notifPrefKey))[notifPrefKey] || {};
+      await chrome.storage.local.set({
+        [notifPrefKey]: { ...cur, badgeEnabled: badgeCb.checked },
+      });
+      flashSaved();
+    }
+
+    desktopCb.addEventListener('change', saveDesktopSound);
+    soundCb.addEventListener('change', saveDesktopSound);
+    badgeCb.addEventListener('change', saveBadge);
+
+    // ── Clinic mode buttons ───────────────────────────────────────────────────
+    document.getElementById('quietBtn30m')?.addEventListener('click', async () => {
+      await window.QuietMode?.set(Date.now() + 30 * 60 * 1000);
+      renderQuietStatus();
+    });
+    document.getElementById('quietBtn1h')?.addEventListener('click', async () => {
+      await window.QuietMode?.set(Date.now() + 60 * 60 * 1000);
+      renderQuietStatus();
+    });
+    document.getElementById('quietBtnUntil18')?.addEventListener('click', async () => {
+      const now = new Date();
+      let until18 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 18, 0, 0, 0).getTime();
+      // Past 18:00 already? Roll to tomorrow's 18:00 so the button is never a
+      // dead click that silently leaves clinic mode off.
+      if (until18 <= Date.now()) until18 += 24 * 60 * 60 * 1000;
+      await window.QuietMode?.set(until18);
+      renderQuietStatus();
+    });
+    document.getElementById('quietBtnOff')?.addEventListener('click', async () => {
+      await window.QuietMode?.clear();
+      renderQuietStatus();
+    });
+
+    // ── Keep RM section checkboxes in sync via storage.onChanged ─────────────
+    // We watch the specific sub-keys covered by the IO file (not the bare parent key).
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes['suite.requestMonitor.notifyEnabled'] || changes['suite.requestMonitor.notifySound']) {
+        if (window.RequestMonitor) {
+          window.RequestMonitor.getConfig().then((cfg) => {
+            desktopCb.checked = cfg.notifyEnabled !== false;
+            soundCb.checked = cfg.notifySound !== false;
+          });
+        }
+      }
+      if (changes[notifPrefKey]) {
+        const v = changes[notifPrefKey].newValue || {};
+        badgeCb.checked = v.badgeEnabled !== false;
+      }
+      if ('suite.quietUntil' in changes) {
+        renderQuietStatus();
+      }
+    });
+  } catch (e) {
+    console.warn('[Notifications section init]', e.message);
   }
 })();
 

@@ -7,7 +7,10 @@ let _container = null;
 let _pollTimer = null;
 
 function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 async function loadCards() {
@@ -21,17 +24,17 @@ async function loadCards() {
     import('./cards/day-score.js'),
     import('./cards/activity.js'),
   ]);
-  const get = (m, fn) => m.status === 'fulfilled' ? (m.value[fn] || (() => '')) : (() => '');
+  const get = (m, fn) => (m.status === 'fulfilled' ? m.value[fn] || (() => '') : () => '');
   return {
-    renderPpi:          get(mods[0], 'renderPpi'),
-    renderDemandGap:    get(mods[1], 'renderDemandGap'),
-    renderVelocity:     get(mods[2], 'renderVelocity'),
-    renderTaskAge:      get(mods[3], 'renderTaskAge'),
-    renderWorkload:     get(mods[4], 'renderWorkload'),
-    renderWaitingRoom:  get(mods[5], 'renderWaitingRoom'),
-    renderDayScore:     get(mods[6], 'renderDayScore'),
-    saveDayScore:       mods[6].status === 'fulfilled' ? (mods[6].value.saveDayScore || (async () => {})) : (async () => {}),
-    renderActivity:     get(mods[7], 'renderActivity'),
+    renderPpi: get(mods[0], 'renderPpi'),
+    renderDemandGap: get(mods[1], 'renderDemandGap'),
+    renderVelocity: get(mods[2], 'renderVelocity'),
+    renderTaskAge: get(mods[3], 'renderTaskAge'),
+    renderWorkload: get(mods[4], 'renderWorkload'),
+    renderWaitingRoom: get(mods[5], 'renderWaitingRoom'),
+    renderDayScore: get(mods[6], 'renderDayScore'),
+    saveDayScore: mods[6].status === 'fulfilled' ? mods[6].value.saveDayScore || (async () => {}) : async () => {},
+    renderActivity: get(mods[7], 'renderActivity'),
   };
 }
 
@@ -66,6 +69,16 @@ export async function init(el) {
   _container = el;
   _container.innerHTML = '<div class="condor-loading">Loading Condor…</div>';
 
+  // Delegated click for "Set up now" buttons rendered inside cards
+  _container.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('setup-now-btn')) return;
+    if (document.getElementById('setupHost')) {
+      document.dispatchEvent(new CustomEvent('suite:open-setup'));
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
+    }
+  });
+
   await poll();
 
   _pollTimer = setInterval(() => {
@@ -76,6 +89,9 @@ export async function init(el) {
 }
 
 export function cleanup() {
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  if (_pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
   _container = null;
 }

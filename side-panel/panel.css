@@ -1500,3 +1500,383 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
     transition: none;
   }
 }
+
+/* ── Command palette (Ctrl+K) ───────────────────────────────────────────────
+   Engine: side-panel/palette/palette.js (shell-owned; panel + pop-out).
+   One keystroke to any tab, display setting, options section or help action. */
+.suite-palette-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90; /* under the tour (100), over modals (50/51) */
+  background: rgba(15, 23, 42, 0.55);
+  font-family: var(--sans);
+}
+.suite-palette {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.suite-palette-inputrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-4);
+}
+.suite-palette-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-1);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.suite-palette-input::placeholder {
+  color: var(--text-5);
+}
+.suite-palette-kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+.suite-palette-list {
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  padding: 4px;
+}
+.suite-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent; /* reserved — selection adds border without layout shift */
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.suite-palette-row.selected {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.suite-palette-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+.suite-palette-row.selected .suite-palette-icon {
+  color: var(--accent);
+}
+.suite-palette-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suite-palette-row.selected .suite-palette-label {
+  color: var(--text-1);
+}
+.suite-palette-group {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+.suite-palette-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  text-align: center;
+  padding: 24px 0;
+}
+.suite-palette-hints {
+  display: flex;
+  gap: 12px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+}
+
+/* ── First-run setup checklist card ─────────────────────────────────────────
+   In-flow card injected above <main id="suiteContent"> by panel.js.
+   No overlay, no fixed positioning — lives naturally in the flex column. */
+
+#setupHost {
+  padding: 8px 10px 0;
+}
+
+#setupHost[style*='display: none'] {
+  padding: 0;
+}
+
+.setup-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px 10px;
+  margin-bottom: 2px;
+}
+
+.setup-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.setup-card-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  transition: background var(--fast) var(--ease);
+}
+
+.setup-step--done {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+
+.setup-step--disabled {
+  opacity: 0.55;
+}
+
+.setup-step--optional {
+  border-color: var(--border);
+}
+
+.setup-step-icon {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
+.setup-step-done {
+  color: var(--green);
+}
+
+.setup-step-pending {
+  color: var(--text-4);
+}
+
+.setup-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-step-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setup-step-detail {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.setup-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.setup-optional-badge {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 5px;
+}
+
+.setup-result {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.setup-result--ok {
+  color: var(--green);
+}
+
+.setup-result--fail {
+  color: var(--red);
+}
+
+.setup-manual-link {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+  transition: color var(--fast) var(--ease);
+}
+
+.setup-manual-link:hover {
+  color: var(--accent-hover);
+}
+
+.setup-card-footer {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.setup-kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+  color: var(--text-3);
+}
+
+.setup-card-progress {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.setup-link {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+  transition: color var(--fast) var(--ease);
+}
+
+.setup-link:hover {
+  color: var(--accent-hover);
+}
+
+.setup-code-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  letter-spacing: 0.06em;
+}
+
+/* ── "Set up now" CTA used in no-practice-code error states ─────────────────
+   Rendered by slots, capacity, activity, condor when no practice code is set.
+   Dispatches suite:open-setup so the setup card opens (panel); falls back to
+   options.html#sect-suite in the pop-out (which has no setup card). */
+.setup-now-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+/* ── Quiet mode pill ─────────────────────────────────────────────────────── */
+.quiet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--fast) var(--ease);
+}
+.quiet-pill:hover {
+  background: var(--amber);
+  color: var(--bg-elev);
+}
+.quiet-pill-hidden {
+  display: none;
+}
