@@ -122,6 +122,12 @@ export async function shoot(
 ) {
   await mkdir(out, { recursive: true });
   const ctx = await browser.newContext({ viewport: { width, height } });
+  // Third-party requests (webfonts, GitHub update check) are egress-blocked in
+  // this sandbox and can fail SLOWLY, holding 'networkidle' hostage — abort
+  // them immediately so renders are deterministic.
+  await ctx.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com|api\.github\.com)\//, (route) =>
+    route.abort()
+  );
   if (apiFixture) {
     await ctx.route('https://*.api.england.medicus.health/**', (route) => {
       const body = apiFixture(new URL(route.request().url()));
@@ -132,7 +138,11 @@ export async function shoot(
   const errors = [];
   tab.on('pageerror', (e) => errors.push(e.message));
   await tab.addInitScript(chromeShim(theme, store) + '\n' + shimExtra);
-  await tab.goto(`http://127.0.0.1:${port}${page}`, { waitUntil: 'networkidle', timeout: 15000 });
+  // Land on 'load' (deterministic), then give the wire a best-effort chance to
+  // go quiet — networkidle alone can hang forever on pollers, and a goto
+  // timeout would cancel the navigation outright.
+  await tab.goto(`http://127.0.0.1:${port}${page}`, { waitUntil: 'load', timeout: 15000 });
+  await tab.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
   await tab.waitForTimeout(settleMs);
   if (actions) await actions(tab);
   const file = join(out, `${name}.png`);
