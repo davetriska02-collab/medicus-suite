@@ -241,6 +241,14 @@ const ALLOWLIST = new Set([
   // new machine still offers the setup checklist. Mirrors suite.tour.seenVersion
   // rationale (see side-panel/setup/setup.js):
   'suite.setup',
+
+  // Transient mute timer — ephemeral, resets naturally (suite.quietUntil is removed
+  // when clear() is called; restoring it would silently re-mute a new install):
+  'suite.quietUntil',
+
+  // Rolling runtime alert log — session-local, not user config. Restoring a stale
+  // log onto a new machine would show misleading historical alerts:
+  'suite.alertLog',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

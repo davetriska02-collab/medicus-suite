@@ -36,6 +36,7 @@ let _rmData = null; // { buckets: {}, configured: bool, error: null }
 let _demandData = null; // { medical: n, admin: n, thresholds: {}, error: null }
 let _slotsData = null; // { count: n, error: null }
 let _sweepData = null; // { lastRun: obj|null }
+let _alertsData = null; // [{ ts, channel, level, label }, ...]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -231,6 +232,22 @@ async function fetchSweep() {
   renderCard('sweep');
 }
 
+// ── Fetch: Alert log ─────────────────────────────────────────────────────────
+
+async function fetchAlerts() {
+  try {
+    const r = await chrome.storage.local.get('suite.alertLog');
+    const log = Array.isArray(r['suite.alertLog']) ? r['suite.alertLog'] : [];
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const todayEntries = log.filter((e) => e && typeof e.ts === 'number' && e.ts >= startOfDay.getTime());
+    _alertsData = todayEntries.slice(0, 8);
+  } catch (_) {
+    _alertsData = [];
+  }
+  renderCard('alerts');
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 function renderCard(which) {
@@ -257,6 +274,9 @@ function renderCard(which) {
     case 'sweep':
       body.innerHTML = buildSweepBody();
       wireSwepButtons(body);
+      break;
+    case 'alerts':
+      body.innerHTML = buildAlertsBody();
       break;
   }
 }
@@ -430,6 +450,44 @@ function buildNoCodeMsg() {
   `;
 }
 
+function buildAlertsBody() {
+  if (!_alertsData) return '<span class="today-loading">Loading…</span>';
+  if (_alertsData.length === 0) {
+    return '<span class="today-empty today-empty--green">No alerts logged today</span>';
+  }
+
+  function channelLabel(channel) {
+    if (channel === 'rm') return 'Triage';
+    if (channel === 'triage') return 'Triage alert';
+    if (channel === 'sub-rag') return 'Demand';
+    return channel;
+  }
+
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  const rows = _alertsData
+    .map((e) => {
+      const dotCls =
+        e.level === 'red'
+          ? 'today-alert-dot--red'
+          : e.level === 'amber'
+            ? 'today-alert-dot--amber'
+            : 'today-alert-dot--green';
+      return `
+      <div class="today-alert-row">
+        <span class="today-alert-time">${fmtTime(e.ts)}</span>
+        <span class="today-alert-dot ${dotCls}"></span>
+        <span class="today-alert-label">${esc(channelLabel(e.channel))}: ${esc(e.label)}</span>
+      </div>`;
+    })
+    .join('');
+
+  return `<div class="today-alert-list">${rows}</div>`;
+}
+
 // ── Wire event handlers ────────────────────────────────────────────────────────
 
 function wireSweepButtons(body) {
@@ -499,6 +557,11 @@ function renderScaffold() {
       label: 'Morning Sweep',
       navModule: 'sweep',
     },
+    {
+      id: 'alerts',
+      label: 'Recent Alerts',
+      navModule: null,
+    },
   ];
 
   container.innerHTML = `
@@ -510,7 +573,7 @@ function renderScaffold() {
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
               <span class="today-card-label">${esc(c.label)}</span>
-              <button class="today-card-open" data-nav="${c.navModule}" title="Open ${esc(c.label)}">Open →</button>
+              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" title="Open ${esc(c.label)}">Open →</button>` : ''}
             </div>
             <div class="today-card-body"><span class="today-loading">Loading…</span></div>
           </div>
@@ -540,6 +603,7 @@ function onStorageChange(changes) {
   if (!container) return;
   if (changes['submissions.thresholds']) fetchDemand();
   if (changes['sweep.lastRun']) fetchSweep();
+  if (changes['suite.alertLog']) fetchAlerts();
 }
 
 // ── Init / Cleanup ────────────────────────────────────────────────────────────
@@ -551,6 +615,7 @@ export async function init(el) {
   _demandData = null;
   _slotsData = null;
   _sweepData = null;
+  _alertsData = null;
   _timers = [];
 
   renderScaffold();
@@ -561,12 +626,14 @@ export async function init(el) {
   fetchDemand();
   fetchSlots();
   fetchSweep();
+  fetchAlerts();
 
   // Pollers
   addTimer(fetchWr, WR_POLL_MS);
   addTimer(fetchRm, DEMAND_POLL_MS);
   addTimer(fetchDemand, DEMAND_POLL_MS);
   addTimer(fetchSlots, DEMAND_POLL_MS);
+  addTimer(fetchAlerts, 30 * 1000);
   // Sweep is not polled on interval — re-reads on storage change only
 
   // Storage watcher
@@ -580,6 +647,7 @@ export async function init(el) {
       fetchDemand();
       fetchSlots();
       fetchSweep();
+      fetchAlerts();
     }
   };
   document.addEventListener('visibilitychange', onVisible);

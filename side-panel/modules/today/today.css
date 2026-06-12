@@ -384,3 +384,58 @@
 .today-sweep-actions {
   margin-top: 4px;
 }
+
+/* ── Recent alerts card ──────────────────────────────────────────────────────── */
+
+.today-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.today-alert-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.today-alert-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-4);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-alert-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+
+.today-alert-dot--red {
+  background: var(--red);
+}
+
+.today-alert-dot--amber {
+  background: var(--amber);
+}
+
+.today-alert-dot--green {
+  background: var(--green);
+}
+
+.today-alert-label {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}

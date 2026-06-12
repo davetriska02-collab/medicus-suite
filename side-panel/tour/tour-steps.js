@@ -21,7 +21,7 @@
 //   2 — Suite-wide walkthrough on first install; Monitoring action bar
 //       relocated under the pre-consultation brief (v3.58.0)
 //   3 — Command palette (Ctrl+K) step (v3.59.0)
-//   4 — Today tab — morning command centre (v4.0.0)
+//   4 — Today tab — morning command centre (v3.60.0)
 
 'use strict';
 
