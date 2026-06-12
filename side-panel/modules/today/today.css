@@ -54,13 +54,14 @@
   color: var(--text-4);
 }
 
+/* Decision H: demote rest colour to text-4; add :focus-visible and :active */
 .today-card-open {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-4);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
@@ -72,16 +73,22 @@
     background var(--fast) var(--ease);
 }
 
-.today-card-open:hover {
+.today-card-open:hover,
+.today-card-open:focus-visible {
   color: var(--text-2);
   border-color: var(--accent);
   background: var(--accent-dim);
 }
 
+.today-card-open:active {
+  background: var(--accent-dim);
+}
+
 /* ── Card body ───────────────────────────────────────────────────────────────── */
 
+/* Decision K: padding shorthand 10px */
 .today-card-body {
-  padding: 10px 10px 10px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -96,10 +103,25 @@
   letter-spacing: 0.06em;
 }
 
+/* Decision F: error state — glyph + mono copy, severity not on hue alone */
 .today-card-error {
-  font-family: var(--sans);
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
   color: var(--red);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.today-error-glyph {
+  flex-shrink: 0;
+  color: var(--red);
+}
+
+.today-card-error-copy {
+  color: var(--text-3);
+  font-weight: 600;
 }
 
 .today-card-error--inline {
@@ -141,6 +163,11 @@
   text-decoration: underline;
 }
 
+/* Decision I: focus-visible for setup link */
+.today-setup-link:focus-visible {
+  text-decoration: underline;
+}
+
 /* ── Ghost button ────────────────────────────────────────────────────────────── */
 
 .today-ghost-btn {
@@ -162,10 +189,21 @@
   align-self: flex-start;
 }
 
-.today-ghost-btn:hover {
+.today-ghost-btn:hover,
+.today-ghost-btn:focus-visible {
   color: var(--text-2);
   border-color: var(--accent);
   background: var(--accent-dim);
+}
+
+/* Decision I: active and disabled states */
+.today-ghost-btn:active {
+  color: var(--text-1);
+}
+
+.today-ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Hero count (big number) ─────────────────────────────────────────────────── */
@@ -278,12 +316,13 @@
   gap: 6px;
 }
 
+/* Decision K: border-radius var(--r-pill) for actual pill shape */
 .today-rm-pill {
   display: flex;
   align-items: center;
   gap: 4px;
-  border-radius: var(--r-sm);
-  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  padding: 3px 6px;
   border: 1px solid var(--border);
   background: var(--bg-mid);
   cursor: default;
@@ -330,11 +369,11 @@
 
 /* ── Demand rows ─────────────────────────────────────────────────────────────── */
 
+/* Decision J: count leads left, label follows, chip trails */
 .today-demand-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .today-demand-label {
@@ -349,6 +388,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-1);
+  line-height: 1;
 }
 
 .today-demand-count--amber {
@@ -357,6 +397,30 @@
 
 .today-demand-count--red {
   color: var(--red);
+}
+
+/* Decision J: threshold breach chip — full status triad, never hue-alone */
+.today-demand-flag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  margin-left: auto;
+}
+
+.today-demand-flag--amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+
+.today-demand-flag--red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
 }
 
 /* ── Sweep ───────────────────────────────────────────────────────────────────── */
@@ -410,10 +474,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Decision K: 7px → 6px */
 .today-alert-dot {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-4);
 }
