@@ -200,9 +200,46 @@
     color var(--fast) var(--ease);
 }
 
+.staff-toggle {
+  position: relative;
+  overflow: hidden;
+}
 .staff-toggle:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+
+/* Per-clinician layers: share-of-total wash + AM|PM split strip along the
+   bottom edge. Content spans sit above both. */
+.staff-share {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-dim);
+  pointer-events: none;
+}
+.staff-split {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  display: flex;
+  pointer-events: none;
+}
+.staff-split .split-am {
+  background: var(--amber);
+  opacity: 0.65;
+}
+.staff-split .split-pm {
+  background: var(--accent);
+  opacity: 0.65;
+}
+.staff-toggle > .staff-chevron,
+.staff-toggle > .staff-name,
+.staff-toggle > .staff-count-mini {
+  position: relative;
 }
 
 .staff-chevron {
@@ -450,6 +487,142 @@
 }
 .slot-pill.pill-zero .slot-pill-num {
   color: var(--text-5);
+}
+
+/* User colour-coding (organising only — NOT a clinical flag; alert amber/red
+   classes are never combined with these). Keys mirror Reception's palette;
+   keep in sync with PILL_COLOUR_KEYS in slots.js. */
+.pill-c-default {
+  --pill-col: transparent;
+}
+.pill-c-slate {
+  --pill-col: #64748b;
+}
+.pill-c-red {
+  --pill-col: #dc2626;
+}
+.pill-c-orange {
+  --pill-col: #ea580c;
+}
+.pill-c-amber {
+  --pill-col: #d97706;
+}
+.pill-c-green {
+  --pill-col: #16a34a;
+}
+.pill-c-teal {
+  --pill-col: #0d9488;
+}
+.pill-c-blue {
+  --pill-col: #2563eb;
+}
+.pill-c-purple {
+  --pill-col: #7c3aed;
+}
+.pill-c-pink {
+  --pill-col: #db2777;
+}
+.slot-pill[class*='pill-c-']:not(.pill-c-default) {
+  border-color: var(--pill-col);
+}
+.slot-pill[class*='pill-c-']:not(.pill-c-default) .slot-pill-dot {
+  background: var(--pill-col);
+}
+
+/* Organise mode */
+.pill-organise-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.pill-organise-btn:hover {
+  color: var(--text-2);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.pill-organise-btn.active {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.slot-pill.pill-organising {
+  cursor: grab;
+  border-style: dashed;
+}
+.slot-pill.pill-dragging {
+  opacity: 0.4;
+}
+
+.pill-palette {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 7px 9px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.pill-palette-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.pill-swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.pill-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-hi);
+  background: var(--pill-col);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--fast) var(--ease);
+}
+.pill-swatch:hover {
+  transform: scale(1.15);
+}
+.pill-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.pill-swatch.pill-c-default {
+  background: var(--bg-elev);
+}
+
+.pill-organise-hint {
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+  margin-top: 6px;
 }
 
 /* AM/PM split below the hero number */

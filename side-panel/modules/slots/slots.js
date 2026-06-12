@@ -25,7 +25,35 @@ let state = {
   showExcluded: false,
   lastFetched: null,
   alertRules: [],
+  // Pill preferences — USER CONFIG (order + colour per type), persisted to
+  // 'slots.pillPrefs' and included in suite backups via slot-counter-io.js.
+  pillPrefs: { order: [], colours: {} },
+  organisePills: false, // ephemeral: reorder/colour mode
+  openColourFor: null, // type whose colour palette is open, or null
 };
+
+// Palette for colour-coding pills (organising only — NOT a clinical flag).
+// Keys mirror Reception's TILE_COLOUR_KEYS; each maps to a pill-c-<key> CSS
+// class in slots.css. Status amber/red from alert rules ALWAYS overrides a
+// custom colour — safety salience is never user-configurable away.
+const PILL_COLOUR_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
+
+function sanitisePillPrefs(raw) {
+  const out = { order: [], colours: {} };
+  if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.order)) out.order = raw.order.filter((t) => typeof t === 'string');
+    if (raw.colours && typeof raw.colours === 'object') {
+      for (const [t, k] of Object.entries(raw.colours)) {
+        if (typeof t === 'string' && PILL_COLOUR_KEYS.includes(k) && k !== 'default') out.colours[t] = k;
+      }
+    }
+  }
+  return out;
+}
+
+function savePillPrefs() {
+  chrome.storage.local.set({ 'slots.pillPrefs': { order: state.pillPrefs.order, colours: state.pillPrefs.colours } });
+}
 
 let container = null;
 let _inFlight = false;
@@ -36,9 +64,15 @@ export async function init(el) {
   container = el;
 
   // Load persisted hidden types, alert rules, and practice code
-  const stored = await chrome.storage.local.get(['slots.hiddenTypes', 'slots.alertRules', 'suite.practiceCode']);
+  const stored = await chrome.storage.local.get([
+    'slots.hiddenTypes',
+    'slots.alertRules',
+    'slots.pillPrefs',
+    'suite.practiceCode',
+  ]);
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
   if (stored['slots.alertRules']) state.alertRules = stored['slots.alertRules'];
+  state.pillPrefs = sanitisePillPrefs(stored['slots.pillPrefs']);
   if (stored['suite.practiceCode']) {
     SITE_ID = stored['suite.practiceCode'];
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
@@ -85,6 +119,10 @@ function onStorageChange(changes) {
   }
   if (changes['slots.alertRules']) {
     state.alertRules = changes['slots.alertRules'].newValue || [];
+    render();
+  }
+  if (changes['slots.pillPrefs']) {
+    state.pillPrefs = sanitisePillPrefs(changes['slots.pillPrefs'].newValue);
     render();
   }
   if (changes['suite.practiceCode']) {
@@ -360,22 +398,48 @@ function renderHeroCard(visible, visibleSum) {
   `;
 }
 
-// One pill per included type, biggest first: dot + name + count. The dot is
-// slate when calm and goes amber/red when that type is at/below its configured
-// alert threshold — colour carries signal, never decoration.
-function renderTypePills(byType, visibleSum) {
-  const entries = Object.entries(byType)
+// One pill per included type: dot + name + count. Order and outline colour
+// are user-configurable (drag to reorder, click to colour, in organise mode);
+// default order is biggest first. The dot/outline is slate (or the user's
+// chosen colour) when calm and ALWAYS goes amber/red when that type is
+// at/below its configured alert threshold — status overrides custom colour.
+function orderedPillEntries(byType) {
+  const byCount = Object.entries(byType)
     .filter(([t]) => !state.hiddenTypes.has(t))
     .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
+  const saved = state.pillPrefs.order || [];
+  if (saved.length === 0) return byCount;
+  const present = new Map(byCount);
+  const out = [];
+  for (const t of saved) {
+    if (present.has(t)) {
+      out.push([t, present.get(t)]);
+      present.delete(t);
+    }
+  }
+  for (const [t, n] of byCount) if (present.has(t)) out.push([t, n]);
+  return out;
+}
+
+function renderTypePills(byType, visibleSum) {
+  const entries = orderedPillEntries(byType);
   if (entries.length === 0 || visibleSum === 0) return '';
+  const organising = state.organisePills;
 
   const pills = entries
     .map(([type, n]) => {
       const total = sumAmPm(n);
       const level = typeAlertLevel(type, total);
-      const cls = level ? ` pill-${level}` : total === 0 ? ' pill-zero' : '';
-      const title = `${escHtml(type)} — ${n.am} am · ${n.pm} pm${level ? ' · below alert threshold' : ''}`;
-      return `<span class="slot-pill${cls}" title="${title}">
+      const colourKey = state.pillPrefs.colours[type];
+      const customCls = !level && colourKey ? ` pill-c-${colourKey}` : '';
+      const cls =
+        (level ? ` pill-${level}` : total === 0 ? ' pill-zero' : '') +
+        customCls +
+        (organising ? ' pill-organising' : '');
+      const title = organising
+        ? 'Drag to reorder · click to set colour'
+        : `${escHtml(type)} — ${n.am} am · ${n.pm} pm${level ? ' · below alert threshold' : ''}`;
+      return `<span class="slot-pill${cls}" data-pill-type="${escHtml(type)}"${organising ? ' draggable="true"' : ''} title="${title}">
         <span class="slot-pill-dot" aria-hidden="true"></span>
         <span class="slot-pill-name">${escHtml(type)}</span>
         <span class="slot-pill-num">${total.toLocaleString('en-GB')}</span>
@@ -383,7 +447,23 @@ function renderTypePills(byType, visibleSum) {
     })
     .join('');
 
-  return `<div class="slots-pill-row">${pills}</div>`;
+  const palette =
+    organising && state.openColourFor
+      ? `<div class="pill-palette">
+          <span class="pill-palette-label">Colour — ${escHtml(state.openColourFor)}</span>
+          <span class="pill-swatches">${PILL_COLOUR_KEYS.map(
+            (k) =>
+              `<button class="pill-swatch pill-c-${k}${(state.pillPrefs.colours[state.openColourFor] || 'default') === k ? ' active' : ''}" data-swatch="${k}" title="${k === 'default' ? 'No colour' : k}"></button>`
+          ).join('')}</span>
+        </div>`
+      : '';
+
+  return `<div class="slots-pill-row${organising ? ' organising' : ''}" id="pillRow">
+      ${pills}
+      <button class="pill-organise-btn${organising ? ' active' : ''}" id="pillOrganiseBtn" title="${organising ? 'Finish organising' : 'Organise pills — drag to reorder, click a pill to colour it'}">${organising ? 'Done' : '✎'}</button>
+    </div>
+    ${palette}
+    ${organising ? '<div class="pill-organise-hint">Drag to reorder · click a pill to colour it · alert amber/red always overrides colour</div>' : ''}`;
 }
 
 function renderAlertRibbon(byType) {
@@ -477,9 +557,13 @@ function renderData(d, visible, visibleSum) {
       const isExpanded = state.expanded.has(s.name);
       const staffVisible = visibleTotal(s.byType, state.hiddenTypes);
       const staffSum = sumAmPm(staffVisible);
+      const staffPct = visibleSum > 0 ? Math.round((staffSum / visibleSum) * 100) : 0;
+      const staffAmPct = staffSum > 0 ? Math.round((staffVisible.am / staffSum) * 100) : 0;
       return `
       <div class="staff-row">
-        <button class="staff-toggle" data-staff="${escHtml(s.name)}">
+        <button class="staff-toggle" data-staff="${escHtml(s.name)}" title="${staffPct}% of visible total · AM ${staffVisible.am} · PM ${staffVisible.pm}">
+          ${staffPct > 0 ? `<span class="staff-share" style="width:${staffPct}%" aria-hidden="true"></span>` : ''}
+          ${staffSum > 0 ? `<span class="staff-split" aria-hidden="true"><span class="split-am" style="width:${staffAmPct}%"></span><span class="split-pm" style="width:${100 - staffAmPct}%"></span></span>` : ''}
           <span class="staff-chevron">${isExpanded ? '▾' : '▸'}</span>
           <span class="staff-name">${escHtml(s.name)}</span>
           <span class="staff-count-mini">
@@ -590,6 +674,82 @@ function bindEvents() {
       render();
     });
   });
+
+  // Pill organise mode: toggle, drag-to-reorder, colour palette
+  container.querySelector('#pillOrganiseBtn')?.addEventListener('click', () => {
+    state.organisePills = !state.organisePills;
+    state.openColourFor = null;
+    render();
+  });
+
+  if (state.organisePills) {
+    const pillRow = container.querySelector('#pillRow');
+    let dragSrc = null;
+
+    const persistOrderFromDom = () => {
+      if (!pillRow) return;
+      state.pillPrefs = {
+        ...state.pillPrefs,
+        order: [...pillRow.querySelectorAll('.slot-pill[data-pill-type]')].map((p) => p.dataset.pillType),
+      };
+      savePillPrefs(); // storage echo re-renders via onStorageChange
+    };
+
+    container.querySelectorAll('.slot-pill[data-pill-type]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        if (dragSrc) return; // a drag that ends on the source still fires click
+        const t = pill.dataset.pillType;
+        state.openColourFor = state.openColourFor === t ? null : t;
+        render();
+      });
+      pill.addEventListener('dragstart', (e) => {
+        dragSrc = pill;
+        pill.classList.add('pill-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+          e.dataTransfer.setData('text/plain', pill.dataset.pillType);
+        } catch (_) {
+          /* some browsers require setData for the drag to start */
+        }
+      });
+      pill.addEventListener('dragend', () => {
+        pill.classList.remove('pill-dragging');
+        setTimeout(() => {
+          dragSrc = null;
+        }, 0);
+      });
+      pill.addEventListener('dragover', (e) => {
+        if (!dragSrc || dragSrc === pill) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const r = pill.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        pillRow.insertBefore(dragSrc, after ? pill.nextSibling : pill);
+      });
+      pill.addEventListener('drop', (e) => {
+        e.preventDefault();
+        persistOrderFromDom();
+      });
+    });
+    pillRow?.addEventListener('dragover', (e) => e.preventDefault());
+    pillRow?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      persistOrderFromDom();
+    });
+
+    container.querySelectorAll('.pill-swatch').forEach((sw) => {
+      sw.addEventListener('click', () => {
+        if (!state.openColourFor) return;
+        const k = sw.dataset.swatch;
+        const colours = { ...state.pillPrefs.colours };
+        if (k === 'default') delete colours[state.openColourFor];
+        else colours[state.openColourFor] = k;
+        state.pillPrefs = { ...state.pillPrefs, colours };
+        savePillPrefs();
+        render();
+      });
+    });
+  }
 
   container.querySelectorAll('.staff-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
