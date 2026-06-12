@@ -5,6 +5,7 @@
 import { createModuleLoader } from './module-loader.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 
 const content = document.getElementById('suiteContent');
@@ -1107,6 +1108,19 @@ document.addEventListener('visibilitychange', () => {
 // panel is normally permanent, but if Chrome re-creates the document (e.g. an
 // extension reload without a browser restart) the old timers would otherwise
 // keep running and a fresh set would stack on top.
+// ── Tab visibility (suite.hiddenTabs — USER-OWNED, never profile-pushed) ─────
+// Hidden tabs disappear from the nav but stay reachable via the Ctrl+K palette.
+function applyTabVisibility(raw) {
+  const hidden = new Set(sanitiseHiddenTabs(raw));
+  document.querySelectorAll('.nav-tab').forEach((t) => {
+    t.classList.toggle('nav-tab-hidden', hidden.has(t.dataset.module));
+  });
+  updateNavOverflow();
+}
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['suite.hiddenTabs']) applyTabVisibility(changes['suite.hiddenTabs'].newValue);
+});
+
 window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
@@ -1141,11 +1155,23 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
 // Read the persisted module name and switch to it, falling back to 'slots' if
 // absent, invalid, or not a real module key.
 (async () => {
-  const r = await chrome.storage.local.get('panel.activeModule');
+  const r = await chrome.storage.local.get(['panel.activeModule', 'suite.hiddenTabs']);
   const saved = r['panel.activeModule'];
-  // Guard: must be a non-'about' key present in MODULES
-  const startMod = saved && saved !== 'about' && saved in MODULES && MODULES[saved] !== null ? saved : 'today';
-  switchModule(startMod);
+  applyTabVisibility(r['suite.hiddenTabs']);
+  // Guard: must be a non-'about' key present in MODULES, and not a hidden tab.
+  const hiddenSet = new Set(sanitiseHiddenTabs(r['suite.hiddenTabs']));
+  const usable = (m) => m && m !== 'about' && m in MODULES && MODULES[m] !== null && !hiddenSet.has(m);
+  let startMod = usable(saved) ? saved : usable('today') ? 'today' : null;
+  if (!startMod) {
+    // Every preferred candidate hidden — first visible nav tab wins.
+    for (const t of document.querySelectorAll('.nav-tab')) {
+      if (usable(t.dataset.module)) {
+        startMod = t.dataset.module;
+        break;
+      }
+    }
+  }
+  switchModule(startMod || 'today');
 
   // ── Guided tour (first-run suite walkthrough) ───────────────────────────────
   // The tour can switch tabs as it walks the suite; give it the module loader.

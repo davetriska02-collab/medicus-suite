@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.3] — 2026-06-12
+
+### Slots pill configuration + "Choose your tabs"
+
+- **Slots pills are now fully user-configurable**: an organise mode (✎ on the
+  pill row) gives drag-to-reorder and a per-type colour palette (the same
+  10-colour set as Reception's tiles). Alert amber/red ALWAYS overrides a
+  custom colour — safety salience is not configurable away. Preferences are
+  user config (`slots.pillPrefs`), included in suite backups.
+- **Per-clinician bars**: each BY CLINICIAN row gains a share-of-total wash
+  and a proportional AM|PM strip along its bottom edge.
+- **Choose your tabs** — new setup-checklist step and Ctrl+K command ("Choose
+  tabs…"): role presets (GP/clinician, Reception, Practice manager,
+  Everything) plus per-tab toggle cards, each with a one-line explainer of
+  what the tab does (new users don't know what "Condor" is). Changes apply
+  live; hidden tabs stay reachable from the palette; at least one tab always
+  stays visible. The choice is **user-owned**: stored in `suite.hiddenTabs`,
+  carried in the user's own backup, and architecturally unreachable by
+  practice-profile central deployment (profiles never push `suite.*`
+  preference keys). Tab metadata lives in `side-panel/tab-catalog.js` with a
+  new CI guard (`test-tab-catalog.js`) keeping it in lock-step with the real
+  nav, mirroring the tour guard.
+
+## [v3.60.2] — 2026-06-12
+
+### Slots — glanceable redesign (hero card, type pills, share bars)
+
+- **Hero card**: headline total, AM/PM chips and a proportional AM|PM split
+  bar in one card; the "available slots" label now inherits the alert state
+  (green when calm, amber/red when any slot-alert rule has tripped).
+- **Type pills**: one pill per included type under the hero — dot + name +
+  bold count, biggest first. The dot is slate normally and turns amber/red
+  when that type is at/below its configured alert threshold, so colour
+  carries signal rather than decoration (cf. the Medicus internal mock's
+  categorical dots).
+- **BY TYPE rows de-noised**: bold totals form a scannable right-hand column,
+  AM/PM demoted to muted detail, the always-on percentage replaced by a
+  subtle share-of-total micro-bar behind each row (exact % in the tooltip).
+
 ## [v3.60.1] — 2026-06-12
 
 ### Safety-doc reissue for the 3.57–3.60 releases (CSO-directed)

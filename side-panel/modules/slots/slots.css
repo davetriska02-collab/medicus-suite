@@ -1,7 +1,9 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Slot Counter module styles */
 
-.slots-module { font-family: var(--sans); }
+.slots-module {
+  font-family: var(--sans);
+}
 
 .header-actions {
   display: flex;
@@ -21,7 +23,9 @@
   transition: border-color var(--fast) var(--ease);
 }
 
-.date-input:focus { border-color: var(--accent); }
+.date-input:focus {
+  border-color: var(--accent);
+}
 
 .date-presets {
   display: flex;
@@ -40,21 +44,29 @@
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 4px 10px;
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
 }
 
-.preset-btn:hover { border-color: var(--border-hi); color: var(--text-3); }
+.preset-btn:hover {
+  border-color: var(--border-hi);
+  color: var(--text-3);
+}
 .preset-btn.active {
   background: var(--accent-dim);
   border-color: var(--accent-line);
   color: var(--text-2);
 }
 .preset-btn:disabled {
-  opacity: .45;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.slots-section { margin-bottom: 16px; }
+.slots-section {
+  margin-bottom: 16px;
+}
 
 .section-label {
   font-family: var(--mono);
@@ -74,7 +86,11 @@
   font-style: italic;
 }
 
-.slot-list { display: flex; flex-direction: column; gap: 1px; }
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 
 .slot-row {
   display: flex;
@@ -85,10 +101,31 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   transition: background var(--fast) var(--ease);
+  position: relative;
+  overflow: hidden;
 }
 
-.slot-row:hover { background: var(--bg-hover); }
-.slot-row.row-hidden { opacity: 0.4; }
+.slot-row:hover {
+  background: var(--bg-hover);
+}
+
+/* Share-of-visible-total micro-bar behind the row content — relative volume
+   scans without reading numbers. Content sits above it. */
+.slot-share {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-dim);
+  pointer-events: none;
+}
+.slot-row > label,
+.slot-row > .slot-count-group {
+  position: relative;
+}
+.slot-row.row-hidden {
+  opacity: 0.4;
+}
 
 .slot-label {
   display: flex;
@@ -99,7 +136,7 @@
   min-width: 0;
 }
 
-.slot-label input[type=checkbox] {
+.slot-label input[type='checkbox'] {
   accent-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
@@ -124,7 +161,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.slot-count.zero { color: var(--text-5); }
+.slot-count.zero {
+  color: var(--text-5);
+}
 
 .row-sep {
   height: 1px;
@@ -132,9 +171,16 @@
   margin: 4px 0;
 }
 
-.staff-list { display: flex; flex-direction: column; gap: 2px; }
+.staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
-.staff-row { border-radius: var(--r-md); overflow: hidden; }
+.staff-row {
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
 
 .staff-toggle {
   display: flex;
@@ -149,14 +195,72 @@
   color: var(--text-3);
   font-size: 11px;
   text-align: left;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
 }
 
-.staff-toggle:hover { background: var(--bg-hover); color: var(--text-2); }
+.staff-toggle {
+  position: relative;
+  overflow: hidden;
+}
+.staff-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
 
-.staff-chevron { font-size: 9px; color: var(--text-5); flex-shrink: 0; }
-.staff-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.staff-count { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--green); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* Per-clinician layers: share-of-total wash + AM|PM split strip along the
+   bottom edge. Content spans sit above both. */
+.staff-share {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-dim);
+  pointer-events: none;
+}
+.staff-split {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  display: flex;
+  pointer-events: none;
+}
+.staff-split .split-am {
+  background: var(--amber);
+  opacity: 0.65;
+}
+.staff-split .split-pm {
+  background: var(--accent);
+  opacity: 0.65;
+}
+.staff-toggle > .staff-chevron,
+.staff-toggle > .staff-name,
+.staff-toggle > .staff-count-mini {
+  position: relative;
+}
+
+.staff-chevron {
+  font-size: 9px;
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+.staff-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staff-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
 
 .staff-detail {
   background: var(--bg-mid);
@@ -179,7 +283,12 @@
   color: var(--text-3);
 }
 
-.skeleton-list { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
 
 .skel-row {
   height: 30px;
@@ -190,8 +299,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.5; }
-  50%       { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .empty-state {
@@ -225,10 +339,15 @@
   cursor: pointer;
   border-radius: var(--r-md);
   margin-top: 2px;
-  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
 
-.excluded-toggle:hover { color: var(--text-3); background: var(--bg-elev); }
+.excluded-toggle:hover {
+  color: var(--text-3);
+  background: var(--bg-elev);
+}
 
 .excluded-list {
   display: flex;
@@ -237,31 +356,279 @@
   margin-top: 2px;
 }
 
-/* Prominent remaining count */
+/* ── Hero card ────────────────────────────────────────────────────────────────
+   One glance unit: headline total + AM/PM chips, a proportional AM|PM split
+   bar, and the per-type pill row. */
+.slots-hero-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px 10px;
+  margin-bottom: 10px;
+}
+.slots-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.slots-hero-right {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .slots-count-hero {
-  font-size: 36px;
+  font-size: 40px;
   font-weight: 700;
   color: var(--text-1);
   line-height: 1;
-  margin: 4px 0 2px;
   font-family: var(--mono);
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 .slots-count-label {
   font-size: 11px;
   color: var(--green);
   font-weight: 600;
   letter-spacing: 0.04em;
-  margin-bottom: 12px;
 }
-.slots-count-label.zero { color: var(--text-4); }
+.slots-count-label.zero {
+  color: var(--text-4);
+}
+/* Label inherits the highest triggered slot-alert level — signal, not décor */
+.slots-count-label.amber {
+  color: var(--amber);
+}
+.slots-count-label.red {
+  color: var(--red);
+}
+
+/* Proportional AM|PM split bar — hues match the AM/PM chip numerals */
+.slots-split-bar {
+  display: flex;
+  height: 4px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--bg-mid);
+  margin: 10px 0 0;
+}
+.slots-split-bar .split-am {
+  background: var(--amber);
+  opacity: 0.75;
+}
+.slots-split-bar .split-pm {
+  background: var(--accent);
+  opacity: 0.75;
+}
+
+/* Per-type pills — dot is slate when calm, amber/red at/below alert threshold */
+.slots-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.slot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  max-width: 100%;
+}
+.slot-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-5);
+  flex-shrink: 0;
+}
+.slot-pill-name {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slot-pill-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.slot-pill.pill-amber {
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+.slot-pill.pill-amber .slot-pill-dot {
+  background: var(--amber);
+}
+.slot-pill.pill-amber .slot-pill-num {
+  color: var(--amber);
+}
+.slot-pill.pill-red {
+  border-color: var(--red-line);
+  background: var(--red-dim);
+}
+.slot-pill.pill-red .slot-pill-dot {
+  background: var(--red);
+}
+.slot-pill.pill-red .slot-pill-num {
+  color: var(--red);
+}
+.slot-pill.pill-zero .slot-pill-num {
+  color: var(--text-5);
+}
+
+/* User colour-coding (organising only — NOT a clinical flag; alert amber/red
+   classes are never combined with these). Keys mirror Reception's palette;
+   keep in sync with PILL_COLOUR_KEYS in slots.js. */
+.pill-c-default {
+  --pill-col: transparent;
+}
+.pill-c-slate {
+  --pill-col: #64748b;
+}
+.pill-c-red {
+  --pill-col: #dc2626;
+}
+.pill-c-orange {
+  --pill-col: #ea580c;
+}
+.pill-c-amber {
+  --pill-col: #d97706;
+}
+.pill-c-green {
+  --pill-col: #16a34a;
+}
+.pill-c-teal {
+  --pill-col: #0d9488;
+}
+.pill-c-blue {
+  --pill-col: #2563eb;
+}
+.pill-c-purple {
+  --pill-col: #7c3aed;
+}
+.pill-c-pink {
+  --pill-col: #db2777;
+}
+.slot-pill[class*='pill-c-']:not(.pill-c-default) {
+  border-color: var(--pill-col);
+}
+.slot-pill[class*='pill-c-']:not(.pill-c-default) .slot-pill-dot {
+  background: var(--pill-col);
+}
+
+/* Organise mode */
+.pill-organise-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.pill-organise-btn:hover {
+  color: var(--text-2);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.pill-organise-btn.active {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.slot-pill.pill-organising {
+  cursor: grab;
+  border-style: dashed;
+}
+.slot-pill.pill-dragging {
+  opacity: 0.4;
+}
+
+.pill-palette {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 7px 9px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.pill-palette-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.pill-swatches {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.pill-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-hi);
+  background: var(--pill-col);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--fast) var(--ease);
+}
+.pill-swatch:hover {
+  transform: scale(1.15);
+}
+.pill-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.pill-swatch.pill-c-default {
+  background: var(--bg-elev);
+}
+
+.pill-organise-hint {
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+  margin-top: 6px;
+}
 
 /* AM/PM split below the hero number */
 .slots-ampm-split {
   display: flex;
   gap: 8px;
-  margin-bottom: 14px;
 }
 .ampm-chip {
   display: inline-flex;
@@ -288,8 +655,12 @@
 }
 /* AM/PM number colours — panel.css colorblind block overrides .ampm-am/.ampm-pm;
    these tokens must stay as the base values so the colorblind override wins. */
-.ampm-am .ampm-num { color: var(--amber); }
-.ampm-pm .ampm-num { color: var(--accent); }
+.ampm-am .ampm-num {
+  color: var(--amber);
+}
+.ampm-pm .ampm-num {
+  color: var(--accent);
+}
 
 /* Per-row AM · PM · Total breakdown */
 .slot-count-group {
@@ -302,7 +673,9 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.slot-count-group.zero { color: var(--text-5); }
+.slot-count-group.zero {
+  color: var(--text-5);
+}
 .slot-count-ampm {
   display: inline-flex;
   align-items: baseline;
@@ -322,26 +695,17 @@
   padding: 0 1px;
 }
 .slot-count-total {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--green);
   font-size: 13px;
   min-width: 28px;
+  margin-left: 6px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.slot-count-group.zero .slot-count-total { color: var(--text-5); }
-
-/* Share-of-total annotation on each type row */
-.slot-count-pct {
-  font-size: 9px;
+.slot-count-group.zero .slot-count-total {
   color: var(--text-5);
-  font-weight: 500;
-  min-width: 30px;
-  text-align: right;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
 }
-.slot-count-group.zero .slot-count-pct { color: var(--text-5); }
 
 /* Per-clinician AM · PM · Total mini badge */
 .staff-count-mini {
@@ -354,7 +718,11 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.staff-count-mini > span { display: inline-flex; align-items: baseline; gap: 1px; }
+.staff-count-mini > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
 
 .staff-type-counts {
   display: inline-flex;
@@ -363,7 +731,11 @@
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
-.staff-type-counts > span { display: inline-flex; align-items: baseline; gap: 1px; }
+.staff-type-counts > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
 .staff-type-total {
   font-family: var(--mono);
   color: var(--text-3);
@@ -396,9 +768,18 @@
   border-color: var(--red-line);
   color: var(--red);
 }
-.slots-alert-icon { flex-shrink: 0; font-style: normal; }
-.slots-alert-items { display: flex; flex-direction: column; gap: 2px; }
-.slots-alert-item { white-space: nowrap; }
+.slots-alert-icon {
+  flex-shrink: 0;
+  font-style: normal;
+}
+.slots-alert-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.slots-alert-item {
+  white-space: nowrap;
+}
 .slots-alert-count {
   font-weight: 700;
   font-size: 12px;
