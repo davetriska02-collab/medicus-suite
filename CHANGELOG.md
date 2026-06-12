@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.9] — 2026-06-12
+
+### Crit follow-ups (the two deferred items from the v3.60.6–v3.60.8 passes)
+
+- **Monitoring modals now trap Tab**: keyboard focus cycles inside an open
+  modal instead of escaping into the panel behind the scrim (completes the
+  modal a11y work started in v3.60.6 — role/aria and focus-restore were
+  already in).
+- **Today cards gain altitude over the global strips** (the art director's
+  "single biggest move"): instead of re-printing the strips' numbers, Triage
+  Load now shows how long the **oldest unanswered request** has waited
+  (computed from data already in the monitor state — no new API calls), and
+  Demand Today shows a **headroom meter** placing today's count against your
+  amber/red thresholds (only when alerting is enabled for that stream).
+
 ## [v3.60.8] — 2026-06-12
 
 ### Today — design-crit pass (three-critic review via /design-crit)

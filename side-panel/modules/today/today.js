@@ -79,6 +79,30 @@ function errMsgInline(raw) {
   return `<span class="today-card-error today-card-error--inline" title="${esc(raw)}">${glyph}<span class="today-card-error-copy">${esc(human)}</span></span>`;
 }
 
+// Oldest unanswered new-request across all new-request buckets (ms epoch), or
+// null when none carry a parseable createdAt. This is the card's altitude over
+// the strip: the strip says how many, the card says how long the worst has waited.
+function oldestUnanswered(buckets) {
+  let oldestMs = null;
+  for (const b of window.RequestMonitor?.BUCKETS || []) {
+    if (b.status !== 'new-request') continue;
+    for (const it of buckets?.[b.key]?.items || []) {
+      const t = it.createdAt ? new Date(it.createdAt).getTime() : NaN;
+      if (!isNaN(t) && (oldestMs === null || t < oldestMs)) oldestMs = t;
+    }
+  }
+  return oldestMs;
+}
+
+function fmtAge(ms) {
+  const mins = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const d = Math.floor(h / 24);
+  if (d >= 2) return `${d}d`;
+  return `${h}h ${String(mins % 60).padStart(2, '0')}m`;
+}
+
 // ── Fetch: Waiting Room ────────────────────────────────────────────────────────
 
 async function fetchWr() {
@@ -357,7 +381,13 @@ function buildRmBody() {
 
   const errLine = _rmData.error ? errMsgInline(_rmData.error) : '';
 
-  return `<div class="today-rm-pills">${pills}</div>${errLine}`;
+  const oldest = oldestUnanswered(_rmData.buckets);
+  const oldestLine =
+    oldest != null
+      ? `<div class="today-rm-oldest">Oldest unanswered request <strong>${esc(fmtAge(oldest))}</strong></div>`
+      : '';
+
+  return `<div class="today-rm-pills">${pills}</div>${oldestLine}${errLine}`;
 }
 
 function buildDemandBody() {
@@ -398,6 +428,23 @@ function buildDemandBody() {
 
   const errLine = error ? errMsgInline(error) : '';
 
+  // Headroom meter — the card's altitude over the strip: the strip shows the
+  // raw count, the meter shows where it sits against the amber/red thresholds.
+  // Only rendered when alerting is enabled for that stream (otherwise the
+  // thresholds are meaningless defaults).
+  function meter(key, val) {
+    if (val == null) return '';
+    const t = { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) };
+    if (!t.enabled || !t.red || t.red <= 0) return '';
+    const pct = Math.min(100, Math.round((val / t.red) * 100));
+    const amberPct = Math.max(0, Math.min(100, Math.round(((t.amber || 0) / t.red) * 100)));
+    const lvl = val >= t.red ? 'red' : t.amber && val >= t.amber ? 'amber' : 'ok';
+    return `<div class="today-demand-meter" role="img" aria-label="${val} of ${t.red} red threshold">
+      <div class="today-demand-meter-fill today-demand-meter-fill--${lvl}" style="width:${pct}%"></div>
+      <span class="today-demand-meter-tick" style="left:${amberPct}%"></span>
+    </div>`;
+  }
+
   // Decision J: count leads, label after, chip at end
   return `
     <div class="today-demand-row">
@@ -405,11 +452,13 @@ function buildDemandBody() {
       <span class="today-demand-label">medical</span>
       ${medFlag}
     </div>
+    ${meter('medical', medical)}
     <div class="today-demand-row">
       <span class="today-demand-count ${admCls}">${admVal}</span>
       <span class="today-demand-label">admin</span>
       ${admFlag}
     </div>
+    ${meter('admin', admin)}
     ${errLine}
   `;
 }
