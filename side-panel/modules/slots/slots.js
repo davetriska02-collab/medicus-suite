@@ -268,6 +268,7 @@ function render() {
       ${renderHeader(visible, visibleSum)}
       <div id="slotsBanner" class="banner${state.error ? '' : ' hidden'}">
         ${escHtml(state.error || '')}
+        ${state.error && state.error.startsWith('No practice code') ? ' <button class="ghost-btn setup-now-btn">Set up now</button>' : ''}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
@@ -467,6 +468,14 @@ function renderData(d, visible, visibleSum) {
 
 function bindEvents() {
   if (!container) return;
+
+  container.querySelector('.setup-now-btn')?.addEventListener('click', () => {
+    if (document.getElementById('setupHost')) {
+      document.dispatchEvent(new CustomEvent('suite:open-setup'));
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
+    }
+  });
 
   container.querySelector('#refreshSlots')?.addEventListener('click', () => fetchAndRender());
 

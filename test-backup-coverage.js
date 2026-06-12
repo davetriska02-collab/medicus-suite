@@ -235,6 +235,12 @@ const ALLOWLIST = new Set([
   // purpose is to allow resuming after a module switch, not to back up.
   // Mirrors sweep.handout pattern:
   'sweep.lastRun',
+
+  // Per-machine first-run onboarding state — dismissed/skipped flags.
+  // Not user config; deliberately excluded from backups so a restore onto a
+  // new machine still offers the setup checklist. Mirrors suite.tour.seenVersion
+  // rationale (see side-panel/setup/setup.js):
+  'suite.setup',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

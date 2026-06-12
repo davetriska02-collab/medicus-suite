@@ -173,6 +173,18 @@ function buildCommands() {
     run: () => startTour(),
   });
 
+  // Setup checklist — panel-only (setupHost does not exist in the pop-out)
+  if (document.getElementById('setupHost')) {
+    cmds.push({
+      id: 'help:setup',
+      label: 'Suite setup checklist',
+      group: 'Help',
+      keywords: 'first run practice code connection notifications onboarding health',
+      icon: GENERIC_ICONS.help,
+      run: () => import('../setup/setup.js').then((m) => m.openSetup()),
+    });
+  }
+
   return cmds;
 }
 
