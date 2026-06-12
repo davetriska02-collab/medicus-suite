@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.8] — 2026-06-12
+
+### Today — design-crit pass (three-critic review via /design-crit)
+
+- **Three dead "Open →" buttons fixed**: Waiting Room, Triage Load and
+  Demand Today navigated nowhere (the handler read the card's own id instead
+  of its nav target) — they now open Monitoring, Reception and Submissions.
+  The Morning Sweep button also fired its navigation twice per click
+  (duplicate direct + delegated handlers); now once.
+- **Jargon pills decoded**: triage bucket pills read "New med 14 / Med reply
+  3 / New admin 9 / Admin reply 2" instead of NM/MR/NA/AR — the fresh-eyes
+  GP critic's top confusion. Zero-count pills are now always muted (the
+  reply accent used to fire at 0 — backwards for a load indicator).
+- **Alert log label stutter fixed**: "Demand: Demand: Medical 34" → the
+  channel prefix is no longer doubled onto labels that already carry it.
+- **Designed error states**: raw fetch exceptions ("Failed to execute
+  'json'…") replaced with a status glyph + "Couldn't reach Medicus —
+  retrying automatically" (truthful — the cards poll), raw detail kept in a
+  tooltip for debugging.
+- **Demand card**: counts lead (matching the Waiting Room/Slots hero
+  pattern) and a threshold breach now adds an "over threshold" amber/red
+  chip — the breach no longer rides on digit colour alone.
+- **Accessibility**: aria-live on all six polled card bodies, per-card
+  accessible names on the six identical "Open →" buttons, labelled alert
+  dots and triage pills, hero-count label, and
+  :focus-visible/:active/:disabled coverage on the card-open, ghost-button
+  and setup-link controls.
+
 ## [v3.60.7] — 2026-06-12
 
 ### Sweep + Trends — design-crit pass (three-critic review via /design-crit)
