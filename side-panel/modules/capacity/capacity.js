@@ -297,6 +297,9 @@ function renderControls(preset) {
 }
 
 function renderView(preset) {
+  if (state.error && state.error.startsWith('No practice code')) {
+    return `<div class="cap-empty">${escHtml(state.error)} <button class="ghost-btn setup-now-btn">Set up now</button></div>`;
+  }
   if (!preset) {
     return `<div class="cap-empty">No preset selected. Open settings to create one.</div>`;
   }
@@ -591,6 +594,14 @@ function bindMonthView() {
 // ── Common control binding ────────────────────────────────────────────────────
 
 function bindControls() {
+  container.querySelector('.setup-now-btn')?.addEventListener('click', () => {
+    if (document.getElementById('setupHost')) {
+      document.dispatchEvent(new CustomEvent('suite:open-setup'));
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
+    }
+  });
+
   container.querySelector('#capPresetSelect')?.addEventListener('change', async (e) => {
     state.activePresetId = e.target.value;
     await chrome.storage.local.set({ 'capacity.activePresetId': state.activePresetId });

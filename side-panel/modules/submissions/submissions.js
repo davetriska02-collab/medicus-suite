@@ -285,6 +285,7 @@ async function fetchAndRender(force = false) {
     }
     if (!state.config.practiceCode) {
       setBanner('No practice code — open a Medicus tab or set it in Options.', 'info');
+      appendSetupNowBtn();
       showSkeleton();
       return;
     }
@@ -653,6 +654,23 @@ function setBanner(msg, kind = 'error') {
   }
   b.textContent = msg;
   b.className = 'banner' + (kind === 'info' ? ' info' : '');
+}
+
+function appendSetupNowBtn() {
+  const b = container?.querySelector('#subBanner');
+  if (!b) return;
+  const btn = document.createElement('button');
+  btn.className = 'ghost-btn setup-now-btn';
+  btn.textContent = 'Set up now';
+  btn.style.marginLeft = '8px';
+  btn.addEventListener('click', () => {
+    if (document.getElementById('setupHost')) {
+      document.dispatchEvent(new CustomEvent('suite:open-setup'));
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
+    }
+  });
+  b.appendChild(btn);
 }
 
 // ── MWChart — SVG chart renderer ──────────────────────────────────────────────

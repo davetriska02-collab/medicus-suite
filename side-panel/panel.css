@@ -1623,3 +1623,234 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   color: var(--text-4);
   letter-spacing: 0.04em;
 }
+
+/* ── First-run setup checklist card ─────────────────────────────────────────
+   In-flow card injected above <main id="suiteContent"> by panel.js.
+   No overlay, no fixed positioning — lives naturally in the flex column. */
+
+#setupHost {
+  padding: 8px 10px 0;
+}
+
+#setupHost[style*='display: none'] {
+  padding: 0;
+}
+
+.setup-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 12px 14px 10px;
+  margin-bottom: 2px;
+}
+
+.setup-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.setup-card-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  transition: background var(--fast) var(--ease);
+}
+
+.setup-step--done {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+
+.setup-step--disabled {
+  opacity: 0.55;
+}
+
+.setup-step--optional {
+  border-color: var(--border);
+}
+
+.setup-step-icon {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+
+.setup-step-done {
+  color: var(--green);
+}
+
+.setup-step-pending {
+  color: var(--text-4);
+}
+
+.setup-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-step-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setup-step-detail {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.setup-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.setup-optional-badge {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 5px;
+}
+
+.setup-result {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.setup-result--ok {
+  color: var(--green);
+}
+
+.setup-result--fail {
+  color: var(--red);
+}
+
+.setup-manual-link {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+  transition: color var(--fast) var(--ease);
+}
+
+.setup-manual-link:hover {
+  color: var(--accent-hover);
+}
+
+.setup-card-footer {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.setup-kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+  color: var(--text-3);
+}
+
+.setup-card-progress {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.setup-link {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+  transition: color var(--fast) var(--ease);
+}
+
+.setup-link:hover {
+  color: var(--accent-hover);
+}
+
+.setup-code-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  letter-spacing: 0.06em;
+}
+
+/* ── "Set up now" CTA used in no-practice-code error states ─────────────────
+   Rendered by slots, capacity, activity, condor when no practice code is set.
+   Dispatches suite:open-setup so the setup card opens (panel); falls back to
+   options.html#sect-suite in the pop-out (which has no setup card). */
+.setup-now-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}

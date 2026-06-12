@@ -5,6 +5,7 @@
 import { createModuleLoader } from './module-loader.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { initSetup } from './setup/setup.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -1040,6 +1041,10 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   // engine no-ops when localStorage says the current TOUR_VERSION has been seen.
   initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
   setTimeout(maybeAutoStartTour, 900);
+
+  // First-run setup checklist (panel-only; setupHost exists only in panel.html)
+  const setupHostEl = document.getElementById('setupHost');
+  if (setupHostEl) initSetup(setupHostEl);
 })();
 
 // ── Command palette (Ctrl+K) ─────────────────────────────────────────────────

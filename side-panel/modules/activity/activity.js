@@ -185,7 +185,11 @@ function renderSkeleton() {
 }
 
 function renderError() {
-  return `<div class="act-error">${escHtml(state.error)}</div>`;
+  const cta =
+    state.error && state.error.startsWith('No practice code')
+      ? ' <button class="ghost-btn setup-now-btn">Set up now</button>'
+      : '';
+  return `<div class="act-error">${escHtml(state.error)}${cta}</div>`;
 }
 
 function renderData() {
@@ -298,6 +302,14 @@ function renderBars() {
 // ── Wiring ───────────────────────────────────────────────────────────────────
 
 function wireControls() {
+  container.querySelector('.setup-now-btn')?.addEventListener('click', () => {
+    if (document.getElementById('setupHost')) {
+      document.dispatchEvent(new CustomEvent('suite:open-setup'));
+    } else {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
+    }
+  });
+
   const startEl = container.querySelector('#actStart');
   const endEl = container.querySelector('#actEnd');
   if (startEl)
