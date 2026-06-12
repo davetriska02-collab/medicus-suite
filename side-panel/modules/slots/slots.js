@@ -249,6 +249,31 @@ function visibleTotal(byType, hiddenTypes) {
   return out;
 }
 
+// ── Alert levels ──────────────────────────────────────────────────────────────
+// One source of truth for "is this type running dry?" — consumed by the alert
+// ribbon, the hero label, and the type pills, so they can never disagree.
+
+// 'red' (zero left), 'amber' (at/below threshold), or null for a single type.
+function typeAlertLevel(typeName, count) {
+  for (const rule of state.alertRules || []) {
+    if (!rule.enabled || rule.typeName !== typeName) continue;
+    if (count <= rule.threshold) return count === 0 ? 'red' : 'amber';
+  }
+  return null;
+}
+
+// Highest triggered level across all enabled rules, or null when all calm.
+function overallAlertLevel(byType) {
+  let level = null;
+  for (const rule of state.alertRules || []) {
+    if (!rule.enabled) continue;
+    const l = typeAlertLevel(rule.typeName, sumAmPm(byType[rule.typeName]));
+    if (l === 'red') return 'red';
+    if (l === 'amber') level = 'amber';
+  }
+  return level;
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
@@ -280,39 +305,85 @@ function render() {
 }
 
 function renderHeader(visible, visibleSum) {
-  const isToday = state.data?.isToday;
-  const splitLine =
-    !state.loading && state.data
-      ? `<div class="slots-ampm-split">
-         <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
-         <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
-       </div>`
-      : '';
   return `
     <div class="mod-header">
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
-        ${
-          !state.loading
-            ? `
-          <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
-          <div class="slots-count-label${visibleSum === 0 ? ' zero' : ''}">
-            ${isToday ? 'slots remaining today' : 'available slots'}
-          </div>
-          ${splitLine}`
-            : `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>`
-        }
+        ${state.loading ? `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>` : ''}
       </div>
       <div class="header-actions" style="align-self:flex-start;margin-top:2px">
         <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
         <button class="ghost-btn" id="refreshSlots" title="Refresh">↻</button>
       </div>
     </div>
+    ${!state.loading && state.data ? renderHeroCard(visible, visibleSum) : ''}
     <div class="date-presets">
       <button class="preset-btn${state.date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
       <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
     </div>
   `;
+}
+
+// Hero card: headline total, AM/PM chips, a proportional AM|PM split bar, and
+// the per-type pill row. The label inherits the alert state (green when calm,
+// amber/red when any slot-alert rule has tripped) so the headline is a signal,
+// not a decoration.
+function renderHeroCard(visible, visibleSum) {
+  const d = state.data;
+  const isToday = d.isToday;
+  const level = overallAlertLevel(d.byType);
+  const labelCls = visibleSum === 0 ? ' zero' : level ? ` ${level}` : '';
+
+  const amPct = visibleSum > 0 ? Math.round((visible.am / visibleSum) * 100) : 0;
+  const splitBar =
+    visibleSum > 0
+      ? `<div class="slots-split-bar" title="AM ${visible.am} · PM ${visible.pm}" aria-hidden="true">
+           <span class="split-am" style="width:${amPct}%"></span><span class="split-pm" style="width:${100 - amPct}%"></span>
+         </div>`
+      : '';
+
+  return `
+    <div class="slots-hero-card">
+      <div class="slots-hero-main">
+        <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
+        <div class="slots-hero-right">
+          <div class="slots-count-label${labelCls}">${isToday ? 'slots remaining today' : 'available slots'}</div>
+          <div class="slots-ampm-split">
+            <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
+            <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
+          </div>
+        </div>
+      </div>
+      ${splitBar}
+      ${renderTypePills(d.byType, visibleSum)}
+    </div>
+  `;
+}
+
+// One pill per included type, biggest first: dot + name + count. The dot is
+// slate when calm and goes amber/red when that type is at/below its configured
+// alert threshold — colour carries signal, never decoration.
+function renderTypePills(byType, visibleSum) {
+  const entries = Object.entries(byType)
+    .filter(([t]) => !state.hiddenTypes.has(t))
+    .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
+  if (entries.length === 0 || visibleSum === 0) return '';
+
+  const pills = entries
+    .map(([type, n]) => {
+      const total = sumAmPm(n);
+      const level = typeAlertLevel(type, total);
+      const cls = level ? ` pill-${level}` : total === 0 ? ' pill-zero' : '';
+      const title = `${escHtml(type)} — ${n.am} am · ${n.pm} pm${level ? ' · below alert threshold' : ''}`;
+      return `<span class="slot-pill${cls}" title="${title}">
+        <span class="slot-pill-dot" aria-hidden="true"></span>
+        <span class="slot-pill-name">${escHtml(type)}</span>
+        <span class="slot-pill-num">${total.toLocaleString('en-GB')}</span>
+      </span>`;
+    })
+    .join('');
+
+  return `<div class="slots-pill-row">${pills}</div>`;
 }
 
 function renderAlertRibbon(byType) {
@@ -359,24 +430,28 @@ function renderData(d, visible, visibleSum) {
   const unticked = entries.filter(([t]) => state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;
 
+  // Count cell: muted am/pm breakdown, then the bold total at the right edge —
+  // totals form a scannable column. Share-of-total moved off the line into the
+  // row's micro-bar (and the tooltip), so the count is the first read.
   const countCell = (n, pct) => {
     const total = sumAmPm(n);
     return `
-      <span class="slot-count-group${total === 0 ? ' zero' : ''}">
+      <span class="slot-count-group${total === 0 ? ' zero' : ''}"${pct != null ? ` title="${pct}% of visible total"` : ''}>
         <span class="slot-count-ampm" title="Morning">${n.am}<span class="ampm-tag-inline">am</span></span>
         <span class="slot-count-sep">·</span>
         <span class="slot-count-ampm" title="Afternoon">${n.pm}<span class="ampm-tag-inline">pm</span></span>
-        <span class="slot-count-sep">·</span>
         <span class="slot-count slot-count-total">${total}</span>
-        ${pct != null ? `<span class="slot-count-pct" title="Share of visible total">${pct}%</span>` : ''}
       </span>
     `;
   };
 
   const row = (type, n, hidden) => {
     const pct = !hidden && visibleSum > 0 ? Math.round((sumAmPm(n) / visibleSum) * 100) : null;
+    const share =
+      pct != null && pct > 0 ? `<span class="slot-share" style="width:${pct}%" aria-hidden="true"></span>` : '';
     return `
       <div class="slot-row${hidden ? ' row-hidden' : ''}">
+        ${share}
         <label class="slot-label">
           <input type="checkbox" class="type-toggle" data-type="${escHtml(type)}" ${hidden ? '' : 'checked'} />
           <span class="slot-type">${escHtml(type)}</span>
