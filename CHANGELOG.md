@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.4] — 2026-06-12
+
+### Slots — design-crit pass (three-critic review, orchestrated)
+
+Findings from an art-director crit, a token/code survey and a fresh-eyes GP
+persona pass, applied in one sweep:
+
+- **Alert hierarchy restored**: the ribbon now renders above the hero, the
+  hero card itself wears the amber/red wash when a rule trips, and the
+  decorative AM|PM split bar is gone. Clinician-row AM|PM strips desaturated
+  to neutral slate/blue — amber no longer appears in resting chrome, so when
+  it does appear, it means something.
+- **One data home**: the BY TYPE list (checkboxes + am/pm detail) collapses
+  into an on-demand panel — pills are the glance layer, the list is the
+  control layer; its open state persists per workstation.
+- **One date zone**: Today / Next working day / date picker / refresh
+  consolidated into a single row; refresh and alert icons now Feather strokes
+  (emoji removed from chrome); alert ribbon gains an "Edit thresholds" link.
+- **Designed empty state** (calendar icon + label, hero suppressed) replacing
+  the bare string with a shouting zero.
+- **Organise-mode accessibility**: pills are keyboard-operable (tab, Enter to
+  colour, arrow keys to reorder), aria-live announcements, focus rings on
+  swatches, ghost-styled Done button, contained swatch styling.
+- Canon clean-up: am/pm unit labels raised from 8px to legible 9px, hints
+  de-italicised to AA contrast, focus-visible corrections, reduced-motion
+  kill switch on the skeleton, dead CSS removed.
+
 ## [v3.60.3] — 2026-06-12
 
 ### Slots pill configuration + "Choose your tabs"
