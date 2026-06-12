@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.58.0] — 2026-06-12
+
+### Suite-wide first-run walkthrough + Monitoring action bar relocation (Sentinel v0.5.1)
+
+- **The guided tour now covers the whole suite and greets first-run users on
+  install.** The engine moved from the Monitoring module to the shell
+  (`side-panel/tour/`), auto-starts when the side panel first opens (whatever
+  tab is active), and can switch tabs as it walks: nav + drag-to-reorder,
+  global alert strips, Slots, the Monitoring deep-dive (waiting room, brief,
+  action bar, Verify in Medicus, unmatched meds), then display settings,
+  pop-out and Settings. Tour version bumped to 2 — users who completed the v1
+  Monitoring tour get a short "What's new" pass of only the new steps.
+  Replayable from the Monitoring More menu or Options → Suite (replay works in
+  the pop-out window too).
+- **Monitoring actions re-anchored under the pre-consultation brief.** The
+  header icon row read as disassociated chrome (user feedback). The actions
+  are now a clearly labelled bar — icon + text: Appointments, Copy actions,
+  Print summary, More — sitting directly beneath the brief card they act on.
+  The header keeps just the title, version and refresh. The bar stays in the
+  persistent scaffold, so the no-flicker guarantees from v3.57.0 hold.
+
 ## [v3.57.0] — 2026-06-12
 
 ### Monitoring panel — header toolbar, flicker fix, guided tour (Sentinel v0.5.0)

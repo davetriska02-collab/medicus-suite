@@ -3,6 +3,7 @@
 'use strict';
 
 import { createModuleLoader } from '../side-panel/module-loader.js';
+import { initTour } from '../side-panel/tour/tour.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -189,6 +190,11 @@ const switchModule = createModuleLoader({
   },
   errPrefix: 'Failed to load',
 });
+
+// Guided tour: replay-only in the pop-out (auto-start is the side panel's
+// job). Module-scoped steps switch tabs via this window's loader; steps whose
+// anchors don't exist here (e.g. panel-only tabs) skip silently.
+initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
 
 // ── Service worker messages ───────────────────────────────────────────────────
 
