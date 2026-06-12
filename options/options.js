@@ -529,13 +529,14 @@ async function applyEnvelope(envelope) {
   // Only include modules that are present in this backup (same mods.X && gating).
   // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
   const tasks = [
-    mods.sentinel && (async () => {
-      const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
-      if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
-        const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
-        notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
-      }
-    }),
+    mods.sentinel &&
+      (async () => {
+        const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
+        if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
+          const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
+          notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
+        }
+      }),
     mods.capacity && (() => capacityImport(mods.capacity)),
     mods.triage && (() => triageImport(mods.triage)),
     mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
