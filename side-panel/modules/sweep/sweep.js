@@ -49,6 +49,11 @@ import { buildBatchPack } from '../shared/action-packs.js';
 
 const BATCH_SIZE = MAX_SWEEP_PATIENTS; // patients evaluated per batch (40)
 
+// sweep.lastRun — transient session state, PHI-bearing, TTL 2 h.
+// Never backed up (allowlisted in test-backup-coverage.js).
+const LAST_RUN_KEY = 'sweep.lastRun';
+const LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 let container = null;
@@ -109,6 +114,86 @@ function delay(ms) {
 function setProgress(msg) {
   const el = container?.querySelector('.sweep-progress');
   if (el) el.textContent = msg;
+}
+
+// ── Last-run persistence ──────────────────────────────────────────────────────
+
+// Serialise _cumulativeResults for storage: convert hiddenRuleIds Set → array.
+function serialiseResults(results) {
+  return results.map((r) => ({
+    uuid: r.uuid,
+    name: r.name,
+    time: r.time,
+    clinician: r.clinician,
+    chips: r.chips,
+    error: r.error,
+    hiddenRuleIds: r.hiddenRuleIds ? Array.from(r.hiddenRuleIds) : [],
+  }));
+}
+
+// Deserialise stored results: restore hiddenRuleIds array → Set.
+function deserialiseResults(results) {
+  if (!Array.isArray(results)) return [];
+  return results.map((r) => ({
+    uuid: r.uuid,
+    name: r.name,
+    time: r.time,
+    clinician: r.clinician,
+    chips: r.chips,
+    error: r.error,
+    hiddenRuleIds: new Set(Array.isArray(r.hiddenRuleIds) ? r.hiddenRuleIds : []),
+  }));
+}
+
+async function persistLastRun() {
+  try {
+    const existing = await chrome.storage.local.get(LAST_RUN_KEY);
+    const prev = existing[LAST_RUN_KEY];
+    const selectedUuids = prev && prev.selectedUuids ? prev.selectedUuids : [];
+    await chrome.storage.local.set({
+      [LAST_RUN_KEY]: {
+        runAt: _sweepMeta?.runAt || new Date().toISOString(),
+        clinician: _selectedClinician || null,
+        results: serialiseResults(_cumulativeResults),
+        missingUuidCount: _sweepMeta?.missingUuidCount ?? 0,
+        totalCount: _allPatients.length,
+        processedCount: _sweepOffset,
+        selectedUuids,
+      },
+    });
+  } catch (_) {}
+}
+
+async function persistSelectedUuids() {
+  try {
+    const existing = await chrome.storage.local.get(LAST_RUN_KEY);
+    const prev = existing[LAST_RUN_KEY];
+    if (!prev || typeof prev !== 'object') return;
+    prev.selectedUuids = Array.from(_selectedUuids);
+    await chrome.storage.local.set({ [LAST_RUN_KEY]: prev });
+  } catch (_) {}
+}
+
+async function loadLastRun() {
+  try {
+    const r = await chrome.storage.local.get(LAST_RUN_KEY);
+    const d = r[LAST_RUN_KEY];
+    if (!d || typeof d !== 'object') return null;
+    const runAt = typeof d.runAt === 'string' ? new Date(d.runAt).getTime() : d.runAt;
+    if (!runAt || Date.now() - runAt > LAST_RUN_TTL_MS) {
+      chrome.storage.local.remove(LAST_RUN_KEY);
+      return null;
+    }
+    return d;
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearLastRun() {
+  try {
+    chrome.storage.local.remove(LAST_RUN_KEY);
+  } catch (_) {}
 }
 
 // ── Rule loading (mirrors sentinel.js loadRules exactly) ──────────────────────
@@ -250,7 +335,10 @@ async function runSweep(apiBase, hiddenRules) {
     return;
   }
 
-  // Store session state for sequential batching
+  // Store session state for sequential batching.
+  // Clear any persisted last-run first — a new sweep supersedes the old one.
+  clearLastRun();
+  _selectedUuids = new Set();
   _allPatients = patients;
   _sweepOffset = 0;
   _cumulativeResults = [];
@@ -319,6 +407,10 @@ async function runNextBatch() {
   _abortFlag = false;
   _sweepOffset = batchStart + processedThisBatch;
 
+  // Persist the run before rendering so the resume card is available after a
+  // module switch. Preserve any existing selection from before the render.
+  await persistLastRun();
+
   const { actionRows, clearRows, errorRows } = summariseSweep(_cumulativeResults);
   renderResults({
     actionRows,
@@ -329,6 +421,7 @@ async function runNextBatch() {
     missingUuidCount: _sweepMeta.missingUuidCount,
     runAt: _sweepMeta.runAt,
     aborted,
+    isResume: false,
   });
 }
 
@@ -414,11 +507,16 @@ function renderResults({
   missingUuidCount,
   runAt,
   aborted,
+  isResume,
 }) {
   if (!container) return;
 
-  // Clear batch selection on every fresh render (new results supersede old picks)
-  _selectedUuids = new Set();
+  // On a fresh run or new batch, clear selection so stale UUIDs don't persist
+  // across result sets. On resume (re-render of a stored run), preserve the
+  // restored selection that was loaded before this call.
+  if (!isResume) {
+    _selectedUuids = new Set();
+  }
 
   const siteIdMatch =
     (window.PracticeCode?.getPracticeCodeSync ? window.PracticeCode.getPracticeCodeSync() : null) || '';
@@ -585,6 +683,7 @@ function wireBatchSelection(runArea, actionRows) {
         cb.closest('.sweep-row')?.classList.remove('sweep-row-selected');
       }
       updateBatchBar();
+      persistSelectedUuids();
     });
   });
 
@@ -603,6 +702,7 @@ function wireBatchSelection(runArea, actionRows) {
       }
     });
     updateBatchBar();
+    persistSelectedUuids();
   });
 
   // Generate batch
@@ -623,7 +723,9 @@ async function onPrintHandout() {
   await chrome.storage.local.set({ 'sweep.handout': model });
   // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
   // in the print tab; this covers the case where the tab never renders.
-  setTimeout(() => { chrome.storage.local.remove('sweep.handout'); }, 60000);
+  setTimeout(() => {
+    chrome.storage.local.remove('sweep.handout');
+  }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/handout.html') });
 }
 
@@ -646,7 +748,9 @@ async function onGenerateBatch() {
   await chrome.storage.local.set({ 'sweep.batchPack': batchPack });
   // best-effort PHI-at-rest backstop (audit L2) — primary clear is consume-on-read
   // in the print tab; this covers the case where the tab never renders.
-  setTimeout(() => { chrome.storage.local.remove('sweep.batchPack'); }, 60000);
+  setTimeout(() => {
+    chrome.storage.local.remove('sweep.batchPack');
+  }, 60000);
   chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/sweep/batch-handout.html') });
 }
 
@@ -690,6 +794,71 @@ function renderError(message) {
     btn.disabled = false;
   }
   _running = false;
+}
+
+// ── Resume-last-run card ──────────────────────────────────────────────────────
+
+function renderResumeCard(stored) {
+  const runArea = container?.querySelector('.sweep-run-area');
+  if (!runArea) return;
+
+  const runAtTs = typeof stored.runAt === 'string' ? new Date(stored.runAt).getTime() : stored.runAt;
+  const timeStr = fmtTs(stored.runAt);
+  const clinLabel = stored.clinician || 'All clinicians';
+
+  const deserialisedResults = deserialiseResults(stored.results || []);
+  const { actionRows } = summariseSweep(deserialisedResults);
+  const actionCount = actionRows.length;
+  const selectedCount = Array.isArray(stored.selectedUuids) ? stored.selectedUuids.length : 0;
+
+  runArea.innerHTML = `
+    <div class="sweep-resume-card" id="sweepResumeCard">
+      <div class="sweep-resume-line">
+        Last sweep ${esc(timeStr)} · ${esc(clinLabel)} · <strong>${actionCount} action-needed</strong> · ${selectedCount} selected
+      </div>
+      <div class="sweep-resume-actions">
+        <button class="sweep-continue-btn" type="button" id="sweepResumeBtn">Resume</button>
+        <button class="rcp-link-btn sweep-resume-discard" type="button" id="sweepResumeDiscard">Discard</button>
+      </div>
+    </div>`;
+
+  runArea.querySelector('#sweepResumeBtn')?.addEventListener('click', () => {
+    onResumeClick(stored);
+  });
+  runArea.querySelector('#sweepResumeDiscard')?.addEventListener('click', () => {
+    clearLastRun();
+    runArea.innerHTML = '';
+  });
+}
+
+function onResumeClick(stored) {
+  const deserialisedResults = deserialiseResults(stored.results || []);
+
+  // Restore in-memory session state so "Continue" and batch actions work
+  _cumulativeResults = deserialisedResults;
+  _sweepOffset = stored.processedCount ?? deserialisedResults.length;
+  _allPatients = []; // can't restore full list — Continue is unavailable after resume
+  _sweepMeta = {
+    runAt: stored.runAt,
+    missingUuidCount: stored.missingUuidCount ?? 0,
+  };
+  _selectedClinician = stored.clinician || '';
+
+  // Restore selection
+  _selectedUuids = new Set(Array.isArray(stored.selectedUuids) ? stored.selectedUuids : []);
+
+  const { actionRows, clearRows, errorRows } = summariseSweep(deserialisedResults);
+  renderResults({
+    actionRows,
+    clearRows,
+    errorRows,
+    processedCount: _sweepOffset,
+    totalCount: stored.totalCount ?? _sweepOffset,
+    missingUuidCount: _sweepMeta.missingUuidCount,
+    runAt: _sweepMeta.runAt,
+    aborted: false,
+    isResume: true,
+  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -747,6 +916,11 @@ export async function init(el) {
     }
   };
   chrome.storage.onChanged.addListener(_storageListener);
+
+  // Check for a recent persisted run — show resume card if found.
+  loadLastRun().then((stored) => {
+    if (stored && container) renderResumeCard(stored);
+  });
 
   // Pre-populate clinician dropdown in the background so the user can filter
   // before running their first sweep. Errors are silently swallowed here —

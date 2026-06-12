@@ -89,6 +89,7 @@ const KEY_PREFIXES = [
   'slots',
   'submissions',
   'popout',
+  'panel',
   'referrals',
   'suite',
   'condor',
@@ -96,6 +97,7 @@ const KEY_PREFIXES = [
   'day',
   'knowledge',
   'sweep',
+  'reception',
 ];
 
 function hasKeyPrefix(k) {
@@ -173,8 +175,13 @@ const ALLOWLIST = new Set([
 
   // Guided-tour seen marker — localStorage, NOT chrome.storage (per-machine
   // onboarding state, deliberately excluded from backups so a restore onto a
-  // new machine still offers the tour). See side-panel/modules/sentinel/tour.js:
+  // new machine still offers the tour). See side-panel/tour/tour.js:
   'suite.tour.seenVersion',
+
+  // Command-palette recents — localStorage, NOT chrome.storage (per-machine
+  // convenience ordering of command ids, never patient data; not worth
+  // backing up). See side-panel/palette/palette.js:
+  'suite.palette.recents',
 
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile', // applied-profile metadata (version etc.)
@@ -208,6 +215,40 @@ const ALLOWLIST = new Set([
   // Rediscovered on visiting the referrals page; never exported to backup.
   // referrals.config IS covered via referrals-io.
   'referrals.discovery',
+
+  // Per-machine view state — not user config, not PHI, deliberately excluded from
+  // backups so a restore onto a new machine starts fresh (see shared/modules/shared/ui-state.js):
+  'suite.uiState',
+
+  // Per-machine last-active panel tab — session convenience, not user config.
+  // Excluded from backups; a freshly-restored machine always starts on 'slots':
+  'panel.activeModule',
+
+  // Transient guided-capture draft — written on every form input (debounced
+  // 400 ms), cleared on "Generate summary" or explicit Discard. PHI-bearing
+  // (may contain patient history answers); TTL 4 h; purpose is to survive
+  // accidental module switches, not to back up. Mirrors sweep.handout pattern:
+  'reception.captureDraft',
+
+  // Transient sweep session state — written after each batch completes,
+  // cleared on a fresh Run. PHI-bearing (patient names + chip data); TTL 2 h;
+  // purpose is to allow resuming after a module switch, not to back up.
+  // Mirrors sweep.handout pattern:
+  'sweep.lastRun',
+
+  // Per-machine first-run onboarding state — dismissed/skipped flags.
+  // Not user config; deliberately excluded from backups so a restore onto a
+  // new machine still offers the setup checklist. Mirrors suite.tour.seenVersion
+  // rationale (see side-panel/setup/setup.js):
+  'suite.setup',
+
+  // Transient mute timer — ephemeral, resets naturally (suite.quietUntil is removed
+  // when clear() is called; restoring it would silently re-mute a new install):
+  'suite.quietUntil',
+
+  // Rolling runtime alert log — session-local, not user config. Restoring a stale
+  // log onto a new machine would show misleading historical alerts:
+  'suite.alertLog',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

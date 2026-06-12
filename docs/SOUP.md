@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-SOUP-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.56.0
-**Document version:** 1.1
-**Date issued:** 2026-06-11
+**Product version:** 3.60.0
+**Document version:** 1.2
+**Date issued:** 2026-06-12
 **Author:** Dr Dave Triska, Graysbrook Ltd
 **Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP
 **Status:** Live — reviewed at each minor or major release, and whenever a vendored library is upgraded
@@ -72,3 +72,4 @@ When any item above is added, upgraded or removed:
 |------|---------|--------|--------|
 | 2026-06-07 | 1.0 | DT | Initial SOUP register, synchronised to Medicus Suite v3.33.0 and `vendor-versions.json` (generated 2026-06-04). Captures PDF.js 3.11.174 (+ worker), Chart.js 4.4.1, D3.js 7.8.5, including the CVE-2024-4367 mitigation and the deferred PDF.js upgrade (NF6). |
 | 2026-06-11 | 1.1 | DT | Synchronised to Medicus Suite v3.56.0. **SOUP items (§3) verified** against `vendor-versions.json`: PDF.js 3.11.174 (+ worker), Chart.js 4.4.1, D3.js 7.8.5 — all versions unchanged; CVE-2024-4367 mitigation and NF6 deferred-upgrade status unchanged. **Added §4 (non-shipped devDependencies):** ESLint 9.24.0, @eslint/js 9.24.0, globals 16.0.0, Prettier 3.5.3 — dev-only, not shipped, no patient-data access. |
+| 2026-06-12 | 1.2 | DT | Synchronised to Medicus Suite v3.60.0. **No SOUP changes.** The v3.57.0–v3.60.0 releases (UX/onboarding: guided tour, command palette, setup checklist, Today tab, view-state continuity, drafts/resumable sweep, notifications/clinic mode) introduced no new vendored libraries and no new shipped dependencies; all new code is first-party. SOUP items (§3) re-verified against `vendor-versions.json`: PDF.js 3.11.174 (+ worker), Chart.js 4.4.1, D3.js 7.8.5 — unchanged; CVE-2024-4367 mitigation and NF6 deferred-upgrade status unchanged. devDependencies (§4) unchanged (Playwright is used transiently for headless design verification, installed with `--no-save`, and is neither a devDependency of record nor shipped). |

@@ -4,6 +4,7 @@
 
 import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
+import { initPalette } from '../side-panel/palette/palette.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -14,6 +15,7 @@ let switchSeq = 0;
 // ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
 
 const MODULES = {
+  today: { js: () => import('../side-panel/modules/today/today.js'), css: '../side-panel/modules/today/today.css' },
   slots: { js: () => import('../side-panel/modules/slots/slots.js'), css: '../side-panel/modules/slots/slots.css' },
   capacity: {
     js: () => import('../side-panel/modules/capacity/capacity.js'),
@@ -196,6 +198,10 @@ const switchModule = createModuleLoader({
 // anchors don't exist here (e.g. panel-only tabs) skip silently.
 initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
 
+// Command palette (Ctrl+K) — same engine as the side panel; nav commands are
+// built from this window's own tabs.
+initPalette();
+
 // ── Service worker messages ───────────────────────────────────────────────────
 
 // F5: Sender guard — only accept messages from intra-extension contexts.
@@ -210,11 +216,56 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+// ── Quiet pill ────────────────────────────────────────────────────────────────
+// Mirrors the panel's quiet pill: amber indicator + click-to-clear.
+
+const _popoutQuietPillEl = document.getElementById('quietPill');
+
+function _popoutFmtHHMM(epochMs) {
+  const d = new Date(epochMs);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+async function _updatePopoutQuietPill() {
+  if (!_popoutQuietPillEl) return;
+  try {
+    const r = await chrome.storage.local.get('suite.quietUntil');
+    const until = r['suite.quietUntil'];
+    const isActive = until && typeof until === 'number' && until > Date.now();
+    if (isActive) {
+      const hhmm = _popoutFmtHHMM(until);
+      _popoutQuietPillEl.textContent = `🔕 ${hhmm}`;
+      _popoutQuietPillEl.title = `Clinic mode — desktop pop-ups and sounds muted until ${hhmm}. Click to switch off.`;
+      _popoutQuietPillEl.classList.remove('quiet-pill-hidden');
+    } else {
+      _popoutQuietPillEl.classList.add('quiet-pill-hidden');
+      _popoutQuietPillEl.title = '';
+    }
+  } catch (_) {}
+}
+
+_popoutQuietPillEl?.addEventListener('click', () => {
+  window.QuietMode?.clear();
+});
+
+setInterval(_updatePopoutQuietPill, 30 * 1000);
+
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.quietUntil' in changes) _updatePopoutQuietPill();
+});
+
+_updatePopoutQuietPill();
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 (async () => {
   // Display preferences are applied by shared/display-prefs.js (loaded before this script).
   const r = await chrome.storage.local.get('popout.activeModule');
-  const startMod = r['popout.activeModule'] || 'slots';
+  // Guard against a stale module name persisted by an older version (mirrors
+  // the panel boot's validation) — an unknown name would blank the content area.
+  const saved = r['popout.activeModule'];
+  const startMod = saved && saved in MODULES && MODULES[saved] ? saved : 'today';
   switchModule(startMod);
 })();

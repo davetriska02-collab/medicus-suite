@@ -2,6 +2,88 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.1] — 2026-06-12
+
+### Safety-doc reissue for the 3.57–3.60 releases (CSO-directed)
+
+- **CLINICAL-SAFETY-NOTICE v3.5** — intended purpose, regulatory assertions and
+  limitations updated for the UX/onboarding releases: limitation 26 corrected
+  ("Results are not stored" → sweep results persist ≤2h for resume, with
+  staleness caution), limitation 27 updated for capture drafts, and new
+  limitations 32 (clinic mode — desktop pop-ups/sounds only, never clinical
+  surfaces), 33 (Today tab — administrative glance; alert log is a convenience
+  record, not an audit trail) and 34 (drafts/resumed sweeps are point-in-time
+  working copies). DOES-NOT item 8 now honestly enumerates the short-lived
+  local working copies that contain patient data and their TTLs.
+- **HAZARD-LOG v3.6** — new hazards H-027 (resumed sweep staleness), H-028
+  (clinic mode awareness delay; fail-open, code-bounded scope) and H-029
+  (reception draft restored against the wrong contact — monitor); H-012 gains
+  clinic mode as a bounded interruption-management control.
+- **SOUP v1.2** — no SOUP changes in v3.57–v3.60 (all new code first-party);
+  vendored set re-verified unchanged.
+- **feature-list** regenerated at v3.60.0 (Today tab, palette, tour/setup,
+  notifications/clinic mode, continuity, drafts/resume).
+- `scripts/check-doc-versions.js` known-stale pins removed — the guard is
+  fully strict again.
+
+## [v3.60.0] — 2026-06-12
+
+### Five-workstream UX release
+
+- **The suite remembers where you were.** The side panel restores your last
+  active tab on reopen (the pop-out already did), and seven modules persist
+  their view state for 24h via a shared helper (`suite.uiState`, per-machine,
+  not backed up): Trends metric, Activity date range + mode, Referrals
+  filters/chart/search, Capacity focus date, Knowledge search/category/expanded
+  entry, Slots filters + expanded clinicians, Submissions mode + muted series.
+- **Never lose typed work.** Reception guided-capture auto-saves a draft as you
+  type (4h TTL, "Restore / Discard" banner, draft pill on the pathway tile,
+  cleared on generate). Sweep runs and batch selections persist (2h TTL) with a
+  "Resume last sweep" card — a tab switch no longer wipes the morning huddle.
+  Both keys are transient, PHI-bearing and excluded from backups.
+- **First-run setup checklist.** A dismissible "Get set up" card walks a new
+  user through practice-code detection/confirmation, a live connection test and
+  the desktop-notification permission, with the triage monitor as an optional
+  step. Reopenable via Ctrl+K → "Suite setup checklist". Every module's
+  "No practice code" error now carries the same "Set up now" CTA.
+- **Today tab — the morning command centre.** New default tab (in panel and
+  pop-out): waiting room, triage load, demand vs thresholds, slots remaining,
+  last sweep summary and recent alerts, each card deep-linking to its module.
+  Tour version 4 adds a Today step.
+- **One attention model.** New Options → Notifications section listing every
+  channel with toggles for desktop pop-ups, sound and the toolbar badge, plus
+  **clinic mode** (mute 30 min / 1 h / until 18:00) with a 🔕 pill in the nav
+  and Ctrl+K commands. Safety boundary, stated in the UI and enforced in code:
+  clinic mode silences desktop pop-ups and sounds only — on-screen strips,
+  badges and clinical alerts in the patient record are never muted. A capped
+  alert log keeps a muted hour reviewable on the Today tab.
+- Release was bug-bashed (three reviewers + verification pass): no red
+  findings; four minor (amber) fixes applied — pop-out boot validates the
+  saved module, setup notification-permission failure is reflected in the
+  checklist, "Until 18:00" clicked after 18:00 rolls to tomorrow, disabling
+  the toolbar badge clears it immediately.
+
+## [v3.59.0] — 2026-06-12
+
+### Command palette (Ctrl+K)
+
+- **One keystroke to anywhere.** Ctrl+K (or the search button in the nav)
+  opens a command palette in both the side panel and the pop-out window:
+  jump to any tab (commands are built from the live nav, so they respect
+  custom tab order and each window's tab set), switch theme / text size /
+  colour-blind palette (applied live on every page), open a **specific
+  Options section** directly, open the visualiser or pop-out, or replay the
+  guided tour. Fuzzy matching with keyword aliases; your five most recent
+  commands float to the top of an empty query. Keyboard-first: type, ↑↓, ↵,
+  esc.
+- **Options deep-linking.** `options.html#sect-<name>` now opens straight
+  onto that section (and reacts to hash changes). Used by the palette's
+  Settings commands, and the Monitoring panel's "Monitoring settings" item
+  now lands on the Monitoring section instead of the generic Suite tab.
+- Tour version 3: a new "One keystroke to anywhere" step — returning users
+  see it as a single-step What's-new pass; the palette core logic
+  (scoring/ranking/recents) is unit-tested in `test-palette-core.js`.
+
 ## [v3.58.1] — 2026-06-12
 
 ### Tour staleness guard (CI) + practice-push deployment guidance

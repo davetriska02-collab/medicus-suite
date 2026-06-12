@@ -4,6 +4,8 @@
 
 import { createModuleLoader } from './module-loader.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
+import { initPalette } from './palette/palette.js';
+import { initSetup } from './setup/setup.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -92,6 +94,7 @@ function renderDisplayPopover() {
 // ── Module registry ───────────────────────────────────────────────────────────
 
 const MODULES = {
+  today: { js: () => import('./modules/today/today.js'), css: './modules/today/today.css' },
   slots: { js: () => import('./modules/slots/slots.js'), css: './modules/slots/slots.css' },
   capacity: { js: () => import('./modules/capacity/capacity.js'), css: './modules/capacity/capacity.css' },
   submissions: {
@@ -309,6 +312,12 @@ const switchModule = createModuleLoader({
     }
     return false;
   },
+  onPersist: (name) => {
+    // Don't persist 'about' as a boot target — it's a static info page,
+    // not a real module, so restoring it on next open is useless.
+    if (name === 'about') return;
+    chrome.storage.local.set({ 'panel.activeModule': name });
+  },
   escFn: escStrip,
 });
 
@@ -325,6 +334,17 @@ function renderAbout() {
       </div>
 
       <h2>Modules</h2>
+
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Today</span>
+          <span class="module-card-version">v1.0</span>
+        </div>
+        <div class="module-card-desc">
+          Morning command centre: waiting room, triage load, demand counts, available slots and
+          the pre-clinic sweep — one screen answers "what does today look like?" before clinic starts.
+        </div>
+      </div>
 
       <div class="module-card">
         <div class="module-card-header">
@@ -653,14 +673,92 @@ function renderStrip(patients) {
   });
 }
 
+// ── Badge-enabled cache ───────────────────────────────────────────────────────
+// Cached to avoid a storage round-trip on every WR poll. Seeded on load,
+// kept current via onChanged. Default true (safe: badge shows if pref unknown).
+let _badgeEnabled = true;
+chrome.storage.local.get('suite.notifications').then((r) => {
+  const prefs = r['suite.notifications'] || {};
+  _badgeEnabled = prefs.badgeEnabled !== false;
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['suite.notifications']) {
+    const prefs = changes['suite.notifications'].newValue || {};
+    _badgeEnabled = prefs.badgeEnabled !== false;
+    // Clear a stale count immediately on disable rather than waiting for the
+    // next waiting-room poll (≤30s) to notice.
+    if (!_badgeEnabled) chrome.action.setBadgeText({ text: '' });
+  }
+});
+
 function updateStripBadge(count) {
-  if (count > 0) {
+  // Respect suite.notifications.badgeEnabled — if disabled, always clear the badge.
+  if (!_badgeEnabled || count <= 0) {
+    chrome.action.setBadgeText({ text: '' });
+  } else {
     chrome.action.setBadgeText({ text: String(count) });
     chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
-  } else {
-    chrome.action.setBadgeText({ text: '' });
   }
 }
+
+// ── Alert log helper ──────────────────────────────────────────────────────────
+// Prepend entry to suite.alertLog (capped at 50). Never stores patient names —
+// counts/labels only. Safe to call from any panel context.
+async function appendAlertLog(entry) {
+  try {
+    const r = await chrome.storage.local.get('suite.alertLog');
+    const log = Array.isArray(r['suite.alertLog']) ? r['suite.alertLog'] : [];
+    log.unshift(entry);
+    if (log.length > 50) log.length = 50;
+    await chrome.storage.local.set({ 'suite.alertLog': log });
+  } catch (_) {}
+}
+
+// ── Quiet pill ────────────────────────────────────────────────────────────────
+// Shows an amber pill in the nav when clinic (quiet) mode is active.
+// Polls every 30s and reacts to storage changes. Click clears quiet mode.
+
+const _quietPillEl = document.getElementById('quietPill');
+
+function _fmtHHMM(epochMs) {
+  const d = new Date(epochMs);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+async function _updateQuietPill() {
+  if (!_quietPillEl) return;
+  try {
+    const r = await chrome.storage.local.get('suite.quietUntil');
+    const until = r['suite.quietUntil'];
+    const isActive = until && typeof until === 'number' && until > Date.now();
+    if (isActive) {
+      const hhmm = _fmtHHMM(until);
+      _quietPillEl.textContent = `🔕 ${hhmm}`;
+      _quietPillEl.title = `Clinic mode — desktop pop-ups and sounds muted until ${hhmm}. Click to switch off.`;
+      _quietPillEl.classList.remove('quiet-pill-hidden');
+    } else {
+      _quietPillEl.classList.add('quiet-pill-hidden');
+      _quietPillEl.title = '';
+    }
+  } catch (_) {}
+}
+
+_quietPillEl?.addEventListener('click', () => {
+  window.QuietMode?.clear();
+});
+
+// Poll every 30s for expiry
+setInterval(_updateQuietPill, 30 * 1000);
+
+// React immediately to storage changes
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.quietUntil' in changes) _updateQuietPill();
+});
+
+// Initial render
+_updateQuietPill();
 
 function escStrip(s) {
   return String(s ?? '')
@@ -842,12 +940,21 @@ async function applyTriageAlerts(buckets) {
   if (maxLevel) rmStripEl.classList.add(`rm-strip-alerted-${maxLevel}`);
 
   // Desktop notifications — once per threshold crossing per session
+  const quietNow = (await window.QuietMode?.isQuiet?.()) ?? false;
   for (const t of triggered) {
     const prev = _triageAlertedBuckets.get(t.key);
     const crossed = prev === undefined || (prev < t.threshold && t.count >= t.threshold);
     if (crossed) {
       _triageAlertedBuckets.set(t.key, t.count);
-      if (Notification.permission === 'granted') {
+      // Always append to alert log (even when quiet) — counts/labels only, no patient names.
+      appendAlertLog({
+        ts: Date.now(),
+        channel: 'triage',
+        level: t.level || 'amber',
+        label: t.label + ': ' + t.count + ' tasks',
+      });
+      // Skip desktop notification if clinic mode (quiet) is active.
+      if (!quietNow && Notification.permission === 'granted') {
         new Notification('Medicus Suite — Triage alert', {
           body: `${t.label}: ${t.count} tasks (threshold ${t.threshold})`,
           silent: true,
@@ -885,6 +992,7 @@ rmPoller = makePoller(fetchAndRenderRmStrip, rmPollSeconds * 1000, 'rm-strip').s
 // Polls every 60s, but only makes API calls when at least one threshold is enabled.
 
 const subRagStripEl = document.getElementById('subRagStrip');
+let _subRagPrevLevel = null;
 const SUB_RAG_POLL_MS = 60 * 1000;
 
 const SUB_RAG_TYPES = [
@@ -954,8 +1062,20 @@ async function fetchAndRenderSubRagStrip() {
   if (triggered.length === 0) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
+    _subRagPrevLevel = null;
     return !anyFailed;
   }
+
+  // Log on level transition only (null→level or level change), counts/labels only.
+  if (maxLevel !== null && maxLevel !== _subRagPrevLevel) {
+    appendAlertLog({
+      ts: Date.now(),
+      channel: 'sub-rag',
+      level: maxLevel,
+      label: 'Demand: ' + triggered.map((t) => t.label + ' ' + t.count).join(', '),
+    });
+  }
+  _subRagPrevLevel = maxLevel;
 
   const pills = triggered
     .map((t) => `<span class="sub-rag-pill sub-rag-pill--${t.level}">${t.label}: ${t.count}</span>`)
@@ -1017,11 +1137,27 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   renderDisplayPopover();
 });
 
-switchModule('slots');
+// ── Boot — restore last active module ────────────────────────────────────────
+// Read the persisted module name and switch to it, falling back to 'slots' if
+// absent, invalid, or not a real module key.
+(async () => {
+  const r = await chrome.storage.local.get('panel.activeModule');
+  const saved = r['panel.activeModule'];
+  // Guard: must be a non-'about' key present in MODULES
+  const startMod = saved && saved !== 'about' && saved in MODULES && MODULES[saved] !== null ? saved : 'today';
+  switchModule(startMod);
 
-// ── Guided tour (first-run suite walkthrough) ─────────────────────────────────
-// The tour can switch tabs as it walks the suite; give it the module loader.
-// Auto-start is deferred so the boot module's first paint settles first; the
-// engine no-ops when localStorage says the current TOUR_VERSION has been seen.
-initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
-setTimeout(maybeAutoStartTour, 900);
+  // ── Guided tour (first-run suite walkthrough) ───────────────────────────────
+  // The tour can switch tabs as it walks the suite; give it the module loader.
+  // Auto-start is deferred so the boot module's first paint settles first; the
+  // engine no-ops when localStorage says the current TOUR_VERSION has been seen.
+  initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
+  setTimeout(maybeAutoStartTour, 900);
+
+  // First-run setup checklist (panel-only; setupHost exists only in panel.html)
+  const setupHostEl = document.getElementById('setupHost');
+  if (setupHostEl) initSetup(setupHostEl);
+})();
+
+// ── Command palette (Ctrl+K) ─────────────────────────────────────────────────
+initPalette();

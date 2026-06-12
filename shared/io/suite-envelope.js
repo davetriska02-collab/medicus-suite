@@ -30,7 +30,22 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
-const VALID_SCOPES = ['suite', 'sentinel', 'capacity', 'triage', 'triageAlerts', 'slots', 'submissions', 'popout', 'referrals', 'requestMonitor', 'condor', 'reception', 'knowledge'];
+const VALID_SCOPES = [
+  'suite',
+  'sentinel',
+  'capacity',
+  'triage',
+  'triageAlerts',
+  'slots',
+  'submissions',
+  'popout',
+  'referrals',
+  'requestMonitor',
+  'condor',
+  'reception',
+  'knowledge',
+  'notifications',
+];
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -106,7 +121,7 @@ function previewEnvelope(envelope) {
 
   const mods = envelope.modules || {};
   const isSuite = envelope.scope === 'suite';
-  const missing = (label) => isSuite ? `${label}: — not in this backup` : null;
+  const missing = (label) => (isSuite ? `${label}: — not in this backup` : null);
 
   if (mods.sentinel) {
     const customCount = (mods.sentinel.customRules || []).length;
@@ -129,50 +144,79 @@ function previewEnvelope(envelope) {
       const more = hiddenCount > 5 ? ` … +${hiddenCount - 5} more` : '';
       lines.push(`WARNING: Suppresses ${hiddenCount} hidden/snoozed alert chip(s): ${hiddenIds}${more}`);
     }
-  } else { const m = missing('Sentinel (Monitoring)'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Sentinel (Monitoring)');
+    if (m) lines.push(m);
+  }
 
   if (mods.capacity) {
     const presetCount = (mods.capacity.presets || []).length;
     lines.push(`Capacity Forecast: ${presetCount} preset(s)`);
-  } else { const m = missing('Capacity Forecast'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Capacity Forecast');
+    if (m) lines.push(m);
+  }
 
   if (mods.triage) {
     const cfg = mods.triage.config || {};
     const ruleCount = (cfg.rules || []).length;
-    const hasPrefs = Object.keys(cfg).some(k => k !== 'rules');
+    const hasPrefs = Object.keys(cfg).some((k) => k !== 'rules');
     lines.push(`Triage Lens (custom rules + prefs): ${ruleCount} rule(s)${hasPrefs ? ', prefs included' : ''}`);
-  } else { const m = missing('Triage Lens (custom rules + prefs)'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Triage Lens (custom rules + prefs)');
+    if (m) lines.push(m);
+  }
 
   if (mods.slots) {
-    const hiddenCount  = (mods.slots.hiddenTypes || []).length;
-    const alertCount   = (mods.slots.alertRules  || []).length;
+    const hiddenCount = (mods.slots.hiddenTypes || []).length;
+    const alertCount = (mods.slots.alertRules || []).length;
     lines.push(`Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s)`);
-  } else { const m = missing('Slot Counter'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Slot Counter');
+    if (m) lines.push(m);
+  }
 
   if (mods.submissions) {
     const hasThresholds = mods.submissions.thresholds != null;
     lines.push(`Submissions Tracker: config included${hasThresholds ? ', thresholds included' : ''}`);
-  } else { const m = missing('Submissions Tracker'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Submissions Tracker');
+    if (m) lines.push(m);
+  }
 
   if (mods.triageAlerts) {
     const ruleCount = (mods.triageAlerts.rules || []).length;
     lines.push(`Triage capacity alerts: ${ruleCount} rule(s)`);
-  } else { const m = missing('Triage capacity alerts'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Triage capacity alerts');
+    if (m) lines.push(m);
+  }
 
   if (mods.popout) {
     lines.push('Pop-out: window state included');
-  } else { const m = missing('Pop-out'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Pop-out');
+    if (m) lines.push(m);
+  }
 
   if (mods.referrals) {
     // Audit M1: discovery is never exported, so only config presence is reported.
     const hasConfig = mods.referrals.config != null;
     lines.push(`Referrals: config ${hasConfig ? 'present' : 'absent'}`);
-  } else { const m = missing('Referrals'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Referrals');
+    if (m) lines.push(m);
+  }
 
   if (mods.requestMonitor) {
     const enabled = mods.requestMonitor.enabled;
-    lines.push(`Request Monitor: ${enabled ? 'enabled' : 'disabled'}, assignee ${mods.requestMonitor.assigneeId || 'not set'}`);
-  } else { const m = missing('Request Monitor'); if (m) lines.push(m); }
+    lines.push(
+      `Request Monitor: ${enabled ? 'enabled' : 'disabled'}, assignee ${mods.requestMonitor.assigneeId || 'not set'}`
+    );
+  } else {
+    const m = missing('Request Monitor');
+    if (m) lines.push(m);
+  }
 
   if (mods.reception) {
     const customCount = (mods.reception.customPathways || []).length;
@@ -182,23 +226,42 @@ function previewEnvelope(envelope) {
     // reception staff — surface it at preview time, same concern class as the
     // sentinel hiddenRules warning above.
     const enabledIds = Object.entries((mods.reception.config || {}).enabledPathways || {})
-      .filter(([, v]) => v === true).map(([id]) => id);
+      .filter(([, v]) => v === true)
+      .map(([id]) => id);
     if (enabledIds.length > 0) {
       const shown = enabledIds.slice(0, 5).join(', ');
       const more = enabledIds.length > 5 ? ` … +${enabledIds.length - 5} more` : '';
       lines.push(`WARNING: Enables ${enabledIds.length} reception capture pathway(s): ${shown}${more}`);
     }
-  } else { const m = missing('Reception'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Reception');
+    if (m) lines.push(m);
+  }
 
   if (mods.knowledge) {
     const items = mods.knowledge.items || [];
     const catCount = (mods.knowledge.categories || []).length;
-    lines.push(`Knowledge: ${items.length} entr${items.length === 1 ? 'y' : 'ies'}, ${catCount} categor${catCount === 1 ? 'y' : 'ies'}`);
-    const unreviewed = items.filter(e => e && e.source === 'llm' && e.reviewed !== true).length;
+    lines.push(
+      `Knowledge: ${items.length} entr${items.length === 1 ? 'y' : 'ies'}, ${catCount} categor${catCount === 1 ? 'y' : 'ies'}`
+    );
+    const unreviewed = items.filter((e) => e && e.source === 'llm' && e.reviewed !== true).length;
     if (unreviewed > 0) {
-      lines.push(`NOTE: ${unreviewed} AI-generated entr${unreviewed === 1 ? 'y is' : 'ies are'} not yet marked reviewed`);
+      lines.push(
+        `NOTE: ${unreviewed} AI-generated entr${unreviewed === 1 ? 'y is' : 'ies are'} not yet marked reviewed`
+      );
     }
-  } else { const m = missing('Knowledge'); if (m) lines.push(m); }
+  } else {
+    const m = missing('Knowledge');
+    if (m) lines.push(m);
+  }
+
+  if (mods.notifications) {
+    const badgeEnabled = mods.notifications.notifications?.badgeEnabled;
+    lines.push(`Notifications: badge ${badgeEnabled === false ? 'disabled' : 'enabled'}`);
+  } else {
+    const m = missing('Notifications');
+    if (m) lines.push(m);
+  }
 
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
@@ -243,20 +306,38 @@ async function applyWithRollback(taskFns) {
     } catch (_) {
       currentKeys = [];
     }
-    const newKeys = currentKeys.filter(k => !(k in snapshot));
+    const newKeys = currentKeys.filter((k) => !(k in snapshot));
     if (newKeys.length > 0) {
-      try { await chrome.storage.local.remove(newKeys); } catch (_) { /* best-effort */ }
+      try {
+        await chrome.storage.local.remove(newKeys);
+      } catch (_) {
+        /* best-effort */
+      }
     }
     // Restore the snapshot (overwrites anything tasks may have changed).
     if (Object.keys(snapshot).length > 0) {
-      try { await chrome.storage.local.set(snapshot); } catch (_) { /* best-effort */ }
+      try {
+        await chrome.storage.local.set(snapshot);
+      } catch (_) {
+        /* best-effort */
+      }
     }
     const msg = originalErr && originalErr.message ? originalErr.message : String(originalErr);
     throw new Error(`${msg} — no changes were applied`);
   }
 }
 
-const api = { FORMAT, FORMAT_VERSION, EXTENSION_VERSION, VALID_SCOPES, wrap, unwrap, previewEnvelope, suggestFilename, applyWithRollback };
+const api = {
+  FORMAT,
+  FORMAT_VERSION,
+  EXTENSION_VERSION,
+  VALID_SCOPES,
+  wrap,
+  unwrap,
+  previewEnvelope,
+  suggestFilename,
+  applyWithRollback,
+};
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;

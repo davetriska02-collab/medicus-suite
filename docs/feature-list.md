@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.56.0
-**Generated:** 2026-06-11 (automated)
+**Version:** v3.60.0
+**Generated:** 2026-06-12 (manual reissue with the v3.60.0 safety-doc set)
 
 ## What it is
 
@@ -9,12 +9,24 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 11 side-panel modules covering monitoring, demand, capacity, workflow, and reference
+- 12 side-panel modules covering monitoring, demand, capacity, workflow, and reference
+- First-run onboarding: guided tour, setup checklist, and a Ctrl+K command palette
 - 4 in-page content-script features (on-screen overlays and relays)
 - 6 rule types in the alert engine
 - 22 bundled starter alerts in the prescribing-safety library (PINCER/NICE-based)
 
 ## Side-panel modules
+
+### Today (Morning command centre)
+
+The default tab. One glance answers "what does today look like?" — each card deep-links to its module:
+
+- **Waiting room**: live arrived-patient count with max-wait colouring (amber ≥10 min, red ≥20)
+- **Triage load**: the four request-monitor bucket counts (when the triage monitor is configured)
+- **Demand today**: medical and admin task counts against the practice's thresholds
+- **Slots remaining**: live available-slot count for today
+- **Morning sweep**: last sweep summary (time, action-needed count) or a prompt to run it
+- **Recent alerts**: the last few operational alert events (counts and labels only — never patient identifiers), so a clinic-mode-muted hour stays reviewable
 
 ### Sentinel (Monitoring)
 
@@ -25,7 +37,7 @@ Sentinel is the core per-patient alerting module. When a patient record is open 
 - Vaccine chips reflect seasonal campaign windows — flu and COVID chips only appear during the active season
 - A collapsible **Brief** card at the top gives a 30-second risk summary: patient line, red/amber counts, and the four highest-priority signals
 - **Action Packs**: each actionable chip carries copy-ready text — blood form with only overdue tests listed, recall SMS (≤320 characters), escalation SMS, letter, and task line for admin
-- **Appts summary** button generates a plain-text booking instruction for admin, for pasting into a Medicus internal message without narrating each item verbally
+- **Appointments needed** button generates a plain-text booking instruction for admin, for pasting into a Medicus internal message without narrating each item verbally. Patient actions (Appointments, Copy actions, Print summary, More) sit in a labelled bar directly under the Brief
 - **Print patient summary** opens a Patient Passport: a plain-English (reading age 9–11) summary of what monitoring is due and what key numbers mean, for handing to the patient in the room
 - Dismissed chips resurface automatically if their status escalates (an overdue chip cannot stay permanently hidden when it becomes severely overdue)
 - A "Meds without a monitoring rule" audit view shows medications not matched by any enabled rule, so brand-coverage gaps are visible rather than silent
@@ -38,6 +50,7 @@ Sweep runs the same monitoring rules as Sentinel across all patients booked in t
 - Clinician filter: sweep one clinician's list or the whole practice
 - Per-patient API failures render explicitly — a patient with partial data cannot appear as clear
 - **Print reception handout** produces a tick-box worklist for the receptionist with plain-English booking instructions per patient (blood tests, check-ups, reviews, or flag to duty clinician), deduplicated and sorted by appointment time
+- **Resume last sweep**: the last run (including batch selections) survives tab switches for up to 2 hours, with the run time shown so staleness is visible; re-run rather than resume when currency matters
 
 ### Reception
 
@@ -47,6 +60,7 @@ A reception-facing panel designed for non-clinical front-desk staff:
 - **Guided capture**: configurable question sets per presenting problem (sore throat, earache, adult cough, urinary symptoms, headache, low back pain, feverish child, rash, general) with Pharmacy First suitability hints. Red-flag questions come first; any YES immediately shows a 999 or duty-clinician escalation banner. Output is a plain-text structured history block for copy-paste into the Medicus triage entry. All pathways ship disabled — a practice administrator must accept an explicit disclaimer before enabling any
 - Practices can edit bundled pathways and author custom ones in Options
 - Tile grid is organise-able: colour-code, drag-and-drop reorder, or A–Z sort
+- In-progress captures auto-save as a local draft (≤4 hours, cleared on generate/discard) with an explicit time-stamped Restore/Discard banner — a mid-call tab switch no longer wipes the form
 
 ### Triage Lens
 
@@ -135,8 +149,18 @@ The rules engine evaluates patient data against six rule types:
 - **Display preferences** — Light/dark theme, three text sizes, and a colour-blind mode (from the side-panel toolbar)
 - **Custom monitoring rules** — Five rule types in the Sentinel custom-rule builder, with a live test-patient preview
 - **Tab order** — Drag-and-drop reordering of side-panel nav tabs; order persists and is shared with the pop-out window
+- **Command palette** — Ctrl+K anywhere in the panel or pop-out: jump to any tab, switch theme/text size, open a specific settings section, replay the tour, or start clinic mode
+- **Guided tour & setup checklist** — versioned first-run walkthrough (returning users see only what's new) plus a setup card that detects the practice code, tests connectivity, and requests the notification permission
+- **Notifications & clinic mode** — one settings section for every alert channel; clinic mode temporarily mutes desktop pop-ups and sounds only (strips, badges and clinical alerts are never muted), with a visible 🔕 pill and automatic expiry
+- **View-state continuity** — the panel reopens on your last tab, and modules remember filters, date ranges and searches for 24 hours per workstation
 
 ## Recent additions (last 4 weeks)
+
+**User experience and onboarding (v3.57.0–v3.60.0, 2026-06-12)**
+- **v3.60.0** — Five-workstream UX release: view-state continuity, reception drafts + resumable sweep, first-run setup checklist, Today tab, consolidated notifications + clinic mode
+- **v3.59.0** — Command palette (Ctrl+K) with options deep-linking
+- **v3.58.x** — Suite-wide first-run walkthrough; Monitoring action bar moved under the Brief; CI guard keeping the tour in lock-step with the UI
+- **v3.57.0** — Monitoring header/action toolbar, panel re-render flicker fix, guided tour v1
 
 **Clinical safety and rules**
 - **v3.54.0 / v3.51.3 (2026-06-11)** — The Keeper clinical-currency passes: completed the UK systemic NSAID, VKA (acenocoumarol, phenindione), ACEi/ARB, and diuretic drug sets across both the active triage engine and the patient record visualiser; 28 of 36 documented parity divergences resolved

@@ -30,44 +30,75 @@ try {
 
 // Dependencies for the v2 practice profile engine.
 // Each is wrapped individually so a parse error in one never takes out the others.
-try { importScripts('shared/knowledge-utils.js'); } catch (e) {
+try {
+  importScripts('shared/knowledge-utils.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/knowledge-utils.js failed:', e && e.message);
 }
-try { importScripts('shared/reception-pathway-utils.js'); } catch (e) {
+try {
+  importScripts('shared/reception-pathway-utils.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/reception-pathway-utils.js failed:', e && e.message);
 }
-try { importScripts('shared/io/sentinel-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/sentinel-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/sentinel-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/triage-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/triage-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/triage-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/submissions-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/submissions-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/submissions-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/slot-counter-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/slot-counter-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/slot-counter-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/capacity-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/capacity-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/capacity-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/knowledge-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/knowledge-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/knowledge-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/reception-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/reception-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/reception-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/triage-alert-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/triage-alert-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/triage-alert-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/referrals-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/referrals-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/referrals-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/request-monitor-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/request-monitor-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/request-monitor-io.js failed:', e && e.message);
 }
-try { importScripts('shared/io/suite-io.js'); } catch (e) {
+try {
+  importScripts('shared/io/suite-io.js');
+} catch (e) {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);
+}
+try {
+  importScripts('shared/quiet-mode.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -115,7 +146,7 @@ function broadcastToSidePanel(payload) {
 // worker termination and restart cycles.
 
 const SLOTS_ALARM = 'slots-poll';
-const PP_ALARM    = 'pp-check';
+const PP_ALARM = 'pp-check';
 
 async function startPolling() {
   const existing = await chrome.alarms.get(SLOTS_ALARM);
@@ -127,7 +158,7 @@ async function stopPolling() {
   await chrome.alarms.clear(SLOTS_ALARM);
 }
 
-chrome.alarms.onAlarm.addListener(async alarm => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === SLOTS_ALARM) {
     const medicusTabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     if (medicusTabs.length === 0) {
@@ -147,7 +178,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 // rejection (which would silently swallow e.g. storage-quota failures).
 function runStartupTask(label, fn) {
   try {
-    Promise.resolve(fn()).catch(e => console.warn(`[Suite] ${label} failed:`, e && e.message));
+    Promise.resolve(fn()).catch((e) => console.warn(`[Suite] ${label} failed:`, e && e.message));
   } catch (e) {
     console.warn(`[Suite] ${label} threw:`, e && e.message);
   }
@@ -187,8 +218,8 @@ async function _schedulePpAlarm() {
 // Notification deduplication is stored in meta.updateNotifiedVersions inside
 // suite.practiceProfile so no extra storage key is needed.
 
-let _pendingUpdateVersion = null;   // version waiting for an idle window
-let _updateDeferCount = 0;          // consecutive alarm cycles the user was active
+let _pendingUpdateVersion = null; // version waiting for an idle window
+let _updateDeferCount = 0; // consecutive alarm cycles the user was active
 
 const _VERSION_RE = /^\d+\.\d+\.\d+$/;
 
@@ -238,9 +269,7 @@ async function _checkForCodeUpdate() {
 async function _attemptPoliteReload(version) {
   let idleState = 'active';
   try {
-    idleState = await new Promise(resolve =>
-      chrome.idle.queryState(120, resolve)
-    );
+    idleState = await new Promise((resolve) => chrome.idle.queryState(120, resolve));
   } catch (_) {}
 
   if (idleState === 'idle' || idleState === 'locked') {
@@ -264,14 +293,20 @@ async function _maybeShowUpdateNotification(version) {
     const notified = meta.updateNotifiedVersions || [];
     if (notified.includes(version)) return;
 
-    if (chrome.notifications?.create) {
+    // Skip desktop notification if clinic mode (quiet) is active.
+    // Use a nested try so a missing QuietMode never blocks the notification path.
+    let quietNow = false;
+    try {
+      quietNow = (await self.QuietMode?.isQuiet?.()) ?? false;
+    } catch (_) {}
+    if (!quietNow && chrome.notifications?.create) {
       chrome.notifications.create(`pp_update_${version}`, {
-        type:     'basic',
-        iconUrl:  'icons/icon-128.png',
-        title:    `Medicus Suite ${version} is ready`,
-        message:  'It will update next time this PC is idle.',
+        type: 'basic',
+        iconUrl: 'icons/icon-128.png',
+        title: `Medicus Suite ${version} is ready`,
+        message: 'It will update next time this PC is idle.',
         priority: 0,
-        silent:   true,
+        silent: true,
       });
     }
 
@@ -348,7 +383,7 @@ async function initialiseTriage() {
     }
     // Neither key exists — initialise from defaults
     const url = chrome.runtime.getURL('defaults.json');
-    const defaults = await fetch(url).then(r => r.json());
+    const defaults = await fetch(url).then((r) => r.json());
     await chrome.storage.local.set({ 'triagelens.config': defaults });
     console.log('[Suite] Triage Lens config initialised from defaults.json');
   } catch (e) {
@@ -388,7 +423,9 @@ async function migrateTriageLensConfig() {
 async function runMigration() {
   const existing = await chrome.storage.local.get([
     // Sentinel
-    'sentinelConfig', 'sentinelRules', 'sentinelOrgRules',
+    'sentinelConfig',
+    'sentinelRules',
+    'sentinelOrgRules',
     // Submissions Tracker
     'config',
     // Slot Counter
@@ -495,9 +532,9 @@ async function scheduleRmAlarm(seconds) {
   await chrome.alarms.create(RM_ALARM, { periodInMinutes: minutes });
 }
 
-chrome.alarms.onAlarm.addListener(alarm => {
+chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RM_ALARM) {
-    pollRequestMonitor().catch(e => console.warn('[RM] poll failed:', e.message));
+    pollRequestMonitor().catch((e) => console.warn('[RM] poll failed:', e.message));
   }
 });
 
@@ -516,7 +553,7 @@ const RM_CONFIG_KEYS = new Set([
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
   const changedKeys = Object.keys(changes);
-  if (changedKeys.some(k => RM_CONFIG_KEYS.has(k))) {
+  if (changedKeys.some((k) => RM_CONFIG_KEYS.has(k))) {
     // Clear auth back-off so the user can immediately retry after re-configuring
     if (self.RequestMonitor) self.RequestMonitor.clearAuthPause();
     await initialiseRequestMonitor();
@@ -534,7 +571,10 @@ async function pollRequestMonitor() {
     const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
     for (const t of tabs) {
       const m = t.url && t.url.match(/england\.medicus\.health\/([a-f0-9]{4,8})\//i);
-      if (m?.[1]) { code = m[1].toLowerCase(); break; }
+      if (m?.[1]) {
+        code = m[1].toLowerCase();
+        break;
+      }
     }
   } catch (_) {}
   if (!code) {
@@ -577,14 +617,41 @@ async function pollRequestMonitor() {
   }
 }
 
+// ── Alert log helper (service-worker context) ─────────────────────────────────
+// Prepend entry to suite.alertLog (capped at 50). Counts/labels only — no patient names.
+async function _appendAlertLog(entry) {
+  try {
+    const r = await chrome.storage.local.get('suite.alertLog');
+    const log = Array.isArray(r['suite.alertLog']) ? r['suite.alertLog'] : [];
+    log.unshift(entry);
+    if (log.length > 50) log.length = 50;
+    await chrome.storage.local.set({ 'suite.alertLog': log });
+  } catch (_) {}
+}
+
 async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
   const map = (await chrome.storage.local.get(RM_NOTIF_MAP_KEY))[RM_NOTIF_MAP_KEY] || {};
+  const quietNow = (await self.QuietMode?.isQuiet?.()) ?? false;
 
   for (const [, { bucket, items }] of Object.entries(freshByBucket)) {
     const count = items.length;
     const kind = bucket.taskType.includes('medical') ? 'Medical' : 'Admin';
     const verb = bucket.status === 'new-request' ? 'new request' : 'reply received';
     const title = `${kind}: ${count} ${verb}${count > 1 ? 's' : ''}`;
+
+    // Always append to alert log (even when quiet) — counts/labels only, no patient names.
+    // Guard: _appendAlertLog may be absent in test sandboxes that extract this fn in isolation.
+    if (typeof _appendAlertLog === 'function') {
+      await _appendAlertLog({
+        ts: Date.now(),
+        channel: 'rm',
+        level: bucket.status === 'new-request' ? 'red' : 'amber',
+        label: title,
+      });
+    }
+
+    // Skip desktop notification if clinic mode (quiet) is active.
+    if (quietNow) continue;
 
     // F2 DATA-MINIMISATION: never reveal full patient names in desktop notifications.
     // Notifications are visible in the OS notification centre (outside the extension
@@ -604,19 +671,23 @@ async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
     const notifId = `mrm_${bucket.key}_${Date.now()}`;
     map[notifId] = clickUrl;
 
-    chrome.notifications.create(notifId, {
-      type: 'basic',
-      iconUrl: 'icons/icon-128.png',
-      title,
-      message,
-      priority: bucket.status === 'new-request' ? 2 : 1,
-      requireInteraction: bucket.status === 'new-request',
-      silent: !cfg.notifySound,
-    }, () => {
-      if (chrome.runtime.lastError) {
-        console.warn('[RM] notification create failed:', chrome.runtime.lastError.message);
+    chrome.notifications.create(
+      notifId,
+      {
+        type: 'basic',
+        iconUrl: 'icons/icon-128.png',
+        title,
+        message,
+        priority: bucket.status === 'new-request' ? 2 : 1,
+        requireInteraction: bucket.status === 'new-request',
+        silent: !cfg.notifySound,
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.warn('[RM] notification create failed:', chrome.runtime.lastError.message);
+        }
       }
-    });
+    );
   }
 
   // Cap notif map at 50 entries
@@ -624,7 +695,7 @@ async function sendRmNotifications(freshByBucket, cfg, practiceCode) {
   await chrome.storage.local.set({ [RM_NOTIF_MAP_KEY]: Object.fromEntries(entries.slice(-50)) });
 }
 
-chrome.notifications?.onClicked.addListener(async notifId => {
+chrome.notifications?.onClicked.addListener(async (notifId) => {
   if (!notifId.startsWith('mrm_')) return;
   const map = (await chrome.storage.local.get(RM_NOTIF_MAP_KEY))[RM_NOTIF_MAP_KEY] || {};
   const url = map[notifId];
@@ -668,8 +739,8 @@ async function _recordUpdateCheckStatus(ok, errorMessage) {
       ? { lastSuccess: now, lastError: null }
       : { lastSuccess: prev.lastSuccess || null, lastError: { ts: now, message: String(errorMessage || 'unknown') } };
     // Skip write when nothing changed (avoid storage churn on every poll cycle)
-    if (prev.lastSuccess === next.lastSuccess &&
-        JSON.stringify(prev.lastError) === JSON.stringify(next.lastError)) return;
+    if (prev.lastSuccess === next.lastSuccess && JSON.stringify(prev.lastError) === JSON.stringify(next.lastError))
+      return;
     await chrome.storage.local.set({ [UPDATE_STATUS_KEY]: next });
   } catch (_) {
     // Storage failure must never propagate — this is diagnostic metadata only.
@@ -703,7 +774,7 @@ async function initialiseUpdateChecker() {
   _runUpdateCheck();
 }
 
-chrome.alarms.onAlarm.addListener(alarm => {
+chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UPDATE_ALARM) {
     _runUpdateCheck();
   }
