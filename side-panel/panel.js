@@ -94,6 +94,7 @@ function renderDisplayPopover() {
 // ── Module registry ───────────────────────────────────────────────────────────
 
 const MODULES = {
+  today: { js: () => import('./modules/today/today.js'), css: './modules/today/today.css' },
   slots: { js: () => import('./modules/slots/slots.js'), css: './modules/slots/slots.css' },
   capacity: { js: () => import('./modules/capacity/capacity.js'), css: './modules/capacity/capacity.css' },
   submissions: {
@@ -333,6 +334,17 @@ function renderAbout() {
       </div>
 
       <h2>Modules</h2>
+
+      <div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">Today</span>
+          <span class="module-card-version">v1.0</span>
+        </div>
+        <div class="module-card-desc">
+          Morning command centre: waiting room, triage load, demand counts, available slots and
+          the pre-clinic sweep — one screen answers "what does today look like?" before clinic starts.
+        </div>
+      </div>
 
       <div class="module-card">
         <div class="module-card-header">
@@ -1032,7 +1044,7 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   const r = await chrome.storage.local.get('panel.activeModule');
   const saved = r['panel.activeModule'];
   // Guard: must be a non-'about' key present in MODULES
-  const startMod = saved && saved !== 'about' && saved in MODULES && MODULES[saved] !== null ? saved : 'slots';
+  const startMod = saved && saved !== 'about' && saved in MODULES && MODULES[saved] !== null ? saved : 'today';
   switchModule(startMod);
 
   // ── Guided tour (first-run suite walkthrough) ───────────────────────────────

@@ -21,10 +21,11 @@
 //   2 — Suite-wide walkthrough on first install; Monitoring action bar
 //       relocated under the pre-consultation brief (v3.58.0)
 //   3 — Command palette (Ctrl+K) step (v3.59.0)
+//   4 — Today tab — morning command centre (v4.0.0)
 
 'use strict';
 
-export const TOUR_VERSION = 3;
+export const TOUR_VERSION = 4;
 
 export const TOUR_STEPS = [
   {
@@ -48,6 +49,14 @@ export const TOUR_STEPS = [
     centerFallback: true,
     title: 'Global alert strips',
     body: 'When patients are waiting, triage queues build, or demand thresholds trip, alert strips appear just under the tab bar — on every tab, so nothing is missed.',
+  },
+  {
+    id: 'today',
+    addedIn: 4,
+    module: 'today',
+    target: ['.today-module'],
+    title: 'Today — your morning at a glance',
+    body: 'One screen shows waiting patients, triage load, demand counts, available slots and the pre-clinic sweep result so you can start clinic fully briefed.',
   },
   {
     id: 'slots',
