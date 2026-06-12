@@ -11,10 +11,14 @@
 // (loaded as a regular script tag in panel.html). Importing as ES module would
 // need a separate build; for module parity with other side-panel modules we
 // just read off window.
-function ApiNs() { return (typeof window !== 'undefined') ? window.ActivityApi : null; }
+function ApiNs() {
+  return typeof window !== 'undefined' ? window.ActivityApi : null;
+}
 
-let container  = null;
-let _inFlight  = false;
+import { loadUiState, saveUiState } from '../shared/ui-state.js';
+
+let container = null;
+let _inFlight = false;
 let state = {
   startDate: null,
   endDate: null,
@@ -22,24 +26,36 @@ let state = {
   aggregated: null,
   loading: false,
   error: null,
-  showMode: 'stacked',   // 'stacked' or single metric key
+  showMode: 'stacked', // 'stacked' or single metric key
   lastFetched: null,
 };
 
 export async function init(el) {
   container = el;
-  // Default range — today
+  // Default range — today (may be overridden by persisted state below)
   const api = ApiNs();
   if (api) {
     const [s, e] = api.preset('today');
     state.startDate = s;
     state.endDate = e;
   }
+
+  // Restore persisted view state (TTL 24 h — expired range resets to today naturally)
+  const saved = await loadUiState('activity');
+  if (saved) {
+    // Validate each field before applying
+    const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+    if (typeof saved.startDate === 'string' && ISO_RE.test(saved.startDate)) state.startDate = saved.startDate;
+    if (typeof saved.endDate === 'string' && ISO_RE.test(saved.endDate)) state.endDate = saved.endDate;
+    const VALID_MODES = ['stacked', 'total', 'medical', 'admin', 'investigation', 'rxRoutine', 'rxNonRoutine'];
+    if (typeof saved.showMode === 'string' && VALID_MODES.includes(saved.showMode)) state.showMode = saved.showMode;
+  }
+
   render();
   fetchAndRender();
 
   // Listen for practice code changes (auto-detection updates) and refetch
-  const onChange = ch => {
+  const onChange = (ch) => {
     if (ch['suite.practiceCode']) fetchAndRender();
   };
   chrome.storage.onChanged.addListener(onChange);
@@ -80,9 +96,14 @@ async function fetchAndRender() {
 
     try {
       const data = await api.fetchActivityReport(code, state.startDate, state.endDate, {
-        fetch: (url, init) => window.ApiDiag.fetch({
-          module: 'activity', url, code, codeSource: source, init,
-        }),
+        fetch: (url, init) =>
+          window.ApiDiag.fetch({
+            module: 'activity',
+            url,
+            code,
+            codeSource: source,
+            init,
+          }),
       });
       state.rawResponse = data;
       state.aggregated = api.aggregate(data?.rowData || []);
@@ -121,9 +142,7 @@ function render() {
       </div>
 
       ${renderControls()}
-      ${state.loading ? renderSkeleton() :
-        state.error ? renderError() :
-        state.aggregated ? renderData() : ''}
+      ${state.loading ? renderSkeleton() : state.error ? renderError() : state.aggregated ? renderData() : ''}
     </div>
   `;
 
@@ -149,7 +168,7 @@ function renderControls() {
         <span class="act-spacer"></span>
         <button class="act-refresh" id="actRefresh">Refresh</button>
       </div>
-      ${state.lastFetched ? `<div class="act-ts">Updated ${state.lastFetched.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</div>` : ''}
+      ${state.lastFetched ? `<div class="act-ts">Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>` : ''}
     </div>
   `;
 }
@@ -176,9 +195,10 @@ function renderData() {
     return `<div class="act-empty">No activity in this date range.</div>`;
   }
 
-  const periodLabel = state.startDate === state.endDate
-    ? formatDateLabel(state.startDate)
-    : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
+  const periodLabel =
+    state.startDate === state.endDate
+      ? formatDateLabel(state.startDate)
+      : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
 
   return `
     <div class="act-totals-card">
@@ -188,7 +208,8 @@ function renderData() {
       </div>
       <div class="act-totals-number">${a.totals.all.toLocaleString('en-GB')}</div>
       <div class="act-totals-metrics">
-        ${api.METRICS.map(m => `
+        ${api.METRICS.map(
+          (m) => `
           <div class="act-metric-tile">
             <div class="act-metric-swatch" style="background:${m.colour}"></div>
             <div class="act-metric-info">
@@ -196,7 +217,8 @@ function renderData() {
               <div class="act-metric-count">${(a.totals[m.key] || 0).toLocaleString('en-GB')}</div>
             </div>
           </div>
-        `).join('')}
+        `
+        ).join('')}
       </div>
     </div>
 
@@ -205,17 +227,19 @@ function renderData() {
         <div class="act-chart-label">By staff member</div>
         <select id="actModeSelect" class="act-mode-select">
           <option value="stacked" ${state.showMode === 'stacked' ? 'selected' : ''}>All metrics (stacked)</option>
-          ${api.METRICS.map(m => `<option value="${m.key}" ${state.showMode === m.key ? 'selected' : ''}>${escHtml(m.short)} only</option>`).join('')}
+          ${api.METRICS.map((m) => `<option value="${m.key}" ${state.showMode === m.key ? 'selected' : ''}>${escHtml(m.short)} only</option>`).join('')}
           <option value="total" ${state.showMode === 'total' ? 'selected' : ''}>Total only</option>
         </select>
       </div>
       <div class="act-legend">
-        ${api.METRICS.map(m => `
+        ${api.METRICS.map(
+          (m) => `
           <div class="act-legend-item">
             <div class="act-legend-swatch" style="background:${m.colour}"></div>
             <div class="act-legend-name">${escHtml(m.short)}</div>
           </div>
-        `).join('')}
+        `
+        ).join('')}
       </div>
       <div class="act-bars">${renderBars()}</div>
     </div>
@@ -238,35 +262,37 @@ function renderBars() {
   }
   if (scaleMax === 0) scaleMax = 1;
 
-  return a.users.map(user => {
-    const userTotalOrMetric = (mode === 'stacked' || mode === 'total') ? user.total : (user.metrics[mode] || 0);
-    const barWidthPct = (userTotalOrMetric / scaleMax) * 100;
+  return a.users
+    .map((user) => {
+      const userTotalOrMetric = mode === 'stacked' || mode === 'total' ? user.total : user.metrics[mode] || 0;
+      const barWidthPct = (userTotalOrMetric / scaleMax) * 100;
 
-    let segments;
-    if (mode === 'stacked') {
-      // Each segment width proportional to (metric / user.total) * barWidthPct
-      segments = api.METRICS.map(m => {
-        const v = user.metrics[m.key] || 0;
-        if (v === 0) return '';
-        const segWidthPct = user.total > 0 ? (v / user.total) * barWidthPct : 0;
-        return `<div class="act-bar-seg" style="width:${segWidthPct}%; background:${m.colour}" title="${escAttr(m.short)}: ${v}"></div>`;
-      }).join('');
-    } else if (mode === 'total') {
-      segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:#64748b" title="Total: ${user.total}"></div>`;
-    } else {
-      const metricDef = api.METRICS.find(m => m.key === mode);
-      const colour = metricDef ? metricDef.colour : '#64748b';
-      segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:${colour}" title="${escAttr(metricDef?.short || mode)}: ${userTotalOrMetric}"></div>`;
-    }
+      let segments;
+      if (mode === 'stacked') {
+        // Each segment width proportional to (metric / user.total) * barWidthPct
+        segments = api.METRICS.map((m) => {
+          const v = user.metrics[m.key] || 0;
+          if (v === 0) return '';
+          const segWidthPct = user.total > 0 ? (v / user.total) * barWidthPct : 0;
+          return `<div class="act-bar-seg" style="width:${segWidthPct}%; background:${m.colour}" title="${escAttr(m.short)}: ${v}"></div>`;
+        }).join('');
+      } else if (mode === 'total') {
+        segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:#64748b" title="Total: ${user.total}"></div>`;
+      } else {
+        const metricDef = api.METRICS.find((m) => m.key === mode);
+        const colour = metricDef ? metricDef.colour : '#64748b';
+        segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:${colour}" title="${escAttr(metricDef?.short || mode)}: ${userTotalOrMetric}"></div>`;
+      }
 
-    return `
+      return `
       <div class="act-bar-row">
         <div class="act-bar-name" title="${escAttr(user.name)}">${escHtml(user.name)}</div>
         <div class="act-bar-track">${segments}</div>
         <div class="act-bar-total">${userTotalOrMetric.toLocaleString('en-GB')}</div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 }
 
 // ── Wiring ───────────────────────────────────────────────────────────────────
@@ -274,10 +300,20 @@ function renderBars() {
 function wireControls() {
   const startEl = container.querySelector('#actStart');
   const endEl = container.querySelector('#actEnd');
-  if (startEl) startEl.addEventListener('change', () => { state.startDate = startEl.value; fetchAndRender(); });
-  if (endEl) endEl.addEventListener('change', () => { state.endDate = endEl.value; fetchAndRender(); });
+  if (startEl)
+    startEl.addEventListener('change', () => {
+      state.startDate = startEl.value;
+      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      fetchAndRender();
+    });
+  if (endEl)
+    endEl.addEventListener('change', () => {
+      state.endDate = endEl.value;
+      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      fetchAndRender();
+    });
 
-  container.querySelectorAll('.act-preset').forEach(btn => {
+  container.querySelectorAll('.act-preset').forEach((btn) => {
     btn.addEventListener('click', () => {
       const api = ApiNs();
       if (!api) return;
@@ -285,6 +321,7 @@ function wireControls() {
       if (range) {
         state.startDate = range[0];
         state.endDate = range[1];
+        saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
         fetchAndRender();
       }
     });
@@ -294,17 +331,19 @@ function wireControls() {
   if (refresh) refresh.addEventListener('click', fetchAndRender);
 
   const modeSel = container.querySelector('#actModeSelect');
-  if (modeSel) modeSel.addEventListener('change', () => {
-    state.showMode = modeSel.value;
-    render();
-  });
+  if (modeSel)
+    modeSel.addEventListener('change', () => {
+      state.showMode = modeSel.value;
+      saveUiState('activity', { startDate: state.startDate, endDate: state.endDate, showMode: state.showMode });
+      render();
+    });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDateLabel(iso) {
@@ -315,6 +354,11 @@ function formatDateLabel(iso) {
 }
 
 function escHtml(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
-function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, '&quot;');
+}

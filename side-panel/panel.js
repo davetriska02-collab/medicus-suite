@@ -310,6 +310,12 @@ const switchModule = createModuleLoader({
     }
     return false;
   },
+  onPersist: (name) => {
+    // Don't persist 'about' as a boot target — it's a static info page,
+    // not a real module, so restoring it on next open is useless.
+    if (name === 'about') return;
+    chrome.storage.local.set({ 'panel.activeModule': name });
+  },
   escFn: escStrip,
 });
 
@@ -1018,14 +1024,23 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
   renderDisplayPopover();
 });
 
-switchModule('slots');
+// ── Boot — restore last active module ────────────────────────────────────────
+// Read the persisted module name and switch to it, falling back to 'slots' if
+// absent, invalid, or not a real module key.
+(async () => {
+  const r = await chrome.storage.local.get('panel.activeModule');
+  const saved = r['panel.activeModule'];
+  // Guard: must be a non-'about' key present in MODULES
+  const startMod = saved && saved !== 'about' && saved in MODULES && MODULES[saved] !== null ? saved : 'slots';
+  switchModule(startMod);
 
-// ── Guided tour (first-run suite walkthrough) ─────────────────────────────────
-// The tour can switch tabs as it walks the suite; give it the module loader.
-// Auto-start is deferred so the boot module's first paint settles first; the
-// engine no-ops when localStorage says the current TOUR_VERSION has been seen.
-initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
-setTimeout(maybeAutoStartTour, 900);
+  // ── Guided tour (first-run suite walkthrough) ───────────────────────────────
+  // The tour can switch tabs as it walks the suite; give it the module loader.
+  // Auto-start is deferred so the boot module's first paint settles first; the
+  // engine no-ops when localStorage says the current TOUR_VERSION has been seen.
+  initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
+  setTimeout(maybeAutoStartTour, 900);
+})();
 
 // ── Command palette (Ctrl+K) ─────────────────────────────────────────────────
 initPalette();

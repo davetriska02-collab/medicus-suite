@@ -89,6 +89,7 @@ const KEY_PREFIXES = [
   'slots',
   'submissions',
   'popout',
+  'panel',
   'referrals',
   'suite',
   'condor',
@@ -213,6 +214,14 @@ const ALLOWLIST = new Set([
   // Rediscovered on visiting the referrals page; never exported to backup.
   // referrals.config IS covered via referrals-io.
   'referrals.discovery',
+
+  // Per-machine view state — not user config, not PHI, deliberately excluded from
+  // backups so a restore onto a new machine starts fresh (see shared/modules/shared/ui-state.js):
+  'suite.uiState',
+
+  // Per-machine last-active panel tab — session convenience, not user config.
+  // Excluded from backups; a freshly-restored machine always starts on 'slots':
+  'panel.activeModule',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

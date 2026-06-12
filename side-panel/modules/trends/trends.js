@@ -1,6 +1,7 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-chart.js';
+import { loadUiState, saveUiState } from '../shared/ui-state.js';
 
 // ── Observation metrics (passive display — no clinical thresholds) ─────────────
 const OBS_METRICS = [
@@ -68,6 +69,14 @@ let lastData = null;
 
 export async function init(el) {
   container = el;
+
+  // Restore persisted view selection before first render
+  const saved = await loadUiState('trends');
+  if (saved && typeof saved.selectedView === 'string') {
+    const VALID_VIEWS = VIEWS.map((v) => v.key);
+    if (VALID_VIEWS.includes(saved.selectedView)) selectedView = saved.selectedView;
+  }
+
   render({ state: 'loading' });
   await refresh();
   pollTimer = setInterval(refresh, 15000);
@@ -144,6 +153,7 @@ function wirePicker() {
       const k = b.dataset.view;
       if (k === selectedView) return;
       selectedView = k;
+      saveUiState('trends', { selectedView });
       render({ state: lastData ? 'ok' : 'no-data' });
     });
   });
