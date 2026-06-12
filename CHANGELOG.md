@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.0] — 2026-06-12
+
+### Five-workstream UX release
+
+- **The suite remembers where you were.** The side panel restores your last
+  active tab on reopen (the pop-out already did), and seven modules persist
+  their view state for 24h via a shared helper (`suite.uiState`, per-machine,
+  not backed up): Trends metric, Activity date range + mode, Referrals
+  filters/chart/search, Capacity focus date, Knowledge search/category/expanded
+  entry, Slots filters + expanded clinicians, Submissions mode + muted series.
+- **Never lose typed work.** Reception guided-capture auto-saves a draft as you
+  type (4h TTL, "Restore / Discard" banner, draft pill on the pathway tile,
+  cleared on generate). Sweep runs and batch selections persist (2h TTL) with a
+  "Resume last sweep" card — a tab switch no longer wipes the morning huddle.
+  Both keys are transient, PHI-bearing and excluded from backups.
+- **First-run setup checklist.** A dismissible "Get set up" card walks a new
+  user through practice-code detection/confirmation, a live connection test and
+  the desktop-notification permission, with the triage monitor as an optional
+  step. Reopenable via Ctrl+K → "Suite setup checklist". Every module's
+  "No practice code" error now carries the same "Set up now" CTA.
+- **Today tab — the morning command centre.** New default tab (in panel and
+  pop-out): waiting room, triage load, demand vs thresholds, slots remaining,
+  last sweep summary and recent alerts, each card deep-linking to its module.
+  Tour version 4 adds a Today step.
+- **One attention model.** New Options → Notifications section listing every
+  channel with toggles for desktop pop-ups, sound and the toolbar badge, plus
+  **clinic mode** (mute 30 min / 1 h / until 18:00) with a 🔕 pill in the nav
+  and Ctrl+K commands. Safety boundary, stated in the UI and enforced in code:
+  clinic mode silences desktop pop-ups and sounds only — on-screen strips,
+  badges and clinical alerts in the patient record are never muted. A capped
+  alert log keeps a muted hour reviewable on the Today tab.
+- Release was bug-bashed (three reviewers + verification pass): no red
+  findings; four minor (amber) fixes applied — pop-out boot validates the
+  saved module, setup notification-permission failure is reflected in the
+  checklist, "Until 18:00" clicked after 18:00 rolls to tomorrow, disabling
+  the toolbar badge clears it immediately.
+
 ## [v3.59.0] — 2026-06-12
 
 ### Command palette (Ctrl+K)
