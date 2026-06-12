@@ -1854,3 +1854,29 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   gap: 5px;
   margin-top: 6px;
 }
+
+/* ── Quiet mode pill ─────────────────────────────────────────────────────── */
+.quiet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--fast) var(--ease);
+}
+.quiet-pill:hover {
+  background: var(--amber);
+  color: var(--bg-elev);
+}
+.quiet-pill-hidden {
+  display: none;
+}

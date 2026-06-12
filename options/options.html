@@ -1,1107 +1,2093 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Medicus Suite — Settings</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+  <head>
+    <meta charset="UTF-8" />
+    <title>Medicus Suite — Settings</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg-deep:    #f8fafc;
-      --bg-mid:     #f1f5f9;
-      --bg-elev:    #ffffff;
-      --bg-hover:   #e2eaf5;
-      --border:     #cbd5e1;
-      --border-hi:  #94a3b8;
-      --accent:       #2563eb;
-      --accent-hover: #1d4ed8;
-      --accent-dim:   rgba(37,99,235,0.09);
-      --accent-line:  rgba(37,99,235,0.30);
-      --text-1: #0f172a;
-      --text-2: #1e3a5f;
-      --text-3: #475569;
-      --text-4: #64748b;
-      --text-5: #94a3b8;
-      --green:      #16a34a;
-      --green-dim:  rgba(22,163,74,0.09);
-      --green-line: rgba(22,163,74,0.30);
-      --amber:      #b45309;
-      --amber-dim:  rgba(180,83,9,0.09);
-      --amber-line: rgba(180,83,9,0.32);
-      --red:        #dc2626;
-      --red-dim:    rgba(220,38,38,0.08);
-      --red-line:   rgba(220,38,38,0.30);
-      --r-sm:   4px;
-      --r-md:   6px;
-      --r-lg:   8px;
-      --r-pill: 999px;
-      --shadow-1: 0 1px 2px rgba(15,23,42,0.05);
-      --shadow-2: 0 2px 8px rgba(15,23,42,0.08);
-      --shadow-3: 0 8px 28px rgba(15,23,42,0.14);
-      --ease: cubic-bezier(0.2, 0, 0, 1);
-      --fast: 120ms;
-      --med:  200ms;
-      --mono: 'JetBrains Mono', 'Courier New', monospace;
-      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-
-    html[data-theme="dark"] {
-      --bg-deep:    #050a14;
-      --bg-mid:     #0b1424;
-      --bg-elev:    #131e34;
-      --bg-hover:   #1a2a44;
-      --border:     #1c2e4e;
-      --border-hi:  #2a4060;
-      --accent:       #5b8fc7;
-      --accent-hover: #7eaad6;
-      --accent-dim:   rgba(91,143,199,0.14);
-      --accent-line:  rgba(91,143,199,0.35);
-      --text-1: #f1f5f9;
-      --text-2: #cfe1ff;
-      --text-3: #93a8c5;
-      --text-4: #5d7a9d;
-      --text-5: #3d5070;
-      --green:      #4ade80;
-      --green-dim:  rgba(74,222,128,0.12);
-      --green-line: rgba(74,222,128,0.32);
-      --amber:      #fbbf24;
-      --amber-dim:  rgba(251,191,36,0.12);
-      --amber-line: rgba(251,191,36,0.32);
-      --red:        #f87171;
-      --red-dim:    rgba(248,113,113,0.13);
-      --red-line:   rgba(248,113,113,0.34);
-      --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
-      --shadow-2: 0 4px 12px rgba(0,0,0,0.45);
-      --shadow-3: 0 10px 32px rgba(0,0,0,0.55);
-    }
-
-    html[data-size="small"]  { zoom: 0.85; }
-    html[data-size="medium"] { zoom: 1;    }
-    html[data-size="large"]  { zoom: 1.25; }
-
-    html[data-colorblind="true"] { --red: #ea580c; --green: #2563eb; }
-
-    html, body { height: 100%; background: var(--bg-deep); color: var(--text-1); font-family: var(--sans); font-size: 13px; }
-
-    .layout { display: flex; height: 100vh; }
-
-    /* Sidebar nav */
-    .side-nav {
-      width: 200px; flex-shrink: 0;
-      background: var(--bg-mid);
-      border-right: 1px solid var(--border);
-      padding: 24px 0;
-      display: flex; flex-direction: column; gap: 2px;
-    }
-
-    .nav-brand {
-      padding: 0 16px 20px;
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-4);
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 8px;
-    }
-
-    .nav-item {
-      display: block; width: 100%;
-      padding: 8px 16px;
-      background: transparent; border: none;
-      border-right: 2px solid transparent;
-      color: var(--text-4);
-      font-size: 13px; text-align: left;
-      cursor: pointer;
-      transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
-    }
-    .nav-item:hover { background: var(--bg-hover); color: var(--text-2); }
-    .nav-item.active { background: var(--accent-dim); color: var(--text-2); border-right-color: var(--accent); }
-
-    /* Content area */
-    .opt-content {
-      flex: 1; overflow-y: auto; overflow-x: hidden; padding: 32px 40px;
-      max-width: 760px;
-    }
-
-    .opt-section.iframe-mode { padding: 0; }
-    .opt-section.iframe-mode .iframe-section { margin: 0; }
-
-    .opt-section { display: none; }
-    .opt-section.active { display: block; }
-
-    h1 { font-size: 18px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
-    .section-desc { font-size: 12px; color: var(--text-4); margin-bottom: 28px; line-height: 1.5; }
-
-    .field { margin-bottom: 22px; }
-    .field-label {
-      display: block;
-      font-family: var(--mono);
-      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-      color: var(--text-3); font-weight: 600; margin-bottom: 6px;
-    }
-    .field-help { display: block; font-size: 11px; color: var(--text-4); margin-top: 4px; line-height: 1.5; }
-
-    input[type=text], input[type=email], input[type=number] {
-      width: 100%; background: var(--bg-mid);
-      border: 1px solid var(--border); color: var(--text-1);
-      font-family: var(--mono); font-size: 13px;
-      border-radius: var(--r-md); padding: 10px 12px;
-    }
-    input[type=text]:focus, input[type=email]:focus, input[type=number]:focus { border-color: var(--accent); background: var(--bg-elev); }
-
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-    }
 
-    .actions { display: flex; gap: 8px; align-items: center; margin-top: 28px; }
+      :root {
+        --bg-deep: #f8fafc;
+        --bg-mid: #f1f5f9;
+        --bg-elev: #ffffff;
+        --bg-hover: #e2eaf5;
+        --border: #cbd5e1;
+        --border-hi: #94a3b8;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --accent-dim: rgba(37, 99, 235, 0.09);
+        --accent-line: rgba(37, 99, 235, 0.3);
+        --text-1: #0f172a;
+        --text-2: #1e3a5f;
+        --text-3: #475569;
+        --text-4: #64748b;
+        --text-5: #94a3b8;
+        --green: #16a34a;
+        --green-dim: rgba(22, 163, 74, 0.09);
+        --green-line: rgba(22, 163, 74, 0.3);
+        --amber: #b45309;
+        --amber-dim: rgba(180, 83, 9, 0.09);
+        --amber-line: rgba(180, 83, 9, 0.32);
+        --red: #dc2626;
+        --red-dim: rgba(220, 38, 38, 0.08);
+        --red-line: rgba(220, 38, 38, 0.3);
+        --r-sm: 4px;
+        --r-md: 6px;
+        --r-lg: 8px;
+        --r-pill: 999px;
+        --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+        --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+        --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+        --ease: cubic-bezier(0.2, 0, 0, 1);
+        --fast: 120ms;
+        --med: 200ms;
+        --mono: 'JetBrains Mono', 'Courier New', monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
 
-    button.primary {
-      background: var(--accent);
-      border: none; color: #fff;
-      font-family: var(--mono); font-size: 11px;
-      font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: var(--r-md); padding: 10px 18px;
-      transition: background var(--fast) var(--ease);
-    }
-    button.primary:hover { background: var(--accent-hover); }
-    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+      html[data-theme='dark'] {
+        --bg-deep: #050a14;
+        --bg-mid: #0b1424;
+        --bg-elev: #131e34;
+        --bg-hover: #1a2a44;
+        --border: #1c2e4e;
+        --border-hi: #2a4060;
+        --accent: #5b8fc7;
+        --accent-hover: #7eaad6;
+        --accent-dim: rgba(91, 143, 199, 0.14);
+        --accent-line: rgba(91, 143, 199, 0.35);
+        --text-1: #f1f5f9;
+        --text-2: #cfe1ff;
+        --text-3: #93a8c5;
+        --text-4: #5d7a9d;
+        --text-5: #3d5070;
+        --green: #4ade80;
+        --green-dim: rgba(74, 222, 128, 0.12);
+        --green-line: rgba(74, 222, 128, 0.32);
+        --amber: #fbbf24;
+        --amber-dim: rgba(251, 191, 36, 0.12);
+        --amber-line: rgba(251, 191, 36, 0.32);
+        --red: #f87171;
+        --red-dim: rgba(248, 113, 113, 0.13);
+        --red-line: rgba(248, 113, 113, 0.34);
+        --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+        --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
+      }
 
-    button.ghost {
-      background: transparent;
-      border: 1px solid var(--border-hi); color: var(--text-3);
-      font-family: var(--mono); font-size: 11px;
-      font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: var(--r-md); padding: 10px 18px;
-      transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
-    }
-    button.ghost:hover { border-color: var(--accent); color: var(--text-2); background: var(--accent-dim); }
-    button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+      html[data-size='small'] {
+        zoom: 0.85;
+      }
+      html[data-size='medium'] {
+        zoom: 1;
+      }
+      html[data-size='large'] {
+        zoom: 1.25;
+      }
 
-    .saved {
-      color: var(--green); font-family: var(--mono); font-size: 11px;
-      letter-spacing: 0.06em; opacity: 0; transition: opacity var(--med) var(--ease);
-    }
-    .saved.show { opacity: 1; }
+      html[data-colorblind='true'] {
+        --red: #ea580c;
+        --green: #2563eb;
+      }
 
-    /* Clinical Safety document links */
-    .safety-doc-link {
-      display: block; text-decoration: none;
-      background: var(--bg-elev); border: 1px solid var(--border);
-      border-radius: var(--r-lg); padding: 12px 14px;
-      transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
-    }
-    .safety-doc-link:hover { border-color: var(--border-hi); background: var(--bg-mid); }
-    .safety-doc-title { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 3px; }
-    .safety-doc-desc { display: block; font-size: 11px; color: var(--text-4); line-height: 1.5; }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg-deep);
+        color: var(--text-1);
+        font-family: var(--sans);
+        font-size: 13px;
+      }
 
-    .iframe-section { margin-top: 8px; }
-    .iframe-section iframe {
-      width: 100%;
-      height: calc(100vh - 120px);
-      min-height: 500px;
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-      background: var(--bg-mid);
-      display: block;
-    }
+      .layout {
+        display: flex;
+        height: 100vh;
+      }
 
-    .module-badge {
-      display: inline-block;
-      font-family: var(--mono); font-size: 9px;
-      background: var(--bg-elev); border: 1px solid var(--border);
-      border-radius: var(--r-sm); padding: 1px 6px;
-      color: var(--text-4); margin-left: 8px; vertical-align: middle;
-    }
+      /* Sidebar nav */
+      .side-nav {
+        width: 200px;
+        flex-shrink: 0;
+        background: var(--bg-mid);
+        border-right: 1px solid var(--border);
+        padding: 24px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
 
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+      .nav-brand {
+        padding: 0 16px 20px;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-4);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 8px;
+      }
 
-    /* Module export cards (Backup tab) */
-    .module-export-card {
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-      padding: 12px 14px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .mec-name { font-size: 12px; color: var(--text-2); font-weight: 500; }
-    .mec-actions { display: flex; gap: 6px; }
-    .mec-actions .ghost { padding: 5px 10px; font-size: 9px; }
+      .nav-item {
+        display: block;
+        width: 100%;
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        border-right: 2px solid transparent;
+        color: var(--text-4);
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition:
+          background var(--fast) var(--ease),
+          color var(--fast) var(--ease);
+      }
+      .nav-item:hover {
+        background: var(--bg-hover);
+        color: var(--text-2);
+      }
+      .nav-item.active {
+        background: var(--accent-dim);
+        color: var(--text-2);
+        border-right-color: var(--accent);
+      }
 
+      /* Content area */
+      .opt-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 32px 40px;
+        max-width: 760px;
+      }
 
-    .preset-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-    .preset-card {
-      background: var(--bg-elev);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--r-lg);
-      padding: 12px 14px;
-    }
-    .preset-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .preset-card-name { font-weight: 600; color: var(--text-1); font-size: 13px; }
-    .preset-card-actions { display: flex; gap: 6px; }
-    .pc-btn {
-      background: transparent; border: 1px solid var(--border-hi); color: var(--text-3);
-      font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
-      cursor: pointer; border-radius: var(--r-md); padding: 3px 8px;
-      transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
-    }
-    .pc-btn:hover { color: var(--text-1); border-color: var(--accent); }
-    .pc-btn.danger:hover { color: var(--red); border-color: var(--red-line); }
-    .preset-card-meta {
-      font-family: var(--mono); font-size: 10px;
-      color: var(--text-4); display: flex; gap: 10px; flex-wrap: wrap;
-    }
-    .preset-card-types {
-      margin-top: 6px; font-size: 11px; color: var(--text-3); line-height: 1.5;
-    }
+      .opt-section.iframe-mode {
+        padding: 0;
+      }
+      .opt-section.iframe-mode .iframe-section {
+        margin: 0;
+      }
 
-    .preset-form {
-      background: var(--bg-mid);
-      border: 1px solid var(--border-hi);
-      border-radius: var(--r-lg);
-      padding: 18px;
-      margin-top: 14px;
-    }
-    .preset-form h3 { font-size: 13px; color: var(--text-1); margin-bottom: 12px; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-    .form-row.full { grid-template-columns: 1fr; }
-    .form-row label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-4); margin-bottom: 5px; }
-    .form-row input[type=text], .form-row input[type=number] {
-      width: 100%; background: var(--bg-elev); border: 1px solid var(--border-hi);
-      color: var(--text-1); font-family: var(--mono); font-size: 12px;
-      border-radius: var(--r-md); padding: 7px 10px;
-    }
-    .form-row input:focus { border-color: var(--accent); background: var(--bg-elev); }
+      .opt-section {
+        display: none;
+      }
+      .opt-section.active {
+        display: block;
+      }
 
-    .types-multiselect {
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid var(--border-hi);
-      border-radius: 6px;
-      background: var(--bg-mid);
-      padding: 6px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .type-check-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 4px 6px; border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.1s;
-    }
-    .type-check-row:hover { background: var(--bg-hover); }
-    .type-check-row input { accent-color: var(--accent); cursor: pointer; }
-    .type-check-row label { font-size: 11px; color: var(--text-2); cursor: pointer; font-family: var(--sans); text-transform: none; letter-spacing: 0; margin: 0; flex: 1; }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-1);
+        margin-bottom: 4px;
+      }
+      .section-desc {
+        font-size: 12px;
+        color: var(--text-4);
+        margin-bottom: 28px;
+        line-height: 1.5;
+      }
 
-    .threshold-row {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 11px; color: var(--text-3); margin-top: 6px;
-    }
-    .threshold-row input[type=number] {
-      width: 64px; padding: 5px 8px; font-size: 11px;
-    }
+      .field {
+        margin-bottom: 22px;
+      }
+      .field-label {
+        display: block;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .field-help {
+        display: block;
+        font-size: 11px;
+        color: var(--text-4);
+        margin-top: 4px;
+        line-height: 1.5;
+      }
 
-    .cap-min-label-row {
-      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-    }
-    .cap-copy-mon {
-      background: transparent; border: none; color: var(--accent);
-      font-family: var(--mono); font-size: 10px; letter-spacing: 0.03em;
-      cursor: pointer; padding: 0;
-    }
-    .cap-copy-mon:hover { text-decoration: underline; }
-    .cap-day-mins-row {
-      display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
-      margin-top: 6px;
-    }
-    .cap-day-min { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .cap-day-min-label {
-      font-family: var(--mono); font-size: 9px;
-      letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-4);
-    }
-    .cap-day-min-input {
-      width: 100%; padding: 5px 6px; font-size: 11px; text-align: center;
-    }
-    .cap-min-hint {
-      font-size: 10px; color: var(--text-4); margin-top: 6px; font-family: var(--sans);
-    }
+      input[type='text'],
+      input[type='email'],
+      input[type='number'] {
+        width: 100%;
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 13px;
+        border-radius: var(--r-md);
+        padding: 10px 12px;
+      }
+      input[type='text']:focus,
+      input[type='email']:focus,
+      input[type='number']:focus {
+        border-color: var(--accent);
+        background: var(--bg-elev);
+      }
 
-    .form-actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-    .add-preset-btn {
-      background: var(--accent);
-      border: none; color: #fff;
-      font-family: var(--mono); font-size: 10px; font-weight: 600;
-      letter-spacing: 0.1em; text-transform: uppercase;
-      cursor: pointer; border-radius: var(--r-md); padding: 8px 14px;
-      transition: background var(--fast) var(--ease);
-    }
-    .add-preset-btn:hover { background: var(--accent-hover); }
-    .add-preset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .ghost-btn-opt {
-      background: transparent; border: 1px solid var(--border-hi); color: var(--text-3);
-      font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-      cursor: pointer; border-radius: var(--r-md); padding: 7px 14px;
-      transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
-    }
-    .ghost-btn-opt:hover { color: var(--text-2); border-color: var(--accent); background: var(--accent-dim); }
-  </style>
-</head>
-<body>
-  <div class="layout">
-    <nav class="side-nav">
-      <div class="nav-brand">Suite Settings</div>
-      <button class="nav-item active" data-section="suite">Suite</button>
-      <button class="nav-item" data-section="slots">Slot Counter</button>
-      <button class="nav-item" data-section="capacity">Capacity Forecast</button>
-      <button class="nav-item" data-section="submissions">Submissions</button>
-      <button class="nav-item" data-section="sentinel">Monitoring</button>
-      <button class="nav-item" data-section="triage">Triage Lens</button>
-      <button class="nav-item" data-section="reception">Reception</button>
-      <button class="nav-item" data-section="knowledge">Knowledge</button>
-      <button class="nav-item" data-section="safety">Clinical Safety</button>
-      <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
-      <button class="nav-item" data-section="debug">Debug</button>
-    </nav>
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
 
-    <div class="opt-content">
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
 
-      <!-- Suite section -->
-      <section class="opt-section active" id="sect-suite">
-        <h1>Medicus Suite <span class="module-badge" id="suiteVersionBadge">v—</span></h1>
-        <p class="section-desc">Global settings shared across all modules. Changes take effect immediately.</p>
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 28px;
+      }
 
-        <!-- Update available banner (v1.4.2) — hidden by default; populated by JS from storage. -->
-        <div id="updateBanner" style="display:none; margin: 0 0 18px; padding: 12px 14px;
-             background: var(--green-dim);
-             border: 1px solid var(--green-line); border-radius: 8px;
-             font-size: 12px; line-height: 1.5;">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <span style="font-size:14px;">🎉</span>
-            <span><strong style="color:var(--green);">Update available:</strong>
-              <span id="updateBannerVersion" style="font-family:var(--mono);"></span>
-              (installed: <span id="updateBannerInstalled" style="font-family:var(--mono); color:var(--text-3);"></span>)</span>
-            <span style="flex:1;"></span>
-            <button class="primary" id="updateBannerOpenBtn" style="padding: 4px 12px; font-size: 11px;">View release</button>
-            <button class="ghost" id="updateBannerNotesBtn" style="padding: 4px 10px; font-size: 11px;">What's new</button>
+      button.primary {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 10px 18px;
+        transition: background var(--fast) var(--ease);
+      }
+      button.primary:hover {
+        background: var(--accent-hover);
+      }
+      button.primary:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      button.ghost {
+        background: transparent;
+        border: 1px solid var(--border-hi);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 10px 18px;
+        transition:
+          border-color var(--fast) var(--ease),
+          color var(--fast) var(--ease),
+          background var(--fast) var(--ease);
+      }
+      button.ghost:hover {
+        border-color: var(--accent);
+        color: var(--text-2);
+        background: var(--accent-dim);
+      }
+      button.ghost:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .saved {
+        color: var(--green);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        opacity: 0;
+        transition: opacity var(--med) var(--ease);
+      }
+      .saved.show {
+        opacity: 1;
+      }
+
+      /* Clinical Safety document links */
+      .safety-doc-link {
+        display: block;
+        text-decoration: none;
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 12px 14px;
+        transition:
+          border-color var(--fast) var(--ease),
+          background var(--fast) var(--ease);
+      }
+      .safety-doc-link:hover {
+        border-color: var(--border-hi);
+        background: var(--bg-mid);
+      }
+      .safety-doc-title {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--accent);
+        margin-bottom: 3px;
+      }
+      .safety-doc-desc {
+        display: block;
+        font-size: 11px;
+        color: var(--text-4);
+        line-height: 1.5;
+      }
+
+      .iframe-section {
+        margin-top: 8px;
+      }
+      .iframe-section iframe {
+        width: 100%;
+        height: calc(100vh - 120px);
+        min-height: 500px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        background: var(--bg-mid);
+        display: block;
+      }
+
+      .module-badge {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 9px;
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 1px 6px;
+        color: var(--text-4);
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-hi);
+        border-radius: 3px;
+      }
+
+      /* Module export cards (Backup tab) */
+      .module-export-card {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .mec-name {
+        font-size: 12px;
+        color: var(--text-2);
+        font-weight: 500;
+      }
+      .mec-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .mec-actions .ghost {
+        padding: 5px 10px;
+        font-size: 9px;
+      }
+
+      .preset-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .preset-card {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--r-lg);
+        padding: 12px 14px;
+      }
+      .preset-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      .preset-card-name {
+        font-weight: 600;
+        color: var(--text-1);
+        font-size: 13px;
+      }
+      .preset-card-actions {
+        display: flex;
+        gap: 6px;
+      }
+      .pc-btn {
+        background: transparent;
+        border: 1px solid var(--border-hi);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 3px 8px;
+        transition:
+          color var(--fast) var(--ease),
+          border-color var(--fast) var(--ease);
+      }
+      .pc-btn:hover {
+        color: var(--text-1);
+        border-color: var(--accent);
+      }
+      .pc-btn.danger:hover {
+        color: var(--red);
+        border-color: var(--red-line);
+      }
+      .preset-card-meta {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-4);
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .preset-card-types {
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--text-3);
+        line-height: 1.5;
+      }
+
+      .preset-form {
+        background: var(--bg-mid);
+        border: 1px solid var(--border-hi);
+        border-radius: var(--r-lg);
+        padding: 18px;
+        margin-top: 14px;
+      }
+      .preset-form h3 {
+        font-size: 13px;
+        color: var(--text-1);
+        margin-bottom: 12px;
+      }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .form-row.full {
+        grid-template-columns: 1fr;
+      }
+      .form-row label {
+        display: block;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-4);
+        margin-bottom: 5px;
+      }
+      .form-row input[type='text'],
+      .form-row input[type='number'] {
+        width: 100%;
+        background: var(--bg-elev);
+        border: 1px solid var(--border-hi);
+        color: var(--text-1);
+        font-family: var(--mono);
+        font-size: 12px;
+        border-radius: var(--r-md);
+        padding: 7px 10px;
+      }
+      .form-row input:focus {
+        border-color: var(--accent);
+        background: var(--bg-elev);
+      }
+
+      .types-multiselect {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid var(--border-hi);
+        border-radius: 6px;
+        background: var(--bg-mid);
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .type-check-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .type-check-row:hover {
+        background: var(--bg-hover);
+      }
+      .type-check-row input {
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .type-check-row label {
+        font-size: 11px;
+        color: var(--text-2);
+        cursor: pointer;
+        font-family: var(--sans);
+        text-transform: none;
+        letter-spacing: 0;
+        margin: 0;
+        flex: 1;
+      }
+
+      .threshold-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--text-3);
+        margin-top: 6px;
+      }
+      .threshold-row input[type='number'] {
+        width: 64px;
+        padding: 5px 8px;
+        font-size: 11px;
+      }
+
+      .cap-min-label-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .cap-copy-mon {
+        background: transparent;
+        border: none;
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+        padding: 0;
+      }
+      .cap-copy-mon:hover {
+        text-decoration: underline;
+      }
+      .cap-day-mins-row {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .cap-day-min {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+      }
+      .cap-day-min-label {
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-4);
+      }
+      .cap-day-min-input {
+        width: 100%;
+        padding: 5px 6px;
+        font-size: 11px;
+        text-align: center;
+      }
+      .cap-min-hint {
+        font-size: 10px;
+        color: var(--text-4);
+        margin-top: 6px;
+        font-family: var(--sans);
+      }
+
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .add-preset-btn {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 8px 14px;
+        transition: background var(--fast) var(--ease);
+      }
+      .add-preset-btn:hover {
+        background: var(--accent-hover);
+      }
+      .add-preset-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .ghost-btn-opt {
+        background: transparent;
+        border: 1px solid var(--border-hi);
+        color: var(--text-3);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 7px 14px;
+        transition:
+          border-color var(--fast) var(--ease),
+          color var(--fast) var(--ease),
+          background var(--fast) var(--ease);
+      }
+      .ghost-btn-opt:hover {
+        color: var(--text-2);
+        border-color: var(--accent);
+        background: var(--accent-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <nav class="side-nav">
+        <div class="nav-brand">Suite Settings</div>
+        <button class="nav-item active" data-section="suite">Suite</button>
+        <button class="nav-item" data-section="notifications">Notifications</button>
+        <button class="nav-item" data-section="slots">Slot Counter</button>
+        <button class="nav-item" data-section="capacity">Capacity Forecast</button>
+        <button class="nav-item" data-section="submissions">Submissions</button>
+        <button class="nav-item" data-section="sentinel">Monitoring</button>
+        <button class="nav-item" data-section="triage">Triage Lens</button>
+        <button class="nav-item" data-section="reception">Reception</button>
+        <button class="nav-item" data-section="knowledge">Knowledge</button>
+        <button class="nav-item" data-section="safety">Clinical Safety</button>
+        <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
+        <button class="nav-item" data-section="debug">Debug</button>
+      </nav>
+
+      <div class="opt-content">
+        <!-- Suite section -->
+        <section class="opt-section active" id="sect-suite">
+          <h1>Medicus Suite <span class="module-badge" id="suiteVersionBadge">v—</span></h1>
+          <p class="section-desc">Global settings shared across all modules. Changes take effect immediately.</p>
+
+          <!-- Update available banner (v1.4.2) — hidden by default; populated by JS from storage. -->
+          <div
+            id="updateBanner"
+            style="
+              display: none;
+              margin: 0 0 18px;
+              padding: 12px 14px;
+              background: var(--green-dim);
+              border: 1px solid var(--green-line);
+              border-radius: 8px;
+              font-size: 12px;
+              line-height: 1.5;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+              <span style="font-size: 14px">🎉</span>
+              <span
+                ><strong style="color: var(--green)">Update available:</strong>
+                <span id="updateBannerVersion" style="font-family: var(--mono)"></span>
+                (installed:
+                <span id="updateBannerInstalled" style="font-family: var(--mono); color: var(--text-3)"></span>)</span
+              >
+              <span style="flex: 1"></span>
+              <button class="primary" id="updateBannerOpenBtn" style="padding: 4px 12px; font-size: 11px">
+                View release
+              </button>
+              <button class="ghost" id="updateBannerNotesBtn" style="padding: 4px 10px; font-size: 11px">
+                What's new
+              </button>
+            </div>
+            <div
+              id="updateBannerNotes"
+              style="
+                display: none;
+                margin-top: 10px;
+                padding: 10px 12px;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 6px;
+                font-family: var(--mono);
+                font-size: 10px;
+                line-height: 1.6;
+                max-height: 240px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                color: var(--text-3);
+              "
+            ></div>
           </div>
-          <div id="updateBannerNotes" style="display:none; margin-top:10px; padding:10px 12px;
-               background: rgba(0,0,0,0.2); border-radius: 6px; font-family: var(--mono);
-               font-size: 10px; line-height: 1.6; max-height: 240px; overflow-y: auto;
-               white-space: pre-wrap; color: var(--text-3);"></div>
-        </div>
-
-        <div class="field">
-          <label class="field-label">Practice code (Medicus site ID)</label>
-          <div id="codeDetectedRow" style="display:none; align-items:center; gap:10px; margin-bottom:8px;">
-            <span style="font-family:var(--mono); font-size:11px; color:var(--green);">&#10003; Auto-detected:</span>
-            <code id="codeDetectedValue" style="font-family:var(--mono); font-size:12px; color:var(--text-1); background:var(--bg-mid); padding:3px 8px; border-radius:var(--r-sm);"></code>
-          </div>
-          <div id="codeNotDetectedRow" style="display:none; margin-bottom:8px;">
-            <span style="font-family:var(--mono); font-size:11px; color:var(--amber);">&#9888; No Medicus tab open — using saved value below.</span>
-          </div>
-          <input type="text" id="practiceCode" placeholder="Auto-detected from Medicus tab — or enter manually" maxlength="20" />
-          <span class="field-help">
-            The extension auto-detects your practice code from the URL when you have a Medicus tab open.
-            The field above shows the saved fallback (used when no Medicus tab is open, e.g. for the popup).
-            Only edit this if auto-detection isn't working.<br>
-            Find it in your Medicus URL: <code style="color:var(--text-3)">england.medicus.health/<strong>[code]</strong>/...</code>
-          </span>
-        </div>
-
-        <div class="field">
-          <label class="field-label">Feedback recipient email</label>
-          <input type="email" id="feedbackEmail" placeholder="davetriska02@gmail.com" maxlength="120" />
-          <span class="field-help">
-            Where the About-tab <strong>Feedback / feature request / bug report</strong> button sends email.
-            Leave blank to use the default (<code style="color:var(--text-3)">davetriska02@gmail.com</code>).
-          </span>
-        </div>
-
-        <div class="field">
-          <label class="field-label">Guided tour</label>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <button class="ghost" id="replayTourBtn">Show the tour again</button>
-            <span id="replayTourStatus" style="font-family:var(--mono); font-size:10px; color:var(--green);"></span>
-          </div>
-          <span class="field-help">
-            Replays the first-run suite walkthrough next time you open the side panel.
-            You can also start it instantly from the Monitoring panel's More menu.
-          </span>
-        </div>
-
-        <div class="actions">
-          <button class="primary" id="saveSuite">Save</button>
-          <button class="ghost" id="testConnectionBtn">Test connection</button>
-          <button class="ghost" id="checkUpdateBtn">Check for updates</button>
-          <span class="saved" id="suiteSaved">Saved ✓</span>
-          <span id="testConnectionResult" style="font-family:var(--mono); font-size:10px; margin-left:4px;"></span>
-          <span id="checkUpdateResult" style="font-family:var(--mono); font-size:10px; margin-left:4px;"></span>
-        </div>
-
-        <!-- Request Monitor (Triage) — v1.3 ─────────────────────────────────── -->
-        <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
-          <h2 style="font-size:13px; margin:0 0 4px;">Triage request monitor</h2>
-          <p class="section-desc" style="margin-bottom:14px;">
-            Optional. Shows a strip in the side panel with live counts of new and replied medical/admin requests for a specific team inbox.
-            Leave off if your practice isn't using triage.
-          </p>
 
           <div class="field">
-            <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-              <input type="checkbox" id="rmEnabled" />
-              <span class="field-label" style="margin:0;">Enable triage request monitor</span>
-            </label>
-          </div>
-
-          <div id="rmConditionalFields" style="display:none; padding-left:24px; border-left:2px solid var(--border-hi); margin-top:14px;">
-            <div class="field">
-              <label class="field-label" for="rmAssigneeId">Team / assignee UUID</label>
-              <input type="text" id="rmAssigneeId" placeholder="e.g. 0199041a-c28a-7358-adda-142f15e10213" />
-              <span class="field-help">
-                The UUID of the inbox to watch (e.g. Triage Doctor). To find it:
-                in Medicus, open the task list and apply the team filter you want.
-                Look at the URL — it contains <code style="color:var(--text-3)">masterAssignee=...</code>.
-                Copy that UUID here.
-              </span>
+            <label class="field-label">Practice code (Medicus site ID)</label>
+            <div id="codeDetectedRow" style="display: none; align-items: center; gap: 10px; margin-bottom: 8px">
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--green)"
+                >&#10003; Auto-detected:</span
+              >
+              <code
+                id="codeDetectedValue"
+                style="
+                  font-family: var(--mono);
+                  font-size: 12px;
+                  color: var(--text-1);
+                  background: var(--bg-mid);
+                  padding: 3px 8px;
+                  border-radius: var(--r-sm);
+                "
+              ></code>
             </div>
-
-            <div class="field">
-              <label class="field-label" for="rmPollSeconds">Poll interval (seconds)</label>
-              <input type="number" id="rmPollSeconds" min="30" max="600" placeholder="60" style="max-width:120px;" />
-              <span class="field-help">Minimum 30. Lower values mean fresher counts but more API calls.</span>
+            <div id="codeNotDetectedRow" style="display: none; margin-bottom: 8px">
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--amber)"
+                >&#9888; No Medicus tab open — using saved value below.</span
+              >
             </div>
+            <input
+              type="text"
+              id="practiceCode"
+              placeholder="Auto-detected from Medicus tab — or enter manually"
+              maxlength="20"
+            />
+            <span class="field-help">
+              The extension auto-detects your practice code from the URL when you have a Medicus tab open. The field
+              above shows the saved fallback (used when no Medicus tab is open, e.g. for the popup). Only edit this if
+              auto-detection isn't working.<br />
+              Find it in your Medicus URL:
+              <code style="color: var(--text-3)">england.medicus.health/<strong>[code]</strong>/...</code>
+            </span>
+          </div>
 
-            <div class="field">
-              <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" id="rmNotifyEnabled" />
-                <span style="font-size:12px;">Desktop notifications when new items arrive</span>
-              </label>
-              <span class="field-help" style="margin-top:4px; display:block;">Notifications fire even when Chrome is minimised. You'll need to grant browser notification permission the first time.</span>
+          <div class="field">
+            <label class="field-label">Feedback recipient email</label>
+            <input type="email" id="feedbackEmail" placeholder="davetriska02@gmail.com" maxlength="120" />
+            <span class="field-help">
+              Where the About-tab <strong>Feedback / feature request / bug report</strong> button sends email. Leave
+              blank to use the default (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label">Guided tour</label>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <button class="ghost" id="replayTourBtn">Show the tour again</button>
+              <span id="replayTourStatus" style="font-family: var(--mono); font-size: 10px; color: var(--green)"></span>
             </div>
-
-            <div class="field">
-              <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                <input type="checkbox" id="rmNotifySound" />
-                <span style="font-size:12px;">Play sound with notifications</span>
-              </label>
-            </div>
+            <span class="field-help">
+              Replays the first-run suite walkthrough next time you open the side panel. You can also start it instantly
+              from the Monitoring panel's More menu.
+            </span>
           </div>
 
-          <div class="actions" style="margin-top:14px;">
-            <button class="primary" id="saveRm">Save monitor settings</button>
-            <span class="saved" id="rmSaved">Saved ✓</span>
+          <div class="actions">
+            <button class="primary" id="saveSuite">Save</button>
+            <button class="ghost" id="testConnectionBtn">Test connection</button>
+            <button class="ghost" id="checkUpdateBtn">Check for updates</button>
+            <span class="saved" id="suiteSaved">Saved ✓</span>
+            <span id="testConnectionResult" style="font-family: var(--mono); font-size: 10px; margin-left: 4px"></span>
+            <span id="checkUpdateResult" style="font-family: var(--mono); font-size: 10px; margin-left: 4px"></span>
           </div>
-        </div>
 
-        <!-- Triage capacity alerts ─────────────────────────────────────────── -->
-        <div style="margin-top:32px; padding-top:24px; border-top:1px solid var(--border);">
-          <h2 style="font-size:13px; margin:0 0 4px;">Triage capacity alerts</h2>
-          <p class="section-desc" style="margin-bottom:14px;">
-            Highlights the triage strip and fires a desktop notification when a task bucket
-            exceeds its threshold. Requires the monitor above to be enabled.
-          </p>
-          <div id="triageAlertRules" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;"></div>
-          <div class="actions" style="margin-top:4px;">
-            <button class="primary" id="saveTriageAlerts">Save alert thresholds</button>
-            <span class="saved" id="triageAlertSaved">Saved ✓</span>
-          </div>
-        </div>
-
-        <!-- Support development ─────────────────────────────────────────── -->
-        <div style="margin-top:32px; padding:18px 20px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elev);">
-          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-            <div style="font-size:28px; line-height:1;">☕</div>
-            <div style="flex:1; min-width:240px;">
-              <h2 style="font-size:13px; margin:0 0 6px;">Support development</h2>
-              <p style="margin:0; font-size:12px; line-height:1.55; color:var(--text-2);">
-                I build Medicus Suite in my spare time and give it away for free.
-                The AI tokens it uses to ship features and fixes cost real money out of pocket.
-                If the suite saves you time and you'd like to chip in, a coffee goes a long way —
-                <strong>100% of donations go straight back into development</strong> (tokens, testing, hosting).
-                No pressure at all, the suite stays free either way.
-              </p>
-            </div>
-            <a href="https://buymeacoffee.com/davetriska" target="_blank" rel="noopener"
-               style="display:inline-flex; align-items:center; gap:8px; padding:10px 18px;
-                      background:#FFDD00; color:var(--text-1); text-decoration:none;
-                      font-weight:700; font-size:13px; border-radius:6px;
-                      border:1px solid #e6c700; white-space:nowrap;">
-              ☕ Buy me a coffee
-            </a>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- Slots section -->
-      <section class="opt-section" id="sect-slots">
-        <h1>Slot Counter <span class="module-badge">v2.3</span></h1>
-        <p class="section-desc">
-          The practice code is shared with the Submissions Tracker; set it in the Suite tab.<br>
-          Slot type visibility is managed directly in the Slots panel by ticking/unticking rows.
-        </p>
-        <div class="field">
-          <label class="field-label">Slot type filters</label>
-          <p class="field-help">Open the side panel → Slots tab and tick/untick slot types to include or exclude them from the total count. Your choices are saved automatically.</p>
-        </div>
-
-        <div style="margin-top:28px; padding-top:20px; border-top:1px solid var(--border);">
-          <h2 style="font-size:13px; margin:0 0 4px;">Slot alert rules</h2>
-          <p class="section-desc" style="margin-bottom:14px;">
-            Show a coloured ribbon in the Slots panel when a slot type drops to or below a threshold.
-            Set threshold to 0 to alert only when that type is completely gone.
-          </p>
-          <div id="slotAlertRules" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;"></div>
-          <button class="ghost" id="addSlotAlertRule">+ Add rule</button>
-          <span class="saved" id="slotAlertSaved">Saved ✓</span>
-        </div>
-      </section>
-
-      <!-- Submissions section -->
-      <section class="opt-section" id="sect-submissions">
-        <h1>Submissions Tracker <span class="module-badge">v1.0</span></h1>
-        <p class="section-desc">The practice code is shared with the Slot Counter; set it in the Suite tab.</p>
-        <div class="field">
-          <label class="field-label">Colours and series</label>
-          <p class="field-help">Series visibility is toggled directly in the Submissions panel by clicking the legend. Colours are fixed per task type in v0.1.</p>
-        </div>
-        <div class="field">
-          <label class="field-label">Workload thresholds</label>
-          <p class="field-help">Amber and red thresholds for medical and admin requests. When today's cumulative total reaches a threshold the tile tints accordingly. Disabled by default.</p>
-          <div id="submissionThresholds" style="display:flex; flex-direction:column; gap:8px; margin:10px 0;"></div>
-          <button class="ghost" id="saveSubmissionThresholds">Save thresholds</button>
-          <span class="saved" id="submissionThresholdSaved" style="display:none">Saved ✓</span>
-        </div>
-      </section>
-
-      <!-- Capacity Forecast section -->
-      <section class="opt-section" id="sect-capacity">
-        <h1>Capacity Forecast <span class="module-badge">v1.0</span></h1>
-        <p class="section-desc">Presets define what counts as "capacity" — which slot types matter, the minimum free slots required for each weekday (Mon–Sun), and at what thresholds the day status shifts from sufficient to tight, low, and critical.</p>
-
-        <div id="capPresetEditor"></div>
-      </section>
-
-      <section class="opt-section" id="sect-sentinel">
-        <h1>Monitoring <span class="module-badge">v0.4.0</span></h1>
-        <p class="section-desc">Sentinel settings — rule overrides, display config, import/export.</p>
-
-        <!-- Rules currency status card -->
-        <div style="margin-bottom:24px; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
-          <div style="background:var(--bg-mid); padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;">
-            <span style="font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600;">Rules status</span>
-            <span id="rulesCurrencyOverall" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:2px 8px; border-radius:3px;"></span>
-          </div>
-          <div id="rulesCurrencyBody" style="padding:12px 16px; font-size:12px; color:var(--text-3);">Checking…</div>
-          <div style="padding:8px 16px; border-top:1px solid var(--border); font-size:10px; color:var(--text-5); font-family:var(--mono);">
-            User-imported custom rule overrides are not included in this check.
-          </div>
-        </div>
-
-        <div class="iframe-section">
-          <iframe id="sentinelFrame" src="../sentinel-options/options.html" title="Sentinel settings"></iframe>
-        </div>
-      </section>
-
-      <!-- Triage Lens section -->
-      <section class="opt-section" id="sect-triage">
-        <h1>Triage Lens <span class="module-badge">v0.5.0</span></h1>
-        <p class="section-desc">Triage Lens keyword rules and display settings.</p>
-        <div class="iframe-section">
-          <iframe id="triageFrame" src="../content-scripts/triage-lens/options.html" title="Triage Lens settings"></iframe>
-        </div>
-      </section>
-
-      <!-- Reception section -->
-      <section class="opt-section" id="sect-reception">
-        <h1>Reception <span class="module-badge">capture pathways</span></h1>
-        <p class="section-desc">Guided capture pathways for reception staff, the quick-wins alert filter, and pathway editing. All pathways ship <strong>disabled</strong> until the disclaimer below has been reviewed and accepted.</p>
-
-        <div id="rcpoDisclaimerBody" style="margin-bottom:18px;"></div>
-
-        <h2 style="font-size:14px; margin:18px 0 6px;">Capture pathways</h2>
-        <p class="section-desc" style="margin-top:0;">Toggle pathways on or off, edit the questions and red flags of bundled pathways, or create your own. Edited and custom pathway content is the responsibility of the practice &mdash; review it clinically before enabling.</p>
-        <div id="rcpoPathwayList"></div>
-        <div id="rcpoEditorHost"></div>
-        <div style="margin-top:10px;">
-          <button class="ghost" id="rcpoNewPathway">+ New custom pathway</button>
-        </div>
-
-        <!-- LLM pathway authoring tool -->
-        <details id="rcpoLlmBlock" style="margin-top:14px; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
-          <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:10px; color:var(--text-4);">&#9654;</span>
-            Generate a pathway with an LLM
-          </summary>
-          <div style="padding:14px 16px; border-top:1px solid var(--border);">
-            <p style="font-size:12px; color:var(--text-3); margin:0 0 12px; line-height:1.6;">
-              Copy the prompt below, paste it into any LLM (ChatGPT, Claude, etc.) followed by the clinical topic you want
-              (e.g. "write a cellulitis pathway"), then paste the JSON response back into the box below to import it.
-              Imported pathways are <strong>not enabled</strong> until you toggle them on after clinical review.
+          <!-- Request Monitor (Triage) — v1.3 ─────────────────────────────────── -->
+          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Triage request monitor</h2>
+            <p class="section-desc" style="margin-bottom: 14px">
+              Optional. Shows a strip in the side panel with live counts of new and replied medical/admin requests for a
+              specific team inbox. Leave off if your practice isn't using triage.
             </p>
-            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-              <button class="ghost" id="rcpoLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
-              <span id="rcpoLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
+
+            <div class="field">
+              <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                <input type="checkbox" id="rmEnabled" />
+                <span class="field-label" style="margin: 0">Enable triage request monitor</span>
+              </label>
             </div>
-            <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
-              Paste LLM JSON output here
-            </label>
-            <textarea id="rcpoLlmJson" rows="8" placeholder='Paste the JSON object (or array) returned by the LLM here, then click "Import pathway".'
-              style="width:100%; box-sizing:border-box; background:var(--bg-mid); border:1px solid var(--border-hi);
-                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:var(--r-md);
-                     padding:8px 10px; resize:vertical; line-height:1.5;"></textarea>
-            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-              <button class="primary" id="rcpoLlmImport" style="font-size:11px; padding:5px 14px;">Import pathway</button>
-              <span id="rcpoLlmStatus" style="font-size:12px; line-height:1.5;"></span>
+
+            <div
+              id="rmConditionalFields"
+              style="display: none; padding-left: 24px; border-left: 2px solid var(--border-hi); margin-top: 14px"
+            >
+              <div class="field">
+                <label class="field-label" for="rmAssigneeId">Team / assignee UUID</label>
+                <input type="text" id="rmAssigneeId" placeholder="e.g. 0199041a-c28a-7358-adda-142f15e10213" />
+                <span class="field-help">
+                  The UUID of the inbox to watch (e.g. Triage Doctor). To find it: in Medicus, open the task list and
+                  apply the team filter you want. Look at the URL — it contains
+                  <code style="color: var(--text-3)">masterAssignee=...</code>. Copy that UUID here.
+                </span>
+              </div>
+
+              <div class="field">
+                <label class="field-label" for="rmPollSeconds">Poll interval (seconds)</label>
+                <input type="number" id="rmPollSeconds" min="30" max="600" placeholder="60" style="max-width: 120px" />
+                <span class="field-help">Minimum 30. Lower values mean fresher counts but more API calls.</span>
+              </div>
+
+              <div class="field">
+                <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                  <input type="checkbox" id="rmNotifyEnabled" />
+                  <span style="font-size: 12px">Desktop notifications when new items arrive</span>
+                </label>
+                <span class="field-help" style="margin-top: 4px; display: block"
+                  >Notifications fire even when Chrome is minimised. You'll need to grant browser notification
+                  permission the first time.</span
+                >
+              </div>
+
+              <div class="field">
+                <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                  <input type="checkbox" id="rmNotifySound" />
+                  <span style="font-size: 12px">Play sound with notifications</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="actions" style="margin-top: 14px">
+              <button class="primary" id="saveRm">Save monitor settings</button>
+              <span class="saved" id="rmSaved">Saved ✓</span>
             </div>
           </div>
-        </details>
 
-        <h2 style="font-size:14px; margin:24px 0 6px;">Quick-wins alert &mdash; chips shown to reception</h2>
-        <p class="section-desc" style="margin-top:0;">The Reception tab shows a single green/amber/red status for the open patient. Untick any monitoring/QOF/vaccine rules you do <em>not</em> want counted there (they remain visible in the Monitoring tab; the Reception tab notes when alerts are filtered).</p>
-        <div id="rcpoChipList"><div style="font-size:12px; color:var(--text-3);">Loading rules&hellip;</div></div>
-      </section>
-
-      <!-- Knowledge section -->
-      <section class="opt-section" id="sect-knowledge">
-        <h1>Knowledge <span class="module-badge">practice reference base</span></h1>
-        <p class="section-desc">A practice-owned reference base &mdash; referral criteria, key contacts, internal pathways and templates &mdash; shown on the <strong>Knowledge</strong> tab in the side panel. Day-to-day adding and editing happens on the tab itself; this page is for generating a starter pack and for backups. Entries are reference material, not clinical decision support &mdash; the practice is responsible for keeping them correct.</p>
-
-        <div id="kboStats" style="font-size:12px; color:var(--text-3); margin-bottom:14px;">Loading&hellip;</div>
-
-        <details id="kboLlmBlock" style="border:1px solid var(--border); border-radius:8px; overflow:hidden;">
-          <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:10px; color:var(--text-4);">&#9654;</span>
-            Generate a starter pack with an LLM
-          </summary>
-          <div style="padding:14px 16px; border-top:1px solid var(--border);">
-            <p style="font-size:12px; color:var(--text-3); margin:0 0 12px; line-height:1.6;">
-              Copy the prompt below into any LLM (ChatGPT, Claude, etc.), optionally followed by pasted local documents
-              (referral guides, contact lists, rota emails) for it to turn into entries, then paste the JSON response back
-              into the box and click <strong>Validate &amp; import</strong>. Imported entries are tagged
-              <strong>AI-generated, unreviewed</strong> until someone at the practice marks each one reviewed on the tab,
-              and entries with titles too similar to existing ones are skipped so repeated imports don't bloat the base.
+          <!-- Triage capacity alerts ─────────────────────────────────────────── -->
+          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Triage capacity alerts</h2>
+            <p class="section-desc" style="margin-bottom: 14px">
+              Highlights the triage strip and fires a desktop notification when a task bucket exceeds its threshold.
+              Requires the monitor above to be enabled.
             </p>
-            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-              <button class="ghost" id="kboLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
-              <span id="kboLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
-            </div>
-            <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-3); font-weight:600; margin-bottom:5px;">
-              Paste LLM JSON output here
-            </label>
-            <textarea id="kboLlmJson" rows="8" placeholder='Paste the JSON returned by the LLM here, then click "Validate &amp; import".'
-              style="width:100%; box-sizing:border-box; background:var(--bg-mid); border:1px solid var(--border-hi);
-                     color:var(--text-1); font-family:var(--mono); font-size:11px; border-radius:var(--r-md);
-                     padding:8px 10px; resize:vertical; line-height:1.5;"></textarea>
-            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-              <button class="primary" id="kboLlmImport" style="font-size:11px; padding:5px 14px;">Validate &amp; import</button>
-              <span id="kboLlmStatus" style="font-size:12px; line-height:1.5;"></span>
-            </div>
-            <div id="kboLlmWarnings" style="font-size:12px; color:var(--amber); margin-top:8px; line-height:1.6;"></div>
-          </div>
-        </details>
-      </section>
-
-      <!-- Clinical Safety section -->
-      <section class="opt-section" id="sect-safety">
-        <h1>Clinical Safety</h1>
-        <p class="section-desc">What this software is, what it isn't, and the clinical safety documentation behind it. Please read before relying on any output.</p>
-
-        <!-- Limitations / best-effort notice -->
-        <div style="background: rgba(180,83,9,0.08); border: 1px solid rgba(180,83,9,0.35); border-radius: 10px; padding: 16px 18px; margin-bottom: 24px; line-height: 1.6;">
-          <div style="display:flex; gap:12px; align-items:flex-start;">
-            <div style="font-size:20px; line-height:1; color:var(--amber, #b45309); flex-shrink:0; margin-top:1px;">&#9888;</div>
-            <div style="flex:1; font-size:12px; color:var(--text-2);">
-              <div style="font-weight:700; font-size:13px; color:var(--text-1); margin-bottom:8px;">Please read &mdash; the honest version</div>
-              <p style="margin:0 0 10px;">
-                This software is built, maintained, and released by a <strong>single GP developer</strong> as a personal project,
-                on a <strong>best-effort basis</strong>. I maintain a clinical safety case &mdash; an intended-purpose statement,
-                a hazard log, and a clinical safety notice (all linked below) &mdash; and do my honest best to identify and mitigate
-                risks. But this is <strong>not a commercially assured medical device</strong> and it comes with <strong>no warranty</strong>.
-              </p>
-              <p style="margin:0 0 10px;">
-                It is a <strong>supplementary aid</strong> that re-organises and surfaces information already in the Medicus record.
-                It does not make clinical decisions, does not constitute clinical decision support, and is <strong>not a substitute
-                for your own clinical judgement or for the live patient record</strong>. Every value it displays must be verified
-                against the source record before you act on it.
-              </p>
-              <p style="margin:0;">
-                Use it at your own discretion and risk. If you are not comfortable with these terms, please do not use it.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Document links -->
-        <h2 style="font-size:13px; font-weight:600; color:var(--text-1); margin:0 0 4px;">Clinical safety case documents</h2>
-        <p class="field-help" style="margin-bottom:14px;">The full documents live in the public repository and are regenerated weekly from the current codebase, so they always reflect the latest release.</p>
-
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/INTENDED-PURPOSE.md" target="_blank" rel="noopener noreferrer">
-            <span class="safety-doc-title">Intended Purpose ↗</span>
-            <span class="safety-doc-desc">What the software is for, and what it is explicitly not for.</span>
-          </a>
-          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/CLINICAL-SAFETY-NOTICE.md" target="_blank" rel="noopener noreferrer">
-            <span class="safety-doc-title">Clinical Safety Notice ↗</span>
-            <span class="safety-doc-desc">Required reading: conditions of safe use, known limitations, and the single most important rule.</span>
-          </a>
-          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/HAZARD-LOG.md" target="_blank" rel="noopener noreferrer">
-            <span class="safety-doc-title">Hazard Log ↗</span>
-            <span class="safety-doc-desc">Identified hazards, their controls/mitigations, and residual risk assessment.</span>
-          </a>
-          <a class="safety-doc-link" href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/sentinel-DISCLAIMER.txt" target="_blank" rel="noopener noreferrer">
-            <span class="safety-doc-title">Full Disclaimer &amp; Terms ↗</span>
-            <span class="safety-doc-desc">The binding terms of use. In any conflict, the disclaimer prevails.</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- Backup & Restore section -->
-      <section class="opt-section" id="sect-backup">
-        <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
-        <p class="section-desc">Export all module settings to a single JSON file, or restore from a previous backup. Per-module quick actions are available below for targeted exports.</p>
-
-        <!-- ── Practice Profile ─────────────────────────────────────────────── -->
-        <div style="border:1px solid var(--border-hi); border-radius:10px; overflow:hidden; margin-bottom:28px;">
-
-          <!-- Header -->
-          <div style="background:var(--bg-mid); padding:14px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px;">
-            <div style="font-size:20px; line-height:1;">🏥</div>
-            <div style="flex:1;">
-              <div style="font-weight:600; font-size:13px; color:var(--text-1);">Practice Profile</div>
-              <div style="font-size:11px; color:var(--text-3); margin-top:2px;">Automatically sync default settings across every PC at your practice</div>
-            </div>
-            <span id="ppBadge" style="display:none; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:3px 9px; border-radius:3px; background:var(--accent-dim); color:var(--accent);">Update available</span>
-          </div>
-
-          <!-- Status + actions -->
-          <div style="padding:14px 16px;">
-            <div id="ppStatusBlock" style="font-size:12px; line-height:1.75; color:var(--text-2);">Checking…</div>
-            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">
-              <button class="ghost" id="ppCheckBtn" style="font-size:11px; padding:5px 12px;">Check for update</button>
-              <button class="primary" id="ppApplyBtn" style="font-size:11px; padding:5px 12px; display:none;">Apply now</button>
-              <span id="ppActionStatus" style="font-family:var(--mono); font-size:10px; color:var(--text-3);"></span>
+            <div
+              id="triageAlertRules"
+              style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px"
+            ></div>
+            <div class="actions" style="margin-top: 4px">
+              <button class="primary" id="saveTriageAlerts">Save alert thresholds</button>
+              <span class="saved" id="triageAlertSaved">Saved ✓</span>
             </div>
           </div>
 
-          <!-- Publish sub-block -->
-          <div style="border-top:1px solid var(--border); padding:14px 16px;">
-            <div style="font-weight:600; font-size:12px; color:var(--text-1); margin-bottom:10px;">Publish settings to the practice</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-              <div>
-                <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Profile label</label>
-                <input type="text" id="ppLabelInput" placeholder="e.g. Acme Surgery — practice defaults"
-                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-mid); color:var(--text-1);" />
+          <!-- Support development ─────────────────────────────────────────── -->
+          <div
+            style="
+              margin-top: 32px;
+              padding: 18px 20px;
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              background: var(--bg-elev);
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
+              <div style="font-size: 28px; line-height: 1">☕</div>
+              <div style="flex: 1; min-width: 240px">
+                <h2 style="font-size: 13px; margin: 0 0 6px">Support development</h2>
+                <p style="margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-2)">
+                  I build Medicus Suite in my spare time and give it away for free. The AI tokens it uses to ship
+                  features and fixes cost real money out of pocket. If the suite saves you time and you'd like to chip
+                  in, a coffee goes a long way —
+                  <strong>100% of donations go straight back into development</strong> (tokens, testing, hosting). No
+                  pressure at all, the suite stays free either way.
+                </p>
               </div>
-              <div>
-                <label style="font-size:11px; color:var(--text-3); display:block; margin-bottom:3px;">Published by</label>
-                <input type="text" id="ppPublishedByInput" placeholder="your@email.nhs.uk"
-                  style="width:100%; font-size:11px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-mid); color:var(--text-1);" />
-              </div>
+              <a
+                href="https://buymeacoffee.com/davetriska"
+                target="_blank"
+                rel="noopener"
+                style="
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 8px;
+                  padding: 10px 18px;
+                  background: #ffdd00;
+                  color: var(--text-1);
+                  text-decoration: none;
+                  font-weight: 700;
+                  font-size: 13px;
+                  border-radius: 6px;
+                  border: 1px solid #e6c700;
+                  white-space: nowrap;
+                "
+              >
+                ☕ Buy me a coffee
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Notifications section -->
+        <section class="opt-section" id="sect-notifications">
+          <h1>Notifications</h1>
+          <p class="section-desc">Control which channels are active and mute desktop pop-ups during clinic sessions.</p>
+
+          <!-- Channel table -->
+          <div style="margin-bottom: 28px">
+            <h2 style="font-size: 13px; margin: 0 0 12px">Channels</h2>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <th
+                    style="
+                      text-align: left;
+                      padding: 6px 0;
+                      color: var(--text-4);
+                      font-weight: 600;
+                      font-family: var(--mono);
+                      font-size: 10px;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                    "
+                  >
+                    Channel
+                  </th>
+                  <th
+                    style="
+                      text-align: left;
+                      padding: 6px 0;
+                      color: var(--text-4);
+                      font-weight: 600;
+                      font-family: var(--mono);
+                      font-size: 10px;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                    "
+                  >
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <td style="padding: 10px 0; color: var(--text-2)">Desktop notifications</td>
+                  <td style="padding: 10px 0">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                      <input type="checkbox" id="notifDesktopEnabled" />
+                      <span style="font-size: 11px; color: var(--text-3)"
+                        >Enable desktop pop-ups for triage requests</span
+                      >
+                    </label>
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <td style="padding: 10px 0; color: var(--text-2)">Notification sound</td>
+                  <td style="padding: 10px 0">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                      <input type="checkbox" id="notifSoundEnabled" />
+                      <span style="font-size: 11px; color: var(--text-3)">Play sound with desktop notifications</span>
+                    </label>
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <td style="padding: 10px 0; color: var(--text-2)">Toolbar badge</td>
+                  <td style="padding: 10px 0">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+                      <input type="checkbox" id="notifBadgeEnabled" />
+                      <span style="font-size: 11px; color: var(--text-3)">Show count badge on toolbar icon</span>
+                    </label>
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <td style="padding: 10px 0; color: var(--text-2)">Strips</td>
+                  <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
+                    Waiting Room, Triage &amp; Demand strips — always shown. Configured in
+                    <a href="#sect-suite" style="color: var(--accent)">Suite settings</a>
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border)">
+                  <td style="padding: 10px 0; color: var(--text-2)">Sentinel chips</td>
+                  <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
+                    Drug monitoring chips — always shown. Configured in
+                    <a href="#sect-sentinel" style="color: var(--accent)">Monitoring settings</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0; color: var(--text-2)">Triage Lens HUD</td>
+                  <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
+                    In-page HUD — always shown. Configured in
+                    <a href="#sect-triage" style="color: var(--accent)">Triage Lens settings</a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <span class="saved" id="notifChannelSaved" style="margin-top: 8px; display: block">Saved ✓</span>
+          </div>
+
+          <!-- Clinic mode block -->
+          <div style="margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Clinic mode</h2>
+            <p class="section-desc" style="margin-bottom: 14px">Temporarily mute desktop pop-ups and sounds.</p>
+
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+              <span style="font-size: 12px; color: var(--text-3)">Status:</span>
+              <span id="quietStatusText" style="font-family: var(--mono); font-size: 12px; color: var(--text-2)"
+                >Off</span
+              >
             </div>
 
-            <!-- Module picker -->
-            <div style="margin-bottom:12px;">
-              <div style="font-size:11px; color:var(--text-3); margin-bottom:6px;">Choose which modules to include and how to apply them:</div>
-              <div id="ppModulePicker" style="display:flex; flex-direction:column; gap:4px; font-size:11px;">
-                <!-- rows injected by JS -->
-              </div>
+            <div class="actions">
+              <button class="ghost" id="quietBtn30m">30 min</button>
+              <button class="ghost" id="quietBtn1h">1 hour</button>
+              <button class="ghost" id="quietBtnUntil18">Until 18:00</button>
+              <button class="ghost" id="quietBtnOff">Off</button>
             </div>
 
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <button class="primary" id="ppPublishBtn" style="font-size:11px; padding:5px 14px;">Publish to shared folder</button>
-              <span id="ppPublishStatus" style="font-family:var(--mono); font-size:10px; color:var(--text-3);"></span>
+            <p style="margin-top: 14px; font-size: 11px; color: var(--text-4); line-height: 1.6; max-width: 520px">
+              Clinic mode silences desktop pop-ups and sounds only. On-screen strips, badges and clinical alerts in the
+              patient record are never muted.
+            </p>
+          </div>
+        </section>
+
+        <!-- Slots section -->
+        <section class="opt-section" id="sect-slots">
+          <h1>Slot Counter <span class="module-badge">v2.3</span></h1>
+          <p class="section-desc">
+            The practice code is shared with the Submissions Tracker; set it in the Suite tab.<br />
+            Slot type visibility is managed directly in the Slots panel by ticking/unticking rows.
+          </p>
+          <div class="field">
+            <label class="field-label">Slot type filters</label>
+            <p class="field-help">
+              Open the side panel → Slots tab and tick/untick slot types to include or exclude them from the total
+              count. Your choices are saved automatically.
+            </p>
+          </div>
+
+          <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Slot alert rules</h2>
+            <p class="section-desc" style="margin-bottom: 14px">
+              Show a coloured ribbon in the Slots panel when a slot type drops to or below a threshold. Set threshold to
+              0 to alert only when that type is completely gone.
+            </p>
+            <div id="slotAlertRules" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px"></div>
+            <button class="ghost" id="addSlotAlertRule">+ Add rule</button>
+            <span class="saved" id="slotAlertSaved">Saved ✓</span>
+          </div>
+        </section>
+
+        <!-- Submissions section -->
+        <section class="opt-section" id="sect-submissions">
+          <h1>Submissions Tracker <span class="module-badge">v1.0</span></h1>
+          <p class="section-desc">The practice code is shared with the Slot Counter; set it in the Suite tab.</p>
+          <div class="field">
+            <label class="field-label">Colours and series</label>
+            <p class="field-help">
+              Series visibility is toggled directly in the Submissions panel by clicking the legend. Colours are fixed
+              per task type in v0.1.
+            </p>
+          </div>
+          <div class="field">
+            <label class="field-label">Workload thresholds</label>
+            <p class="field-help">
+              Amber and red thresholds for medical and admin requests. When today's cumulative total reaches a threshold
+              the tile tints accordingly. Disabled by default.
+            </p>
+            <div
+              id="submissionThresholds"
+              style="display: flex; flex-direction: column; gap: 8px; margin: 10px 0"
+            ></div>
+            <button class="ghost" id="saveSubmissionThresholds">Save thresholds</button>
+            <span class="saved" id="submissionThresholdSaved" style="display: none">Saved ✓</span>
+          </div>
+        </section>
+
+        <!-- Capacity Forecast section -->
+        <section class="opt-section" id="sect-capacity">
+          <h1>Capacity Forecast <span class="module-badge">v1.0</span></h1>
+          <p class="section-desc">
+            Presets define what counts as "capacity" — which slot types matter, the minimum free slots required for each
+            weekday (Mon–Sun), and at what thresholds the day status shifts from sufficient to tight, low, and critical.
+          </p>
+
+          <div id="capPresetEditor"></div>
+        </section>
+
+        <section class="opt-section" id="sect-sentinel">
+          <h1>Monitoring <span class="module-badge">v0.4.0</span></h1>
+          <p class="section-desc">Sentinel settings — rule overrides, display config, import/export.</p>
+
+          <!-- Rules currency status card -->
+          <div
+            style="
+              margin-bottom: 24px;
+              background: var(--bg-elev);
+              border: 1px solid var(--border);
+              border-radius: 10px;
+              overflow: hidden;
+            "
+          >
+            <div
+              style="
+                background: var(--bg-mid);
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              "
+            >
+              <span
+                style="
+                  font-family: var(--mono);
+                  font-size: 10px;
+                  letter-spacing: 0.1em;
+                  text-transform: uppercase;
+                  color: var(--text-3);
+                  font-weight: 600;
+                "
+                >Rules status</span
+              >
+              <span
+                id="rulesCurrencyOverall"
+                style="
+                  display: none;
+                  font-size: 10px;
+                  font-weight: 700;
+                  text-transform: uppercase;
+                  letter-spacing: 0.04em;
+                  padding: 2px 8px;
+                  border-radius: 3px;
+                "
+              ></span>
+            </div>
+            <div id="rulesCurrencyBody" style="padding: 12px 16px; font-size: 12px; color: var(--text-3)">
+              Checking…
+            </div>
+            <div
+              style="
+                padding: 8px 16px;
+                border-top: 1px solid var(--border);
+                font-size: 10px;
+                color: var(--text-5);
+                font-family: var(--mono);
+              "
+            >
+              User-imported custom rule overrides are not included in this check.
             </div>
           </div>
 
-          <!-- Collapsible setup guide -->
-          <details style="border-top:1px solid var(--border);">
-            <summary style="padding:10px 16px; font-size:12px; font-weight:500; color:var(--text-2); cursor:pointer; user-select:none;">
-              &#9654; How to set up shared-folder deployment
+          <div class="iframe-section">
+            <iframe id="sentinelFrame" src="../sentinel-options/options.html" title="Sentinel settings"></iframe>
+          </div>
+        </section>
+
+        <!-- Triage Lens section -->
+        <section class="opt-section" id="sect-triage">
+          <h1>Triage Lens <span class="module-badge">v0.5.0</span></h1>
+          <p class="section-desc">Triage Lens keyword rules and display settings.</p>
+          <div class="iframe-section">
+            <iframe
+              id="triageFrame"
+              src="../content-scripts/triage-lens/options.html"
+              title="Triage Lens settings"
+            ></iframe>
+          </div>
+        </section>
+
+        <!-- Reception section -->
+        <section class="opt-section" id="sect-reception">
+          <h1>Reception <span class="module-badge">capture pathways</span></h1>
+          <p class="section-desc">
+            Guided capture pathways for reception staff, the quick-wins alert filter, and pathway editing. All pathways
+            ship <strong>disabled</strong> until the disclaimer below has been reviewed and accepted.
+          </p>
+
+          <div id="rcpoDisclaimerBody" style="margin-bottom: 18px"></div>
+
+          <h2 style="font-size: 14px; margin: 18px 0 6px">Capture pathways</h2>
+          <p class="section-desc" style="margin-top: 0">
+            Toggle pathways on or off, edit the questions and red flags of bundled pathways, or create your own. Edited
+            and custom pathway content is the responsibility of the practice &mdash; review it clinically before
+            enabling.
+          </p>
+          <div id="rcpoPathwayList"></div>
+          <div id="rcpoEditorHost"></div>
+          <div style="margin-top: 10px">
+            <button class="ghost" id="rcpoNewPathway">+ New custom pathway</button>
+          </div>
+
+          <!-- LLM pathway authoring tool -->
+          <details
+            id="rcpoLlmBlock"
+            style="margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden"
+          >
+            <summary
+              style="
+                padding: 10px 14px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-2);
+                cursor: pointer;
+                user-select: none;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              "
+            >
+              <span style="font-size: 10px; color: var(--text-4)">&#9654;</span>
+              Generate a pathway with an LLM
             </summary>
-            <div style="padding:16px 18px; font-size:12px; line-height:1.8; color:var(--text-2); border-top:1px solid var(--border);">
-
-              <strong style="display:block; margin-bottom:6px;">1. One-time: put the extension on your shared drive</strong>
-              <ol style="margin:0 0 14px; padding-left:20px;">
-                <li>Copy the entire Medicus Suite extension folder to a shared network location that every PC at the practice can open — for example <em>S:\Medicus Suite\extension</em>.</li>
-                <li>The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to be able to read from it.</li>
-                <li>Make sure the folder contains <em>manifest.json</em> at its top level — that is the file Edge and Chrome use to recognise an extension.</li>
-              </ol>
-
-              <strong style="display:block; margin-bottom:6px;">2. Add the extension to each PC (about 2 minutes, once per PC)</strong>
-              <ol style="margin:0 0 14px; padding-left:20px;">
-                <li><strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code> in the address bar, then press Enter. In the top-right corner, turn on the <strong>Developer mode</strong> toggle. Click <strong>Load unpacked</strong>. In the window that opens, navigate to the shared extension folder and click <strong>Select Folder</strong>.</li>
-                <li><strong>Chrome:</strong> The steps are identical — type <code>chrome://extensions</code> instead, then follow the same Developer mode → Load unpacked steps.</li>
-                <li>You should now see the Medicus Suite icon in the browser toolbar. Click it (or open the side panel) to confirm the extension is running.</li>
-                <li>Repeat on every PC that needs the extension. Each PC points to the same shared folder.</li>
-              </ol>
-
-              <strong style="display:block; margin-bottom:6px;">3. Practice manager: change settings for everyone (about 1 minute)</strong>
-              <ol style="margin:0 0 14px; padding-left:20px;">
-                <li>On your own PC, set up each module the way the practice wants it — practice code, monitoring rules, Knowledge tab entries, triage keywords, whatever you need.</li>
-                <li>Come back to this Settings page, scroll up to <em>Publish settings to the practice</em>, fill in a label (e.g. "Acme Surgery — June 2026") and your name or email, tick the modules you want to share, and choose how each one should apply:
-                  <ul style="margin:4px 0 4px; padding-left:18px;">
-                    <li><strong>Fill gaps only</strong> — adds your settings on PCs that haven't customised them yet; never changes what someone has already set themselves.</li>
-                    <li><strong>Enforce for everyone</strong> — everyone gets exactly your version, replacing their local changes for that module. Use this when you need to push a correction that must take effect for all staff.</li>
-                  </ul>
-                </li>
-                <li>Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — navigate to the shared extension folder and save the file there (replace the existing <em>practice-profile.json</em> if asked). After the first time, the extension remembers the location and publishing is a single click.</li>
-              </ol>
-
-              <strong style="display:block; margin-bottom:6px;">4. What happens on everyone else's PC</strong>
-              <ol style="margin:0 0 14px; padding-left:20px;">
-                <li>There is nothing for other staff to do. Each PC checks the shared folder roughly every 15 minutes while the browser is open, and also checks on every browser start.</li>
-                <li>When it finds a new version, it quietly applies the updated settings in the background. Staff do not need to restart their browser or do anything at all.</li>
-                <li>If the browser is closed, the changes will be picked up the next time it starts.</li>
-                <li>New versions of the extension itself (when you update the files in the shared folder) install themselves automatically when the PC is next idle — no manual reinstall needed.</li>
-              </ol>
-
-              <strong style="display:block; margin-bottom:6px;">5. If something isn't working</strong>
-              <ul style="margin:0; padding-left:20px;">
-                <li><strong>Is the PC running the extension from the shared folder?</strong> Open <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under <em>Source</em> or <em>Loaded from</em>. It should show the shared folder path, not a local path on that PC.</li>
-                <li><strong>Is practice-profile.json in the right place?</strong> The file must sit in the same folder as <em>manifest.json</em> — not inside a subfolder. You can check by opening the shared extension folder and looking for both files side by side (the practice-profile.json file is a JSON text file).</li>
-                <li><strong>Test it immediately:</strong> Press <em>Check for update</em> on this page. If an update is found it will say so; if not, the file is either missing or the version hasn't changed.</li>
-                <li><strong>A colleague's setting didn't change:</strong> The module is probably set to <em>Fill gaps only</em> and they had already customised that setting. Go back to <em>Publish settings to the practice</em>, change that module to <em>Enforce for everyone</em>, and publish again.</li>
-                <li><strong>Track what each PC has applied:</strong> The status box at the top of this card shows exactly which version this PC has applied, and when.</li>
-              </ul>
-
+            <div style="padding: 14px 16px; border-top: 1px solid var(--border)">
+              <p style="font-size: 12px; color: var(--text-3); margin: 0 0 12px; line-height: 1.6">
+                Copy the prompt below, paste it into any LLM (ChatGPT, Claude, etc.) followed by the clinical topic you
+                want (e.g. "write a cellulitis pathway"), then paste the JSON response back into the box below to import
+                it. Imported pathways are <strong>not enabled</strong> until you toggle them on after clinical review.
+              </p>
+              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px">
+                <button class="ghost" id="rcpoLlmCopyPrompt" style="font-size: 11px; padding: 5px 12px">
+                  Copy LLM prompt
+                </button>
+                <span
+                  id="rcpoLlmCopied"
+                  style="
+                    font-family: var(--mono);
+                    font-size: 11px;
+                    color: var(--green);
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                  "
+                  >Copied.</span
+                >
+              </div>
+              <label
+                style="
+                  display: block;
+                  font-family: var(--mono);
+                  font-size: 10px;
+                  letter-spacing: 0.1em;
+                  text-transform: uppercase;
+                  color: var(--text-3);
+                  font-weight: 600;
+                  margin-bottom: 5px;
+                "
+              >
+                Paste LLM JSON output here
+              </label>
+              <textarea
+                id="rcpoLlmJson"
+                rows="8"
+                placeholder='Paste the JSON object (or array) returned by the LLM here, then click "Import pathway".'
+                style="
+                  width: 100%;
+                  box-sizing: border-box;
+                  background: var(--bg-mid);
+                  border: 1px solid var(--border-hi);
+                  color: var(--text-1);
+                  font-family: var(--mono);
+                  font-size: 11px;
+                  border-radius: var(--r-md);
+                  padding: 8px 10px;
+                  resize: vertical;
+                  line-height: 1.5;
+                "
+              ></textarea>
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px">
+                <button class="primary" id="rcpoLlmImport" style="font-size: 11px; padding: 5px 14px">
+                  Import pathway
+                </button>
+                <span id="rcpoLlmStatus" style="font-size: 12px; line-height: 1.5"></span>
+              </div>
             </div>
           </details>
-        </div>
-        <!-- ── End Practice Profile ──────────────────────────────────────────── -->
 
-        <div class="field">
-          <label class="field-label">Suite-wide backup</label>
-          <p class="field-help">Exports Sentinel rules and custom rules, Capacity presets, Triage Lens config, Slot Counter hidden types, Submissions config, and practice code.</p>
-          <div class="actions" style="margin-top:10px">
-            <button class="primary" id="exportSuite">Export entire suite</button>
-            <button class="primary" id="importSuiteBtn">Import from file</button>
-            <input type="file" id="importSuiteFile" accept=".json" style="display:none" />
+          <h2 style="font-size: 14px; margin: 24px 0 6px">Quick-wins alert &mdash; chips shown to reception</h2>
+          <p class="section-desc" style="margin-top: 0">
+            The Reception tab shows a single green/amber/red status for the open patient. Untick any
+            monitoring/QOF/vaccine rules you do <em>not</em> want counted there (they remain visible in the Monitoring
+            tab; the Reception tab notes when alerts are filtered).
+          </p>
+          <div id="rcpoChipList"><div style="font-size: 12px; color: var(--text-3)">Loading rules&hellip;</div></div>
+        </section>
+
+        <!-- Knowledge section -->
+        <section class="opt-section" id="sect-knowledge">
+          <h1>Knowledge <span class="module-badge">practice reference base</span></h1>
+          <p class="section-desc">
+            A practice-owned reference base &mdash; referral criteria, key contacts, internal pathways and templates
+            &mdash; shown on the <strong>Knowledge</strong> tab in the side panel. Day-to-day adding and editing happens
+            on the tab itself; this page is for generating a starter pack and for backups. Entries are reference
+            material, not clinical decision support &mdash; the practice is responsible for keeping them correct.
+          </p>
+
+          <div id="kboStats" style="font-size: 12px; color: var(--text-3); margin-bottom: 14px">Loading&hellip;</div>
+
+          <details id="kboLlmBlock" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden">
+            <summary
+              style="
+                padding: 10px 14px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-2);
+                cursor: pointer;
+                user-select: none;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              "
+            >
+              <span style="font-size: 10px; color: var(--text-4)">&#9654;</span>
+              Generate a starter pack with an LLM
+            </summary>
+            <div style="padding: 14px 16px; border-top: 1px solid var(--border)">
+              <p style="font-size: 12px; color: var(--text-3); margin: 0 0 12px; line-height: 1.6">
+                Copy the prompt below into any LLM (ChatGPT, Claude, etc.), optionally followed by pasted local
+                documents (referral guides, contact lists, rota emails) for it to turn into entries, then paste the JSON
+                response back into the box and click <strong>Validate &amp; import</strong>. Imported entries are tagged
+                <strong>AI-generated, unreviewed</strong> until someone at the practice marks each one reviewed on the
+                tab, and entries with titles too similar to existing ones are skipped so repeated imports don't bloat
+                the base.
+              </p>
+              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px">
+                <button class="ghost" id="kboLlmCopyPrompt" style="font-size: 11px; padding: 5px 12px">
+                  Copy LLM prompt
+                </button>
+                <span
+                  id="kboLlmCopied"
+                  style="
+                    font-family: var(--mono);
+                    font-size: 11px;
+                    color: var(--green);
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                  "
+                  >Copied.</span
+                >
+              </div>
+              <label
+                style="
+                  display: block;
+                  font-family: var(--mono);
+                  font-size: 10px;
+                  letter-spacing: 0.1em;
+                  text-transform: uppercase;
+                  color: var(--text-3);
+                  font-weight: 600;
+                  margin-bottom: 5px;
+                "
+              >
+                Paste LLM JSON output here
+              </label>
+              <textarea
+                id="kboLlmJson"
+                rows="8"
+                placeholder='Paste the JSON returned by the LLM here, then click "Validate &amp; import".'
+                style="
+                  width: 100%;
+                  box-sizing: border-box;
+                  background: var(--bg-mid);
+                  border: 1px solid var(--border-hi);
+                  color: var(--text-1);
+                  font-family: var(--mono);
+                  font-size: 11px;
+                  border-radius: var(--r-md);
+                  padding: 8px 10px;
+                  resize: vertical;
+                  line-height: 1.5;
+                "
+              ></textarea>
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px">
+                <button class="primary" id="kboLlmImport" style="font-size: 11px; padding: 5px 14px">
+                  Validate &amp; import
+                </button>
+                <span id="kboLlmStatus" style="font-size: 12px; line-height: 1.5"></span>
+              </div>
+              <div
+                id="kboLlmWarnings"
+                style="font-size: 12px; color: var(--amber); margin-top: 8px; line-height: 1.6"
+              ></div>
+            </div>
+          </details>
+        </section>
+
+        <!-- Clinical Safety section -->
+        <section class="opt-section" id="sect-safety">
+          <h1>Clinical Safety</h1>
+          <p class="section-desc">
+            What this software is, what it isn't, and the clinical safety documentation behind it. Please read before
+            relying on any output.
+          </p>
+
+          <!-- Limitations / best-effort notice -->
+          <div
+            style="
+              background: rgba(180, 83, 9, 0.08);
+              border: 1px solid rgba(180, 83, 9, 0.35);
+              border-radius: 10px;
+              padding: 16px 18px;
+              margin-bottom: 24px;
+              line-height: 1.6;
+            "
+          >
+            <div style="display: flex; gap: 12px; align-items: flex-start">
+              <div
+                style="font-size: 20px; line-height: 1; color: var(--amber, #b45309); flex-shrink: 0; margin-top: 1px"
+              >
+                &#9888;
+              </div>
+              <div style="flex: 1; font-size: 12px; color: var(--text-2)">
+                <div style="font-weight: 700; font-size: 13px; color: var(--text-1); margin-bottom: 8px">
+                  Please read &mdash; the honest version
+                </div>
+                <p style="margin: 0 0 10px">
+                  This software is built, maintained, and released by a <strong>single GP developer</strong> as a
+                  personal project, on a <strong>best-effort basis</strong>. I maintain a clinical safety case &mdash;
+                  an intended-purpose statement, a hazard log, and a clinical safety notice (all linked below) &mdash;
+                  and do my honest best to identify and mitigate risks. But this is
+                  <strong>not a commercially assured medical device</strong> and it comes with
+                  <strong>no warranty</strong>.
+                </p>
+                <p style="margin: 0 0 10px">
+                  It is a <strong>supplementary aid</strong> that re-organises and surfaces information already in the
+                  Medicus record. It does not make clinical decisions, does not constitute clinical decision support,
+                  and is
+                  <strong>not a substitute for your own clinical judgement or for the live patient record</strong>.
+                  Every value it displays must be verified against the source record before you act on it.
+                </p>
+                <p style="margin: 0">
+                  Use it at your own discretion and risk. If you are not comfortable with these terms, please do not use
+                  it.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- Import preview -->
-        <div id="importPreviewWrap" style="display:none; margin-top:16px;">
+          <!-- Document links -->
+          <h2 style="font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0 0 4px">
+            Clinical safety case documents
+          </h2>
+          <p class="field-help" style="margin-bottom: 14px">
+            The full documents live in the public repository and are regenerated weekly from the current codebase, so
+            they always reflect the latest release.
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <a
+              class="safety-doc-link"
+              href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/INTENDED-PURPOSE.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="safety-doc-title">Intended Purpose ↗</span>
+              <span class="safety-doc-desc">What the software is for, and what it is explicitly not for.</span>
+            </a>
+            <a
+              class="safety-doc-link"
+              href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/CLINICAL-SAFETY-NOTICE.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="safety-doc-title">Clinical Safety Notice ↗</span>
+              <span class="safety-doc-desc"
+                >Required reading: conditions of safe use, known limitations, and the single most important rule.</span
+              >
+            </a>
+            <a
+              class="safety-doc-link"
+              href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/HAZARD-LOG.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="safety-doc-title">Hazard Log ↗</span>
+              <span class="safety-doc-desc"
+                >Identified hazards, their controls/mitigations, and residual risk assessment.</span
+              >
+            </a>
+            <a
+              class="safety-doc-link"
+              href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/sentinel-DISCLAIMER.txt"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="safety-doc-title">Full Disclaimer &amp; Terms ↗</span>
+              <span class="safety-doc-desc">The binding terms of use. In any conflict, the disclaimer prevails.</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- Backup & Restore section -->
+        <section class="opt-section" id="sect-backup">
+          <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
+          <p class="section-desc">
+            Export all module settings to a single JSON file, or restore from a previous backup. Per-module quick
+            actions are available below for targeted exports.
+          </p>
+
+          <!-- ── Practice Profile ─────────────────────────────────────────────── -->
+          <div style="border: 1px solid var(--border-hi); border-radius: 10px; overflow: hidden; margin-bottom: 28px">
+            <!-- Header -->
+            <div
+              style="
+                background: var(--bg-mid);
+                padding: 14px 16px;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                gap: 12px;
+              "
+            >
+              <div style="font-size: 20px; line-height: 1">🏥</div>
+              <div style="flex: 1">
+                <div style="font-weight: 600; font-size: 13px; color: var(--text-1)">Practice Profile</div>
+                <div style="font-size: 11px; color: var(--text-3); margin-top: 2px">
+                  Automatically sync default settings across every PC at your practice
+                </div>
+              </div>
+              <span
+                id="ppBadge"
+                style="
+                  display: none;
+                  font-size: 10px;
+                  font-weight: 700;
+                  text-transform: uppercase;
+                  letter-spacing: 0.04em;
+                  padding: 3px 9px;
+                  border-radius: 3px;
+                  background: var(--accent-dim);
+                  color: var(--accent);
+                "
+                >Update available</span
+              >
+            </div>
+
+            <!-- Status + actions -->
+            <div style="padding: 14px 16px">
+              <div id="ppStatusBlock" style="font-size: 12px; line-height: 1.75; color: var(--text-2)">Checking…</div>
+              <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center">
+                <button class="ghost" id="ppCheckBtn" style="font-size: 11px; padding: 5px 12px">
+                  Check for update
+                </button>
+                <button class="primary" id="ppApplyBtn" style="font-size: 11px; padding: 5px 12px; display: none">
+                  Apply now
+                </button>
+                <span
+                  id="ppActionStatus"
+                  style="font-family: var(--mono); font-size: 10px; color: var(--text-3)"
+                ></span>
+              </div>
+            </div>
+
+            <!-- Publish sub-block -->
+            <div style="border-top: 1px solid var(--border); padding: 14px 16px">
+              <div style="font-weight: 600; font-size: 12px; color: var(--text-1); margin-bottom: 10px">
+                Publish settings to the practice
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px">
+                <div>
+                  <label style="font-size: 11px; color: var(--text-3); display: block; margin-bottom: 3px"
+                    >Profile label</label
+                  >
+                  <input
+                    type="text"
+                    id="ppLabelInput"
+                    placeholder="e.g. Acme Surgery — practice defaults"
+                    style="
+                      width: 100%;
+                      font-size: 11px;
+                      padding: 5px 8px;
+                      border: 1px solid var(--border);
+                      border-radius: var(--r-md);
+                      background: var(--bg-mid);
+                      color: var(--text-1);
+                    "
+                  />
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: var(--text-3); display: block; margin-bottom: 3px"
+                    >Published by</label
+                  >
+                  <input
+                    type="text"
+                    id="ppPublishedByInput"
+                    placeholder="your@email.nhs.uk"
+                    style="
+                      width: 100%;
+                      font-size: 11px;
+                      padding: 5px 8px;
+                      border: 1px solid var(--border);
+                      border-radius: var(--r-md);
+                      background: var(--bg-mid);
+                      color: var(--text-1);
+                    "
+                  />
+                </div>
+              </div>
+
+              <!-- Module picker -->
+              <div style="margin-bottom: 12px">
+                <div style="font-size: 11px; color: var(--text-3); margin-bottom: 6px">
+                  Choose which modules to include and how to apply them:
+                </div>
+                <div id="ppModulePicker" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px">
+                  <!-- rows injected by JS -->
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+                <button class="primary" id="ppPublishBtn" style="font-size: 11px; padding: 5px 14px">
+                  Publish to shared folder
+                </button>
+                <span
+                  id="ppPublishStatus"
+                  style="font-family: var(--mono); font-size: 10px; color: var(--text-3)"
+                ></span>
+              </div>
+            </div>
+
+            <!-- Collapsible setup guide -->
+            <details style="border-top: 1px solid var(--border)">
+              <summary
+                style="
+                  padding: 10px 16px;
+                  font-size: 12px;
+                  font-weight: 500;
+                  color: var(--text-2);
+                  cursor: pointer;
+                  user-select: none;
+                "
+              >
+                &#9654; How to set up shared-folder deployment
+              </summary>
+              <div
+                style="
+                  padding: 16px 18px;
+                  font-size: 12px;
+                  line-height: 1.8;
+                  color: var(--text-2);
+                  border-top: 1px solid var(--border);
+                "
+              >
+                <strong style="display: block; margin-bottom: 6px"
+                  >1. One-time: put the extension on your shared drive</strong
+                >
+                <ol style="margin: 0 0 14px; padding-left: 20px">
+                  <li>
+                    Copy the entire Medicus Suite extension folder to a shared network location that every PC at the
+                    practice can open — for example <em>S:\Medicus Suite\extension</em>.
+                  </li>
+                  <li>
+                    The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to
+                    be able to read from it.
+                  </li>
+                  <li>
+                    Make sure the folder contains <em>manifest.json</em> at its top level — that is the file Edge and
+                    Chrome use to recognise an extension.
+                  </li>
+                </ol>
+
+                <strong style="display: block; margin-bottom: 6px"
+                  >2. Add the extension to each PC (about 2 minutes, once per PC)</strong
+                >
+                <ol style="margin: 0 0 14px; padding-left: 20px">
+                  <li>
+                    <strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code> in the
+                    address bar, then press Enter. In the top-right corner, turn on the
+                    <strong>Developer mode</strong> toggle. Click <strong>Load unpacked</strong>. In the window that
+                    opens, navigate to the shared extension folder and click <strong>Select Folder</strong>.
+                  </li>
+                  <li>
+                    <strong>Chrome:</strong> The steps are identical — type <code>chrome://extensions</code> instead,
+                    then follow the same Developer mode → Load unpacked steps.
+                  </li>
+                  <li>
+                    You should now see the Medicus Suite icon in the browser toolbar. Click it (or open the side panel)
+                    to confirm the extension is running.
+                  </li>
+                  <li>Repeat on every PC that needs the extension. Each PC points to the same shared folder.</li>
+                </ol>
+
+                <strong style="display: block; margin-bottom: 6px"
+                  >3. Practice manager: change settings for everyone (about 1 minute)</strong
+                >
+                <ol style="margin: 0 0 14px; padding-left: 20px">
+                  <li>
+                    On your own PC, set up each module the way the practice wants it — practice code, monitoring rules,
+                    Knowledge tab entries, triage keywords, whatever you need.
+                  </li>
+                  <li>
+                    Come back to this Settings page, scroll up to <em>Publish settings to the practice</em>, fill in a
+                    label (e.g. "Acme Surgery — June 2026") and your name or email, tick the modules you want to share,
+                    and choose how each one should apply:
+                    <ul style="margin: 4px 0 4px; padding-left: 18px">
+                      <li>
+                        <strong>Fill gaps only</strong> — adds your settings on PCs that haven't customised them yet;
+                        never changes what someone has already set themselves.
+                      </li>
+                      <li>
+                        <strong>Enforce for everyone</strong> — everyone gets exactly your version, replacing their
+                        local changes for that module. Use this when you need to push a correction that must take effect
+                        for all staff.
+                      </li>
+                    </ul>
+                  </li>
+                  <li>
+                    Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — navigate
+                    to the shared extension folder and save the file there (replace the existing
+                    <em>practice-profile.json</em> if asked). After the first time, the extension remembers the location
+                    and publishing is a single click.
+                  </li>
+                </ol>
+
+                <strong style="display: block; margin-bottom: 6px">4. What happens on everyone else's PC</strong>
+                <ol style="margin: 0 0 14px; padding-left: 20px">
+                  <li>
+                    There is nothing for other staff to do. Each PC checks the shared folder roughly every 15 minutes
+                    while the browser is open, and also checks on every browser start.
+                  </li>
+                  <li>
+                    When it finds a new version, it quietly applies the updated settings in the background. Staff do not
+                    need to restart their browser or do anything at all.
+                  </li>
+                  <li>If the browser is closed, the changes will be picked up the next time it starts.</li>
+                  <li>
+                    New versions of the extension itself (when you update the files in the shared folder) install
+                    themselves automatically when the PC is next idle — no manual reinstall needed.
+                  </li>
+                </ol>
+
+                <strong style="display: block; margin-bottom: 6px">5. If something isn't working</strong>
+                <ul style="margin: 0; padding-left: 20px">
+                  <li>
+                    <strong>Is the PC running the extension from the shared folder?</strong> Open
+                    <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under
+                    <em>Source</em> or <em>Loaded from</em>. It should show the shared folder path, not a local path on
+                    that PC.
+                  </li>
+                  <li>
+                    <strong>Is practice-profile.json in the right place?</strong> The file must sit in the same folder
+                    as <em>manifest.json</em> — not inside a subfolder. You can check by opening the shared extension
+                    folder and looking for both files side by side (the practice-profile.json file is a JSON text file).
+                  </li>
+                  <li>
+                    <strong>Test it immediately:</strong> Press <em>Check for update</em> on this page. If an update is
+                    found it will say so; if not, the file is either missing or the version hasn't changed.
+                  </li>
+                  <li>
+                    <strong>A colleague's setting didn't change:</strong> The module is probably set to
+                    <em>Fill gaps only</em> and they had already customised that setting. Go back to
+                    <em>Publish settings to the practice</em>, change that module to <em>Enforce for everyone</em>, and
+                    publish again.
+                  </li>
+                  <li>
+                    <strong>Track what each PC has applied:</strong> The status box at the top of this card shows
+                    exactly which version this PC has applied, and when.
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </div>
+          <!-- ── End Practice Profile ──────────────────────────────────────────── -->
+
           <div class="field">
-            <label class="field-label">Import preview</label>
-            <div id="importPreviewBox" style="
-              background: var(--bg-mid);
-              border: 1px solid var(--border-hi);
-              border-radius: 8px;
-              padding: 14px 16px;
-              font-family: var(--mono);
-              font-size: 11px;
-              color: var(--text-3);
-              line-height: 1.7;
-              margin-bottom: 12px;
-            "></div>
-            <div id="importWarnings" style="color:var(--amber); font-size:11px; margin-bottom:12px;"></div>
-            <div class="actions">
-              <button class="primary" id="confirmImportBtn">Restore from this backup</button>
-              <button class="ghost" id="cancelImportBtn">Cancel</button>
+            <label class="field-label">Suite-wide backup</label>
+            <p class="field-help">
+              Exports Sentinel rules and custom rules, Capacity presets, Triage Lens config, Slot Counter hidden types,
+              Submissions config, and practice code.
+            </p>
+            <div class="actions" style="margin-top: 10px">
+              <button class="primary" id="exportSuite">Export entire suite</button>
+              <button class="primary" id="importSuiteBtn">Import from file</button>
+              <input type="file" id="importSuiteFile" accept=".json" style="display: none" />
             </div>
           </div>
-        </div>
 
-        <div class="field" style="margin-top:28px; padding-top:20px; border-top:1px solid var(--border)">
-          <label class="field-label">Reset to defaults</label>
-          <p class="field-help">Clears all extension storage, resetting every module to factory defaults. This cannot be undone without a backup.</p>
-          <div class="actions" style="margin-top:10px">
-            <button class="ghost" id="resetAllBtn" style="border-color: var(--red-line); color:var(--red);">Reset all settings</button>
-          </div>
-        </div>
-
-        <div class="field" style="margin-top:28px; padding-top:20px; border-top:1px solid var(--border)">
-          <label class="field-label">Per-module quick exports</label>
-          <p class="field-help">Export or import settings for a single module. Useful for sharing presets or moving config between profiles.</p>
-          <div class="module-export-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
-            <div class="module-export-card">
-              <div class="mec-name">Sentinel</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="sentinel">Export</button>
-                <button class="ghost" data-mod-import="sentinel">Import</button>
-                <input type="file" class="mod-file-input" data-mod="sentinel" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Capacity Forecast</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="capacity">Export</button>
-                <button class="ghost" data-mod-import="capacity">Import</button>
-                <input type="file" class="mod-file-input" data-mod="capacity" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Triage Lens</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="triage">Export</button>
-                <button class="ghost" data-mod-import="triage">Import</button>
-                <input type="file" class="mod-file-input" data-mod="triage" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Slot Counter</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="slots">Export</button>
-                <button class="ghost" data-mod-import="slots">Import</button>
-                <input type="file" class="mod-file-input" data-mod="slots" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Submissions Tracker</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="submissions">Export</button>
-                <button class="ghost" data-mod-import="submissions">Import</button>
-                <input type="file" class="mod-file-input" data-mod="submissions" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Referrals</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="referrals">Export</button>
-                <button class="ghost" data-mod-import="referrals">Import</button>
-                <input type="file" class="mod-file-input" data-mod="referrals" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Request Monitor</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="requestMonitor">Export</button>
-                <button class="ghost" data-mod-import="requestMonitor">Import</button>
-                <input type="file" class="mod-file-input" data-mod="requestMonitor" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Triage Capacity Alerts</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="triageAlerts">Export</button>
-                <button class="ghost" data-mod-import="triageAlerts">Import</button>
-                <input type="file" class="mod-file-input" data-mod="triageAlerts" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Pop-out Window</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="popout">Export</button>
-                <button class="ghost" data-mod-import="popout">Import</button>
-                <input type="file" class="mod-file-input" data-mod="popout" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Condor</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="condor">Export</button>
-                <button class="ghost" data-mod-import="condor">Import</button>
-                <input type="file" class="mod-file-input" data-mod="condor" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Reception</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="reception">Export</button>
-                <button class="ghost" data-mod-import="reception">Import</button>
-                <input type="file" class="mod-file-input" data-mod="reception" accept=".json" style="display:none" />
-              </div>
-            </div>
-            <div class="module-export-card">
-              <div class="mec-name">Knowledge</div>
-              <div class="mec-actions">
-                <button class="ghost" data-mod-export="knowledge">Export</button>
-                <button class="ghost" data-mod-import="knowledge">Import</button>
-                <input type="file" class="mod-file-input" data-mod="knowledge" accept=".json" style="display:none" />
+          <!-- Import preview -->
+          <div id="importPreviewWrap" style="display: none; margin-top: 16px">
+            <div class="field">
+              <label class="field-label">Import preview</label>
+              <div
+                id="importPreviewBox"
+                style="
+                  background: var(--bg-mid);
+                  border: 1px solid var(--border-hi);
+                  border-radius: 8px;
+                  padding: 14px 16px;
+                  font-family: var(--mono);
+                  font-size: 11px;
+                  color: var(--text-3);
+                  line-height: 1.7;
+                  margin-bottom: 12px;
+                "
+              ></div>
+              <div id="importWarnings" style="color: var(--amber); font-size: 11px; margin-bottom: 12px"></div>
+              <div class="actions">
+                <button class="primary" id="confirmImportBtn">Restore from this backup</button>
+                <button class="ghost" id="cancelImportBtn">Cancel</button>
               </div>
             </div>
           </div>
-        </div>
 
-        <div id="backupStatus" style="margin-top:12px; font-family:var(--mono); font-size:11px; min-height:20px;"></div>
-      </section>
-
-      <!-- Debug section -->
-      <section class="opt-section" id="sect-debug">
-        <h1>Debug <span class="module-badge" id="debugVersionBadge">v—</span></h1>
-        <p class="section-desc">Diagnostic information for troubleshooting API errors. Copy this if you're reporting an issue.</p>
-
-        <div class="field">
-          <label class="field-label">Current state</label>
-          <div id="debugState" style="
-            background: var(--bg-mid);
-            border: 1px solid var(--border-hi);
-            border-radius: 8px;
-            padding: 12px 14px;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-3);
-            line-height: 1.7;
-            white-space: pre-wrap;
-            min-height: 120px;
-          ">Loading…</div>
-          <div class="actions" style="margin-top:10px;">
-            <button class="ghost" id="debugRefreshBtn">Refresh</button>
-            <button class="ghost" id="debugCopyBtn">Copy to clipboard</button>
-            <button class="ghost" id="debugClearLogBtn">Clear API log</button>
-            <span id="debugCopyStatus" style="font-family:var(--mono); font-size:10px; color:var(--green);"></span>
+          <div class="field" style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border)">
+            <label class="field-label">Reset to defaults</label>
+            <p class="field-help">
+              Clears all extension storage, resetting every module to factory defaults. This cannot be undone without a
+              backup.
+            </p>
+            <div class="actions" style="margin-top: 10px">
+              <button class="ghost" id="resetAllBtn" style="border-color: var(--red-line); color: var(--red)">
+                Reset all settings
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div class="field" style="margin-top:24px;">
-          <label class="field-label">Probe API endpoints</label>
-          <p class="field-help">Run a live test of every endpoint the extension uses. Open a Medicus tab and sign in first, then click Run.</p>
-          <div class="actions" style="margin-top:10px;">
-            <button class="primary" id="debugProbeBtn">Run endpoint probe</button>
+          <div class="field" style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border)">
+            <label class="field-label">Per-module quick exports</label>
+            <p class="field-help">
+              Export or import settings for a single module. Useful for sharing presets or moving config between
+              profiles.
+            </p>
+            <div
+              class="module-export-grid"
+              style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px"
+            >
+              <div class="module-export-card">
+                <div class="mec-name">Sentinel</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="sentinel">Export</button>
+                  <button class="ghost" data-mod-import="sentinel">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="sentinel" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Capacity Forecast</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="capacity">Export</button>
+                  <button class="ghost" data-mod-import="capacity">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="capacity" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Triage Lens</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="triage">Export</button>
+                  <button class="ghost" data-mod-import="triage">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="triage" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Slot Counter</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="slots">Export</button>
+                  <button class="ghost" data-mod-import="slots">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="slots" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Submissions Tracker</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="submissions">Export</button>
+                  <button class="ghost" data-mod-import="submissions">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="submissions"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Referrals</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="referrals">Export</button>
+                  <button class="ghost" data-mod-import="referrals">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="referrals" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Request Monitor</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="requestMonitor">Export</button>
+                  <button class="ghost" data-mod-import="requestMonitor">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="requestMonitor"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Triage Capacity Alerts</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="triageAlerts">Export</button>
+                  <button class="ghost" data-mod-import="triageAlerts">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="triageAlerts"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Pop-out Window</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="popout">Export</button>
+                  <button class="ghost" data-mod-import="popout">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="popout" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Condor</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="condor">Export</button>
+                  <button class="ghost" data-mod-import="condor">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="condor" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Reception</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="reception">Export</button>
+                  <button class="ghost" data-mod-import="reception">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="reception" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Knowledge</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="knowledge">Export</button>
+                  <button class="ghost" data-mod-import="knowledge">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="knowledge" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
+                <div class="mec-name">Notifications</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="notifications">Export</button>
+                  <button class="ghost" data-mod-import="notifications">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="notifications"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div id="debugProbeResults" style="
-            margin-top: 12px;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-3);
-            line-height: 1.7;
-          "></div>
-        </div>
-      </section>
 
+          <div
+            id="backupStatus"
+            style="margin-top: 12px; font-family: var(--mono); font-size: 11px; min-height: 20px"
+          ></div>
+        </section>
+
+        <!-- Debug section -->
+        <section class="opt-section" id="sect-debug">
+          <h1>Debug <span class="module-badge" id="debugVersionBadge">v—</span></h1>
+          <p class="section-desc">
+            Diagnostic information for troubleshooting API errors. Copy this if you're reporting an issue.
+          </p>
+
+          <div class="field">
+            <label class="field-label">Current state</label>
+            <div
+              id="debugState"
+              style="
+                background: var(--bg-mid);
+                border: 1px solid var(--border-hi);
+                border-radius: 8px;
+                padding: 12px 14px;
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-3);
+                line-height: 1.7;
+                white-space: pre-wrap;
+                min-height: 120px;
+              "
+            >
+              Loading…
+            </div>
+            <div class="actions" style="margin-top: 10px">
+              <button class="ghost" id="debugRefreshBtn">Refresh</button>
+              <button class="ghost" id="debugCopyBtn">Copy to clipboard</button>
+              <button class="ghost" id="debugClearLogBtn">Clear API log</button>
+              <span id="debugCopyStatus" style="font-family: var(--mono); font-size: 10px; color: var(--green)"></span>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top: 24px">
+            <label class="field-label">Probe API endpoints</label>
+            <p class="field-help">
+              Run a live test of every endpoint the extension uses. Open a Medicus tab and sign in first, then click
+              Run.
+            </p>
+            <div class="actions" style="margin-top: 10px">
+              <button class="primary" id="debugProbeBtn">Run endpoint probe</button>
+            </div>
+            <div
+              id="debugProbeResults"
+              style="
+                margin-top: 12px;
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-3);
+                line-height: 1.7;
+              "
+            ></div>
+          </div>
+        </section>
+      </div>
     </div>
-  </div>
 
-  <script src="../shared/io/suite-envelope.js"></script>
-  <script src="../shared/io/practice-profile.js"></script>
-  <script src="../shared/io/suite-io.js"></script>
-  <script src="../shared/io/sentinel-io.js"></script>
-  <script src="../shared/io/capacity-io.js"></script>
-  <script src="../shared/io/triage-io.js"></script>
-  <script src="../shared/io/triage-alert-io.js"></script>
-  <script src="../shared/io/slot-counter-io.js"></script>
-  <script src="../shared/io/submissions-io.js"></script>
-  <script src="../shared/io/popout-io.js"></script>
-  <script src="../shared/io/referrals-io.js"></script>
-  <script src="../shared/io/request-monitor-io.js"></script>
-  <script src="../shared/reception-pathway-utils.js"></script>
-  <script src="../shared/io/condor-io.js"></script>
-  <script src="../shared/io/reception-io.js"></script>
-  <script src="../shared/knowledge-utils.js"></script>
-  <script src="../shared/io/knowledge-io.js"></script>
-  <script src="../shared/practice-code.js"></script>
-  <script src="../shared/api-diag.js"></script>
-  <script src="../shared/request-monitor.js"></script>
-  <script src="../engine/triage-alert-engine.js"></script>
-  <script src="../shared/update-checker.js"></script>
-  <script src="../shared/rule-currency.js"></script>
-  <script src="../shared/display-prefs.js"></script>
-  <script src="options.js"></script>
-</body>
+    <script src="../shared/io/suite-envelope.js"></script>
+    <script src="../shared/io/practice-profile.js"></script>
+    <script src="../shared/io/suite-io.js"></script>
+    <script src="../shared/io/sentinel-io.js"></script>
+    <script src="../shared/io/capacity-io.js"></script>
+    <script src="../shared/io/triage-io.js"></script>
+    <script src="../shared/io/triage-alert-io.js"></script>
+    <script src="../shared/io/slot-counter-io.js"></script>
+    <script src="../shared/io/submissions-io.js"></script>
+    <script src="../shared/io/popout-io.js"></script>
+    <script src="../shared/io/referrals-io.js"></script>
+    <script src="../shared/io/request-monitor-io.js"></script>
+    <script src="../shared/reception-pathway-utils.js"></script>
+    <script src="../shared/io/condor-io.js"></script>
+    <script src="../shared/io/reception-io.js"></script>
+    <script src="../shared/knowledge-utils.js"></script>
+    <script src="../shared/io/knowledge-io.js"></script>
+    <script src="../shared/io/notifications-io.js"></script>
+    <script src="../shared/quiet-mode.js"></script>
+    <script src="../shared/practice-code.js"></script>
+    <script src="../shared/api-diag.js"></script>
+    <script src="../shared/request-monitor.js"></script>
+    <script src="../engine/triage-alert-engine.js"></script>
+    <script src="../shared/update-checker.js"></script>
+    <script src="../shared/rule-currency.js"></script>
+    <script src="../shared/display-prefs.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

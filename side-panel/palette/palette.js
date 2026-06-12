@@ -74,6 +74,7 @@ const GENERIC_ICONS = {
 // Options sections (ids match options.html sect-* / options.js deep-linking).
 const OPTIONS_SECTIONS = [
   ['suite', 'Suite', 'practice code feedback email global'],
+  ['notifications', 'Notifications', 'alerts sounds desktop quiet clinic mode mute'],
   ['slots', 'Slot Counter', 'appointments'],
   ['capacity', 'Capacity Forecast', 'forecast'],
   ['submissions', 'Submissions', 'demand thresholds'],
@@ -149,6 +150,33 @@ function buildCommands() {
       const r = await chrome.storage.local.get('suite.display');
       await setDisplay({ colorblind: !(r['suite.display'] || {}).colorblind });
     },
+  });
+
+  // Quiet mode / clinic mode commands
+  const quietIcon = GENERIC_ICONS.display; // reuse display icon
+  cmds.push({
+    id: 'quiet:30m',
+    label: 'Clinic mode: 30 minutes',
+    group: 'Quiet',
+    keywords: 'mute silence notifications desktop 30 minutes clinic',
+    icon: quietIcon,
+    run: () => window.QuietMode?.set(Date.now() + 30 * 60 * 1000),
+  });
+  cmds.push({
+    id: 'quiet:1h',
+    label: 'Clinic mode: 1 hour',
+    group: 'Quiet',
+    keywords: 'mute silence notifications desktop hour clinic',
+    icon: quietIcon,
+    run: () => window.QuietMode?.set(Date.now() + 60 * 60 * 1000),
+  });
+  cmds.push({
+    id: 'quiet:off',
+    label: 'Clinic mode: off',
+    group: 'Quiet',
+    keywords: 'unmute resume notifications desktop clinic',
+    icon: quietIcon,
+    run: () => window.QuietMode?.clear(),
   });
 
   // Options sections — deep links straight to the right settings page.

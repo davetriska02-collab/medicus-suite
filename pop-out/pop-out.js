@@ -216,6 +216,48 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+// ── Quiet pill ────────────────────────────────────────────────────────────────
+// Mirrors the panel's quiet pill: amber indicator + click-to-clear.
+
+const _popoutQuietPillEl = document.getElementById('quietPill');
+
+function _popoutFmtHHMM(epochMs) {
+  const d = new Date(epochMs);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+async function _updatePopoutQuietPill() {
+  if (!_popoutQuietPillEl) return;
+  try {
+    const r = await chrome.storage.local.get('suite.quietUntil');
+    const until = r['suite.quietUntil'];
+    const isActive = until && typeof until === 'number' && until > Date.now();
+    if (isActive) {
+      const hhmm = _popoutFmtHHMM(until);
+      _popoutQuietPillEl.textContent = `🔕 ${hhmm}`;
+      _popoutQuietPillEl.title = `Clinic mode — desktop pop-ups and sounds muted until ${hhmm}. Click to switch off.`;
+      _popoutQuietPillEl.classList.remove('quiet-pill-hidden');
+    } else {
+      _popoutQuietPillEl.classList.add('quiet-pill-hidden');
+      _popoutQuietPillEl.title = '';
+    }
+  } catch (_) {}
+}
+
+_popoutQuietPillEl?.addEventListener('click', () => {
+  window.QuietMode?.clear();
+});
+
+setInterval(_updatePopoutQuietPill, 30 * 1000);
+
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.quietUntil' in changes) _updatePopoutQuietPill();
+});
+
+_updatePopoutQuietPill();
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 (async () => {
