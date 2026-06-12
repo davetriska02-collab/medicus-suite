@@ -8,7 +8,7 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
-import { startTour, maybeAutoStartTour, stopTour } from './tour.js';
+import { startTour } from '../../tour/tour.js';
 
 const STATUS_COLOUR = {
   overdue: 'red',
@@ -252,11 +252,13 @@ let pollTimer = null;
 let currentFilter = 'all'; // all | action | clear
 let _refreshBtnHandler = null;
 
-// Re-render minimisation: render() writes only #sentDynamic, and skips the DOM
-// write entirely when the freshly generated HTML matches the last one. This is
-// the anti-flicker contract — open modals, the overflow menu, evidence panels
-// and <details> state all survive the 10s poll untouched.
+// Re-render minimisation: render() writes only #sentDynamic (and the brief
+// slot), and skips each DOM write entirely when the freshly generated HTML
+// matches the last one. This is the anti-flicker contract — open modals, the
+// overflow menu, evidence panels and <details> state all survive the 10s poll
+// untouched.
 let _lastDynamicHtml = null;
+let _lastBriefHtml = null;
 
 // Data context behind the header toolbar. Toolbar buttons are wired ONCE in
 // init() and read this at click time, so they never need re-wiring per render.
@@ -362,6 +364,7 @@ let wrPollTimer = null;
 export async function init(el) {
   container = el;
   _lastDynamicHtml = null;
+  _lastBriefHtml = null;
   _renderCtx = null;
 
   // Persistent scaffold: header + toolbar, waiting-room slot, dynamic content
@@ -388,12 +391,6 @@ export async function init(el) {
   pollTimer = setInterval(refresh, 10000);
   chrome.tabs.onActivated.addListener(refresh);
   chrome.tabs.onUpdated.addListener(onUpdated);
-
-  // First-run guided tour / "What's new" pass. Deferred so the first real
-  // render has settled and step anchors that depend on it exist.
-  setTimeout(() => {
-    if (container) maybeAutoStartTour();
-  }, 600);
 
   // Listen for refresh signals: waiting-room polls (Pusher) + sentinel snapshot
   // updates pushed by the content script when the patient context changes.
@@ -473,7 +470,8 @@ async function cleanup() {
   clearInterval(wrPollTimer);
   chrome.tabs.onActivated.removeListener(refresh);
   chrome.tabs.onUpdated.removeListener(onUpdated);
-  stopTour();
+  // NB: the suite tour is shell-owned and switches modules itself — do NOT
+  // stop it here, or the walkthrough would die the moment it left this tab.
   if (_refreshBtnHandler) {
     document.removeEventListener('click', _refreshBtnHandler);
     _refreshBtnHandler = null;
@@ -520,6 +518,7 @@ async function cleanup() {
   _ruleCurrencyFooter = null;
   _lastTrendData = null;
   _lastDynamicHtml = null;
+  _lastBriefHtml = null;
   _renderCtx = null;
   container = null;
 }
@@ -830,6 +829,17 @@ function setDynamic(html) {
   return true;
 }
 
+// The pre-consultation brief lives in its own persistent slot (the action bar
+// is anchored directly beneath it), updated with the same changed-check.
+function setBriefSlot(html) {
+  const slot = container?.querySelector('#sentBriefSlot');
+  if (!slot) return;
+  if (html === _lastBriefHtml) return;
+  slot.innerHTML = html;
+  _lastBriefHtml = html;
+  if (html) attachBriefToggle();
+}
+
 function updateFooterTs(ts) {
   const el = container?.querySelector('#sentFooterTs');
   if (el) el.textContent = ts ? `Data at ${ts}` : '';
@@ -840,10 +850,11 @@ function render(payload) {
   const { state, snapshot, message } = payload;
 
   if (state !== 'data') {
-    // No usable data behind the toolbar in these states.
+    // No usable data behind the action bar in these states.
     _renderCtx = null;
     updateToolbarState();
     updateFooterTs('');
+    setBriefSlot('');
   }
 
   if (state === 'loading') {
@@ -1048,9 +1059,10 @@ function render(payload) {
       `</div>`
     : '';
 
-  // Pre-consultation brief — build and render above the patient banner.
+  // Pre-consultation brief — rendered into its persistent slot (the action
+  // bar sits directly beneath it).
   const brief = buildBrief(snapshot, _lastTrendData);
-  const briefHtml = brief ? renderBriefCard(brief) : '';
+  setBriefSlot(brief ? renderBriefCard(brief) : '');
 
   // ── Data-derived state: always refreshed, even when the DOM write below is
   // skipped, so the one-time toolbar/delegated handlers act on current data. ──
@@ -1097,15 +1109,7 @@ function render(payload) {
   // every poll tick that brings back the same data. ──
 
   const changed = setDynamic(
-    briefHtml +
-      patientHtml +
-      driftHtml +
-      filterHtml +
-      groupsHtml +
-      emptyMsg +
-      unmatchedHtml +
-      extractionHtml +
-      journalAugmentHtml
+    patientHtml + driftHtml + filterHtml + groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + journalAugmentHtml
   );
   if (!changed) return;
 
@@ -1150,8 +1154,6 @@ function render(payload) {
       render(payload); // re-render with new filter
     });
   });
-
-  attachBriefToggle();
 
   // Restore the evidence panel that was open before this re-render, if its chip
   // still exists in the new snapshot.
@@ -1596,25 +1598,28 @@ function scaffoldHtml() {
           <div class="mod-eyebrow">Clinical Monitoring</div>
           <div class="mod-title">Monitoring</div>
         </div>
-        <div class="sent-toolbar" role="toolbar" aria-label="Monitoring actions">
-          <span class="module-ver">v0.5.0</span>
+        <div class="sent-header-meta">
+          <span class="module-ver">v0.5.1</span>
           <button class="sent-tool-btn" id="sentRefreshBtn" title="Refresh now (the panel also refreshes itself every 10 seconds)" aria-label="Refresh">${toolIcon(TOOL_ICONS.refresh)}</button>
-          <button class="sent-tool-btn" id="sentApptSummaryBtn" disabled title="Appointments needed — copyable list of the appointments this patient is due, for admin to book" aria-label="Appointments needed">${toolIcon(TOOL_ICONS.calendar)}</button>
-          <button class="sent-tool-btn" id="sentCopyAllActionsBtn" disabled title="Copy all actions — copy-ready blood forms, recall SMS and tasks for every alert needing action" aria-label="Copy all actions">${toolIcon(TOOL_ICONS.clipboard)}</button>
-          <button class="sent-tool-btn" id="sentPrintPassportBtn" disabled title="Print patient summary — plain-English health summary to hand to the patient" aria-label="Print patient summary">${toolIcon(TOOL_ICONS.printer)}</button>
-          <div class="sent-overflow-wrap">
-            <button class="sent-tool-btn" id="sentOverflowBtn" title="More tools" aria-label="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}</button>
-            <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
-              <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
-              <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
-              <div class="sent-menu-sep" role="separator"></div>
-              <button class="sent-menu-item" id="sentTourBtn" role="menuitem" title="Step through the guided tour of this panel again">Replay the guided tour</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
     <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
+    <div id="sentBriefSlot"></div>
+    <div class="sent-actionbar" role="toolbar" aria-label="Patient actions">
+      <button class="sent-action-btn" id="sentApptSummaryBtn" disabled title="Copyable list of the appointments this patient is due, for admin to book">${toolIcon(TOOL_ICONS.calendar)}<span>Appointments</span></button>
+      <button class="sent-action-btn" id="sentCopyAllActionsBtn" disabled title="Copy-ready blood forms, recall SMS and tasks for every alert needing action">${toolIcon(TOOL_ICONS.clipboard)}<span>Copy actions</span></button>
+      <button class="sent-action-btn" id="sentPrintPassportBtn" disabled title="Print a plain-English health summary to hand to the patient">${toolIcon(TOOL_ICONS.printer)}<span>Print summary</span></button>
+      <div class="sent-overflow-wrap">
+        <button class="sent-action-btn" id="sentOverflowBtn" title="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}<span>More</span></button>
+        <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
+          <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
+          <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
+          <div class="sent-menu-sep" role="separator"></div>
+          <button class="sent-menu-item" id="sentTourBtn" role="menuitem" title="Step through the suite walkthrough again">Replay the guided tour</button>
+        </div>
+      </div>
+    </div>
     <div id="sentDynamic"></div>
     <div class="sent-footer">
       <span class="sent-ts" id="sentFooterTs"></span>

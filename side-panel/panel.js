@@ -3,6 +3,7 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
+import { initTour, maybeAutoStartTour } from './tour/tour.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -361,7 +362,7 @@ function renderAbout() {
       <div class="module-card">
         <div class="module-card-header">
           <span class="module-card-name">Monitoring (Sentinel)</span>
-          <span class="module-card-version">v0.5.0</span>
+          <span class="module-card-version">v0.5.1</span>
         </div>
         <div class="module-card-desc">
           Clinical context sidebar on patient records. Drug monitoring and QOF 25/26 indicators.
@@ -1017,3 +1018,10 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
 });
 
 switchModule('slots');
+
+// ── Guided tour (first-run suite walkthrough) ─────────────────────────────────
+// The tour can switch tabs as it walks the suite; give it the module loader.
+// Auto-start is deferred so the boot module's first paint settles first; the
+// engine no-ops when localStorage says the current TOUR_VERSION has been seen.
+initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
+setTimeout(maybeAutoStartTour, 900);
