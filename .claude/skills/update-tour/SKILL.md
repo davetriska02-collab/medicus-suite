@@ -18,6 +18,7 @@ maintenance procedure.
 | `welcome` | — | — (`center: true`) | Orientation / replay affordance |
 | `nav-tabs` | — | `.nav-tabs` | Module tabs + drag-to-reorder (`panel.html`) |
 | `alert-strips` | — | `#wrStrip`, `#rmStrip`, `#subRagStrip` (`centerFallback`) | Global alert strips (hidden unless firing — hence the fallback) |
+| `today` | `today` | `.today-module` | Morning command centre (waiting room, triage, demand, slots, sweep) |
 | `slots` | `slots` | `#suiteContent .module-wrap` | Live slot counts |
 | `monitoring-intro` | `sentinel` | `.sent-header` | Sentinel chips concept |
 | `waiting-room` | `sentinel` | `.wr-pinned`, `#wrStrip` | Live waiting-room block (`renderWaitingRoomBlock()`) |

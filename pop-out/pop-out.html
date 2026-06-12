@@ -1,97 +1,269 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Medicus Suite</title>
-  <link rel="stylesheet" href="../side-panel/panel.css" />
-  <link rel="stylesheet" href="pop-out.css" />
-</head>
-<body>
-  <div class="suite-shell popout-shell">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Medicus Suite</title>
+    <link rel="stylesheet" href="../side-panel/panel.css" />
+    <link rel="stylesheet" href="pop-out.css" />
+  </head>
+  <body>
+    <div class="suite-shell popout-shell">
+      <nav class="popout-titlebar" id="popoutTitlebar">
+        <div class="nav-brand">
+          <span class="nav-logo">&#9671;</span>
+          <span class="nav-name">Medicus Suite</span>
+        </div>
+        <div class="popout-tabs" id="popoutTabs">
+          <button class="nav-tab" data-module="today" aria-label="Today">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+            <span>Today</span>
+          </button>
+          <button class="nav-tab active" data-module="slots" aria-label="Slot Counter">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>Slots</span>
+          </button>
+          <button class="nav-tab" data-module="sentinel" aria-label="Monitoring">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <polygon
+                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+              />
+            </svg>
+            <span>Monitor</span>
+          </button>
+          <button class="nav-tab" data-module="trends" aria-label="Trends">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M3 3v18h18" />
+              <polyline points="7 14 11 9 14 12 20 5" />
+            </svg>
+            <span>Trends</span>
+          </button>
+          <button class="nav-tab" data-module="capacity" aria-label="Capacity Forecast">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M7 14l4-4 4 4 5-5" />
+            </svg>
+            <span>Forecast</span>
+          </button>
+          <button class="nav-tab" data-module="submissions" aria-label="Submissions Tracker">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            <span>Subs</span>
+          </button>
+          <button class="nav-tab" data-module="activity" aria-label="Activity Report">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            <span>Activity</span>
+          </button>
+          <button class="nav-tab" data-module="referrals" aria-label="Referrals Tracker">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path
+                d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.27 16z"
+              />
+              <path d="M14 2a8 8 0 0 1 8 8" />
+              <path d="M14 6a4 4 0 0 1 4 4" />
+            </svg>
+            <span>Referrals</span>
+          </button>
+          <button class="nav-tab" data-module="reception" aria-label="Reception">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M3 12a9 9 0 0 1 18 0" />
+              <path d="M21 16v2a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h3z" />
+              <path d="M3 16v2a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2H3z" />
+            </svg>
+            <span>Reception</span>
+          </button>
+          <button class="nav-tab" data-module="sweep" aria-label="Pre-clinic Sweep">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span>Sweep</span>
+          </button>
+          <button class="nav-tab" data-module="condor" aria-label="Condor Dashboard">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M7 12l4-6 4 4 4-8" />
+            </svg>
+            <span>Condor</span>
+          </button>
+          <button class="nav-tab" data-module="knowledge" aria-label="Practice Knowledge">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            <span>Knowledge</span>
+          </button>
+        </div>
+        <div class="popout-actions">
+          <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          <button id="popoutSettingsBtn" class="icon-btn" title="Settings">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"
+              />
+            </svg>
+          </button>
+        </div>
+      </nav>
 
-    <nav class="popout-titlebar" id="popoutTitlebar">
-      <div class="nav-brand">
-        <span class="nav-logo">&#9671;</span>
-        <span class="nav-name">Medicus Suite</span>
-      </div>
-      <div class="popout-tabs" id="popoutTabs">
-        <button class="nav-tab active" data-module="slots"       aria-label="Slot Counter">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span>Slots</span>
-        </button>
-        <button class="nav-tab" data-module="sentinel"    aria-label="Monitoring">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <span>Monitor</span>
-        </button>
-        <button class="nav-tab" data-module="trends"     aria-label="Trends">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><polyline points="7 14 11 9 14 12 20 5"/></svg>
-          <span>Trends</span>
-        </button>
-        <button class="nav-tab" data-module="capacity"    aria-label="Capacity Forecast">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
-          <span>Forecast</span>
-        </button>
-        <button class="nav-tab" data-module="submissions" aria-label="Submissions Tracker">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <span>Subs</span>
-        </button>
-        <button class="nav-tab" data-module="activity"    aria-label="Activity Report">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-          <span>Activity</span>
-        </button>
-        <button class="nav-tab" data-module="referrals"   aria-label="Referrals Tracker">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.27 16z"/><path d="M14 2a8 8 0 0 1 8 8"/><path d="M14 6a4 4 0 0 1 4 4"/></svg>
-          <span>Referrals</span>
-        </button>
-        <button class="nav-tab" data-module="reception" aria-label="Reception">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M21 16v2a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h3z"/><path d="M3 16v2a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2H3z"/></svg>
-          <span>Reception</span>
-        </button>
-        <button class="nav-tab" data-module="sweep"  aria-label="Pre-clinic Sweep">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <span>Sweep</span>
-        </button>
-        <button class="nav-tab" data-module="condor" aria-label="Condor Dashboard">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 12l4-6 4 4 4-8"/></svg>
-          <span>Condor</span>
-        </button>
-        <button class="nav-tab" data-module="knowledge" aria-label="Practice Knowledge">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <span>Knowledge</span>
-        </button>
-      </div>
-      <div class="popout-actions">
-        <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </button>
-        <button id="popoutSettingsBtn" class="icon-btn" title="Settings">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
-        </button>
-      </div>
-    </nav>
+      <main class="suite-content" id="popoutContent">
+        <!-- Modules load here -->
+      </main>
+    </div>
 
-    <main class="suite-content" id="popoutContent">
-      <!-- Modules load here -->
-    </main>
-
-  </div>
-
-  <script src="../shared/practice-code.js"></script>
-  <script src="../shared/api-diag.js"></script>
-  <script src="../shared/activity-api.js"></script>
-  <script src="../shared/referrals-api.js"></script>
-  <script src="../shared/chip-renderer.js"></script>
-  <script src="../engine/api-client.js"></script>
-  <script src="../engine/normalisers.js"></script>
-  <script src="../engine/ruleset-io.js"></script>
-  <script src="../engine/rules-engine.js"></script>
-  <script src="../shared/rule-currency.js"></script>
-  <script src="../shared/extraction-health.js"></script>
-  <script src="../shared/reception-pathway-utils.js"></script>
-  <script src="../shared/knowledge-utils.js"></script>
-  <script src="../shared/update-checker.js"></script>
-  <script src="../shared/display-prefs.js"></script>
-  <script type="module" src="pop-out.js"></script>
-</body>
+    <script src="../shared/practice-code.js"></script>
+    <script src="../shared/api-diag.js"></script>
+    <script src="../shared/activity-api.js"></script>
+    <script src="../shared/referrals-api.js"></script>
+    <script src="../shared/chip-renderer.js"></script>
+    <script src="../engine/api-client.js"></script>
+    <script src="../engine/normalisers.js"></script>
+    <script src="../engine/ruleset-io.js"></script>
+    <script src="../engine/rules-engine.js"></script>
+    <script src="../shared/rule-currency.js"></script>
+    <script src="../shared/extraction-health.js"></script>
+    <script src="../shared/reception-pathway-utils.js"></script>
+    <script src="../shared/knowledge-utils.js"></script>
+    <script src="../shared/update-checker.js"></script>
+    <script src="../shared/display-prefs.js"></script>
+    <script type="module" src="pop-out.js"></script>
+  </body>
 </html>

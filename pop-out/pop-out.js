@@ -15,6 +15,7 @@ let switchSeq = 0;
 // ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
 
 const MODULES = {
+  today: { js: () => import('../side-panel/modules/today/today.js'), css: '../side-panel/modules/today/today.css' },
   slots: { js: () => import('../side-panel/modules/slots/slots.js'), css: '../side-panel/modules/slots/slots.css' },
   capacity: {
     js: () => import('../side-panel/modules/capacity/capacity.js'),
@@ -220,6 +221,6 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 (async () => {
   // Display preferences are applied by shared/display-prefs.js (loaded before this script).
   const r = await chrome.storage.local.get('popout.activeModule');
-  const startMod = r['popout.activeModule'] || 'slots';
+  const startMod = r['popout.activeModule'] || 'today';
   switchModule(startMod);
 })();
