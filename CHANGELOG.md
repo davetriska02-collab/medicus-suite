@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.59.0] — 2026-06-12
+
+### Command palette (Ctrl+K)
+
+- **One keystroke to anywhere.** Ctrl+K (or the search button in the nav)
+  opens a command palette in both the side panel and the pop-out window:
+  jump to any tab (commands are built from the live nav, so they respect
+  custom tab order and each window's tab set), switch theme / text size /
+  colour-blind palette (applied live on every page), open a **specific
+  Options section** directly, open the visualiser or pop-out, or replay the
+  guided tour. Fuzzy matching with keyword aliases; your five most recent
+  commands float to the top of an empty query. Keyboard-first: type, ↑↓, ↵,
+  esc.
+- **Options deep-linking.** `options.html#sect-<name>` now opens straight
+  onto that section (and reacts to hash changes). Used by the palette's
+  Settings commands, and the Monitoring panel's "Monitoring settings" item
+  now lands on the Monitoring section instead of the generic Suite tab.
+- Tour version 3: a new "One keystroke to anywhere" step — returning users
+  see it as a single-step What's-new pass; the palette core logic
+  (scoring/ranking/recents) is unit-tested in `test-palette-core.js`.
+
 ## [v3.58.1] — 2026-06-12
 
 ### Tour staleness guard (CI) + practice-push deployment guidance

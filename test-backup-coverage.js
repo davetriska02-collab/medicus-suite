@@ -173,8 +173,13 @@ const ALLOWLIST = new Set([
 
   // Guided-tour seen marker — localStorage, NOT chrome.storage (per-machine
   // onboarding state, deliberately excluded from backups so a restore onto a
-  // new machine still offers the tour). See side-panel/modules/sentinel/tour.js:
+  // new machine still offers the tour). See side-panel/tour/tour.js:
   'suite.tour.seenVersion',
+
+  // Command-palette recents — localStorage, NOT chrome.storage (per-machine
+  // convenience ordering of command ids, never patient data; not worth
+  // backing up). See side-panel/palette/palette.js:
+  'suite.palette.recents',
 
   // Admin-managed via practice-profile.json, not user-writable backup:
   'suite.practiceProfile', // applied-profile metadata (version etc.)

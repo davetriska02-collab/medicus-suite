@@ -1648,7 +1648,9 @@ function wireToolbar() {
   });
   $('sentSettingsBtn')?.addEventListener('click', () => {
     closeOverflowMenu();
-    chrome.runtime.openOptionsPage();
+    // Deep-link straight to the Monitoring section (openOptionsPage always
+    // lands on the default Suite tab) — options.js resolves #sect-sentinel.
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-sentinel') });
   });
   $('sentExportLogBtn')?.addEventListener('click', () => {
     closeOverflowMenu();

@@ -4,6 +4,7 @@
 
 import { createModuleLoader } from './module-loader.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
+import { initPalette } from './palette/palette.js';
 
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -1025,3 +1026,6 @@ switchModule('slots');
 // engine no-ops when localStorage says the current TOUR_VERSION has been seen.
 initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
 setTimeout(maybeAutoStartTour, 900);
+
+// ── Command palette (Ctrl+K) ─────────────────────────────────────────────────
+initPalette();

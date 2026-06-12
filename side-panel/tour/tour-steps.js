@@ -20,10 +20,11 @@
 //   1 — Monitoring-panel-only tour (v3.57.0)
 //   2 — Suite-wide walkthrough on first install; Monitoring action bar
 //       relocated under the pre-consultation brief (v3.58.0)
+//   3 — Command palette (Ctrl+K) step (v3.59.0)
 
 'use strict';
 
-export const TOUR_VERSION = 2;
+export const TOUR_VERSION = 3;
 
 export const TOUR_STEPS = [
   {
@@ -103,6 +104,13 @@ export const TOUR_STEPS = [
     target: ['.sent-unmatched-section'],
     title: 'Meds without a monitoring rule',
     body: 'Most medicines need no routine monitoring. Scan this list for brand names that should have matched a rule but didn’t — and report any you spot.',
+  },
+  {
+    id: 'palette',
+    addedIn: 3,
+    target: ['#paletteBtn'],
+    title: 'One keystroke to anywhere',
+    body: 'Press Ctrl+K (or click here) for the command palette: jump to any tab, change theme or text size, open the right settings section, or replay this tour.',
   },
   {
     id: 'display',
