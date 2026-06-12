@@ -101,7 +101,7 @@ function fmtTs(d) {
   // Accept either a Date or an ISO string (runAt is now an ISO string).
   const date = d instanceof Date ? d : new Date(d);
   try {
-    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   } catch (_) {
     return String(d);
   }
@@ -357,7 +357,7 @@ async function runSweep(apiBase, hiddenRules) {
 async function runNextBatch() {
   const runArea = container?.querySelector('.sweep-run-area');
   if (runArea) {
-    runArea.innerHTML = `<div class="sweep-progress-wrap"><div class="sweep-progress">Starting…</div></div>`;
+    runArea.innerHTML = `<div class="sweep-progress-wrap" aria-live="polite"><div class="sweep-progress">Starting…</div></div>`;
   }
 
   const batchStart = _sweepOffset;
@@ -459,8 +459,8 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
   if (row.error) {
     return `<div class="sweep-row sweep-row-error">
       <div class="sweep-row-head">
-        ${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
-        <span class="sweep-row-badge sweep-badge-error">ERROR</span>
+        ${timeStr}<span class="sweep-row-name">${name}</span>
+        <span class="sweep-badge sweep-badge-error">ERROR</span>
       </div>
       <div class="sweep-row-detail sweep-row-errtext">Could not read record: ${esc(row.error)}</div>
     </div>`;
@@ -483,16 +483,17 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
   const checkboxHtml = selectable
     ? `<label class="sweep-row-check" title="Select for batch">
          <input type="checkbox" class="sweep-batch-cb" data-uuid="${esc(row.uuid)}"
+           aria-label="Select ${name} for batch"
            ${_selectedUuids.has(row.uuid) ? 'checked' : ''}>
        </label>`
     : '';
 
   return `<div class="sweep-row${_selectedUuids.has(row.uuid) ? ' sweep-row-selected' : ''}">
     <div class="sweep-row-head">
-      ${checkboxHtml}${timeStr}<span class="sweep-row-name">${name}</span>${clinStr}
+      ${checkboxHtml}${timeStr}<span class="sweep-row-name">${name}</span>
       <span class="sweep-row-badges">${badgeParts.join('')}</span>
-      <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a>
     </div>
+    <div class="sweep-row-meta">${clinStr}<a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a></div>
     ${chipHtml ? `<div class="sweep-row-chips">${chipHtml}</div>` : ''}
     ${hiddenNote}
   </div>`;
@@ -603,13 +604,6 @@ function renderResults({
         ${printBtn}
       </div>
 
-      <div class="sweep-disclaimer">
-        <strong>Supplementary tool only.</strong>
-        Verify every alert in the source record before acting.
-        No alert &#8800; monitoring complete &mdash; this is a point-in-time snapshot.
-        Results are not stored; re-run to refresh.
-      </div>
-
       ${missingNote}${batchNote}
 
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
@@ -707,6 +701,9 @@ function wireBatchSelection(runArea, actionRows) {
 
   // Generate batch
   batchBtn.addEventListener('click', onGenerateBatch);
+
+  // Initialise bar state — needed after resume so restored _selectedUuids are reflected
+  updateBatchBar();
 }
 
 // Build the printable reception handout from the latest results and open it
@@ -818,7 +815,7 @@ function renderResumeCard(stored) {
       </div>
       <div class="sweep-resume-actions">
         <button class="sweep-continue-btn" type="button" id="sweepResumeBtn">Resume</button>
-        <button class="rcp-link-btn sweep-resume-discard" type="button" id="sweepResumeDiscard">Discard</button>
+        <button class="sweep-resume-discard" type="button" id="sweepResumeDiscard">Discard</button>
       </div>
     </div>`;
 
@@ -877,16 +874,10 @@ export async function init(el) {
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Runs the Sentinel rules engine across today's booked patients from the
-          practice appointment book to identify overdue or action-needed
-          monitoring BEFORE clinic starts. Use the dropdown to sweep a single
-          clinician's list.
+          Checks today's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Use the dropdown to sweep one clinician's list.
         </div>
-        <div class="sweep-disclaimer sweep-disclaimer-top">
-          <strong>Supplementary tool only.</strong>
-          Always verify in the source record.
-          No alert &#8800; monitoring complete.
-          Results are a point-in-time snapshot and are not stored.
+        <div class="sweep-disclaimer-top">
+          <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. No alert &#8800; monitoring complete &mdash; results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.
         </div>
       </div>
 
@@ -949,7 +940,7 @@ async function onRunClick() {
 
   const runArea = container?.querySelector('.sweep-run-area');
   if (runArea) {
-    runArea.innerHTML = `<div class="sweep-progress-wrap"><div class="sweep-progress">Resolving practice code…</div></div>`;
+    runArea.innerHTML = `<div class="sweep-progress-wrap" aria-live="polite"><div class="sweep-progress">Resolving practice code…</div></div>`;
   }
 
   let code = null;

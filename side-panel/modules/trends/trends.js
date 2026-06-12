@@ -140,7 +140,7 @@ function pickerHtml() {
     `<div class="trends-picker" role="tablist">` +
     VIEWS.map(
       (v) =>
-        `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}">${esc(v.label)}</button>`
+        `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" id="trendsTab-${esc(v.key)}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}" aria-controls="trendsPanel">${esc(v.label)}</button>`
     ).join('') +
     `</div>`
   );
@@ -176,7 +176,7 @@ function render(m) {
   else if (selectedView === 'renal') body = renderRenal(m);
   else body = renderObs(m);
 
-  container.innerHTML = `<div class="trends-module">${pickerHtml()}${body}</div>`;
+  container.innerHTML = `<div class="trends-module">${pickerHtml()}<div id="trendsPanel" role="tabpanel" aria-labelledby="trendsTab-${esc(selectedView)}">${body}</div></div>`;
   wirePicker();
 }
 
@@ -271,17 +271,18 @@ function renderBp(m) {
         ${
           t
             ? `<span class="bpt-pill ${above ? 'bpt-above' : 'bpt-met'}">${above ? 'ABOVE TARGET' : 'AT TARGET'} · ≤${t.sys}/${t.dia} <span class="bpt-tgt-lbl">(${esc(t.label)})</span></span>`
-            : `<span class="bpt-pill bpt-neutral">No BP target register</span>`
+            : `<span class="bpt-pill bpt-neutral" title="BP targets apply to patients on the HYP, DM, CHD, Stroke/TIA or CKD registers">No BP target (no qualifying register)</span>`
         }
       </div>
       <div class="bpt-registers">${registersHtml}</div>
       ${paedNote}
-      ${lineChart({ series: bm.series, targets, yMin: 40, yMax: 200, unit: 'mmHg' })}
+      ${lineChart({ series: bm.series, targets, yMin: 40, yMax: 200, unit: 'mmHg', title: 'Blood pressure trend' })}
       <div class="bpt-legend">
         <span class="bpt-key bpt-k-sys">Systolic</span>
         <span class="bpt-key bpt-k-dia">Diastolic</span>
         ${targets.length ? `<span class="bpt-key bpt-k-tgt">Target</span>` : ''}
       </div>
+      ${t ? `<div class="bpt-foot">Default NICE/QOF thresholds — verify any personalised target in Medicus.</div>` : ''}
       <div class="bpt-count">${bm.pairs.length} reading${bm.pairs.length !== 1 ? 's' : ''}</div>
     </div>`;
 }
@@ -368,22 +369,22 @@ function renderRenal(m) {
   const banners = [];
   if (rm.referralFlag)
     banners.push(
-      `<div class="acrt-banner acrt-banner-red">⚠ ACR ≥70 mg/mmol — consider nephrology referral (NICE NG203)</div>`
+      `<div class="acrt-banner acrt-banner-red" role="alert">⚠ ACR ≥70 mg/mmol — consider nephrology referral (NICE NG203)</div>`
     );
   if (rm.doublingFlag)
     banners.push(
-      `<div class="acrt-banner acrt-banner-amber">ACR has doubled since previous reading — review and repeat</div>`
+      `<div class="acrt-banner acrt-banner-amber" role="alert">ACR has doubled since previous reading — review and repeat</div>`
     );
   if (rm.crossingFlag)
     banners.push(
-      `<div class="acrt-banner acrt-banner-amber">ACR category has increased (${esc(rm.as)}) — escalate monitoring frequency</div>`
+      `<div class="acrt-banner acrt-banner-amber" role="alert">ACR category has increased (${esc(rm.as)}) — escalate monitoring frequency</div>`
     );
 
   const kdigoHtml =
     rm.gs && rm.as
       ? `
     <div class="acrt-kdigo">
-      <span class="acrt-kdigo-cell acrt-${rm.as?.toLowerCase()}">${esc(rm.gs)}${esc(rm.as)}</span>
+      <span class="acrt-kdigo-cell acrt-${rm.as?.toLowerCase()}" title="KDIGO risk category — eGFR G-stage + albuminuria A-stage. Frequency shown is suggested monitoring checks per year.">${esc(rm.gs)}${esc(rm.as)}</span>
       <span class="acrt-kdigo-freq">${rm.kdigoFreq ? `${esc(rm.kdigoFreq)} check${rm.kdigoFreq === '1' ? '' : 's'}/year` : ''}</span>
       <span class="acrt-kdigo-lbl">KDIGO staging</span>
     </div>`
@@ -405,8 +406,15 @@ function renderRenal(m) {
     </div>`;
 
   const acrChart = rm.acrPts.length
-    ? `<div class="acrt-section-lbl">ACR trend (mg/mmol) — clamped at 100</div>` +
-      lineChart({ series: rm.acrSeries, bands: rm.acrBands, yMin: 0, yMax: 100, unit: rm.acrUnit }) +
+    ? `<div class="acrt-section-lbl">ACR trend (mg/mmol) — values above 100 plotted at 100</div>` +
+      lineChart({
+        series: rm.acrSeries,
+        bands: rm.acrBands,
+        yMin: 0,
+        yMax: 100,
+        unit: rm.acrUnit,
+        title: 'ACR trend',
+      }) +
       `<div class="acrt-band-legend"><span class="acrt-band-a1">A1 &lt;3</span><span class="acrt-band-a2">A2 3–30</span><span class="acrt-band-a3">A3 &gt;30</span></div>`
     : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
 
@@ -426,6 +434,7 @@ function renderRenal(m) {
         yMin: 0,
         yMax: 120,
         unit: rm.egfrUnit,
+        title: 'eGFR trend',
       })
     : '';
 
@@ -479,7 +488,11 @@ function renderObs(m) {
   const deltaCls = delta == null ? '' : delta > 0 ? 'trends-up' : delta < 0 ? 'trends-down' : 'trends-flat';
   const first = pts[0],
     last = pts[pts.length - 1];
-  const chart = lineChart({ series: [{ cls: 'tc-trend', label: metric.label, points: pts }], unit });
+  const chart = lineChart({
+    series: [{ cls: 'tc-trend', label: metric.label, points: pts }],
+    unit,
+    title: `${metric.label} trend`,
+  });
 
   return `
     <div class="trends-head">

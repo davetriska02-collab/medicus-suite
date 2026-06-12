@@ -24,8 +24,7 @@
   line-height: 1.4;
 }
 
-/* Disclaimers */
-.sweep-disclaimer,
+/* Disclaimer (single authoritative placement in sweep-header) */
 .sweep-disclaimer-top {
   background: var(--accent-dim);
   border-left: 3px solid var(--accent-line);
@@ -44,7 +43,7 @@
 
 .sweep-run-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
   border: none;
   border-radius: var(--r-md);
   padding: 6px 16px;
@@ -56,6 +55,11 @@
 
 .sweep-run-btn:hover {
   background: var(--accent-hover);
+}
+
+.sweep-run-btn:active {
+  opacity: 0.8;
+  transform: translateY(1px);
 }
 
 .sweep-run-btn:disabled {
@@ -111,6 +115,7 @@
 .sweep-summary-line {
   font-size: 13px;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .sweep-timestamp {
@@ -204,6 +209,10 @@
   text-decoration: underline;
 }
 
+.sweep-open-record:active {
+  opacity: 0.8;
+}
+
 /* Badges */
 .sweep-badge {
   font-family: var(--mono);
@@ -231,13 +240,6 @@
   background: var(--red-dim);
   color: var(--red);
   border: 1px solid var(--red-line);
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: var(--r-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 /* Chip summary */
@@ -368,7 +370,17 @@
 
 .sweep-continue-btn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
+}
+
+.sweep-continue-btn:active {
+  opacity: 0.8;
+  transform: translateY(1px);
+}
+
+.sweep-continue-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* "All patients checked" positive notice (v3.40.3) */
@@ -398,14 +410,25 @@
   max-width: 180px;
   transition: border-color var(--fast) var(--ease);
 }
-.sweep-clin-label select:focus {
+.sweep-clin-label select:focus-visible {
   border-color: var(--accent);
 }
+/* Meta line: clinician (left) + open record link (right) */
+.sweep-row-meta {
+  display: flex;
+  align-items: baseline;
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+.sweep-row-meta .sweep-open-record {
+  margin-left: auto;
+}
+
 .sweep-row-clin {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
-  margin-left: 6px;
   flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -428,7 +451,15 @@
 }
 .sweep-print-btn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
+}
+.sweep-print-btn:active {
+  opacity: 0.8;
+  transform: translateY(1px);
+}
+.sweep-print-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Batch selection ──────────────────────────────────────────────────────── */
@@ -506,7 +537,11 @@
 }
 .sweep-batch-btn:hover:not(:disabled) {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
+}
+.sweep-batch-btn:active {
+  opacity: 0.8;
+  transform: translateY(1px);
 }
 .sweep-batch-btn:disabled {
   opacity: 0.45;
@@ -526,6 +561,11 @@
   cursor: pointer;
   width: 13px;
   height: 13px;
+}
+.sweep-row-check:hover,
+.sweep-select-all-label:hover {
+  background: var(--bg-hover);
+  border-radius: var(--r-sm);
 }
 
 /* Selected row highlight — accent wash + line (matches token-canon selected/active recipe) */
@@ -556,10 +596,20 @@
 }
 
 .sweep-resume-discard {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
   font-size: 12px;
+  padding: 2px 4px;
   color: var(--text-4);
+  transition: color var(--fast) var(--ease);
 }
 
 .sweep-resume-discard:hover {
   color: var(--red);
+}
+
+.sweep-resume-discard:active {
+  opacity: 0.7;
 }
