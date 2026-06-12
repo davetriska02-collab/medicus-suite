@@ -22,31 +22,157 @@
 
 'use strict';
 
-import {
-  summariseActionChips,
-  evaluateRedFlags,
-  buildCaptureText,
-  pharmacyFirstHint,
-} from './reception-core.js';
+import { summariseActionChips, evaluateRedFlags, buildCaptureText, pharmacyFirstHint } from './reception-core.js';
 
 let container = null;
-let _bundledDoc = null;       // reception-pathways.json document
-let _config = {};             // reception.config
+let _bundledDoc = null; // reception-pathways.json document
+let _config = {}; // reception.config
 let _effective = { all: [], enabled: [] };
-let _snapshot = null;         // last Sentinel snapshot (or null)
-let _takerInitials = '';      // in-memory only, per panel session
+let _snapshot = null; // last Sentinel snapshot (or null)
+let _takerInitials = ''; // in-memory only, per panel session
 let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
 
+// ── Draft autosave ────────────────────────────────────────────────────────────
+// reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
+// Never backed up (allowlisted in test-backup-coverage.js).
+
+const DRAFT_KEY = 'reception.captureDraft';
+const DRAFT_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+let _draftDebounceTimer = null;
+
+async function loadDraft() {
+  try {
+    const r = await chrome.storage.local.get(DRAFT_KEY);
+    const d = r[DRAFT_KEY];
+    if (!d || typeof d !== 'object') return null;
+    if (typeof d.savedAt !== 'number' || Date.now() - d.savedAt > DRAFT_TTL_MS) {
+      chrome.storage.local.remove(DRAFT_KEY);
+      return null;
+    }
+    return d;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveDraft(pathwayId, form) {
+  const fields = {};
+  if (!form) return;
+  // Radios: each named group — read checked value
+  const radioGroups = new Set();
+  form.querySelectorAll('input[type="radio"]').forEach((el) => {
+    if (el.name) radioGroups.add(el.name);
+  });
+  radioGroups.forEach((name) => {
+    const checked = form.querySelector(`input[type="radio"][name="${CSS.escape(name)}"]:checked`);
+    fields[name] = checked ? checked.value : '';
+  });
+  // Checkboxes (multi questions)
+  const cbGroups = new Set();
+  form.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+    if (el.name) cbGroups.add(el.name);
+  });
+  cbGroups.forEach((name) => {
+    fields[name] = Array.from(form.querySelectorAll(`input[type="checkbox"][name="${CSS.escape(name)}"]:checked`)).map(
+      (el) => el.value
+    );
+  });
+  // Text inputs, selects, textareas — identified by name attribute
+  form.querySelectorAll('input[type="text"], select, textarea').forEach((el) => {
+    if (el.name) fields[el.name] = el.value;
+  });
+  // Initials stored separately (id=rcpInitials, no name)
+  const initialsEl = form.querySelector('#rcpInitials');
+  if (initialsEl) fields['__initials__'] = initialsEl.value;
+
+  try {
+    chrome.storage.local.set({
+      [DRAFT_KEY]: { pathwayId, savedAt: Date.now(), fields },
+    });
+  } catch (_) {}
+}
+
+function scheduleDraftSave(pathwayId, form) {
+  if (_draftDebounceTimer !== null) clearTimeout(_draftDebounceTimer);
+  _draftDebounceTimer = setTimeout(() => {
+    _draftDebounceTimer = null;
+    saveDraft(pathwayId, form);
+  }, 400);
+}
+
+function clearDraft() {
+  if (_draftDebounceTimer !== null) {
+    clearTimeout(_draftDebounceTimer);
+    _draftDebounceTimer = null;
+  }
+  try {
+    chrome.storage.local.remove(DRAFT_KEY);
+  } catch (_) {}
+}
+
+function fmtHHMM(epochMs) {
+  try {
+    return new Date(epochMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch (_) {
+    return '';
+  }
+}
+
+function restoreDraftFields(form, fields) {
+  if (!form || !fields || typeof fields !== 'object') return;
+  // Restore initials
+  if (fields['__initials__'] !== undefined) {
+    const el = form.querySelector('#rcpInitials');
+    if (el) {
+      el.value = fields['__initials__'];
+      _takerInitials = fields['__initials__'];
+    }
+  }
+  // Restore text inputs, selects, textareas by name
+  form.querySelectorAll('input[type="text"], select, textarea').forEach((el) => {
+    if (el.name && fields[el.name] !== undefined) el.value = fields[el.name];
+  });
+  // Restore radios
+  const radioGroups = new Set();
+  form.querySelectorAll('input[type="radio"]').forEach((el) => {
+    if (el.name) radioGroups.add(el.name);
+  });
+  radioGroups.forEach((name) => {
+    const val = fields[name];
+    if (val) {
+      const target = form.querySelector(`input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(val)}"]`);
+      if (target) target.checked = true;
+    }
+  });
+  // Restore checkboxes
+  const cbGroups = new Set();
+  form.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+    if (el.name) cbGroups.add(el.name);
+  });
+  cbGroups.forEach((name) => {
+    const vals = fields[name];
+    if (Array.isArray(vals)) {
+      form.querySelectorAll(`input[type="checkbox"][name="${CSS.escape(name)}"]`).forEach((el) => {
+        el.checked = vals.includes(el.value);
+      });
+    }
+  });
+}
+
 // Tile organisation (reception.tilePrefs) — colour / order / sort. Display only.
 let _tilePrefs = { sortMode: 'manual', order: [], colours: {} };
-let _organising = false;      // true → reorder/colour mode (tiles don't launch capture)
-let _openColourFor = null;    // pathway id whose colour palette is open, or null
+let _organising = false; // true → reorder/colour mode (tiles don't launch capture)
+let _openColourFor = null; // pathway id whose colour palette is open, or null
 let _ignoreNextTilePrefsChange = false; // skip our own storage write echo
 
 function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // ── Init / cleanup ────────────────────────────────────────────────────────────
@@ -76,7 +202,8 @@ export async function init(el) {
   }
 
   await loadConfigAndResolve();
-  renderPathwayPicker();
+  const initDraft = await loadDraft();
+  renderPathwayPicker(initDraft);
   refreshPatientCard();
 
   _onActivated = () => refreshPatientCard();
@@ -86,18 +213,26 @@ export async function init(el) {
   // when tile prefs change in another context (pop-out ↔ panel).
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
-    const tileOnly = changes['reception.tilePrefs']
-      && !changes['reception.config'] && !changes['reception.customPathways'] && !changes['reception.pathwayOverrides'];
+    const tileOnly =
+      changes['reception.tilePrefs'] &&
+      !changes['reception.config'] &&
+      !changes['reception.customPathways'] &&
+      !changes['reception.pathwayOverrides'];
     if (tileOnly) {
       // Skip the echo of our own write so an in-progress organise action isn't reset.
-      if (_ignoreNextTilePrefsChange) { _ignoreNextTilePrefsChange = false; return; }
-      loadConfigAndResolve().then(() => { if (container) renderPathwayPicker(); });
+      if (_ignoreNextTilePrefsChange) {
+        _ignoreNextTilePrefsChange = false;
+        return;
+      }
+      loadConfigAndResolve().then(async () => {
+        if (container) renderPathwayPicker(await loadDraft());
+      });
       return;
     }
     if (changes['reception.config'] || changes['reception.customPathways'] || changes['reception.pathwayOverrides']) {
-      loadConfigAndResolve().then(() => {
+      loadConfigAndResolve().then(async () => {
         if (!container) return;
-        renderPathwayPicker();
+        renderPathwayPicker(await loadDraft());
         refreshPatientCard();
       });
     }
@@ -108,8 +243,18 @@ export async function init(el) {
 }
 
 function cleanup() {
-  if (_onActivated) { chrome.tabs.onActivated.removeListener(_onActivated); _onActivated = null; }
-  if (_storageListener) { chrome.storage.onChanged.removeListener(_storageListener); _storageListener = null; }
+  if (_onActivated) {
+    chrome.tabs.onActivated.removeListener(_onActivated);
+    _onActivated = null;
+  }
+  if (_storageListener) {
+    chrome.storage.onChanged.removeListener(_storageListener);
+    _storageListener = null;
+  }
+  if (_draftDebounceTimer !== null) {
+    clearTimeout(_draftDebounceTimer);
+    _draftDebounceTimer = null;
+  }
   _snapshot = null;
   container = null;
 }
@@ -117,12 +262,17 @@ function cleanup() {
 export { cleanup };
 
 async function loadConfigAndResolve() {
-  const r = await chrome.storage.local.get(['reception.config', 'reception.customPathways', 'reception.pathwayOverrides', 'reception.tilePrefs']);
+  const r = await chrome.storage.local.get([
+    'reception.config',
+    'reception.customPathways',
+    'reception.pathwayOverrides',
+    'reception.tilePrefs',
+  ]);
   _config = r['reception.config'] || {};
-  const PU = (typeof window !== 'undefined') ? window.ReceptionPathwayUtils : null;
+  const PU = typeof window !== 'undefined' ? window.ReceptionPathwayUtils : null;
   _tilePrefs = PU
     ? PU.sanitiseTilePrefs(r['reception.tilePrefs'] || {})
-    : (r['reception.tilePrefs'] || { sortMode: 'manual', order: [], colours: {} });
+    : r['reception.tilePrefs'] || { sortMode: 'manual', order: [], colours: {} };
   if (PU && _bundledDoc) {
     _effective = PU.resolveEffectivePathways({
       bundled: _bundledDoc.pathways || [],
@@ -142,7 +292,10 @@ async function fetchSnapshot() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
   if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) return null;
-  const mountCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => !!window.__sentinelMounted });
+  const mountCheck = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: () => !!window.__sentinelMounted,
+  });
   if (!mountCheck?.[0]?.result) return null;
   const snapshot = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
   if (!snapshot || snapshot.unavailable || !snapshot.chips) return null;
@@ -179,19 +332,25 @@ function renderPatientCard() {
 
   // Single status pill: red wins over amber, green = nothing to action.
   const level = sum.red > 0 ? 'red' : sum.amber > 0 ? 'amber' : 'green';
-  const pillText = level === 'green'
-    ? 'Nothing flagged'
-    : `${sum.red + sum.amber} to action${sum.red ? ` · ${sum.red} overdue` : ''}`;
+  const pillText =
+    level === 'green' ? 'Nothing flagged' : `${sum.red + sum.amber} to action${sum.red ? ` · ${sum.red} overdue` : ''}`;
 
   const degradedNote = _snapshot.degraded
-    ? `<div class="rcp-error">Record extraction incomplete — this status may be missing data.</div>` : '';
-  const filteredNote = sum.hiddenCount > 0
-    ? `<div class="rcp-fineprint">${sum.hiddenCount} alert(s) not shown here by practice settings (visible in Monitoring).</div>` : '';
+    ? `<div class="rcp-error">Record extraction incomplete — this status may be missing data.</div>`
+    : '';
+  const filteredNote =
+    sum.hiddenCount > 0
+      ? `<div class="rcp-fineprint">${sum.hiddenCount} alert(s) not shown here by practice settings (visible in Monitoring).</div>`
+      : '';
 
   let detailHtml = '';
   if (_pillExpanded) {
-    const rows = sum.items.map(i =>
-      `<div class="rcp-detail-row rcp-detail-${i.colour}"><span class="rcp-detail-name">${esc(i.name)}</span><span class="rcp-detail-status">${esc(i.statusLabel)}</span></div>`).join('');
+    const rows = sum.items
+      .map(
+        (i) =>
+          `<div class="rcp-detail-row rcp-detail-${i.colour}"><span class="rcp-detail-name">${esc(i.name)}</span><span class="rcp-detail-status">${esc(i.statusLabel)}</span></div>`
+      )
+      .join('');
     detailHtml = `
       <div class="rcp-pill-detail">
         ${rows || '<div class="rcp-muted">No action-needed alerts in the current data.</div>'}
@@ -224,7 +383,7 @@ function renderPatientCard() {
 
 // ── Card 2: guided capture ────────────────────────────────────────────────────
 
-function renderPathwayPicker() {
+function renderPathwayPicker(_activeDraft) {
   if (!container) return;
   const body = container.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
@@ -247,6 +406,9 @@ function renderPathwayPicker() {
   const alpha = _tilePrefs.sortMode === 'alpha';
   const colourKeys = (PU && PU.TILE_COLOUR_KEYS) || ['default'];
 
+  // _activeDraft may be passed in from the async init path; otherwise not shown.
+  const draftPathwayId = _activeDraft ? _activeDraft.pathwayId : null;
+
   const toolbar = `
     <div class="rcp-tile-toolbar">
       <div class="rcp-sort-ctrl">
@@ -257,26 +419,40 @@ function renderPathwayPicker() {
       <button class="rcp-link-btn rcp-organise-toggle" id="rcpOrganise" type="button">${_organising ? 'Done' : 'Organise tiles'}</button>
     </div>`;
 
-  const tiles = ordered.map(p => {
-    const colour = PU ? PU.tileColourFor(_tilePrefs, p.id) : 'default';
-    const draggable = _organising && !alpha;
-    const handle = draggable ? `<span class="rcp-drag-handle" aria-hidden="true">&#10303;</span>` : '';
-    const swatch = _organising
-      ? `<button class="rcp-tile-swatch rcp-tile-c-${esc(colour)}" data-colour-for="${esc(p.id)}" type="button" aria-label="Set tile colour" title="Tile colour"></button>`
-      : '';
-    const palette = (_organising && _openColourFor === p.id)
-      ? `<div class="rcp-colour-palette">` + colourKeys.map(k =>
-          `<button class="rcp-colour-dot rcp-tile-c-${esc(k)} ${k === colour ? 'rcp-colour-sel' : ''}" data-set-colour="${esc(k)}" data-for="${esc(p.id)}" type="button" title="${esc(k)}"></button>`).join('') + `</div>`
-      : '';
-    return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
+  const tiles = ordered
+    .map((p) => {
+      const colour = PU ? PU.tileColourFor(_tilePrefs, p.id) : 'default';
+      const draggable = _organising && !alpha;
+      const handle = draggable ? `<span class="rcp-drag-handle" aria-hidden="true">&#10303;</span>` : '';
+      const swatch = _organising
+        ? `<button class="rcp-tile-swatch rcp-tile-c-${esc(colour)}" data-colour-for="${esc(p.id)}" type="button" aria-label="Set tile colour" title="Tile colour"></button>`
+        : '';
+      const palette =
+        _organising && _openColourFor === p.id
+          ? `<div class="rcp-colour-palette">` +
+            colourKeys
+              .map(
+                (k) =>
+                  `<button class="rcp-colour-dot rcp-tile-c-${esc(k)} ${k === colour ? 'rcp-colour-sel' : ''}" data-set-colour="${esc(k)}" data-for="${esc(p.id)}" type="button" title="${esc(k)}"></button>`
+              )
+              .join('') +
+            `</div>`
+          : '';
+      const draftPill =
+        !_organising && draftPathwayId === p.id
+          ? `<span class="rcp-draft-pill" aria-label="Unsaved draft">draft</span>`
+          : '';
+      return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
       ${handle}
       <button class="rcp-pathway-btn" data-pathway-go="${esc(p.id)}" type="button"${_organising ? ' tabindex="-1"' : ''}>
         <span class="rcp-pathway-title">${esc(p.title)}</span>
         <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
+        ${draftPill}
       </button>
       ${swatch}${palette}
     </div>`;
-  }).join('');
+    })
+    .join('');
 
   const note = _organising
     ? `<div class="rcp-fineprint">${alpha ? 'Switch to &ldquo;Manual&rdquo; to drag tiles into your own order. ' : 'Drag tiles to reorder. '}Tap the dot to colour-label a tile. Colours and order organise your tiles only &mdash; they are not a clinical flag.</div>`
@@ -289,30 +465,33 @@ function renderPathwayPicker() {
     _openColourFor = null;
     renderPathwayPicker();
   });
-  body.querySelectorAll('.rcp-seg').forEach(btn =>
-    btn.addEventListener('click', () => setSortMode(btn.dataset.sort)));
+  body
+    .querySelectorAll('.rcp-seg')
+    .forEach((btn) => btn.addEventListener('click', () => setSortMode(btn.dataset.sort)));
 
-  body.querySelectorAll('.rcp-pathway-btn[data-pathway-go]').forEach(btn => {
+  body.querySelectorAll('.rcp-pathway-btn[data-pathway-go]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (_organising) return; // organise mode: launching a capture is disabled
-      const p = enabled.find(x => x.id === btn.dataset.pathwayGo);
+      const p = enabled.find((x) => x.id === btn.dataset.pathwayGo);
       if (p) renderCaptureForm(p);
     });
   });
 
   if (_organising) {
-    body.querySelectorAll('.rcp-tile-swatch').forEach(sw =>
-      sw.addEventListener('click', e => {
+    body.querySelectorAll('.rcp-tile-swatch').forEach((sw) =>
+      sw.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = sw.dataset.colourFor;
-        _openColourFor = (_openColourFor === id) ? null : id;
+        _openColourFor = _openColourFor === id ? null : id;
         renderPathwayPicker();
-      }));
-    body.querySelectorAll('.rcp-colour-dot').forEach(dot =>
-      dot.addEventListener('click', e => {
+      })
+    );
+    body.querySelectorAll('.rcp-colour-dot').forEach((dot) =>
+      dot.addEventListener('click', (e) => {
         e.stopPropagation();
         setTileColour(dot.dataset.for, dot.dataset.setColour);
-      }));
+      })
+    );
     if (!alpha) wireTileDrag(body);
   }
 }
@@ -325,11 +504,13 @@ function persistTilePrefs() {
     chrome.storage.local.set({
       'reception.tilePrefs': {
         sortMode: _tilePrefs.sortMode === 'alpha' ? 'alpha' : 'manual',
-        order:    Array.isArray(_tilePrefs.order) ? _tilePrefs.order : [],
-        colours:  _tilePrefs.colours || {},
+        order: Array.isArray(_tilePrefs.order) ? _tilePrefs.order : [],
+        colours: _tilePrefs.colours || {},
       },
     });
-  } catch (_) { _ignoreNextTilePrefsChange = false; }
+  } catch (_) {
+    _ignoreNextTilePrefsChange = false;
+  }
 }
 
 function setSortMode(mode) {
@@ -355,7 +536,7 @@ function currentManualOrder() {
   const list = PU
     ? PU.orderTiles(_effective.enabled, { sortMode: 'manual', order: _tilePrefs.order })
     : _effective.enabled;
-  return list.map(p => p.id);
+  return list.map((p) => p.id);
 }
 
 function reorderTile(dragId, targetId) {
@@ -375,27 +556,29 @@ function wireTileDrag(body) {
   const grid = body.querySelector('.rcp-pathway-grid');
   if (!grid) return;
   let dragId = null;
-  grid.querySelectorAll('.rcp-pathway-tile[draggable="true"]').forEach(tile => {
-    tile.addEventListener('dragstart', e => {
+  grid.querySelectorAll('.rcp-pathway-tile[draggable="true"]').forEach((tile) => {
+    tile.addEventListener('dragstart', (e) => {
       dragId = tile.dataset.pathway;
       tile.classList.add('rcp-tile-dragging');
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = 'move';
-        try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+        try {
+          e.dataTransfer.setData('text/plain', dragId);
+        } catch (_) {}
       }
     });
     tile.addEventListener('dragend', () => {
       tile.classList.remove('rcp-tile-dragging');
-      grid.querySelectorAll('.rcp-tile-over').forEach(t => t.classList.remove('rcp-tile-over'));
+      grid.querySelectorAll('.rcp-tile-over').forEach((t) => t.classList.remove('rcp-tile-over'));
       dragId = null;
     });
-    tile.addEventListener('dragover', e => {
+    tile.addEventListener('dragover', (e) => {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       if (dragId && tile.dataset.pathway !== dragId) tile.classList.add('rcp-tile-over');
     });
     tile.addEventListener('dragleave', () => tile.classList.remove('rcp-tile-over'));
-    tile.addEventListener('drop', e => {
+    tile.addEventListener('drop', (e) => {
       e.preventDefault();
       tile.classList.remove('rcp-tile-over');
       const targetId = tile.dataset.pathway;
@@ -413,33 +596,50 @@ function inputHtml(scope, q) {
     </span>`;
   }
   if (q.type === 'choice') {
-    const opts = (q.options || []).map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    const opts = (q.options || []).map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
     return `<select name="${esc(nm)}"><option value="">—</option>${opts}</select>`;
   }
   if (q.type === 'multi') {
-    return `<span class="rcp-multi">` + (q.options || []).map(o =>
-      `<label><input type="checkbox" name="${esc(nm)}" value="${esc(o)}"> ${esc(o)}</label>`).join('') + `</span>`;
+    return (
+      `<span class="rcp-multi">` +
+      (q.options || [])
+        .map((o) => `<label><input type="checkbox" name="${esc(nm)}" value="${esc(o)}"> ${esc(o)}</label>`)
+        .join('') +
+      `</span>`
+    );
   }
   return `<input type="text" name="${esc(nm)}" autocomplete="off">`;
 }
 
-function renderCaptureForm(pathway) {
+async function renderCaptureForm(pathway) {
   const body = container?.querySelector('#rcpCaptureBody');
   if (!body || !_bundledDoc) return;
 
-  const rfRows = (pathway.redFlags || []).map(rf => `
+  const rfRows = (pathway.redFlags || [])
+    .map(
+      (rf) => `
     <div class="rcp-rf-row" data-rf="${esc(rf.id)}">
       <span class="rcp-rf-ask">${esc(rf.ask)}</span>
       <span class="rcp-yn">
         <label><input type="radio" name="rf-${esc(rf.id)}" value="yes"> Yes</label>
         <label><input type="radio" name="rf-${esc(rf.id)}" value="no"> No</label>
       </span>
-    </div>`).join('');
+    </div>`
+    )
+    .join('');
 
-  const qRows = (pathway.questions || []).map(q => `
-    <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('q', q)}</div>`).join('');
-  const cRows = (_bundledDoc.closingQuestions || []).map(q => `
-    <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('c', q)}</div>`).join('');
+  const qRows = (pathway.questions || [])
+    .map(
+      (q) => `
+    <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('q', q)}</div>`
+    )
+    .join('');
+  const cRows = (_bundledDoc.closingQuestions || [])
+    .map(
+      (q) => `
+    <div class="rcp-q-row"><label class="rcp-q-ask">${esc(q.ask)}</label>${inputHtml('c', q)}</div>`
+    )
+    .join('');
 
   body.innerHTML = `
     <form class="rcp-form" id="rcpForm">
@@ -448,6 +648,8 @@ function renderCaptureForm(pathway) {
         <span class="rcp-form-title">${esc(pathway.title)}</span>
         <label class="rcp-initials">Your initials <input type="text" id="rcpInitials" maxlength="5" value="${esc(_takerInitials)}"></label>
       </div>
+
+      <div class="rcp-draft-banner rcp-draft-banner-hidden" id="rcpDraftBanner"></div>
 
       <div class="rcp-banner rcp-banner-hidden" id="rcpEscBanner"></div>
 
@@ -474,13 +676,41 @@ function renderCaptureForm(pathway) {
       </div>
     </form>`;
 
-  body.querySelector('#rcpBack')?.addEventListener('click', renderPathwayPicker);
-  body.querySelector('#rcpInitials')?.addEventListener('input', e => { _takerInitials = e.target.value.trim(); });
+  const form = body.querySelector('#rcpForm');
+
+  // Check for a restorable draft for this specific pathway
+  const draft = await loadDraft();
+  if (draft && draft.pathwayId === pathway.id) {
+    const banner = form.querySelector('#rcpDraftBanner');
+    if (banner) {
+      banner.className = 'rcp-draft-banner';
+      banner.innerHTML = `Draft from ${esc(fmtHHMM(draft.savedAt))} — <button type="button" class="rcp-link-btn rcp-draft-restore" id="rcpDraftRestore">Restore</button> · <button type="button" class="rcp-link-btn rcp-draft-discard" id="rcpDraftDiscard">Discard</button>`;
+      banner.querySelector('#rcpDraftRestore')?.addEventListener('click', () => {
+        restoreDraftFields(form, draft.fields);
+        updateEscalationBanner(form, pathway);
+        banner.className = 'rcp-draft-banner rcp-draft-banner-hidden';
+      });
+      banner.querySelector('#rcpDraftDiscard')?.addEventListener('click', () => {
+        clearDraft();
+        banner.className = 'rcp-draft-banner rcp-draft-banner-hidden';
+      });
+    }
+  }
+
+  body.querySelector('#rcpBack')?.addEventListener('click', () => {
+    loadDraft().then((d) => renderPathwayPicker(d));
+  });
+  body.querySelector('#rcpInitials')?.addEventListener('input', (e) => {
+    _takerInitials = e.target.value.trim();
+  });
 
   // Escalation banner reacts the moment any red flag is answered YES.
-  const form = body.querySelector('#rcpForm');
-  form.addEventListener('change', () => updateEscalationBanner(form, pathway));
-  form.addEventListener('submit', e => {
+  form.addEventListener('change', () => {
+    updateEscalationBanner(form, pathway);
+    scheduleDraftSave(pathway.id, form);
+  });
+  form.addEventListener('input', () => scheduleDraftSave(pathway.id, form));
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     generateSummary(form, pathway);
   });
@@ -488,7 +718,7 @@ function renderCaptureForm(pathway) {
 
 function readRedFlagAnswers(form, pathway) {
   const answers = {};
-  for (const rf of (pathway.redFlags || [])) {
+  for (const rf of pathway.redFlags || []) {
     const v = form.querySelector(`input[name="rf-${CSS.escape(rf.id)}"]:checked`)?.value;
     if (v === 'yes' || v === 'no') answers[rf.id] = v;
   }
@@ -505,7 +735,7 @@ function updateEscalationBanner(form, pathway) {
     return;
   }
   // 999-level escalation wins over duty-level when both are present.
-  const level = positives.some(p => p.escalate === '999') ? '999' : 'duty';
+  const level = positives.some((p) => p.escalate === '999') ? '999' : 'duty';
   banner.className = `rcp-banner rcp-banner-${level === '999' ? 'red' : 'amber'}`;
   // Fallback includes the level so the receptionist always knows 999-vs-duty even if
   // the escalations map entry is missing (near-unreachable; validation forces level ∈ {999,duty}).
@@ -514,10 +744,10 @@ function updateEscalationBanner(form, pathway) {
 
 function readQuestionAnswers(form, scope, questions) {
   const out = {};
-  for (const q of (questions || [])) {
+  for (const q of questions || []) {
     const nm = `${scope}-${q.id}`;
     if (q.type === 'multi') {
-      const vals = Array.from(form.querySelectorAll(`input[name="${CSS.escape(nm)}"]:checked`)).map(i => i.value);
+      const vals = Array.from(form.querySelectorAll(`input[name="${CSS.escape(nm)}"]:checked`)).map((i) => i.value);
       out[q.id] = vals;
     } else {
       const el = form.querySelector(`[name="${CSS.escape(nm)}"]${q.type === 'yesno' ? ':checked' : ''}`);
@@ -532,7 +762,7 @@ function generateSummary(form, pathway) {
   const rfAnswers = readRedFlagAnswers(form, pathway);
   const { unanswered } = evaluateRedFlags(pathway.redFlags, rfAnswers);
 
-  form.querySelectorAll('.rcp-rf-row').forEach(row => {
+  form.querySelectorAll('.rcp-rf-row').forEach((row) => {
     row.classList.toggle('rcp-rf-missing', unanswered.includes(row.dataset.rf));
   });
   if (unanswered.length > 0) {
@@ -544,7 +774,9 @@ function generateSummary(form, pathway) {
 
   const pc = _snapshot?.patientContext || null;
   const patientLine = pc?.patientName
-    ? [pc.patientName, pc.dateOfBirth ? `DOB ${pc.dateOfBirth}` : null, pc.nhsNumber ? `NHS ${pc.nhsNumber}` : null].filter(Boolean).join(', ')
+    ? [pc.patientName, pc.dateOfBirth ? `DOB ${pc.dateOfBirth}` : null, pc.nhsNumber ? `NHS ${pc.nhsNumber}` : null]
+        .filter(Boolean)
+        .join(', ')
     : null;
 
   const text = buildCaptureText({
@@ -563,6 +795,9 @@ function generateSummary(form, pathway) {
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
     },
   });
+
+  // Draft completed — clear it before rendering the output screen.
+  clearDraft();
 
   renderOutput(text, pathway);
 }
@@ -591,7 +826,8 @@ function renderOutput(text, pathway) {
       await navigator.clipboard.writeText(ta.value);
       if (m) m.textContent = 'Copied.';
     } catch (_) {
-      ta.focus(); ta.select();
+      ta.focus();
+      ta.select();
       const ok = document.execCommand && document.execCommand('copy');
       if (m) m.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
     }

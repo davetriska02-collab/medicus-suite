@@ -533,3 +533,33 @@
   background: var(--accent-dim);
   border-color: var(--accent-line);
 }
+
+/* ── Resume-last-run card ─────────────────────────────────────────────────── */
+.sweep-resume-card {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.sweep-resume-line {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+
+.sweep-resume-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sweep-resume-discard {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+.sweep-resume-discard:hover {
+  color: var(--red);
+}

@@ -97,6 +97,7 @@ const KEY_PREFIXES = [
   'day',
   'knowledge',
   'sweep',
+  'reception',
 ];
 
 function hasKeyPrefix(k) {
@@ -222,6 +223,18 @@ const ALLOWLIST = new Set([
   // Per-machine last-active panel tab — session convenience, not user config.
   // Excluded from backups; a freshly-restored machine always starts on 'slots':
   'panel.activeModule',
+
+  // Transient guided-capture draft — written on every form input (debounced
+  // 400 ms), cleared on "Generate summary" or explicit Discard. PHI-bearing
+  // (may contain patient history answers); TTL 4 h; purpose is to survive
+  // accidental module switches, not to back up. Mirrors sweep.handout pattern:
+  'reception.captureDraft',
+
+  // Transient sweep session state — written after each batch completes,
+  // cleared on a fresh Run. PHI-bearing (patient names + chip data); TTL 2 h;
+  // purpose is to allow resuming after a module switch, not to back up.
+  // Mirrors sweep.handout pattern:
+  'sweep.lastRun',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
