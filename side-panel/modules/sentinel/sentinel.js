@@ -67,12 +67,16 @@ function showAdminSummaryModal(text) {
   if (!host) return;
   closeModals(host);
 
+  const opener = document.activeElement;
   const modal = document.createElement('div');
   modal.className = 'sent-appt-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'sentApptModalTitle');
   modal.innerHTML = `
     <div class="sent-appt-modal-inner">
       <div class="sent-appt-modal-head">
-        <span class="sent-appt-modal-title">Appointments needed</span>
+        <span class="sent-appt-modal-title" id="sentApptModalTitle">Appointments needed</span>
         <button class="sent-appt-modal-close" id="sentApptModalClose" aria-label="Close">&#x2715;</button>
       </div>
       <textarea class="sent-appt-modal-text" id="sentApptModalText" readonly spellcheck="false">${escHtml(text)}</textarea>
@@ -83,12 +87,17 @@ function showAdminSummaryModal(text) {
 
   host.appendChild(modal);
 
-  modal.querySelector('#sentApptModalClose').addEventListener('click', () => modal.remove());
+  // Close + restore focus to the button that opened the modal (K-7).
+  const closeModal = () => {
+    modal.remove();
+    if (opener && typeof opener.focus === 'function') opener.focus();
+  };
+  modal.querySelector('#sentApptModalClose').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.remove();
+    if (e.target === modal) closeModal();
   });
   modal.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') modal.remove();
+    if (e.key === 'Escape') closeModal();
   });
 
   const copyBtn = modal.querySelector('#sentApptModalCopy');
@@ -138,8 +147,11 @@ function showActionPackModal(title, pack) {
     )
     .join('');
 
+  const opener = document.activeElement;
   const modal = document.createElement('div');
   modal.className = 'sent-act-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
   modal.innerHTML = `
     <div class="sent-act-modal-inner">
       <div class="sent-appt-modal-head">
@@ -151,13 +163,18 @@ function showActionPackModal(title, pack) {
 
   host.appendChild(modal);
 
-  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  const closeModal = () => {
+    modal.remove();
+    if (opener && typeof opener.focus === 'function') opener.focus();
+  };
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.remove();
+    if (e.target === modal) closeModal();
   });
   modal.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') modal.remove();
+    if (e.key === 'Escape') closeModal();
   });
+  modal.querySelector('.sent-appt-modal-close')?.focus();
 
   // Per-section copy buttons
   modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
@@ -208,8 +225,11 @@ function showAllActionsModal(chips, patient) {
     )
     .join('');
 
+  const opener = document.activeElement;
   const modal = document.createElement('div');
   modal.className = 'sent-act-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
   modal.innerHTML = `
     <div class="sent-act-modal-inner">
       <div class="sent-appt-modal-head">
@@ -221,13 +241,18 @@ function showAllActionsModal(chips, patient) {
 
   host.appendChild(modal);
 
-  modal.querySelector('.sent-appt-modal-close').addEventListener('click', () => modal.remove());
+  const closeModal = () => {
+    modal.remove();
+    if (opener && typeof opener.focus === 'function') opener.focus();
+  };
+  modal.querySelector('.sent-appt-modal-close').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.remove();
+    if (e.target === modal) closeModal();
   });
   modal.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') modal.remove();
+    if (e.key === 'Escape') closeModal();
   });
+  modal.querySelector('.sent-appt-modal-close')?.focus();
 
   modal.querySelectorAll('.sent-act-copy-btn').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
@@ -644,7 +669,8 @@ async function fetchWaitingRoom(bypassCache = false) {
     // too, so the two writers raced and clobbered each other's count whenever the
     // Sentinel tab was active. Leave the badge to panel.js.
   } catch (e) {
-    wrError = e.message;
+    console.warn('[Sentinel WR] fetch error:', e.message);
+    wrError = 'Waiting room unavailable — check your Medicus connection.';
     wrPatients = wrPatients ?? []; // retain last good state on transient error
   }
   // Re-render the sentinel module to update the pinned block
@@ -662,13 +688,26 @@ function calcWrWait(startDateTime) {
   return mins > 0 ? mins : 0;
 }
 
+// Feather stroke SVG icons for the waiting-room block (14px, currentColor, aria-hidden).
+// Emoji removed per design crit — these are chrome glyphs, not content.
+const WR_ICONS = {
+  // users (two-person)
+  users: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  // clock
+  clock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+  // alert-triangle
+  alertTriangle: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  // check
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`,
+};
+
 function renderWaitingRoomBlock() {
   const patients = wrPatients;
   if (patients === null) {
     // Still loading — show a slim skeleton
     return `<div class="wr-pinned wr-loading">
       <div class="wr-pin-row">
-        <span class="wr-pin-icon">⏳</span>
+        <span class="wr-pin-icon">${WR_ICONS.clock}</span>
         <span class="wr-pin-label">Waiting room loading…</span>
       </div>
     </div>`;
@@ -677,7 +716,7 @@ function renderWaitingRoomBlock() {
   if (wrError && patients.length === 0) {
     return `<div class="wr-pinned wr-error">
       <div class="wr-pin-row">
-        <span class="wr-pin-icon">⚠</span>
+        <span class="wr-pin-icon">${WR_ICONS.alertTriangle}</span>
         <span class="wr-pin-label">${escHtml(wrError)}</span>
       </div>
     </div>`;
@@ -686,14 +725,13 @@ function renderWaitingRoomBlock() {
   if (patients.length === 0) {
     return `<div class="wr-pinned wr-clear">
       <div class="wr-pin-row">
-        <span class="wr-pin-icon">✓</span>
+        <span class="wr-pin-icon">${WR_ICONS.check}</span>
         <span class="wr-pin-label">Waiting room clear</span>
         <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
       </div>
     </div>`;
   }
 
-  const maxWait = Math.max(...patients.map((p) => p.minutesWaiting ?? 0));
   const urgent = patients.filter((p) => (p.minutesWaiting ?? 0) >= 15);
   const rows = patients
     .map((p) => {
@@ -712,7 +750,7 @@ function renderWaitingRoomBlock() {
 
   return `<div class="wr-pinned wr-waiting">
     <div class="wr-pin-row wr-pin-head">
-      <span class="wr-pin-icon">🚶</span>
+      <span class="wr-pin-icon">${WR_ICONS.users}</span>
       <span class="wr-pin-label"><strong>${patients.length}</strong> waiting${urgentNote}</span>
       <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
     </div>
@@ -984,10 +1022,10 @@ function render(payload) {
       : '';
 
   const filterHtml = `
-    <div class="sent-filter-bar">
-      <button class="sent-filter-btn${currentFilter === 'all' ? ' active' : ''}" data-filter="all">All (${chips.length})</button>
-      <button class="sent-filter-btn${currentFilter === 'action' ? ' active action' : ''}" data-filter="action">Needs action (${actionCount})</button>
-      <button class="sent-filter-btn${currentFilter === 'clear' ? ' active clear' : ''}" data-filter="clear">In date (${clearCount})</button>
+    <div class="sent-filter-bar" role="group" aria-label="Filter alerts">
+      <button class="sent-filter-btn${currentFilter === 'all' ? ' active' : ''}" data-filter="all" aria-pressed="${currentFilter === 'all'}">All (${chips.length})</button>
+      <button class="sent-filter-btn${currentFilter === 'action' ? ' active action' : ''}" data-filter="action" aria-pressed="${currentFilter === 'action'}">Needs action (${actionCount})</button>
+      <button class="sent-filter-btn${currentFilter === 'clear' ? ' active clear' : ''}" data-filter="clear" aria-pressed="${currentFilter === 'clear'}">In date (${clearCount})</button>
     </div>`;
 
   const typeOrder = [
@@ -1123,7 +1161,7 @@ function render(payload) {
     const row = document.createElement('div');
     row.className = 'sent-act-row';
     row.dataset.actKey = key;
-    row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Actions</button>`;
+    row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Copy actions</button>`;
     chipEl.insertAdjacentElement('afterend', row);
   });
 
@@ -1405,10 +1443,13 @@ function renderChip(chip) {
           t.latestObs && t.latestObs.value != null
             ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
             : '';
-        const dayStr = t.days != null ? ` · ${t.days}d` : '';
+        // E: Three-slot grid: name / status+value+date / days column
+        const statusText = `${tLbl}${valStr}${dateStr ? ` · ${dateStr}` : ''}`;
+        const daysText = t.days != null ? `${t.days}d` : '';
         return `<div class="sent-test-row">
         <span class="sent-test-name">${escHtml(t.testName || t.name || '')}</span>
-        <span class="sent-test-status sent-test-${tCol}">${tLbl}${valStr}${dateStr ? ` · ${dateStr}${dayStr}` : ''}</span>
+        <span class="sent-test-status sent-test-${tCol}">${statusText}</span>
+        <span class="sent-test-days sent-test-${tCol}">${daysText}</span>
       </div>`;
       })
       .join('');
@@ -1480,7 +1521,9 @@ function renderBriefCard(brief) {
   const collapsed = _briefCollapsed;
 
   // Header: "Brief" label + patientLine + red/amber count badges
-  const patPart = brief.patientLine ? ` <span class="sent-brief-patient">${escHtml(brief.patientLine)}</span>` : '';
+  const patPart = brief.patientLine
+    ? ` <span class="sent-brief-patient" title="${escHtml(brief.patientLine)}">${escHtml(brief.patientLine)}</span>`
+    : '';
 
   // Count badges — include text labels for colour-blind safety
   const redBadge =
@@ -1591,6 +1634,10 @@ const TOOL_ICONS = {
 };
 
 function scaffoldHtml() {
+  // Order: header → brief slot → action bar → wr slot → dynamic content → footer → modal host.
+  // Brief comes first so the action bar is always anchored directly beneath the
+  // pre-consultation summary. The waiting-room block sits below (still prominent,
+  // now de-amberised so it doesn't compete with clinical chip salience).
   return `<div class="module-wrap sent-module">
     <div class="sent-header">
       <div class="sent-header-row">
@@ -1604,7 +1651,6 @@ function scaffoldHtml() {
         </div>
       </div>
     </div>
-    <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
     <div id="sentBriefSlot"></div>
     <div class="sent-actionbar" role="toolbar" aria-label="Patient actions">
       <button class="sent-action-btn" id="sentApptSummaryBtn" disabled title="Copyable list of the appointments this patient is due, for admin to book">${toolIcon(TOOL_ICONS.calendar)}<span>Appointments</span></button>
@@ -1620,7 +1666,8 @@ function scaffoldHtml() {
         </div>
       </div>
     </div>
-    <div id="sentDynamic"></div>
+    <div id="sentWrSlot">${renderWaitingRoomBlock()}</div>
+    <div id="sentDynamic" aria-live="polite"></div>
     <div class="sent-footer">
       <span class="sent-ts" id="sentFooterTs"></span>
       <span class="sent-rules-slot" id="sentRulesSlot"></span>
@@ -1693,6 +1740,8 @@ function closeOverflowMenu() {
 }
 
 // Enable/disable toolbar actions to match the current data context.
+// When there is no data context (_renderCtx is null) the action bar is hidden entirely
+// via the .sent-actionbar-empty class — no point showing disabled buttons in non-data states.
 function updateToolbarState() {
   if (!container) return;
   const ctx = _renderCtx;
@@ -1704,6 +1753,16 @@ function updateToolbarState() {
   set('sentCopyAllActionsBtn', !!ctx && ctx.actionCount > 0);
   set('sentPrintPassportBtn', !!ctx && !!ctx.patient);
   set('sentExportLogBtn', !!ctx && !!ctx.trace);
+
+  // Hide the whole action bar when there is nothing to act on (no data context).
+  const actionbar = container.querySelector('.sent-actionbar');
+  if (actionbar) {
+    if (!ctx) {
+      actionbar.classList.add('sent-actionbar-empty');
+    } else {
+      actionbar.classList.remove('sent-actionbar-empty');
+    }
+  }
 }
 
 // Download the current snapshot's rule-evaluation trace as a JSON file.
@@ -1725,11 +1784,20 @@ function exportEvaluationLog() {
 }
 
 function statusBlock(level, heading, body) {
-  return `<div class="sentinel-status ${level}" style="margin-bottom:12px">
+  if (level === 'idle') {
+    // J: Canon empty-state for idle states — centered, mono label, Feather monitor icon
+    return `<div class="sent-idle-state">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <div class="sent-idle-heading">${escHtml(heading)}</div>
+      <div class="sent-idle-body">${escHtml(body)}</div>
+    </div>`;
+  }
+  // J: Error/degraded — left-aligned banner format, byte-identical copy preserved, class-based (no inline style)
+  return `<div class="sentinel-status ${level}">
     <div class="status-dot"></div>
     <span class="status-text">${escHtml(heading)}</span>
   </div>
-  <p style="font-size:12px;color:var(--text-3);line-height:1.6">${escHtml(body)}</p>`;
+  <p class="sent-status-body">${escHtml(body)}</p>`;
 }
 
 function formatDate(s) {

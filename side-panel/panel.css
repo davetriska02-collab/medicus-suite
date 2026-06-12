@@ -38,6 +38,11 @@
   --amber-line: rgba(180, 83, 9, 0.32);
   --red: #dc2626;
   --red-dim: rgba(220, 38, 38, 0.08);
+  /* Violet triad — custom/user-defined rule accent. NOT a clinical status;
+     deliberately outside the RAG set and untouched by colorblind mode. */
+  --violet: #7c3aed;
+  --violet-dim: rgba(124, 58, 237, 0.09);
+  --violet-line: rgba(124, 58, 237, 0.3);
   --red-line: rgba(220, 38, 38, 0.3);
   /* Shape, depth, motion */
   --r-sm: 4px;
@@ -82,10 +87,13 @@ html[data-theme='dark'] {
   --green-dim: rgba(74, 222, 128, 0.12);
   --green-line: rgba(74, 222, 128, 0.32);
   --amber: #fbbf24;
-  --amber-dim: rgba(251, 191, 36, 0.12);
+  --amber-dim: rgba(251, 191, 36, 0.16);
   --amber-line: rgba(251, 191, 36, 0.32);
   --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.13);
+  --red-dim: rgba(248, 113, 113, 0.17);
+  --violet: #a78bfa;
+  --violet-dim: rgba(167, 139, 250, 0.14);
+  --violet-line: rgba(167, 139, 250, 0.35);
   --red-line: rgba(248, 113, 113, 0.34);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
