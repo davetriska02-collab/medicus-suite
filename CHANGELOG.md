@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.5] — 2026-06-12
+
+### New repo skill: design-crit
+
+- `.claude/skills/design-crit/` captures the end-to-end single-surface
+  crit-and-improve pipeline used for the v3.60.4 Slots pass: render the real
+  surface in all states via a reusable mocked-API screenshot harness
+  (`harness.mjs`), fan out three critics (art director / token surveyor /
+  fresh-eyes GP persona), orchestrator rulings with documented overrules,
+  one settled stylist brief, before/after verification. Documents the known
+  agent-race and re-render-during-bubble failure modes and their checks.
+
 ## [v3.60.4] — 2026-06-12
 
 ### Slots — design-crit pass (three-critic review, orchestrated)
