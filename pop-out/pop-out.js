@@ -4,6 +4,7 @@
 
 import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
+import { initPalette } from '../side-panel/palette/palette.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -195,6 +196,10 @@ const switchModule = createModuleLoader({
 // job). Module-scoped steps switch tabs via this window's loader; steps whose
 // anchors don't exist here (e.g. panel-only tabs) skip silently.
 initTour({ activateModule: (name) => switchModule(name), getActiveModule: () => activeModule });
+
+// Command palette (Ctrl+K) — same engine as the side panel; nav commands are
+// built from this window's own tabs.
+initPalette();
 
 // ── Service worker messages ───────────────────────────────────────────────────
 

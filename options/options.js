@@ -69,6 +69,18 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   });
 });
 
+// Deep-linking: options.html#sect-<name> opens straight onto that section.
+// Used by the command palette and the Monitoring panel's settings item; also
+// honoured on in-page hash changes so links can retarget an open options tab.
+function activateSectionFromHash() {
+  const m = /^#sect-([a-z-]+)$/.exec(location.hash || '');
+  if (!m) return;
+  const btn = document.querySelector(`.nav-item[data-section="${m[1]}"]`);
+  if (btn) btn.click();
+}
+activateSectionFromHash();
+window.addEventListener('hashchange', activateSectionFromHash);
+
 // ── Suite settings (practice code) ────────────────────────────────────────────
 
 const practiceCodeInput = document.getElementById('practiceCode');
