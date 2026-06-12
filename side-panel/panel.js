@@ -971,9 +971,20 @@ async function applyTriageAlerts(buckets) {
   }
 }
 
-// React to config changes — re-render immediately
+// React to config changes — re-render immediately.
+// CONFIG keys only, never the prefix: pollAll writes suite.requestMonitor.state
+// on every cycle, so a startsWith() match re-triggers the poll it came from —
+// an infinite self-sustaining poll loop hammering the API (same hazard the
+// service worker guards with its own RM_CONFIG_KEYS allowlist).
+const RM_STRIP_CONFIG_KEYS = [
+  'suite.requestMonitor.enabled',
+  'suite.requestMonitor.assigneeId',
+  'suite.requestMonitor.pollSeconds',
+  'suite.requestMonitor.notifyEnabled',
+  'suite.requestMonitor.notifySound',
+];
 chrome.storage.onChanged.addListener((changes) => {
-  if (Object.keys(changes).some((k) => k.startsWith('suite.requestMonitor.'))) {
+  if (RM_STRIP_CONFIG_KEYS.some((k) => k in changes)) {
     fetchAndRenderRmStrip();
   }
   if (Object.keys(changes).some((k) => k.startsWith('suite.triageAlert.'))) {

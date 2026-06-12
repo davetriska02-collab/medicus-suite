@@ -66,6 +66,19 @@ function openSetup() {
   }
 }
 
+// Decision F: human-readable error copy, raw message preserved in title attr
+function errMsg(raw) {
+  const human = 'Couldn’t reach Medicus — retrying automatically';
+  const glyph = `<svg class="today-error-glyph" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="3" x2="5" y2="5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5" cy="7.2" r="0.7" fill="currentColor"/></svg>`;
+  return `<span class="today-card-error" title="${esc(raw)}">${glyph}<span class="today-card-error-copy">${esc(human)}</span></span>`;
+}
+
+function errMsgInline(raw) {
+  const human = 'Couldn’t reach Medicus — retrying automatically';
+  const glyph = `<svg class="today-error-glyph" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="3" x2="5" y2="5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="5" cy="7.2" r="0.7" fill="currentColor"/></svg>`;
+  return `<span class="today-card-error today-card-error--inline" title="${esc(raw)}">${glyph}<span class="today-card-error-copy">${esc(human)}</span></span>`;
+}
+
 // ── Fetch: Waiting Room ────────────────────────────────────────────────────────
 
 async function fetchWr() {
@@ -272,8 +285,8 @@ function renderCard(which) {
       body.innerHTML = buildSlotsBody();
       break;
     case 'sweep':
+      // Decision B: removed wireSwepButtons call — delegated handler is sufficient
       body.innerHTML = buildSweepBody();
-      wireSwepButtons(body);
       break;
     case 'alerts':
       body.innerHTML = buildAlertsBody();
@@ -286,7 +299,7 @@ function renderCard(which) {
 function buildWrBody() {
   if (!_wrData) return '<span class="today-loading">Loading…</span>';
   if (_wrData.noCode) return buildNoCodeMsg();
-  if (_wrData.error) return `<span class="today-card-error">${esc(_wrData.error)}</span>`;
+  if (_wrData.error) return errMsg(_wrData.error);
 
   const { patients } = _wrData;
   if (patients.length === 0) {
@@ -296,7 +309,8 @@ function buildWrBody() {
   const maxWait = Math.max(...patients.map((p) => p.mins ?? 0));
   const urgency = maxWait >= 20 ? 'red' : maxWait >= 10 ? 'amber' : 'green';
 
-  const countEl = `<span class="today-hero-count today-hero-count--${urgency}">${patients.length}</span>`;
+  // Decision G: aria-label on hero count
+  const countEl = `<span class="today-hero-count today-hero-count--${urgency}" aria-label="${patients.length} patients waiting">${patients.length}</span>`;
   const waitEl = maxWait > 0 ? `<span class="today-wait today-wait--${urgency}">Max wait ${maxWait}m</span>` : '';
 
   const shown = patients.slice(0, 3);
@@ -323,7 +337,7 @@ function buildRmBody() {
       <a class="today-setup-link" href="#" data-action="open-setup">Set up in options →</a>`;
   }
   if (_rmData.error && !Object.keys(_rmData.buckets).length) {
-    return `<span class="today-card-error">${esc(_rmData.error)}</span>`;
+    return errMsg(_rmData.error);
   }
 
   const buckets = window.RequestMonitor?.BUCKETS || [];
@@ -331,17 +345,17 @@ function buildRmBody() {
     .map((b) => {
       const count = _rmData.buckets?.[b.key]?.count ?? 0;
       const isReply = b.status === 'reply-received';
-      const cls = isReply ? 'today-rm-pill--reply' : count > 0 ? 'today-rm-pill--new' : 'today-rm-pill--zero';
-      return `<span class="today-rm-pill ${cls}" title="${esc(b.label)}">
-        <span class="today-rm-pill-label">${esc(b.short)}</span>
+      // Decision E: zero-state pill logic — count === 0 is always zero, else reply or new
+      const cls = count === 0 ? 'today-rm-pill--zero' : isReply ? 'today-rm-pill--reply' : 'today-rm-pill--new';
+      // Decision D: show b.label instead of b.short; aria-label with full context
+      return `<span class="today-rm-pill ${cls}" title="${esc(b.label)}" aria-label="${esc(b.label)}: ${count}">
+        <span class="today-rm-pill-label">${esc(b.label)}</span>
         <span class="today-rm-pill-count">${count}</span>
       </span>`;
     })
     .join('');
 
-  const errLine = _rmData.error
-    ? `<span class="today-card-error today-card-error--inline">${esc(_rmData.error)}</span>`
-    : '';
+  const errLine = _rmData.error ? errMsgInline(_rmData.error) : '';
 
   return `<div class="today-rm-pills">${pills}</div>${errLine}`;
 }
@@ -353,7 +367,7 @@ function buildDemandBody() {
   const { medical, admin, thresholds, error } = _demandData;
 
   if (error && medical == null && admin == null) {
-    return `<span class="today-card-error">${esc(error)}</span>`;
+    return errMsg(error);
   }
 
   function level(key, val) {
@@ -374,16 +388,27 @@ function buildDemandBody() {
   const medVal = medical != null ? medical : '—';
   const admVal = admin != null ? admin : '—';
 
-  const errLine = error ? `<span class="today-card-error today-card-error--inline">${esc(error)}</span>` : '';
+  // Decision J: threshold chip when level fires
+  const medFlag = medLevel
+    ? `<span class="today-demand-flag today-demand-flag--${medLevel}">over threshold</span>`
+    : '';
+  const admFlag = admLevel
+    ? `<span class="today-demand-flag today-demand-flag--${admLevel}">over threshold</span>`
+    : '';
 
+  const errLine = error ? errMsgInline(error) : '';
+
+  // Decision J: count leads, label after, chip at end
   return `
     <div class="today-demand-row">
-      <span class="today-demand-label">Medical</span>
       <span class="today-demand-count ${medCls}">${medVal}</span>
+      <span class="today-demand-label">medical</span>
+      ${medFlag}
     </div>
     <div class="today-demand-row">
-      <span class="today-demand-label">Admin</span>
       <span class="today-demand-count ${admCls}">${admVal}</span>
+      <span class="today-demand-label">admin</span>
+      ${admFlag}
     </div>
     ${errLine}
   `;
@@ -393,13 +418,11 @@ function buildSlotsBody() {
   if (!_slotsData) return '<span class="today-loading">Loading…</span>';
   if (_slotsData.noCode) return buildNoCodeMsg();
   if (_slotsData.error && _slotsData.count == null) {
-    return `<span class="today-card-error">${esc(_slotsData.error)}</span>`;
+    return errMsg(_slotsData.error);
   }
 
   const count = _slotsData.count ?? '—';
-  const errLine = _slotsData.error
-    ? `<span class="today-card-error today-card-error--inline">${esc(_slotsData.error)}</span>`
-    : '';
+  const errLine = _slotsData.error ? errMsgInline(_slotsData.error) : '';
 
   return `
     <div class="today-hero-row">
@@ -456,10 +479,12 @@ function buildAlertsBody() {
     return '<span class="today-empty today-empty--green">No alerts logged today</span>';
   }
 
+  // Decision C: sub-rag returns '' so label doubling is avoided;
+  // rm → 'Triage', triage → 'Triage alert' unchanged.
   function channelLabel(channel) {
     if (channel === 'rm') return 'Triage';
     if (channel === 'triage') return 'Triage alert';
-    if (channel === 'sub-rag') return 'Demand';
+    if (channel === 'sub-rag') return '';
     return channel;
   }
 
@@ -476,11 +501,15 @@ function buildAlertsBody() {
           : e.level === 'amber'
             ? 'today-alert-dot--amber'
             : 'today-alert-dot--green';
+      // Decision C: omit separator when prefix is empty
+      const prefix = channelLabel(e.channel);
+      const labelText = prefix ? `${prefix}: ${esc(e.label)}` : esc(e.label);
+      // Decision K: aria-label on dot
       return `
       <div class="today-alert-row">
         <span class="today-alert-time">${fmtTime(e.ts)}</span>
-        <span class="today-alert-dot ${dotCls}"></span>
-        <span class="today-alert-label">${esc(channelLabel(e.channel))}: ${esc(e.label)}</span>
+        <span class="today-alert-dot ${dotCls}" role="img" aria-label="${esc(e.level)}"></span>
+        <span class="today-alert-label">${labelText}</span>
       </div>`;
     })
     .join('');
@@ -490,17 +519,8 @@ function buildAlertsBody() {
 
 // ── Wire event handlers ────────────────────────────────────────────────────────
 
-function wireSweepButtons(body) {
-  body.querySelector('[data-action="open-sweep"]')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navTo('sweep');
-  });
-}
-
-// Alias used inside buildSweepBody render path
-function wireSwepButtons(body) {
-  wireSweepButtons(body);
-}
+// Decision B: wireSweepButtons and wireSwepButtons alias removed entirely.
+// The delegated handler in wireCardInteractions handles open-sweep.
 
 function wireCardInteractions() {
   if (!container) return;
@@ -516,11 +536,12 @@ function wireCardInteractions() {
     if (action === 'open-sweep') navTo('sweep');
   });
 
-  // Card header "Open →" navigation
+  // Decision A: use btn.dataset.nav (not btn.closest('.today-card')?.dataset.card)
+  // Decision H: replace title with aria-label on .today-card-open
   container.querySelectorAll('.today-card-open').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const mod = btn.closest('.today-card')?.dataset.card;
+      const mod = btn.dataset.nav;
       if (mod) navTo(mod);
     });
   });
@@ -573,9 +594,9 @@ function renderScaffold() {
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
               <span class="today-card-label">${esc(c.label)}</span>
-              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" title="Open ${esc(c.label)}">Open →</button>` : ''}
+              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">Open →</button>` : ''}
             </div>
-            <div class="today-card-body"><span class="today-loading">Loading…</span></div>
+            <div class="today-card-body" aria-live="polite"><span class="today-loading">Loading…</span></div>
           </div>
         `
           )

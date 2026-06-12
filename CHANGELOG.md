@@ -2,6 +2,162 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.8] — 2026-06-12
+
+### Today — design-crit pass (three-critic review via /design-crit)
+
+- **Three dead "Open →" buttons fixed**: Waiting Room, Triage Load and
+  Demand Today navigated nowhere (the handler read the card's own id instead
+  of its nav target) — they now open Monitoring, Reception and Submissions.
+  The Morning Sweep button also fired its navigation twice per click
+  (duplicate direct + delegated handlers); now once.
+- **Jargon pills decoded**: triage bucket pills read "New med 14 / Med reply
+  3 / New admin 9 / Admin reply 2" instead of NM/MR/NA/AR — the fresh-eyes
+  GP critic's top confusion. Zero-count pills are now always muted (the
+  reply accent used to fire at 0 — backwards for a load indicator).
+- **Alert log label stutter fixed**: "Demand: Demand: Medical 34" → the
+  channel prefix is no longer doubled onto labels that already carry it.
+- **Designed error states**: raw fetch exceptions ("Failed to execute
+  'json'…") replaced with a status glyph + "Couldn't reach Medicus —
+  retrying automatically" (truthful — the cards poll), raw detail kept in a
+  tooltip for debugging.
+- **Demand card**: counts lead (matching the Waiting Room/Slots hero
+  pattern) and a threshold breach now adds an "over threshold" amber/red
+  chip — the breach no longer rides on digit colour alone.
+- **Accessibility**: aria-live on all six polled card bodies, per-card
+  accessible names on the six identical "Open →" buttons, labelled alert
+  dots and triage pills, hero-count label, and
+  :focus-visible/:active/:disabled coverage on the card-open, ghost-button
+  and setup-link controls.
+
+## [v3.60.7] — 2026-06-12
+
+### Sweep + Trends — design-crit pass (three-critic review via /design-crit)
+
+- **Resume selection bug fixed**: after resuming a stored sweep, the batch
+  bar showed "0 selected" and Generate batch stayed disabled even though the
+  restored checkboxes were ticked — the bar state is now initialised at
+  wire-up, so a resumed selection is immediately actionable.
+- **Disclaimer tells the truth**: the in-results disclaimer claimed "Results
+  are not stored; re-run to refresh", contradicting the 2-hour
+  persistence/resume feature. Sweep now carries ONE authoritative disclaimer
+  (header), with all safety phrases intact and the storage copy corrected
+  ("kept for 2 hours so you can resume; re-run to refresh").
+- **Row anatomy**: action rows are two lines — name + red/amber count badges
+  lead, clinician + Open record sit on a meta line — so names no longer wrap
+  through the controls at panel width. Error rows use the proper badge class
+  (was an undefined class name). Patient names stay verbatim from the
+  appointment book (no case transforms).
+- **Chart calming (Trends)**: KDIGO/ACR reference bands are dim washes with
+  1px dashed boundary edges instead of saturated fills, data lines thickened,
+  and the eGFR series moved from grey (failed non-text contrast) to the
+  violet ink. Red alert dots and full-ink stage pills unchanged.
+- **Plain English**: "clamped at 100" → "values above 100 plotted at 100";
+  "No BP target register" → "No BP target (no qualifying register)" with a
+  register-list tooltip; KDIGO cell gets an explainer tooltip; BP view gains
+  a "Default NICE/QOF thresholds — verify any personalised target in
+  Medicus" footnote when a target line is drawn.
+- **Accessibility**: every chart gets a descriptive aria-label (was six
+  identical "Trend chart"s); sweep progress is an aria-live region; renal
+  banners announce via role=alert; the Trends tab picker is a proper ARIA
+  tabs pattern (aria-controls + tabpanel); row checkboxes are labelled per
+  patient with a hover wash; :active/:focus-visible/:disabled states filled
+  in across sweep buttons; on-accent button ink uses var(--bg-deep).
+
+### Fixed
+
+- **Infinite Triage-strip poll loop**: the side panel re-polled the request
+  monitor on any `suite.requestMonitor.*` storage change — including the
+  state write each poll itself makes — so an enabled triage monitor polled
+  the Medicus task-list API continuously instead of every 60s. The listener
+  now reacts to the five config keys only (mirrors the service worker's
+  existing guard).
+
+## [v3.60.6] — 2026-06-12
+
+### Monitoring — design-crit pass (three-critic review via /design-crit)
+
+- **Hierarchy under alert fixed**: the pre-consultation BRIEF (red/amber
+  summary) now leads the stack; the waiting-room block is demoted below the
+  action bar and de-amberised (neutral card + amber left bar — per-row
+  red/amber minute counts unchanged), so operational throughput no longer
+  out-shouts clinical risk and amber is reserved for signal.
+- **Canon**: dark-theme `--red-dim`/`--amber-dim` raised to .17/.16 so the
+  red-vs-amber tier survives on dark; new `--violet` triad promotes the
+  custom-rule accent into the token canon (TOKENS.md updated).
+- **Chip anatomy**: test rows are a three-column grid with a right-aligned
+  mono days rail (122d/43d… scan as a column); the invisible ⓘ evidence
+  affordance is now a rotating chevron on every evidence-bearing chip; the
+  floating ACTIONS pill is a docked "Copy actions" card footer.
+- **Designed idle states** (no-Medicus / not-mounted) with icon + mono label;
+  raw "Failed to fetch" replaced with human copy; the degraded H-005 warning
+  copy and salience untouched, with dead action-bar chrome hidden in
+  no-patient states; version pill de-emphasised to metadata.
+- **Accessibility sweep**: focus-visible/active states on every interactive
+  (chip dismiss ×, drift dismiss, modal close, evidence buttons); modals get
+  role=dialog/aria-modal/labelled titles + focus restore to opener;
+  aria-live on the auto-refreshing chip region; filter bar aria-pressed
+  group; emoji replaced with Feather strokes in the waiting-room block;
+  contrast and mono-voice corrections; seven previously unstyled classes
+  (journal warning, RESURFACED banner, unmatched-meds section) given
+  token-recipe styling.
+
+## [v3.60.6] — 2026-06-12
+
+### Monitoring (Sentinel) — design-crit fixes
+
+- **A** Scaffold slot order: brief above waiting room (brief → action bar → WR block).
+- **B** WR block de-amberised: calm `--bg-elev` surface, left `3px solid var(--amber)` bar only. Feather SVG icons replace emoji. WR fetch error humanised.
+- **C** Action bar hidden (`.sent-actionbar-empty`) when no data context.
+- **D** Version pill de-emphasised: transparent bg, no border.
+- **E** Test-row three-slot grid: name / status+value+date / days (`38px` rail, `sent-test-days` inherits status colour).
+- **F** Evidence affordance: chevron (`▸`) replaces ⓘ on all clickable chip-heads. Vaccine summary ⓘ left intact.
+- **G** ACTIONS row docked footer; button label → "Copy actions"; `:focus-visible` ring.
+- **H** Brief dot 7→8px; `title` attribute on patientLine span.
+- **I** Filter bar active state uses accent triad; `aria-pressed` + `role="group"` added.
+- **J** Idle states render canon empty-state (monitor icon, mono heading, sans body). Error/degraded blocks moved from inline `style=` to CSS classes.
+- **K** A11y sweep: focus-visible + active on dismiss, vax-summary, modal-close, drift-dismiss, ev-close, ev-verify, act-copy; `aria-live="polite"` on `#sentDynamic`; letter-spacing/mono on ev-label/refs-head/ref-state; `--text-2` on patient-meta; violet triad tokens on custom-tag; verify-button voice unification; badge shared selector.
+- **L** Seven previously unstyled classes styled: `sent-journal-warn`, `sent-chip-resurfaced`, `sent-unmatched-section/*`, `sent-chip-more`.
+
+## [v3.60.5] — 2026-06-12
+
+### New repo skill: design-crit
+
+- `.claude/skills/design-crit/` captures the end-to-end single-surface
+  crit-and-improve pipeline used for the v3.60.4 Slots pass: render the real
+  surface in all states via a reusable mocked-API screenshot harness
+  (`harness.mjs`), fan out three critics (art director / token surveyor /
+  fresh-eyes GP persona), orchestrator rulings with documented overrules,
+  one settled stylist brief, before/after verification. Documents the known
+  agent-race and re-render-during-bubble failure modes and their checks.
+
+## [v3.60.4] — 2026-06-12
+
+### Slots — design-crit pass (three-critic review, orchestrated)
+
+Findings from an art-director crit, a token/code survey and a fresh-eyes GP
+persona pass, applied in one sweep:
+
+- **Alert hierarchy restored**: the ribbon now renders above the hero, the
+  hero card itself wears the amber/red wash when a rule trips, and the
+  decorative AM|PM split bar is gone. Clinician-row AM|PM strips desaturated
+  to neutral slate/blue — amber no longer appears in resting chrome, so when
+  it does appear, it means something.
+- **One data home**: the BY TYPE list (checkboxes + am/pm detail) collapses
+  into an on-demand panel — pills are the glance layer, the list is the
+  control layer; its open state persists per workstation.
+- **One date zone**: Today / Next working day / date picker / refresh
+  consolidated into a single row; refresh and alert icons now Feather strokes
+  (emoji removed from chrome); alert ribbon gains an "Edit thresholds" link.
+- **Designed empty state** (calendar icon + label, hero suppressed) replacing
+  the bare string with a shouting zero.
+- **Organise-mode accessibility**: pills are keyboard-operable (tab, Enter to
+  colour, arrow keys to reorder), aria-live announcements, focus rings on
+  swatches, ghost-styled Done button, contained swatch styling.
+- Canon clean-up: am/pm unit labels raised from 8px to legible 9px, hints
+  de-italicised to AA contrast, focus-visible corrections, reduced-motion
+  kill switch on the skeleton, dead CSS removed.
+
 ## [v3.60.3] — 2026-06-12
 
 ### Slots pill configuration + "Choose your tabs"

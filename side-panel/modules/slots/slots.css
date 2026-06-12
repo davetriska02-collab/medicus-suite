@@ -5,10 +5,12 @@
   font-family: var(--sans);
 }
 
-.header-actions {
+/* Date zone: presets + date input + refresh all on one row (Decision C) */
+.date-presets {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: 12px;
 }
 
 .date-input {
@@ -23,14 +25,18 @@
   transition: border-color var(--fast) var(--ease);
 }
 
-.date-input:focus {
+.date-input:focus-visible {
   border-color: var(--accent);
 }
 
-.date-presets {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 14px;
+/* Refresh button in date zone — matches date-input height */
+.date-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  height: 28px;
+  border-radius: var(--r-md);
 }
 
 .preset-btn {
@@ -81,9 +87,8 @@
 
 .section-hint {
   font-size: 10px;
-  color: var(--text-4);
+  color: var(--text-3);
   margin-top: 4px;
-  font-style: italic;
 }
 
 .slot-list {
@@ -150,25 +155,34 @@
   text-overflow: ellipsis;
 }
 
-.slot-count {
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--green);
-  min-width: 24px;
-  text-align: right;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
+/* By-type collapsible panel (Decision D) */
+.slot-types-details {
+  /* no extra styling — inherits from section */
 }
-
-.slot-count.zero {
+.slot-types-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+.slot-types-summary::-webkit-details-marker {
+  display: none;
+}
+/* Chevron via CSS ::after — toggled by open state */
+.slot-types-summary::after {
+  content: '▸';
+  font-size: 9px;
   color: var(--text-5);
+  transition: transform var(--fast) var(--ease);
 }
-
-.row-sep {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
+details[open] > .slot-types-summary::after {
+  content: '▾';
+}
+.slot-types-details > .slot-list,
+.slot-types-details > .section-hint {
+  margin-top: 6px;
 }
 
 .staff-list {
@@ -182,6 +196,7 @@
   overflow: hidden;
 }
 
+/* Single merged .staff-toggle rule (Decision H — fold duplicates) */
 .staff-toggle {
   display: flex;
   align-items: center;
@@ -195,18 +210,18 @@
   color: var(--text-3);
   font-size: 11px;
   text-align: left;
+  position: relative;
+  overflow: hidden;
   transition:
     background var(--fast) var(--ease),
     color var(--fast) var(--ease);
 }
-
-.staff-toggle {
-  position: relative;
-  overflow: hidden;
-}
 .staff-toggle:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+.staff-toggle:active {
+  background: var(--bg-hover);
 }
 
 /* Per-clinician layers: share-of-total wash + AM|PM split strip along the
@@ -228,13 +243,15 @@
   display: flex;
   pointer-events: none;
 }
+
+/* Desaturated AM/PM bars in clinician rows (Decision E) */
 .staff-split .split-am {
-  background: var(--amber);
-  opacity: 0.65;
+  background: var(--text-5);
+  opacity: 0.55;
 }
 .staff-split .split-pm {
   background: var(--accent);
-  opacity: 0.65;
+  opacity: 0.4;
 }
 .staff-toggle > .staff-chevron,
 .staff-toggle > .staff-name,
@@ -253,7 +270,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.staff-count {
+
+/* staff-count — scoped to mini context (Decision H) */
+.staff-count-mini .staff-count {
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
@@ -308,14 +327,39 @@
   }
 }
 
-.empty-state {
+@media (prefers-reduced-motion: reduce) {
+  .skel-row {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Empty state — designed (Decision F) */
+.slots-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
   text-align: center;
-  color: var(--text-4);
+}
+.slots-empty-icon {
+  color: var(--text-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slots-empty-label {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 32px 16px;
+  letter-spacing: 0.08em;
+  color: var(--text-4);
+}
+.slots-empty-sub {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
 }
 
 .foot {
@@ -327,10 +371,12 @@
   margin-top: 12px;
 }
 
+/* excluded-toggle as <button> (Decision H) — full width, UA reset, keyboard-reachable */
 .excluded-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 5px 8px;
   font-size: 10px;
   font-family: var(--mono);
@@ -339,6 +385,10 @@
   cursor: pointer;
   border-radius: var(--r-md);
   margin-top: 2px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: left;
   transition:
     color var(--fast) var(--ease),
     background var(--fast) var(--ease);
@@ -349,6 +399,11 @@
   background: var(--bg-elev);
 }
 
+.excluded-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .excluded-list {
   display: flex;
   flex-direction: column;
@@ -357,8 +412,7 @@
 }
 
 /* ── Hero card ────────────────────────────────────────────────────────────────
-   One glance unit: headline total + AM/PM chips, a proportional AM|PM split
-   bar, and the per-type pill row. */
+   Headline total + AM/PM chips. Alert wash states (Decision A). */
 .slots-hero-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -367,6 +421,17 @@
   padding: 12px 14px 10px;
   margin-bottom: 10px;
 }
+
+/* Amber / red wash when overall alert level triggers (Decision A) */
+.slots-hero-card--amber {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+.slots-hero-card--red {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+
 .slots-hero-main {
   display: flex;
   align-items: center;
@@ -389,11 +454,15 @@
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+
+/* slots-count-label: mono, uppercase, letterspaced, machine-voice label (Decision H) */
 .slots-count-label {
-  font-size: 11px;
-  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--green);
 }
 .slots-count-label.zero {
   color: var(--text-4);
@@ -404,24 +473,6 @@
 }
 .slots-count-label.red {
   color: var(--red);
-}
-
-/* Proportional AM|PM split bar — hues match the AM/PM chip numerals */
-.slots-split-bar {
-  display: flex;
-  height: 4px;
-  border-radius: var(--r-pill);
-  overflow: hidden;
-  background: var(--bg-mid);
-  margin: 10px 0 0;
-}
-.slots-split-bar .split-am {
-  background: var(--amber);
-  opacity: 0.75;
-}
-.slots-split-bar .split-pm {
-  background: var(--accent);
-  opacity: 0.75;
 }
 
 /* Per-type pills — dot is slate when calm, amber/red at/below alert threshold */
@@ -554,17 +605,27 @@
   background: var(--accent-dim);
   border-color: var(--accent-line);
 }
+/* Active (Done) state: ghost button — cannot be mistaken for a data pill (Decision G) */
 .pill-organise-btn.active {
-  color: var(--accent);
-  border-color: var(--accent-line);
-  background: var(--accent-dim);
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  font-size: 9px;
   font-weight: 600;
+}
+.pill-organise-btn:active {
+  background: var(--accent-dim);
 }
 .slot-pill.pill-organising {
   cursor: grab;
   border-style: dashed;
+}
+.slot-pill.pill-organising:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
 }
 .slot-pill.pill-dragging {
   opacity: 0.4;
@@ -579,7 +640,7 @@
   padding: 7px 9px;
   background: var(--bg-mid);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
 }
 .pill-palette-label {
   font-family: var(--mono);
@@ -601,7 +662,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 1px solid var(--border-hi);
+  border: 2px solid var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--border);
   background: var(--pill-col);
   cursor: pointer;
   padding: 0;
@@ -614,14 +676,17 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+.pill-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .pill-swatch.pill-c-default {
   background: var(--bg-elev);
 }
 
 .pill-organise-hint {
   font-size: 10px;
-  color: var(--text-4);
-  font-style: italic;
+  color: var(--text-3);
   margin-top: 6px;
 }
 
@@ -635,7 +700,7 @@
   align-items: baseline;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   background: var(--bg-elev);
   border: 1px solid var(--border);
 }
@@ -683,10 +748,12 @@
   min-width: 24px;
   justify-content: flex-end;
 }
+
+/* ampm-tag-inline (Decision H) */
 .ampm-tag-inline {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.05em;
-  color: var(--text-5);
+  color: var(--text-4);
   margin-left: 1px;
 }
 .slot-count-sep {
@@ -695,6 +762,7 @@
   padding: 0 1px;
 }
 .slot-count-total {
+  font-family: var(--mono);
   font-weight: 700;
   color: var(--green);
   font-size: 13px;
@@ -771,11 +839,14 @@
 .slots-alert-icon {
   flex-shrink: 0;
   font-style: normal;
+  display: inline-flex;
+  align-items: center;
 }
 .slots-alert-items {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
 }
 .slots-alert-item {
   white-space: nowrap;
@@ -785,4 +856,29 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   padding: 0 1px;
+}
+
+/* Edit thresholds deep-link button inside the alert ribbon (Decision B) */
+.slots-ribbon-link {
+  align-self: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: opacity var(--fast) var(--ease);
+}
+.slots-ribbon-link:hover {
+  opacity: 1;
+}
+.slots-ribbon-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }

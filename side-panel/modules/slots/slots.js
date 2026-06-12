@@ -30,6 +30,7 @@ let state = {
   pillPrefs: { order: [], colours: {} },
   organisePills: false, // ephemeral: reorder/colour mode
   openColourFor: null, // type whose colour palette is open, or null
+  typesOpen: false, // whether the by-type details panel is open
 };
 
 // Palette for colour-coding pills (organising only — NOT a clinical flag).
@@ -88,6 +89,7 @@ export async function init(el) {
     if (typeof savedUi.showExcluded === 'boolean') state.showExcluded = savedUi.showExcluded;
     if (Array.isArray(savedUi.expanded))
       state.expanded = new Set(savedUi.expanded.filter((t) => typeof t === 'string'));
+    if (typeof savedUi.typesOpen === 'boolean') state.typesOpen = savedUi.typesOpen;
   }
 
   render();
@@ -312,6 +314,21 @@ function overallAlertLevel(byType) {
   return level;
 }
 
+// ── SVG helpers ───────────────────────────────────────────────────────────────
+
+// Feather-style stroke SVGs at 14px currentColor for use in chrome.
+// stroke-linecap/linejoin round, stroke-width 2, fill none.
+
+const SVG_ALERT_OCTAGON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+const SVG_ALERT_TRIANGLE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+const SVG_REFRESH = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+
+const SVG_SLIDERS = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`;
+
+const SVG_CALENDAR_X = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="10" y1="14" x2="14" y2="18"/><line x1="14" y1="14" x2="10" y2="18"/></svg>`;
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function render() {
@@ -328,12 +345,13 @@ function render() {
 
   container.innerHTML = `
     <div class="module-wrap slots-module">
-      ${renderHeader(visible, visibleSum)}
+      ${renderHeader()}
       <div id="slotsBanner" class="banner${state.error ? '' : ' hidden'}">
         ${escHtml(state.error || '')}
         ${state.error && state.error.startsWith('No practice code') ? ' <button class="ghost-btn setup-now-btn">Set up now</button>' : ''}
       </div>
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
+      ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
       <div class="foot">${state.lastFetched ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
     </div>
@@ -342,46 +360,38 @@ function render() {
   bindEvents();
 }
 
-function renderHeader(visible, visibleSum) {
+function renderHeader() {
   return `
     <div class="mod-header">
       <div>
         <div class="mod-eyebrow">Appointment Book · ${escHtml(formatDate(state.date))}</div>
         ${state.loading ? `<div class="mod-title" style="margin:6px 0 10px">Loading…</div>` : ''}
       </div>
-      <div class="header-actions" style="align-self:flex-start;margin-top:2px">
-        <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
-        <button class="ghost-btn" id="refreshSlots" title="Refresh">↻</button>
-      </div>
     </div>
-    ${!state.loading && state.data ? renderHeroCard(visible, visibleSum) : ''}
     <div class="date-presets">
       <button class="preset-btn${state.date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
       <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
+      <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
+      <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh">${SVG_REFRESH}</button>
     </div>
   `;
 }
 
-// Hero card: headline total, AM/PM chips, a proportional AM|PM split bar, and
-// the per-type pill row. The label inherits the alert state (green when calm,
-// amber/red when any slot-alert rule has tripped) so the headline is a signal,
-// not a decoration.
+// Hero card: headline total and AM/PM chips. When an alert level is active the
+// card itself wears the wash. The split bar has been removed (Decision A).
+// Returns '' when there are no session types at all (empty-state path, Decision F).
 function renderHeroCard(visible, visibleSum) {
   const d = state.data;
+  // Suppress hero card when there are no sessions at all (empty state, Decision F)
+  if (!d || Object.keys(d.byType).length === 0) return '';
+
   const isToday = d.isToday;
   const level = overallAlertLevel(d.byType);
   const labelCls = visibleSum === 0 ? ' zero' : level ? ` ${level}` : '';
-
-  const amPct = visibleSum > 0 ? Math.round((visible.am / visibleSum) * 100) : 0;
-  const splitBar =
-    visibleSum > 0
-      ? `<div class="slots-split-bar" title="AM ${visible.am} · PM ${visible.pm}" aria-hidden="true">
-           <span class="split-am" style="width:${amPct}%"></span><span class="split-pm" style="width:${100 - amPct}%"></span>
-         </div>`
-      : '';
+  const cardCls = level ? ` slots-hero-card--${level}` : '';
 
   return `
-    <div class="slots-hero-card">
+    <div class="slots-hero-card${cardCls}">
       <div class="slots-hero-main">
         <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
         <div class="slots-hero-right">
@@ -392,7 +402,6 @@ function renderHeroCard(visible, visibleSum) {
           </div>
         </div>
       </div>
-      ${splitBar}
       ${renderTypePills(d.byType, visibleSum)}
     </div>
   `;
@@ -439,7 +448,10 @@ function renderTypePills(byType, visibleSum) {
       const title = organising
         ? 'Drag to reorder · click to set colour'
         : `${escHtml(type)} — ${n.am} am · ${n.pm} pm${level ? ' · below alert threshold' : ''}`;
-      return `<span class="slot-pill${cls}" data-pill-type="${escHtml(type)}"${organising ? ' draggable="true"' : ''} title="${title}">
+      const ariaLabel = organising
+        ? `${escHtml(type)}, ${total} slots — Enter to colour, arrow keys to move`
+        : `${escHtml(type)}, ${total} slots`;
+      return `<span class="slot-pill${cls}" data-pill-type="${escHtml(type)}"${organising ? ' draggable="true" tabindex="0" role="button"' : ''} title="${title}" aria-label="${ariaLabel}">
         <span class="slot-pill-dot" aria-hidden="true"></span>
         <span class="slot-pill-name">${escHtml(type)}</span>
         <span class="slot-pill-num">${total.toLocaleString('en-GB')}</span>
@@ -458,9 +470,11 @@ function renderTypePills(byType, visibleSum) {
         </div>`
       : '';
 
-  return `<div class="slots-pill-row${organising ? ' organising' : ''}" id="pillRow">
+  const organiseBtn = `<button class="pill-organise-btn${organising ? ' active' : ''}" id="pillOrganiseBtn" title="${organising ? 'Finish organising' : 'Organise pills — drag to reorder, click a pill to colour it'}" aria-pressed="${organising}">${organising ? 'Done' : SVG_SLIDERS}</button>`;
+
+  return `<div class="slots-pill-row${organising ? ' organising' : ''}" id="pillRow" aria-live="polite">
       ${pills}
-      <button class="pill-organise-btn${organising ? ' active' : ''}" id="pillOrganiseBtn" title="${organising ? 'Finish organising' : 'Organise pills — drag to reorder, click a pill to colour it'}">${organising ? 'Done' : '✎'}</button>
+      ${organiseBtn}
     </div>
     ${palette}
     ${organising ? '<div class="pill-organise-hint">Drag to reorder · click a pill to colour it · alert amber/red always overrides colour</div>' : ''}`;
@@ -478,7 +492,10 @@ function renderAlertRibbon(byType) {
   }
   if (triggered.length === 0) return '';
   const topLevel = triggered.some((t) => t.level === 'red') ? 'red' : 'amber';
-  const icon = topLevel === 'red' ? '⛔' : '⚠';
+  const iconSvg =
+    topLevel === 'red'
+      ? `<span aria-label="Critical alert">${SVG_ALERT_OCTAGON}</span>`
+      : `<span aria-label="Warning">${SVG_ALERT_TRIANGLE}</span>`;
   const items = triggered
     .map((t) => {
       const msg =
@@ -488,10 +505,12 @@ function renderAlertRibbon(byType) {
       return `<div class="slots-alert-item">${msg}</div>`;
     })
     .join('');
+  const editBtn = `<button class="slots-ribbon-link" id="slotsRibbonEdit">Edit thresholds</button>`;
   return `
     <div class="slots-alert-ribbon slots-alert-ribbon-${topLevel}">
-      <span class="slots-alert-icon">${icon}</span>
+      <span class="slots-alert-icon">${iconSvg}</span>
       <div class="slots-alert-items">${items}</div>
+      ${editBtn}
     </div>
   `;
 }
@@ -502,7 +521,14 @@ function renderSkeleton() {
 
 function renderData(d, visible, visibleSum) {
   if (!d.byType || Object.keys(d.byType).length === 0) {
-    return `<div class="empty-state">No sessions found for ${escHtml(formatDate(state.date))}.</div>`;
+    // Designed empty state (Decision F) — hero is already suppressed by renderHeroCard
+    return `
+      <div class="slots-empty-state">
+        <span class="slots-empty-icon">${SVG_CALENDAR_X}</span>
+        <span class="slots-empty-label">NO SESSIONS — ${escHtml(formatDate(state.date))}</span>
+        <span class="slots-empty-sub">Try another day above.</span>
+      </div>
+    `;
   }
 
   const entries = Object.entries(d.byType).sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
@@ -520,7 +546,7 @@ function renderData(d, visible, visibleSum) {
         <span class="slot-count-ampm" title="Morning">${n.am}<span class="ampm-tag-inline">am</span></span>
         <span class="slot-count-sep">·</span>
         <span class="slot-count-ampm" title="Afternoon">${n.pm}<span class="ampm-tag-inline">pm</span></span>
-        <span class="slot-count slot-count-total">${total}</span>
+        <span class="slot-count-total">${total}</span>
       </span>
     `;
   };
@@ -545,10 +571,10 @@ function renderData(d, visible, visibleSum) {
     unticked.length === 0
       ? ''
       : `
-    <div class="excluded-toggle" id="excludedToggle">
+    <button class="excluded-toggle" id="excludedToggle">
       <span>${showExcluded ? '▾' : '▸'}</span>
       <span>${unticked.length} excluded type${unticked.length !== 1 ? 's' : ''}</span>
-    </div>
+    </button>
     ${showExcluded ? `<div class="excluded-list">${unticked.map(([t, n]) => row(t, n, true)).join('')}</div>` : ''}
   `;
 
@@ -561,7 +587,7 @@ function renderData(d, visible, visibleSum) {
       const staffAmPct = staffSum > 0 ? Math.round((staffVisible.am / staffSum) * 100) : 0;
       return `
       <div class="staff-row">
-        <button class="staff-toggle" data-staff="${escHtml(s.name)}" title="${staffPct}% of visible total · AM ${staffVisible.am} · PM ${staffVisible.pm}">
+        <button class="staff-toggle" data-staff="${escHtml(s.name)}" title="${staffPct}% of visible total · AM ${staffVisible.am} · PM ${staffVisible.pm}" aria-label="${escHtml(s.name)} — ${staffPct}% of visible total">
           ${staffPct > 0 ? `<span class="staff-share" style="width:${staffPct}%" aria-hidden="true"></span>` : ''}
           ${staffSum > 0 ? `<span class="staff-split" aria-hidden="true"><span class="split-am" style="width:${staffAmPct}%"></span><span class="split-pm" style="width:${100 - staffAmPct}%"></span></span>` : ''}
           <span class="staff-chevron">${isExpanded ? '▾' : '▸'}</span>
@@ -603,12 +629,14 @@ function renderData(d, visible, visibleSum) {
 
   return `
     <section class="slots-section">
-      <div class="section-label">By type</div>
-      <div class="slot-list">
-        ${ticked.map(([t, n]) => row(t, n, false)).join('')}
-        ${excludedSection}
-      </div>
-      <div class="section-hint">Untick a type to exclude it from the total.</div>
+      <details class="slot-types-details"${state.typesOpen ? ' open' : ''}>
+        <summary class="slot-types-summary section-label"><span>By type — include/exclude &amp; am/pm detail</span></summary>
+        <div class="slot-list">
+          ${ticked.map(([t, n]) => row(t, n, false)).join('')}
+          ${excludedSection}
+        </div>
+        <div class="section-hint">Untick a type to exclude it from the total.</div>
+      </details>
     </section>
 
     ${
@@ -650,14 +678,31 @@ function bindEvents() {
     });
   });
 
+  // Edit thresholds deep-link button in alert ribbon
+  container.querySelector('#slotsRibbonEdit')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-slots') });
+  });
+
   container.querySelector('#excludedToggle')?.addEventListener('click', () => {
     state.showExcluded = !state.showExcluded;
     saveUiState('slots', {
       hiddenTypes: [...state.hiddenTypes],
       showExcluded: state.showExcluded,
       expanded: [...state.expanded],
+      typesOpen: state.typesOpen,
     });
     render();
+  });
+
+  // Persist the by-type details open/closed state
+  container.querySelector('.slot-types-details')?.addEventListener('toggle', (e) => {
+    state.typesOpen = e.target.open;
+    saveUiState('slots', {
+      hiddenTypes: [...state.hiddenTypes],
+      showExcluded: state.showExcluded,
+      expanded: [...state.expanded],
+      typesOpen: state.typesOpen,
+    });
   });
 
   container.querySelectorAll('.type-toggle').forEach((cb) => {
@@ -670,6 +715,7 @@ function bindEvents() {
         hiddenTypes: [...state.hiddenTypes],
         showExcluded: state.showExcluded,
         expanded: [...state.expanded],
+        typesOpen: state.typesOpen,
       });
       render();
     });
@@ -702,6 +748,34 @@ function bindEvents() {
         state.openColourFor = state.openColourFor === t ? null : t;
         render();
       });
+
+      // Keyboard: Enter/Space toggles colour palette; ArrowLeft/Right reorders
+      pill.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const t = pill.dataset.pillType;
+          state.openColourFor = state.openColourFor === t ? null : t;
+          render();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          const pillType = pill.dataset.pillType;
+          const sibling = e.key === 'ArrowLeft' ? pill.previousElementSibling : pill.nextElementSibling;
+          if (sibling && sibling.classList.contains('slot-pill')) {
+            if (e.key === 'ArrowLeft') {
+              pillRow.insertBefore(pill, sibling);
+            } else {
+              pillRow.insertBefore(sibling, pill);
+            }
+            persistOrderFromDom();
+            // Re-query after re-render (triggered by persistOrderFromDom) and restore focus
+            requestAnimationFrame(() => {
+              const refocused = container.querySelector(`.slot-pill[data-pill-type="${CSS.escape(pillType)}"]`);
+              refocused?.focus();
+            });
+          }
+        }
+      });
+
       pill.addEventListener('dragstart', (e) => {
         dragSrc = pill;
         pill.classList.add('pill-dragging');
@@ -760,6 +834,7 @@ function bindEvents() {
         hiddenTypes: [...state.hiddenTypes],
         showExcluded: state.showExcluded,
         expanded: [...state.expanded],
+        typesOpen: state.typesOpen,
       });
       render();
     });

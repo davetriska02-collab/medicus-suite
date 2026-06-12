@@ -1,14 +1,31 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Trends module (BP / Renal / HbA1c / Cholesterol / Weight) */
 
-.trends-module { font-family: var(--sans); }
+.trends-module {
+  font-family: var(--sans);
+}
 
-.trends-msg { font-family: var(--sans); color: var(--text-3); padding: 20px 16px; font-size: 13px; line-height: 1.5; }
-.trends-hint { font-size: 11px; }
-.trends-msg-inline { padding: 16px 12px; }
+.trends-msg {
+  font-family: var(--sans);
+  color: var(--text-3);
+  padding: 20px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.trends-hint {
+  font-size: 11px;
+}
+.trends-msg-inline {
+  padding: 16px 12px;
+}
 
 /* ── Picker ──────────────────────────────────────────────────────────────────── */
-.trends-picker { display: flex; gap: 6px; padding: 10px 12px 4px; flex-wrap: wrap; }
+.trends-picker {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 4px;
+  flex-wrap: wrap;
+}
 .trends-tab {
   font-family: var(--sans);
   font-size: 12px;
@@ -20,57 +37,192 @@
   background: var(--bg-mid);
   border: 1px solid var(--border);
   color: var(--text-3);
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.trends-tab:hover { color: var(--text-2); border-color: var(--border-hi); }
-/* Selected state: accent wash + line — full fill reserved for clinical salience */
-.trends-tab.active { background: var(--accent-dim); border-color: var(--accent-line); color: var(--text-2); }
+.trends-tab:hover {
+  color: var(--text-2);
+  border-color: var(--border-hi);
+}
+.trends-tab:active {
+  opacity: 0.85;
+}
+/* Selected state: accent wash + line — full fill reserved for clinical salience.
+   [aria-selected] alias keeps the ARIA truth and the visual truth on one attribute. */
+.trends-tab.active,
+.trends-tab[aria-selected='true'] {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
 
 /* ── Shared chart primitives (tc-*) ─────────────────────────────────────────── */
-.tc-svg { width: 100%; height: auto; display: block; overflow: visible; }
-.tc-grid { stroke: var(--border); stroke-width: 1; }
-.tc-axis { stroke: var(--border); stroke-width: 1; }
-.tc-axis-lbl { fill: var(--text-3); font-size: 9px; font-family: var(--sans); }
-.tc-empty { fill: var(--text-3); font-size: 13px; font-family: var(--sans); }
-.tc-line { stroke-width: 2; }
-.tc-dot { fill: var(--text-4); cursor: default; }
-.tc-dot-alert { fill: var(--red); }
-.tc-target { stroke: var(--text-3); stroke-dasharray: 4 3; stroke-width: 1; }
-.tc-target-lbl { fill: var(--text-3); font-size: 9px; font-family: var(--sans); }
-.tc-band { opacity: .15; }
+.tc-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.tc-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.tc-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.tc-axis-lbl {
+  fill: var(--text-3);
+  font-size: 9px;
+  font-family: var(--sans);
+}
+.tc-empty {
+  fill: var(--text-3);
+  font-size: 13px;
+  font-family: var(--sans);
+}
+.tc-line {
+  stroke-width: 2.5;
+}
+.tc-dot {
+  fill: var(--text-4);
+  cursor: default;
+}
+.tc-dot-alert {
+  fill: var(--red);
+}
+.tc-target {
+  stroke: var(--text-3);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+.tc-target-lbl {
+  fill: var(--text-3);
+  font-size: 9px;
+  font-family: var(--sans);
+}
+/* Reference zones: dim washes, not saturated ink — the data line is the signal.
+   Zone edges carried by the dashed band-edge line instead of fill contrast. */
+.tc-band {
+  opacity: 1;
+}
+.tc-band-edge {
+  stroke: var(--border-hi);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
 
 /* Series colours */
-.tc-trend { stroke: var(--accent); }
-.tc-sys   { stroke: var(--red); }
-.tc-dia   { stroke: var(--accent); }
-.tc-acr   { stroke: var(--accent); }
-.tc-egfr  { stroke: var(--text-4); }
+.tc-trend {
+  stroke: var(--accent);
+}
+.tc-sys {
+  stroke: var(--red);
+}
+.tc-dia {
+  stroke: var(--accent);
+}
+.tc-acr {
+  stroke: var(--accent);
+}
+/* eGFR: violet ink — distinct from ACR (accent) and BP (red/accent), and passes
+   non-text contrast where --text-4 failed (~2.5:1 dark) */
+.tc-egfr {
+  stroke: var(--violet);
+}
 
-/* ACR band fills */
-.tc-a1 { fill: var(--green); }
-.tc-a2 { fill: var(--amber); }
-.tc-a3 { fill: var(--red);   }
+/* ACR band fills — dim washes (reference zones, not alerts) */
+.tc-a1 {
+  fill: var(--green-dim);
+}
+.tc-a2 {
+  fill: var(--amber-dim);
+}
+.tc-a3 {
+  fill: var(--red-dim);
+}
 
-/* eGFR G-stage band fills */
-.tc-g1, .tc-g2             { fill: var(--green); }
-.tc-g3a                    { fill: var(--amber); }
-.tc-g3b, .tc-g4, .tc-g5   { fill: var(--red);   }
+/* eGFR G-stage band fills — dim washes */
+.tc-g1,
+.tc-g2 {
+  fill: var(--green-dim);
+}
+.tc-g3a {
+  fill: var(--amber-dim);
+}
+.tc-g3b,
+.tc-g4,
+.tc-g5 {
+  fill: var(--red-dim);
+}
 
 /* ── Obs view: latest value head ─────────────────────────────────────────────── */
-.trends-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px 4px; flex-wrap: wrap; }
-.trends-val  { display: flex; align-items: baseline; gap: 6px; }
-.trends-num  { font-size: 22px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
-.trends-unit { font-size: 11px; color: var(--text-3); }
-.trends-delta { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-pill); background: var(--bg-mid); font-variant-numeric: tabular-nums; }
-.trends-up, .trends-down { color: var(--text-2); }
-.trends-flat { color: var(--text-3); }
-.trends-latest-date { font-size: 10px; color: var(--text-3); }
+.trends-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px 4px;
+  flex-wrap: wrap;
+}
+.trends-val {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.trends-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.trends-unit {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.trends-delta {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.trends-up,
+.trends-down {
+  color: var(--text-2);
+}
+.trends-flat {
+  color: var(--text-3);
+}
+.trends-latest-date {
+  font-size: 10px;
+  color: var(--text-3);
+}
 
-.trends-section-lbl { font-size: 10px; color: var(--text-3); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .04em; }
-.trends-count       { font-size: 10px; color: var(--text-3); padding: 4px 12px 12px; font-variant-numeric: tabular-nums; }
+.trends-section-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-4);
+  padding: 6px 12px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.trends-count {
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 4px 12px 12px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── BP view ─────────────────────────────────────────────────────────────────── */
-.bpt-module { font-family: var(--sans); }
+.bpt-module {
+  font-family: var(--sans);
+}
 
 .bpt-head {
   display: flex;
@@ -79,8 +231,17 @@
   gap: 10px;
   padding: 10px 12px 6px;
 }
-.bpt-latest { font-size: 20px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
-.bpt-latest small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+.bpt-latest {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.bpt-latest small {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 400;
+}
 
 .bpt-pill {
   font-size: 11px;
@@ -92,64 +253,251 @@
 /* CLINICAL SALIENCE: full-ink fills — these are patient-safety state indicators.
    color: var(--bg-deep) ensures near-black on pastel dark-theme inks (not pure #fff
    which would give low contrast on dark's pastel red/green).                    */
-.bpt-above   { background: var(--red);    color: var(--bg-deep); }
-.bpt-met     { background: var(--green);  color: var(--bg-deep); }
-.bpt-neutral { background: var(--border); color: var(--text-3); }
-.bpt-tgt-lbl { font-weight: 400; opacity: .85; }
+.bpt-above {
+  background: var(--red);
+  color: var(--bg-deep);
+}
+.bpt-met {
+  background: var(--green);
+  color: var(--bg-deep);
+}
+/* bpt-neutral: informational, not a status — chip recipe, not a flat fill */
+.bpt-neutral {
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+}
+.bpt-tgt-lbl {
+  font-weight: 400;
+  opacity: 0.85;
+}
 
-.bpt-registers { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 8px; }
+.bpt-registers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 0 12px 8px;
+}
 /* bpt-reg: register chip — bg-mid + explicit border for both-theme correctness */
-.bpt-reg { font-size: 10px; background: var(--bg-mid); border: 1px solid var(--border); color: var(--text-4); padding: 1px 7px; border-radius: var(--r-pill); }
-.bpt-reg-none { color: var(--text-3); background: transparent; padding: 0; }
+.bpt-reg {
+  font-size: 10px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-4);
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+}
+.bpt-reg-none {
+  color: var(--text-3);
+  background: transparent;
+  padding: 0;
+}
 
-.bpt-note { font-size: 11px; color: var(--amber); padding: 4px 12px 8px; line-height: 1.4; }
+.bpt-note {
+  font-size: 11px;
+  color: var(--amber);
+  padding: 4px 12px 8px;
+  line-height: 1.4;
+}
 
-.bpt-legend { display: flex; gap: 14px; padding: 5px 12px; font-family: var(--sans); font-size: 11px; color: var(--text-4); }
-.bpt-key { display: flex; align-items: center; gap: 4px; }
-.bpt-key::before { content: ''; display: inline-block; width: 14px; height: 2px; }
-.bpt-k-sys::before  { background: var(--red); }
-.bpt-k-dia::before  { background: var(--accent); }
-.bpt-k-tgt::before  { background: var(--text-3); border-top: 2px dashed var(--text-3); height: 0; }
+.bpt-legend {
+  display: flex;
+  gap: 14px;
+  padding: 5px 12px;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
+}
+.bpt-key {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bpt-key::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+}
+.bpt-k-sys::before {
+  background: var(--red);
+}
+.bpt-k-dia::before {
+  background: var(--accent);
+}
+.bpt-k-tgt::before {
+  background: var(--text-3);
+  border-top: 2px dashed var(--text-3);
+  height: 0;
+}
 
-.bpt-count { font-size: 10px; color: var(--text-3); padding: 0 12px 10px; font-variant-numeric: tabular-nums; }
+.bpt-foot {
+  font-size: 10px;
+  color: var(--text-4);
+  padding: 0 12px 6px;
+}
+
+.bpt-count {
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 0 12px 10px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Renal view ──────────────────────────────────────────────────────────────── */
-.acrt-module { font-family: var(--sans); }
+.acrt-module {
+  font-family: var(--sans);
+}
 
-.acrt-banner { font-size: 12px; padding: 7px 12px; font-weight: 600; line-height: 1.4; }
+.acrt-banner {
+  font-size: 12px;
+  padding: 7px 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
 /* CLINICAL SALIENCE: full-ink fills — colour: var(--bg-deep) for dark-theme contrast */
-.acrt-banner-red   { background: var(--red);   color: var(--bg-deep); }
-.acrt-banner-amber { background: var(--amber); color: var(--bg-deep); }
+.acrt-banner-red {
+  background: var(--red);
+  color: var(--bg-deep);
+}
+.acrt-banner-amber {
+  background: var(--amber);
+  color: var(--bg-deep);
+}
 
-.acrt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 12px 8px; }
-.acrt-val  { display: flex; align-items: baseline; gap: 5px; }
-.acrt-num  { font-size: 20px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
-.acrt-unit { font-size: 11px; color: var(--text-3); }
-.acrt-no-val { font-size: 12px; color: var(--text-3); }
+.acrt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 8px;
+}
+.acrt-val {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.acrt-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.acrt-unit {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.acrt-no-val {
+  font-size: 12px;
+  color: var(--text-3);
+}
 
-.acrt-stage { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: var(--r-pill); }
+.acrt-stage {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
 /* CLINICAL SALIENCE: KDIGO stage pills — full-ink fills, colour: var(--bg-deep) */
-.acrt-a1 { background: var(--green); color: var(--bg-deep); }
-.acrt-a2 { background: var(--amber); color: var(--bg-deep); }
-.acrt-a3 { background: var(--red);   color: var(--bg-deep); }
+.acrt-a1 {
+  background: var(--green);
+  color: var(--bg-deep);
+}
+.acrt-a2 {
+  background: var(--amber);
+  color: var(--bg-deep);
+}
+.acrt-a3 {
+  background: var(--red);
+  color: var(--bg-deep);
+}
 
-.acrt-g1, .acrt-g2             { background: var(--green); color: var(--bg-deep); }
-.acrt-g3a                       { background: var(--amber); color: var(--bg-deep); }
-.acrt-g3b, .acrt-g4, .acrt-g5  { background: var(--red);   color: var(--bg-deep); }
+.acrt-g1,
+.acrt-g2 {
+  background: var(--green);
+  color: var(--bg-deep);
+}
+.acrt-g3a {
+  background: var(--amber);
+  color: var(--bg-deep);
+}
+.acrt-g3b,
+.acrt-g4,
+.acrt-g5 {
+  background: var(--red);
+  color: var(--bg-deep);
+}
 
-.acrt-kdigo      { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.acrt-kdigo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
 /* acrt-kdigo-cell: non-clinical container — bg-mid + border (replaces raw --border background) */
-.acrt-kdigo-cell { font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-md); background: var(--bg-mid); border: 1px solid var(--border); color: var(--text-1); font-variant-numeric: tabular-nums; }
-.acrt-kdigo-freq { font-size: 12px; color: var(--text-4); font-weight: 600; font-variant-numeric: tabular-nums; }
-.acrt-kdigo-lbl  { font-size: 10px; color: var(--text-3); }
+.acrt-kdigo-cell {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.acrt-kdigo-freq {
+  font-size: 12px;
+  color: var(--text-4);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.acrt-kdigo-lbl {
+  font-size: 10px;
+  color: var(--text-3);
+}
 
-.acrt-section-lbl { font-size: 10px; color: var(--text-3); padding: 6px 12px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.acrt-section-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-4);
+  padding: 6px 12px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
 
-.acrt-band-legend { display: flex; gap: 12px; padding: 4px 12px; font-size: 10px; }
-.acrt-band-a1, .acrt-band-a2, .acrt-band-a3 { padding: 1px 6px; border-radius: var(--r-pill); }
+.acrt-band-legend {
+  display: flex;
+  gap: 12px;
+  padding: 4px 12px;
+  font-size: 10px;
+}
+.acrt-band-a1,
+.acrt-band-a2,
+.acrt-band-a3 {
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
 /* CLINICAL SALIENCE: band legend chips — full-ink, colour: var(--bg-deep) */
-.acrt-band-a1 { background: var(--green); color: var(--bg-deep); opacity: .85; }
-.acrt-band-a2 { background: var(--amber); color: var(--bg-deep); opacity: .85; }
-.acrt-band-a3 { background: var(--red);   color: var(--bg-deep); opacity: .85; }
+.acrt-band-a1 {
+  background: var(--green);
+  color: var(--bg-deep);
+  opacity: 0.85;
+}
+.acrt-band-a2 {
+  background: var(--amber);
+  color: var(--bg-deep);
+  opacity: 0.85;
+}
+.acrt-band-a3 {
+  background: var(--red);
+  color: var(--bg-deep);
+  opacity: 0.85;
+}
 
-.acrt-count { font-size: 10px; color: var(--text-3); padding: 4px 12px 12px; font-variant-numeric: tabular-nums; }
+.acrt-count {
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 4px 12px 12px;
+  font-variant-numeric: tabular-nums;
+}
