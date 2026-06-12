@@ -1372,3 +1372,131 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   transform: translateX(14px);
   background: var(--accent);
 }
+
+/* ── Guided tour (spotlight step-through) ───────────────────────────────────
+   Engine: side-panel/tour/tour.js · steps: side-panel/tour/tour-steps.js.
+   Shell-owned (not module CSS) because the walkthrough runs across tabs and
+   must be styled before any module stylesheet has loaded. The layer blocks
+   interaction; the spotlight cuts a hole in the scrim via an oversized
+   box-shadow so the highlighted element shows through at full brightness. */
+.suite-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  font-family: var(--sans);
+}
+.suite-tour-spot {
+  position: fixed;
+  border-radius: var(--r-md);
+  /* Scrim drawn as the spotlight's shadow — same dark scrim as the modals */
+  box-shadow:
+    0 0 0 9999px rgba(15, 23, 42, 0.55),
+    0 0 0 2px var(--accent);
+  transition:
+    left var(--med) var(--ease),
+    top var(--med) var(--ease),
+    width var(--med) var(--ease),
+    height var(--med) var(--ease);
+  pointer-events: none;
+}
+/* Centred (no-target) steps: no cutout — the layer itself carries the scrim.
+   (A parked/zero-size spotlight can't do it: Chromium culls box-shadow
+   painting for offscreen/zero-area boxes.) */
+.suite-tour-layer.suite-tour-center {
+  background: rgba(15, 23, 42, 0.55);
+}
+.suite-tour-center .suite-tour-spot {
+  display: none;
+}
+.suite-tour-card {
+  position: fixed;
+  width: min(300px, calc(100vw - 24px));
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  transition:
+    left var(--med) var(--ease),
+    top var(--med) var(--ease);
+}
+.suite-tour-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.suite-tour-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+.suite-tour-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.suite-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+.suite-tour-progress {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.suite-tour-btns {
+  display: flex;
+  gap: 4px;
+}
+.suite-tour-btn {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.suite-tour-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+.suite-tour-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.suite-tour-next {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.suite-tour-next:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .suite-tour-spot,
+  .suite-tour-card {
+    transition: none;
+  }
+}
