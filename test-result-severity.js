@@ -1174,6 +1174,76 @@ console.log('\n--- suppressIfProblem: word-boundary match + substring exclude --
   assert(lvl([{ label: 'Hypertension' }]) === 'red', 'suppress: unrelated problem → fires');
 }
 
+// ── Shipped builtin result rules: schema-valid + behave as labelled ───────────
+// Guards the rules baked into defaults.json so a bad edit (wrong comparator,
+// out-of-order thresholds, dropped match string) fails CI rather than silently
+// shipping a non-firing patient-safety rule.
+console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---');
+{
+  const { validateResultRule } = require('./engine/result-rules.js');
+  const shipped = require('./defaults.json').resultRules;
+
+  assert(Array.isArray(shipped) && shipped.length > 0, 'defaults.json ships a non-empty resultRules array');
+
+  let allValid = true;
+  shipped.forEach(r => {
+    const errs = validateResultRule(r);
+    if (errs.length) { allValid = false; console.error(`    ${r && r.id}: ${errs.join('; ')}`); }
+  });
+  assert(allValid, 'every shipped result rule validates against the schema');
+
+  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  // The six rules added in this change must all be present.
+  ['base-lithium-toxicity', 'base-digoxin-toxicity', 'base-low-potassium',
+   'base-high-calcium', 'base-egfr-amber', 'base-blood-culture'].forEach(id => {
+    assert(!!byId[id], `shipped rules include ${id}`);
+  });
+
+  // Helper: build a single-result report and grade it with the shipped rules.
+  const grade = (name, value) =>
+    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]),
+      { resultRules: shipped });
+  const gradeText = (name, text) =>
+    evaluateReportSeverity(makeReport([{ name, value: null, text, urgent: false, isAbove: false, isBelow: false }]),
+      { resultRules: shipped });
+
+  // Lithium: 0.8 calm, 1.2 amber (supratherapeutic), 1.8 red (toxic).
+  assert(grade('Serum lithium', 0.8).level === 'none', 'lithium 0.8 → none (in target range)');
+  assert(grade('Serum lithium', 1.2).level === 'amber', 'lithium 1.2 → amber (supratherapeutic)');
+  assert(grade('Serum lithium', 1.8).level === 'red', 'lithium 1.8 → red (toxic)');
+
+  // Digoxin: 1.0 calm, 2.4 red (toxic).
+  assert(grade('Digoxin level', 1.0).level === 'none', 'digoxin 1.0 → none');
+  assert(grade('Digoxin level', 2.4).level === 'red', 'digoxin 2.4 → red (toxic)');
+
+  // Low potassium gap-fill: 2.8 amber, 2.3 red. (High-K rule untouched: 7.0 → red.)
+  assert(grade('Serum potassium', 2.8).level === 'amber', 'potassium 2.8 → amber (hypokalaemia)');
+  assert(grade('Serum potassium', 2.3).level === 'red', 'potassium 2.3 → red (severe hypokalaemia)');
+  assert(grade('Serum potassium', 7.0).level === 'red', 'potassium 7.0 → red (existing high-K rule still fires)');
+  // Urinary potassium must NOT trip the serum rule (exclude).
+  assert(grade('Urine potassium', 2.0).level === 'none', 'urine potassium 2.0 → none (excluded)');
+
+  // Hypercalcaemia: 2.7 amber, 3.2 red; ionised calcium must not false-fire.
+  assert(grade('Adjusted calcium', 2.7).level === 'amber', 'adjusted calcium 2.7 → amber');
+  assert(grade('Corrected calcium', 3.2).level === 'red', 'corrected calcium 3.2 → red (severe hypercalcaemia)');
+  assert(grade('Ionised calcium', 1.3).level === 'none', 'ionised calcium 1.3 → none (excluded)');
+
+  // eGFR amber band (CKD G4) added; existing red <15 preserved.
+  assert(grade('eGFR', 25).level === 'amber', 'eGFR 25 → amber (CKD G4 band)');
+  assert(grade('eGFR', 12).level === 'red', 'eGFR 12 → red (existing G5 rule still fires)');
+  assert(grade('eGFR', 55).level === 'none', 'eGFR 55 → none');
+
+  // Blood culture text rule: a known-negative phrase calms (noGrowth); anything else
+  // (e.g. an organism isolated) escalates to review — it can never hide a positive.
+  const calm = gradeText('Blood culture', 'No growth after 5 days');
+  assert(calm.level === 'none' && calm.noGrowthCount === 1, 'blood culture "no growth" → calm noGrowth');
+  const pos = gradeText('Blood culture', 'Staphylococcus aureus isolated');
+  assert(pos.level === 'amber' && pos.reviewCount === 1, 'blood culture with organism → amber review');
+  // "Gram negative" in a positive report must NOT calm it (no bare "negative" phrase).
+  const gramNeg = gradeText('Blood culture', 'Escherichia coli (Gram negative bacilli) isolated');
+  assert(gramNeg.level === 'amber' && gramNeg.reviewCount === 1, 'blood culture "Gram negative ... isolated" → still amber review');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
