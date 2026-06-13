@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.75.2] — 2026-06-13
+
+### Fix: v3.75.0 config changes never reached existing users
+
+The shipped-config version (`defaults.json` `"version"`) was **not bumped** in v3.75.0,
+so `mergeShippedDefaults` — which only runs when the shipped config is newer than the
+user's stored copy — never fired for anyone who already had a saved config. Two visible
+consequences:
+
+- The **"Urgent:" result-chip prefix kept rendering** even though the default label had
+  changed to `{name}`. (Made worse by a latent bug: that migration *bakes the whole
+  shipped chip map into the saved config*, so once a default label changes, the stored
+  old label shadows the new default forever.)
+- The new **bowel-screening non-responder rule was never appended** to existing users'
+  `resultRules`, so it couldn't fire for them.
+
+Fixes: `defaults.json` `"version"` 9 → 10 so the migration runs and the bowel rule is
+appended; and `mergeShippedDefaults` now reverts any chip label still frozen at a
+since-changed shipped default (tracked in a new `RETIRED_CHIP_LABELS` table, in lock-step
+across the content script and options page) back to the current shipped label — so the
+`Urgent:` prefix finally drops for existing installs on next load. The whitespace fix in
+v3.75.1 was code, not config, so it already reached users.
+
+manifest 3.75.1→3.75.2; defaults schema 9→10.
+
 ## [v3.75.1] — 2026-06-13
 
 ### Result text rules: match phrases across lab line-breaks
