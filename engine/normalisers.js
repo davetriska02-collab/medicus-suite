@@ -499,7 +499,15 @@
       rawResults.forEach(r => {
         if (!r || typeof r !== 'object') return;
         const name = r.description || null;
-        const rawValue = r.resultValue != null ? String(r.resultValue) : '';
+        // text-result types (e.g. microbiology / culture) carry their content in
+        // `resultText`, not `resultValue` (which is absent entirely). Fall back to it
+        // so the result has a displayable value and the searchable text below is populated.
+        const rawValue =
+          r.resultValue != null
+            ? String(r.resultValue)
+            : r.resultText != null
+              ? String(r.resultText)
+              : '';
         const numValue = parseObservationValue(rawValue);
         const { low, high } = parseRefRange(r.referenceRanges);
 
@@ -536,6 +544,49 @@
           });
         }
 
+        // Build a single searchable text string for text-classification rules
+        // (microbiology / free-text results that have no numeric high/low flag).
+        // We gather rawValue, interpretation, performerComments, resultPerformerComments,
+        // and filingComments defensively, then join with spaces. Case is preserved;
+        // callers must lowercase before searching.
+        const textParts = [];
+        if (rawValue) textParts.push(rawValue);
+        // resultText explicitly (covers results that carry BOTH a numeric resultValue
+        // and a separate free-text resultText where a normal phrase may live).
+        if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) {
+          textParts.push(r.resultText);
+        }
+        if (r.interpretation && typeof r.interpretation === 'string') {
+          textParts.push(r.interpretation);
+        }
+        if (r.performerComments && typeof r.performerComments === 'string') {
+          textParts.push(r.performerComments);
+        }
+        // resultPerformerComments — may be an array of strings or objects
+        if (Array.isArray(r.resultPerformerComments)) {
+          r.resultPerformerComments.forEach(item => {
+            if (typeof item === 'string') {
+              textParts.push(item);
+            } else if (item && typeof item === 'object') {
+              // Pull any of text / comment / value sub-field present
+              const sub = item.text || item.comment || item.value;
+              if (sub && typeof sub === 'string') textParts.push(sub);
+            }
+          });
+        }
+        // filingComments — may be an array of strings or objects
+        if (Array.isArray(r.filingComments)) {
+          r.filingComments.forEach(item => {
+            if (typeof item === 'string') {
+              textParts.push(item);
+            } else if (item && typeof item === 'object') {
+              const sub = item.text || item.comment || item.value;
+              if (sub && typeof sub === 'string') textParts.push(sub);
+            }
+          });
+        }
+        const text = textParts.join(' ');
+
         safe.results.push({
           name,
           value: numValue,
@@ -549,7 +600,8 @@
           urgent: !!r.requiresUrgentReview,
           interpretation: r.interpretation || null,
           date,
-          history
+          history,
+          text
         });
       });
     } catch (_) {

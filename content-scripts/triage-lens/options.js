@@ -90,7 +90,11 @@
     out.thresholds = { ...(shipped.thresholds || {}), ...(cfg.thresholds || {}) };
     out.prefs = { ...(shipped.prefs || {}), ...(cfg.prefs || {}) };
     out.systemChips = { ...(shipped.systemChips || {}), ...(cfg.systemChips || {}) };
-    out.resultRules = Array.isArray(cfg.resultRules) ? cfg.resultRules : (shipped.resultRules || []);
+    out.resultRules = [...(Array.isArray(cfg.resultRules) ? cfg.resultRules : [])];
+    const haveRR = new Set(out.resultRules.map(r => r && r.id));
+    for (const r of (shipped.resultRules || [])) {
+      if (r.builtin && !haveRR.has(r.id) && !removed.has(r.id)) out.resultRules.push(r);
+    }
     out.version = shipped.version;
     return out;
   };
@@ -872,6 +876,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'queue.resultAbnormal',       page: 'Queue', desc: 'Investigation result has out-of-range analytes', vars: ['{count}'] },
     { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
     { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
+    { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
+    { id: 'queue.resultNoGrowth',       page: 'Queue', desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip', vars: ['{count}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },
@@ -1051,6 +1057,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   });
 
   const rrSeveritySummary = (rule) => {
+    if (rule.kind === 'text') {
+      const phrases = Array.isArray(rule.normalText) ? rule.normalText : [];
+      const shown = phrases.slice(0, 3).join(', ');
+      const more = phrases.length > 3 ? ' …' : '';
+      return 'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more;
+    }
     const parts = [];
     const cmp = rule.comparator === 'above' ? '≥' : '≤';
     if (rule.red != null) parts.push(cmp + rule.red + ' red');
@@ -1114,6 +1126,14 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
   };
 
+  const rrApplyKindVisibility = (kind) => {
+    const thresholdEls = document.querySelectorAll('.rr-fields-threshold');
+    const textEls = document.querySelectorAll('.rr-fields-text');
+    const isText = kind === 'text';
+    thresholdEls.forEach(el => { el.style.display = isText ? 'none' : ''; });
+    textEls.forEach(el => { el.style.display = isText ? '' : 'none'; });
+  };
+
   const rrUpdateTestMatch = () => {
     const testEl = $('#rrTestName');
     const resultEl = $('#rrTestResult');
@@ -1171,6 +1191,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     });
     $('#rrAnalyteMatch').addEventListener('input', rrUpdateTestMatch);
     $('#rrTestName').addEventListener('input', rrUpdateTestMatch);
+    $('#rrKind').addEventListener('change', (e) => rrApplyKindVisibility(e.target.value));
   };
 
   const openResultRuleEditor = (id) => {
@@ -1182,11 +1203,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrEditTitle').textContent = rule.builtin ? 'Edit built-in result rule: ' + rule.label : 'Edit result rule: ' + rule.label;
     $('#rrLabel').value = rrEditingDraft.label || '';
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
+    const kind = rrEditingDraft.kind === 'text' ? 'text' : 'threshold';
+    $('#rrKind').value = kind;
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
     $('#rrAmber').value = rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
     $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
     $('#rrUnit').value = rrEditingDraft.unit || '';
+    $('#rrNormalText').value = Array.isArray(rrEditingDraft.normalText) ? rrEditingDraft.normalText.join('\n') : '';
+    $('#rrNormalLabel').value = rrEditingDraft.normalLabel || '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
+    rrApplyKindVisibility(kind);
 
     // Reset test-match indicator when opening editor
     const testEl = $('#rrTestName');
@@ -1199,16 +1225,40 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
 
   const saveCurrentResultRule = async () => {
     if (!rrEditingId) return;
-    rrEditingDraft.label = $('#rrLabel').value.trim() || 'Untitled result rule';
-    rrEditingDraft.analyte = { match: $('#rrAnalyteMatch').value.split('\n').map(s => s.trim()).filter(Boolean) };
-    rrEditingDraft.comparator = $('#rrComparator').value;
-    const amberVal = $('#rrAmber').value.trim();
-    const redVal = $('#rrRed').value.trim();
-    rrEditingDraft.amber = amberVal !== '' && Number.isFinite(+amberVal) ? +amberVal : null;
-    rrEditingDraft.red = redVal !== '' && Number.isFinite(+redVal) ? +redVal : null;
-    const unitVal = $('#rrUnit').value.trim();
-    rrEditingDraft.unit = unitVal || null;
-    rrEditingDraft.enabled = $('#rrEnabled').checked;
+    const selectedKind = $('#rrKind').value;
+    const label = $('#rrLabel').value.trim() || 'Untitled result rule';
+    const analyteMatch = $('#rrAnalyteMatch').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const enabled = $('#rrEnabled').checked;
+
+    if (selectedKind === 'text') {
+      const normalText = ($('#rrNormalText').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const normalLabel = $('#rrNormalLabel').value.trim() || 'No growth';
+      rrEditingDraft = {
+        id: rrEditingDraft.id,
+        builtin: rrEditingDraft.builtin || false,
+        kind: 'text',
+        label,
+        normalLabel,
+        analyte: { match: analyteMatch },
+        normalText,
+        enabled
+      };
+    } else {
+      rrEditingDraft.label = label;
+      rrEditingDraft.analyte = { match: analyteMatch };
+      rrEditingDraft.comparator = $('#rrComparator').value;
+      const amberVal = $('#rrAmber').value.trim();
+      const redVal = $('#rrRed').value.trim();
+      rrEditingDraft.amber = amberVal !== '' && Number.isFinite(+amberVal) ? +amberVal : null;
+      rrEditingDraft.red = redVal !== '' && Number.isFinite(+redVal) ? +redVal : null;
+      const unitVal = $('#rrUnit').value.trim();
+      rrEditingDraft.unit = unitVal || null;
+      rrEditingDraft.enabled = enabled;
+      // Remove text-only fields if switching from text to threshold
+      delete rrEditingDraft.kind;
+      delete rrEditingDraft.normalText;
+      delete rrEditingDraft.normalLabel;
+    }
 
     const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
     if (VALIDATE) {
@@ -1329,15 +1379,24 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (previewEl && previewList) {
         previewList.innerHTML = '';
         for (const c of candidates) {
-          const cmp = c.comparator === 'above' ? '≥' : '≤';
-          const parts = [];
-          if (c.red != null) parts.push(cmp + c.red + ' red');
-          if (c.amber != null) parts.push(cmp + c.amber + ' amber');
-          const unit = c.unit ? ' (' + c.unit + ')' : '';
-          const summary = parts.join(' / ') + unit;
+          let summary;
+          if (c.kind === 'text') {
+            const phrases = Array.isArray(c.normalText) ? c.normalText : [];
+            const shownPhrases = phrases.slice(0, 3).join(', ') || '(none)';
+            const morePhrases = phrases.length > 3 ? ' …' : '';
+            summary = (c.label || 'Untitled') + ' — Text: "' + (c.label || 'Needs review') + '" unless: ' + shownPhrases + morePhrases + ' — will import DISABLED';
+          } else {
+            const cmp = c.comparator === 'above' ? '≥' : '≤';
+            const parts = [];
+            if (c.red != null) parts.push(cmp + c.red + ' red');
+            if (c.amber != null) parts.push(cmp + c.amber + ' amber');
+            const unit = c.unit ? ' (' + c.unit + ')' : '';
+            const numSummary = parts.join(' / ') + unit;
+            summary = (c.label || 'Untitled') + ' — ' + (c.comparator === 'above' ? 'at or above' : 'at or below') + ': ' + numSummary + ' — will import DISABLED';
+          }
           const item = document.createElement('div');
           item.className = 'tl-rr-llm-preview-item';
-          item.textContent = (c.label || 'Untitled') + ' — ' + (c.comparator === 'above' ? 'at or above' : 'at or below') + ': ' + summary + ' — will import DISABLED';
+          item.textContent = summary;
           previewList.appendChild(item);
         }
         if (btnConfirm) btnConfirm.textContent = 'Add ' + candidates.length + ' rule' + (candidates.length !== 1 ? 's' : '') + ', disabled';

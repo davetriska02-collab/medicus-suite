@@ -354,6 +354,14 @@
         </label>
 
         <label class="tl-field">
+          <span>Rule type</span>
+          <select id="rrKind">
+            <option value="threshold">Numeric threshold</option>
+            <option value="text">Text / culture</option>
+          </select>
+        </label>
+
+        <label class="tl-field">
           <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
           <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
         </label>
@@ -364,33 +372,47 @@
           <span id="rrTestResult" class="tl-rr-test-result"></span>
         </div>
 
-        <label class="tl-field">
-          <span>Comparator <small>(engine evaluates inclusively)</small></span>
-          <select id="rrComparator">
-            <option value="above">at or above (≥ threshold) — fires when value ≥ threshold</option>
-            <option value="below">at or below (≤ threshold) — fires when value ≤ threshold</option>
-          </select>
-        </label>
+        <div class="rr-fields-threshold">
+          <label class="tl-field">
+            <span>Comparator <small>(engine evaluates inclusively)</small></span>
+            <select id="rrComparator">
+              <option value="above">at or above (≥ threshold) — fires when value ≥ threshold</option>
+              <option value="below">at or below (≤ threshold) — fires when value ≤ threshold</option>
+            </select>
+          </label>
 
-        <label class="tl-field">
-          <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
-          <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
-        </label>
+          <label class="tl-field" style="margin-top:8px">
+            <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
+            <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
+          </label>
 
-        <label class="tl-field">
-          <span>Red threshold <small>(optional — leave blank to omit)</small></span>
-          <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
-        </label>
+          <label class="tl-field" style="margin-top:8px">
+            <span>Red threshold <small>(optional — leave blank to omit)</small></span>
+            <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
+          </label>
 
-        <label class="tl-field">
-          <span>Unit <small>(display only, e.g. mmol/L)</small></span>
-          <input type="text" id="rrUnit" placeholder="mmol/L">
-          <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
-        </label>
+          <label class="tl-field" style="margin-top:8px">
+            <span>Unit <small>(display only, e.g. mmol/L)</small></span>
+            <input type="text" id="rrUnit" placeholder="mmol/L">
+            <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
+          </label>
+        </div>
 
-        <label class="tl-field tl-field-inline">
+        <div class="rr-fields-text" style="display:none">
+          <label class="tl-field">
+            <span>Normal phrases <small>(one per line) — if any appears in the result text, the result is treated as normal, e.g. no growth</small></span>
+            <textarea id="rrNormalText" rows="5" placeholder="no growth&#10;no significant growth&#10;no organisms isolated"></textarea>
+          </label>
+
+          <label class="tl-field" style="margin-top:8px">
+            <span>Normal chip label <small>(shown when a normal phrase is matched)</small></span>
+            <input type="text" id="rrNormalLabel" maxlength="60" placeholder="No growth">
+          </label>
+        </div>
+
+        <label class="tl-field tl-field-inline" style="margin-top:8px">
           <input type="checkbox" id="rrEnabled">
-          <span>Enabled <small>(uncheck until you have reviewed the thresholds)</small></span>
+          <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
         </label>
       </div>
 
@@ -398,6 +420,8 @@
         <div class="tl-help">
           <strong>How result rules work:</strong><br>
           Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab.
+          <br><br>
+          <strong>Text / culture rules</strong> match a result by analyte name, then inspect the result text: if any <em>normal phrase</em> is found (case-insensitive) the calm "normal" chip is shown; otherwise the label chip is shown (amber by default). Use this for microbiology culture reports such as MSU.
         </div>
       </div>
     </div>

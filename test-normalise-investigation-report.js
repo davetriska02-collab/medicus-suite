@@ -256,6 +256,46 @@ console.log('\n--- Date format DD Mon YY HH:MM ---');
   assert(out.results[0].date === '2026-06-11', 'DD Mon YY format → 2026-06-11');
 }
 
+// ── Microbiology text-result (resultText, no resultValue) ─────────────────────
+// Mirrors the real Medicus "Urine M,C&S" shape: text-result type carries its
+// content in resultText; resultValue is absent entirely.
+console.log('\n--- Microbiology text-result (resultText) ---');
+{
+  const negative = {
+    description: 'Urine culture',
+    resultType: 'text-result',
+    resultText: 'No growth',
+    interpretation: null,
+    performerComments: null,
+    resultPerformerComments: [],
+    filingComments: [],
+    referenceRanges: [],
+    previousResults: [],
+  };
+  const out = normaliseInvestigationReport(makePayload([{ results: [negative] }], []));
+  const r = out.results[0];
+  assert(r.name === 'Urine culture', 'name is Urine culture');
+  assert(r.rawValue === 'No growth', 'rawValue falls back to resultText when resultValue absent');
+  assert(/no growth/i.test(r.text), 'searchable text contains the resultText "No growth"');
+}
+{
+  const positive = {
+    description: 'Urine culture',
+    resultType: 'text-result',
+    resultText: '>10*8 cfu/L of\n  Escherichia coli\n       Trimethoprim (Sensitive)',
+    interpretation: null,
+    performerComments: null,
+    resultPerformerComments: ['Mid-stream urine - REQUESTED TEST SETS COMPLETE'],
+    filingComments: [],
+    referenceRanges: [],
+    previousResults: [],
+  };
+  const out = normaliseInvestigationReport(makePayload([{ results: [positive] }], []));
+  const r = out.results[0];
+  assert(/escherichia coli/i.test(r.text), 'searchable text contains the organism from resultText');
+  assert(!/no growth/i.test(r.text), 'positive culture text has no normal phrase');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

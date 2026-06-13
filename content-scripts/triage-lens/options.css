@@ -715,3 +715,9 @@ details summary {
   color: var(--amber);
   vertical-align: middle;
 }
+
+/* Rule-kind field groups — toggled show/hide by rrApplyKindVisibility() */
+.rr-fields-threshold,
+.rr-fields-text {
+  margin-top: 0;
+}

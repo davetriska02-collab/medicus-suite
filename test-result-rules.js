@@ -255,6 +255,248 @@ console.log('\n--- RESULT_RULE_FIELDS ---');
   assert(RESULT_RULE_FIELDS.includes('comparator'), 'RESULT_RULE_FIELDS includes "comparator"');
 }
 
+// ── validateResultRule: text rule — valid ─────────────────────────────────────
+console.log('\n--- validateResultRule: text rule valid cases ---');
+{
+  // Minimal valid text rule
+  const errs = validateResultRule({
+    id: 'rule_msu',
+    enabled: false,
+    builtin: false,
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU', 'urine culture'] },
+    normalText: ['no growth'],
+    normalLabel: 'No growth',
+  });
+  assert(errs.length === 0, 'complete valid text rule returns no errors');
+}
+{
+  // normalLabel is optional — omitting it is valid
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture review',
+    analyte: { match: ['culture'] },
+    normalText: ['no growth', 'no significant growth'],
+  });
+  assert(errs.length === 0, 'text rule without normalLabel → still valid');
+}
+{
+  // Multiple match and normalText entries are valid
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'MSU / blood culture needs review',
+    analyte: { match: ['MSU', 'blood culture', 'HVS'] },
+    normalText: ['no growth', 'no significant growth', 'no organisms isolated'],
+    normalLabel: 'Negative',
+  });
+  assert(errs.length === 0, 'text rule with multiple match and normalText strings → valid');
+}
+
+// ── validateResultRule: text rule — missing normalText ────────────────────────
+console.log('\n--- validateResultRule: text rule — missing / bad normalText ---');
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    // normalText missing entirely
+  });
+  assert(errs.length > 0, 'text rule missing normalText → error');
+  assert(
+    errs.some(e => e.toLowerCase().includes('normaltext')),
+    'error mentions "normalText"'
+  );
+}
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: [], // empty array
+  });
+  assert(errs.length > 0, 'text rule with empty normalText → error');
+}
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: ['', '   '], // only empty strings
+  });
+  assert(errs.length > 0, 'text rule with only empty normalText strings → error');
+}
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: 'no growth', // not an array
+  });
+  assert(errs.length > 0, 'text rule normalText as string (not array) → error');
+}
+
+// ── validateResultRule: text rule — missing label ─────────────────────────────
+console.log('\n--- validateResultRule: text rule — missing / bad label ---');
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: '',
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+  });
+  assert(errs.length > 0, 'text rule empty label → error');
+}
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    // label omitted
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+  });
+  assert(errs.length > 0, 'text rule missing label → error');
+}
+{
+  // label over 60 chars
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'A'.repeat(61),
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+  });
+  assert(errs.length > 0, 'text rule label > 60 chars → error');
+}
+
+// ── validateResultRule: text rule — missing analyte.match ─────────────────────
+console.log('\n--- validateResultRule: text rule — missing analyte.match ---');
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    // analyte missing
+    normalText: ['no growth'],
+  });
+  assert(errs.length > 0, 'text rule missing analyte → error');
+}
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: [] },
+    normalText: ['no growth'],
+  });
+  assert(errs.length > 0, 'text rule empty analyte.match → error');
+}
+
+// ── validateResultRule: text rule — bad normalLabel type ──────────────────────
+console.log('\n--- validateResultRule: text rule — bad normalLabel type ---');
+{
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+    normalLabel: 42, // must be string or omitted
+  });
+  assert(errs.length > 0, 'text rule normalLabel as number → error');
+  assert(
+    errs.some(e => e.toLowerCase().includes('normallabel')),
+    'error mentions "normalLabel"'
+  );
+}
+{
+  // null normalLabel is allowed (treated as omitted)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+    normalLabel: null,
+  });
+  assert(errs.length === 0, 'text rule normalLabel null → valid (treated as omitted)');
+}
+
+// ── validateResultRule: unknown kind → rejected ───────────────────────────────
+console.log('\n--- validateResultRule: unknown kind rejected ---');
+{
+  const errs = validateResultRule({
+    kind: 'regex',
+    label: 'Some rule',
+    analyte: { match: ['MSU'] },
+  });
+  assert(errs.length > 0, 'unknown kind "regex" → error');
+  assert(
+    errs.some(e => e.toLowerCase().includes('kind')),
+    'error mentions "kind"'
+  );
+}
+{
+  const errs = validateResultRule({
+    kind: 'THRESHOLD', // wrong case
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  });
+  assert(errs.length > 0, 'kind "THRESHOLD" (wrong case) → error (must be exact string)');
+}
+{
+  const errs = validateResultRule({
+    kind: 'numeric',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  });
+  assert(errs.length > 0, 'unknown kind "numeric" → error');
+}
+
+// ── validateResultRule: numeric rules still validate normally ──────────────────
+console.log('\n--- validateResultRule: numeric rules still validate normally with kind absent or explicit ---');
+{
+  // kind absent — should be treated as threshold and pass
+  const errs = validateResultRule(validRule());
+  assert(errs.length === 0, 'kind absent → threshold path, valid rule passes');
+}
+{
+  // kind explicit 'threshold'
+  const errs = validateResultRule(validRule({ kind: 'threshold' }));
+  assert(errs.length === 0, "kind 'threshold' explicit → valid rule passes");
+}
+{
+  // threshold rule must still reject bad comparator even when kind is explicit
+  const errs = validateResultRule(validRule({ kind: 'threshold', comparator: 'equal' }));
+  assert(errs.length > 0, "kind 'threshold' with bad comparator → error");
+}
+
+// ── resultRuleSchemaPrompt: documents both text and threshold kinds ────────────
+console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  // Existing checks (duplicated here for completeness with text-rule additions)
+  assert(prompt.toLowerCase().includes('disabled') || prompt.toLowerCase().includes('disable'),
+    'prompt mentions "disabled"');
+  assert(prompt.toLowerCase().includes('review'), 'prompt mentions "review"');
+  // Text-rule specific checks
+  assert(
+    prompt.includes('text') || prompt.toLowerCase().includes("kind:'text'") || prompt.includes('"text"'),
+    'prompt mentions text kind'
+  );
+  assert(
+    prompt.toLowerCase().includes('normallabel') || prompt.toLowerCase().includes('normal label') ||
+    prompt.toLowerCase().includes('normaltext') || prompt.toLowerCase().includes('normal text') ||
+    prompt.includes('no growth'),
+    'prompt mentions text-rule fields (normalText/normalLabel) or example phrase "no growth"'
+  );
+  assert(
+    prompt.toLowerCase().includes('msu') || prompt.toLowerCase().includes('urine culture') ||
+    prompt.toLowerCase().includes('microbiology') || prompt.toLowerCase().includes('culture'),
+    'prompt gives a microbiology / culture example for text rules'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

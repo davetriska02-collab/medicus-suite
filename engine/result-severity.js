@@ -29,6 +29,68 @@
     return SEV_ORDER[a] >= SEV_ORDER[b] ? a : b;
   }
 
+  // ── Compute text-rule outcome for a single result ────────────────────────────
+  // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
+  // Also returns the matched rule's label / normalLabel for chip display.
+  // Deliberately does NOT import result-rules.js to avoid a content-world dep.
+  function computeTextOutcome(result, rules) {
+    if (!Array.isArray(rules) || rules.length === 0) {
+      return { outcome: 'none', label: null, normalLabel: null };
+    }
+    if (!result || typeof result !== 'object') {
+      return { outcome: 'none', label: null, normalLabel: null };
+    }
+
+    const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
+    // result.text is the pre-built combined free-text string (may be absent on old fixtures)
+    const resultText = typeof result.text === 'string' ? result.text.toLowerCase() : '';
+
+    let anyRuleApplied = false;
+    let normalFound = false;
+    let reviewLabel = null;
+    let normalLabel = null;
+
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      if (!rule || typeof rule !== 'object') continue;
+      if ((rule.kind || 'threshold') !== 'text') continue; // only text rules
+      if (rule.enabled === false) continue;
+
+      // analyte.match must be a non-empty array
+      const analyte = rule.analyte;
+      if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) continue;
+      // normalText must be a non-empty array
+      if (!Array.isArray(rule.normalText) || rule.normalText.length === 0) continue;
+
+      // Does this rule apply to this result?
+      const nameHit = analyte.match.some(
+        m => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
+      );
+      if (!nameHit) continue;
+
+      anyRuleApplied = true;
+      // Does the result text contain a normal phrase?
+      const foundNormal = rule.normalText.some(
+        phrase => typeof phrase === 'string' && phrase.length > 0 &&
+          resultText.includes(phrase.toLowerCase())
+      );
+      if (foundNormal) {
+        normalFound = true;
+        if (!normalLabel) {
+          normalLabel = (typeof rule.normalLabel === 'string' && rule.normalLabel) || 'No growth';
+        }
+      } else {
+        if (!reviewLabel) {
+          reviewLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
+        }
+      }
+    }
+
+    if (!anyRuleApplied) return { outcome: 'none', label: null, normalLabel: null };
+    if (normalFound) return { outcome: 'noGrowth', label: null, normalLabel: normalLabel || 'No growth' };
+    return { outcome: 'review', label: reviewLabel || 'Needs review', normalLabel: null };
+  }
+
   // ── Compute rule-derived severity for a single result ─────────────────────────
   // Deliberately does NOT import result-rules.js to avoid a content-world dep.
   // Uses minimal inline guards only.
@@ -93,9 +155,20 @@
    * @param {object} [opts]
    * @param {string} [opts.priorityDisplay]  Queue row priority text e.g. "High", "Routine".
    * @param {object} [opts.thresholds]       Reserved for future named-analyte thresholds.
-   * @param {Array}  [opts.resultRules]      Analyte-threshold escalation rules (see result-rules.js).
-   *                                         Rules ESCALATE severity; they never lower lab flags.
-   * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched }}
+   * @param {Array}  [opts.resultRules]      Analyte-threshold or text classification rules
+   *                                         (see result-rules.js). Rules ESCALATE severity;
+   *                                         they never lower lab flags.
+   * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
+   *             reviewCount, noGrowthCount, reviewTop, noGrowthTop }}
+   *
+   * Text-rule outcomes (kind:'text') are SEPARATE from numeric severity:
+   *   reviewCount   — results matched a text rule but no normal phrase found in text
+   *   noGrowthCount — results matched a text rule AND a normal phrase was found
+   *   reviewTop     — { name, label } | null  (first 'review' result + rule label)
+   *   noGrowthTop   — { name, label } | null  (first 'noGrowth' result + its label)
+   *
+   * level is elevated to 'amber' if reviewCount > 0 (a culture needing review).
+   * noGrowth results do NOT raise level (negative culture is calm / informational).
    */
   function evaluateReportSeverity(report, opts) {
     const none = {
@@ -104,7 +177,11 @@
       abnormalCount: 0,
       top: null,
       misprioritised: false,
-      unmatched: false
+      unmatched: false,
+      reviewCount: 0,
+      noGrowthCount: 0,
+      reviewTop: null,
+      noGrowthTop: null
     };
 
     try {
@@ -119,16 +196,22 @@
       let firstUrgent = null;
       let firstAbnormal = null;
 
+      // Text-rule tracking (separate from numeric severity)
+      let reviewCount = 0;
+      let noGrowthCount = 0;
+      let reviewTop = null;
+      let noGrowthTop = null;
+
       results.forEach(r => {
         if (!r || typeof r !== 'object') return;
 
         // Lab-derived severity
         const labSev = r.urgent ? 'urgent' : (r.isAbove || r.isBelow ? 'abnormal' : 'none');
 
-        // Rule-derived severity (escalation only)
+        // Rule-derived severity for numeric (threshold) rules
         const ruleSev = computeRuleSev(r, resultRules);
 
-        // Effective severity: never below lab severity
+        // Effective numeric severity: never below lab severity
         const effSev = maxSev(labSev, ruleSev);
 
         if (effSev === 'urgent') {
@@ -139,12 +222,23 @@
           abnormalCount++;
           if (!firstAbnormal) firstAbnormal = r;
         }
+
+        // Text-rule outcome — independent, does not affect urgentCount/abnormalCount
+        const textResult = computeTextOutcome(r, resultRules);
+        if (textResult.outcome === 'review') {
+          reviewCount++;
+          if (!reviewTop) reviewTop = { name: r.name, label: textResult.label };
+        } else if (textResult.outcome === 'noGrowth') {
+          noGrowthCount++;
+          if (!noGrowthTop) noGrowthTop = { name: r.name, label: textResult.normalLabel };
+        }
       });
 
       let level;
       if (urgentCount > 0) {
         level = 'red';
-      } else if (abnormalCount > 0) {
+      } else if (abnormalCount > 0 || reviewCount > 0) {
+        // review (unclassified culture) escalates to amber; noGrowth does not
         level = 'amber';
       } else {
         level = 'none';
@@ -167,7 +261,11 @@
         abnormalCount,
         top,
         misprioritised,
-        unmatched: !!report.unmatched
+        unmatched: !!report.unmatched,
+        reviewCount,
+        noGrowthCount,
+        reviewTop,
+        noGrowthTop
       };
     } catch (_) {
       return none;

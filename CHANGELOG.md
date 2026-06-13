@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.64.0] — 2026-06-13
+
+### Investigation Results queue — microbiology (MSU / culture) text rules
+
+Microbiology results carry no numeric high/low flag, so the lab-flag-led chips
+never surfaced them. This adds text-classification result rules.
+
+- **Built-in MSU/urine-culture rule:** a culture is flagged amber **"Needs
+  review"** unless its result text contains a normal phrase (e.g. "No growth"),
+  in which case a calm blue **"No growth"** info chip is shown instead. The info
+  chip asserts a negative culture from the actual result text — it is not a
+  "safe to file" verdict (sterile pyuria and "no significant growth — repeat"
+  remain the clinician's call).
+- **User-tunable:** the rule type is now Numeric threshold OR Text/culture; users
+  can edit the normal phrases, add other culture types (wound swabs, sputum,
+  stool, blood cultures), manually or via the LLM single-rule build. Escalate-only
+  and, for user-authored/imported rules, ship-disabled until reviewed.
+- The result text is read from the Medicus `resultText` field (where cultures put
+  "No growth" / the organism), combining interpretation and lab comments.
+- New chips `queue.resultReview` (amber) and `queue.resultNoGrowth` (info), both
+  enable/colour-configurable. HAZARD-LOG H-030 and CSN limitation 35 updated.
+
 ## [v3.63.1] — 2026-06-13
 
 ### Investigation Results queue — usability pass (The Practice synthetic panel)

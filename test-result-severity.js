@@ -468,6 +468,304 @@ console.log('\n--- resultRules: disabled rule is ignored ---');
   assert(out.level === 'none', 'disabled rule → not applied → level none');
 }
 
+// ── Text-rule fixtures ────────────────────────────────────────────────────────
+
+// Culture result with "No growth" text in rawValue — should be noGrowth
+const msuNoGrowth = {
+  name: 'MSU - Microscopy and Culture',
+  value: NaN,
+  rawValue: 'No growth',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: 'No growth',
+};
+
+// Culture result with organism growth — should be review
+const msuGrowth = {
+  name: 'MSU - Microscopy and Culture',
+  value: NaN,
+  rawValue: 'Escherichia coli >10^5',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: 'Significant growth identified',
+  date: '2026-06-10',
+  history: [],
+  text: 'Escherichia coli >10^5 Significant growth identified',
+};
+
+// Culture result where "no growth" appears only in performerComments (via text field)
+const msuNoGrowthInComments = {
+  name: 'Urine culture',
+  value: NaN,
+  rawValue: 'See comments',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: 'See comments No growth after 48 hours incubation',
+};
+
+// Non-microbiology result (potassium) — text rule must NOT match this
+const potassiumResult = {
+  name: 'Serum Potassium',
+  value: 4.1,
+  rawValue: '4.1',
+  comparator: null,
+  unit: 'mmol/L',
+  low: 3.5,
+  high: 5.1,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: '4.1',
+};
+
+// Standard MSU text rule
+const msuTextRule = {
+  id: 'rule_msu_text',
+  enabled: true,
+  kind: 'text',
+  label: 'Needs review',
+  analyte: { match: ['MSU', 'urine culture'] },
+  normalText: ['no growth'],
+  normalLabel: 'No growth',
+};
+
+// ── Text-rule: no text rules → new counts are zero, existing fields unchanged ─
+console.log('\n--- text rules: no text rules → zero counts, existing behaviour unchanged ---');
+{
+  const out = evaluateReportSeverity(makeReport([msuGrowth]));
+  assert(out.reviewCount === 0, 'no text rules → reviewCount 0');
+  assert(out.noGrowthCount === 0, 'no text rules → noGrowthCount 0');
+  assert(out.reviewTop === null, 'no text rules → reviewTop null');
+  assert(out.noGrowthTop === null, 'no text rules → noGrowthTop null');
+  assert(out.level === 'none', 'no text rules → culture with growth is level none (no numeric flags)');
+}
+{
+  // Ensure numeric rule-only path still works correctly alongside zero text counts
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [] });
+  assert(out.reviewCount === 0, 'empty resultRules → reviewCount 0');
+  assert(out.noGrowthCount === 0, 'empty resultRules → noGrowthCount 0');
+}
+
+// ── Text-rule: growth present → review outcome, amber level ──────────────────
+console.log('\n--- text rules: growth in result text → review, amber level ---');
+{
+  const out = evaluateReportSeverity(makeReport([msuGrowth]), { resultRules: [msuTextRule] });
+  assert(out.reviewCount === 1, 'growth result → reviewCount 1');
+  assert(out.noGrowthCount === 0, 'growth result → noGrowthCount 0');
+  assert(out.level === 'amber', 'review result → level amber');
+  assert(out.reviewTop !== null, 'reviewTop is set');
+  assert(out.reviewTop.name === 'MSU - Microscopy and Culture', 'reviewTop.name is the culture result');
+  assert(out.reviewTop.label === 'Needs review', 'reviewTop.label from rule.label');
+  assert(out.noGrowthTop === null, 'noGrowthTop null when only review results');
+}
+
+// ── Text-rule: "No growth" in rawValue → noGrowth outcome, level stays none ──
+console.log('\n--- text rules: "No growth" in text → noGrowth outcome, level stays none ---');
+{
+  const out = evaluateReportSeverity(makeReport([msuNoGrowth]), { resultRules: [msuTextRule] });
+  assert(out.noGrowthCount === 1, '"no growth" in text → noGrowthCount 1');
+  assert(out.reviewCount === 0, '"no growth" in text → reviewCount 0');
+  assert(out.level === 'none', 'noGrowth does NOT raise level (calm informational)');
+  assert(out.noGrowthTop !== null, 'noGrowthTop is set');
+  assert(out.noGrowthTop.name === 'MSU - Microscopy and Culture', 'noGrowthTop.name correct');
+  assert(out.noGrowthTop.label === 'No growth', 'noGrowthTop.label from rule.normalLabel');
+  assert(out.reviewTop === null, 'reviewTop null when only noGrowth results');
+}
+
+// ── Text-rule: "no growth" in comments (via text field) → noGrowth ───────────
+console.log('\n--- text rules: "no growth" found in comment text field → noGrowth ---');
+{
+  const out = evaluateReportSeverity(makeReport([msuNoGrowthInComments]), {
+    resultRules: [msuTextRule],
+  });
+  assert(out.noGrowthCount === 1, '"no growth" in comment text → noGrowthCount 1');
+  assert(out.level === 'none', 'noGrowth from comments → level stays none');
+}
+
+// ── Text-rule: matching is case-insensitive on both name and text ─────────────
+console.log('\n--- text rules: case-insensitive name and text matching ---');
+{
+  // Rule matches "urine culture" (lowercase); result name uses "Urine culture" (mixed)
+  // text is "See comments No growth after 48 hours incubation" — "no growth" is present
+  const out = evaluateReportSeverity(makeReport([msuNoGrowthInComments]), {
+    resultRules: [msuTextRule],
+  });
+  assert(out.noGrowthCount === 1, 'case-insensitive name match ("urine culture" in rule, "Urine culture" in result)');
+}
+{
+  // result text has "NO GROWTH" in uppercase — normal phrase "no growth" should still match
+  const msuUpperCase = Object.assign({}, msuNoGrowth, { text: 'NO GROWTH' });
+  const out = evaluateReportSeverity(makeReport([msuUpperCase]), { resultRules: [msuTextRule] });
+  assert(out.noGrowthCount === 1, 'case-insensitive text match ("NO GROWTH" matches "no growth")');
+  assert(out.level === 'none', 'uppercase no-growth → level still none');
+}
+
+// ── Text-rule: rule does NOT match unrelated analyte ─────────────────────────
+console.log('\n--- text rules: rule does not match unrelated result name ---');
+{
+  // potassiumResult has name "Serum Potassium" — neither "MSU" nor "urine culture" substring
+  const out = evaluateReportSeverity(makeReport([potassiumResult]), {
+    resultRules: [msuTextRule],
+  });
+  assert(out.reviewCount === 0, 'text rule not applied to non-matching result name');
+  assert(out.noGrowthCount === 0, 'noGrowthCount 0 for non-matching result');
+  assert(out.level === 'none', 'non-matching result → level none');
+}
+
+// ── Text-rule: numeric and text rules coexist independently ──────────────────
+console.log('\n--- text rules: numeric and text rules coexist, additive ---');
+{
+  // Mix: msuGrowth gets text review; wbcNormal gets numeric amber rule escalation
+  const wbcAmberRule = {
+    id: 'rule_wbc_amber',
+    enabled: true,
+    label: 'WBC check',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 4.0,
+    red: null,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal, msuGrowth]), {
+    resultRules: [wbcAmberRule, msuTextRule],
+  });
+  assert(out.abnormalCount === 1, 'WBC numeric escalation still counted in abnormalCount');
+  assert(out.reviewCount === 1, 'MSU text rule fires → reviewCount 1');
+  assert(out.level === 'amber', 'mixed: both abnormal and review → amber');
+  // review result does NOT inflate abnormalCount
+  assert(out.abnormalCount === 1, 'text-review does NOT increment abnormalCount');
+}
+{
+  // noGrowth result does not add to abnormalCount; numeric abnormal still counts
+  const out = evaluateReportSeverity(makeReport([mcvAbove, msuNoGrowth]), {
+    resultRules: [msuTextRule],
+  });
+  assert(out.abnormalCount === 1, 'noGrowth result does NOT increment abnormalCount');
+  assert(out.noGrowthCount === 1, 'noGrowthCount 1 for no-growth culture');
+  assert(out.level === 'amber', 'MCV above keeps level amber (noGrowth alone would not)');
+}
+
+// ── Text-rule: review escalates to amber; noGrowth alone keeps none ───────────
+console.log('\n--- text rules: review → amber; noGrowth alone → none ---');
+{
+  // Only a noGrowth result: level must stay none
+  const out = evaluateReportSeverity(makeReport([msuNoGrowth]), { resultRules: [msuTextRule] });
+  assert(out.level === 'none', 'noGrowth alone → level none (calm, no escalation)');
+  assert(out.noGrowthCount === 1, 'noGrowthCount 1');
+  assert(out.reviewCount === 0, 'reviewCount 0');
+}
+{
+  // Only a review result: level must be amber
+  const out = evaluateReportSeverity(makeReport([msuGrowth]), { resultRules: [msuTextRule] });
+  assert(out.level === 'amber', 'review alone → level amber');
+}
+
+// ── Text-rule: disabled text rule is ignored ──────────────────────────────────
+console.log('\n--- text rules: disabled text rule is ignored ---');
+{
+  const disabledTextRule = Object.assign({}, msuTextRule, {
+    id: 'rule_msu_disabled',
+    enabled: false,
+  });
+  const out = evaluateReportSeverity(makeReport([msuGrowth]), {
+    resultRules: [disabledTextRule],
+  });
+  assert(out.reviewCount === 0, 'disabled text rule → not applied → reviewCount 0');
+  assert(out.level === 'none', 'disabled text rule → level none');
+}
+
+// ── Text-rule: urgent numeric result + review together → red (urgent wins) ────
+console.log('\n--- text rules: urgent numeric + review → red (urgent overrides) ---');
+{
+  const out = evaluateReportSeverity(makeReport([rdwUrgent, msuGrowth]), {
+    resultRules: [msuTextRule],
+  });
+  assert(out.level === 'red', 'urgent numeric result → level red even with review result');
+  assert(out.urgentCount === 1, 'urgentCount 1');
+  assert(out.reviewCount === 1, 'reviewCount 1 (text review still tracked)');
+}
+
+// ── Text-rule: misprioritised unchanged by text rules ─────────────────────────
+console.log('\n--- text rules: misprioritised not affected by text rules ---');
+{
+  // review → amber, so misprioritised is always false for amber
+  const out = evaluateReportSeverity(makeReport([msuGrowth]), {
+    resultRules: [msuTextRule],
+    priorityDisplay: 'Routine',
+  });
+  assert(out.misprioritised === false, 'amber (from review) + Routine → misprioritised false');
+}
+
+// ── Text-rule: default labels when rule omits normalLabel ─────────────────────
+console.log('\n--- text rules: default labels when normalLabel omitted ---');
+{
+  const ruleNoNormalLabel = {
+    id: 'rule_msu_nolabel',
+    enabled: true,
+    kind: 'text',
+    label: 'Culture needs review',
+    analyte: { match: ['msu'] },
+    normalText: ['no growth'],
+    // normalLabel intentionally omitted
+  };
+  const out = evaluateReportSeverity(makeReport([msuNoGrowth]), {
+    resultRules: [ruleNoNormalLabel],
+  });
+  assert(out.noGrowthTop !== null, 'noGrowthTop set even when normalLabel omitted');
+  assert(out.noGrowthTop.label === 'No growth', 'default normalLabel is "No growth"');
+}
+{
+  const ruleNoLabel = {
+    id: 'rule_msu_nolabel2',
+    enabled: true,
+    kind: 'text',
+    // label intentionally omitted — validate falls back to default
+    label: '', // empty string → treated as missing, computeTextOutcome uses default
+    analyte: { match: ['msu'] },
+    normalText: ['no growth'],
+  };
+  const out = evaluateReportSeverity(makeReport([msuGrowth]), {
+    resultRules: [ruleNoLabel],
+  });
+  // label is empty string → falsy → falls back to 'Needs review'
+  assert(out.reviewTop !== null, 'reviewTop set even when label is empty');
+  assert(out.reviewTop.label === 'Needs review', 'default label is "Needs review"');
+}
+
+// ── Text-rule: null report new keys are zero/null ─────────────────────────────
+console.log('\n--- text rules: null report → new keys are zero/null ---');
+{
+  const out = evaluateReportSeverity(null);
+  assert(out.reviewCount === 0, 'null report → reviewCount 0');
+  assert(out.noGrowthCount === 0, 'null report → noGrowthCount 0');
+  assert(out.reviewTop === null, 'null report → reviewTop null');
+  assert(out.noGrowthTop === null, 'null report → noGrowthTop null');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
