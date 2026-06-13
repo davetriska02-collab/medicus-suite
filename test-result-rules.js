@@ -416,6 +416,78 @@ console.log('\n--- validateResultRule: text rule — bad normalLabel type ---');
   assert(errs.length === 0, 'text rule normalLabel null → valid (treated as omitted)');
 }
 
+// ── validateResultRule: text rule — abnormalText (flag-if-present) ────────────
+console.log('\n--- validateResultRule: text rule — abnormalText ---');
+{
+  // abnormalText-only text rule (no normalText) is valid — flags a specific finding.
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Bowel screening: no response',
+    analyte: { match: ['bcs:fob', 'bowel cancer screening'] },
+    abnormalText: ['no response to bowel cancer screening'],
+  });
+  assert(errs.length === 0, 'abnormalText-only text rule (no normalText) → valid');
+}
+{
+  // Both normalText and abnormalText present → valid.
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture',
+    analyte: { match: ['culture'] },
+    normalText: ['no growth'],
+    abnormalText: ['scanty growth'],
+  });
+  assert(errs.length === 0, 'text rule with both normalText and abnormalText → valid');
+}
+{
+  // Neither normalText nor abnormalText → error (cannot classify anything).
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Empty',
+    analyte: { match: ['bcs:fob'] },
+  });
+  assert(errs.length > 0, 'text rule with neither normalText nor abnormalText → error');
+  assert(
+    errs.some(e => e.toLowerCase().includes('normaltext') || e.toLowerCase().includes('abnormaltext')),
+    'error mentions the required classification lists'
+  );
+}
+{
+  // abnormalText present but empty, and no normalText → still an error.
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Empty arrays',
+    analyte: { match: ['bcs:fob'] },
+    abnormalText: [],
+  });
+  assert(errs.length > 0, 'empty abnormalText with no normalText → error');
+}
+{
+  // abnormalText as a string (not an array) → error.
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Bad abnormalText',
+    analyte: { match: ['bcs:fob'] },
+    abnormalText: 'no response to bowel cancer screening',
+  });
+  assert(errs.length > 0, 'abnormalText as string (not array) → error');
+  assert(
+    errs.some(e => e.toLowerCase().includes('abnormaltext')),
+    'error mentions "abnormalText"'
+  );
+}
+{
+  // abnormalText satisfies the "at least one list" requirement even when normalText is absent.
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Non-responder',
+    analyte: { match: ['bcs:fob'] },
+    abnormalText: ['no response', 'non-responder'],
+    normalLabel: 'n/a', // allowed even on an abnormalText-only rule
+  });
+  assert(errs.length === 0, 'abnormalText satisfies the required-list check; normalLabel still allowed');
+}
+
 // ── validateResultRule: unknown kind → rejected ───────────────────────────────
 console.log('\n--- validateResultRule: unknown kind rejected ---');
 {
@@ -494,6 +566,10 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
     prompt.toLowerCase().includes('msu') || prompt.toLowerCase().includes('urine culture') ||
     prompt.toLowerCase().includes('microbiology') || prompt.toLowerCase().includes('culture'),
     'prompt gives a microbiology / culture example for text rules'
+  );
+  assert(
+    prompt.toLowerCase().includes('abnormaltext'),
+    'prompt documents the abnormalText (flag-if-present) field'
   );
 }
 

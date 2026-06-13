@@ -203,6 +203,43 @@ if (selectResultChips) {
     selectResultChips(labRed).some((c) => c.id === 'queue.resultUrgent'),
     'lab-driven red (null ruleLabel) → generic resultUrgent'
   );
+
+  // text-review with a SPECIFIC rule label (e.g. bowel non-responder) → attributable chip
+  const reviewLabelled = {
+    level: 'amber', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    reviewCount: 1, reviewTop: { name: 'BCS:FOB result', label: 'Bowel screening: no response' },
+  };
+  const reviewLabelledChips = selectResultChips(reviewLabelled);
+  check(
+    reviewLabelledChips.some((c) => c.id === 'queue.resultReviewRule'),
+    'labelled text review → queue.resultReviewRule'
+  );
+  check(
+    !reviewLabelledChips.some((c) => c.id === 'queue.resultReview'),
+    'labelled text review → NOT the generic resultReview'
+  );
+  const rrr = reviewLabelledChips.find((c) => c.id === 'queue.resultReviewRule');
+  check(
+    rrr && rrr.vars.rule === 'Bowel screening: no response',
+    'resultReviewRule carries the rule label in {rule}'
+  );
+
+  // text-review with the GENERIC "Needs review" label (e.g. a culture) → generic chip
+  const reviewGeneric = {
+    level: 'amber', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    reviewCount: 2, reviewTop: { name: 'MSU', label: 'Needs review' },
+  };
+  const reviewGenericChips = selectResultChips(reviewGeneric);
+  check(
+    reviewGenericChips.some((c) => c.id === 'queue.resultReview'),
+    'generic "Needs review" text review → generic queue.resultReview (cultures unchanged)'
+  );
+  check(
+    !reviewGenericChips.some((c) => c.id === 'queue.resultReviewRule'),
+    'generic "Needs review" text review → NOT the attributable chip'
+  );
 }
 
 // ============================================================
