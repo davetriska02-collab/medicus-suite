@@ -16,29 +16,49 @@ function _isValidPracticeCode(code) {
   return typeof code === 'string' && _SITE_CODE_RE.test(code);
 }
 
+// Categorical data-series palette — NOT clinical status colours.
+// Deliberately drawn from non-status hues (indigo / blue / teal / pink / violet)
+// so the resting charts never echo the RAG amber/red, which would dilute alert
+// salience (a clinician misreads a red category as an alarm). The RAG triads
+// (--red / --amber) stay reserved exclusively for tripped thresholds. No canon
+// token exists for a qualitative series palette; keep these here, in one place.
+const CHART_COLORS = {
+  medical: '#6366f1', // indigo (was alert-red)
+  admin: '#3b82f6', // blue
+  investigation: '#14b8a6', // teal
+  rxRoutine: '#db2777', // pink (was status-green)
+  rxNonRoutine: '#a855f7', // violet
+};
+
 const TASK_TYPES = [
-  { key: 'medical', label: 'Medical', shortLabel: 'Medical', type: 'medical_patient_request_task', color: '#ef4444' },
-  { key: 'admin', label: 'Admin', shortLabel: 'Admin', type: 'admin_patient_request_task', color: '#3b82f6' },
+  {
+    key: 'medical',
+    label: 'Medical',
+    shortLabel: 'Medical',
+    type: 'medical_patient_request_task',
+    color: CHART_COLORS.medical,
+  },
+  { key: 'admin', label: 'Admin', shortLabel: 'Admin', type: 'admin_patient_request_task', color: CHART_COLORS.admin },
   {
     key: 'investigation',
-    label: 'Invest.',
-    shortLabel: 'Invest.',
+    label: 'Invest',
+    shortLabel: 'Invest',
     type: 'review_investigation_results_task',
-    color: '#14b8a6',
+    color: CHART_COLORS.investigation,
   },
   {
     key: 'rxRoutine',
     label: 'Routine Rx',
     shortLabel: 'Rx rtn',
     type: 'prescription_request_task_routine',
-    color: '#10b981',
+    color: CHART_COLORS.rxRoutine,
   },
   {
     key: 'rxNonRoutine',
     label: 'Non-rtn Rx',
     shortLabel: 'Rx non',
     type: 'prescription_request_task_non_routine',
-    color: '#a855f7',
+    color: CHART_COLORS.rxNonRoutine,
   },
 ];
 
@@ -134,9 +154,9 @@ function renderShell() {
           <div class="mod-subtitle" id="subSubtitle">Live count of inbound work</div>
         </div>
         <div class="header-right">
-          <button id="subRefreshBtn" class="ghost-btn">↻ Refresh</button>
-          <button id="subSettingsBtn" class="icon-btn" title="Settings">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
+          <button id="subRefreshBtn" class="ghost-btn"><svg class="ghost-btn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>
+          <button id="subSettingsBtn" class="icon-btn" title="Settings" aria-label="Submissions settings">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
           </button>
         </div>
       </div>
@@ -151,7 +171,7 @@ function renderShell() {
 
       <div id="modeControls" class="mode-controls-row"></div>
       <div id="subBanner" class="banner hidden"></div>
-      <div id="subAlertStrip" class="sub-alert-strip hidden"></div>
+      <div id="subAlertStrip" class="sub-alert-strip hidden" role="status" aria-live="assertive" aria-atomic="true"></div>
 
       <div id="subMetrics" class="sub-metrics"></div>
 
@@ -266,7 +286,7 @@ function datePicker(label, value, onChange) {
   // innerHTML can't preserve function refs, so register the callback in a map
   // keyed by id; renderModeControls binds it after the DOM is in place.
   _dpCallbacks[id] = onChange;
-  return `<div class="dp-wrap"><span class="dp-label">${label}</span><input id="${id}" type="date" value="${value}" max="${todayISO()}" /></div>`;
+  return `<div class="dp-wrap"><label class="dp-label" for="${id}">${label}</label><input id="${id}" type="date" value="${value}" max="${todayISO()}" /></div>`;
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -449,7 +469,7 @@ function renderToday() {
   if (t2) t2.textContent = 'Total by category';
   MWChart.bar({
     container: container.querySelector('#chart2'),
-    bars: TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.label, value: series[tt.key].total, color: tt.color })),
+    bars: TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: series[tt.key].total, color: tt.color })),
   });
   renderAlertStrip();
 }
@@ -500,7 +520,7 @@ function renderCompare() {
     container: container.querySelector('#chart2'),
     bars: TASK_TYPES.map((tt) => ({
       key: tt.key,
-      label: tt.label,
+      label: tt.shortLabel,
       value: sA[tt.key].total,
       compareValue: sB[tt.key].total,
       color: tt.color,
@@ -539,7 +559,7 @@ function renderRange() {
   if (t2) t2.textContent = `Totals over ${days.length} days`;
   MWChart.bar({
     container: container.querySelector('#chart2'),
-    bars: TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.label, value: totals[tt.key], color: tt.color })),
+    bars: TASK_TYPES.map((tt) => ({ key: tt.key, label: tt.shortLabel, value: totals[tt.key], color: tt.color })),
   });
   renderAlertStrip();
 }
@@ -550,14 +570,17 @@ function renderMetrics(items) {
   _lastMetricItems = items;
   const ctr = container?.querySelector('#subMetrics');
   if (!ctr) return;
+  // Resting tile is neutral (no category colour on the card itself) — the only
+  // thing that paints a tile is a tripped RAG threshold (CSS [data-rag] wash +
+  // border), so the alert state owns colour outright. Category is shown by a
+  // small swatch beside the label, tying the tile to its chart series.
   ctr.innerHTML = items
     .map((m) => {
       const rag = getRagLevel(m.key, m.value, state.thresholds);
-      const borderColor = rag === 'red' ? '#ef4444' : rag === 'amber' ? '#f59e0b' : m.color;
       return `
-    <div class="sub-metric${rag ? ' sub-metric--alerted' : ''}" style="border-top: 2px solid ${borderColor}"${rag ? ` data-rag="${rag}"` : ''}>
-      ${rag ? `<div class="sub-metric-rag-dot sub-metric-rag-dot--${rag}"></div>` : ''}
-      <div class="metric-label">${m.label}</div>
+    <div class="sub-metric${rag ? ' sub-metric--alerted' : ''}"${rag ? ` data-rag="${rag}"` : ''}>
+      ${rag ? `<div class="sub-metric-rag-dot sub-metric-rag-dot--${rag}" aria-hidden="true"></div>` : ''}
+      <div class="metric-label"><span class="metric-swatch" style="background:${m.color}" aria-hidden="true"></span>${m.label}</div>
       <div class="metric-num${m.value === 0 ? ' zero' : ''}">${m.value}</div>
       ${m.compareValue != null ? renderDelta(m.value, m.compareValue) : ''}
     </div>`;
@@ -582,7 +605,9 @@ function renderAlertStrip() {
     return;
   }
   strip.className = 'sub-alert-strip sub-alert-strip--red';
-  strip.textContent = `⚠ ${redItems.join(' · ')}`;
+  strip.innerHTML =
+    `<svg class="sub-alert-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` +
+    `<span>${redItems.join(' · ')}</span>`;
 }
 
 function renderDelta(a, b) {
@@ -597,11 +622,12 @@ function renderDelta(a, b) {
     cls = 'dn';
     arrow = '↓';
   }
+  // Direction is carried by the arrow glyph (decorative for AT); colour stays
+  // neutral — for an inbound-work count "up" is neither clinically good nor bad,
+  // so spending the red/green status hues here would mislead and dilute them.
   const text =
-    b === 0
-      ? `${arrow} ${a > 0 ? `+${a} vs 0` : 'no change'}`
-      : `${arrow} ${diff > 0 ? '+' : ''}${diff} (${pct > 0 ? '+' : ''}${pct}%)`;
-  return `<div class="metric-delta ${cls}">${text}</div>`;
+    b === 0 ? `${a > 0 ? `+${a} vs 0` : 'no change'}` : `${diff > 0 ? '+' : ''}${diff} (${pct > 0 ? '+' : ''}${pct}%)`;
+  return `<div class="metric-delta ${cls}"><span class="metric-delta-arrow" aria-hidden="true">${arrow}</span>${text}</div>`;
 }
 
 function renderLegend(elId, items, { toggleable = false, extraNote = null } = {}) {
@@ -609,22 +635,35 @@ function renderLegend(elId, items, { toggleable = false, extraNote = null } = {}
   if (!el) return;
   el.innerHTML =
     items
-      .map(
-        (it) => `
-    <div class="legend-item${state.hiddenSeries.has(it.key) ? ' muted' : ''}" data-key="${it.key}" style="cursor:${toggleable ? 'pointer' : 'default'}">
-      <span class="legend-swatch" style="background:${it.color}"></span>
-      <span>${it.label}</span>
-    </div>`
-      )
+      .map((it) => {
+        const hidden = state.hiddenSeries.has(it.key);
+        // Toggleable items are real checkboxes (keyboard-reachable, state in
+        // aria-checked); non-toggleable ones are inert text.
+        const attrs = toggleable
+          ? ` role="checkbox" tabindex="0" aria-checked="${!hidden}" aria-label="${it.label} series"`
+          : '';
+        return `
+    <div class="legend-item${hidden ? ' muted' : ''}${toggleable ? ' legend-item--toggle' : ''}" data-key="${it.key}"${attrs}>
+      <span class="legend-swatch" style="background:${it.color}" aria-hidden="true"></span>
+      <span class="legend-label">${it.label}</span>
+    </div>`;
+      })
       .join('') + (extraNote ? `<span class="legend-note">${extraNote}</span>` : '');
   if (toggleable) {
+    const toggle = (li) => {
+      const k = li.dataset.key;
+      if (state.hiddenSeries.has(k)) state.hiddenSeries.delete(k);
+      else state.hiddenSeries.add(k);
+      saveUiState('submissions', { mode: state.mode, hiddenSeries: [...state.hiddenSeries] });
+      renderAll();
+    };
     el.querySelectorAll('.legend-item').forEach((li) => {
-      li.addEventListener('click', () => {
-        const k = li.dataset.key;
-        if (state.hiddenSeries.has(k)) state.hiddenSeries.delete(k);
-        else state.hiddenSeries.add(k);
-        saveUiState('submissions', { mode: state.mode, hiddenSeries: [...state.hiddenSeries] });
-        renderAll();
+      li.addEventListener('click', () => toggle(li));
+      li.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle(li);
+        }
       });
     });
   }
@@ -675,15 +714,41 @@ function appendSetupNowBtn() {
 
 // ── MWChart — SVG chart renderer ──────────────────────────────────────────────
 
+// SVG chrome is token-driven so it adapts to light/dark: <text> fills and
+// gridline strokes carry inline `style` with CSS custom properties (these
+// resolve through SVG inline style in Chromium), not baked hexes. Axis labels
+// are the machine voice — mono. Data colours come from the series themselves.
+const AXIS_LABEL = 'style="fill:var(--text-4);font-family:var(--mono)" font-size="8"';
+const GRID_STROKE = 'style="stroke:var(--border)" stroke-width="1"';
+let _chartSeq = 0;
+
+function svgOpen(W, H, titleText) {
+  const id = `mwc-t${++_chartSeq}`;
+  return {
+    id,
+    open: `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${id}" xmlns="http://www.w3.org/2000/svg"><title id="${id}">${titleText}</title>`,
+  };
+}
+
 const MWChart = {
   showLoading(el, msg) {
     if (!el) return;
     el.innerHTML = `<div class="chart-loading">${msg || 'Loading…'}</div>`;
   },
 
-  line({ container: el, xLabels, series }) {
+  empty(el, msg) {
+    if (!el) return;
+    el.innerHTML = `<div class="chart-empty">${msg || 'No submissions in this period'}</div>`;
+  },
+
+  line({ container: el, xLabels, series, title = 'Cumulative submissions by category' }) {
     if (!el || !series.length) {
-      MWChart.showLoading(el, 'No data');
+      MWChart.empty(el);
+      return;
+    }
+    const allVals = series.flatMap((s) => s.values);
+    if (Math.max(0, ...allVals) === 0) {
+      MWChart.empty(el);
       return;
     }
     const W = el.clientWidth || 300,
@@ -691,7 +756,6 @@ const MWChart = {
     const pad = { t: 8, r: 8, b: 24, l: 28 };
     const cW = W - pad.l - pad.r,
       cH = H - pad.t - pad.b;
-    const allVals = series.flatMap((s) => s.values);
     const maxVal = Math.max(1, ...allVals);
     const N = xLabels.length;
     const xStep = cW / Math.max(1, N - 1);
@@ -703,12 +767,12 @@ const MWChart = {
     let paths = '';
     series.forEach((s) => {
       const pts = s.values.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-      paths += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="${s.dashed ? 1.5 : 2}" stroke-dasharray="${s.dashed ? '4,3' : ''}" opacity="0.85"/>`;
+      paths += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="${s.dashed ? 1.5 : 2}" stroke-dasharray="${s.dashed ? '4,3' : ''}" opacity="0.9"/>`;
     });
 
     let xTicks = '';
     for (let i = 0; i < N; i += labelStep) {
-      xTicks += `<text x="${toX(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#5d7a9d">${xLabels[i]}</text>`;
+      xTicks += `<text x="${toX(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" ${AXIS_LABEL}>${xLabels[i]}</text>`;
     }
 
     let yTicks = '';
@@ -716,16 +780,21 @@ const MWChart = {
     for (let i = 0; i <= steps; i++) {
       const v = Math.round((maxVal / steps) * i);
       const y = toY(v).toFixed(1);
-      yTicks += `<line x1="${pad.l}" y1="${y}" x2="${pad.l + cW}" y2="${y}" stroke="#142340" stroke-width="1"/>`;
-      yTicks += `<text x="${pad.l - 3}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="#5d7a9d">${v}</text>`;
+      yTicks += `<line x1="${pad.l}" y1="${y}" x2="${pad.l + cW}" y2="${y}" ${GRID_STROKE}/>`;
+      yTicks += `<text x="${pad.l - 3}" y="${y}" text-anchor="end" dominant-baseline="middle" ${AXIS_LABEL}>${v}</text>`;
     }
 
-    el.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${yTicks}${paths}${xTicks}</svg>`;
+    const { open } = svgOpen(W, H, title);
+    el.innerHTML = `${open}${yTicks}${paths}${xTicks}</svg>`;
   },
 
-  bar({ container: el, bars }) {
+  bar({ container: el, bars, title = 'Total submissions by category' }) {
     if (!el || !bars.length) {
-      MWChart.showLoading(el, 'No data');
+      MWChart.empty(el);
+      return;
+    }
+    if (Math.max(0, ...bars.map((b) => Math.max(b.value, b.compareValue ?? 0))) === 0) {
+      MWChart.empty(el);
       return;
     }
     const W = el.clientWidth || 300,
@@ -743,20 +812,26 @@ const MWChart = {
     bars.forEach((b, i) => {
       const gx = pad.l + i * groupW + (groupW - (hasCompare ? barW * 2 + gap : barW)) / 2;
       const h1 = (b.value / maxVal) * cH;
-      rects += `<rect x="${gx.toFixed(1)}" y="${(pad.t + cH - h1).toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" fill="${b.color}" opacity="0.85" rx="2"/>`;
+      rects += `<rect x="${gx.toFixed(1)}" y="${(pad.t + cH - h1).toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" fill="${b.color}" opacity="0.9" rx="2"/>`;
       if (hasCompare && b.compareValue != null) {
         const h2 = (b.compareValue / maxVal) * cH;
-        rects += `<rect x="${(gx + barW + gap).toFixed(1)}" y="${(pad.t + cH - h2).toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" fill="${b.color}" opacity="0.35" rx="2"/>`;
+        rects += `<rect x="${(gx + barW + gap).toFixed(1)}" y="${(pad.t + cH - h2).toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" fill="${b.color}" opacity="0.4" rx="2"/>`;
       }
-      rects += `<text x="${(gx + (hasCompare ? barW + gap / 2 : barW / 2)).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#5d7a9d">${b.label}</text>`;
+      rects += `<text x="${(gx + (hasCompare ? barW + gap / 2 : barW / 2)).toFixed(1)}" y="${H - 4}" text-anchor="middle" ${AXIS_LABEL}>${String(b.label).toUpperCase()}</text>`;
     });
 
-    el.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`;
+    const { open } = svgOpen(W, H, title);
+    el.innerHTML = `${open}${rects}</svg>`;
   },
 
-  stacked({ container: el, xLabels, stacks }) {
+  stacked({ container: el, xLabels, stacks, title = 'Daily submissions by category' }) {
     if (!el || !stacks.length) {
-      MWChart.showLoading(el, 'No data');
+      MWChart.empty(el);
+      return;
+    }
+    const totals = stacks.map((s) => s.segments.reduce((a, seg) => a + seg.value, 0));
+    if (Math.max(0, ...totals) === 0) {
+      MWChart.empty(el);
       return;
     }
     const W = el.clientWidth || 300,
@@ -764,7 +839,6 @@ const MWChart = {
     const pad = { t: 4, r: 8, b: 20, l: 28 };
     const cW = W - pad.l - pad.r,
       cH = H - pad.t - pad.b;
-    const totals = stacks.map((s) => s.segments.reduce((a, seg) => a + seg.value, 0));
     const maxVal = Math.max(1, ...totals);
     const barW = Math.max(4, (cW / stacks.length) * 0.7);
     const labelStep = Math.ceil(stacks.length / 6);
@@ -777,10 +851,10 @@ const MWChart = {
         const h = (seg.value / maxVal) * cH;
         yBase -= h;
         if (h > 0)
-          rects += `<rect x="${x.toFixed(1)}" y="${yBase.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seg.color}" opacity="0.85"/>`;
+          rects += `<rect x="${x.toFixed(1)}" y="${yBase.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seg.color}" opacity="0.9"/>`;
       });
       if (i % labelStep === 0) {
-        rects += `<text x="${(x + barW / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#5d7a9d">${xLabels[i]}</text>`;
+        rects += `<text x="${(x + barW / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle" ${AXIS_LABEL}>${xLabels[i]}</text>`;
       }
     });
 
@@ -789,11 +863,12 @@ const MWChart = {
     for (let i = 0; i <= steps; i++) {
       const v = Math.round((maxVal / steps) * i);
       const y = (pad.t + cH - (v / maxVal) * cH).toFixed(1);
-      yTicks += `<line x1="${pad.l}" y1="${y}" x2="${pad.l + cW}" y2="${y}" stroke="#142340" stroke-width="1"/>`;
-      yTicks += `<text x="${pad.l - 3}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="#5d7a9d">${v}</text>`;
+      yTicks += `<line x1="${pad.l}" y1="${y}" x2="${pad.l + cW}" y2="${y}" ${GRID_STROKE}/>`;
+      yTicks += `<text x="${pad.l - 3}" y="${y}" text-anchor="end" dominant-baseline="middle" ${AXIS_LABEL}>${v}</text>`;
     }
 
-    el.innerHTML = `<svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${yTicks}${rects}</svg>`;
+    const { open } = svgOpen(W, H, title);
+    el.innerHTML = `${open}${yTicks}${rects}</svg>`;
   },
 };
 

@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.10] — 2026-06-13
+
+### Submissions Tracker — multi-critic design crit
+
+A single-surface design crit (art director on the pixels, a token/code
+surveyor on the CSS+JS, a fresh-eyes GP persona on screenshots) converged on
+one core sin and several token defects. Changes:
+
+- **The category palette no longer spends the alert pigments.** Medical was
+  permanently drawn in alert-red and routine-Rx in status-green, so the
+  resting screen looked alarmed and a tripped RAG threshold had no un-spent
+  red left to claim. The five categories now use a non-status data-series
+  palette (indigo / blue / teal / pink / violet) declared in one place;
+  `--red` / `--amber` are reserved exclusively for tripped thresholds. Alert
+  salience is **increased**, not reduced.
+- **Resting metric tiles are now neutral** — the category is shown by a small
+  swatch beside the label, so a RAG wash is the only thing that ever paints a
+  tile. Calm field, sharp signal.
+- **Charts are theme-aware.** SVG axis labels and gridlines were baked to a
+  dark-theme hex (failing contrast in light, heavy in light); they now consume
+  `--text-4` / `--border` and adapt to both themes. Axis labels are mono
+  (machine voice) and category labels are unified across tiles, legend and bars.
+- **Designed empty state** ("No submissions in this period") replaces the
+  flat-line / blank-card look that read as broken.
+- **Accessibility**: legend series are now keyboard-operable checkboxes with a
+  focus ring and a greyscale-surviving muted state; the alert strip is an
+  `aria-live` region; charts carry `<title>`/`role="img"`; date inputs get
+  real `<label>`s; the settings button gets an `aria-label`; `↻`/`⚠` glyphs
+  are replaced with Feather icons.
+- **Compare deltas** are neutral (an inbound-work count going up is neither
+  clinically good nor bad) with tabular-nums and a decorative direction arrow.
+- Token cleanups: card shadows, tokenised date-input well, mode-tab hover/active
+  states, radius/grid normalisation, reduced-motion kill switch.
+
 ## [v3.60.9] — 2026-06-12
 
 ### Crit follow-ups (the two deferred items from the v3.60.6–v3.60.8 passes)
