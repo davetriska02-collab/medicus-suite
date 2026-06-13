@@ -857,7 +857,7 @@ body {
 /* Slot count badge on nav tab */
 .nav-badge {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
@@ -1557,12 +1557,12 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .suite-tour-next {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
 }
 .suite-tour-next:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: #fff;
+  color: var(--bg-deep);
 }
 .suite-tour-next:active {
   background: var(--accent-hover);
@@ -2174,7 +2174,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   background: var(--accent);
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
-  color: #fff;
+  color: var(--bg-deep);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;

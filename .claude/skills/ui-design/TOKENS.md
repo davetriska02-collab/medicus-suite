@@ -135,7 +135,12 @@ mono uppercase 9–10px, `--text-3`; hover: `border-color: var(--accent);
 color: var(--text-2); background: var(--accent-dim);`
 
 **Primary button** (one per view, max) — `background: var(--accent); color:
-#fff;` hover `--accent-hover`; disabled: `opacity:.45; cursor:not-allowed`.
+var(--bg-deep);` hover `--accent-hover`; disabled: `opacity:.45;
+cursor:not-allowed`. On-accent text is `var(--bg-deep)`, not `#fff`: it is
+theme-adaptive (reads near-white on light, dark-ink on dark) and clears
+contrast on the pastel **dark** accent `#5b8fc7`, where pure `#fff` is only
+~3.4:1. Same rule for any text/glyph sitting on an `--accent` fill (nav badge,
+copy buttons, tour/tabs CTAs).
 
 **Status chip** — `background: var(--<c>-dim); color: var(--<c>);
 border: 1px solid var(--<c>-line); border-radius: var(--r-sm);` mono 10px.
