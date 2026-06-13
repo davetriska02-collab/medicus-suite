@@ -2523,6 +2523,9 @@
   let _resultFetchWindowTimer = null;
   const _RESULT_FETCH_MAX = 90;
   const _RESULT_FETCH_WINDOW_MS = 60000;
+  // Short retry window for a failed (null) result fetch, so a transient error or a
+  // flaky HIGH result re-surfaces soon instead of being cached blank for the full TTL.
+  const _RESULT_RETRY_MS = 20000;
 
   const scheduleQueueResultTriage = async () => {
     const gen = ++_queueResultGeneration;
@@ -2543,7 +2546,11 @@
 
     const worker = async () => {
       while (idx < sorted.length) {
-        if (pageType() !== 'queue' || _queueResultGeneration !== gen) { aborted = true; break; }
+        // Do NOT abort on a generation change. The SPA churn bumps the generation
+        // constantly, which used to starve this pass — only the first few of N rows
+        // got tagged before every restart. Run the whole snapshot; if a genuinely new
+        // generation was requested, the tail below re-runs once we've finished.
+        if (pageType() !== 'queue') { aborted = true; break; }
         const [rowIndex, taskUuid] = sorted[idx++];
         // Rolling fetch budget
         if (!_resultFetchWindowTimer) {
@@ -2563,7 +2570,10 @@
           if (_queueResultCache.has(taskUuid)) {
             const e2 = _queueResultCache.get(taskUuid);
             e2.sev = sev;
-            e2.ts = Date.now();
+            // A failed fetch (null — transient error / flaky HIGH result) gets only a
+            // SHORT retry window so it re-surfaces on a later pass; a real result keeps
+            // the full TTL. Without this a one-off error blanked the row for 5 minutes.
+            e2.ts = sev === null ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
           injectResultChip(rowIndex, sev);
           await new Promise(res => setTimeout(res, 200));
@@ -2767,10 +2777,12 @@
     // never initialised, and re-bound to the current container if it was.
     queueObservedContainer = null;
     setupQueueObserver();
-    // Fetch+compute for rows not yet in the cache — this still needs the bridge map.
-    // (Already-cached rows were restored synchronously above, independent of it.)
+    // Result-chip DISPLAY is handled synchronously by reinjectCachedResultChips above.
+    // Do NOT kick a fetch pass from here: refreshQueueChips fires on every grid mutation,
+    // so doing so re-started/aborted the fetch worker and starved it (only the first few
+    // of N rows ever got tagged). Fetching is driven by the bridge task-list event +
+    // runQueue; this call only re-displays what's already cached.
     if (_queueRowUuids.size > 0) scheduleQueueMonitoring();
-    if (_queueRowUuids.size > 0) scheduleQueueResultTriage();
   };
 
   const setupQueueObserver = () => {
