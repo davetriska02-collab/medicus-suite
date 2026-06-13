@@ -2,6 +2,77 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.66.0] — 2026-06-13
+
+### Base rules are red-only + attributable chips + conditional HbA1c flags
+
+Refines the v3.65.0 base result rules after live testing showed the amber tiers were
+invisible — every amber threshold sat inside the lab's own reference range, so the lab
+already flagged the row amber and the rule's amber added nothing.
+
+- **Base rules are now red-only (escalate-to-urgent).** Each promotes a result the suite
+  would otherwise show as a lab "abnormal" amber up to **urgent/red** when critically
+  deranged — the only visible, non-redundant signal. Thresholds: Hb **<100 g/L**,
+  K **≥6.5**, Na **≤120**, eGFR **<15**, platelets **<30**, neutrophils **<0.5**, INR **≥8**.
+- **Attributable rule chips.** When a user/base threshold rule (not the lab flag) raises a
+  result's severity, the queue chip now names the rule — e.g. *"Urgent: Potassium —
+  Critical high potassium"* — via two new system chips `queue.resultRuleUrgent` /
+  `queue.resultRuleAbnormal`. A rule fire is now answerable at a glance instead of blending
+  into the generic lab chip.
+- **Conditional HbA1c flags (`suppressIfProblem`).** Result rules gain an optional
+  `suppressIfProblem` clause that suppresses a rule when the patient already has a matching
+  problem on record. Two built-ins use it:
+  - **Possible diabetes — not on register (HbA1c ≥48):** red, unless the patient is already
+    a known diabetic.
+  - **Prediabetes range — not on record (HbA1c 42–47):** amber, unless already prediabetic
+    or diabetic.
+
+  Matching mirrors the engine's register logic — word-boundary match terms with broad
+  substring excludes (so "non-diabetic"/"pre-diabetic" never trip the diabetes suppression).
+  Suppression **fails open**: if the patient's problem list can't be fetched, the rule still
+  fires (flag rather than silently hide a possible new diagnosis). The problem list is only
+  fetched for reports that actually contain the targeted analyte.
+
+## [v3.65.0] — 2026-06-13
+
+### Investigation Results queue — result chips now persist + a pack of built-in threshold rules
+
+**Fix: queue result chips were stripped and never re-injected.** On every AG Grid
+re-render (which fires constantly on the queue), `refreshQueueChips()` wiped the
+`.ch-q-result` chips but only re-ran the *monitoring* pass — never the result-triage
+pass. So result chips vanished a frame after they appeared and never came back, even
+after a hard refresh, making every result rule (and lab-flagged urgent) look dead.
+`refreshQueueChips()` now also re-runs result triage (cheap — served from the per-row
+cache, no re-fetch unless stale).
+
+- **Config edits take effect live:** changing or enabling a result rule now invalidates
+  the cached per-row severities, so the queue recomputes instead of re-showing stale
+  chips. Previously an edited/enabled rule did nothing until the 5-minute cache expired.
+- **Robustness:** the result-triage pass now releases its run latch in a `finally`, so a
+  thrown worker can no longer permanently block all future passes.
+
+### `analyte.exclude` for result rules
+
+Result rules gain an optional `analyte.exclude` (case-insensitive substrings). A result
+whose name contains an exclude term is skipped even if it matched — dropping shared-token
+false positives. This is editable in the rule editor and honoured by the in-editor tester.
+
+### Seven built-in base result rules (enabled, escalate-only)
+
+A starter pack of common UK critical-result thresholds, shipped enabled. Each escalates
+severity only (never lowers a lab flag) and can be disabled per-rule in settings:
+
+- **Low haemoglobin** — amber <100, red <70 g/L (excludes HbA1c).
+- **High potassium** — amber ≥6.0, red ≥6.5 mmol/L (excludes urine).
+- **Low sodium** — amber ≤128, red ≤120 mmol/L (excludes urine).
+- **Low eGFR** — amber <30, red <15 mL/min/1.73m².
+- **Low platelets** — amber <100, red <30 ×10⁹/L (excludes "Mean platelet volume").
+- **Low neutrophils** — amber <1.0, red <0.5 ×10⁹/L.
+- **High INR** — amber ≥5, red ≥8.
+
+> Thresholds compare the raw number the lab reports — verify the units listed match your
+> laboratory before relying on a rule (the engine does not convert units).
+
 ## [v3.64.0] — 2026-06-13
 
 ### Investigation Results queue — microbiology (MSU / culture) text rules

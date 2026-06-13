@@ -874,6 +874,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
     { id: 'queue.resultUrgent',         page: 'Queue', desc: 'Investigation result has an urgent/critical analyte (lab flag or user threshold rule)', vars: ['{name}', '{count}'] },
     { id: 'queue.resultAbnormal',       page: 'Queue', desc: 'Investigation result has out-of-range analytes', vars: ['{count}'] },
+    { id: 'queue.resultRuleUrgent',     page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to urgent — names the rule', vars: ['{name}', '{rule}'] },
+    { id: 'queue.resultRuleAbnormal',   page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to abnormal — names the rule', vars: ['{name}', '{rule}'] },
     { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
     { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
     { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
@@ -1150,11 +1152,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
       return;
     }
+    const excludeLines = ($('#rrAnalyteExclude').value || '').split('\n').map(s => s.trim()).filter(Boolean);
     const nameLower = testName.toLowerCase();
     const matched = matchLines.some(m => nameLower.includes(m.toLowerCase()));
-    if (matched) {
+    const excluded = excludeLines.some(e => nameLower.includes(e.toLowerCase()));
+    if (matched && !excluded) {
       resultEl.textContent = '✓ would match';
       resultEl.className = 'tl-rr-test-result tl-rr-test-match';
+    } else if (matched && excluded) {
+      resultEl.textContent = '✗ excluded (matches an exclude term)';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
     } else {
       resultEl.textContent = '✗ would not match';
       resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
@@ -1190,6 +1197,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       activateTab('resultRules');
     });
     $('#rrAnalyteMatch').addEventListener('input', rrUpdateTestMatch);
+    $('#rrAnalyteExclude').addEventListener('input', rrUpdateTestMatch);
     $('#rrTestName').addEventListener('input', rrUpdateTestMatch);
     $('#rrKind').addEventListener('change', (e) => rrApplyKindVisibility(e.target.value));
   };
@@ -1203,6 +1211,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrEditTitle').textContent = rule.builtin ? 'Edit built-in result rule: ' + rule.label : 'Edit result rule: ' + rule.label;
     $('#rrLabel').value = rrEditingDraft.label || '';
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
+    $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');
     const kind = rrEditingDraft.kind === 'text' ? 'text' : 'threshold';
     $('#rrKind').value = kind;
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
@@ -1228,6 +1237,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const selectedKind = $('#rrKind').value;
     const label = $('#rrLabel').value.trim() || 'Untitled result rule';
     const analyteMatch = $('#rrAnalyteMatch').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const analyteExclude = ($('#rrAnalyteExclude').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const analyte = analyteExclude.length
+      ? { match: analyteMatch, exclude: analyteExclude }
+      : { match: analyteMatch };
     const enabled = $('#rrEnabled').checked;
 
     if (selectedKind === 'text') {
@@ -1239,13 +1252,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         kind: 'text',
         label,
         normalLabel,
-        analyte: { match: analyteMatch },
+        analyte,
         normalText,
         enabled
       };
     } else {
       rrEditingDraft.label = label;
-      rrEditingDraft.analyte = { match: analyteMatch };
+      rrEditingDraft.analyte = analyte;
       rrEditingDraft.comparator = $('#rrComparator').value;
       const amberVal = $('#rrAmber').value.trim();
       const redVal = $('#rrRed').value.trim();

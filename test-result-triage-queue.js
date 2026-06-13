@@ -167,6 +167,42 @@ if (selectResultChips) {
     noTopChips[0] && noTopChips[0].vars.name === '',
     `red urgent no top: vars.name is empty string (got "${noTopChips[0] && noTopChips[0].vars.name}")`
   );
+
+  // rule-driven red (top.ruleLabel set) → attributable queue.resultRuleUrgent
+  const ruleRed = {
+    level: 'red', urgentCount: 1, abnormalCount: 1,
+    top: { name: 'Potassium', value: '6.7', unit: 'mmol/L', ruleLabel: 'Critical high potassium' },
+    misprioritised: false, unmatched: false,
+  };
+  const ruleRedChips = selectResultChips(ruleRed);
+  check(ruleRedChips.some((c) => c.id === 'queue.resultRuleUrgent'), 'rule-driven red → queue.resultRuleUrgent');
+  check(!ruleRedChips.some((c) => c.id === 'queue.resultUrgent'), 'rule-driven red → NOT the generic resultUrgent');
+  const rru = ruleRedChips.find((c) => c.id === 'queue.resultRuleUrgent');
+  check(
+    rru && rru.vars.rule === 'Critical high potassium' && rru.vars.name === 'Potassium',
+    'resultRuleUrgent carries {name} and {rule}'
+  );
+
+  // rule-driven amber → attributable queue.resultRuleAbnormal
+  const ruleAmber = {
+    level: 'amber', urgentCount: 0, abnormalCount: 1,
+    top: { name: 'HbA1c', value: '44', unit: 'mmol/mol', ruleLabel: 'Prediabetes range' },
+    misprioritised: false, unmatched: false,
+  };
+  const ruleAmberChips = selectResultChips(ruleAmber);
+  check(ruleAmberChips.some((c) => c.id === 'queue.resultRuleAbnormal'), 'rule-driven amber → queue.resultRuleAbnormal');
+  check(!ruleAmberChips.some((c) => c.id === 'queue.resultAbnormal'), 'rule-driven amber → NOT the generic resultAbnormal');
+
+  // lab-driven (no ruleLabel) → generic chips unchanged
+  const labRed = {
+    level: 'red', urgentCount: 1, abnormalCount: 1,
+    top: { name: 'RDW', value: '16.7', unit: '%', ruleLabel: null },
+    misprioritised: false, unmatched: false,
+  };
+  check(
+    selectResultChips(labRed).some((c) => c.id === 'queue.resultUrgent'),
+    'lab-driven red (null ruleLabel) → generic resultUrgent'
+  );
 }
 
 // ============================================================
@@ -222,6 +258,49 @@ if (OVERVIEW_URL_RE) {
   );
   // Empty string
   check(!OVERVIEW_URL_RE.test(''), 'rejects empty string');
+}
+
+// ============================================================
+// Layer 3 — result-chip re-injection wiring (regression guards)
+// ============================================================
+console.log('Layer 3: result-chip re-injection & cache-invalidation wiring');
+
+// refreshQueueChips() must re-run result triage, not just monitoring — otherwise
+// AG Grid re-renders strip the .ch-q-result chips and they never come back (the
+// bug that made every result rule and lab-flagged urgent look dead on the queue).
+const rqcMatch = src.match(/const refreshQueueChips = \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!rqcMatch, 'refreshQueueChips function found');
+if (rqcMatch) {
+  check(
+    /scheduleQueueResultTriage\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips re-runs scheduleQueueResultTriage() (chips survive grid re-renders)'
+  );
+  check(
+    /scheduleQueueMonitoring\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips still re-runs scheduleQueueMonitoring()'
+  );
+}
+
+// A config change must invalidate the cached per-row result severities so an
+// edited/enabled rule is recomputed rather than re-shown stale.
+const watchMatch = src.match(/watchConfig\(\(\) => \{[\s\S]*?\n {4}\}\);/);
+check(!!watchMatch, 'watchConfig(onChange) callback found');
+if (watchMatch) {
+  check(
+    /_queueResultCache\.values\(\)[\s\S]*?\.sev = undefined/.test(watchMatch[0]),
+    'config change invalidates cached _queueResultCache severities (recompute, not stale)'
+  );
+}
+
+// scheduleQueueResultTriage must release its run latch in a finally so a thrown
+// worker cannot permanently block every future result-triage pass.
+const sqrtMatch = src.match(/const scheduleQueueResultTriage = async \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!sqrtMatch, 'scheduleQueueResultTriage function found');
+if (sqrtMatch) {
+  check(
+    /finally\s*\{[\s\S]*?_queueResultRunning = false/.test(sqrtMatch[0]),
+    'scheduleQueueResultTriage resets _queueResultRunning in a finally block'
+  );
 }
 
 // ============================================================

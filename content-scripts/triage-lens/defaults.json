@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 8,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3827,6 +3827,18 @@
       "kind": "amber",
       "actions": []
     },
+    "queue.resultRuleUrgent": {
+      "enabled": true,
+      "label": "Urgent: {name} — {rule}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.resultRuleAbnormal": {
+      "enabled": true,
+      "label": "{name} — {rule}",
+      "kind": "amber",
+      "actions": []
+    },
     "queue.resultMisprioritised": {
       "enabled": true,
       "label": "Under-prioritised",
@@ -3897,6 +3909,136 @@
         "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
       },
       "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    },
+    {
+      "id": "base-low-haemoglobin",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low haemoglobin (red <100 g/L)",
+      "analyte": {
+        "match": ["haemoglobin", "hemoglobin"],
+        "exclude": ["a1c", "glycated", "glycosylated"]
+      },
+      "comparator": "below",
+      "red": 100,
+      "unit": "g/L"
+    },
+    {
+      "id": "base-high-potassium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical high potassium (red ≥6.5 mmol/L)",
+      "analyte": {
+        "match": ["potassium"],
+        "exclude": ["urine", "urinary"]
+      },
+      "comparator": "above",
+      "red": 6.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-sodium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low sodium (red ≤120 mmol/L)",
+      "analyte": {
+        "match": ["sodium"],
+        "exclude": ["urine", "urinary", "valproate"]
+      },
+      "comparator": "below",
+      "red": 120,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-egfr",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low eGFR (red <15 mL/min/1.73m²)",
+      "analyte": {
+        "match": ["gfr"]
+      },
+      "comparator": "below",
+      "red": 15,
+      "unit": "mL/min/1.73m²"
+    },
+    {
+      "id": "base-low-platelets",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low platelets (red <30 ×10⁹/L)",
+      "analyte": {
+        "match": ["platelet"],
+        "exclude": ["mean platelet", "volume", "ratio", "large"]
+      },
+      "comparator": "below",
+      "red": 30,
+      "unit": "×10⁹/L"
+    },
+    {
+      "id": "base-low-neutrophils",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low neutrophils (red <0.5 ×10⁹/L)",
+      "analyte": {
+        "match": ["neutrophil"],
+        "exclude": ["%", "percent", "ratio"]
+      },
+      "comparator": "below",
+      "red": 0.5,
+      "unit": "×10⁹/L"
+    },
+    {
+      "id": "base-high-inr",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High INR (red ≥8)",
+      "analyte": {
+        "match": ["inr", "international normalised ratio", "international normalized ratio"]
+      },
+      "comparator": "above",
+      "red": 8,
+      "unit": "ratio"
+    },
+    {
+      "id": "base-hba1c-prediabetes",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Prediabetes range — not on record (HbA1c 42–47)",
+      "analyte": {
+        "match": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"]
+      },
+      "comparator": "above",
+      "amber": 42,
+      "unit": "mmol/mol",
+      "suppressIfProblem": {
+        "match": ["prediabetes", "pre-diabetes", "pre-diabetic", "impaired glucose", "impaired fasting", "non-diabetic hyperglycaemia", "non-diabetic hyperglycemia", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "diabetic"],
+        "exclude": ["diabetes insipidus", "gestational"]
+      }
+    },
+    {
+      "id": "base-hba1c-diabetes",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Possible diabetes — not on register (HbA1c ≥48)",
+      "analyte": {
+        "match": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"]
+      },
+      "comparator": "above",
+      "red": 48,
+      "unit": "mmol/mol",
+      "suppressIfProblem": {
+        "match": ["diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "type i diabetes", "type ii diabetes", "insulin dependent diabetes", "non insulin dependent diabetes", "diabetic"],
+        "exclude": ["non-diabetic", "pre-diabetic", "prediabetes", "pre-diabetes", "impaired glucose", "impaired fasting", "diabetes insipidus", "gestational"]
+      }
     }
   ]
 }

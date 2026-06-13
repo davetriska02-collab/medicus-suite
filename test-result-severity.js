@@ -766,6 +766,204 @@ console.log('\n--- text rules: null report → new keys are zero/null ---');
   assert(out.noGrowthTop === null, 'null report → noGrowthTop null');
 }
 
+// ── analyte.exclude: shared-token false positives are skipped ─────────────────
+console.log('\n--- resultRules: analyte.exclude skips look-alike analytes ---');
+function mkResult(name, value, extra) {
+  return Object.assign(
+    {
+      name,
+      value,
+      rawValue: String(value),
+      comparator: null,
+      unit: null,
+      low: null,
+      high: null,
+      isAbove: false,
+      isBelow: false,
+      urgent: false,
+      interpretation: null,
+      date: '2026-06-13',
+      history: [],
+    },
+    extra || {}
+  );
+}
+{
+  // "haemoglobin" rule must NOT fire on "Haemoglobin A1c" (excluded), MUST on "Haemoglobin"
+  const hbRule = {
+    id: 'rule_hb_excl',
+    enabled: true,
+    label: 'Low Hb',
+    analyte: { match: ['haemoglobin'], exclude: ['a1c'] },
+    comparator: 'below',
+    amber: 100,
+    red: 70,
+    unit: 'g/L',
+  };
+  const a1c = evaluateReportSeverity(makeReport([mkResult('Haemoglobin A1c', 50)]), {
+    resultRules: [hbRule],
+  });
+  assert(a1c.level === 'none', 'exclude: HbA1c 50 not fired by haemoglobin rule');
+  const hb = evaluateReportSeverity(makeReport([mkResult('Haemoglobin', 65)]), {
+    resultRules: [hbRule],
+  });
+  assert(hb.level === 'red', 'exclude: real Haemoglobin 65 still fires red');
+}
+{
+  // "platelet" rule must NOT fire on "Mean platelet volume" (8.4 fL)
+  const pltRule = {
+    id: 'rule_plt_excl',
+    enabled: true,
+    label: 'Low platelets',
+    analyte: { match: ['platelet'], exclude: ['mean platelet'] },
+    comparator: 'below',
+    amber: 100,
+    red: 30,
+    unit: '×10⁹/L',
+  };
+  const mpv = evaluateReportSeverity(makeReport([mkResult('Mean platelet volume', 8.4)]), {
+    resultRules: [pltRule],
+  });
+  assert(mpv.level === 'none', 'exclude: MPV 8.4 not fired by platelet rule');
+  const plt = evaluateReportSeverity(makeReport([mkResult('Platelets', 25)]), {
+    resultRules: [pltRule],
+  });
+  assert(plt.level === 'red', 'exclude: real Platelets 25 still fires red');
+}
+{
+  // exclude is optional — absent exclude reproduces the false positive (proves it's the guard)
+  const noExcl = {
+    id: 'rule_noexcl',
+    enabled: true,
+    label: 'Low Hb',
+    analyte: { match: ['haemoglobin'] },
+    comparator: 'below',
+    amber: 100,
+    red: 70,
+    unit: 'g/L',
+  };
+  const out = evaluateReportSeverity(makeReport([mkResult('Haemoglobin A1c', 50)]), {
+    resultRules: [noExcl],
+  });
+  assert(out.level === 'red', 'without exclude, HbA1c 50 DOES match — exclude is what prevents it');
+}
+
+// ── Shipped base result rules (defaults.json) ────────────────────────────────
+console.log('\n--- shipped base result rules: present, valid, and fire correctly ---');
+{
+  const defaults = require('./defaults.json');
+  const { validateResultRule } = require('./engine/result-rules.js');
+  const rules = Array.isArray(defaults.resultRules) ? defaults.resultRules : [];
+  const baseIds = [
+    'base-low-haemoglobin',
+    'base-high-potassium',
+    'base-low-sodium',
+    'base-low-egfr',
+    'base-low-platelets',
+    'base-low-neutrophils',
+    'base-high-inr',
+    'base-hba1c-prediabetes',
+    'base-hba1c-diabetes',
+  ];
+  for (const id of baseIds) {
+    const r = rules.find(x => x && x.id === id);
+    assert(!!r, `base rule present in defaults.json: ${id}`);
+    if (r) {
+      assert(r.builtin === true && r.enabled === true, `${id}: builtin + enabled`);
+      assert(validateResultRule(r).length === 0, `${id}: validates clean`);
+    }
+  }
+  // Fire the full shipped base set against representative results (now RED-ONLY).
+  const baseSet = rules.filter(r => baseIds.includes(r.id));
+  const fire = (name, value, problems) =>
+    evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
+  // Red-only: only critically-deranged values fire; the rest are left to the lab flag (none here).
+  assert(fire('Haemoglobin', 65) === 'red', 'base: Haemoglobin 65 → red');
+  assert(fire('Haemoglobin', 95) === 'red', 'base: Haemoglobin 95 → red (red threshold <100)');
+  assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
+  assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
+  assert(fire('Potassium', 6.2) === 'none', 'base: Potassium 6.2 → none (red-only, <6.5)');
+  assert(fire('Urine potassium', 60) === 'none', 'base: Urine potassium 60 → none (excluded)');
+  assert(fire('Sodium', 118) === 'red', 'base: Sodium 118 → red');
+  assert(fire('Sodium', 125) === 'none', 'base: Sodium 125 → none (red-only, >120)');
+  assert(fire('eGFR', 12) === 'red', 'base: eGFR 12 → red');
+  assert(fire('eGFR (CKD-EPI)', 28) === 'none', 'base: eGFR 28 → none (red-only, ≥15)');
+  assert(fire('Platelets', 25) === 'red', 'base: Platelets 25 → red');
+  assert(fire('Mean platelet volume', 8.4) === 'none', 'base: MPV 8.4 → none (excluded)');
+  assert(fire('Neutrophils', 0.4) === 'red', 'base: Neutrophils 0.4 → red');
+  assert(fire('INR', 8.5) === 'red', 'base: INR 8.5 → red');
+  assert(fire('INR', 5.5) === 'none', 'base: INR 5.5 → none (red-only, <8)');
+
+  // HbA1c conditional flags
+  assert(fire('HbA1c', 50) === 'red', 'base: HbA1c 50, no record → red (possible diabetes)');
+  assert(fire('HbA1c', 44) === 'amber', 'base: HbA1c 44, no record → amber (prediabetes)');
+  assert(fire('HbA1c', 38) === 'none', 'base: HbA1c 38 → none');
+  // Known diabetic → diabetes flag suppressed (and prediabetes too)
+  assert(
+    fire('HbA1c', 60, [{ label: 'Type 2 diabetes mellitus' }]) === 'none',
+    'base: HbA1c 60 with T2DM on record → none (suppressed)'
+  );
+  // Known prediabetic with a NEW diabetic-range HbA1c → diabetes flag still fires (progression)
+  assert(
+    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'red',
+    'base: HbA1c 50 with prediabetes on record → red (progression to diabetes still flagged)'
+  );
+  // "non-diabetic hyperglycaemia" must NOT suppress the diabetes flag (footgun guard)
+  assert(
+    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
+    'base: HbA1c 50 with non-diabetic hyperglycaemia → red (not a diabetes diagnosis)'
+  );
+  // Prediabetes flag suppressed once prediabetes is on record
+  assert(
+    fire('HbA1c', 44, [{ label: 'Impaired glucose tolerance' }]) === 'none',
+    'base: HbA1c 44 with IGT on record → none (prediabetes suppressed)'
+  );
+
+  // Attributable rule label flows onto top for rule-driven escalations
+  const ruleDrivenRed = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.7)]), { resultRules: baseSet });
+  assert(
+    ruleDrivenRed.top && ruleDrivenRed.top.ruleLabel && /potassium/i.test(ruleDrivenRed.top.ruleLabel),
+    'rule-driven red carries top.ruleLabel naming the rule'
+  );
+  // A lab-urgent result (no rule) carries no ruleLabel
+  const labUrgent = evaluateReportSeverity(makeReport([rdwUrgent]));
+  assert(labUrgent.top && labUrgent.top.ruleLabel == null, 'lab-driven urgent has null top.ruleLabel');
+}
+
+// ── suppressIfProblem: the non-diabetic / pre-diabetic footgun guards ─────────
+console.log('\n--- suppressIfProblem: word-boundary match + substring exclude ---');
+{
+  const diabetesRule = {
+    id: 'rule_dm',
+    enabled: true,
+    label: 'Possible diabetes',
+    analyte: { match: ['hba1c'] },
+    comparator: 'above',
+    red: 48,
+    unit: 'mmol/mol',
+    suppressIfProblem: {
+      match: ['diabetes mellitus', 'type 2 diabetes', 'diabetic'],
+      exclude: ['non-diabetic', 'pre-diabetic', 'prediabetes', 'pre-diabetes'],
+    },
+  };
+  const lvl = (problems) =>
+    evaluateReportSeverity(makeReport([mkResult('HbA1c', 52)]), { resultRules: [diabetesRule], problems }).level;
+  assert(lvl([]) === 'red', 'suppress: no problems → fires red (fail-open)');
+  assert(lvl(undefined) === 'red', 'suppress: undefined problems → fires red (fail-open)');
+  assert(lvl([{ label: 'Type 2 diabetes mellitus' }]) === 'none', 'suppress: T2DM on record → suppressed');
+  assert(lvl([{ label: 'Diabetic nephropathy' }]) === 'none', 'suppress: "diabetic nephropathy" → suppressed');
+  assert(
+    lvl([{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
+    'suppress: "non-diabetic hyperglycaemia" → NOT suppressed (exclude wins)'
+  );
+  assert(
+    lvl([{ label: 'Pre-diabetic retinopathy' }]) === 'red',
+    'suppress: "pre-diabetic retinopathy" → NOT suppressed (exclude wins)'
+  );
+  assert(lvl([{ label: 'Prediabetes' }]) === 'red', 'suppress: "prediabetes" → NOT suppressed (excluded)');
+  assert(lvl([{ label: 'Hypertension' }]) === 'red', 'suppress: unrelated problem → fires');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
