@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.62.0] — 2026-06-13
+
+### Investigation Results queue — per-row severity triage chips
+
+- **Urgent/abnormal result chips:** Each queued Investigation Results task now shows
+  a severity chip derived from the actual lab report data. Urgent (red) results show
+  the abnormal analyte name and count; abnormal (amber) results show the abnormal count.
+- **Under-prioritised safety flag:** A red "Under-prioritised" chip fires when the
+  task's `priorityDisplay` is `Routine` but the result contains urgent findings.
+- **Unmatched-patient flag:** An amber "Unmatched patient" chip fires when the report
+  could not be matched to a patient record.
+- **Whole-queue throttled sweep:** All queue rows are swept with 3 concurrent workers,
+  priority-ordered (High/Urgent/Immediate first), with a 90-fetch / 60s rolling budget.
+  Results are cached for 5 minutes. The sweep runs on queue entry and on new task-list
+  data arrival.
+
 ## [v3.61.0] — 2026-06-13
 
 ### Whole-suite usability pass — synthetic GP-practice panel ("The Practice")

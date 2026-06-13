@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3812,6 +3812,30 @@
     "queue.monitoringDueAmber": {
       "enabled": false,
       "label": "Monitoring {count}",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultUrgent": {
+      "enabled": true,
+      "label": "Urgent: {name}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.resultAbnormal": {
+      "enabled": true,
+      "label": "{count} abnormal",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultMisprioritised": {
+      "enabled": true,
+      "label": "Under-prioritised",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.resultUnmatched": {
+      "enabled": true,
+      "label": "Unmatched patient",
       "kind": "amber",
       "actions": []
     },
