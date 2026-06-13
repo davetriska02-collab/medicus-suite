@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.11] — 2026-06-13
+
+### Activity — design-crit pass (three-critic review via /design-crit)
+
+- **The chart no longer spends the clinical alert palette on workload (the
+  convergent finding across all three critics)**: "Routine Rx" was painted
+  alert-amber and "Non-routine Rx" alert-red, so the "Non-routine only" view
+  turned the whole panel blood-red over benign prescription counts — the
+  fresh-eyes GP read it as "that doctor is doing something risky". Workload is
+  not a clinical status, so the six series now draw from a new **non-clinical
+  categorical data-viz ramp** (`--cat-1`…`--cat-6`, light + dark columns,
+  documented in TOKENS.md) that deliberately avoids the `--red`/`--amber`
+  alert hues. The metric tiles and legend inherit the same ramp. Red/amber are
+  now reserved for genuine clinical signals — alert salience was only
+  protected, never reduced.
+- **States are designed, not inherited**: the empty state is now a centered
+  bar-chart glyph over a mono machine-voice label (was a bare italic string);
+  the "no practice code" error is recoloured off the clinical-red triad to a
+  neutral informational treatment (a config gap is not a clinical alarm); the
+  legend now reflects the active mode (all six stacked, a single key for a
+  single metric, hidden entirely for total-only).
+- **Controls match the instrument**: the metric `<select>` and date inputs
+  adopt the tokenised Input recipe (custom chevron, `:hover`,
+  `:focus-visible`); the active date preset now carries an accent
+  selected-state and **Refresh** is demoted to a ghost button so the live
+  range — not a utility action — owns the accent.
+- **Accessibility**: the staff chart gains `role="list"`/`listitem` with
+  per-row `aria-label` breakdowns (data was previously hover-only `title`
+  text), an `aria-live` region announces async data swaps, and the load-bearing
+  metric labels move off the muted `--text-4` tier to `--text-3` for contrast.
+- **Fix**: a stale `VALID_MODES` whitelist meant any single-metric chart view
+  silently reset to "stacked" on reload — the list is now derived from the real
+  metric keys, so the chosen view persists.
+- Token/radius hygiene: cards corrected to the card radius, swatch radii
+  tokenised, 4px-grid spacing, and dashed dividers replaced with hairlines.
+
 ## [v3.60.10] — 2026-06-13
 
 ### Reception — design-crit pass (three-critic review via /design-crit)
