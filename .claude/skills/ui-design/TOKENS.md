@@ -99,6 +99,11 @@ Elevation = hairline border **plus** shadow, always both, both subtle.
 `--shadow-1` cards at rest · `--shadow-2` hover lift & dropdowns ·
 `--shadow-3` modals/HUD only.
 
+Overlay veil: `--scrim` — the dimming layer behind modals, the tab chooser and
+the tour spotlight. Light `rgba(15,23,42,.55)`; dark `rgba(0,0,0,.66)` (the
+light slate value barely darkens an already-dark page, so dark is re-picked
+deeper, not inherited). Consume `var(--scrim)` — never a raw scrim rgba.
+
 Focus: `panel.css` ships a global
 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }`.
 Never suppress it; never use `:focus` for the ring (mouse users get flashed).
@@ -130,7 +135,12 @@ mono uppercase 9–10px, `--text-3`; hover: `border-color: var(--accent);
 color: var(--text-2); background: var(--accent-dim);`
 
 **Primary button** (one per view, max) — `background: var(--accent); color:
-#fff;` hover `--accent-hover`; disabled: `opacity:.45; cursor:not-allowed`.
+var(--bg-deep);` hover `--accent-hover`; disabled: `opacity:.45;
+cursor:not-allowed`. On-accent text is `var(--bg-deep)`, not `#fff`: it is
+theme-adaptive (reads near-white on light, dark-ink on dark) and clears
+contrast on the pastel **dark** accent `#5b8fc7`, where pure `#fff` is only
+~3.4:1. Same rule for any text/glyph sitting on an `--accent` fill (nav badge,
+copy buttons, tour/tabs CTAs).
 
 **Status chip** — `background: var(--<c>-dim); color: var(--<c>);
 border: 1px solid var(--<c>-line); border-radius: var(--r-sm);` mono 10px.

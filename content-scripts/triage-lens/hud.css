@@ -72,8 +72,8 @@
 .ch-chip {
   display: inline-block;
   padding: 2px 7px;
-  border-radius: var(--r-pill);
-  font-size: 10.5px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.4;
   border: 1px solid transparent;
@@ -238,7 +238,7 @@
 }
 #medicus-clinical-hud .ch-request-head {
   font-weight: 600;
-  font-size: 9.5px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-4);
@@ -296,9 +296,13 @@
   gap: 2px;
 }
 #medicus-clinical-hud .ch-tile:hover {
-  border-color: var(--header-bg);
+  border-color: var(--accent);
   transform: translateY(-1px);
   box-shadow: var(--shadow-2);
+}
+#medicus-clinical-hud .ch-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 /* Selected tile — accent triad; border reserved at rest to avoid layout shift */
 #medicus-clinical-hud .ch-tile.ch-tile-sel {
@@ -383,10 +387,10 @@
 }
 #medicus-clinical-hud .ch-detail-text {
   font-weight: 500;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 #medicus-clinical-hud .ch-detail-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-4);
   margin-top: 2px;
 }
@@ -493,7 +497,7 @@
 .ch-action-menu-note {
   padding: 10px 12px;
   white-space: pre-wrap;
-  font-size: 11.5px;
+  font-size: 12px;
   max-height: 360px;
   overflow-y: auto;
   color: var(--text-1);

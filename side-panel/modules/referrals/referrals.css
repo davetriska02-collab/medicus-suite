@@ -1,7 +1,9 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Referrals Tracker v1.0 */
 
-.ref-v1-module { font-family: var(--sans); }
+.ref-v1-module {
+  font-family: var(--sans);
+}
 
 /* ── Controls ─────────────────────────────────────────────────────────────── */
 
@@ -42,8 +44,13 @@
   min-width: 130px;
   transition: border-color var(--fast) var(--ease);
 }
-.ref-date-input:focus { border-color: var(--accent); background: var(--bg-elev); }
-.ref-date-input::placeholder { color: var(--text-4); }
+.ref-date-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.ref-date-input::placeholder {
+  color: var(--text-4);
+}
 
 .ref-preset-row {
   display: flex;
@@ -52,7 +59,8 @@
   flex-wrap: wrap;
 }
 
-.ref-preset, .ref-refresh {
+.ref-preset,
+.ref-refresh {
   background: var(--bg-mid);
   border: 1px solid var(--border);
   color: var(--text-3);
@@ -63,22 +71,45 @@
   cursor: pointer;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ref-preset:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-hi); }
-.ref-preset:active { background: var(--bg-hover); }
-.ref-preset:disabled { opacity: 0.45; cursor: not-allowed; }
+.ref-preset:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.ref-preset:active {
+  background: var(--bg-hover);
+}
+.ref-preset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .ref-refresh {
   background: var(--accent-dim);
   border-color: var(--accent-line);
   color: var(--accent);
 }
-.ref-refresh:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--text-2); }
-.ref-refresh:active { opacity: 0.8; }
-.ref-refresh:disabled { opacity: 0.45; cursor: not-allowed; }
+.ref-refresh:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+.ref-refresh:active {
+  opacity: 0.8;
+}
+.ref-refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
-.ref-spacer { flex: 1; }
+.ref-spacer {
+  flex: 1;
+}
 
 .ref-ts {
   font-family: var(--mono);
@@ -96,7 +127,7 @@
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
   border-radius: var(--r-md);
-  padding: 7px 12px;
+  padding: 8px 12px;
   margin-bottom: 12px;
   line-height: 1.5;
 }
@@ -152,7 +183,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   background: var(--bg-mid);
   border-radius: var(--r-md);
   border: 1px solid var(--border);
@@ -161,12 +192,15 @@
 .ref-priority-swatch {
   width: 4px;
   height: 36px;
-  border-radius: 2px;
+  border-radius: var(--r-pill);
   flex-shrink: 0;
   margin-top: 2px;
 }
 
-.ref-priority-info { flex: 1; min-width: 0; }
+.ref-priority-info {
+  flex: 1;
+  min-width: 0;
+}
 
 .ref-priority-label {
   font-family: var(--mono);
@@ -234,7 +268,13 @@
   flex-shrink: 0;
 }
 
-.ref-status-info { flex: 1; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ref-status-info {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
 
 .ref-status-lbl {
   font-family: var(--sans);
@@ -291,11 +331,25 @@
   cursor: pointer;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ref-chart-tab:hover    { background: var(--bg-hover); color: var(--text-1); border-color: var(--border); }
-.ref-chart-tab.active   { background: var(--accent-dim); border-color: var(--accent-line); color: var(--text-2); }
-.ref-chart-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+.ref-chart-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border);
+}
+.ref-chart-tab.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+.ref-chart-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ── Bars ─────────────────────────────────────────────────────────────────── */
 
@@ -333,7 +387,9 @@
   height: 100%;
   transition: opacity var(--fast) var(--ease);
 }
-.ref-bar-seg:hover { opacity: 0.8; }
+.ref-bar-seg:hover {
+  opacity: 0.8;
+}
 
 .ref-bar-total {
   font-family: var(--mono);
@@ -351,7 +407,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 32px 24px 28px;
+  padding: 32px 24px;
   gap: 10px;
 }
 
@@ -406,9 +462,11 @@
 .ref-empty {
   padding: 24px 12px;
   text-align: center;
-  color: var(--text-4);
-  font-size: 12px;
-  font-style: italic;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .ref-progress {
@@ -422,7 +480,9 @@
   margin-bottom: 10px;
 }
 
-.ref-skeleton { padding: 8px 0; }
+.ref-skeleton {
+  padding: 8px 0;
+}
 .ref-skel-line {
   height: 14px;
   background: linear-gradient(90deg, var(--bg-mid), var(--bg-hover), var(--bg-mid));
@@ -431,22 +491,41 @@
   border-radius: var(--r-sm);
   margin-bottom: 8px;
 }
-.ref-skel-w50 { width: 50%; }
-.ref-skel-w60 { width: 60%; }
-.ref-skel-w65 { width: 65%; }
-.ref-skel-w70 { width: 70%; }
-.ref-skel-w80 { width: 80%; }
+.ref-skel-w50 {
+  width: 50%;
+}
+.ref-skel-w60 {
+  width: 60%;
+}
+.ref-skel-w65 {
+  width: 65%;
+}
+.ref-skel-w70 {
+  width: 70%;
+}
+.ref-skel-w80 {
+  width: 80%;
+}
 @keyframes ref-shimmer {
-  0%   { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ref-skel-line { animation: none; background: var(--bg-mid); }
+  .ref-skel-line {
+    animation: none;
+    background: var(--bg-mid);
+  }
 }
 
 /* ── Error + diagnostics ──────────────────────────────────────────────────── */
 
-.ref-error-msg { margin-bottom: 6px; }
+.ref-error-msg {
+  margin-bottom: 6px;
+}
 
 .ref-error-url {
   font-size: 10px;
@@ -481,7 +560,12 @@
   letter-spacing: 0.03em;
   transition: color var(--fast) var(--ease);
 }
-.ref-diag-toggle:hover { color: var(--text-2); }
+.ref-diag-toggle:hover {
+  color: var(--text-2);
+}
+.ref-diag-toggle:active {
+  color: var(--text-1);
+}
 
 .ref-diag-body {
   font-family: var(--mono);
@@ -499,7 +583,9 @@
   overflow-y: auto;
 }
 
-.ref-diag-actions { margin-top: 6px; }
+.ref-diag-actions {
+  margin-top: 6px;
+}
 
 .ref-btn-secondary {
   background: var(--bg-mid);
@@ -510,11 +596,23 @@
   font-size: 10px;
   border-radius: var(--r-md);
   cursor: pointer;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ref-btn-secondary:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-hi); }
-.ref-btn-secondary:active { background: var(--bg-hover); }
-.ref-btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.ref-btn-secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.ref-btn-secondary:active {
+  background: var(--bg-hover);
+}
+.ref-btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ── CSV button ───────────────────────────────────────────────────────────── */
 
@@ -529,15 +627,30 @@
   cursor: pointer;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ref-csv:hover { background: var(--green-dim); border-color: var(--green); color: var(--green); opacity: 0.85; }
-.ref-csv:active { opacity: 0.75; }
-.ref-csv:disabled { opacity: 0.45; cursor: not-allowed; }
+.ref-csv:hover {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+  opacity: 0.85;
+}
+.ref-csv:active {
+  opacity: 0.75;
+}
+.ref-csv:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ── Staleness timestamp ──────────────────────────────────────────────────── */
 
-.ref-ts-stale { color: var(--amber); }
+.ref-ts-stale {
+  color: var(--amber);
+}
 
 .ref-ts-refresh {
   background: transparent;
@@ -551,7 +664,9 @@
   text-underline-offset: 2px;
   transition: color var(--fast) var(--ease);
 }
-.ref-ts-refresh:hover { color: var(--text-1); }
+.ref-ts-refresh:hover {
+  color: var(--text-1);
+}
 
 /* ── Filter chips ─────────────────────────────────────────────────────────── */
 
@@ -572,7 +687,9 @@
   white-space: nowrap;
 }
 
-.ref-chips-sep { width: 8px; }
+.ref-chips-sep {
+  width: 8px;
+}
 
 .ref-chip {
   display: inline-flex;
@@ -587,9 +704,16 @@
   border-radius: var(--r-pill);
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.ref-chip:hover { background: var(--bg-hover); color: var(--text-2); border-color: var(--border-hi); }
+.ref-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+  border-color: var(--border-hi);
+}
 .ref-chip.active {
   background: var(--accent-dim);
   border-color: var(--chip-colour, var(--accent-line));
@@ -622,10 +746,17 @@
   font-family: var(--sans);
   font-size: 11px;
   border-radius: var(--r-md);
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
-.ref-search-input:focus { border-color: var(--accent); background: var(--bg-elev); }
-.ref-search-input::placeholder { color: var(--text-4); }
+.ref-search-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.ref-search-input::placeholder {
+  color: var(--text-4);
+}
 
 .ref-search-clear {
   position: absolute;
@@ -639,7 +770,9 @@
   line-height: 1;
   transition: color var(--fast) var(--ease);
 }
-.ref-search-clear:hover { color: var(--text-2); }
+.ref-search-clear:hover {
+  color: var(--text-2);
+}
 
 /* ── Show all toggle ──────────────────────────────────────────────────────── */
 
@@ -657,16 +790,28 @@
   letter-spacing: 0.03em;
   transition: color var(--fast) var(--ease);
 }
-.ref-show-all:hover { color: var(--text-2); }
+.ref-show-all:hover {
+  color: var(--text-2);
+}
 
 /* ── Narrow viewport tweaks ───────────────────────────────────────────────── */
 
 @media (max-width: 380px) {
-  .ref-bar-row           { grid-template-columns: 100px 1fr 38px; }
-  .ref-bar-row--rate     { grid-template-columns: 100px 1fr 64px; }
-  .ref-breakdown-grid    { grid-template-columns: 1fr 1fr; }
-  .ref-summary-number    { font-size: 26px; }
-  .ref-chart-tabs        { flex-wrap: wrap; }
+  .ref-bar-row {
+    grid-template-columns: 100px 1fr 38px;
+  }
+  .ref-bar-row--rate {
+    grid-template-columns: 100px 1fr 64px;
+  }
+  .ref-breakdown-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ref-summary-number {
+    font-size: 26px;
+  }
+  .ref-chart-tabs {
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Rate chart ────────────────────────────────────────────────────────────── */
@@ -699,9 +844,8 @@
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
-  font-style: italic;
   margin-bottom: 8px;
-  padding: 4px 6px;
+  padding: 4px 8px;
   background: var(--bg-mid);
   border-radius: var(--r-sm);
 }
@@ -738,9 +882,10 @@
 
 .ref-rate-loading {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-4);
   padding: 16px 0;
   text-align: center;
-  font-style: italic;
 }
