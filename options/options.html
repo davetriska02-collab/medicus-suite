@@ -695,6 +695,7 @@
         <button class="nav-item" data-section="submissions">Submissions</button>
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="triage">Triage Lens</button>
+        <button class="nav-item" data-section="result-rules">Result Rules</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
@@ -1214,6 +1215,22 @@
               id="triageFrame"
               src="../content-scripts/triage-lens/options.html"
               title="Triage Lens settings"
+            ></iframe>
+          </div>
+        </section>
+
+        <!-- Result Rules section — deep-links into the Triage Lens result-rules editor -->
+        <section class="opt-section" id="sect-result-rules">
+          <h1>Result Rules <span class="module-badge">investigation results</span></h1>
+          <p class="section-desc">
+            Analyte-threshold and culture/text rules that escalate the Investigation Results
+            queue chips. Imported rules arrive <strong>disabled</strong> — review each before enabling.
+          </p>
+          <div class="iframe-section">
+            <iframe
+              id="resultRulesFrame"
+              src="../content-scripts/triage-lens/options.html#resultRules"
+              title="Result rules settings"
             ></iframe>
           </div>
         </section>
