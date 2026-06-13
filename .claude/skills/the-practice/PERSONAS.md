@@ -35,6 +35,19 @@ final report must label their input as synthetic every time (see SKILL.md
 | 8 | **Janet Briggs**, 49 | Practice manager | reluctant-but-capable | Submissions, Activity, Condor, Referrals, Capacity | Numbers she can defend to the partners and reconcile against Medicus | Distrusts any figure she can't tie back to a source count; one wrong number poisons the whole tool for her | sonnet |
 | 9 | **Raj Patel**, 38 | Clinical pharmacist | savvy + domain | Sentinel, drug rules, Visualiser PINCER/STOPP-START | Clinical correctness — false positives AND silent false negatives | Spots a missing brand, a wrong monitoring interval, an over-broad exclude; loses faith fast if the rules are wrong | sonnet |
 | 10 | **Dr Geoff Pellew**, 52 | GP partner / tinkerer | savvy power user | Custom Alert Builder, Trends, dark mode, exports | Control: keyboard shortcuts, CSV export, density, customisation | Frustrated by anything he can't tune or get data out of; wants more on screen, not less | sonnet |
+| 11 | **Dr Iain Frewin**, 47 | GP partner — full-time, burnt-out, time-starved | pragmatist (capable, zero patience) | Today, Pre-Consultation Brief, Patient Passport; Sentinel only if it pays off instantly | Instant payoff measured in seconds, not clicks; no setup, no reading, no second visit to "give it a chance" | Decides *whether to engage at all*, not per-click: if the value isn't obvious in the first few seconds he closes it, doesn't reopen it, and writes it off as "yet another tool that costs me time" | sonnet |
+| 12 | **Helen Mowbray**, 53 | CQC inspector — *external assessor, mock inspection only* | pragmatist (governance-literate) | Options › Clinical Safety, the hazard-log / safety-case links, audit trail, Submissions / Activity *as evidence* | Whether every claim the tool makes can be **evidenced** and traced to a source; whether the safety boundary and limitations are stated; whether patient data is handled lawfully and locally | "Show me" is her whole mode: anything she is shown that can't be traced to a source count, a safety-case document, or a stated limitation becomes a finding / action — she does not assume good faith, she asks for the artefact | sonnet |
+
+> **Note on #11 and #12.** #11 (Frewin) fills a real gap between the *technophobe*
+> partner (#1, who fears looking stupid) and the *per-click* salaried pragmatist
+> (#5, who abandons mid-clinic if a step is added): Frewin is competent and not
+> tech-averse, but so time-poor and cynical that the question he tests is "is the
+> first-impression payoff instant enough that I even start?". #12 (Mowbray) is
+> **not practice staff** — she is an external governance lens for *mock
+> inspections* of the suite's safety case, audit trail and data handling. Cast her
+> only when the appraisal scope includes the Clinical Safety / governance surfaces,
+> and keep her findings clearly labelled as a synthetic mock-inspection rehearsal,
+> never as a real CQC view.
 
 ## Casting guide — who actually uses each surface
 
@@ -45,8 +58,8 @@ reluctant 3/8) so the ease-of-use floor is tested, plus at least one savvy band
 
 | Surface | Primary panel | Why |
 |---|---|---|
-| Today | 1, 5, 6 | First screen everyone lands on; the technophobe's verdict here colours the whole suite |
-| Sentinel / Monitoring | 3, 9, 5, 1 | Nurse + pharmacist are the domain users; the partner tests whether a non-expert trusts it |
+| Today | 1, 5, 6, 11 | First screen everyone lands on; the technophobe's verdict here colours the whole suite, and the burnt-out partner decides in seconds whether to engage at all |
+| Sentinel / Monitoring | 3, 9, 5, 1, 11 | Nurse + pharmacist are the domain users; the partner tests whether a non-expert trusts it, and the burnt-out partner tests whether the Pre-Consultation Brief pays off in the first glance |
 | Custom Alert Builder | 10, 9, 7 | Authoring is a power-user surface; does it stay safe in expert hands |
 | Slots / Capacity | 5, 8, 6 | Clinical speed user + the manager who plans capacity |
 | Submissions / Activity / Condor | 8, 1, 10 | Manager-led oversight; reconcilability and exportability dominate |
@@ -55,6 +68,7 @@ reluctant 3/8) so the ease-of-use floor is tested, plus at least one savvy band
 | Triage Lens (in-page) | 5, 9, 3 | At-a-glance during a live queue; does the overlay help or clutter |
 | Patient Record Visualiser | 9, 7, 10 | Dense analytics tab; expert readers, but legibility still tested |
 | Trends | 10, 8, 5 | Chart literacy and "so what do I do with this" |
+| Clinical Safety / governance (Options › Clinical Safety, hazard-log & safety-case links, audit trail) | 12, 8 | Mock-inspection lens: is every claim evidenced and traceable, is the safety boundary stated, is data handled lawfully |
 | Whole suite | full roster | Navigation, consistency, and the tech-literacy gradient across modules |
 
 ## Accessibility lenses (fold into the relevant personas, do not skip)
