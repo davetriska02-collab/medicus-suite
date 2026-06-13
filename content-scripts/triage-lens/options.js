@@ -78,6 +78,27 @@
   // shipped defaults are newer than the stored config, append builtin rules
   // the user doesn't have (honouring removedBuiltins tombstones) and any
   // missing threshold / pref / systemChip keys. Never overwrites user edits.
+  // Chip labels shipped in a PRIOR version and SINCE CHANGED. An earlier migration baked
+  // the full shipped chip map into each saved config, so once a default label changed the
+  // stored (old) label shadowed the new default forever (e.g. the "Urgent:" result-chip
+  // prefix, retired in v3.75.0). When a stored chip label still matches a retired default
+  // we revert it to the current shipped label. WHEN YOU CHANGE A SHIPPED CHIP LABEL: add
+  // its previous value here AND bump defaults.json "version" so this migration runs.
+  // Kept in lock-step with the same table in content-scripts/triage-lens/content.js.
+  const RETIRED_CHIP_LABELS = {
+    'queue.resultUrgent': ['Urgent: {name}'],
+    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}']
+  };
+  const revertRetiredChipLabels = (chips, shippedChips) => {
+    if (!chips || !shippedChips) return;
+    for (const id of Object.keys(RETIRED_CHIP_LABELS)) {
+      const entry = chips[id];
+      const shippedNow = shippedChips[id];
+      if (entry && shippedNow && RETIRED_CHIP_LABELS[id].indexOf(entry.label) !== -1) {
+        entry.label = shippedNow.label;
+      }
+    }
+  };
   const mergeShippedDefaults = (cfg, shipped) => {
     if (!cfg || !Array.isArray(cfg.rules) || !shipped) return null;
     if ((cfg.version || 0) >= (shipped.version || 0)) return null;
@@ -90,6 +111,7 @@
     out.thresholds = { ...(shipped.thresholds || {}), ...(cfg.thresholds || {}) };
     out.prefs = { ...(shipped.prefs || {}), ...(cfg.prefs || {}) };
     out.systemChips = { ...(shipped.systemChips || {}), ...(cfg.systemChips || {}) };
+    revertRetiredChipLabels(out.systemChips, shipped.systemChips);
     out.resultRules = [...(Array.isArray(cfg.resultRules) ? cfg.resultRules : [])];
     const haveRR = new Set(out.resultRules.map(r => r && r.id));
     for (const r of (shipped.resultRules || [])) {
