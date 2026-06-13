@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.62.1] — 2026-06-13
+
+### Investigation Results queue chips — design-crit polish
+
+Visual-only pass from a three-critic design review (art director, token/CSS
+surveyor, fresh-eyes GP). No change to severity logic, chip wording, or which
+chips appear.
+
+- **Clinical vs process hierarchy:** the filled red/amber treatment is now
+  reserved for the clinical result chips (Urgent / abnormal). The process/meta
+  flags ("Under-prioritised", "Unmatched patient") render as outline chips so a
+  genuine abnormal result is never out-shouted by a queue/data-quality caveat.
+- **Long-analyte chips no longer overflow:** chips truncate with an ellipsis
+  (`max-width`) and carry the full text in a `title` tooltip.
+- **Amber contrast fix:** amber chip ink darkened to `#b45309` to clear the
+  4.5:1 accessibility floor at 10px (was 3.10:1).
+- **A11y/tidy:** result-chip strip marked `role="note"`; de-duplicated the
+  identical queue/result chip CSS.
+
 ## [v3.62.0] — 2026-06-13
 
 ### Investigation Results queue — per-row severity triage chips

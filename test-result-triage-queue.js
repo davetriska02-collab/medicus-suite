@@ -92,6 +92,14 @@ if (selectResultChips) {
     misChips.some((c) => c.id === 'queue.resultMisprioritised'),
     'misprioritised: includes queue.resultMisprioritised'
   );
+  check(
+    misChips.find((c) => c.id === 'queue.resultMisprioritised')?.meta === true,
+    'misprioritised: meta flag is true'
+  );
+  check(
+    misChips.find((c) => c.id === 'queue.resultUrgent')?.meta !== true,
+    'urgent (clinical): meta flag is falsy'
+  );
 
   // unmatched adds resultUnmatched
   const unmatchSev = {
@@ -107,6 +115,14 @@ if (selectResultChips) {
   check(
     unmatchChips.some((c) => c.id === 'queue.resultUnmatched'),
     'unmatched: includes queue.resultUnmatched'
+  );
+  check(
+    unmatchChips.find((c) => c.id === 'queue.resultUnmatched')?.meta === true,
+    'unmatched: meta flag is true'
+  );
+  check(
+    unmatchChips.find((c) => c.id === 'queue.resultAbnormal')?.meta !== true,
+    'abnormal (clinical): meta flag is falsy'
   );
 
   // none -> no chips

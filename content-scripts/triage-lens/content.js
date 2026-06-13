@@ -32,25 +32,20 @@
   border: 1px solid transparent;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   white-space: nowrap;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ch-chip-red    { background: #fbe6e7; color: #b8262e; border-color: rgba(184,38,46,0.25); }
-.ch-chip-amber  { background: #fdf3e1; color: #b8771a; border-color: rgba(184,119,26,0.25); }
+.ch-chip-amber  { background: #fdf3e1; color: #b45309; border-color: rgba(184,119,26,0.25); }
 .ch-chip-green  { background: #e8f4ec; color: #2f8a4a; border-color: rgba(47,138,74,0.25); }
 .ch-chip-info   { background: #e7eef7; color: #2a4d7a; border-color: rgba(42,77,122,0.20); }
+/* Meta/process chips (under-prioritised, unmatched): outline, not filled — */
+/* keeps clinical fills reserved for actual result severity. */
+.ch-q-result .ch-chip-meta { background: transparent; }
 
 /* ---- Queue row chips ---- */
-.ch-queue-chips {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-.ch-queue-chips .ch-chip {
-  padding: 1px 6px;
-  font-size: 10px;
-  border-radius: 9px;
-}
+.ch-queue-chips,
 .ch-q-result {
   display: inline-flex;
   flex-wrap: wrap;
@@ -58,6 +53,7 @@
   margin-right: 6px;
   vertical-align: middle;
 }
+.ch-queue-chips .ch-chip,
 .ch-q-result .ch-chip {
   padding: 1px 6px;
   font-size: 10px;
@@ -1693,7 +1689,7 @@
     const ruleAttr = chip.ruleId ? ` data-rule-id="${escapeHtml(chip.ruleId)}"` : '';
     const cursorClass = chip.hasActions ? ' ch-chip-actionable' : '';
     const chevron = chip.hasActions ? ' <span class="ch-chev">▾</span>' : '';
-    return `<span class="ch-chip ch-chip-${escapeHtml(chip.kind)}${cursorClass}"${ruleAttr}>${escapeHtml(chip.text)}${chevron}</span>`;
+    return `<span class="ch-chip ch-chip-${escapeHtml(chip.kind)}${cursorClass}"${ruleAttr} title="${escapeHtml(chip.text)}">${escapeHtml(chip.text)}${chevron}</span>`;
   };
 
   // ---- Action menu popover ----
@@ -2320,8 +2316,8 @@
     } else if (sev.level === 'amber') {
       chips.push({ id: 'queue.resultAbnormal', vars: { count: sev.abnormalCount } });
     }
-    if (sev.misprioritised) chips.push({ id: 'queue.resultMisprioritised', vars: {} });
-    if (sev.unmatched) chips.push({ id: 'queue.resultUnmatched', vars: {} });
+    if (sev.misprioritised) chips.push({ id: 'queue.resultMisprioritised', vars: {}, meta: true });
+    if (sev.unmatched) chips.push({ id: 'queue.resultUnmatched', vars: {}, meta: true });
     return chips;
   }
 
@@ -2353,8 +2349,10 @@
     if (!row) return;
     const chipDefs = selectResultChips(sev);
     if (!chipDefs.length) return;
-    const chips = chipDefs.map(({ id, vars }) => getSystemChip(id, vars)).filter(Boolean);
-    if (!chips.length) return;
+    const built = chipDefs
+      .map((d) => ({ chip: getSystemChip(d.id, d.vars), meta: !!d.meta }))
+      .filter((b) => b.chip);
+    if (!built.length) return;
     const previewRow = findQueuePreviewRow(row);
     let target = previewRow
       ? (previewRow.querySelector('.h-full.w-full') || previewRow.firstElementChild || previewRow)
@@ -2362,8 +2360,11 @@
     if (!target || target.querySelector('.ch-q-result')) return;
     const span = document.createElement('span');
     span.className = 'ch-q-result';
-    span.innerHTML = chips.map(renderChipHtml).join('');
+    span.setAttribute('role', 'note');
+    span.innerHTML = built.map((b) => renderChipHtml(b.chip)).join('');
     target.insertBefore(span, target.firstChild);
+    const rendered = span.querySelectorAll('.ch-chip');
+    built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
   };
 
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
