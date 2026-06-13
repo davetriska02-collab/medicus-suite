@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.68.0] — 2026-06-13
+
+### Fix: queue result chips stopped injecting (regression from v3.67.0)
+
+v3.67.0 switched the flat-queue chip injection to `appendChild` (to keep the
+patient name visible). On the live Medicus grid the appended node is reconciled
+away by the page's Vue renderer on its next re-render, so result chips vanished
+the instant they were injected (a live capture showed *peak* result-chips = 0).
+
+- **Reverted to prepend (`insertBefore`)** for both result and monitoring chips —
+  the original, durable behaviour. The patient name stays visible via the
+  `.ch-q-result-inline` CSS width-cap (added in v3.67.0), not by chip position.
+- **Runtime debug switch.** `localStorage.setItem('ch-debug','1')` + reload now
+  turns on the content script's `[ClinHUD]` logging (content script and page share
+  origin localStorage), so the queue result-triage pipeline (row count, computed
+  severity, inject calls, refreshes) can be traced live without a special build.
+
 ## [v3.67.0] — 2026-06-13
 
 ### Queue result chips: render correctly + stop hiding the patient name
