@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.74.0] — 2026-06-13
+
+### Result Rules gets its own settings tab
+
+The Investigation Results rule editor was buried as a sub-tab inside Triage Lens
+settings and was hard to find. Suite Settings now has a dedicated **Result Rules**
+nav item (between Triage Lens and Reception) that opens straight onto the result-rules
+editor — the embedded Triage Lens page deep-links to its `#resultRules` tab and hides
+its sibling tab bar so it reads as a dedicated page. No change to the rules engine or
+the rules themselves; this is purely settings navigation.
+
+manifest 3.73.0→3.74.0.
+
 ## [v3.73.0] — 2026-06-13
 
 ### Queue result triage: cut cold time-to-tag and CPU contention during the tag burst
