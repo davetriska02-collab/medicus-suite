@@ -1114,6 +1114,33 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
   };
 
+  const rrUpdateTestMatch = () => {
+    const testEl = $('#rrTestName');
+    const resultEl = $('#rrTestResult');
+    if (!testEl || !resultEl) return;
+    const testName = testEl.value.trim();
+    if (!testName) {
+      resultEl.textContent = '';
+      resultEl.className = 'tl-rr-test-result';
+      return;
+    }
+    const matchLines = ($('#rrAnalyteMatch').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!matchLines.length) {
+      resultEl.textContent = '✗ no match strings defined';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
+      return;
+    }
+    const nameLower = testName.toLowerCase();
+    const matched = matchLines.some(m => nameLower.includes(m.toLowerCase()));
+    if (matched) {
+      resultEl.textContent = '✓ would match';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-match';
+    } else {
+      resultEl.textContent = '✗ would not match';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
+    }
+  };
+
   const setupResultEditPane = () => {
     $('#btnBackToResultRules').addEventListener('click', () => {
       rrEditingId = null;
@@ -1142,6 +1169,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       renderResultRules();
       activateTab('resultRules');
     });
+    $('#rrAnalyteMatch').addEventListener('input', rrUpdateTestMatch);
+    $('#rrTestName').addEventListener('input', rrUpdateTestMatch);
   };
 
   const openResultRuleEditor = (id) => {
@@ -1158,6 +1187,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
     $('#rrUnit').value = rrEditingDraft.unit || '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
+
+    // Reset test-match indicator when opening editor
+    const testEl = $('#rrTestName');
+    const testResEl = $('#rrTestResult');
+    if (testEl) testEl.value = '';
+    if (testResEl) { testResEl.textContent = ''; testResEl.className = 'tl-rr-test-result'; }
 
     activateTab('resultEdit');
   };
@@ -1195,12 +1230,25 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   };
 
   const setupResultLlmPane = () => {
-    const btnCopy   = $('#btnResultLlmCopyPrompt');
-    const copiedEl  = $('#resultLlmCopied');
-    const jsonEl    = $('#resultLlmJson');
-    const btnImport = $('#btnResultLlmImport');
-    const statusEl  = $('#resultLlmStatus');
+    const btnCopy      = $('#btnResultLlmCopyPrompt');
+    const copiedEl     = $('#resultLlmCopied');
+    const jsonEl       = $('#resultLlmJson');
+    const btnImport    = $('#btnResultLlmImport');
+    const statusEl     = $('#resultLlmStatus');
+    const previewEl    = $('#resultLlmPreview');
+    const previewList  = $('#resultLlmPreviewList');
+    const btnConfirm   = $('#btnResultLlmConfirm');
+    const btnCancel    = $('#btnResultLlmCancel');
     if (!btnCopy || !jsonEl || !btnImport || !statusEl) return;
+
+    // Pending candidates awaiting confirm
+    let rrPendingCandidates = null;
+
+    const clearPreview = () => {
+      rrPendingCandidates = null;
+      if (previewEl) previewEl.style.display = 'none';
+      if (previewList) previewList.innerHTML = '';
+    };
 
     btnCopy.addEventListener('click', async () => {
       const PROMPT = window.SentinelResultRules && window.SentinelResultRules.resultRuleSchemaPrompt;
@@ -1224,6 +1272,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     });
 
     btnImport.addEventListener('click', async () => {
+      clearPreview();
       statusEl.className = 'tl-llm-status';
       statusEl.textContent = '';
       const raw = (jsonEl.value || '').trim();
@@ -1275,20 +1324,55 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         }
       }
 
-      const toAdd = candidates.map(rule => ({
-        ...rule,
-        id: 'rrule_' + Math.random().toString(36).slice(2, 9),
-        builtin: false,
-        enabled: false,
-      }));
-
-      CONFIG.resultRules.push(...toAdd);
-      await saveConfig(CONFIG);
-      jsonEl.value = '';
-      statusEl.className = 'tl-llm-status tl-llm-status-ok';
-      statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each before it fires).';
-      renderResultRules();
+      // Build preview — show before committing
+      rrPendingCandidates = candidates;
+      if (previewEl && previewList) {
+        previewList.innerHTML = '';
+        for (const c of candidates) {
+          const cmp = c.comparator === 'above' ? '≥' : '≤';
+          const parts = [];
+          if (c.red != null) parts.push(cmp + c.red + ' red');
+          if (c.amber != null) parts.push(cmp + c.amber + ' amber');
+          const unit = c.unit ? ' (' + c.unit + ')' : '';
+          const summary = parts.join(' / ') + unit;
+          const item = document.createElement('div');
+          item.className = 'tl-rr-llm-preview-item';
+          item.textContent = (c.label || 'Untitled') + ' — ' + (c.comparator === 'above' ? 'at or above' : 'at or below') + ': ' + summary + ' — will import DISABLED';
+          previewList.appendChild(item);
+        }
+        if (btnConfirm) btnConfirm.textContent = 'Add ' + candidates.length + ' rule' + (candidates.length !== 1 ? 's' : '') + ', disabled';
+        previewEl.style.display = 'block';
+        statusEl.className = 'tl-llm-status';
+        statusEl.textContent = '';
+      }
     });
+
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', async () => {
+        if (!rrPendingCandidates) return;
+        const toAdd = rrPendingCandidates.map(rule => ({
+          ...rule,
+          id: 'rrule_' + Math.random().toString(36).slice(2, 9),
+          builtin: false,
+          enabled: false,
+        }));
+        CONFIG.resultRules.push(...toAdd);
+        await saveConfig(CONFIG);
+        jsonEl.value = '';
+        clearPreview();
+        statusEl.className = 'tl-llm-status tl-llm-status-ok';
+        statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each before it fires).';
+        renderResultRules();
+      });
+    }
+
+    if (btnCancel) {
+      btnCancel.addEventListener('click', () => {
+        clearPreview();
+        statusEl.className = 'tl-llm-status';
+        statusEl.textContent = '';
+      });
+    }
   };
 
   // ============================================================

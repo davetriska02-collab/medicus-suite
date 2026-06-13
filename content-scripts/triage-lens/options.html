@@ -326,6 +326,13 @@
           <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rule(s)</button>
           <span id="resultLlmStatus" class="tl-llm-status"></span>
         </div>
+        <div id="resultLlmPreview" class="tl-rr-llm-preview" style="display:none;">
+          <div class="tl-rr-llm-preview-list" id="resultLlmPreviewList"></div>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+            <button class="tl-btn tl-btn-primary" id="btnResultLlmConfirm">Add rule(s), disabled</button>
+            <button class="tl-btn" id="btnResultLlmCancel">Cancel</button>
+          </div>
+        </div>
       </div>
     </details>
   </section>
@@ -351,11 +358,17 @@
           <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
         </label>
 
+        <div class="tl-field">
+          <span>Test match <small>(advisory — not saved)</small></span>
+          <input type="text" id="rrTestName" placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)">
+          <span id="rrTestResult" class="tl-rr-test-result"></span>
+        </div>
+
         <label class="tl-field">
-          <span>Comparator</span>
+          <span>Comparator <small>(engine evaluates inclusively)</small></span>
           <select id="rrComparator">
-            <option value="above">above — fires when value is above threshold</option>
-            <option value="below">below — fires when value is below threshold</option>
+            <option value="above">at or above (≥ threshold) — fires when value ≥ threshold</option>
+            <option value="below">at or below (≤ threshold) — fires when value ≤ threshold</option>
           </select>
         </label>
 
@@ -372,6 +385,7 @@
         <label class="tl-field">
           <span>Unit <small>(display only, e.g. mmol/L)</small></span>
           <input type="text" id="rrUnit" placeholder="mmol/L">
+          <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
         </label>
 
         <label class="tl-field tl-field-inline">
@@ -383,7 +397,7 @@
       <div class="tl-edit-col">
         <div class="tl-help">
           <strong>How result rules work:</strong><br>
-          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. For comparator "above", set red ≥ amber. For "below", set red ≤ amber. At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab.
+          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab.
         </div>
       </div>
     </div>

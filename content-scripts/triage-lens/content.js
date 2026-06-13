@@ -44,6 +44,35 @@
 /* keeps clinical fills reserved for actual result severity. */
 .ch-q-result .ch-chip-meta { background: transparent; }
 
+/* Clinical result chips (filled, not meta): small leading triangle marker so   */
+/* filled+glyph vs outline+no-glyph is distinguishable beyond colour alone.     */
+.ch-q-result .ch-chip:not(.ch-chip-meta)::before {
+  content: "▲ ";
+  font-size: 9px;
+  font-style: normal;
+}
+
+/* ---- Queue result legend ---- */
+/* Injected once at the top of the Investigation Results queue. Deliberately     */
+/* quiet — informs without competing with the red/amber clinical chips.          */
+.ch-q-legend {
+  display: block;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.3;
+  max-width: 360px;
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 99990;
+  pointer-events: none;
+}
+
 /* ---- Queue row chips ---- */
 .ch-queue-chips,
 .ch-q-result {
@@ -2070,6 +2099,26 @@
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
   };
 
+  // ---- Queue "absence is not a verdict" legend ----
+  // Injected once when on the Investigation Results queue; removed on navigation
+  // away.  Guard ID prevents duplicate insertion across SPA re-renders.
+  const _QUEUE_LEGEND_ID = 'ch-q-legend-note';
+
+  const injectQueueLegend = () => {
+    if (document.getElementById(_QUEUE_LEGEND_ID)) return;
+    const el = document.createElement('div');
+    el.id = _QUEUE_LEGEND_ID;
+    el.className = 'ch-q-legend';
+    el.textContent =
+      'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
+    document.body.appendChild(el);
+  };
+
+  const removeQueueLegend = () => {
+    const el = document.getElementById(_QUEUE_LEGEND_ID);
+    if (el) el.remove();
+  };
+
   const runQueue = () => {
     teardownQueueObserver();
     hideHud();
@@ -2081,6 +2130,7 @@
     for (const [uuid, entry] of _queueMonCache) {
       if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
     }
+    injectQueueLegend();
     decorateQueueRows();
     setupQueueObserver();
     scheduleQueueMonitoring();
@@ -2583,6 +2633,7 @@
     if (queueObserver) { queueObserver.disconnect(); queueObserver = null; }
     queueObservedContainer = null;
     queueRafScheduled = false;
+    removeQueueLegend();
   };
 
   const refreshQueueChips = () => {

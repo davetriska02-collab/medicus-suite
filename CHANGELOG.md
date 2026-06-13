@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.63.1] — 2026-06-13
+
+### Investigation Results queue — usability pass (The Practice synthetic panel)
+
+Fixes from a five-persona synthetic usability appraisal (technophobe partner ->
+power user). No change to severity logic or which chips appear.
+
+- **"A blank row is not 'normal'":** a quiet persistent legend on the queue
+  states that chips are additive and an unflagged row has not been assessed as
+  normal — the universal fear across the panel that absence read as safe.
+- **Clinical chips carry a glyph:** the filled Urgent / abnormal chips gain a
+  leading marker so they are distinguishable from the outline process chips by
+  shape and fill, not colour alone (also colour-blind safe).
+- **Result-rule editor (clinical-pharmacist findings):** comparator relabelled
+  "at or above (>=)" / "at or below (<=)" to match the engine's inclusive
+  evaluation; a display-only-unit warning; a live "test match" box to check a
+  rule's analyte-match strings against a real lab result name before saving;
+  and an LLM import now shows a plain-English preview and requires confirmation
+  before adding (still disabled) rules.
+- **Baseline chips:** clearer group separators so the result chips are not
+  misread as the existing priority chip.
+
+## [v3.63.0] — 2026-06-13
+
+### Investigation Results queue — user customisation
+
+- **Per-chip enable + colour:** the four result chips are configurable in the
+  Triage Lens "Baseline chips" editor (enable/disable and severity-kind colour).
+- **User analyte-threshold rules:** a new "Result rules" pane lets a clinician
+  author rules (e.g. "Potassium >= 6.0 -> red") that escalate chip severity.
+  Escalate-only — a rule can never lower or hide a lab's own urgent/abnormal flag.
+- **LLM single-rule build + manual editor:** copy a prompt, paste the model's
+  JSON back, validate and import; or author by hand. Imported rules arrive
+  disabled and must be clinician-reviewed before they fire.
+- Engine: new `engine/result-rules.js` (validation + LLM prompt);
+  `evaluateReportSeverity` consumes user rules. Safety docs (HAZARD-LOG H-030,
+  Clinical Safety Notice limitation 35) updated to record the first
+  self-computed clinical threshold, gated by the escalate-only + review model.
+
 ## [v3.62.1] — 2026-06-13
 
 ### Investigation Results queue chips — design-crit polish
