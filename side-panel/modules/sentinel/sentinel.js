@@ -611,7 +611,16 @@ async function loadRuleCurrencyFooter() {
     const qofLabel = qofMatch ? qofMatch[0] : qofSpec.slice(0, 20);
     const drugDateLabel = drug.lastUpdated ? `updated ${drug.lastUpdated}` : '';
 
-    const summaryText = [qofLabel, drugDateLabel ? `drug rules ${drugDateLabel}` : ''].filter(Boolean).join(' · ');
+    // Scope disclosure: a date stamp tells you the rules are maintained, but not
+    // how much they cover. Surface the counts so a clinician can calibrate the
+    // safety net at a glance (absence of a chip never means "monitoring complete").
+    const drugCount = Array.isArray(drug.rules) ? drug.rules.length : 0;
+    const qofCount = Array.isArray(qof.rules) ? qof.rules.length : 0;
+    const scopeLabel = drugCount && qofCount ? `${drugCount} drug rules · ${qofCount} QOF indicators` : '';
+
+    const summaryText = [qofLabel, drugDateLabel ? `drug rules ${drugDateLabel}` : '', scopeLabel]
+      .filter(Boolean)
+      .join(' · ');
 
     if (result.overall === 'red') {
       _ruleCurrencyFooter =
@@ -777,6 +786,7 @@ function renderWaitingRoomBlock() {
       <span class="wr-pin-label"><strong>${patients.length}</strong> waiting${urgentNote}</span>
       <span class="wr-pin-ts">${wrLastFetch ? new Date(wrLastFetch).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
     </div>
+    <div class="wr-pin-caption">Waiting room only · times are how long they have waited. Sentinel checks the record you open, not this list.</div>
     <div class="wr-rows">${rows}</div>
   </div>`;
 }
@@ -923,7 +933,13 @@ function render(payload) {
     return;
   }
   if (state === 'no-medicus') {
-    setDynamic(statusBlock('idle', 'No Medicus tab active', 'Open Medicus to use Sentinel.'));
+    setDynamic(
+      statusBlock(
+        'idle',
+        'Monitoring idle — no record open',
+        'Open a patient in Medicus and Sentinel checks their drug and QOF monitoring here. The waiting room above is not a monitoring result.'
+      )
+    );
     return;
   }
   if (state === 'not-mounted') {

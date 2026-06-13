@@ -370,6 +370,21 @@ body {
   background: var(--bg-hover);
 }
 
+/* Persistent "all N tabs live here" hint on the command-palette button, so the
+   narrow rail's off-screen tabs are discoverable without hover or prior knowledge. */
+.palette-count {
+  margin-left: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--r-sm);
+  background: var(--bg-mid);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Content area ─────────────────────────────────────────────────────────── */
 
 .suite-content {
@@ -1886,6 +1901,15 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   font-variant-numeric: tabular-nums;
   margin-left: auto;
   margin-right: 8px;
+}
+
+/* Reassures the cautious/technophobe user that the suite already works and the
+   remaining steps are optional, rather than reading the checklist as "broken". */
+.setup-card-reassure {
+  margin: 0 0 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 
 .setup-link {
