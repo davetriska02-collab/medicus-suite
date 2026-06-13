@@ -166,6 +166,14 @@
   align-items: center;
   justify-content: space-between;
   user-select: none;
+  border-radius: var(--r-sm);
+  transition: background var(--fast) var(--ease);
+}
+.slot-types-summary:hover {
+  background: var(--bg-hover);
+}
+.slot-types-summary:active {
+  opacity: 0.8;
 }
 .slot-types-summary::-webkit-details-marker {
   display: none;
@@ -253,6 +261,17 @@ details[open] > .slot-types-summary::after {
   background: var(--accent);
   opacity: 0.4;
 }
+
+/* Dark theme: raise AM/PM bar opacity so time-of-day encoding stays perceptible
+   on dark backgrounds (--text-5 and --accent are both dark-lifted already). */
+html[data-theme='dark'] .staff-split .split-am {
+  background: var(--border-hi);
+  opacity: 0.7;
+}
+html[data-theme='dark'] .staff-split .split-pm {
+  background: var(--accent);
+  opacity: 0.6;
+}
 .staff-toggle > .staff-chevron,
 .staff-toggle > .staff-name,
 .staff-toggle > .staff-count-mini {
@@ -314,7 +333,7 @@ details[open] > .slot-types-summary::after {
   border-radius: var(--r-md);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: pulse var(--med) var(--ease) infinite;
 }
 
 @keyframes pulse {
@@ -699,7 +718,7 @@ details[open] > .slot-types-summary::after {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: var(--r-sm);
   background: var(--bg-elev);
   border: 1px solid var(--border);

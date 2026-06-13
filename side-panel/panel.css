@@ -19,7 +19,6 @@
   --bg-hover: #e2eaf5;
   --border: #cbd5e1;
   --border-hi: #94a3b8;
-  --border-acc: #2563eb;
   --text-1: #0f172a;
   --text-2: #1e3a5f;
   --text-3: #475569;
@@ -38,12 +37,12 @@
   --amber-line: rgba(180, 83, 9, 0.32);
   --red: #dc2626;
   --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
   /* Violet triad — custom/user-defined rule accent. NOT a clinical status;
      deliberately outside the RAG set and untouched by colorblind mode. */
   --violet: #7c3aed;
   --violet-dim: rgba(124, 58, 237, 0.09);
   --violet-line: rgba(124, 58, 237, 0.3);
-  --red-line: rgba(220, 38, 38, 0.3);
   /* Shape, depth, motion */
   --r-sm: 4px;
   --r-md: 6px;
@@ -82,7 +81,6 @@ html[data-theme='dark'] {
   --bg-hover: #1a2a44;
   --border: #1c2e4e;
   --border-hi: #2a4060;
-  --border-acc: #5b8fc7;
   --text-1: #f1f5f9;
   --text-2: #cfe1ff;
   --text-3: #93a8c5;
@@ -100,14 +98,16 @@ html[data-theme='dark'] {
   --amber-line: rgba(251, 191, 36, 0.32);
   --red: #f87171;
   --red-dim: rgba(248, 113, 113, 0.17);
+  --red-line: rgba(248, 113, 113, 0.34);
   --violet: #a78bfa;
   --violet-dim: rgba(167, 139, 250, 0.14);
   --violet-line: rgba(167, 139, 250, 0.35);
-  --red-line: rgba(248, 113, 113, 0.34);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
-  --scrim: rgba(15, 23, 42, 0.55);
+  /* Heavier veil on dark — the light-tuned 15/23/42 @ .55 barely darkens an
+     already-dark page; modal/overlay separation needs a deeper scrim here. */
+  --scrim: rgba(0, 0, 0, 0.66);
   --cat-1: #5b8fc7;
   --cat-2: #2dd4bf;
   --cat-3: #e879c9;
@@ -177,7 +177,7 @@ body {
   width: 28px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--med) var(--ease);
   z-index: 1;
 }
 .suite-nav::after {
@@ -370,6 +370,11 @@ body {
   background: var(--bg-hover);
 }
 
+.icon-btn:active {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
 /* Shared data-freshness chip (side-panel/modules/shared/freshness.js). One
    consistent "Updated · 12s ago" relative stamp across every data module, with a
    visible stale state so users can tell live from stale from silently-failed. */
@@ -537,7 +542,7 @@ body {
 .module-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 12px 14px;
   margin-bottom: 8px;
 }
@@ -561,13 +566,13 @@ body {
   color: var(--text-5);
   background: var(--bg-mid);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
 }
 
 .module-card-desc {
   font-size: 11px;
-  color: var(--text-4);
+  color: var(--text-3);
   line-height: 1.5;
 }
 
@@ -575,7 +580,7 @@ body {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 10px 12px;
   font-size: 11px;
   color: var(--text-3);
@@ -599,9 +604,9 @@ body {
 }
 
 .feature-list-link {
-  background: rgba(74, 127, 184, 0.08);
-  border: 1px solid rgba(74, 127, 184, 0.25);
-  border-radius: 8px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-lg);
   padding: 12px 14px;
   margin-bottom: 16px;
 }
@@ -759,9 +764,10 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   border: 1px solid var(--border);
   background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
   margin: 14px 0 10px;
   font-size: 12px;
 }
@@ -856,7 +862,7 @@ body {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 10px 12px;
 }
 
@@ -879,7 +885,7 @@ body {
 /* Slot count badge on nav tab */
 .nav-badge {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
@@ -904,8 +910,8 @@ body {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   transition:
-    background 0.2s,
-    border-color 0.2s;
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
   overflow: hidden;
   min-height: 28px;
 }
@@ -994,17 +1000,21 @@ body {
   color: var(--text-4);
   background: none;
   border: 1px solid var(--border-hi);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 2px 7px;
   cursor: pointer;
   transition:
-    color 0.1s,
-    border-color 0.1s;
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
   white-space: nowrap;
 }
 .wr-strip-goto:hover {
   color: var(--text-2);
   border-color: var(--text-4);
+}
+.wr-strip-goto:active {
+  color: var(--text-1);
+  background: var(--bg-hover);
 }
 
 /* ── Request Monitor strip (v1.3) ────────────────────────────────────────────
@@ -1034,7 +1044,7 @@ body {
   flex-shrink: 0;
 }
 .rm-strip-label {
-  color: var(--text-4);
+  color: var(--text-3);
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.04em;
@@ -1062,6 +1072,10 @@ body {
 .rm-pill:hover {
   background: var(--bg-hover);
   border-color: var(--border-hi);
+}
+.rm-pill:active {
+  background: var(--bg-hover);
+  border-color: var(--accent-line);
 }
 .rm-pill-count {
   color: var(--text-1);
@@ -1145,7 +1159,7 @@ body {
   flex-shrink: 0;
 }
 .sub-rag-label {
-  color: var(--text-4);
+  color: var(--text-3);
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.04em;
@@ -1215,6 +1229,20 @@ body {
   padding: 3px 8px;
   border-radius: var(--r-sm);
   cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.ui-health-btn:hover {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--bg-elev);
+}
+.ui-health-btn:active {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--bg-elev);
+  opacity: 0.85;
 }
 .ui-health-btn:disabled {
   opacity: 0.6;
@@ -1249,6 +1277,10 @@ body {
 .sub-rag-goto:hover {
   color: var(--text-2);
   border-color: var(--border-hi);
+}
+.sub-rag-goto:active {
+  color: var(--text-1);
+  background: var(--bg-hover);
 }
 
 /* ── Display preferences ─────────────────────────────────────────────────── */
@@ -1328,7 +1360,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   box-shadow: var(--shadow-3);
   display: flex;
   flex-direction: column;
-  gap: 11px;
+  gap: 12px;
 }
 
 .dp-title {
@@ -1338,7 +1370,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   text-transform: uppercase;
   color: var(--text-4);
   border-bottom: 1px solid var(--border);
-  padding-bottom: 7px;
+  padding-bottom: 8px;
   margin-bottom: 1px;
 }
 
@@ -1360,7 +1392,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   gap: 2px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   padding: 2px;
 }
 
@@ -1381,6 +1413,10 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 
 .dp-seg:hover {
   color: var(--text-2);
+}
+.dp-seg:active {
+  background: var(--bg-hover);
+  color: var(--text-1);
 }
 .dp-seg.active {
   background: var(--bg-hover);
@@ -1407,7 +1443,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border-hi);
   border-radius: 9px;
   position: relative;
-  transition: background 0.2s;
+  transition: background var(--med) var(--ease);
 }
 .dp-toggle input:checked + .dp-track {
   background: var(--accent-dim);
@@ -1422,8 +1458,8 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   background: var(--text-4);
   border-radius: 50%;
   transition:
-    transform 0.2s,
-    background 0.2s;
+    transform var(--med) var(--ease),
+    background var(--fast) var(--ease);
 }
 .dp-toggle input:checked + .dp-track .dp-thumb {
   transform: translateX(14px);
@@ -1549,12 +1585,12 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .suite-tour-next {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
 }
 .suite-tour-next:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: #fff;
+  color: var(--bg-deep);
 }
 .suite-tour-next:active {
   background: var(--accent-hover);
@@ -2002,7 +2038,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   position: fixed;
   inset: 0;
   z-index: 92; /* over the palette, under the tour */
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--scrim);
   font-family: var(--sans);
   display: flex;
   align-items: flex-start;
@@ -2175,7 +2211,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   background: var(--accent);
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
-  color: #fff;
+  color: var(--bg-deep);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;

@@ -56,6 +56,48 @@ the following changes. No clinical alert salience was reduced anywhere.
   "nothing is broken" reassurance) for the cautious/technophobe user.
 - Condor tab tooltip/aria now gloss the name as the practice-pressure dashboard.
 
+## [v3.60.15] — 2026-06-13
+
+### Suite-wide design polish — Atelier pass, verified on real-data renders
+
+An orchestrated suite-wide refinement pass (token canon + all module/options/
+injected/visualiser stylesheets), audited by four surveyors and implemented by
+seven stylists, then verified by rendering every surface in both themes with
+realistic clinical data (waiting rooms, slot grids, RAG-tripped submissions,
+overdue monitoring) and eyeballing each. Design intent — heal the gap between
+90% and 100% craft without changing the visual language or any layout:
+
+- **Red and amber stop blurring together on dark.** The options, Triage-Lens
+  and Sentinel-options surfaces still carried pre-update dark wash alphas, so
+  an overdue (red) and a stale (amber) state read as nearly the same colour on
+  a dark background. All three now match the canon's raised dark dims — the
+  clinical RAG hierarchy survives dark mode everywhere.
+- **On-accent text is now legible on the dark accent.** Primary buttons, the
+  nav slot-count badge, copy buttons and the tour/tabs CTAs used pure white,
+  which sits at ~3.4:1 on the pastel dark accent. They now use the
+  theme-adaptive `--bg-deep` (near-white on light, dark ink on dark) and clear
+  contrast in both themes. Canon recipe updated to match.
+- **The dual voice is cast correctly.** Numeric readouts, chart axes, units and
+  legends that had slipped into the human (sans) voice are back in the machine
+  (mono, tabular) voice; the Reception module, which was falling through to the
+  browser default serif for its prose, now declares the sans stack.
+- **Overlays actually dim on dark.** The modal/tour/tab-chooser scrim was using
+  its light-tuned value on dark, barely veiling an already-dark page; the dark
+  scrim is re-picked deeper. Documented `--scrim` in the token canon.
+- **Every pressable element answers a press.** Missing `:active` (and a few
+  `:disabled`) states were completed across shell strips, menus, toggles and
+  module buttons; keyboard focus rings restored where `outline:none` had
+  suppressed them (Visualiser toolbar, HUD tiles).
+- **Contrast lifts on load-bearing copy.** Empty states, monitoring-status
+  badges, KDIGO frequencies, card previews and strip labels moved off the
+  faint text tiers that failed on dark. The Visualiser's dark NHS-blue is
+  remapped for legibility while its light/print palette is left exactly as-is.
+- **Drift healed quietly.** Raw radii, transitions and overlay colours folded
+  onto the `--r-*` / `--ease` / `--scrim` tokens; spacing nudged onto the 4px
+  grid; a dead `--border-acc` token removed. Sanctioned decorative palettes
+  (Reception/Slots) and the intentional Capacity RAG tier were left untouched.
+  Clinical alert salience was never reduced.
+
 ## [v3.60.14] — 2026-06-13
 
 ### Guided setup & onboarding tour — multi-critic design crit

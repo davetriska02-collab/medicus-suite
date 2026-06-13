@@ -148,7 +148,7 @@
 }
 
 .sub-metric.loading-skel {
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: pulse var(--med) var(--ease) infinite;
   opacity: 0.5;
 }
 
@@ -200,7 +200,7 @@
 .chart-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-1);
   padding: 12px;
   margin-bottom: 8px;
@@ -237,7 +237,7 @@
 }
 
 .chart-loading {
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: pulse var(--med) var(--ease) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -273,6 +273,9 @@
 }
 .legend-item--toggle:hover {
   background: var(--bg-hover);
+}
+.legend-item--toggle:active {
+  opacity: 0.7;
 }
 .legend-item--toggle:focus-visible {
   outline: 2px solid var(--accent);
