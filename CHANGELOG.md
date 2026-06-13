@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.69.0] — 2026-06-13
+
+### Fix: queue result chips injected then wiped (now durable like the age chips)
+
+Live `[ClinHUD]` tracing showed the pipeline was working — `triage start rows=58` →
+`sev = red` → `chip injected` — but `refreshQueueChips` then ran with `rows=0` (the
+Medicus SPA's constant re-render churn keeps clearing the bridge-provided row→task
+map) and wiped the freshly-injected chips without re-injecting, because re-injection
+was gated on that map being populated. Net: chips flashed and vanished.
+
+Fix borrows how the **age/Elder/High chips stay durable** — they're rebuilt from the
+row DOM every pass. New `reinjectCachedResultChips()` restores result chips
+**synchronously from the per-task severity cache, keyed by each row's own `row-id`
+(the task UUID) read from the DOM** — so it no longer depends on the `_queueRowUuids`
+map the SPA keeps clearing. `refreshQueueChips` calls it right after the wipe (no
+visible gap); the bridge map is now only needed to *fetch* not-yet-cached rows.
+
+manifest 3.68.0→3.69.0.
+
 ## [v3.68.0] — 2026-06-13
 
 ### Fix: queue result chips stopped injecting (regression from v3.67.0)
