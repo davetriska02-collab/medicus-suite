@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.61.1] — 2026-06-13
+
+### Guided tour bug fixes
+
+- **The setup checklist no longer paints over the running tour.** The checklist
+  hides on `suite:tour-started`, but `initSetup()` registered that listener only
+  after its async boot (`PracticeCode.resolve()` etc.), so a tour auto-starting
+  on its 900ms timer could fire the event before anyone was listening — leaving
+  the wizard covering the very content the tour was describing. The listener is
+  now registered before any await, so the event can never be missed.
+- **"Next" no longer hangs around the Sentinel steps.** The patient-data steps
+  (brief, actions, verify, unmatched meds) are absent on a first-run tour with no
+  record open and are skipped — but each waited the full 2.5s module render-grace
+  before skipping, so a run of them made "Next" look completely dead for several
+  seconds. The long grace now applies only when the tour actually switches tabs;
+  steps on the already-active module resolve or skip within 400ms.
+
 ## [v3.61.0] — 2026-06-13
 
 ### Whole-suite usability pass — synthetic GP-practice panel ("The Practice")

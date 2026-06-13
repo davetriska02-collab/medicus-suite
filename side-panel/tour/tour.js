@@ -113,7 +113,9 @@ function resolveTarget(step) {
 // Activate the step's module if needed, then wait briefly for its target to
 // appear (module init may render asynchronously). Returns the element or null.
 async function ensureStepContext(step) {
+  let switched = false;
   if (step.module && _activateModule && _getActiveModule?.() !== step.module) {
+    switched = true;
     try {
       await _activateModule(step.module);
     } catch (_) {
@@ -121,7 +123,12 @@ async function ensureStepContext(step) {
     }
   }
   if (!step.target) return null;
-  const deadline = Date.now() + (step.module ? 2500 : 0);
+  // Only wait the long render-grace when we actually switched tabs (the module
+  // is freshly mounting). For a step on the ALREADY-active module the target
+  // either exists now or never will — e.g. the patient-data Sentinel steps with
+  // no record open — so a short grace is enough. Without this, a run of absent
+  // steps each stalled the full 2.5s, making "Next" look completely dead.
+  const deadline = Date.now() + (switched ? 2500 : step.module ? 400 : 0);
   for (;;) {
     const el = resolveTarget(step);
     if (el || Date.now() >= deadline) return el;
