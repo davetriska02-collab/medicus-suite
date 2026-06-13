@@ -189,8 +189,8 @@ assert(UC.isNewer('', '1.3.0') === false, 'empty latest never newer');
   // ── Hardcoded URL sanity ──────────────────────────────────────────────────
   console.log('\n--- Hardcoded constants ---');
   assert(UC.REPO_OWNER === 'davetriska02-collab', 'REPO_OWNER points to Dave\'s repo');
-  assert(UC.REPO_NAME === 'medicus-suite', 'REPO_NAME is medicus-suite');
-  assert(UC.RELEASES_URL.includes('davetriska02-collab/medicus-suite'), 'RELEASES_URL is correctly assembled');
+  assert(UC.REPO_NAME === 'medicus-suite-public', 'REPO_NAME is the public shopfront repo');
+  assert(UC.RELEASES_URL.includes('davetriska02-collab/medicus-suite-public'), 'RELEASES_URL is correctly assembled');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

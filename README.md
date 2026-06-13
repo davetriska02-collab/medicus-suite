@@ -13,7 +13,7 @@ Medicus the company.
 ## Installation
 
 1. Download the latest `medicus-suite-vX.Y.Z.zip` from the
-   [releases page](https://github.com/davetriska02-collab/medicus-suite/releases/latest).
+   [releases page](https://github.com/davetriska02-collab/medicus-suite-public/releases/latest).
 2. Unzip somewhere permanent on your computer.
 3. Open `chrome://extensions` in Chrome.
 4. Switch on **Developer mode** (top right).

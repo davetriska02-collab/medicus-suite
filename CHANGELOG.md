@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.64.1] — 2026-06-13
+
+### Releases move to a public shopfront repo
+
+- **The update-checker now polls `medicus-suite-public`** instead of the main
+  repo. This lets the development repo (with its build tooling and internal
+  docs) become private while the extension keeps detecting new versions: a
+  GitHub Action mirrors a sanitised copy of the code to the public repo on
+  every push, and releases are cut there. `host_permissions` updated to the
+  new API path accordingly. No change to what the extension does on a Medicus
+  page; only where it checks for updates.
+
 ## [v3.64.0] — 2026-06-13
 
 ### Investigation Results queue — microbiology (MSU / culture) text rules

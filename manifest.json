@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.64.0",
-  "description": "Medicus Suite v3.64.0",
+  "version": "3.64.1",
+  "description": "Medicus Suite v3.64.1",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
     "https://*.api.england.medicus.health/*",
-    "https://api.github.com/repos/davetriska02-collab/medicus-suite/*"
+    "https://api.github.com/repos/davetriska02-collab/medicus-suite-public/*"
   ],
   "background": { "service_worker": "service-worker.js" },
   "side_panel": { "default_path": "side-panel/panel.html" },

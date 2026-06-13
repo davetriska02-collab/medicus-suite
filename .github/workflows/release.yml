@@ -12,6 +12,11 @@ permissions:
 
 jobs:
   build-and-release:
+    # Releases are cut only in the public "shopfront" repo, which is what the
+    # update-checker polls and where users download from. This file is mirrored
+    # into the public repo by sync-public.yml; the guard keeps it inert in the
+    # private workshop repo so we never cut competing/duplicate releases.
+    if: github.repository == 'davetriska02-collab/medicus-suite-public'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source

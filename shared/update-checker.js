@@ -18,8 +18,10 @@
 (function(global) {
   'use strict';
 
+  // Points at the PUBLIC shopfront repo (where releases live and users
+  // download from), not the private workshop repo. See docs/internal/PUBLIC-SYNC-SETUP.md.
   const REPO_OWNER = 'davetriska02-collab';
-  const REPO_NAME = 'medicus-suite';
+  const REPO_NAME = 'medicus-suite-public';
   const RELEASES_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
   // Don't recheck more often than this (don't hammer GitHub even if multiple

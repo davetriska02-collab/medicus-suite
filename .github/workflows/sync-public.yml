@@ -1,0 +1,78 @@
+name: Sync to public repo
+
+# Publishes a sanitised copy of this (private "workshop") repo to the public
+# "shopfront" repo on every push to main. The public repo carries the full
+# extension code, tests, CHANGELOG and safety docs — but NONE of the method:
+# .claude/ skills + agents + scheduled-tasks, CLAUDE.md, internal strategy docs.
+#
+# Setup (one-time) — see docs/internal/PUBLIC-SYNC-SETUP.md:
+#   1. Create the public repo (PUBLIC_REPO below).
+#   2. Add a repo secret PUBLIC_SYNC_TOKEN: a fine-grained PAT with
+#      Contents: read & write on the public repo only.
+#
+# This workflow is intentionally NOT mirrored to the public repo (it is in the
+# rsync exclude list), so the sync mechanism stays private.
+
+on:
+  push:
+    branches:
+      - main
+
+# Only ever runs in the private workshop repo. If this file somehow lands in
+# the public repo, this guard makes it inert.
+permissions:
+  contents: read
+
+env:
+  PUBLIC_REPO: davetriska02-collab/medicus-suite-public
+
+jobs:
+  sync:
+    if: github.repository == 'davetriska02-collab/medicus-suite'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out workshop (private) repo
+        uses: actions/checkout@v4
+        with:
+          path: workshop
+          fetch-depth: 1
+
+      - name: Check out public repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          token: ${{ secrets.PUBLIC_SYNC_TOKEN }}
+          path: public
+          fetch-depth: 1
+
+      - name: Mirror sanitised tree into public checkout
+        run: |
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.claude/' \
+            --exclude='CLAUDE.md' \
+            --exclude='docs/appraisal/' \
+            --exclude='docs/benchmark/' \
+            --exclude='docs/archive/' \
+            --exclude='docs/internal/' \
+            --exclude='.github/workflows/sync-public.yml' \
+            --exclude='.github/workflows/rule-currency.yml' \
+            workshop/ public/
+          # rsync --exclude also protects these paths from --delete in the
+          # destination, so anything private that already exists in public is
+          # left untouched (it just never gets created by us).
+
+      - name: Commit and push to public repo
+        # First successful sync seeds the public repo; thereafter it tracks main.
+        run: |
+          cd public
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git add -A
+          SHORT_SHA="${GITHUB_SHA::7}"
+          git commit -m "Sync from workshop @ ${SHORT_SHA}"
+          git push origin HEAD:main
