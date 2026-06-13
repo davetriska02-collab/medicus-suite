@@ -414,6 +414,202 @@
     return out;
   }
 
+  // ---- Date string normaliser ----
+  // Handles two formats seen in investigationReport payloads:
+  //   "2026-01-09 08:26:00"  → "2026-01-09"
+  //   "11 Jun 26, 14:30"     → "2026-06-11"
+  //   ISO 8601 "2026-01-09T08:26:00Z" → "2026-01-09"
+  // Returns null for unparseable input.
+  const MONTH_MAP = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+  };
+  function normaliseDateString(raw) {
+    if (!raw) return null;
+    const s = String(raw).trim();
+    // "YYYY-MM-DD ..." or "YYYY-MM-DDTHH:MM..."
+    const isoLike = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoLike) return isoLike[1];
+    // "DD Mon YY, HH:MM" e.g. "11 Jun 26, 14:30"
+    const ddMonYY = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2})(?:[,\s]|$)/);
+    if (ddMonYY) {
+      const day = ddMonYY[1].padStart(2, '0');
+      const mon = MONTH_MAP[ddMonYY[2].toLowerCase()];
+      if (!mon) return null;
+      const yr = parseInt(ddMonYY[3], 10);
+      const year = yr < 100 ? (yr >= 50 ? 1900 + yr : 2000 + yr) : yr;
+      return `${year}-${mon}-${day}`;
+    }
+    return null;
+  }
+
+  // ---- Investigation report normaliser ----
+  // Converts a raw investigationReport payload (from the queued-result API) to
+  // a structured shape suitable for result-severity scoring.
+  function normaliseInvestigationReport(payload) {
+    const safe = {
+      patientUuid: null,
+      unmatched: false,
+      results: []
+    };
+    try {
+      if (!payload || !payload.data) return safe;
+      const data = payload.data;
+      safe.patientUuid = (data.patient && data.patient.id) || data.patientId || null;
+      const report = data.investigationReport;
+      if (!report) return safe;
+      safe.unmatched = report.isMatchedToPatient === false;
+
+      // Collect all result objects from groups + ungrouped
+      const rawResults = [];
+      if (Array.isArray(report.investigationGroups)) {
+        report.investigationGroups.forEach(g => {
+          if (Array.isArray(g.results)) {
+            g.results.forEach(r => rawResults.push(r));
+          }
+        });
+      }
+      if (Array.isArray(report.ungroupedResults)) {
+        report.ungroupedResults.forEach(r => rawResults.push(r));
+      }
+
+      // Parse reference range limits from the first entry
+      function parseRefRange(referenceRanges) {
+        if (!Array.isArray(referenceRanges) || referenceRanges.length === 0) {
+          return { low: null, high: null };
+        }
+        const rr = referenceRanges[0];
+        const low = parseObservationValue(rr.lowerReferenceLimit);
+        const high = parseObservationValue(rr.upperReferenceLimit);
+        return {
+          low: isFinite(low) ? low : null,
+          high: isFinite(high) ? high : null
+        };
+      }
+
+      // Derive above/below flag for a history value against parent ranges
+      function deriveHistoryFlag(numericValue, low, high) {
+        if (!isFinite(numericValue)) return 'unknown';
+        if (high !== null && numericValue > high) return 'above';
+        if (low !== null && numericValue < low) return 'below';
+        if (low !== null || high !== null) return 'normal';
+        return 'unknown';
+      }
+
+      rawResults.forEach(r => {
+        if (!r || typeof r !== 'object') return;
+        const name = r.description || null;
+        // text-result types (e.g. microbiology / culture) carry their content in
+        // `resultText`, not `resultValue` (which is absent entirely). Fall back to it
+        // so the result has a displayable value and the searchable text below is populated.
+        const rawValue =
+          r.resultValue != null
+            ? String(r.resultValue)
+            : r.resultText != null
+              ? String(r.resultText)
+              : '';
+        const numValue = parseObservationValue(rawValue);
+        const { low, high } = parseRefRange(r.referenceRanges);
+
+        // Best available date: prefer formattedSpecimenCollectionDate, then specimenCollectionDate, then issuedDateTime
+        const date =
+          normaliseDateString(r.formattedSpecimenCollectionDate) ||
+          normaliseDateString(r.specimenCollectionDate) ||
+          normaliseDateString(r.issuedDateTime) ||
+          null;
+
+        // Build history array (newest-first) from previousResults
+        const history = [];
+        if (Array.isArray(r.previousResults)) {
+          r.previousResults.forEach(pr => {
+            if (!pr || typeof pr !== 'object') return;
+            const prevRaw = pr.result != null ? String(pr.result) : '';
+            const prevNum = parseObservationValue(prevRaw);
+            const prevDate =
+              normaliseDateString(pr.formattedSpecimenCollectionDate) ||
+              normaliseDateString(pr.specimenCollectionDate) ||
+              null;
+            history.push({
+              date: prevDate,
+              value: prevNum,
+              flag: deriveHistoryFlag(prevNum, low, high)
+            });
+          });
+          // Sort newest-first (nulls last)
+          history.sort((a, b) => {
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return b.date < a.date ? -1 : b.date > a.date ? 1 : 0;
+          });
+        }
+
+        // Build a single searchable text string for text-classification rules
+        // (microbiology / free-text results that have no numeric high/low flag).
+        // We gather rawValue, interpretation, performerComments, resultPerformerComments,
+        // and filingComments defensively, then join with spaces. Case is preserved;
+        // callers must lowercase before searching.
+        const textParts = [];
+        if (rawValue) textParts.push(rawValue);
+        // resultText explicitly (covers results that carry BOTH a numeric resultValue
+        // and a separate free-text resultText where a normal phrase may live).
+        if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) {
+          textParts.push(r.resultText);
+        }
+        if (r.interpretation && typeof r.interpretation === 'string') {
+          textParts.push(r.interpretation);
+        }
+        if (r.performerComments && typeof r.performerComments === 'string') {
+          textParts.push(r.performerComments);
+        }
+        // resultPerformerComments — may be an array of strings or objects
+        if (Array.isArray(r.resultPerformerComments)) {
+          r.resultPerformerComments.forEach(item => {
+            if (typeof item === 'string') {
+              textParts.push(item);
+            } else if (item && typeof item === 'object') {
+              // Pull any of text / comment / value sub-field present
+              const sub = item.text || item.comment || item.value;
+              if (sub && typeof sub === 'string') textParts.push(sub);
+            }
+          });
+        }
+        // filingComments — may be an array of strings or objects
+        if (Array.isArray(r.filingComments)) {
+          r.filingComments.forEach(item => {
+            if (typeof item === 'string') {
+              textParts.push(item);
+            } else if (item && typeof item === 'object') {
+              const sub = item.text || item.comment || item.value;
+              if (sub && typeof sub === 'string') textParts.push(sub);
+            }
+          });
+        }
+        const text = textParts.join(' ');
+
+        safe.results.push({
+          name,
+          value: numValue,
+          rawValue,
+          comparator: r.resultComparator || null,
+          unit: r.resultUnit || null,
+          low,
+          high,
+          isAbove: !!r.isAboveReferenceRange,
+          isBelow: !!r.isBelowReferenceRange,
+          urgent: !!r.requiresUrgentReview,
+          interpretation: r.interpretation || null,
+          date,
+          history,
+          text
+        });
+      });
+    } catch (_) {
+      // Never throw — return whatever safe shape we've built so far
+    }
+    return safe;
+  }
+
   // ---- Combined normalisation ----
   function normaliseAll(apiResults, urlContext) {
     const allProbs = normaliseProblemsAll(apiResults?.problemListing);
@@ -435,7 +631,8 @@
     normaliseObservations,
     normaliseObservationHistory,
     parseObservationValue,
-    normaliseAll
+    normaliseAll,
+    normaliseInvestigationReport
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

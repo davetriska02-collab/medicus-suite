@@ -90,6 +90,11 @@
     out.thresholds = { ...(shipped.thresholds || {}), ...(cfg.thresholds || {}) };
     out.prefs = { ...(shipped.prefs || {}), ...(cfg.prefs || {}) };
     out.systemChips = { ...(shipped.systemChips || {}), ...(cfg.systemChips || {}) };
+    out.resultRules = [...(Array.isArray(cfg.resultRules) ? cfg.resultRules : [])];
+    const haveRR = new Set(out.resultRules.map(r => r && r.id));
+    for (const r of (shipped.resultRules || [])) {
+      if (r.builtin && !haveRR.has(r.id) && !removed.has(r.id)) out.resultRules.push(r);
+    }
     out.version = shipped.version;
     return out;
   };
@@ -97,6 +102,7 @@
   const init = async () => {
     DEFAULTS = await fetchDefaults();
     CONFIG = await loadConfig();
+    if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
     const merged = mergeShippedDefaults(CONFIG, DEFAULTS);
     if (merged) {
       await saveConfig(merged);
@@ -111,8 +117,12 @@
     setupPreviewPane();
     setupBackupPane();
     setupLlmPane();
+    setupResultRulesPane();
+    setupResultEditPane();
+    setupResultLlmPane();
     renderRules();
     renderSystemChips();
+    renderResultRules();
     populateThresholds();
     populatePrefs();
   };
@@ -138,8 +148,16 @@
       const llmStatus = $('#llmStatus');
       if (llmStatus) { llmStatus.textContent = ''; llmStatus.className = 'tl-llm-status'; }
     }
+    if (name !== 'resultEdit') {
+      const rrLlmDetails = $('#rrLlmDetails');
+      if (rrLlmDetails) rrLlmDetails.removeAttribute('open');
+      const resultLlmJson = $('#resultLlmJson');
+      if (resultLlmJson) resultLlmJson.value = '';
+      const resultLlmStatus = $('#resultLlmStatus');
+      if (resultLlmStatus) { resultLlmStatus.textContent = ''; resultLlmStatus.className = 'tl-llm-status'; }
+    }
     $$('.tl-tab').forEach(t => t.classList.toggle('tl-tab-active', t.dataset.tab === name));
-    const map = { rules: 'paneRules', edit: 'paneEdit', systemChips: 'paneSystemChips', systemEdit: 'paneSystemEdit', thresholds: 'paneThresholds', prefs: 'panePrefs', preview: 'panePreview', backup: 'paneBackup', about: 'paneAbout' };
+    const map = { rules: 'paneRules', edit: 'paneEdit', systemChips: 'paneSystemChips', systemEdit: 'paneSystemEdit', thresholds: 'paneThresholds', prefs: 'panePrefs', preview: 'panePreview', backup: 'paneBackup', about: 'paneAbout', resultRules: 'paneResultRules', resultEdit: 'paneResultEdit' };
     $$('.tl-pane').forEach(p => p.classList.remove('tl-pane-active'));
     const id = map[name];
     if (id) $('#' + id).classList.add('tl-pane-active');
@@ -854,6 +872,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'detail.docSpecialty',        page: 'Detail', desc: 'Clinical specialty or sender on document task pages',                   vars: ['{specialty}'] },
     { id: 'queue.monitoringDueRed',   page: 'Queue', desc: 'High-risk drug monitoring overdue on queue rows (requires network per row — off by default)', vars: ['{count}'] },
     { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
+    { id: 'queue.resultUrgent',         page: 'Queue', desc: 'Investigation result has an urgent/critical analyte (lab flag or user threshold rule)', vars: ['{name}', '{count}'] },
+    { id: 'queue.resultAbnormal',       page: 'Queue', desc: 'Investigation result has out-of-range analytes', vars: ['{count}'] },
+    { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
+    { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
+    { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
+    { id: 'queue.resultNoGrowth',       page: 'Queue', desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip', vars: ['{count}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },
@@ -1011,6 +1035,402 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // Re-open the editor showing fresh defaults
       openSystemChipEditor(sysEditingId);
       renderSystemChips();
+    }
+  };
+
+  // ============================================================
+  // RESULT RULES TAB
+  // ============================================================
+  let rrEditingId = null;
+  let rrEditingDraft = null;
+
+  const makeBlankResultRule = () => ({
+    id: 'rrule_' + Math.random().toString(36).slice(2, 9),
+    enabled: false,
+    builtin: false,
+    label: 'New result rule',
+    analyte: { match: [] },
+    comparator: 'above',
+    amber: null,
+    red: null,
+    unit: null
+  });
+
+  const rrSeveritySummary = (rule) => {
+    if (rule.kind === 'text') {
+      const phrases = Array.isArray(rule.normalText) ? rule.normalText : [];
+      const shown = phrases.slice(0, 3).join(', ');
+      const more = phrases.length > 3 ? ' …' : '';
+      return 'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more;
+    }
+    const parts = [];
+    const cmp = rule.comparator === 'above' ? '≥' : '≤';
+    if (rule.red != null) parts.push(cmp + rule.red + ' red');
+    if (rule.amber != null) parts.push(cmp + rule.amber + ' amber');
+    const unit = rule.unit ? ' ' + rule.unit : '';
+    return parts.join(' / ') + unit;
+  };
+
+  const setupResultRulesPane = () => {
+    $('#btnAddResultRule').addEventListener('click', () => {
+      const newRule = makeBlankResultRule();
+      CONFIG.resultRules.push(newRule);
+      openResultRuleEditor(newRule.id);
+    });
+  };
+
+  const renderResultRules = () => {
+    const container = $('#resultRuleList');
+    if (!container) return;
+    container.innerHTML = '';
+    const list = CONFIG.resultRules || [];
+    if (!list.length) {
+      $('#resultRuleListEmpty').style.display = 'block';
+      return;
+    }
+    $('#resultRuleListEmpty').style.display = 'none';
+
+    for (const rule of list) {
+      const row = document.createElement('div');
+      row.className = 'tl-rule-row' + (rule.enabled ? '' : ' tl-rule-disabled');
+      const summary = rrSeveritySummary(rule);
+      row.innerHTML = `
+        <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''}>
+        <span></span>
+        <span>
+          <span class="tl-rule-label">${escHtml(rule.label)}</span>
+          ${!rule.enabled ? '<span class="tl-rr-unreviewed">Unreviewed</span>' : ''}
+          <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${summary ? '· ' + escHtml(summary) : ''}</span>
+        </span>
+        <span class="tl-rule-meta">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
+        <span></span>
+        <span class="tl-rule-actions">
+          <button class="tl-btn" data-act="edit">Edit</button>
+          <button class="tl-btn tl-btn-danger" data-act="del">×</button>
+        </span>`;
+      row.querySelector('.tl-rule-toggle').addEventListener('change', async (e) => {
+        rule.enabled = e.target.checked;
+        await saveConfig(CONFIG);
+        flash('Saved');
+        renderResultRules();
+      });
+      row.querySelector('[data-act="edit"]').addEventListener('click', () => openResultRuleEditor(rule.id));
+      row.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        if (!confirm(`Delete result rule "${rule.label}"? This can't be undone.`)) return;
+        CONFIG.resultRules = CONFIG.resultRules.filter(r => r.id !== rule.id);
+        await saveConfig(CONFIG);
+        flash('Deleted');
+        renderResultRules();
+      });
+      container.appendChild(row);
+    }
+  };
+
+  const rrApplyKindVisibility = (kind) => {
+    const thresholdEls = document.querySelectorAll('.rr-fields-threshold');
+    const textEls = document.querySelectorAll('.rr-fields-text');
+    const isText = kind === 'text';
+    thresholdEls.forEach(el => { el.style.display = isText ? 'none' : ''; });
+    textEls.forEach(el => { el.style.display = isText ? '' : 'none'; });
+  };
+
+  const rrUpdateTestMatch = () => {
+    const testEl = $('#rrTestName');
+    const resultEl = $('#rrTestResult');
+    if (!testEl || !resultEl) return;
+    const testName = testEl.value.trim();
+    if (!testName) {
+      resultEl.textContent = '';
+      resultEl.className = 'tl-rr-test-result';
+      return;
+    }
+    const matchLines = ($('#rrAnalyteMatch').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!matchLines.length) {
+      resultEl.textContent = '✗ no match strings defined';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
+      return;
+    }
+    const nameLower = testName.toLowerCase();
+    const matched = matchLines.some(m => nameLower.includes(m.toLowerCase()));
+    if (matched) {
+      resultEl.textContent = '✓ would match';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-match';
+    } else {
+      resultEl.textContent = '✗ would not match';
+      resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
+    }
+  };
+
+  const setupResultEditPane = () => {
+    $('#btnBackToResultRules').addEventListener('click', () => {
+      rrEditingId = null;
+      activateTab('resultRules');
+    });
+    $('#btnCancelResultEdit').addEventListener('click', () => {
+      rrEditingId = null;
+      chrome.storage.local.get(['triagelens.config', 'config']).then(r => {
+        const cfg = r['triagelens.config'] || r['config'];
+        if (cfg) CONFIG = cfg;
+        if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
+        renderResultRules();
+        activateTab('resultRules');
+      });
+    });
+    $('#btnSaveResultEdit').addEventListener('click', saveCurrentResultRule);
+    $('#btnDeleteResultRule').addEventListener('click', async () => {
+      if (!rrEditingId) return;
+      const r = CONFIG.resultRules.find(x => x.id === rrEditingId);
+      if (!r) return;
+      if (!confirm(`Delete result rule "${r.label}"?`)) return;
+      CONFIG.resultRules = CONFIG.resultRules.filter(x => x.id !== rrEditingId);
+      await saveConfig(CONFIG);
+      rrEditingId = null;
+      flash('Deleted');
+      renderResultRules();
+      activateTab('resultRules');
+    });
+    $('#rrAnalyteMatch').addEventListener('input', rrUpdateTestMatch);
+    $('#rrTestName').addEventListener('input', rrUpdateTestMatch);
+    $('#rrKind').addEventListener('change', (e) => rrApplyKindVisibility(e.target.value));
+  };
+
+  const openResultRuleEditor = (id) => {
+    const rule = CONFIG.resultRules.find(r => r.id === id);
+    if (!rule) return;
+    rrEditingId = id;
+    rrEditingDraft = JSON.parse(JSON.stringify(rule));
+
+    $('#rrEditTitle').textContent = rule.builtin ? 'Edit built-in result rule: ' + rule.label : 'Edit result rule: ' + rule.label;
+    $('#rrLabel').value = rrEditingDraft.label || '';
+    $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
+    const kind = rrEditingDraft.kind === 'text' ? 'text' : 'threshold';
+    $('#rrKind').value = kind;
+    $('#rrComparator').value = rrEditingDraft.comparator || 'above';
+    $('#rrAmber').value = rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
+    $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
+    $('#rrUnit').value = rrEditingDraft.unit || '';
+    $('#rrNormalText').value = Array.isArray(rrEditingDraft.normalText) ? rrEditingDraft.normalText.join('\n') : '';
+    $('#rrNormalLabel').value = rrEditingDraft.normalLabel || '';
+    $('#rrEnabled').checked = !!rrEditingDraft.enabled;
+    rrApplyKindVisibility(kind);
+
+    // Reset test-match indicator when opening editor
+    const testEl = $('#rrTestName');
+    const testResEl = $('#rrTestResult');
+    if (testEl) testEl.value = '';
+    if (testResEl) { testResEl.textContent = ''; testResEl.className = 'tl-rr-test-result'; }
+
+    activateTab('resultEdit');
+  };
+
+  const saveCurrentResultRule = async () => {
+    if (!rrEditingId) return;
+    const selectedKind = $('#rrKind').value;
+    const label = $('#rrLabel').value.trim() || 'Untitled result rule';
+    const analyteMatch = $('#rrAnalyteMatch').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const enabled = $('#rrEnabled').checked;
+
+    if (selectedKind === 'text') {
+      const normalText = ($('#rrNormalText').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const normalLabel = $('#rrNormalLabel').value.trim() || 'No growth';
+      rrEditingDraft = {
+        id: rrEditingDraft.id,
+        builtin: rrEditingDraft.builtin || false,
+        kind: 'text',
+        label,
+        normalLabel,
+        analyte: { match: analyteMatch },
+        normalText,
+        enabled
+      };
+    } else {
+      rrEditingDraft.label = label;
+      rrEditingDraft.analyte = { match: analyteMatch };
+      rrEditingDraft.comparator = $('#rrComparator').value;
+      const amberVal = $('#rrAmber').value.trim();
+      const redVal = $('#rrRed').value.trim();
+      rrEditingDraft.amber = amberVal !== '' && Number.isFinite(+amberVal) ? +amberVal : null;
+      rrEditingDraft.red = redVal !== '' && Number.isFinite(+redVal) ? +redVal : null;
+      const unitVal = $('#rrUnit').value.trim();
+      rrEditingDraft.unit = unitVal || null;
+      rrEditingDraft.enabled = enabled;
+      // Remove text-only fields if switching from text to threshold
+      delete rrEditingDraft.kind;
+      delete rrEditingDraft.normalText;
+      delete rrEditingDraft.normalLabel;
+    }
+
+    const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
+    if (VALIDATE) {
+      const errs = VALIDATE(rrEditingDraft);
+      if (errs.length > 0) {
+        flash(errs[0], 'err');
+        return;
+      }
+    }
+
+    const idx = CONFIG.resultRules.findIndex(r => r.id === rrEditingId);
+    if (idx >= 0) CONFIG.resultRules[idx] = rrEditingDraft;
+    else CONFIG.resultRules.push(rrEditingDraft);
+    await saveConfig(CONFIG);
+    flash('Saved');
+    rrEditingId = null;
+    renderResultRules();
+    activateTab('resultRules');
+  };
+
+  const setupResultLlmPane = () => {
+    const btnCopy      = $('#btnResultLlmCopyPrompt');
+    const copiedEl     = $('#resultLlmCopied');
+    const jsonEl       = $('#resultLlmJson');
+    const btnImport    = $('#btnResultLlmImport');
+    const statusEl     = $('#resultLlmStatus');
+    const previewEl    = $('#resultLlmPreview');
+    const previewList  = $('#resultLlmPreviewList');
+    const btnConfirm   = $('#btnResultLlmConfirm');
+    const btnCancel    = $('#btnResultLlmCancel');
+    if (!btnCopy || !jsonEl || !btnImport || !statusEl) return;
+
+    // Pending candidates awaiting confirm
+    let rrPendingCandidates = null;
+
+    const clearPreview = () => {
+      rrPendingCandidates = null;
+      if (previewEl) previewEl.style.display = 'none';
+      if (previewList) previewList.innerHTML = '';
+    };
+
+    btnCopy.addEventListener('click', async () => {
+      const PROMPT = window.SentinelResultRules && window.SentinelResultRules.resultRuleSchemaPrompt;
+      if (!PROMPT) { flash('result-rules.js not loaded', 'err'); return; }
+      const prompt = PROMPT();
+      try {
+        await navigator.clipboard.writeText(prompt);
+      } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = prompt;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      if (copiedEl) {
+        copiedEl.style.opacity = '1';
+        setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+      }
+    });
+
+    btnImport.addEventListener('click', async () => {
+      clearPreview();
+      statusEl.className = 'tl-llm-status';
+      statusEl.textContent = '';
+      const raw = (jsonEl.value || '').trim();
+      if (!raw) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Paste the LLM JSON into the box first.';
+        return;
+      }
+
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (e) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Could not parse JSON: ' + e.message;
+        return;
+      }
+
+      let candidates = [];
+      if (Array.isArray(parsed)) {
+        candidates = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.rules)) {
+          candidates = parsed.rules;
+        } else {
+          candidates = [parsed];
+        }
+      } else {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'Expected a JSON object, an array, or an object with a "rules" array.';
+        return;
+      }
+
+      if (candidates.length === 0) {
+        statusEl.className = 'tl-llm-status tl-llm-status-err';
+        statusEl.textContent = 'No rule objects found in the pasted JSON.';
+        return;
+      }
+
+      const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
+      if (VALIDATE) {
+        for (let i = 0; i < candidates.length; i++) {
+          const errs = VALIDATE(candidates[i]);
+          if (errs.length > 0) {
+            statusEl.className = 'tl-llm-status tl-llm-status-err';
+            const prefix = candidates.length > 1 ? 'Rule ' + (i + 1) + ': ' : '';
+            statusEl.textContent = prefix + errs[0];
+            return;
+          }
+        }
+      }
+
+      // Build preview — show before committing
+      rrPendingCandidates = candidates;
+      if (previewEl && previewList) {
+        previewList.innerHTML = '';
+        for (const c of candidates) {
+          let summary;
+          if (c.kind === 'text') {
+            const phrases = Array.isArray(c.normalText) ? c.normalText : [];
+            const shownPhrases = phrases.slice(0, 3).join(', ') || '(none)';
+            const morePhrases = phrases.length > 3 ? ' …' : '';
+            summary = (c.label || 'Untitled') + ' — Text: "' + (c.label || 'Needs review') + '" unless: ' + shownPhrases + morePhrases + ' — will import DISABLED';
+          } else {
+            const cmp = c.comparator === 'above' ? '≥' : '≤';
+            const parts = [];
+            if (c.red != null) parts.push(cmp + c.red + ' red');
+            if (c.amber != null) parts.push(cmp + c.amber + ' amber');
+            const unit = c.unit ? ' (' + c.unit + ')' : '';
+            const numSummary = parts.join(' / ') + unit;
+            summary = (c.label || 'Untitled') + ' — ' + (c.comparator === 'above' ? 'at or above' : 'at or below') + ': ' + numSummary + ' — will import DISABLED';
+          }
+          const item = document.createElement('div');
+          item.className = 'tl-rr-llm-preview-item';
+          item.textContent = summary;
+          previewList.appendChild(item);
+        }
+        if (btnConfirm) btnConfirm.textContent = 'Add ' + candidates.length + ' rule' + (candidates.length !== 1 ? 's' : '') + ', disabled';
+        previewEl.style.display = 'block';
+        statusEl.className = 'tl-llm-status';
+        statusEl.textContent = '';
+      }
+    });
+
+    if (btnConfirm) {
+      btnConfirm.addEventListener('click', async () => {
+        if (!rrPendingCandidates) return;
+        const toAdd = rrPendingCandidates.map(rule => ({
+          ...rule,
+          id: 'rrule_' + Math.random().toString(36).slice(2, 9),
+          builtin: false,
+          enabled: false,
+        }));
+        CONFIG.resultRules.push(...toAdd);
+        await saveConfig(CONFIG);
+        jsonEl.value = '';
+        clearPreview();
+        statusEl.className = 'tl-llm-status tl-llm-status-ok';
+        statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each before it fires).';
+        renderResultRules();
+      });
+    }
+
+    if (btnCancel) {
+      btnCancel.addEventListener('click', () => {
+        clearPreview();
+        statusEl.className = 'tl-llm-status';
+        statusEl.textContent = '';
+      });
     }
   };
 

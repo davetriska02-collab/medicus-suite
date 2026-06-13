@@ -44,8 +44,7 @@
   function handleTaskList(u, body) {
     var m = u.match(TL_RE);
     if (!m) return;
-    var items = body && (body.tasks || body.data || body.results || body.rows ||
-      (Array.isArray(body) ? body : null));
+    var items = body && (body.tasks || body.data || body.results || body.rows || (Array.isArray(body) ? body : null));
     if (!Array.isArray(items)) {
       console.warn('[ClinHUD] task-list: no array found; body keys=', body ? Object.keys(body) : body);
       return;
@@ -54,8 +53,19 @@
       window.__chTaskKeysLogged = 1;
       console.debug('[ClinHUD] task-list first item keys:', Object.keys(items[0]));
     }
-    var rows = items.map(function (item, i) { return { rowIndex: i, taskUuid: pickUuid(item) }; })
-      .filter(function (r) { return r.taskUuid; });
+    var rows = items
+      .map(function (item, i) {
+        var row = { rowIndex: i, taskUuid: pickUuid(item) };
+        if (item && typeof item === 'object') {
+          row.overviewURL = typeof item.overviewURL === 'string' ? item.overviewURL : '';
+          row.priorityDisplay = typeof item.priorityDisplay === 'string' ? item.priorityDisplay : '';
+          row.unmatched = !!item.unmatchedToPatient;
+        }
+        return row;
+      })
+      .filter(function (r) {
+        return r.taskUuid;
+      });
     if (rows.length) {
       window.dispatchEvent(new CustomEvent('ch-task-list-data', { detail: { rows: rows, taskTypeSlug: m[1] } }));
     } else {
@@ -73,8 +83,14 @@
         if (TL_RE.test(u)) {
           p.then(function (r) {
             try {
-              r.clone().json().then(function (b) { handleTaskList(u, b); })
-                .catch(function (e) { console.warn('[ClinHUD] task-list parse error', e); });
+              r.clone()
+                .json()
+                .then(function (b) {
+                  handleTaskList(u, b);
+                })
+                .catch(function (e) {
+                  console.warn('[ClinHUD] task-list parse error', e);
+                });
             } catch (_) {}
           });
         }
@@ -87,7 +103,9 @@
   var origOpen = XMLHttpRequest.prototype.open;
   var origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (method, url) {
-    try { this.__chUrl = url; } catch (_) {}
+    try {
+      this.__chUrl = url;
+    } catch (_) {}
     return origOpen.apply(this, arguments);
   };
   XMLHttpRequest.prototype.send = function () {
@@ -98,7 +116,9 @@
         xhr.addEventListener('load', function () {
           try {
             handleTaskList(u, JSON.parse(xhr.responseText));
-          } catch (e) { console.warn('[ClinHUD] interceptor parse error', e); }
+          } catch (e) {
+            console.warn('[ClinHUD] interceptor parse error', e);
+          }
         });
       }
     } catch (_) {}

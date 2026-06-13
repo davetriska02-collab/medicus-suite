@@ -2,6 +2,102 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.64.0] — 2026-06-13
+
+### Investigation Results queue — microbiology (MSU / culture) text rules
+
+Microbiology results carry no numeric high/low flag, so the lab-flag-led chips
+never surfaced them. This adds text-classification result rules.
+
+- **Built-in MSU/urine-culture rule:** a culture is flagged amber **"Needs
+  review"** unless its result text contains a normal phrase (e.g. "No growth"),
+  in which case a calm blue **"No growth"** info chip is shown instead. The info
+  chip asserts a negative culture from the actual result text — it is not a
+  "safe to file" verdict (sterile pyuria and "no significant growth — repeat"
+  remain the clinician's call).
+- **User-tunable:** the rule type is now Numeric threshold OR Text/culture; users
+  can edit the normal phrases, add other culture types (wound swabs, sputum,
+  stool, blood cultures), manually or via the LLM single-rule build. Escalate-only
+  and, for user-authored/imported rules, ship-disabled until reviewed.
+- The result text is read from the Medicus `resultText` field (where cultures put
+  "No growth" / the organism), combining interpretation and lab comments.
+- New chips `queue.resultReview` (amber) and `queue.resultNoGrowth` (info), both
+  enable/colour-configurable. HAZARD-LOG H-030 and CSN limitation 35 updated.
+
+## [v3.63.1] — 2026-06-13
+
+### Investigation Results queue — usability pass (The Practice synthetic panel)
+
+Fixes from a five-persona synthetic usability appraisal (technophobe partner ->
+power user). No change to severity logic or which chips appear.
+
+- **"A blank row is not 'normal'":** a quiet persistent legend on the queue
+  states that chips are additive and an unflagged row has not been assessed as
+  normal — the universal fear across the panel that absence read as safe.
+- **Clinical chips carry a glyph:** the filled Urgent / abnormal chips gain a
+  leading marker so they are distinguishable from the outline process chips by
+  shape and fill, not colour alone (also colour-blind safe).
+- **Result-rule editor (clinical-pharmacist findings):** comparator relabelled
+  "at or above (>=)" / "at or below (<=)" to match the engine's inclusive
+  evaluation; a display-only-unit warning; a live "test match" box to check a
+  rule's analyte-match strings against a real lab result name before saving;
+  and an LLM import now shows a plain-English preview and requires confirmation
+  before adding (still disabled) rules.
+- **Baseline chips:** clearer group separators so the result chips are not
+  misread as the existing priority chip.
+
+## [v3.63.0] — 2026-06-13
+
+### Investigation Results queue — user customisation
+
+- **Per-chip enable + colour:** the four result chips are configurable in the
+  Triage Lens "Baseline chips" editor (enable/disable and severity-kind colour).
+- **User analyte-threshold rules:** a new "Result rules" pane lets a clinician
+  author rules (e.g. "Potassium >= 6.0 -> red") that escalate chip severity.
+  Escalate-only — a rule can never lower or hide a lab's own urgent/abnormal flag.
+- **LLM single-rule build + manual editor:** copy a prompt, paste the model's
+  JSON back, validate and import; or author by hand. Imported rules arrive
+  disabled and must be clinician-reviewed before they fire.
+- Engine: new `engine/result-rules.js` (validation + LLM prompt);
+  `evaluateReportSeverity` consumes user rules. Safety docs (HAZARD-LOG H-030,
+  Clinical Safety Notice limitation 35) updated to record the first
+  self-computed clinical threshold, gated by the escalate-only + review model.
+
+## [v3.62.1] — 2026-06-13
+
+### Investigation Results queue chips — design-crit polish
+
+Visual-only pass from a three-critic design review (art director, token/CSS
+surveyor, fresh-eyes GP). No change to severity logic, chip wording, or which
+chips appear.
+
+- **Clinical vs process hierarchy:** the filled red/amber treatment is now
+  reserved for the clinical result chips (Urgent / abnormal). The process/meta
+  flags ("Under-prioritised", "Unmatched patient") render as outline chips so a
+  genuine abnormal result is never out-shouted by a queue/data-quality caveat.
+- **Long-analyte chips no longer overflow:** chips truncate with an ellipsis
+  (`max-width`) and carry the full text in a `title` tooltip.
+- **Amber contrast fix:** amber chip ink darkened to `#b45309` to clear the
+  4.5:1 accessibility floor at 10px (was 3.10:1).
+- **A11y/tidy:** result-chip strip marked `role="note"`; de-duplicated the
+  identical queue/result chip CSS.
+
+## [v3.62.0] — 2026-06-13
+
+### Investigation Results queue — per-row severity triage chips
+
+- **Urgent/abnormal result chips:** Each queued Investigation Results task now shows
+  a severity chip derived from the actual lab report data. Urgent (red) results show
+  the abnormal analyte name and count; abnormal (amber) results show the abnormal count.
+- **Under-prioritised safety flag:** A red "Under-prioritised" chip fires when the
+  task's `priorityDisplay` is `Routine` but the result contains urgent findings.
+- **Unmatched-patient flag:** An amber "Unmatched patient" chip fires when the report
+  could not be matched to a patient record.
+- **Whole-queue throttled sweep:** All queue rows are swept with 3 concurrent workers,
+  priority-ordered (High/Urgent/Immediate first), with a 90-fetch / 60s rolling budget.
+  Results are cached for 5 minutes. The sweep runs on queue entry and on new task-list
+  data arrival.
+
 ## [v3.61.2] — 2026-06-13
 
 ### Guided tour — patient-data steps now shown, not skipped
