@@ -29,6 +29,7 @@ const AUTO_HIDE_THRESHOLD = 2;
 
 let _host = null;
 let _setupState = { dismissedAt: null, skippedNotifications: false };
+let _tourActive = false;
 let _stepStatus = {
   practiceCode: { done: false, detected: null },
   connection: { done: false, result: null }, // result: 'ok'|'fail'|null
@@ -167,7 +168,8 @@ function renderConnectionStep() {
       ${stepIcon(done)}
       <div class="setup-step-body">
         <span class="setup-step-label">Connection test</span>
-        <span class="setup-step-detail">Verify the extension can reach your Medicus API.</span>
+        <span class="setup-step-detail">Check the extension can reach Medicus.</span>
+        ${!hasCode ? '<span class="setup-step-hint">Add a practice code first.</span>' : ''}
         <div class="setup-step-actions">
           <button class="ghost-btn setup-test-conn"${!hasCode ? ' disabled aria-disabled="true"' : ''}>Test connection</button>
           ${statusEl}
@@ -204,13 +206,13 @@ function renderNotificationsStep() {
 function renderTabsStep() {
   const { done, visible, total } = _stepStatus.tabs;
   const detail = done
-    ? `<span class="setup-result setup-result--ok">Showing ${visible} of ${total} tabs</span>`
+    ? `<span class="setup-step-meta">Showing ${visible} of ${total} tabs</span>`
     : `<span class="setup-step-detail">Pick the tabs you actually use — a GP rarely needs Reception; reception rarely needs Slots. Everything stays reachable via Ctrl+K, and your choice is never overwritten by practice-pushed config.</span>`;
   return `
     <li class="setup-step${done ? ' setup-step--done' : ''}">
       ${stepIcon(done)}
       <div class="setup-step-body">
-        <span class="setup-step-label">Choose your tabs</span>
+        <span class="setup-step-label">Choose your tabs <span class="setup-recommended-badge">recommended</span></span>
         ${detail}
         <div class="setup-step-actions">
           <button class="ghost-btn setup-choose-tabs">${done ? 'Change tabs' : 'Choose tabs'}</button>
@@ -240,7 +242,7 @@ function renderCard() {
     <div class="setup-card" role="region" aria-label="Suite setup checklist">
       <div class="setup-card-header">
         <span class="setup-card-title">Get set up</span>
-        <span class="setup-card-progress">${done}/${MANDATORY_STEPS} done</span>
+        <span class="setup-card-progress">${done} of ${MANDATORY_STEPS} essentials</span>
         <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
       </div>
       <ol class="setup-steps">
@@ -286,6 +288,7 @@ function wireEvents() {
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Checking…';
+      btn.setAttribute('aria-busy', 'true');
     }
     await evaluateSteps();
     renderInto(_host);
@@ -298,6 +301,7 @@ function wireEvents() {
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Testing…';
+      btn.setAttribute('aria-busy', 'true');
     }
     await runConnectionTest();
     renderInto(_host);
@@ -382,6 +386,7 @@ function renderInto(host) {
 
 function show() {
   if (!_host) return;
+  if (_tourActive) return;
   _visible = true;
   _host.style.display = '';
   renderInto(_host);
@@ -454,4 +459,14 @@ export async function initSetup(hostEl) {
 
   // Listen for dispatch from module CTAs
   document.addEventListener('suite:open-setup', () => openSetup());
+
+  // Hide while the guided tour is active; re-evaluate when it ends
+  document.addEventListener('suite:tour-started', () => {
+    _tourActive = true;
+    hide();
+  });
+  document.addEventListener('suite:tour-ended', () => {
+    _tourActive = false;
+    refresh();
+  });
 }
