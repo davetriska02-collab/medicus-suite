@@ -96,6 +96,7 @@ export const TOUR_STEPS = [
     addedIn: 2,
     module: 'sentinel',
     target: ['.sent-actionbar'],
+    centerFallback: true,
     title: 'Patient actions, right under the brief',
     body: 'Appointments needed, copy-ready actions and the printable patient summary sit here; rarer tools — settings, evaluation log export, this tour — are under More.',
   },
