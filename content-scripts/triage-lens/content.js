@@ -2185,8 +2185,14 @@
   // It is ONLY used to trigger re-fetches from the authenticated Medicus API;
   // row UUIDs are never rendered into the DOM or trusted as authoritative data.
 
-  // rowIndex → taskUuid for the current queue load
+  // rowIndex → taskUuid for the current queue load. runQueue clears this on every
+  // queue (re)entry, which keeps the FETCH path from chasing a previous queue's tasks.
   const _queueRowUuids = new Map();
+  // Durable mirror, written ONLY by the bridge task-list event (never cleared by
+  // runQueue). Used to RE-INJECT cached result chips after the SPA's re-renders —
+  // runQueue's churn keeps emptying _queueRowUuids, and that emptying is exactly what
+  // made the chips flash-and-vanish. The bridge owns this map's whole lifecycle.
+  const _durableRowMap = new Map();
   // taskUuid → { taskTypeSlug, result, ts } — session-level cache with TTL
   const _queueMonCache = new Map();
   const _MON_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -2243,6 +2249,7 @@
     if (pageType() !== 'queue') return;
 
     _queueRowUuids.clear();
+    _durableRowMap.clear();
     // Cap rows processed and validate each entry's shape before acting on it
     const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
     for (const row of cappedRows) {
@@ -2253,6 +2260,7 @@
       // taskUuid must be a plausible UUID string
       if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
       _queueRowUuids.set(rowIndex, taskUuid);
+      _durableRowMap.set(rowIndex, taskUuid);
       if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug });
 
       // Validate and cache result-triage fields (UNTRUSTED — strict rules)
@@ -2496,16 +2504,18 @@
   // clean, synchronous restore with no visible gap.
   const reinjectCachedResultChips = () => {
     let n = 0;
-    document.querySelectorAll('.ag-row[row-id]:not(.ag-full-width-row)').forEach((row) => {
-      const taskUuid = row.getAttribute('row-id');
-      if (!taskUuid || !_BRIDGE_UUID_RE.test(taskUuid)) return;
+    // Drive re-injection off the DURABLE map (rowIndex → taskUuid). It survives the
+    // runQueue churn that empties _queueRowUuids, so cached chips persist across
+    // re-renders. injectResultChip finds the row by row-index (the proven path) and
+    // de-dupes, so this is safe to call on every refresh.
+    for (const [rowIndex, taskUuid] of _durableRowMap) {
       const entry = _queueResultCache.get(taskUuid);
-      if (!entry || entry.sev === undefined || entry.sev === null) return;
-      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
-      const rowIndex = row.getAttribute('row-index');
-      if (rowIndex != null) { injectResultChip(rowIndex, entry.sev); n++; }
-    });
-    if (n) log('queue-result: re-injected ' + n + ' cached chip(s) via row-id');
+      if (!entry || entry.sev === undefined || entry.sev === null) continue;
+      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) continue;
+      injectResultChip(rowIndex, entry.sev);
+      n++;
+    }
+    if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map');
   };
 
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.

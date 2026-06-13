@@ -49,6 +49,46 @@ Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled 
 
 Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
 
+## Injecting chips into the live Medicus queue (mechanics — copy the pattern, don't rediscover)
+
+The queue is a **Vue + AG-Grid SPA** that re-renders constantly and **strips foreign DOM
+nodes** on every render. Three chip families are injected into it
+(`content-scripts/triage-lens/content.js`), by two strategies — pick the right one or
+chips flash-and-vanish:
+
+- **Age/decoration (`.ch-queue-chips`)** — *DOM-driven*: `decorateOneRow` reads what it
+  needs from the row's own cells and is rebuilt on every refresh. No async, no external
+  state → inherently durable. **This is the template; copy it.**
+- **Monitoring (`.ch-q-mon`) / result-triage (`.ch-q-result`)** — *fetch-driven*: they
+  need data not on the row (drug record / lab values), fetched per row from the API and
+  cached (`_queueResultCache`, keyed by **taskUuid**).
+
+Non-negotiable rules (each cost a debugging session):
+
+1. **PREPEND, never append** — `insertBefore(node, target.firstChild)`. Appended (trailing)
+   nodes get reconciled away by Vue on its next render. (Append was the v3.67.0 regression.)
+2. **Host:** the master/detail **preview row** if present (`findQueuePreviewRow`), else the
+   `[col-id="patientName"]` cell. Width-cap inline chips (`.ch-q-result-inline`) so they
+   don't push the patient name out of the fixed-width cell.
+3. **Re-inject on every `refreshQueueChips`** (fired by the queue MutationObserver) — one
+   inject never survives the SPA's re-renders.
+4. **Re-injection must not depend on `_queueRowUuids`.** `runQueue` clears that
+   rowIndex→taskUuid map on every queue (re)entry, and the SPA churn triggers `runQueue`
+   constantly — so gating re-injection on it (`if (_queueRowUuids.size > 0)`) loses the
+   chips (they inject then get wiped with nothing to replace them). Keep a **durable
+   `_durableRowMap` (rowIndex→taskUuid) written ONLY by the bridge task-list event**,
+   never cleared by `runQueue`. `reinjectCachedResultChips()` iterates it, looks up the
+   cached severity in `_queueResultCache` (keyed by taskUuid), and re-injects via the
+   **row-index** path on every refresh — the result-chip equivalent of `decorateOneRow`.
+   The transient `_queueRowUuids` is only for scheduling the initial *fetch* of
+   not-yet-cached rows. **`row-id` is NOT the task UUID on real Medicus — do not key off
+   it** (that no-op shipped as v3.69.0; the durable map fixed it in v3.70.0).
+5. **CSS token scope:** the chip's top-level class must be in the `hud.css` token-block
+   selector list (`#medicus-clinical-hud, .ch-queue-chips, .ch-q-result, .ch-q-mon, …`) or
+   `var(--red-dim)` etc. resolve to nothing and it renders as an unstyled "white rectangle".
+6. Inject functions **de-dupe** (`target.querySelector('.ch-q-result')`), so re-injection
+   is idempotent — safe to call on every refresh.
+
 ## Debugging injected queue chips on the live Medicus page (capture first)
 
 The queue chips — age/decoration (`.ch-queue-chips`), monitoring (`.ch-q-mon`),
