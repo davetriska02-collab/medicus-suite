@@ -49,6 +49,47 @@ Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled 
 
 Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
 
+## Debugging injected queue chips on the live Medicus page (capture first)
+
+The queue chips — age/decoration (`.ch-queue-chips`), monitoring (`.ch-q-mon`),
+result-triage (`.ch-q-result`) — are injected by `content-scripts/triage-lens/content.js`
+into Medicus's **Vue + AG-Grid** DOM. When a user reports chips "not firing",
+flashing-then-vanishing, or rendering wrong, **do not reason in the abstract and do not
+trust the eye** — the inject→wipe race is faster than a human can see. Reach for a
+**page-console capture** every time; remember this technique for this repo.
+
+Why a page-console capture (and its limits): the content script runs in the **isolated
+world**, so the page console (MAIN world) **cannot** read its `CONFIG`/closure state. But
+from the page console you *can*: count injected DOM (shared), read shared-origin
+`localStorage`, do **credentialed `fetch`** (the page shares the extension's cookie auth,
+so you can replay the exact API path), and read `window.__chPageWorld` (the MAIN-world
+bridge flag set by `page-world.js`). Build diagnostics around those.
+
+The toolkit, in order:
+1. **Presence + counts** — `window.__chPageWorld` and counts of `.ch-chip`,
+   `.ch-queue-chips`, `.ch-q-mon`, `.ch-q-result`. Distinguishes *not injecting* vs
+   *decoration works but triage doesn't* vs *injected-then-wiped*.
+2. **Timed lifecycle poll** — sample those counts over ~20s and record **peak** and
+   **final**. `peak>0, final=0` = injected then wiped (persistence/re-inject bug);
+   `peak=0` = never injected (event/rules/host problem). This is what catches the flash.
+3. **Data-path replay** — `fetch` `/tasks/data/{slug}/task-list` then each row's
+   `overviewURL`, normalise, and run the rule yourself. Separates *rule wrong* from
+   *pipeline broken* (the values are reachable from the queue via the overview endpoint).
+4. **The content script's own logs** — `localStorage.setItem('ch-debug','1')` + reload
+   turns on `[ClinHUD]` pipeline logging (`DEBUG` reads that flag). Shows `triage start,
+   rows=`, per-report `sev=`, `chip injected`, `refreshQueueChips`.
+
+Hard rules learned the slow way:
+- **Inject by PREPEND (`insertBefore(node, target.firstChild)`), never `appendChild`.**
+  Medicus's Vue reconciler strips *trailing* foreign nodes on its next re-render;
+  prepended nodes survive. (Appending was the v3.67.0 regression — chips vanished
+  instantly; fixed v3.68.0.)
+- **CSS-variable scope:** injected chips only get the design tokens if their top-level
+  class is in the `hud.css` token-block selector list. A class left out renders as an
+  unstyled "white rectangle" (`.ch-q-result`/`.ch-q-mon` had this until v3.67.0).
+- **Host-app noise is not us:** `MInput.vue` warnings and `sentry.io` `429`s in the
+  console are Medicus's own Vue app + telemetry, not the extension.
+
 ## Editing drug-monitoring rules (`rules/drug-rules.json`)
 
 Drug matching in `engine/rules-engine.js` (`drugMatchesRule`) is **case-insensitive substring** matching against the `drug.match` list. Two consequences you must keep in mind, because the failure mode is **silent** — a med that doesn't match simply never fires its alert; there is no error, just a missing chip (a patient-safety risk, not a cosmetic one):
