@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.73.0] — 2026-06-13
+
+### Queue result triage: cut cold time-to-tag and CPU contention during the tag burst
+
+The per-row fetch is unavoidable (the task-list carries no severity flag), so this pass is
+pure scheduler/observer wins — no clinical-logic change:
+
+- **Visible burst un-throttled.** The fetch worker now applies a ZERO inter-fetch delay to
+  on-screen rows; the ~12 visible rows are well under the 90/60s budget and the browser's
+  ~6-connection-per-host ceiling, so firing them with no inter-fetch sleep is safe and
+  removes ~300ms of pure sleep from the perceived path. The off-screen tail keeps the
+  computed 100ms→1000ms backoff, and the budget cap + 60s rolling reset remain the
+  rate-limit protection. Concurrency stays at 5.
+- **Leading-edge first fetch pass.** The first result-triage pass per queue entry now fires
+  immediately from the bridge task-list handler (after `_queueRowUuids`/`_durableRowMap` are
+  populated) instead of waiting on the 150ms debounce — ~150ms off time-to-first-chip, and
+  the fetch overlaps the grid's first paint. Subsequent events still use the debounce; the
+  run latch + post-`Promise.all` generation re-run coalesce the leading + trailing calls so
+  it cannot double-fetch.
+- **MutationObserver no longer self-triggers on our own chip injections.** The async
+  injectors run while the observer is live during the fetch pass, so each injected chip was
+  a childList mutation that scheduled another refresh — tagging ~12 visible rows spawned
+  ~12 spurious refresh cycles. The observer callback now ignores batches whose added/removed
+  element nodes are all our own chips, eliminating roughly one refresh cycle per visible
+  chip during the burst. Genuine grid mutations still schedule the coalesced rAF refresh.
+
+No change to clinical severity logic, PREPEND injection, CSS token-scope, the durable
+`_durableRowMap` (v3.70), the whole-snapshot worker (v3.71), or the on-screen-only
+re-display (v3.72).
+
 ## [v3.72.0] — 2026-06-13
 
 ### Queue result triage: tag the visible rows in ~2s, not the whole list in ~10s
