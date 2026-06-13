@@ -46,6 +46,8 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3 },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -73,6 +75,11 @@
     { term: 'trihexyphenidyl', score: 3 },
     // ── Score 3: Antiemetic ───────────────────────────────────────────────────
     { term: 'prochlorperazine', score: 3 },
+    // ── Score 2: Moderate anticholinergic activity ───────────────────────────
+    // Boustani ACB scale 2012 (NHS Somerset / Derbyshire NHS ACB list).
+    // UK-relevant score-2 drugs only; others (loxapine, pethidine) not UK-standard.
+    { term: 'carbamazepine', score: 2 },
+    { term: 'tegretol', score: 2, note: 'brand: carbamazepine' },
     // ── Score 1: Mild / possible anticholinergic effect ──────────────────────
     // These are on the Boustani ACB score-1 list. Confidence: high.
     { term: 'cetirizine', score: 1 },

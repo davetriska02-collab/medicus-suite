@@ -32,6 +32,7 @@
   // loading model does not allow direct reuse. Comments reference the source.
 
   // NSAIDs — from HIGH_RISK_DRUGS id:'nsaid_long' + common UK brands
+  // Full UK systemic NSAID set per BNF ch 10.1.1; parity with nsaid_long in visualiser-core.js.
   const NSAID_TERMS = [
     'ibuprofen',
     'naproxen',
@@ -39,6 +40,21 @@
     'celecoxib',
     'etoricoxib',
     'meloxicam',
+    'piroxicam',
+    'tenoxicam',
+    'aceclofenac',
+    'indometacin',
+    'indomethacin',
+    'sulindac',
+    'ketoprofen',
+    'dexketoprofen',
+    'mefenamic acid',
+    'tolfenamic acid',
+    'nabumetone',
+    'etodolac',
+    'flurbiprofen',
+    'dexibuprofen',
+    'tiaprofenic acid',
     // Common UK brand names that may appear in med lists without generic name:
     'brufen', // ibuprofen
     'nurofen', // ibuprofen (OTC brand; may appear on acute prescription)
@@ -47,8 +63,8 @@
     'mobic', // meloxicam
   ];
 
-  // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
-  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide'];
+  // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'; parity with alert-library.json pincer-10
+  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide', 'torasemide'];
 
   // Benzodiazepines — standard UK generics
   const BENZO_TERMS = [
@@ -84,8 +100,9 @@
   // exclusions minimal. A simple prefix check for low-dose forms:
   const ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible'];
 
-  // Long-acting sulfonylureas (glibenclamide, glimepiride)
-  const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];
+  // Long-acting sulfonylureas — generics + UK brands (Amaryl, Daonil/Semi-Daonil)
+  // Brands listed because branded prescriptions do not contain the generic name as a substring.
+  const LONG_SU_TERMS = ['glibenclamide', 'glimepiride', 'amaryl', 'daonil', 'semi-daonil'];
 
   // Statins — from HIGH_RISK_DRUGS id:'statin'
   const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];

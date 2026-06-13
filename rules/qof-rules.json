@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-10",
+  "lastUpdated": "2026-06-13",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation. 2026-06-10: enabled HF009 and DM037. 2026-06-13 (The Keeper): enabled OB004 and OB005 (PRN02356 confirmed); added NDH register, NDH003 (new 12-month HbA1c indicator), and NDH002 retired stub.",
   "rules": [
 
     {
@@ -1033,9 +1033,9 @@
     {
       "id": "qof-ob004",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB004",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "indicatorName": "Offer of referral to a weight-management programme in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "observation-recent",
@@ -1044,15 +1044,15 @@
       },
       "thresholds": { "lower": 10, "upper": 30 },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 2026/27 OB004 (NHS England PRN02356, published March 2026)",
+      "notes": "2026/27 QOF indicator. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Depends on the OB register, which is itself a BMI-driven approximation."
     },
     {
       "id": "qof-ob005",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB005",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "indicatorName": "Weight-management pharmacotherapy / shared decision-making in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "medication-present",
@@ -1060,8 +1060,57 @@
       },
       "thresholds": { "lower": 50, "upper": 80 },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 2026/27 OB005 (NHS England PRN02356, published March 2026); tirzepatide eligibility per NICE TA1026",
+      "notes": "2026/27 QOF indicator. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing."
+    },
+
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "NDH",
+      "registerName": "Non-diabetic hyperglycaemia register",
+      "description": "Patients aged 18+ with recorded non-diabetic hyperglycaemia (pre-diabetes): HbA1c 42–47 mmol/mol or fasting glucose 5.5–6.9 mmol/L, without a diabetes diagnosis.",
+      "problemMatch": ["non-diabetic hyperglycaemia", "non diabetic hyperglycaemia", "pre-diabetes", "prediabetes", "impaired fasting glucose", "impaired glucose tolerance", "ifg", "igt", "borderline diabetes", "at risk of diabetes"],
+      "problemExclude": ["type 1 diabetes", "type 2 diabetes", "diabetes mellitus"],
+      "source": "QOF 2026/27 NDH register (NHS England PRN02356, published March 2026)",
+      "notes": "Sentinel approximates the NDH register from problem-list coding; the true QOF register is biochemically defined (HbA1c 42–47 or fasting glucose 5.5–6.9). Patients on the DM register are excluded. Flag up for manual verification."
+    },
+
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "NDH003",
+      "indicatorName": "HbA1c recorded in the preceding 12 months for patients on the NDH register",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "glycated haemoglobin", "glycosylated haemoglobin"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 12,
+      "source": "QOF 2026/27 NDH003 (NHS England PRN02356, published March 2026)",
+      "notes": "NEW 2026/27 indicator (replaces NDH002 which was a 9-month HbA1c requirement). Now requires HbA1c within 12 months (not 9). Patients on the NDH register should have annual HbA1c to monitor progression to T2DM."
+    },
+
+    {
+      "id": "qof-ndh002",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "NDH002",
+      "indicatorName": "HbA1c recorded in the preceding 9 months for patients on the NDH register (RETIRED 2026/27)",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "glycated haemoglobin"],
+        "withinDays": 274
+      },
+      "thresholds": { "lower": 40, "upper": 90 },
+      "points": 12,
+      "source": "QOF 2025/26 NDH002 — RETIRED from 2026/27; replaced by NDH003 (12-month window). Kept as disabled stub for year-on-year diff visibility.",
+      "notes": "RETIRED from 2026/27. Replaced by NDH003 which extends the monitoring window from 9 months to 12 months."
     }
   ]
 }

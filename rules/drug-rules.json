@@ -1,7 +1,7 @@
 {
-  "lastUpdated": "2026-06-04",
+  "lastUpdated": "2026-06-13",
   "schemaVersion": 2,
-  "specVersion": "Sentinel drug rules - June 2026 review",
+  "specVersion": "Sentinel drug rules - June 2026 review (Keeper run 2026-06-13)",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation.",
   "rules": [
     {
@@ -154,10 +154,11 @@
       "tests": [
         { "name": "TFT", "match": ["tft", "thyroid function"], "snomed": ["166842003"], "intervalDays": 180, "dueSoonDays": 21 },
         { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 180, "dueSoonDays": 21 },
-        { "name": "CXR", "match": ["chest x-ray", "cxr", "chest xray"], "intervalDays": 365, "dueSoonDays": 30 }
+        { "name": "CXR", "match": ["chest x-ray", "cxr", "chest xray"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "ECG", "match": ["ecg", "electrocardiogram", "electrocardiograph", "12 lead ecg", "resting ecg"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
-      "source": "BNF / MHRA Drug Safety Update",
-      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness.",
+      "source": "BNF / MHRA Drug Safety Update / SPC (amiodarone; cordarone) — ECG annual monitoring added per BNF amiodarone monitoring requirements",
+      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness. Annual ECG to monitor QTc, detect amiodarone-induced sinus bradycardia or heart block.",
       "sharedCare": false
     },
     {
@@ -236,7 +237,7 @@
       "id": "glp1-receptor-agonist",
       "drugClass": "GLP-1 receptor agonist",
       "drug": {
-        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "zepbound", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
+        "match": ["semaglutide", "ozempic", "wegovy", "rybelsus", "tirzepatide", "mounjaro", "dulaglutide", "trulicity", "liraglutide", "victoza", "saxenda", "xultophy", "lixisenatide", "lyxumia", "exenatide", "byetta", "bydureon"]
       },
       "phase": "maintenance",
       "tests": [
@@ -489,6 +490,26 @@
           "ferrous sulfate", "ferrous fumarate", "ferrous gluconate"
         ]
       }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "voclosporin",
+      "drugClass": "Calcineurin inhibitor (selective)",
+      "drug": {
+        "match": ["voclosporin", "lupkynis"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "FBC", "match": ["fbc", "full blood count"], "snomed": ["26604007"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "BP", "match": ["blood pressure", "bp"], "intervalDays": 90, "dueSoonDays": 14 },
+        { "name": "Lipids", "match": ["lipids", "cholesterol", "lipid profile"], "intervalDays": 180, "dueSoonDays": 21 }
+      ],
+      "source": "NICE TA882 (voclosporin, May 2023) / SPC (Lupkynis, Otsuka) — for active lupus nephritis in combination with MMF and corticosteroids",
+      "notes": "Shared care from specialist initiation. Renal function monitoring is critical — voclosporin is nephrotoxic; dose-reduce or stop if eGFR falls >20% from baseline. Monitor BP (hypertension common). Lipids and FBC every 6 months during maintenance. Avoid grapefruit juice and potent CYP3A4 inhibitors. Lupkynis is the UK brand name.",
+      "sharedCare": true
     }
   ]
 }

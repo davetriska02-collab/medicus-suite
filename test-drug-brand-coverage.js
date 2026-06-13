@@ -139,7 +139,8 @@ const EXPECTED = {
     'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg'
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
-  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg']
+  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
+  'voclosporin': ['Voclosporin 9.9mg capsules', 'Lupkynis 9.9mg capsules']
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {

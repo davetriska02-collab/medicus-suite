@@ -77,5 +77,29 @@ for (const p of doc.pathways || []) {
   }
 }
 
+// ── Keeper 2026-06-13: targeted flag checks ───────────────────────────────
+console.log('\n--- Keeper 2026-06-13: targeted flag assertions ---');
+{
+  // rf-under3m must escalate to 999 (NICE NG143 RED feature — changed from duty, 2026-06-13)
+  const feverishPathway = (doc.pathways || []).find(p => p.id === 'feverish-child');
+  check(!!feverishPathway, 'feverish-child pathway exists');
+  if (feverishPathway) {
+    const rf = (feverishPathway.redFlags || []).find(r => r.id === 'rf-under3m');
+    check(!!rf, 'feverish-child has rf-under3m red flag');
+    check(rf && rf.escalate === '999', 'rf-under3m escalates to 999 (NICE NG143 RED feature)');
+  }
+}
+{
+  // rf-vertebral-fracture must exist in backpain pathway (added 2026-06-13)
+  const backpainPathway = (doc.pathways || []).find(p => p.id === 'backpain');
+  check(!!backpainPathway, 'backpain pathway exists');
+  if (backpainPathway) {
+    const rf = (backpainPathway.redFlags || []).find(r => r.id === 'rf-vertebral-fracture');
+    check(!!rf, 'backpain pathway has rf-vertebral-fracture red flag (added 2026-06-13)');
+    check(rf && typeof rf.ask === 'string' && rf.ask.length > 10, 'rf-vertebral-fracture has ask text');
+    check(rf && (rf.escalate === '999' || rf.escalate === 'duty'), 'rf-vertebral-fracture has valid escalate');
+  }
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

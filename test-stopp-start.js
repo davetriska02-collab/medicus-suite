@@ -420,6 +420,42 @@ console.log('\n--- Flag structure ---');
   assert(f.source.includes('STOPP/START v3'), 'source cites STOPP/START v3');
 }
 
+// ── Keeper 2026-06-13: torasemide, extended NSAIDs, SU brands ───────────────
+console.log('\n--- Keeper 2026-06-13: torasemide in STOPP 2 ---');
+{
+  // torasemide is now in LOOP_DIURETIC_TERMS — should trigger stopp_nsaid_loop with ibuprofen
+  const flags = computeStoppStart({ drugs: ['ibuprofen 400mg', 'torasemide 5mg'], problems: [], ageYears: 70, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: ibuprofen + torasemide');
+}
+
+console.log('\n--- Keeper 2026-06-13: extended NSAIDs in STOPP 2 ---');
+{
+  const flags = computeStoppStart({ drugs: ['piroxicam 20mg', 'furosemide 40mg'], problems: [], ageYears: 70, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: piroxicam + furosemide');
+}
+{
+  const flags = computeStoppStart({ drugs: ['mefenamic acid 250mg', 'furosemide 40mg'], problems: [], ageYears: 70, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: mefenamic acid + furosemide');
+}
+{
+  const flags = computeStoppStart({ drugs: ['indometacin 25mg', 'furosemide 40mg'], problems: [], ageYears: 70, egfr: 60 });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: indometacin (UK spelling) + furosemide');
+}
+
+console.log('\n--- Keeper 2026-06-13: SU brands (Amaryl, Daonil) ---');
+{
+  const flags = computeStoppStart({ drugs: ['Amaryl 2mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 fires: Amaryl (glimepiride brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Daonil 5mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 fires: Daonil (glibenclamide brand) + age 70');
+}
+{
+  const flags = computeStoppStart({ drugs: ['Semi-Daonil 2.5mg tablets'], problems: [], ageYears: 70, egfr: null });
+  assert(!!find(flags, 'stopp_long_su_elderly'), 'STOPP 10 fires: Semi-Daonil (glibenclamide brand) + age 70');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

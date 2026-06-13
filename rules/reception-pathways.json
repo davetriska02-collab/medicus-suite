@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-06-10",
-  "specVersion": "Reception capture pathways v1.1 (DRAFT — requires CSO sign-off before live use; escalation re-tiering pass 2026-06-10)",
-  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG51 (sepsis) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
+  "lastUpdated": "2026-06-13",
+  "specVersion": "Reception capture pathways v1.2 (2026-06-13 Keeper: feverish child <3m escalated to 999 per NG143; vertebral fracture red flag added to backpain; NG51 updated to NG253; NG12 Jan 2026 citation)",
+  "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253 (sepsis in adults 16+, published November 2025, replaces NG51 adults portion) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level; still DRAFT pending CSO sign-off. This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
     "duty": "Alert the duty clinician now — this needs same-day clinical review. Do not book as routine."
@@ -68,7 +68,7 @@
       "id": "cough",
       "title": "Cough / chest symptoms (adult)",
       "appliesTo": "Adults",
-      "sources": ["NICE CKS: Cough — acute with chest signs", "NICE NG12 (urgent referral symptoms captured as history only)", "NICE CKS: Pulmonary embolism (PE red flags, lay-phrased)"],
+      "sources": ["NICE CKS: Cough — acute with chest signs", "NICE NG12 (urgent referral symptoms captured as history only; last updated January 2026)", "NICE CKS: Pulmonary embolism (PE red flags, lay-phrased)"],
       "redFlags": [
         { "id": "rf-breathless", "ask": "Are they so breathless they can't finish a sentence, or breathless at rest?", "escalate": "999" },
         { "id": "rf-bluelips", "ask": "Any blue or grey lips or face?", "escalate": "999" },
@@ -149,7 +149,8 @@
         { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "duty" },
         { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
         { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
-        { "id": "rf-cancer", "ask": "Any history of cancer, with this being a new back pain?", "escalate": "duty" }
+        { "id": "rf-cancer", "ask": "Any history of cancer, with this being a new back pain?", "escalate": "duty" },
+        { "id": "rf-vertebral-fracture", "ask": "Known osteoporosis, or taking regular steroid tablets (prednisolone or similar) for a long time, AND new back pain — even without a significant injury?", "escalate": "duty" }
       ],
       "questions": [
         { "id": "duration", "ask": "How long has the back pain been going on?", "type": "text", "label": "Duration" },
@@ -165,9 +166,9 @@
       "title": "Feverish child",
       "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
       "sources": ["NICE NG143: Fever in under 5s (traffic-light features, lay-phrased)", "NICE CKS: Feverish children"],
-      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO should confirm whether the local escalation route for this age group is 999 or urgent duty.",
+      "notes": "NICE NG143 traffic light: fever in a child under 3 months is a RED (high-risk) feature requiring immediate hospital assessment. Escalation confirmed as 999 per NG143 — do not put on a routine callback queue.",
       "redFlags": [
-        { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
+        { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "999" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },
         { "id": "rf-floppy", "ask": "Floppy, very hard to wake, or an unusual high-pitched or weak cry?", "escalate": "999" },
         { "id": "rf-breathing", "ask": "Breathing very fast, grunting, or sucking in between the ribs?", "escalate": "999" },

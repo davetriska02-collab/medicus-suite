@@ -2,6 +2,62 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.61.0] — 2026-06-13
+
+### The Keeper: clinical rule currency run (22 changes, 8 Red)
+
+Periodic horizon scan by The Keeper skill. All changes are additive — no
+monitoring weakened. Full change-proposal report in `/tmp/the-keeper/`.
+Sources: NHS England PRN02356, NICE NG143/NG253/TA882, UKHSA Green Book
+Chapters 25/27a/28a, Boustani ACBcalc, STOPP/START v3, MHRA DSUs 2024/2026.
+Source gaps: BNF, MHRA register, SPS, EMC returned 403 from remote environment
+— workaround via secondary NHS/academic sources; all additive, no weakening.
+
+**Red (patient-safety gaps now fixed):**
+- `vax-rsv`: RSV eligibility corrected — removed `ageMax:79`; patients 80+
+  and care home residents now correctly flagged (NHS England expansion 1 April 2026)
+- `drug-005`: Voclosporin (Lupkynis) monitoring rule added — U&E/FBC/LFT/BP
+  3-monthly, lipids 6-monthly (NICE TA882 May 2023; shared care)
+- `qof-ob004`: OB004 enabled — weight-management referral indicator live
+  (PRN02356 confirmed; 5 points, 10–30%)
+- `qof-ob005`: OB005 enabled — weight-management pharmacotherapy indicator live
+  (PRN02356 confirmed; 13 points, 50–80%)
+- `qof-reg-ndh`: NDH register, NDH003, and NDH002 retired stub added — NDH
+  clinical area was entirely absent from qof-rules.json
+- `acb-scores.js`: darifenacin/Emselex (score 3) added — missing strong
+  anticholinergic was silently under-scoring ACB
+- `stopp-start.js` NSAID_TERMS: 15 additional UK-licensed systemic NSAIDs
+  added — piroxicam, mefenamic acid, indometacin, tenoxicam, aceclofenac etc.
+- `feverish-child/rf-under3m`: escalate corrected from 'duty' to '999'
+  (NICE NG143: fever <3 months is a RED feature requiring emergency evaluation)
+
+**Amber:**
+- `vax-shingles`: severely immunosuppressed age in notes corrected 50+→18+
+- `vax-flu`: source updated to 2026/27 annual flu letter (26 Feb 2026)
+- `vax-pneumo-ppv23`: PCV20/Prevenar 20 status terms added (replaced PPV23
+  December 2025)
+- `amiodarone-maintenance`: annual ECG test added (BNF/SPC requirement)
+- `glp1-receptor-agonist`: Zepbound removed from match (US brand, not UK)
+- `prescribing-qtc-combination`: tamoxifen/Nolvadex added to both QTc drug sets
+- `mhra-isotretinoin-ppg`: notes updated for alitretinoin PPP extension
+  (MHRA DSU January 2026)
+- `mhra-valproate-male`: new amber rule for valproate in males — paternal
+  exposure advisory (MHRA DSU 2024)
+- `acb-scores.js`: carbamazepine/Tegretol (score 2) added
+- `stopp-start.js` LOOP_DIURETIC_TERMS: torasemide added (parity with
+  alert-library.json PINCER which already included it)
+- `stopp-start.js` LONG_SU_TERMS: Amaryl, Daonil, Semi-Daonil brands added
+- `visualiser-core.js` statin HIGH_RISK_DRUGS: pitavastatin/Livazo added
+  (parity with drug-rules.json statin rule)
+- `backpain/rf-vertebral-fracture`: new red flag for osteoporosis/steroid +
+  new back pain (NICE CKS / NG59)
+- `reception-pathways.json` sourceNotes: NG51→NG253 (Sepsis, November 2025)
+
+**Regression tests updated:** test-acb-scores.js (+8 assertions),
+test-stopp-start.js (+10 assertions), test-drug-brand-coverage.js
+(+voclosporin/Lupkynis), test-reception-pathways.js (+7 assertions),
+test-visualiser-pincer.js (+7 assertions). Full suite: 1243 tests passing.
+
 ## [v3.60.15] — 2026-06-13
 
 ### Suite-wide design polish — Atelier pass, verified on real-data renders

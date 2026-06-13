@@ -129,6 +129,40 @@ console.log('\n--- UK brand names ---');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
 }
 
+// ── Score 3: darifenacin and Emselex (Keeper 2026-06-13) ─────────────────
+console.log('\n--- darifenacin / emselex (score 3) ---');
+{
+  const r = computeACB(['darifenacin 7.5mg tablets']);
+  assert(r.perDrug.length === 1, 'darifenacin yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'darifenacin scores 3');
+}
+{
+  const r = computeACB(['Emselex 15mg modified-release tablets']);
+  assert(r.perDrug.length === 1, 'Emselex (darifenacin brand) yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'Emselex scores 3');
+  assert(r.perDrug[0].matchedTerm === 'emselex', 'Emselex matchedTerm is "emselex"');
+}
+
+// ── Score 2: carbamazepine and Tegretol (Keeper 2026-06-13) ──────────────
+console.log('\n--- carbamazepine / tegretol (score 2) ---');
+{
+  const r = computeACB(['carbamazepine 200mg tablets']);
+  assert(r.perDrug.length === 1, 'carbamazepine yields 1 entry');
+  assert(r.perDrug[0].score === 2, 'carbamazepine scores 2');
+}
+{
+  const r = computeACB(['Tegretol 200mg tablets']);
+  assert(r.perDrug.length === 1, 'Tegretol (carbamazepine brand) yields 1 entry');
+  assert(r.perDrug[0].score === 2, 'Tegretol scores 2');
+  assert(r.perDrug[0].matchedTerm === 'tegretol', 'Tegretol matchedTerm is "tegretol"');
+}
+{
+  // Mixed: amitriptyline(3) + carbamazepine(2) = 5
+  const r = computeACB(['amitriptyline', 'carbamazepine']);
+  assert(r.total === 5, 'amitriptyline(3) + carbamazepine(2) = 5');
+  assert(r.alert === true, 'total 5 → alert=true');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

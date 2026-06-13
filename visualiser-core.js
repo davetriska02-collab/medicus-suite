@@ -484,7 +484,7 @@ const HIGH_RISK_DRUGS = [
   {
     id: 'statin',
     label: 'Statin',
-    terms: ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'],
+    terms: ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin', 'livazo'],
     requires: ['lft', 'liver function', 'cholesterol'],
     interval: 365,
   },

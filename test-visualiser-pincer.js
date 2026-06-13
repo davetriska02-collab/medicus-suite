@@ -493,6 +493,12 @@ console.log('\n── Drug-table completeness locks ──');
   ]) {
     assert(benzo.includes(t), `benzo_z terms include "${t}"`);
   }
+
+  // Keeper 2026-06-13: statin entry now includes pitavastatin and Livazo
+  const statins = termsOf('statin');
+  for (const t of ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin', 'livazo']) {
+    assert(statins.includes(t), `statin terms include "${t}"`);
+  }
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────
