@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.61.2] — 2026-06-13
+
+### Guided tour — patient-data steps now shown, not skipped
+
+- **The four Sentinel patient-data steps (brief, actions, verify, unmatched
+  meds) no longer silently skip.** When a tour runs with no actionable record
+  open, their anchor elements (`.sent-brief-card`, `#sentVerifyBannerBtn`,
+  `.sent-unmatched-section`) are absent, so the engine skipped them — the tour
+  jumped straight from "Waiting room" (7) to "Command palette" (12). Each step
+  now sets `centerFallback: true`, so it shows as a centred card describing the
+  feature instead of vanishing. This matches the existing alert-strips step.
+- **Fixed a syntax error that broke `tour-steps.js` entirely.** The
+  unmatched-meds step had smart-quote characters as its string delimiters,
+  which is invalid JavaScript — the whole tour module failed to import.
+  Restored straight-quote delimiters.
+
 ## [v3.61.1] — 2026-06-13
 
 ### Guided tour bug fixes
