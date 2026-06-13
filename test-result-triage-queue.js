@@ -285,6 +285,57 @@ if (rqcMatch) {
     /scheduleQueueMonitoring\(\)/.test(rqcMatch[0]),
     'refreshQueueChips still re-runs scheduleQueueMonitoring()'
   );
+  // v3.72.0 — observer reuse: refreshQueueChips must NOT null the container then call
+  // setupQueueObserver() (that forced a needless full rebuild on every grid mutation);
+  // it re-arms the SAME observer instead.
+  check(
+    !/queueObservedContainer = null;\s*\n\s*setupQueueObserver\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips no longer nulls the container then rebuilds the observer (reuses it)'
+  );
+  // v3.72.0 — grid-scoped sweeps: the wipe/re-decorate sweeps must run over queueScope(),
+  // not the whole document (so the per-frame cost scales with the grid, not the page).
+  check(
+    !/document\.querySelectorAll\('\.ch-queue-chips/.test(rqcMatch[0]),
+    'refreshQueueChips wipe sweep is grid-scoped (queueScope), not document-wide'
+  );
+}
+
+// ============================================================
+// Layer 3b — v3.72.0 performance plan: visible-first ordering, concurrency,
+// budget-aware backoff, memoised chip HTML, on-screen re-injection.
+// ============================================================
+console.log('Layer 3b: v3.72.0 result-triage performance wiring');
+
+// (a) scheduleQueueResultTriage: on-screen partition first, concurrency 5, soft budget.
+check(/onScreen/.test(src), 'scheduleQueueResultTriage builds an on-screen partition (visible-first ordering)');
+check(/CONCURRENCY = 5/.test(src), 'result-triage concurrency is 5');
+check(/_RESULT_FETCH_SOFT/.test(src), '_RESULT_FETCH_SOFT (budget-aware backoff threshold) is present');
+
+// (b) Memoised chip HTML + cache invalidation on config change.
+check(/_chipHtmlMemo/.test(src), '_chipHtmlMemo (rendered chip HTML memo) is present');
+const watchForMemo = src.match(/watchConfig\(\(\) => \{[\s\S]*?\n {4}\}\);/);
+check(
+  !!watchForMemo && /_chipHtmlMemo\.clear\(\)/.test(watchForMemo[0]),
+  'config change clears _chipHtmlMemo (edited labels/kinds re-render, not stale)'
+);
+
+// (c) reinjectCachedResultChips iterates on-screen rows, still keyed via _durableRowMap,
+//     still TTL-gated.
+const ricMatch = src.match(/const reinjectCachedResultChips = \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!ricMatch, 'reinjectCachedResultChips function found');
+if (ricMatch) {
+  check(
+    /\.ag-row\[row-index\]/.test(ricMatch[0]),
+    'reinjectCachedResultChips iterates on-screen .ag-row[row-index] rows'
+  );
+  check(
+    /_durableRowMap\.get\(/.test(ricMatch[0]),
+    'reinjectCachedResultChips still keyed via _durableRowMap.get(rowIndex) → taskUuid'
+  );
+  check(
+    /_RESULT_CACHE_TTL/.test(ricMatch[0]),
+    'reinjectCachedResultChips still honours _RESULT_CACHE_TTL'
+  );
 }
 
 // A config change must invalidate the cached per-row result severities so an
