@@ -1,7 +1,9 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
 /* Medicus Suite — Activity Report module styles */
 
-.act-module { font-family: var(--sans); }
+.act-module {
+  font-family: var(--sans);
+}
 
 /* ── Controls ─────────────────────────────────────────────────────────────── */
 
@@ -9,9 +11,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 0 14px 0;
+  padding: 0 0 16px 0;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .act-date-row {
@@ -24,7 +26,7 @@
 .act-date-label {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   color: var(--text-4);
   text-transform: uppercase;
 }
@@ -40,10 +42,20 @@
   font-variant-numeric: tabular-nums;
   flex: 1 1 auto;
   min-width: 130px;
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
-.act-date-input:focus { border-color: var(--accent); background: var(--bg-elev); }
-.act-date-input::placeholder { color: var(--text-4); }
+.act-date-input:hover {
+  border-color: var(--border-hi);
+}
+.act-date-input:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.act-date-input::placeholder {
+  color: var(--text-4);
+}
 
 .act-preset-row {
   display: flex;
@@ -52,7 +64,7 @@
   flex-wrap: wrap;
 }
 
-.act-preset, .act-refresh {
+.act-preset {
   background: var(--bg-mid);
   border: 1px solid var(--border);
   color: var(--text-3);
@@ -61,24 +73,65 @@
   font-size: 10px;
   border-radius: var(--r-md);
   cursor: pointer;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.act-preset:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-hi); }
-.act-preset:active { background: var(--bg-hover); }
-.act-preset:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.act-refresh {
+.act-preset:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.act-preset:active {
+  background: var(--bg-hover);
+}
+.act-preset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.act-preset.active {
   background: var(--accent-dim);
   border-color: var(--accent-line);
-  color: var(--accent);
+  color: var(--text-2);
 }
-.act-refresh:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--text-2); }
-.act-refresh:active { opacity: 0.8; }
-.act-refresh:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.act-spacer { flex: 1; }
+/* Decision I: ghost-button recipe — transparent/bg-mid, border-hi, text-3;
+   hover swaps to accent wash; removed accent-triad default colouring. */
+.act-refresh {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  color: var(--text-3);
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.act-refresh:hover {
+  border-color: var(--accent);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+.act-refresh:active {
+  opacity: 0.8;
+}
+.act-refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.act-spacer {
+  flex: 1;
+}
 
 .act-ts {
   font-family: var(--mono);
@@ -92,10 +145,10 @@
 .act-totals-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-1);
-  padding: 14px 16px;
-  margin-bottom: 14px;
+  padding: 16px 16px;
+  margin-bottom: 16px;
 }
 
 .act-totals-head {
@@ -119,12 +172,13 @@
   color: var(--text-3);
 }
 
+/* Decision O: demote hero number from 32px → 26px */
 .act-totals-number {
   font-family: var(--mono);
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 600;
   color: var(--text-1);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -144,19 +198,24 @@
   border: 1px solid var(--border);
 }
 
+/* Decision K: use token instead of raw 2px */
 .act-metric-swatch {
   width: 8px;
   height: 22px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   flex-shrink: 0;
 }
 
-.act-metric-info { flex: 1; min-width: 0; }
+.act-metric-info {
+  flex: 1;
+  min-width: 0;
+}
 
+/* Decision L: promote label from text-4 (muted) to text-3 (tertiary) */
 .act-metric-name {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--text-4);
+  color: var(--text-3);
   letter-spacing: 0.03em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -176,9 +235,9 @@
 .act-chart-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-1);
-  padding: 14px 16px;
+  padding: 16px 16px;
 }
 
 .act-chart-head {
@@ -197,26 +256,41 @@
   color: var(--text-4);
 }
 
+/* Decision F: Input recipe styling for native <select> */
 .act-mode-select {
   background: var(--bg-mid);
   border: 1px solid var(--border);
-  color: var(--text-1);
-  padding: 3px 6px;
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  padding: 3px 28px 3px 6px;
   font-family: var(--mono);
   font-size: 10px;
-  border-radius: var(--r-sm);
   cursor: pointer;
-  transition: border-color var(--fast) var(--ease);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition:
+    border-color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
 }
-.act-mode-select:focus { border-color: var(--accent); }
+.act-mode-select:hover {
+  border-color: var(--border-hi);
+}
+.act-mode-select:focus-visible {
+  border-color: var(--accent);
+  background-color: var(--bg-elev);
+}
 
+/* Decision N: solid border (no dashed in canon); spacing normalized to 16px grid */
 .act-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 12px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .act-legend-item {
@@ -225,10 +299,11 @@
   gap: 5px;
 }
 
+/* Decision K: use token instead of raw 2px */
 .act-legend-swatch {
   width: 10px;
   height: 10px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
 }
 
 .act-legend-name {
@@ -239,10 +314,11 @@
 
 /* ── Bars ─────────────────────────────────────────────────────────────────── */
 
+/* Decision P: gap lifted 6px → 7px */
 .act-bars {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .act-bar-row {
@@ -261,19 +337,23 @@
   white-space: nowrap;
 }
 
+/* Decision P: height lifted 18px → 20px */
 .act-bar-track {
   display: flex;
-  height: 18px;
+  height: 20px;
   background: var(--bg-mid);
   border-radius: var(--r-sm);
   overflow: hidden;
 }
 
+/* Decision N: opacity transition uses --med (layout-adjacent), not --fast */
 .act-bar-seg {
   height: 100%;
-  transition: opacity var(--fast) var(--ease);
+  transition: opacity var(--med) var(--ease);
 }
-.act-bar-seg:hover { opacity: 0.8; }
+.act-bar-seg:hover {
+  opacity: 0.8;
+}
 
 .act-bar-total {
   font-family: var(--mono);
@@ -286,10 +366,11 @@
 
 /* ── States ───────────────────────────────────────────────────────────────── */
 
+/* Decision E: neutral/informational colouring — not clinical-red */
 .act-error {
-  background: var(--red-dim);
-  border: 1px solid var(--red-line);
-  color: var(--red);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-2);
   padding: 10px 12px;
   border-radius: var(--r-md);
   font-family: var(--mono);
@@ -297,15 +378,33 @@
   line-height: 1.5;
 }
 
+/* Decision D: designed empty state — flex column, centered, no italic */
 .act-empty {
-  padding: 24px 12px;
-  text-align: center;
-  color: var(--text-4);
-  font-size: 12px;
-  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 12px;
+  color: var(--text-5);
 }
 
-.act-skeleton { padding: 8px 0; }
+.act-empty svg {
+  color: var(--text-5);
+  flex-shrink: 0;
+}
+
+.act-empty span {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-4);
+}
+
+.act-skeleton {
+  padding: 8px 0;
+}
 .act-skel-line {
   height: 14px;
   background: linear-gradient(90deg, var(--bg-mid), var(--bg-hover), var(--bg-mid));
@@ -314,22 +413,44 @@
   border-radius: var(--r-sm);
   margin-bottom: 8px;
 }
-.act-skel-w60 { width: 60%; }
-.act-skel-w70 { width: 70%; }
-.act-skel-w80 { width: 80%; }
-.act-skel-w50 { width: 50%; }
+.act-skel-w60 {
+  width: 60%;
+}
+.act-skel-w70 {
+  width: 70%;
+}
+.act-skel-w80 {
+  width: 80%;
+}
+.act-skel-w50 {
+  width: 50%;
+}
 @keyframes act-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .act-skel-line { animation: none; background: var(--bg-mid); }
+  .act-skel-line {
+    animation: none;
+    background: var(--bg-mid);
+  }
 }
 
 /* ── Narrow viewport tweaks ───────────────────────────────────────────────── */
 
 @media (max-width: 380px) {
-  .act-bar-row { grid-template-columns: 90px 1fr 40px; }
-  .act-totals-metrics { grid-template-columns: 1fr; }
-  .act-totals-number { font-size: 26px; }
+  .act-bar-row {
+    grid-template-columns: 90px 1fr 40px;
+  }
+  .act-totals-metrics {
+    grid-template-columns: 1fr;
+  }
+  /* Decision O: narrow override 26px → 22px */
+  .act-totals-number {
+    font-size: 22px;
+  }
 }
