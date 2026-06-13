@@ -50,11 +50,19 @@ colorblind mode leaves it alone. Dark `--red-dim`/`--amber-dim` were raised to
 
 ### Non-clinical categorical data-viz ramp
 
-Used exclusively by the Activity chart to colour workload metric series.
+The suite-wide qualitative chart palette — used by the Activity chart and the
+Submissions Tracker charts to colour workload/category series. This is the ONE
+data-series ramp; new charts consume it rather than declaring their own.
 Intentionally **outside the status triads** — workload counts (consultations,
 prescription tasks, etc.) are operational data, never clinical alerts. Spending
 `--amber` or `--red` on a bar-chart segment dilutes the alert palette's signal
 strength. If you need a chart for clinical data, define a new scope.
+
+Consume via inline `style="fill:var(--cat-N)"` / `style="stroke:…"` /
+`background:var(--cat-N)` — CSS variables resolve there (and adapt to the
+active theme), whereas SVG `fill=`/`stroke=` presentation attributes do NOT.
+`--cat-5` is the recessive slate member: use it for the de-emphasised
+"everything else"/admin series, not a headline category.
 
 | Token     | Light     | Dark      |
 | --------- | --------- | --------- |

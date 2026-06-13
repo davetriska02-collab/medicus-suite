@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.13] — 2026-06-13
+
+### Suite — unify the chart palette onto one canonical ramp
+
+The Activity and Submissions design crits independently solved the same sin
+(spending the alert palette on benign categories) and each introduced its own
+data-series colours. This collapses them to a single source of truth:
+
+- The Submissions Tracker charts/tiles/legends now consume the canonical
+  `--cat-1`…`--cat-6` ramp (defined once in `panel.css`, documented in
+  TOKENS.md) instead of a module-local hex palette — Medical→`--cat-1`,
+  Admin→`--cat-2`, Invest→`--cat-6`, Routine Rx→`--cat-3`, Non-routine
+  Rx→`--cat-4`. One ramp now serves every chart in the suite.
+- The Submissions SVG series colours moved from `fill=`/`stroke=` presentation
+  attributes (which cannot resolve CSS variables) to inline `style="fill:…"`,
+  matching the axis/grid pattern already in that module. Side benefit: the
+  Submissions charts are now **theme-aware**, picking up the tuned dark
+  `--cat-*` values on `#0b1424` instead of reusing one fixed palette.
+- TOKENS.md documents `--cat-*` as the suite-wide qualitative chart ramp and
+  records the inline-`style` consumption rule for SVG.
+
+No change to alert semantics: `--red`/`--amber` remain reserved for clinical
+status. No visual change to the resting/alert RAG states.
+
 ## [v3.60.12] — 2026-06-13
 
 ### Activity — design-crit pass (three-critic review via /design-crit)

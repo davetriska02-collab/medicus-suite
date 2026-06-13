@@ -17,17 +17,21 @@ function _isValidPracticeCode(code) {
 }
 
 // Categorical data-series palette — NOT clinical status colours.
-// Deliberately drawn from non-status hues (indigo / blue / teal / pink / violet)
-// so the resting charts never echo the RAG amber/red, which would dilute alert
+// Drawn from the suite's canonical non-clinical data-viz ramp (--cat-1..--cat-6,
+// defined once in panel.css :root + dark, documented in TOKENS.md) so the
+// resting charts never echo the RAG amber/red — which would dilute alert
 // salience (a clinician misreads a red category as an alarm). The RAG triads
-// (--red / --amber) stay reserved exclusively for tripped thresholds. No canon
-// token exists for a qualitative series palette; keep these here, in one place.
+// (--red / --amber) stay reserved exclusively for tripped thresholds. These
+// are consumed via inline `style="fill:…"`/`background:…`, where the CSS
+// variables resolve (and adapt to the active theme) — see AXIS_LABEL below.
+// The slate ramp member (--cat-5) is deliberately skipped: it is the recessive
+// hue and reads as muted/disabled here.
 const CHART_COLORS = {
-  medical: '#6366f1', // indigo (was alert-red)
-  admin: '#3b82f6', // blue
-  investigation: '#14b8a6', // teal
-  rxRoutine: '#db2777', // pink (was status-green)
-  rxNonRoutine: '#a855f7', // violet
+  medical: 'var(--cat-1)', // blue (was alert-red)
+  admin: 'var(--cat-2)', // teal
+  investigation: 'var(--cat-6)', // cyan
+  rxRoutine: 'var(--cat-3)', // magenta (was status-green)
+  rxNonRoutine: 'var(--cat-4)', // violet
 };
 
 const TASK_TYPES = [
@@ -767,7 +771,7 @@ const MWChart = {
     let paths = '';
     series.forEach((s) => {
       const pts = s.values.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-      paths += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="${s.dashed ? 1.5 : 2}" stroke-dasharray="${s.dashed ? '4,3' : ''}" opacity="0.9"/>`;
+      paths += `<polyline points="${pts}" fill="none" style="stroke:${s.color}" stroke-width="${s.dashed ? 1.5 : 2}" stroke-dasharray="${s.dashed ? '4,3' : ''}" opacity="0.9"/>`;
     });
 
     let xTicks = '';
@@ -812,10 +816,10 @@ const MWChart = {
     bars.forEach((b, i) => {
       const gx = pad.l + i * groupW + (groupW - (hasCompare ? barW * 2 + gap : barW)) / 2;
       const h1 = (b.value / maxVal) * cH;
-      rects += `<rect x="${gx.toFixed(1)}" y="${(pad.t + cH - h1).toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" fill="${b.color}" opacity="0.9" rx="2"/>`;
+      rects += `<rect x="${gx.toFixed(1)}" y="${(pad.t + cH - h1).toFixed(1)}" width="${barW.toFixed(1)}" height="${h1.toFixed(1)}" style="fill:${b.color}" opacity="0.9" rx="2"/>`;
       if (hasCompare && b.compareValue != null) {
         const h2 = (b.compareValue / maxVal) * cH;
-        rects += `<rect x="${(gx + barW + gap).toFixed(1)}" y="${(pad.t + cH - h2).toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" fill="${b.color}" opacity="0.4" rx="2"/>`;
+        rects += `<rect x="${(gx + barW + gap).toFixed(1)}" y="${(pad.t + cH - h2).toFixed(1)}" width="${barW.toFixed(1)}" height="${h2.toFixed(1)}" style="fill:${b.color}" opacity="0.4" rx="2"/>`;
       }
       rects += `<text x="${(gx + (hasCompare ? barW + gap / 2 : barW / 2)).toFixed(1)}" y="${H - 4}" text-anchor="middle" ${AXIS_LABEL}>${String(b.label).toUpperCase()}</text>`;
     });
@@ -851,7 +855,7 @@ const MWChart = {
         const h = (seg.value / maxVal) * cH;
         yBase -= h;
         if (h > 0)
-          rects += `<rect x="${x.toFixed(1)}" y="${yBase.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seg.color}" opacity="0.9"/>`;
+          rects += `<rect x="${x.toFixed(1)}" y="${yBase.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${seg.color}" opacity="0.9"/>`;
       });
       if (i % labelStep === 0) {
         rects += `<text x="${(x + barW / 2).toFixed(1)}" y="${H - 4}" text-anchor="middle" ${AXIS_LABEL}>${xLabels[i]}</text>`;
