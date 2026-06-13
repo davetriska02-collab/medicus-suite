@@ -18,18 +18,33 @@
 //     }]
 //   }
 
-(function(global) {
+(function (global) {
   'use strict';
 
   // Metric definitions in display order. The chart colours each segment in
   // this sequence. Short labels are used in the legend and column headers.
   const METRICS = [
-    { key: 'consultations',                      short: 'Consults',     long: 'Consultations',                       colour: '#3b82f6' }, // blue
-    { key: 'routinePrescriptionRequestTasks',    short: 'Routine Rx',   long: 'Routine prescription requests',       colour: '#f59e0b' }, // amber
-    { key: 'nonRoutinePrescriptionRequestTasks', short: 'Non-routine', long: 'Non-routine prescription requests',   colour: '#ef4444' }, // red
-    { key: 'medicationReviews',                  short: 'Med reviews',  long: 'Medication reviews',                  colour: '#a78bfa' }, // purple
-    { key: 'documentTasks',                      short: 'Documents',    long: 'Document tasks',                      colour: '#94a3b8' }, // grey
-    { key: 'investigationReportTasks',           short: 'Results',      long: 'Investigation report tasks (Results)', colour: '#4ade80' }, // green
+    { key: 'consultations', short: 'Consults', long: 'Consultations', colour: 'var(--cat-1)' }, // blue
+    {
+      key: 'routinePrescriptionRequestTasks',
+      short: 'Routine Rx',
+      long: 'Routine prescription requests',
+      colour: 'var(--cat-2)',
+    }, // teal
+    {
+      key: 'nonRoutinePrescriptionRequestTasks',
+      short: 'Non-routine',
+      long: 'Non-routine prescription requests',
+      colour: 'var(--cat-3)',
+    }, // purple-magenta
+    { key: 'medicationReviews', short: 'Med reviews', long: 'Medication reviews', colour: 'var(--cat-4)' }, // violet
+    { key: 'documentTasks', short: 'Documents', long: 'Document tasks', colour: 'var(--cat-5)' }, // slate
+    {
+      key: 'investigationReportTasks',
+      short: 'Results',
+      long: 'Investigation report tasks (Results)',
+      colour: 'var(--cat-6)',
+    }, // cyan
   ];
 
   // F8: Practice code format guard — same 4–8 hex-char pattern as practice-code.js.
@@ -37,7 +52,9 @@
   // this local copy exists because activity-api.js is an IIFE that may run before
   // PracticeCode is available (e.g. during unit tests). Keep in sync with practice-code.js.
   const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
-  function _isValidPracticeCode(code) { return typeof code === 'string' && _SITE_CODE_RE.test(code); }
+  function _isValidPracticeCode(code) {
+    return typeof code === 'string' && _SITE_CODE_RE.test(code);
+  }
 
   function buildApiUrl(practiceCode, startDate, endDate) {
     const base = `https://${practiceCode}.api.england.medicus.health/reporting/data/activity/report`;
@@ -76,12 +93,14 @@
     const rows = Array.isArray(rowData) ? rowData : [];
 
     const totals = { all: 0 };
-    METRICS.forEach(m => { totals[m.key] = 0; });
+    METRICS.forEach((m) => {
+      totals[m.key] = 0;
+    });
 
-    const users = rows.map(row => {
+    const users = rows.map((row) => {
       const metrics = {};
       let userTotal = 0;
-      METRICS.forEach(m => {
+      METRICS.forEach((m) => {
         const v = Number(row[m.key]) || 0;
         metrics[m.key] = v;
         totals[m.key] += v;
@@ -122,7 +141,7 @@
         end.setDate(end.getDate() - 1);
         break;
       case 'last7':
-        start.setDate(start.getDate() - 6);  // 7 days inclusive of today
+        start.setDate(start.getDate() - 6); // 7 days inclusive of today
         break;
       case 'last30':
         start.setDate(start.getDate() - 29);
@@ -133,7 +152,7 @@
       case 'lastMonth':
         start.setMonth(start.getMonth() - 1);
         start.setDate(1);
-        end.setDate(0);  // last day of previous month
+        end.setDate(0); // last day of previous month
         break;
       default:
         return null;
