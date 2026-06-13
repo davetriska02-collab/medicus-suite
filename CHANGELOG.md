@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.71.0] — 2026-06-13
+
+### Queue result triage: tag the whole list, retry flaky fetches
+
+With persistence solved (v3.70.0), only the first few of a long list (e.g. 8 of 58)
+were getting tagged, and the occasional HIGH result (ALP etc.) surfaced intermittently.
+Two causes, both fixed:
+
+- **Pass starvation.** The fetch worker aborted on every generation change, and the SPA
+  churn bumps the generation constantly — so each pass tagged a handful of rows and
+  restarted. The worker now runs the whole row snapshot (it only stops if you leave the
+  queue); a genuinely new generation re-runs after it finishes. And `refreshQueueChips`
+  no longer kicks a fetch pass on every grid mutation — display is handled durably by
+  `reinjectCachedResultChips`, so grid churn can't restart/starve the fetch worker.
+- **Flaky HIGH results.** A failed (null) fetch was cached for the full 5-minute TTL, so
+  a one-off network error blanked that row's chip for 5 minutes. Failed fetches now get a
+  short (20s) retry window so they re-surface on a later pass.
+
+manifest 3.70.0→3.71.0.
+
 ## [v3.70.0] — 2026-06-13
 
 ### Fix: result-chip re-injection now uses a durable row map (v3.69.0 was a no-op)
