@@ -697,6 +697,59 @@ console.log('\n--- abnormalText: flag wins over normal phrase (precedence) ---')
   assert(out.level === 'none', 'calm normal phrase → level none');
 }
 
+// ── Text rules: whitespace/line-break robustness ─────────────────────────────────
+// Lab reports hard-wrap free text, so a multi-word phrase can arrive split across a
+// newline (or padded with double spaces / tabs). Matching must collapse whitespace on
+// both sides, or a normal phrase is missed (benign result wrongly flagged) and — worse —
+// an abnormalText flag phrase split across a line break silently fails to fire.
+console.log('\n--- text rules: phrase matching survives lab line-wrapping ---');
+{
+  // Real histology report: "no evidence of dysplasia or malignancy" wrapped across a line
+  // break (twice — once as "evidence\nof", once as "no\nevidence"), exactly as the lab sent it.
+  const histologyText =
+    'MICROSCOPY:\n' +
+    'A: Sections show a benign fibroepithelial polyp. There is no evidence\n' +
+    'of dysplasia or malignancy.\n' +
+    'B: This is part of an intradermal melanocytic naevus. There is no\n' +
+    'evidence of dysplasia or malignancy.\n' +
+    'Dr Javier Perez Consultant Histopathologist.';
+  const histologyResult = {
+    name: 'Histology report', value: NaN, rawValue: histologyText,
+    comparator: null, unit: null, low: null, high: null,
+    isAbove: false, isBelow: false, urgent: false, interpretation: null,
+    date: '2026-05-21', history: [], text: histologyText,
+  };
+  const histologyRule = {
+    id: 'rule_histology', enabled: true, kind: 'text',
+    label: 'Histology — review', normalLabel: 'Benign — no dysplasia/malignancy',
+    analyte: { match: ['histology', 'microscopy', 'biopsy'] },
+    normalText: ['no evidence of dysplasia or malignancy'],
+  };
+  const out = evaluateReportSeverity(makeReport([histologyResult]), { resultRules: [histologyRule] });
+  assert(out.noGrowthCount === 1, 'normalText phrase wrapped across a newline still matches → noGrowth');
+  assert(out.reviewCount === 0, 'wrapped benign histology is NOT wrongly flagged for review');
+  assert(out.level === 'none', 'wrapped benign histology → level none (calm)');
+}
+{
+  // The dangerous direction: an abnormalText flag phrase split across a line break MUST
+  // still fire — otherwise a bowel screening non-responder would be silently missed.
+  const wrapped = Object.assign({}, bowelNonResponder, {
+    rawValue: 'No response to bowel cancer\nscreening programme invitation (finding)',
+    text: 'No response to bowel cancer\nscreening programme invitation (finding)',
+  });
+  const out = evaluateReportSeverity(makeReport([wrapped]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 1, 'abnormalText flag phrase wrapped across a newline still fires');
+  assert(out.level === 'amber', 'wrapped non-responder → still amber (no false negative)');
+}
+{
+  // Padding variants — double spaces and a tab between words — also collapse and match.
+  const padded = Object.assign({}, bowelNonResponder, {
+    text: 'No response to bowel cancer  screening\tprogramme invitation',
+  });
+  const out = evaluateReportSeverity(makeReport([padded]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 1, 'double-space / tab padding between words still matches');
+}
+
 // ── Text-rule: no text rules → new counts are zero, existing fields unchanged ─
 console.log('\n--- text rules: no text rules → zero counts, existing behaviour unchanged ---');
 {
