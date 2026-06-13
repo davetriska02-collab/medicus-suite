@@ -109,6 +109,9 @@
 .rcp-link-btn:hover {
   color: var(--accent-hover);
 }
+.rcp-link-btn:active {
+  opacity: 0.7;
+}
 .rcp-link-btn:disabled,
 .rcp-link-btn[disabled] {
   opacity: 0.45;
@@ -119,57 +122,12 @@
 .rcp-patient-line {
   margin-bottom: 6px;
 }
-.rcp-opp-line {
-  margin-bottom: 4px;
-}
-.rcp-count {
+.rcp-nhs {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: var(--r-pill);
-  font-size: 12px;
-}
-.rcp-count-red {
-  background: var(--red-dim);
-  color: var(--red);
-  border: 1px solid var(--red-line);
-}
-.rcp-count-amber {
-  background: var(--amber-dim);
-  color: var(--amber);
-  border: 1px solid var(--amber-line);
-}
-.rcp-opp-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.rcp-chip {
-  display: inline-block;
-  border-radius: var(--r-sm);
-  padding: 1px 6px;
-  font-family: var(--mono);
   font-size: 10px;
-  border: 1px solid transparent;
-}
-.rcp-chip em {
-  font-style: normal;
-  font-weight: 700;
-  font-size: 9px;
-}
-.rcp-chip-red {
-  background: var(--red-dim);
-  border-color: var(--red-line);
-  color: var(--red);
-}
-.rcp-chip-amber {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-  color: var(--amber);
-}
-.rcp-opp-clear {
-  color: var(--text-3);
+  letter-spacing: 0.04em;
+  color: var(--text-4);
 }
 
 /* Status pill */
@@ -184,10 +142,16 @@
   cursor: pointer;
   border: 1px solid transparent;
   margin-top: 2px;
-  transition: opacity var(--fast) var(--ease);
+  transition:
+    box-shadow var(--fast) var(--ease),
+    filter var(--fast) var(--ease);
 }
 .rcp-pill:hover {
-  opacity: 0.85;
+  filter: saturate(1.18);
+  box-shadow: var(--shadow-1);
+}
+.rcp-pill:active {
+  filter: saturate(1.18) brightness(0.97);
 }
 .rcp-pill-dot {
   width: 9px;
@@ -216,39 +180,60 @@
 }
 
 .rcp-pill-detail {
-  margin-top: 7px;
+  margin-top: 8px;
   border-top: 1px solid var(--border);
-  padding-top: 6px;
+  padding-top: 8px;
 }
 .rcp-detail-row {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 0;
+  padding: 3px 0;
   font-size: 12px;
 }
+.rcp-detail-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rcp-detail-status {
+  flex-shrink: 0;
   font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 .rcp-detail-red .rcp-detail-status {
   color: var(--red);
+  background: var(--red-dim);
+  border-color: var(--red-line);
 }
 .rcp-detail-amber .rcp-detail-status {
   color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
 }
 
 /* Pathways-disabled notice */
 .rcp-disabled-note {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
+  border-left: 3px solid var(--amber);
   border-radius: var(--r-md);
   padding: 8px 10px;
   margin-bottom: 8px;
   line-height: 1.45;
+}
+.rcp-disabled-note strong {
+  color: var(--amber);
 }
 
 /* Pathway picker */
@@ -296,6 +281,10 @@
   box-shadow: var(--shadow-2);
   background: var(--bg-hover);
 }
+.rcp-pathway-tile:not(.rcp-tile-organising) .rcp-pathway-btn:active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
 .rcp-pathway-title {
   font-weight: 600;
   font-size: 13px;
@@ -339,8 +328,22 @@
   --tile-col: #db2777;
 }
 
-.rcp-pathway-tile:not(.rcp-tile-c-default) > .rcp-pathway-btn {
-  border-left: 4px solid var(--tile-col);
+/* User colour-label shows as a small corner DOT (a tag), never a left-rule —
+   a coloured edge-bar would mimic the clinical-severity language used by the
+   escalation banner and overdue rows. The dot reads as a personal label. */
+.rcp-tile-tag {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tile-col, transparent);
+  border: 1px solid var(--border);
+  pointer-events: none;
+}
+.rcp-pathway-tile:not(.rcp-tile-c-default):not(.rcp-tile-organising) > .rcp-pathway-btn {
+  padding-right: 22px;
 }
 
 /* Organise toolbar */
@@ -373,11 +376,15 @@
   cursor: pointer;
   transition:
     background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
     color var(--fast) var(--ease);
 }
 .rcp-seg:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+.rcp-seg:active {
+  background: var(--accent-dim);
 }
 .rcp-seg:first-of-type {
   border-radius: var(--r-sm) 0 0 var(--r-sm);
@@ -387,14 +394,15 @@
   border-left: none;
 }
 .rcp-seg-on {
-  background: var(--accent);
+  background: var(--accent-dim);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--text-2);
+  font-weight: 600;
 }
 .rcp-seg-on:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #fff;
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-2);
 }
 .rcp-organise-toggle {
   font-weight: 600;
@@ -438,9 +446,19 @@
   height: 16px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border-hi);
   background: var(--tile-col, transparent);
   cursor: pointer;
+  transition:
+    box-shadow var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.rcp-tile-swatch:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-1);
+}
+.rcp-tile-swatch:active {
+  box-shadow: none;
 }
 .rcp-tile-swatch.rcp-tile-c-default {
   background: transparent;
@@ -457,7 +475,7 @@
   flex-wrap: wrap;
   gap: 5px;
   width: 116px;
-  padding: 7px;
+  padding: 8px;
   border-radius: var(--r-lg);
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -468,9 +486,19 @@
   height: 18px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
   background: var(--tile-col, transparent);
   cursor: pointer;
+  transition:
+    box-shadow var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+.rcp-colour-dot:hover {
+  box-shadow: var(--shadow-1);
+  transform: scale(1.08);
+}
+.rcp-colour-dot:active {
+  transform: scale(1);
 }
 .rcp-colour-dot.rcp-tile-c-default {
   background: transparent;
@@ -501,7 +529,7 @@
   width: 46px;
   margin-left: 4px;
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   padding: 2px 5px;
   background: var(--bg-mid);
   color: var(--text-2);
@@ -509,7 +537,7 @@
     border-color var(--fast) var(--ease),
     background var(--fast) var(--ease);
 }
-.rcp-initials input:focus {
+.rcp-initials input:focus-visible {
   border-color: var(--accent);
   background: var(--bg-elev);
 }
@@ -527,11 +555,14 @@
 .rcp-banner-red {
   background: var(--red-dim);
   border: 1px solid var(--red-line);
+  border-left: 4px solid var(--red);
+  box-shadow: var(--shadow-2);
   color: var(--red);
 }
 .rcp-banner-amber {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
+  border-left: 4px solid var(--amber);
   color: var(--amber);
 }
 
@@ -597,7 +628,7 @@
   width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   padding: 4px 7px;
   font: inherit;
   background: var(--bg-mid);
@@ -606,9 +637,9 @@
     border-color var(--fast) var(--ease),
     background var(--fast) var(--ease);
 }
-.rcp-q-row input[type='text']:focus,
-.rcp-q-row select:focus,
-.rcp-q-row textarea:focus {
+.rcp-q-row input[type='text']:focus-visible,
+.rcp-q-row select:focus-visible,
+.rcp-q-row textarea:focus-visible {
   border-color: var(--accent);
   background: var(--bg-elev);
 }
@@ -630,6 +661,9 @@
 .rcp-form-msg {
   font-size: 12px;
   color: var(--red);
+}
+.rcp-form-msg-ok {
+  color: var(--green);
 }
 
 /* Draft autosave — pill on pathway tile */
