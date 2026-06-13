@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.74.2] — 2026-06-13
+
+### Fix: text-rule "normal" chip uses rule's `normalLabel` not the hardcoded "No growth"
+
+Queue chips for text rules (e.g. USS, culture) that match a normal phrase now show the
+label configured in that rule's **Normal chip label** field ("Normal USS", "No growth", etc.)
+instead of always showing the hardcoded "No growth" default. The chip template was passing
+only `{count}` — the `normalLabel` from `noGrowthTop` was never forwarded. Fix: pass
+`label` from `sev.noGrowthTop.label` in chip vars and use `{label}` in the chip template.
+
 ## [v3.74.1] — 2026-06-13
 
 ### Monitoring pane: faster, render-storm-proof reload on patient switch

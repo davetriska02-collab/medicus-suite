@@ -3859,7 +3859,7 @@
     },
     "queue.resultNoGrowth": {
       "enabled": true,
-      "label": "No growth",
+      "label": "{label}",
       "kind": "info",
       "actions": []
     },
