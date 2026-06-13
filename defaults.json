@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 6,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3815,6 +3815,42 @@
       "kind": "amber",
       "actions": []
     },
+    "queue.resultUrgent": {
+      "enabled": true,
+      "label": "Urgent: {name}",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.resultAbnormal": {
+      "enabled": true,
+      "label": "{count} abnormal",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultMisprioritised": {
+      "enabled": true,
+      "label": "Under-prioritised",
+      "kind": "red",
+      "actions": []
+    },
+    "queue.resultUnmatched": {
+      "enabled": true,
+      "label": "Unmatched patient",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultReview": {
+      "enabled": true,
+      "label": "Needs review",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultNoGrowth": {
+      "enabled": true,
+      "label": "No growth",
+      "kind": "info",
+      "actions": []
+    },
     "record.stoppStart": {
       "enabled": true,
       "label": "Rx review \u00d7{count}",
@@ -3848,5 +3884,19 @@
         }
       ]
     }
-  }
+  },
+  "resultRules": [
+    {
+      "id": "msu-culture",
+      "kind": "text",
+      "enabled": true,
+      "builtin": true,
+      "label": "Needs review",
+      "normalLabel": "No growth",
+      "analyte": {
+        "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
+      },
+      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    }
+  ]
 }

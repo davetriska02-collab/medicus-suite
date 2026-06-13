@@ -90,7 +90,8 @@ function mockResponse(status, jsonPayload) {
       if (jsonPayload instanceof Error) throw jsonPayload;
       return jsonPayload;
     },
-    text: async () => (jsonPayload && typeof jsonPayload === 'object' ? JSON.stringify(jsonPayload) : String(jsonPayload || '')),
+    text: async () =>
+      jsonPayload && typeof jsonPayload === 'object' ? JSON.stringify(jsonPayload) : String(jsonPayload || ''),
   };
 }
 
@@ -120,23 +121,19 @@ async function runMedicusApiTests() {
 
   // Save + restore globalThis.fetch around each test
   const origFetch = globalThis.fetch;
-  function setFetch(fn) { globalThis.fetch = fn; }
-  function restoreFetch() { globalThis.fetch = origFetch; }
+  function setFetch(fn) {
+    globalThis.fetch = fn;
+  }
+  function restoreFetch() {
+    globalThis.fetch = origFetch;
+  }
 
   // ── Validation (no network needed) ───────────────────────────────────────
 
   console.log('\n--- fetchSchedulingOverview: input validation ---');
 
-  await expectReject(
-    () => fetchSchedulingOverview(null, '2026-01-01'),
-    'Practice code not set',
-    'null siteId throws'
-  );
-  await expectReject(
-    () => fetchSchedulingOverview('', '2026-01-01'),
-    'Practice code not set',
-    'empty siteId throws'
-  );
+  await expectReject(() => fetchSchedulingOverview(null, '2026-01-01'), 'Practice code not set', 'null siteId throws');
+  await expectReject(() => fetchSchedulingOverview('', '2026-01-01'), 'Practice code not set', 'empty siteId throws');
   await expectReject(
     () => fetchSchedulingOverview('not-hex!!', '2026-01-01'),
     'Invalid practice code format',
@@ -174,17 +171,15 @@ async function runMedicusApiTests() {
 
   console.log('\n--- fetchSchedulingOverview: HTTP 500 ---');
   setFetch(async () => mockResponse(500, {}));
-  await expectReject(
-    () => fetchSchedulingOverview('a1b2c3', '2026-01-03'),
-    'API error 500',
-    '500 → "API error 500"'
-  );
+  await expectReject(() => fetchSchedulingOverview('a1b2c3', '2026-01-03'), 'API error 500', '500 → "API error 500"');
   restoreFetch();
 
   // ── Network rejection ─────────────────────────────────────────────────────
 
   console.log('\n--- fetchSchedulingOverview: network rejection ---');
-  setFetch(async () => { throw new TypeError('Failed to fetch'); });
+  setFetch(async () => {
+    throw new TypeError('Failed to fetch');
+  });
   await expectReject(
     () => fetchSchedulingOverview('a1b2c3', '2026-01-04'),
     'Failed to fetch',
@@ -198,7 +193,9 @@ async function runMedicusApiTests() {
   setFetch(async () => ({
     ok: true,
     status: 200,
-    json: async () => { throw new SyntaxError('Unexpected token < in JSON'); },
+    json: async () => {
+      throw new SyntaxError('Unexpected token < in JSON');
+    },
   }));
   await expectReject(
     () => fetchSchedulingOverview('a1b2c3', '2026-01-05'),
@@ -214,14 +211,18 @@ async function runMedicusApiTests() {
     staffSchedules: [
       {
         name: 'Dr Smith',
-        schedule: [{
-          summary: { status: { isCancelled: false } },
-          entries: [{
-            diaryEntryType: { value: 'slot' },
-            appointmentType: { name: 'GP Standard' },
-            startDateTime: '2099-01-01T10:00:00',
-          }],
-        }],
+        schedule: [
+          {
+            summary: { status: { isCancelled: false } },
+            entries: [
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'GP Standard' },
+                startDateTime: '2099-01-01T10:00:00',
+              },
+            ],
+          },
+        ],
       },
     ],
     appointmentTypeOptions: [{ value: 'gp', label: 'GP Standard' }],
@@ -287,10 +288,15 @@ async function runMedicusApiTests() {
   restoreFetch();
 
   // Network rejection is also boxed
-  setFetch(async () => { throw new TypeError('net::ERR_NAME_NOT_RESOLVED'); });
+  setFetch(async () => {
+    throw new TypeError('net::ERR_NAME_NOT_RESOLVED');
+  });
   try {
     manyResult = await fetchManyDates('b2c3d4', ['2026-03-01'], { concurrency: 1 });
-    check(typeof manyResult['2026-03-01']?.error === 'string', 'fetchManyDates: network error boxed into { error: string }');
+    check(
+      typeof manyResult['2026-03-01']?.error === 'string',
+      'fetchManyDates: network error boxed into { error: string }'
+    );
   } catch (e) {
     check(false, `fetchManyDates: network error should be boxed, not thrown: ${e.message}`);
   }
@@ -309,10 +315,15 @@ async function runMedicusApiTests() {
   }
   restoreFetch();
 
-  setFetch(async () => mockResponse(200, {
-    staffSchedules: [],
-    appointmentTypeOptions: [{ value: 'gp', label: 'GP Standard' }, { value: 'nurse', label: 'Nurse' }],
-  }));
+  setFetch(async () =>
+    mockResponse(200, {
+      staffSchedules: [],
+      appointmentTypeOptions: [
+        { value: 'gp', label: 'GP Standard' },
+        { value: 'nurse', label: 'Nurse' },
+      ],
+    })
+  );
   try {
     const types = await fetchAppointmentTypes('a1b2c3');
     check(Array.isArray(types) && types.length === 2, 'fetchAppointmentTypes: returns mapped types array');
@@ -352,7 +363,8 @@ async function runReferralsApiTests() {
 
   const { fetchReferrals } = ReferralsApi;
 
-  const TEMPLATE_URL = 'https://a1b2c3.api.england.medicus.health/referrals/clinical-audit-report?referralStartDate=2026-01-01&referralEndDate=2026-01-31&startRow=0&endRow=2000';
+  const TEMPLATE_URL =
+    'https://a1b2c3.api.england.medicus.health/referrals/clinical-audit-report?referralStartDate=2026-01-01&referralEndDate=2026-01-31&startRow=0&endRow=2000';
 
   // ── Input validation ──────────────────────────────────────────────────────
 
@@ -433,7 +445,9 @@ async function runReferralsApiTests() {
   try {
     await fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
       templateUrl: TEMPLATE_URL,
-      fetch: async () => { throw new TypeError('net::ERR_NAME_NOT_RESOLVED'); },
+      fetch: async () => {
+        throw new TypeError('net::ERR_NAME_NOT_RESOLVED');
+      },
     });
     check(false, 'network rejection should propagate');
   } catch (e) {
@@ -454,7 +468,9 @@ async function runReferralsApiTests() {
       fetch: async () => ({
         ok: true,
         status: 200,
-        json: async () => { throw new SyntaxError('Unexpected token'); },
+        json: async () => {
+          throw new SyntaxError('Unexpected token');
+        },
         text: async () => '',
       }),
     });
@@ -474,10 +490,7 @@ async function runReferralsApiTests() {
     });
     check(false, 'config response should throw');
   } catch (e) {
-    check(
-      e.message.includes('Got config response'),
-      `config response → "Got config response …" (got: "${e.message}")`
-    );
+    check(e.message.includes('Got config response'), `config response → "Got config response …" (got: "${e.message}")`);
   }
 
   // ── Happy path — single page ──────────────────────────────────────────────
@@ -540,7 +553,9 @@ async function runReferralsApiTests() {
     await fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
       templateUrl: TEMPLATE_URL,
       fetch: async () => mockResponse(200, { referrals: [mockReferral], totalCount: 1 }),
-      onProgress: () => { progressCalls++; },
+      onProgress: () => {
+        progressCalls++;
+      },
     });
     check(progressCalls >= 1, 'onProgress: called at least once per page');
   } catch (e) {
@@ -652,7 +667,9 @@ async function runActivityApiTests() {
 
   try {
     await fetchActivityReport('a1b2c3', '2026-01-01', '2026-01-31', {
-      fetch: async () => { throw new TypeError('net::ERR_INTERNET_DISCONNECTED'); },
+      fetch: async () => {
+        throw new TypeError('net::ERR_INTERNET_DISCONNECTED');
+      },
     });
     check(false, 'network rejection should propagate');
   } catch (e) {
@@ -671,7 +688,9 @@ async function runActivityApiTests() {
       fetch: async () => ({
         ok: true,
         status: 200,
-        json: async () => { throw new SyntaxError('Bad JSON'); },
+        json: async () => {
+          throw new SyntaxError('Bad JSON');
+        },
       }),
     });
     check(false, 'malformed JSON should propagate');
@@ -719,7 +738,9 @@ async function runActivityApiTests() {
   console.log('\n--- fetchActivityReport: opts.fetch preferred over global ---');
 
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error('global fetch must not be called'); };
+  globalThis.fetch = async () => {
+    throw new Error('global fetch must not be called');
+  };
   let optsFetchCalled = false;
   try {
     await fetchActivityReport('a1b2c3', '2026-01-01', '2026-01-31', {
@@ -749,14 +770,24 @@ async function runUtilityTests() {
     staffSchedules: [
       {
         name: 'Dr A',
-        schedule: [{
-          summary: { status: { isCancelled: false } },
-          entries: [
-            { diaryEntryType: { value: 'slot' }, appointmentType: { name: 'GP' }, startDateTime: '2099-01-01T09:00:00' },
-            { diaryEntryType: { value: 'slot' }, appointmentType: { name: 'GP' }, startDateTime: '2099-01-01T14:00:00' },
-            { diaryEntryType: { value: 'admin' }, appointmentType: { name: 'Admin' } }, // should be ignored
-          ],
-        }],
+        schedule: [
+          {
+            summary: { status: { isCancelled: false } },
+            entries: [
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'GP' },
+                startDateTime: '2099-01-01T09:00:00',
+              },
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'GP' },
+                startDateTime: '2099-01-01T14:00:00',
+              },
+              { diaryEntryType: { value: 'admin' }, appointmentType: { name: 'Admin' } }, // should be ignored
+            ],
+          },
+        ],
       },
     ],
   };
@@ -805,9 +836,24 @@ async function runUtilityTests() {
 
   console.log('\n--- referrals-api.js: aggregate ---');
   const aggResult = RA.aggregate([
-    { referringClinician: 'Dr Jones', referralService: 'Cardio – Cardiology – RFH – RFL', priority: 'Routine', displayStatus: 'Completed' },
-    { referringClinician: 'Dr Jones', referralService: 'Ortho – Orthopaedics – RFH – RFL', priority: 'Urgent', displayStatus: 'Incomplete' },
-    { referringClinician: 'Dr Smith', referralService: 'Cardio – Cardiology – RFH – RFL', priority: 'TwoWeekWait', displayStatus: 'Cancelled' },
+    {
+      referringClinician: 'Dr Jones',
+      referralService: 'Cardio – Cardiology – RFH – RFL',
+      priority: 'Routine',
+      displayStatus: 'Completed',
+    },
+    {
+      referringClinician: 'Dr Jones',
+      referralService: 'Ortho – Orthopaedics – RFH – RFL',
+      priority: 'Urgent',
+      displayStatus: 'Incomplete',
+    },
+    {
+      referringClinician: 'Dr Smith',
+      referralService: 'Cardio – Cardiology – RFH – RFL',
+      priority: 'TwoWeekWait',
+      displayStatus: 'Cancelled',
+    },
   ]);
   check(aggResult.total === 3, 'aggregate: total === 3');
   check(aggResult.byClinician[0].name === 'Dr Jones', 'aggregate: byClinician sorted desc by count');
@@ -821,16 +867,155 @@ async function runUtilityTests() {
   console.log('\n--- activity-api.js: aggregate ---');
   const AA = require('./shared/activity-api.js');
   const actAgg = AA.aggregate([
-    { name: 'Dr A', consultations: 10, routinePrescriptionRequestTasks: 5, nonRoutinePrescriptionRequestTasks: 1, medicationReviews: 2, documentTasks: 3, investigationReportTasks: 4 },
-    { name: 'Dr B', consultations: 20, routinePrescriptionRequestTasks: 8, nonRoutinePrescriptionRequestTasks: 0, medicationReviews: 1, documentTasks: 2, investigationReportTasks: 1 },
+    {
+      name: 'Dr A',
+      consultations: 10,
+      routinePrescriptionRequestTasks: 5,
+      nonRoutinePrescriptionRequestTasks: 1,
+      medicationReviews: 2,
+      documentTasks: 3,
+      investigationReportTasks: 4,
+    },
+    {
+      name: 'Dr B',
+      consultations: 20,
+      routinePrescriptionRequestTasks: 8,
+      nonRoutinePrescriptionRequestTasks: 0,
+      medicationReviews: 1,
+      documentTasks: 2,
+      investigationReportTasks: 1,
+    },
   ]);
   check(Array.isArray(actAgg.users) && actAgg.users.length === 2, 'activity aggregate: users array has 2 entries');
   check(actAgg.users[0].name === 'Dr B', 'activity aggregate: users sorted desc by total (Dr B first)');
   check(actAgg.totals.consultations === 30, 'activity aggregate: totals.consultations summed correctly');
-  check(actAgg.totals.all === actAgg.users.reduce((s, u) => s + u.total, 0), 'activity aggregate: totals.all matches sum of user totals');
+  check(
+    actAgg.totals.all === actAgg.users.reduce((s, u) => s + u.total, 0),
+    'activity aggregate: totals.all matches sum of user totals'
+  );
   check(actAgg.maxUserTotal === actAgg.users[0].total, 'activity aggregate: maxUserTotal is highest user total');
   check(AA.aggregate([]).users.length === 0, 'activity aggregate: empty array → empty users');
   check(AA.aggregate(null).users.length === 0, 'activity aggregate: null → empty users');
+}
+
+// ── engine/api-client.js (IIFE / module.exports) ──────────────────────────────
+//
+// Loaded via require(). Uses globalThis.fetch (same-origin credentials pattern).
+// We patch globalThis.fetch around each test and restore it.
+//
+// fetchInvestigationReport(apiBase, overviewURL):
+//   invalid overviewURL   → rejects with Error('bad overviewURL'), fetch NOT called
+//   happy path            → resolves with the JSON payload
+//   cache hit             → second call returns same data without a second fetch
+
+async function runApiClientTests() {
+  console.log('\n=== engine/api-client.js ===');
+
+  let ApiClient;
+  try {
+    ApiClient = require('./engine/api-client.js');
+    check(typeof ApiClient.fetchInvestigationReport === 'function', 'api-client.js loaded via require()');
+  } catch (e) {
+    check(false, `api-client.js require failed: ${e.message}`);
+    return;
+  }
+
+  const { fetchInvestigationReport, clearCache } = ApiClient;
+  const API_BASE = 'https://560b6c.api.england.medicus.health';
+  const VALID_URL = '/tasks/data/review-investigation-report/overview/aaaabbbb-0000-0000-0000-000000000001';
+
+  const origFetch = globalThis.fetch;
+  function setFetch(fn) {
+    globalThis.fetch = fn;
+  }
+  function restoreFetch() {
+    globalThis.fetch = origFetch;
+  }
+
+  // ── Input validation — fetch must NOT be called ───────────────────────────
+
+  console.log('\n--- fetchInvestigationReport: input validation ---');
+
+  const invalidCases = [
+    ['https://evil.com/tasks/data/x/overview/uuid', 'absolute URL (contains ://)'],
+    ['/tasks/data/../etc/passwd', 'path traversal (..)'],
+    ['/clinical/data/x/overview/uuid', 'wrong prefix (not /tasks/data/)'],
+    ['/tasks/data/x/no-overview/uuid', 'missing /overview/ segment'],
+    ['/tasks/data/x/overview /uuid', 'whitespace in path'],
+    [null, 'null overviewURL'],
+    [42, 'numeric overviewURL'],
+  ];
+
+  for (const [badUrl, label] of invalidCases) {
+    let fetchCalled = false;
+    setFetch(async () => {
+      fetchCalled = true;
+      return mockResponse(200, {});
+    });
+    await expectReject(
+      () => fetchInvestigationReport(API_BASE, badUrl),
+      'bad overviewURL',
+      `invalid overviewURL (${label}) → rejects with "bad overviewURL"`
+    );
+    check(!fetchCalled, `invalid overviewURL (${label}) → fetch NOT called`);
+    restoreFetch();
+  }
+
+  // ── Happy path ─────────────────────────────────────────────────────────────
+
+  console.log('\n--- fetchInvestigationReport: happy path ---');
+
+  clearCache();
+  const mockReport = {
+    taskUuid: 'aaaabbbb-0000-0000-0000-000000000001',
+    patient: { id: 'p-uuid-1' },
+    status: 'pending',
+  };
+  let fetchCallCount = 0;
+  setFetch(async () => {
+    fetchCallCount++;
+    return mockResponse(200, mockReport);
+  });
+
+  let result;
+  try {
+    result = await fetchInvestigationReport(API_BASE, VALID_URL);
+    check(fetchCallCount === 1, 'happy path: fetch called exactly once');
+    check(typeof result === 'object' && result !== null, 'happy path: returns an object');
+    check(result.taskUuid === 'aaaabbbb-0000-0000-0000-000000000001', 'happy path: payload preserved (taskUuid)');
+    check(result.patient && result.patient.id === 'p-uuid-1', 'happy path: payload preserved (patient.id)');
+  } catch (e) {
+    check(false, `happy path: unexpected rejection: ${e.message}`);
+  }
+
+  // ── Cache: second call must not fetch again ────────────────────────────────
+
+  console.log('\n--- fetchInvestigationReport: cache dedup ---');
+
+  try {
+    const result2 = await fetchInvestigationReport(API_BASE, VALID_URL);
+    check(fetchCallCount === 1, 'cache: second call served from cache (no extra fetch)');
+    check(
+      result2 === result || (result2 && result2.taskUuid === result.taskUuid),
+      'cache: cached result matches original'
+    );
+  } catch (e) {
+    check(false, `cache: unexpected rejection: ${e.message}`);
+  }
+  restoreFetch();
+
+  // ── HTTP error propagates ─────────────────────────────────────────────────
+
+  console.log('\n--- fetchInvestigationReport: HTTP error ---');
+
+  clearCache();
+  setFetch(async () => mockResponse(500, {}));
+  await expectReject(
+    () => fetchInvestigationReport(API_BASE, VALID_URL),
+    'HTTP 500',
+    'HTTP 500 → rejects with "HTTP 500"'
+  );
+  restoreFetch();
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -841,6 +1026,7 @@ async function runUtilityTests() {
     await runReferralsApiTests();
     await runActivityApiTests();
     await runUtilityTests();
+    await runApiClientTests();
   } catch (e) {
     console.error('\nFATAL: test runner threw:', e);
     process.exitCode = 1;

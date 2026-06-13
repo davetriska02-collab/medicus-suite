@@ -172,6 +172,39 @@
     return safeFetch(`${apiBase}/care-record/data/investigation/dashboard/${uuid}`);
   }
 
+  // Fetch the overview payload for a single investigation-report task.
+  // overviewURL is provided by the caller (from the task's overviewURL field) and
+  // must be a relative path that begins with /tasks/data/ and contains /overview/
+  // (e.g. /tasks/data/review-investigation-report/overview/{taskUuid}).
+  // We validate it here as defense-in-depth because this value crosses the
+  // page-world bridge and must not be used to fetch arbitrary URLs.
+  function fetchInvestigationReport(apiBase, overviewURL) {
+    if (
+      typeof overviewURL !== 'string' ||
+      !overviewURL.startsWith('/tasks/data/') ||
+      !overviewURL.includes('/overview/') ||
+      overviewURL.includes('://') ||
+      overviewURL.includes('..') ||
+      /\s/.test(overviewURL)
+    ) {
+      return Promise.reject(new Error('bad overviewURL'));
+    }
+    // Use overviewURL as the "uuid" slot in the shared cache key — it uniquely
+    // identifies the resource and cacheKey is just a string concatenation.
+    const k = cacheKey(apiBase, overviewURL, 'invReport');
+    const hit = getCached(apiBase, overviewURL, 'invReport');
+    if (hit !== null) return Promise.resolve(hit);
+    if (IN_FLIGHT.has(k)) return IN_FLIGHT.get(k);
+    const promise = safeFetch(`${apiBase}${overviewURL}`)
+      .then(data => {
+        setCached(apiBase, overviewURL, 'invReport', data);
+        return data;
+      })
+      .finally(() => IN_FLIGHT.delete(k));
+    IN_FLIGHT.set(k, promise);
+    return promise;
+  }
+
   // Resolve an encounter UUID to its patient UUID via the encounter overview endpoint.
   // Used when the page is on a consultation/encounter view where only the encounter
   // UUID appears in the URL. Cached separately from patient data because the mapping
@@ -299,6 +332,7 @@
     fetchMedicationRegimen,
     fetchProblemListing,
     fetchInvestigationDashboard,
+    fetchInvestigationReport,
     fetchAll,
     clearCache,
     CACHE_TTL_MS

@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.60.0
-**Generated:** 2026-06-12 (manual reissue with the v3.60.0 safety-doc set)
+**Version:** v3.64.0
+**Generated:** 2026-06-13 (microbiology text-classification result rules)
 
 ## What it is
 
@@ -70,6 +70,10 @@ The Triage Lens overlays the Medicus request queue with semantic triage chips. C
 - Chips are severity-ordered: red chips always appear before amber, amber before info
 - New rules added since the last stored config are merged in automatically — existing users receive new builtins without a destructive reset, and rules they deliberately deleted stay deleted
 - An LLM-assisted authoring flow (copy prompt → external LLM → paste JSON → validate → import) is available for authoring custom rules
+- **Investigation Results queue triage (v3.62.0):** on the Medicus Investigation Results filing queue each pending row is decorated with per-row severity chips — **Urgent** (red, lab's own `requiresUrgentReview` flag), **{n} abnormal** (amber, lab's own above/below-reference-range flags), **Under-prioritised** (red, result severity exceeds the row's assigned priority), and **Unmatched patient** (amber). Chips are a prioritisation aid only: there is deliberately no "all normal / safe to file" chip, the extension applies no clinical thresholds of its own, and no result is ever filed or changed automatically. Fail-silent on fetch error.
+- **Per-chip enable and colour (kind) configuration:** each result-queue chip can be individually enabled or disabled and its colour (severity kind: red/amber/info) adjusted via the systemChips editor in Options, so practices can tune salience to local workflow.
+- **User analyte-threshold rules (v3.63.0):** clinicians can author rules that escalate result severity for specific analytes (e.g. "Potassium ≥6.0 → red"). Rules are escalate-only — they can raise a chip to amber or red but can never lower or suppress the laboratory's own urgent or abnormal flags; the engine always takes the more-severe of lab-flag vs user-rule. Rules are validated on save/import. Imported rules (including LLM-generated rules) and manually-authored rules ship **disabled** and must be reviewed and enabled by a clinician before they fire. An **LLM single-rule build** tool is provided (copy prompt → paste JSON into external LLM → paste reply back → validate → import disabled), mirroring the Sentinel/Triage Lens custom-rule authoring flow. A manual rule editor is also available in the Triage Lens settings.
+- **Microbiology text-classification rules (v3.64.0):** for culture results (e.g. MSU / urine culture) that carry no numeric high/low lab flag, a new **"text" rule kind** matches on result text rather than analyte values. A built-in MSU/urine-culture rule ships **enabled**: it flags any matched culture **"Needs review"** (amber chip) unless the combined result text (result value + interpretation + lab comments) contains a configured normal phrase such as "No growth", in which case it shows a calm **"No growth" info chip** instead. The info chip asserts a negative culture from the actual result text — it is not a safe-to-file verdict; clinicians should remain alert to sterile pyuria and "no significant growth — repeat if symptomatic" edge cases. The built-in normal-phrase list is conservative and clinician-editable. User-authored text rules (manual or LLM-imported) arrive **disabled** and require clinician review before firing. Matching is case-insensitive substring against the result name (to identify cultures) and the combined result text (to find the normal phrase). Escalate-only: text rules can only raise severity or add an info chip; they cannot lower or suppress any lab urgent or abnormal flag.
 
 ### Trends
 
@@ -157,18 +161,21 @@ The rules engine evaluates patient data against six rule types:
 ## Recent additions (last 4 weeks)
 
 **User experience and onboarding (v3.57.0–v3.60.0, 2026-06-12)**
+
 - **v3.60.0** — Five-workstream UX release: view-state continuity, reception drafts + resumable sweep, first-run setup checklist, Today tab, consolidated notifications + clinic mode
 - **v3.59.0** — Command palette (Ctrl+K) with options deep-linking
 - **v3.58.x** — Suite-wide first-run walkthrough; Monitoring action bar moved under the Brief; CI guard keeping the tour in lock-step with the UI
 - **v3.57.0** — Monitoring header/action toolbar, panel re-render flicker fix, guided tour v1
 
 **Clinical safety and rules**
+
 - **v3.54.0 / v3.51.3 (2026-06-11)** — The Keeper clinical-currency passes: completed the UK systemic NSAID, VKA (acenocoumarol, phenindione), ACEi/ARB, and diuretic drug sets across both the active triage engine and the patient record visualiser; 28 of 36 documented parity divergences resolved
 - **v3.52.0 (2026-06-11)** — DKA/HHS now fires a red chip (same-day/999) separately from routine diabetes amber chips; clinical-letter curly-quote normalisation so patterns match regardless of source punctuation; threshold rules now fail closed on non-numeric inputs
 - **v3.51.0 (2026-06-10)** — New SMR tab in the patient record visualiser: ACB anticholinergic burden scoring (Boustani scale), STOPP/START v3 (2023) flags for 13 criteria, and a printable NHS DES-aligned SMR documentation skeleton
 - **v3.47.0 (2026-06-10)** — Vaccine schedule expanded (pneumococcal PPV23, shingles/Shingrix, RSV); QOF HF009 enabled (HFrEF four-pillar therapy); HRT IUS cover now only counted within the device's 5-year licensed life
 
 **New features**
+
 - **v3.50.0 (2026-06-10)** — Patient Passport: one-click printable plain-English health summary for the patient
 - **v3.49.0 (2026-06-10)** — Pre-Consultation Brief: collapsible risk-summary card at the top of the Sentinel panel
 - **v3.48.0 (2026-06-10)** — Action Packs: copy-ready blood forms, recall SMS/letters, escalation SMS, and task lines per chip
@@ -176,6 +183,7 @@ The rules engine evaluates patient data against six rule types:
 - **v3.42.0 (2026-06-10)** — Knowledge tab: new practice-owned reference base with near-duplicate detection and LLM starter-pack import
 
 **Practice operations**
+
 - **v3.46.0 (2026-06-10)** — Triage Lens expanded by 52 new rules: 17 red (stroke/TIA, sepsis, anaphylaxis, obstetric emergencies, paediatric red flags), 27 amber (2WW cancer patterns, DKA/HHS, perinatal mental health, contraception), 8 info
 - **v3.44.0 (2026-06-10)** — Sweep printable reception handout: appointment-time-ordered tick-box worklist with plain-English booking instructions for non-clinical staff
 - **v3.43.0 (2026-06-10)** — Practice Profile v2: push configuration from a shared folder to every practice PC, with self-updating extension deployment and a one-click publish UI
