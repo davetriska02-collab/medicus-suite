@@ -359,6 +359,55 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.60.9 addendum ---
+
+This addendum records the state of the software at Medicus Suite v3.60.9. The
+following features have been added or changed since the v3.26.4 addendum. In
+each case the feature remains within the intended purpose at section 3 and does
+not alter the nature of the software, its regulatory status, or its data-handling
+characteristics.
+
+Tab chooser (v3.60.3): users may now hide any suite tab — including the Monitoring
+(Sentinel) tab — via the Ctrl+K command palette "Choose tabs…" command, the role
+presets (GP, Reception, Practice manager, Everything) in the first-run setup checklist,
+or the per-tab toggle cards. Hiding a tab removes it from the visible navigation bar
+but does not disable the underlying monitoring rules, data extraction, or any alert
+surface outside the hidden tab. Hidden tabs remain reachable via the command palette
+at any time; at least one tab is always visible. The "suite.hiddenTabs" preference is
+stored in chrome.storage.local, contains no patient data, and cannot be overwritten by
+a practice-profile push — it is user-owned. The obligation at section 5 to verify every
+displayed value against the source record before any clinical action is unchanged.
+Hiding the Monitoring tab does not relieve the user of any obligation to complete
+patient monitoring; the absence of chips while a tab is hidden is not an all-clear
+signal. The Triage Lens HUD, waiting-room strip, triage strip, and demand strip remain
+visible and unaffected regardless of which tabs are hidden.
+
+Slots pill colour customisation (v3.60.2): individual appointment slot types may now
+be assigned custom display colours in the Slots tab. Alert-level colours — the amber
+threshold pill and the red threshold pill — always override user-configured custom
+colours, so the safety salience of slot-alert thresholds is not configurable away.
+Slot pill preferences are stored in chrome.storage.local (slots.pillPrefs); no patient
+data is involved.
+
+Today tab altitude additions (v3.60.7–v3.60.9): the Today tab's administrative glance
+now additionally shows the age of the oldest unanswered new-request across all
+request buckets (when a parseable creation timestamp is available) and a visual
+demand headroom meter for medical and admin request streams showing how each stream
+sits against the configured amber/red thresholds. These are display-only arithmetic
+aggregations of data already surfaced elsewhere in the suite (the Request Monitor and
+demand count feeds); they make no clinical decisions and remain within the
+administrative situational-awareness purpose already described in
+CLINICAL-SAFETY-NOTICE.md section 2 and HAZARD-LOG.md H-022/H-028.
+
+RM-strip poll-loop fix (v3.60.9, commit a0d440c): panel.js previously reacted to any
+suite.requestMonitor.* storage change to trigger a new RM-strip poll; since every
+pollAll() writes suite.requestMonitor.state, this created a self-sustaining infinite
+poll loop hammering the task-list API continuously rather than on the intended
+60-second interval. Fixed to react to five CONFIG keys only, mirroring the service
+worker's own RM_CONFIG_KEYS guard. This is a code-correctness fix; it does not alter
+the intended purpose, the clinical behaviour, or any data-handling characteristic.
+
+
 --- v3.26.4 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.26.4. The
