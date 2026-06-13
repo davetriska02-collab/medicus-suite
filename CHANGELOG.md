@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.74.1] — 2026-06-13
+
+### Monitoring pane: faster, render-storm-proof reload on patient switch
+
+Switching patients **via a heavy documents view** (a large PNG/PDF rendered inline)
+made the monitoring (Sentinel) pane look like it "didn't reload until F5", while the
+same switch via lightweight task views (labs / med requests) felt instant. It was
+latency, not a hang — and two things caused it:
+
+- **Patient-change detection relied solely on a `MutationObserver` on `<body>`.** A
+  heavy documents render floods that observer and pins the main thread, delaying
+  detection of the new patient. Detection is now driven by **three independent
+  signals** — the observer (kept), the **Navigation API `currententrychange` event**
+  (the direct SPA-navigation signal, independent of DOM-mutation volume), and a
+  low-frequency **`location.href` backstop poll** — so a render storm can no longer
+  starve it. All three feed one idempotent handler (it no-ops when the URL is
+  unchanged), so whichever fires first wins.
+- **Every navigation paid a fixed 800 ms coalescing window before re-evaluating**,
+  even when the new URL unambiguously identified a *different* patient. That window
+  only exists to absorb same-patient journal-search keystroke churn; a **confirmed
+  switch** now re-evaluates after ~150 ms.
+
+No change to the wrong-patient guards: a genuine navigation still invalidates the
+snapshot *before* the re-eval (the panel can never show the previous patient's chips
+during the fetch window), the stale-evaluation generation counter is unchanged, and
+same-patient sub-navigation (journal search) still keeps its chips. Guarded by a new
+`test-sentinel-nav-detection.js`.
+
+manifest 3.74.0→3.74.1.
+
 ## [v3.74.0] — 2026-06-13
 
 ### Result Rules gets its own settings tab
