@@ -23,6 +23,8 @@ export const TOUR_SEEN_KEY = 'suite.tour.seenVersion';
 let _activateModule = null; // async (name) => void — provided by the shell
 let _getActiveModule = null; // () => string|null
 
+let _prevFocus = null; // focus-trap: element focused before the tour started
+
 let _layer = null;
 let _steps = [];
 let _idx = 0;
@@ -77,6 +79,7 @@ export function startTour() {
 }
 
 export function stopTour() {
+  const had = !!_layer;
   _navSeq++;
   if (_keyHandler) {
     document.removeEventListener('keydown', _keyHandler, true);
@@ -90,6 +93,10 @@ export function stopTour() {
   _layer = null;
   _steps = [];
   _idx = 0;
+  // Restore focus to the element that was active before the tour started
+  _prevFocus?.focus?.();
+  _prevFocus = null;
+  if (had) document.dispatchEvent(new CustomEvent('suite:tour-ended'));
 }
 
 // Resolve a step's target right now: first selector whose element exists and
@@ -139,20 +146,25 @@ function runTour(steps, mode) {
   _layer.setAttribute('aria-label', 'Guided tour');
   _layer.innerHTML = `
     <div class="suite-tour-spot" aria-hidden="true"></div>
-    <div class="suite-tour-card">
+    <div class="suite-tour-card" aria-live="polite">
       <div class="suite-tour-tag"></div>
       <div class="suite-tour-title"></div>
       <div class="suite-tour-body"></div>
+      <div class="suite-tour-track"><div class="suite-tour-track-fill"></div></div>
       <div class="suite-tour-foot">
+        <button class="suite-tour-skip" data-tour-act="skip">Skip tour</button>
         <span class="suite-tour-progress"></span>
         <div class="suite-tour-btns">
           <button class="suite-tour-btn" data-tour-act="back">Back</button>
-          <button class="suite-tour-btn" data-tour-act="skip">Skip</button>
           <button class="suite-tour-btn suite-tour-next" data-tour-act="next">Next</button>
         </div>
       </div>
     </div>`;
+  // Capture focus before appending so we can restore it when the tour ends
+  _prevFocus = document.activeElement;
   document.body.appendChild(_layer);
+  // Notify setup checklist (and any other listener) that the tour is up
+  document.dispatchEvent(new CustomEvent('suite:tour-started'));
 
   _layer.addEventListener('click', (e) => {
     const act = e.target.closest('[data-tour-act]')?.dataset.tourAct;
@@ -172,6 +184,19 @@ function runTour(steps, mode) {
     } else if (e.key === 'ArrowLeft') {
       e.stopPropagation();
       back();
+    } else if (e.key === 'Tab') {
+      // Focus trap: wrap within the tour dialog buttons
+      const focusable = [..._layer.querySelectorAll('button:not(:disabled)')];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   };
   document.addEventListener('keydown', _keyHandler, true);
@@ -180,6 +205,8 @@ function runTour(steps, mode) {
   window.addEventListener('resize', _resizeHandler);
 
   showStep();
+  // Move focus into the dialog after the first step is rendered
+  requestAnimationFrame(() => _layer?.querySelector('.suite-tour-next')?.focus());
 }
 
 function next() {
@@ -232,6 +259,8 @@ async function showStep() {
   _layer.querySelector('.suite-tour-progress').textContent = `${_idx + 1} of ${_steps.length}`;
   _layer.querySelector('[data-tour-act="back"]').disabled = _idx === 0;
   _layer.querySelector('.suite-tour-next').textContent = _idx === _steps.length - 1 ? 'Done' : 'Next';
+  const fill = _layer.querySelector('.suite-tour-track-fill');
+  if (fill) fill.style.width = `${((_idx + 1) / _steps.length) * 100}%`;
 
   if (target) target.scrollIntoView({ block: 'center', behavior: 'instant' });
   // Position after scroll has settled this frame.
