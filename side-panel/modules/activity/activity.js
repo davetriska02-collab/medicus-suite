@@ -26,7 +26,7 @@ let state = {
   aggregated: null,
   loading: false,
   error: null,
-  showMode: 'stacked', // 'stacked' or single metric key
+  showMode: 'stacked', // 'stacked' | 'total' | single metric key
   lastFetched: null,
 };
 
@@ -47,7 +47,8 @@ export async function init(el) {
     const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
     if (typeof saved.startDate === 'string' && ISO_RE.test(saved.startDate)) state.startDate = saved.startDate;
     if (typeof saved.endDate === 'string' && ISO_RE.test(saved.endDate)) state.endDate = saved.endDate;
-    const VALID_MODES = ['stacked', 'total', 'medical', 'admin', 'investigation', 'rxRoutine', 'rxNonRoutine'];
+    // Decision B: derive VALID_MODES from the real metric keys rather than hard-coding stale keys
+    const VALID_MODES = ['stacked', 'total', ...(api ? api.METRICS.map((m) => m.key) : [])];
     if (typeof saved.showMode === 'string' && VALID_MODES.includes(saved.showMode)) state.showMode = saved.showMode;
   }
 
@@ -142,7 +143,9 @@ function render() {
       </div>
 
       ${renderControls()}
-      ${state.loading ? renderSkeleton() : state.error ? renderError() : state.aggregated ? renderData() : ''}
+      <div class="act-results" aria-live="polite" aria-atomic="false">
+        ${state.loading ? renderSkeleton() : state.error ? renderError() : state.aggregated ? renderData() : ''}
+      </div>
     </div>
   `;
 
@@ -150,6 +153,28 @@ function render() {
 }
 
 function renderControls() {
+  const api = ApiNs();
+  // Decision H: compute which preset (if any) matches the current date range
+  const PRESET_NAMES = ['today', 'yesterday', 'last7', 'last30', 'thisMonth', 'lastMonth'];
+  const PRESET_LABELS = {
+    today: 'Today',
+    yesterday: 'Yesterday',
+    last7: 'Last 7d',
+    last30: 'Last 30d',
+    thisMonth: 'This month',
+    lastMonth: 'Last month',
+  };
+  let activePreset = null;
+  if (api && state.startDate && state.endDate) {
+    for (const name of PRESET_NAMES) {
+      const range = api.preset(name);
+      if (range && range[0] === state.startDate && range[1] === state.endDate) {
+        activePreset = name;
+        break;
+      }
+    }
+  }
+
   return `
     <div class="act-controls">
       <div class="act-date-row">
@@ -159,12 +184,10 @@ function renderControls() {
         <input type="date" id="actEnd" class="act-date-input" value="${state.endDate || ''}" max="${todayISO()}" />
       </div>
       <div class="act-preset-row">
-        <button class="act-preset" data-preset="today">Today</button>
-        <button class="act-preset" data-preset="yesterday">Yesterday</button>
-        <button class="act-preset" data-preset="last7">Last 7d</button>
-        <button class="act-preset" data-preset="last30">Last 30d</button>
-        <button class="act-preset" data-preset="thisMonth">This month</button>
-        <button class="act-preset" data-preset="lastMonth">Last month</button>
+        ${PRESET_NAMES.map(
+          (name) =>
+            `<button class="act-preset${activePreset === name ? ' active' : ''}" data-preset="${name}">${escHtml(PRESET_LABELS[name])}</button>`
+        ).join('')}
         <span class="act-spacer"></span>
         <button class="act-refresh" id="actRefresh">Refresh</button>
       </div>
@@ -175,7 +198,7 @@ function renderControls() {
 
 function renderSkeleton() {
   return `
-    <div class="act-skeleton">
+    <div class="act-skeleton" role="status" aria-label="Loading activity data">
       <div class="act-skel-line act-skel-w60"></div>
       <div class="act-skel-line act-skel-w80"></div>
       <div class="act-skel-line act-skel-w70"></div>
@@ -189,6 +212,7 @@ function renderError() {
     state.error && state.error.startsWith('No practice code')
       ? ' <button class="ghost-btn setup-now-btn">Set up now</button>'
       : '';
+  // Decision E: neutral/informational colour, not clinical-red
   return `<div class="act-error">${escHtml(state.error)}${cta}</div>`;
 }
 
@@ -196,13 +220,54 @@ function renderData() {
   const api = ApiNs();
   const a = state.aggregated;
   if (!a || a.users.length === 0) {
-    return `<div class="act-empty">No activity in this date range.</div>`;
+    // Decision D: designed empty state
+    return `
+      <div class="act-empty">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="3" y1="9" x2="21" y2="9"></line>
+          <line x1="9" y1="21" x2="9" y2="9"></line>
+        </svg>
+        <span>NO ACTIVITY IN THIS RANGE</span>
+      </div>
+    `;
   }
 
   const periodLabel =
     state.startDate === state.endDate
       ? formatDateLabel(state.startDate)
       : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
+
+  // Decision C: legend rendering depends on mode
+  let legendHtml = '';
+  if (state.showMode === 'stacked') {
+    legendHtml = `
+      <div class="act-legend">
+        ${api.METRICS.map(
+          (m) => `
+          <div class="act-legend-item">
+            <div class="act-legend-swatch" style="background:${m.colour}"></div>
+            <div class="act-legend-name">${escHtml(m.short)}</div>
+          </div>
+        `
+        ).join('')}
+      </div>
+    `;
+  } else if (state.showMode !== 'total') {
+    // single metric — render only that metric's legend item
+    const metricDef = api.METRICS.find((m) => m.key === state.showMode);
+    if (metricDef) {
+      legendHtml = `
+        <div class="act-legend">
+          <div class="act-legend-item">
+            <div class="act-legend-swatch" style="background:${metricDef.colour}"></div>
+            <div class="act-legend-name">${escHtml(metricDef.short)}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
+  // total mode: no legend element at all
 
   return `
     <div class="act-totals-card">
@@ -235,17 +300,8 @@ function renderData() {
           <option value="total" ${state.showMode === 'total' ? 'selected' : ''}>Total only</option>
         </select>
       </div>
-      <div class="act-legend">
-        ${api.METRICS.map(
-          (m) => `
-          <div class="act-legend-item">
-            <div class="act-legend-swatch" style="background:${m.colour}"></div>
-            <div class="act-legend-name">${escHtml(m.short)}</div>
-          </div>
-        `
-        ).join('')}
-      </div>
-      <div class="act-bars">${renderBars()}</div>
+      ${legendHtml}
+      <div class="act-bars" role="list">${renderBars()}</div>
     </div>
   `;
 }
@@ -272,24 +328,34 @@ function renderBars() {
       const barWidthPct = (userTotalOrMetric / scaleMax) * 100;
 
       let segments;
+      // Decision M: build aria-label for each row
+      let ariaLabel;
+
       if (mode === 'stacked') {
         // Each segment width proportional to (metric / user.total) * barWidthPct
+        const segParts = [];
         segments = api.METRICS.map((m) => {
           const v = user.metrics[m.key] || 0;
           if (v === 0) return '';
           const segWidthPct = user.total > 0 ? (v / user.total) * barWidthPct : 0;
+          segParts.push(`${m.short}: ${v}`);
           return `<div class="act-bar-seg" style="width:${segWidthPct}%; background:${m.colour}" title="${escAttr(m.short)}: ${v}"></div>`;
         }).join('');
+        ariaLabel = `${user.name}: ${user.total} total — ${segParts.join(', ')}`;
       } else if (mode === 'total') {
-        segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:#64748b" title="Total: ${user.total}"></div>`;
+        // Decision A.4: use var(--text-4) instead of raw hex for total mode
+        segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:var(--text-4)" title="Total: ${user.total}"></div>`;
+        ariaLabel = `${user.name}: ${user.total} total`;
       } else {
         const metricDef = api.METRICS.find((m) => m.key === mode);
-        const colour = metricDef ? metricDef.colour : '#64748b';
+        // Decision A.4: fallback uses var(--text-4) not a raw hex
+        const colour = metricDef ? metricDef.colour : 'var(--text-4)';
         segments = `<div class="act-bar-seg" style="width:${barWidthPct}%; background:${colour}" title="${escAttr(metricDef?.short || mode)}: ${userTotalOrMetric}"></div>`;
+        ariaLabel = `${user.name}: ${userTotalOrMetric} ${metricDef ? metricDef.short : mode}`;
       }
 
       return `
-      <div class="act-bar-row">
+      <div class="act-bar-row" role="listitem" aria-label="${escAttr(ariaLabel)}">
         <div class="act-bar-name" title="${escAttr(user.name)}">${escHtml(user.name)}</div>
         <div class="act-bar-track">${segments}</div>
         <div class="act-bar-total">${userTotalOrMetric.toLocaleString('en-GB')}</div>

@@ -65,6 +65,13 @@
   --t3: var(--text-3);
   --t4: var(--text-4);
   --t5: var(--text-5);
+  /* Categorical data-viz ramp — NON-clinical chart series. Deliberately avoids the --red/--amber alert hues. Canon: TOKENS.md */
+  --cat-1: #2563eb;
+  --cat-2: #0d9488;
+  --cat-3: #a21caf;
+  --cat-4: #7c3aed;
+  --cat-5: #64748b;
+  --cat-6: #0891b2;
 }
 
 /* Dark theme override */
@@ -101,6 +108,12 @@ html[data-theme='dark'] {
   --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
   --scrim: rgba(15, 23, 42, 0.55);
+  --cat-1: #5b8fc7;
+  --cat-2: #2dd4bf;
+  --cat-3: #e879c9;
+  --cat-4: #a78bfa;
+  --cat-5: #93a8c5;
+  --cat-6: #38bdf8;
 }
 
 html,
