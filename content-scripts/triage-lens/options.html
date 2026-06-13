@@ -17,6 +17,7 @@
     <button class="tl-tab tl-tab-active" data-tab="rules">Rules</button>
     <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
     <button class="tl-tab" data-tab="thresholds">Thresholds</button>
+    <button class="tl-tab" data-tab="resultRules">Result rules</button>
     <button class="tl-tab" data-tab="prefs">Preferences</button>
     <button class="tl-tab" data-tab="preview">Live preview</button>
     <button class="tl-tab" data-tab="backup">Backup &amp; restore</button>
@@ -290,6 +291,109 @@
     </details>
   </section>
 
+  <!-- ============================ RESULT RULES TAB ============================ -->
+  <section class="tl-pane" id="paneResultRules">
+    <div class="tl-help">
+      Analyte-threshold rules <strong>escalate</strong> investigation result severity — they can raise a chip from none to amber or red, but never lower a lab-flagged result. Imported rules arrive <strong>disabled</strong>; review each rule's analyte match strings and threshold values before enabling.
+    </div>
+    <div class="tl-toolbar">
+      <button class="tl-btn tl-btn-primary" id="btnAddResultRule">+ New result rule</button>
+    </div>
+    <div class="tl-rule-list" id="resultRuleList"></div>
+    <div class="tl-empty" id="resultRuleListEmpty" style="display:none">No result rules configured. Add one manually or import via the LLM tool in the editor.</div>
+
+    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+      <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
+        <span style="font-size:10px; opacity:0.6;">&#9654;</span>
+        Import rule(s) from LLM
+      </summary>
+      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+        <p class="tl-help" style="margin:0 0 12px;">
+          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the analyte rule you want
+          (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the JSON response into
+          the box below to import it. Imported rules arrive <strong>disabled</strong> — review and enable each before it fires.
+        </p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <button class="tl-btn" id="btnResultLlmCopyPrompt">Copy LLM prompt</button>
+          <span id="resultLlmCopied" style="font-size:12px; color:#16a34a; opacity:0; transition:opacity 0.3s;">Copied.</span>
+        </div>
+        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; opacity:0.6; margin-bottom:5px;">
+          Paste LLM JSON output here
+        </label>
+        <textarea id="resultLlmJson" rows="8" spellcheck="false"
+          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'></textarea>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+          <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rule(s)</button>
+          <span id="resultLlmStatus" class="tl-llm-status"></span>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- Result rule editor pane -->
+  <section class="tl-pane" id="paneResultEdit">
+    <div class="tl-edit-header">
+      <button class="tl-btn tl-btn-ghost" id="btnBackToResultRules">← Back to result rules</button>
+      <h2 id="rrEditTitle">Edit result rule</h2>
+      <span class="tl-spacer"></span>
+      <button class="tl-btn tl-btn-danger" id="btnDeleteResultRule">Delete rule</button>
+    </div>
+
+    <div class="tl-edit-grid">
+      <div class="tl-edit-col">
+        <label class="tl-field">
+          <span>Label <small>(shown on the chip, max ~60 chars)</small></span>
+          <input type="text" id="rrLabel" maxlength="60">
+        </label>
+
+        <label class="tl-field">
+          <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
+          <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
+        </label>
+
+        <label class="tl-field">
+          <span>Comparator</span>
+          <select id="rrComparator">
+            <option value="above">above — fires when value is above threshold</option>
+            <option value="below">below — fires when value is below threshold</option>
+          </select>
+        </label>
+
+        <label class="tl-field">
+          <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
+          <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
+        </label>
+
+        <label class="tl-field">
+          <span>Red threshold <small>(optional — leave blank to omit)</small></span>
+          <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
+        </label>
+
+        <label class="tl-field">
+          <span>Unit <small>(display only, e.g. mmol/L)</small></span>
+          <input type="text" id="rrUnit" placeholder="mmol/L">
+        </label>
+
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" id="rrEnabled">
+          <span>Enabled <small>(uncheck until you have reviewed the thresholds)</small></span>
+        </label>
+      </div>
+
+      <div class="tl-edit-col">
+        <div class="tl-help">
+          <strong>How result rules work:</strong><br>
+          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. For comparator "above", set red ≥ amber. For "below", set red ≤ amber. At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-edit-footer">
+      <button class="tl-btn" id="btnCancelResultEdit">Cancel</button>
+      <button class="tl-btn tl-btn-primary" id="btnSaveResultEdit">Save rule</button>
+    </div>
+  </section>
+
   <!-- ============================ ABOUT TAB ============================ -->
   <section class="tl-pane" id="paneAbout">
     <h2>About Triage Lens</h2>
@@ -313,6 +417,7 @@
   </section>
 </main>
 
+<script src="../../engine/result-rules.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

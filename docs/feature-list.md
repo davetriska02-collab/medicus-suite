@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.62.0
-**Generated:** 2026-06-13 (Investigation Results queue triage)
+**Version:** v3.63.0
+**Generated:** 2026-06-13 (user-customisable Investigation Results queue rules)
 
 ## What it is
 
@@ -71,6 +71,8 @@ The Triage Lens overlays the Medicus request queue with semantic triage chips. C
 - New rules added since the last stored config are merged in automatically — existing users receive new builtins without a destructive reset, and rules they deliberately deleted stay deleted
 - An LLM-assisted authoring flow (copy prompt → external LLM → paste JSON → validate → import) is available for authoring custom rules
 - **Investigation Results queue triage (v3.62.0):** on the Medicus Investigation Results filing queue each pending row is decorated with per-row severity chips — **Urgent** (red, lab's own `requiresUrgentReview` flag), **{n} abnormal** (amber, lab's own above/below-reference-range flags), **Under-prioritised** (red, result severity exceeds the row's assigned priority), and **Unmatched patient** (amber). Chips are a prioritisation aid only: there is deliberately no "all normal / safe to file" chip, the extension applies no clinical thresholds of its own, and no result is ever filed or changed automatically. Fail-silent on fetch error.
+- **Per-chip enable and colour (kind) configuration:** each result-queue chip can be individually enabled or disabled and its colour (severity kind: red/amber/info) adjusted via the systemChips editor in Options, so practices can tune salience to local workflow.
+- **User analyte-threshold rules (v3.63.0):** clinicians can author rules that escalate result severity for specific analytes (e.g. "Potassium ≥6.0 → red"). Rules are escalate-only — they can raise a chip to amber or red but can never lower or suppress the laboratory's own urgent or abnormal flags; the engine always takes the more-severe of lab-flag vs user-rule. Rules are validated on save/import. Imported rules (including LLM-generated rules) and manually-authored rules ship **disabled** and must be reviewed and enabled by a clinician before they fire. An **LLM single-rule build** tool is provided (copy prompt → paste JSON into external LLM → paste reply back → validate → import disabled), mirroring the Sentinel/Triage Lens custom-rule authoring flow. A manual rule editor is also available in the Triage Lens settings.
 
 ### Trends
 

@@ -239,6 +239,235 @@ console.log('\n--- thresholds opt accepted (extension point) ---');
   assert(out.level === 'none', 'thresholds passed but not acted on → none for in-range result');
 }
 
+// ── resultRules: no rules → behaviour identical to baseline ──────────────────
+console.log('\n--- resultRules: no rules supplied → unchanged baseline ---');
+{
+  // empty array: same as no opts
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [] });
+  assert(out.level === 'none', 'empty resultRules → level none (unchanged)');
+  assert(out.urgentCount === 0, 'empty resultRules → urgentCount 0');
+  assert(out.abnormalCount === 0, 'empty resultRules → abnormalCount 0');
+  assert(out.top === null, 'empty resultRules → top null');
+}
+{
+  // no opts at all: unchanged urgent path
+  const out = evaluateReportSeverity(makeReport([rdwUrgent]));
+  assert(out.level === 'red', 'no resultRules → urgent still red');
+  assert(out.urgentCount === 1, 'no resultRules → urgentCount 1');
+}
+
+// ── resultRules: rule escalates in-lab-range analyte to amber ─────────────────
+console.log('\n--- resultRules: escalate normal analyte to amber ---');
+{
+  // WBC is 4.6 and in-range; rule: above 4.0 → amber
+  const potassiumAmberRule = {
+    id: 'rule_test_1',
+    enabled: true,
+    label: 'WBC mildly elevated',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 4.0,
+    red: null,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [potassiumAmberRule] });
+  assert(out.level === 'amber', 'rule escalates in-range WBC 4.6 >= 4.0 amber → amber');
+  assert(out.abnormalCount === 1, 'abnormalCount 1 after rule escalation to amber');
+  assert(out.urgentCount === 0, 'urgentCount 0 (amber only)');
+  assert(out.top !== null, 'top is set for rule-escalated result');
+  assert(out.top.name === 'WBC', 'top name is WBC');
+}
+
+// ── resultRules: rule escalates to red ───────────────────────────────────────
+console.log('\n--- resultRules: escalate normal analyte to red ---');
+{
+  // WBC is 4.6; rule: above 3.0 amber, 4.5 red
+  const rule = {
+    id: 'rule_test_2',
+    enabled: true,
+    label: 'WBC critical high',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 3.0,
+    red: 4.5,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [rule] });
+  assert(out.level === 'red', 'rule escalates in-range WBC 4.6 >= 4.5 red → red');
+  assert(out.urgentCount === 1, 'urgentCount 1 after rule escalation to red');
+  assert(out.top.name === 'WBC', 'top is the rule-escalated result');
+}
+
+// ── resultRules: rule NEVER lowers a lab-urgent analyte ───────────────────────
+console.log('\n--- resultRules: rule never lowers lab-urgent analyte ---');
+{
+  // rdwUrgent is lab-urgent; rule matches but evaluates to 'none' (value 16.7 is above amber 10.0 but
+  // let us use a rule that would NOT fire for this value to prove lab-urgent stays urgent)
+  const nonMatchingRule = {
+    id: 'rule_test_3',
+    enabled: true,
+    label: 'RDW above 20',
+    analyte: { match: ['rdw'] },
+    comparator: 'above',
+    amber: 20.0,
+    red: 25.0,
+    unit: '%',
+  };
+  const out = evaluateReportSeverity(makeReport([rdwUrgent]), { resultRules: [nonMatchingRule] });
+  assert(out.level === 'red', 'lab-urgent stays red even when rule does not fire');
+  assert(out.urgentCount === 1, 'urgentCount still 1 — rule cannot lower lab urgent');
+}
+{
+  // rdwUrgent is lab-urgent; rule matches and fires at amber — should not downgrade to amber
+  const amberRule = {
+    id: 'rule_test_4',
+    enabled: true,
+    label: 'RDW above 15 amber',
+    analyte: { match: ['rdw'] },
+    comparator: 'above',
+    amber: 15.0,
+    red: null,
+    unit: '%',
+  };
+  const out = evaluateReportSeverity(makeReport([rdwUrgent]), { resultRules: [amberRule] });
+  assert(out.level === 'red', 'lab-urgent stays red; rule amber cannot lower it');
+  assert(out.urgentCount === 1, 'urgentCount 1 — rule did not downgrade');
+}
+
+// ── resultRules: 'below' comparator ──────────────────────────────────────────
+console.log('\n--- resultRules: below comparator ---');
+{
+  // wbcNormal value 4.6 — rule: below 5.0 amber, below 4.0 red → amber expected (4.6 <= 5.0, 4.6 > 4.0)
+  const belowAmberRule = {
+    id: 'rule_test_5',
+    enabled: true,
+    label: 'WBC low',
+    analyte: { match: ['wbc'] },
+    comparator: 'below',
+    amber: 5.0,
+    red: 4.0,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [belowAmberRule] });
+  assert(out.level === 'amber', 'below: WBC 4.6 <= amber 5.0 → amber');
+  assert(out.abnormalCount === 1, 'abnormalCount 1 for below escalation');
+  assert(out.urgentCount === 0, 'urgentCount 0 (not <= red 4.0)');
+}
+{
+  // wbcNormal value 4.6 — below red 4.7 → red expected
+  const belowRedRule = {
+    id: 'rule_test_6',
+    enabled: true,
+    label: 'WBC critically low',
+    analyte: { match: ['wbc'] },
+    comparator: 'below',
+    amber: 5.0,
+    red: 4.7,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [belowRedRule] });
+  assert(out.level === 'red', 'below: WBC 4.6 <= red 4.7 → red');
+  assert(out.urgentCount === 1, 'urgentCount 1 for below red escalation');
+}
+{
+  // sodiumBelow value 129; rule: below 130 amber, 125 red → amber (129 <= 130, 129 > 125)
+  const sodiumRule = {
+    id: 'rule_test_7',
+    enabled: true,
+    label: 'Low sodium',
+    analyte: { match: ['sodium'] },
+    comparator: 'below',
+    amber: 130,
+    red: 125,
+    unit: 'mmol/L',
+  };
+  const out = evaluateReportSeverity(makeReport([sodiumBelow]), { resultRules: [sodiumRule] });
+  // sodiumBelow is already lab-abnormal (isBelow); rule should escalate further to amber or stay amber
+  assert(out.level === 'amber', 'sodiumBelow lab-abnormal stays amber with matching below rule (no red)');
+}
+
+// ── resultRules: red >= amber ordering in matching (above comparator) ─────────
+console.log('\n--- resultRules: red/amber ordering respected in above comparator ---');
+{
+  // Both amber and red set. Value 5.6 >= amber 5.5 but < red 6.0 → amber expected
+  const potRule = {
+    id: 'rule_test_8',
+    enabled: true,
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    unit: 'mmol/L',
+  };
+  const potResult = {
+    name: 'Serum Potassium',
+    value: 5.6,
+    rawValue: '5.6',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.1,
+    isAbove: true,
+    isBelow: false,
+    urgent: false,
+    interpretation: 'Above reference range',
+    date: '2026-01-09',
+    history: [],
+  };
+  const out = evaluateReportSeverity(makeReport([potResult]), { resultRules: [potRule] });
+  assert(out.level === 'amber', '5.6 >= amber 5.5 but < red 6.0 → amber');
+  assert(out.urgentCount === 0, 'urgentCount 0 (below red threshold)');
+}
+{
+  // Value 6.1 >= red 6.0 → red expected
+  const potRule = {
+    id: 'rule_test_9',
+    enabled: true,
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    unit: 'mmol/L',
+  };
+  const potResultHigh = {
+    name: 'Serum Potassium',
+    value: 6.1,
+    rawValue: '6.1',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.1,
+    isAbove: true,
+    isBelow: false,
+    urgent: false,
+    interpretation: 'Above reference range',
+    date: '2026-01-09',
+    history: [],
+  };
+  const out = evaluateReportSeverity(makeReport([potResultHigh]), { resultRules: [potRule] });
+  assert(out.level === 'red', '6.1 >= red 6.0 → red');
+  assert(out.urgentCount === 1, 'urgentCount 1 for value at red threshold');
+}
+
+// ── resultRules: disabled rule is ignored ─────────────────────────────────────
+console.log('\n--- resultRules: disabled rule is ignored ---');
+{
+  const disabledRule = {
+    id: 'rule_test_10',
+    enabled: false,
+    label: 'WBC low disabled',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 1.0,
+    red: null,
+    unit: '× 10⁹/L',
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal]), { resultRules: [disabledRule] });
+  assert(out.level === 'none', 'disabled rule → not applied → level none');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

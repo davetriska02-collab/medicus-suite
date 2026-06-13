@@ -657,3 +657,18 @@ details summary {
 .tl-llm-status-err {
   color: var(--red);
 }
+
+/* ---- Result rules ---- */
+.tl-rr-unreviewed {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--amber-dim);
+  color: var(--amber);
+  vertical-align: middle;
+}

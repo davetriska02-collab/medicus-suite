@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3872,5 +3872,6 @@
         }
       ]
     }
-  }
+  },
+  "resultRules": []
 }
