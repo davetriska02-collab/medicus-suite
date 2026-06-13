@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "rules": [
     {
       "id": "mh-crisis",
@@ -4019,8 +4019,8 @@
       "amber": 42,
       "unit": "mmol/mol",
       "suppressIfProblem": {
-        "match": ["prediabetes", "pre-diabetes", "pre-diabetic", "impaired glucose", "impaired fasting", "non-diabetic hyperglycaemia", "non-diabetic hyperglycemia", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "diabetic"],
-        "exclude": ["diabetes insipidus", "gestational"]
+        "match": ["prediabetes", "pre-diabetes", "pre-diabetic", "impaired glucose", "impaired fasting", "non-diabetic hyperglycaemia", "non-diabetic hyperglycemia", "diabetes", "diabetic", "t1dm", "t2dm", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes"],
+        "exclude": ["family history", "diabetes insipidus", "gestational"]
       }
     },
     {
@@ -4036,8 +4036,8 @@
       "red": 48,
       "unit": "mmol/mol",
       "suppressIfProblem": {
-        "match": ["diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "type i diabetes", "type ii diabetes", "insulin dependent diabetes", "non insulin dependent diabetes", "diabetic"],
-        "exclude": ["non-diabetic", "pre-diabetic", "prediabetes", "pre-diabetes", "impaired glucose", "impaired fasting", "diabetes insipidus", "gestational"]
+        "match": ["diabetes", "diabetic", "t1dm", "t2dm", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "type i diabetes", "type ii diabetes", "insulin dependent diabetes", "non insulin dependent diabetes"],
+        "exclude": ["family history", "non-diabetic", "pre-diabetic", "prediabetes", "pre-diabetes", "impaired glucose", "impaired fasting", "diabetes insipidus", "gestational"]
       }
     }
   ]

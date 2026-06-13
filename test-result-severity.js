@@ -918,6 +918,19 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     fire('HbA1c', 44, [{ label: 'Impaired glucose tolerance' }]) === 'none',
     'base: HbA1c 44 with IGT on record → none (prediabetes suppressed)'
   );
+  // H1 (patient-safety): a FAMILY HISTORY code must NOT suppress the new-diabetes flag
+  assert(
+    fire('HbA1c', 52, [{ label: 'Family history of diabetes mellitus' }]) === 'red',
+    'H1: HbA1c 52 with "Family history of diabetes mellitus" → red (NOT suppressed)'
+  );
+  // M1 (alert fatigue): known diabetics coded without "mellitus"/"type N" still suppress
+  assert(fire('HbA1c', 60, [{ label: 'Steroid-induced diabetes' }]) === 'none', 'M1: steroid-induced diabetes → suppressed');
+  assert(fire('HbA1c', 60, [{ label: 'Pancreatic diabetes' }]) === 'none', 'M1: pancreatic diabetes → suppressed');
+  assert(fire('HbA1c', 60, [{ label: 'Type-2 diabetes' }]) === 'none', 'M1: hyphenated "Type-2 diabetes" → suppressed');
+  assert(fire('HbA1c', 60, [{ label: 'T2DM' }]) === 'none', 'M1: "T2DM" abbreviation → suppressed');
+  // Broadened match must NOT over-suppress the footgun look-alikes
+  assert(fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'red', 'pre-diabetic retinopathy → red (not suppressed)');
+  assert(fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'red', 'diabetes insipidus → red (not suppressed)');
 
   // Attributable rule label flows onto top for rule-driven escalations
   const ruleDrivenRed = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.7)]), { resultRules: baseSet });

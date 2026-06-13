@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.67.0] — 2026-06-13
+
+### Queue result chips: render correctly + stop hiding the patient name
+
+Live testing surfaced two rendering bugs in the queue result chips:
+
+- **"White rectangles" fixed.** Result/monitoring chips (`.ch-q-result` / `.ch-q-mon`)
+  were injected outside the design-token CSS scope, so `.ch-chip-red`/`-amber`
+  resolved to undefined variables and rendered as unstyled boxes. Both classes are
+  now in the token scope and render as proper red/amber pills (the age/queue chips
+  were already in scope, which is why only result chips looked broken).
+- **Patient name no longer hidden.** On flat single-line queues (no Medicus
+  master/detail row) chips fell back into the narrow patient-name cell and were
+  *prepended*, pushing the name out of view. They're now *appended* after the name
+  (and Medicus badges) and width-capped with an ellipsis — full text on hover — so
+  the patient is always identifiable. Detail-row layouts are unchanged.
+
+### Clinical-safety: HbA1c "possible diabetes" suppression (from the red-team audit)
+
+- **H1 (patient-safety):** a patient whose only diabetes-related code was a *family
+  history* entry ("Family history of diabetes mellitus") had the new-diabetes red
+  flag wrongly suppressed. `"family history"` is now in the suppression exclude list,
+  so a diagnostic HbA1c in an FH-coded patient is flagged.
+- **M1 (alert fatigue):** known diabetics coded without "mellitus"/"type N"
+  ("Steroid-induced diabetes", "Pancreatic diabetes", "Type-2 diabetes", "T2DM")
+  were not matched and got nagged on every HbA1c. The diabetes match now includes a
+  guarded bare `"diabetes"`/`"diabetic"` plus `t1dm`/`t2dm`; the broad excludes
+  (non-diabetic, pre-diabetic, family history, gestational, diabetes insipidus) keep
+  it from over-suppressing. Progression (pre-diabetic → diagnostic HbA1c) still flags.
+
+defaults version 8→9 so existing installs receive the rule change; manifest
+3.66.0→3.67.0.
+
 ## [v3.66.0] — 2026-06-13
 
 ### Base rules are red-only + attributable chips + conditional HbA1c flags

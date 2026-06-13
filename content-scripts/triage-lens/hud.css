@@ -14,6 +14,8 @@
  */
 #medicus-clinical-hud,
 .ch-queue-chips,
+.ch-q-result,
+.ch-q-mon,
 .ch-action-menu {
   /* Surfaces */
   --bg-deep: #f8fafc;
@@ -114,6 +116,35 @@
   padding: 1px 6px;
   font-size: 10px;
   border-radius: var(--r-pill);
+}
+
+/* ---- Result / monitoring chips injected into Medicus queue rows ----
+   These now sit inside the token scope above (selector list), so their
+   .ch-chip-red/amber resolve correctly instead of rendering as unstyled
+   "white rectangles". */
+.ch-q-result,
+.ch-q-mon {
+  display: inline-flex;
+  gap: 4px;
+  vertical-align: middle;
+}
+/* Flat-queue fallback: chips appended into the narrow patient-name cell AFTER
+   the name. Cap their width so the patient name is never pushed out of view;
+   the full chip text stays available on hover (title attribute). */
+.ch-q-result-inline,
+.ch-q-mon-inline {
+  margin-left: 6px;
+  max-width: 60%;
+  overflow: hidden;
+}
+.ch-q-result-inline .ch-chip,
+.ch-q-mon-inline .ch-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* ---- HUD panel ---- */
