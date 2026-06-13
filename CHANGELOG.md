@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.76.0] — 2026-06-13
+
+### Feature: six new built-in Investigation Results rules
+
+Added six built-in result-triage rules to `defaults.json`, escalate-only (they never
+lower a lab-flagged result). Authored via a two-agent clinical-safety deliberation
+(acute/cancer-safety-netting lens + biochemistry/drug-monitoring lens) and converged on
+the highest-value, lowest-false-positive additions with clean analyte match strings:
+
+- **Lithium level high** — amber > 1.0, red ≥ 1.5 mmol/L (BNF target 0.4–1.0; toxicity
+  risk). Drug-level monitoring miss-prevention.
+- **Digoxin level high** — amber ≥ 1.5, red ≥ 2.0 micrograms/L (UK therapeutic 0.5–2.0).
+- **Critical low potassium** — amber < 3.0, red ≤ 2.5 mmol/L. Fills the hypokalaemia gap
+  (only high potassium was covered); excludes urine potassium.
+- **High adjusted calcium (hypercalcaemia)** — amber ≥ 2.6, red ≥ 3.0 mmol/L
+  (malignancy / hyperparathyroidism); excludes urine and ionised calcium.
+- **Low eGFR amber band** — amber < 30 mL/min/1.73m² (CKD G4). Additive to the existing
+  red < 15 (G5) rule.
+- **Blood culture — needs review** (text): a known-negative phrase ("no growth" family)
+  calms the row; anything else escalates to amber review, so a positive culture can never
+  be hidden. Deliberately omits bare "negative"/"sterile" so a "Gram negative … isolated"
+  report is not falsely calmed; excludes urine/wound/sputum/CSF/swab/stool cultures.
+
+Bumped `defaults.json` `"version"` (10 → 11) so `mergeShippedDefaults` appends these
+builtins to existing users' stored config (by id; user-deleted builtins are not
+resurrected). Guarded by new assertions in `test-result-severity.js` that validate every
+shipped rule against the schema and confirm each new rule fires (and excludes) as labelled.
+
 ## [v3.75.2] — 2026-06-13
 
 ### Fix: v3.75.0 config changes never reached existing users
