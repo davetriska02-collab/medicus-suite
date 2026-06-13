@@ -24,6 +24,9 @@ jobs:
       - name: Verify Triage Lens defaults are in sync (3-copy guard)
         run: node scripts/regen-defaults.js --check
 
+      - name: Verify shipped-config changes bump defaults.json "version" (migration guard)
+        run: node scripts/defaults-config-lock.js --check
+
       - name: Verify safety-doc versions track manifest (known-stale pins allowed)
         run: node scripts/check-doc-versions.js
 

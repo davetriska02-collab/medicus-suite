@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.75.3] — 2026-06-13
+
+### Internal: guard against shipped-config changes that don't bump the schema version
+
+Process fix for the class of bug behind v3.75.2: a change to `defaults.json`'s
+migration-propagated content (`rules` / `thresholds` / `prefs` / `systemChips` /
+`resultRules`) that doesn't also bump its integer `"version"` silently never reaches
+existing installs. New `scripts/defaults-config-lock.js` fingerprints that content against
+the version and **refuses to bless a content change that wasn't version-bumped**; CI runs
+its `--check` as an early step (and via `test-defaults-config-lock.js`) and fails closed on
+drift. The rule is now documented in CLAUDE.md. No runtime/extension behaviour change.
+
+manifest 3.75.2→3.75.3.
+
 ## [v3.75.2] — 2026-06-13
 
 ### Fix: v3.75.0 config changes never reached existing users
