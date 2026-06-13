@@ -887,6 +887,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
     { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
     { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
+    { id: 'queue.resultReviewRule',     page: 'Queue', desc: 'A text rule flagged a result for review and named it (e.g. bowel screening non-responder) — shows the rule label', vars: ['{rule}'] },
     { id: 'queue.resultNoGrowth',       page: 'Queue', desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip', vars: ['{count}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },

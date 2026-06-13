@@ -33,6 +33,18 @@
   // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
   // Also returns the matched rule's label / normalLabel for chip display.
   // Deliberately does NOT import result-rules.js to avoid a content-world dep.
+  //
+  // A text rule classifies an applied result (its name matched analyte.match) using:
+  //   abnormalText — POSITIVE flag: if any phrase is present in the result text the
+  //                  result is flagged 'review' (e.g. "no response to bowel cancer
+  //                  screening"). A positive flag is never overridden by a normal phrase.
+  //                  This is the safe primitive for surfacing a specific coded finding
+  //                  WITHOUT having to enumerate every "normal" phrase — guessing the
+  //                  normal set risks a false-negative (e.g. "abnormal" contains "normal").
+  //   normalText   — calm-if-present: a phrase present → 'noGrowth' (calm); a rule whose
+  //                  normalText is ABSENT → 'review' (the culture "not clearly normal"
+  //                  pattern). A rule with ONLY abnormalText that did not match flags
+  //                  nothing — its analyte was seen but no flag phrase was present.
   function computeTextOutcome(result, rules) {
     if (!Array.isArray(rules) || rules.length === 0) {
       return { outcome: 'none', label: null, normalLabel: null };
@@ -46,6 +58,8 @@
     const resultText = typeof result.text === 'string' ? result.text.toLowerCase() : '';
 
     let anyRuleApplied = false;
+    let abnormalFound = false; // an abnormalText phrase positively matched → forced review
+    let abnormalLabel = null;
     let normalFound = false;
     let reviewLabel = null;
     let normalLabel = null;
@@ -59,8 +73,11 @@
       // analyte.match must be a non-empty array
       const analyte = rule.analyte;
       if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) continue;
-      // normalText must be a non-empty array
-      if (!Array.isArray(rule.normalText) || rule.normalText.length === 0) continue;
+      // A text rule must carry at least one classification list — normalText
+      // (calm-if-present) and/or abnormalText (flag-if-present). Neither → cannot classify.
+      const hasNormal = Array.isArray(rule.normalText) && rule.normalText.length > 0;
+      const hasAbnormal = Array.isArray(rule.abnormalText) && rule.abnormalText.length > 0;
+      if (!hasNormal && !hasAbnormal) continue;
 
       // Does this rule apply to this result?
       const nameHit = analyte.match.some(
@@ -80,26 +97,52 @@
       }
 
       anyRuleApplied = true;
-      // Does the result text contain a normal phrase?
-      const foundNormal = rule.normalText.some(
-        phrase => typeof phrase === 'string' && phrase.length > 0 &&
-          resultText.includes(phrase.toLowerCase())
-      );
-      if (foundNormal) {
-        normalFound = true;
-        if (!normalLabel) {
-          normalLabel = (typeof rule.normalLabel === 'string' && rule.normalLabel) || 'No growth';
+
+      // abnormalText is a POSITIVE flag match (e.g. "no response to bowel cancer
+      // screening"). If any phrase is present the result is flagged — and a positive flag
+      // is never overridden by a normal phrase, so record it and move on to the next rule.
+      if (hasAbnormal) {
+        const foundAbnormal = rule.abnormalText.some(
+          phrase => typeof phrase === 'string' && phrase.length > 0 &&
+            resultText.includes(phrase.toLowerCase())
+        );
+        if (foundAbnormal) {
+          abnormalFound = true;
+          if (!abnormalLabel) {
+            abnormalLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
+          }
+          continue; // flagged by this rule; do not also apply its normalText
         }
-      } else {
-        if (!reviewLabel) {
-          reviewLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
+      }
+
+      // normalText classification. A rule with ONLY abnormalText that did not match
+      // contributes nothing here (neither calm nor flag).
+      if (hasNormal) {
+        const foundNormal = rule.normalText.some(
+          phrase => typeof phrase === 'string' && phrase.length > 0 &&
+            resultText.includes(phrase.toLowerCase())
+        );
+        if (foundNormal) {
+          normalFound = true;
+          if (!normalLabel) {
+            normalLabel = (typeof rule.normalLabel === 'string' && rule.normalLabel) || 'No growth';
+          }
+        } else {
+          if (!reviewLabel) {
+            reviewLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
+          }
         }
       }
     }
 
     if (!anyRuleApplied) return { outcome: 'none', label: null, normalLabel: null };
+    // Precedence: an explicit abnormalText flag wins over a normal phrase (never calm a
+    // positively-flagged finding); a normal phrase calms; otherwise a "not clearly normal"
+    // normalText rule reviews; a lone abnormalText rule that did not match stays none.
+    if (abnormalFound) return { outcome: 'review', label: abnormalLabel || 'Needs review', normalLabel: null };
     if (normalFound) return { outcome: 'noGrowth', label: null, normalLabel: normalLabel || 'No growth' };
-    return { outcome: 'review', label: reviewLabel || 'Needs review', normalLabel: null };
+    if (reviewLabel) return { outcome: 'review', label: reviewLabel, normalLabel: null };
+    return { outcome: 'none', label: null, normalLabel: null };
   }
 
   // ── Patient-record suppression helper ─────────────────────────────────────────
@@ -242,8 +285,11 @@
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop }}
    *
-   * Text-rule outcomes (kind:'text') are SEPARATE from numeric severity:
-   *   reviewCount   — results matched a text rule but no normal phrase found in text
+   * Text-rule outcomes (kind:'text') are SEPARATE from numeric severity. A text rule
+   * flags a result via abnormalText (a flag phrase is present) or via normalText (no
+   * normal phrase present); a present normalText phrase calms it.
+   *   reviewCount   — results a text rule flagged for review (abnormalText hit, or no
+   *                   normal phrase found in text)
    *   noGrowthCount — results matched a text rule AND a normal phrase was found
    *   reviewTop     — { name, label } | null  (first 'review' result + rule label)
    *   noGrowthTop   — { name, label } | null  (first 'noGrowth' result + its label)
