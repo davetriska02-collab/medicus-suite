@@ -526,6 +526,23 @@
     };
   };
 
+  // Memoise the rendered chip HTML per (id, vars). getSystemChip + renderChipHtml
+  // are pure for a given config snapshot, so the queue result-triage hot path
+  // (re-injecting the same chips across many rows / re-renders) skips the repeated
+  // string-building. The memo is cleared whenever config changes (see watchConfig).
+  const _chipHtmlMemo = new Map();
+  const renderSystemChipHtmlMemo = (id, vars) => {
+    const key = id + '|' + JSON.stringify(vars || {});
+    let html = _chipHtmlMemo.get(key);
+    if (html === undefined) {
+      const chip = getSystemChip(id, vars);
+      if (!chip) { _chipHtmlMemo.set(key, null); return null; }
+      html = renderChipHtml(chip);
+      _chipHtmlMemo.set(key, html);
+    }
+    return html;
+  };
+
   // ============================================================
   // 1c. PAGE ROUTING
   // ============================================================
@@ -1710,7 +1727,8 @@
       </div>`).join('');
   };
 
-  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const _HTML_ESC = { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' };
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => _HTML_ESC[c]);
 
   const ensureHudEl = () => {
     const doc = hudDoc();
@@ -2477,15 +2495,15 @@
     const chipDefs = selectResultChips(sev);
     if (!chipDefs.length) return;
     const built = chipDefs
-      .map((d) => ({ chip: getSystemChip(d.id, d.vars), meta: !!d.meta }))
-      .filter((b) => b.chip);
+      .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
+      .filter((b) => b.html);
     if (!built.length) return;
     const host = queueChipHost(row, '.ch-q-result');
     if (!host) return;
     const span = document.createElement('span');
     span.className = host.inPreview ? 'ch-q-result' : 'ch-q-result ch-q-result-inline';
     span.setAttribute('role', 'note');
-    span.innerHTML = built.map((b) => renderChipHtml(b.chip)).join('');
+    span.innerHTML = built.map((b) => b.html).join('');
     // Always PREPEND. Appending to the end of the (Vue-managed) patient-name cell
     // gets reconciled away by Medicus's renderer on its next re-render; prepending
     // before the cell's own content survives. The name stays visible via the CSS
@@ -2504,24 +2522,36 @@
   // clean, synchronous restore with no visible gap.
   const reinjectCachedResultChips = () => {
     let n = 0;
-    // Drive re-injection off the DURABLE map (rowIndex → taskUuid). It survives the
-    // runQueue churn that empties _queueRowUuids, so cached chips persist across
-    // re-renders. injectResultChip finds the row by row-index (the proven path) and
-    // de-dupes, so this is safe to call on every refresh.
-    for (const [rowIndex, taskUuid] of _durableRowMap) {
+    // Iterate only the ON-SCREEN rows (AG-Grid virtualises — only a handful of the
+    // N rows exist in the DOM at any time), not the whole _durableRowMap, so the
+    // sweep cost scales with what's visible rather than the full snapshot. Each
+    // visible row is STILL keyed via _durableRowMap.get(rowIndex) → taskUuid →
+    // _queueResultCache sev (survives the runQueue churn that empties
+    // _queueRowUuids), still honours _RESULT_CACHE_TTL + null/undefined skip, and
+    // injectResultChip de-dupes so this stays idempotent across re-renders.
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const rowIndex = Number(ri);
+      const taskUuid = _durableRowMap.get(rowIndex);
+      if (!taskUuid) return;
       const entry = _queueResultCache.get(taskUuid);
-      if (!entry || entry.sev === undefined || entry.sev === null) continue;
-      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) continue;
+      if (!entry || entry.sev === undefined || entry.sev === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
       injectResultChip(rowIndex, entry.sev);
       n++;
-    }
-    if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map');
+    });
+    if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
   };
 
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
   let _resultFetchCount = 0;
   let _resultFetchWindowTimer = null;
   const _RESULT_FETCH_MAX = 90;
+  // Soft threshold (80% of budget): below it we run at the fast inter-fetch delay;
+  // above it we ease the delay up to throttle as we approach the hard cap.
+  const _RESULT_FETCH_SOFT = Math.floor(_RESULT_FETCH_MAX * 0.8);
   const _RESULT_FETCH_WINDOW_MS = 60000;
   // Short retry window for a failed (null) result fetch, so a transient error or a
   // flaky HIGH result re-surfaces soon instead of being cached blank for the full TTL.
@@ -2533,14 +2563,26 @@
     _queueResultRunning = true;
     log('queue-result: triage start, rows=' + _queueRowUuids.size + ', gen=' + gen);
 
-    // Sort by priority: High/Urgent/Immediate first
-    const sorted = [..._queueRowUuids.entries()].sort(([, ua], [, ub]) => {
+    // Fetch ordering: on-screen rows first (so the ~dozen visible rows tag in a
+    // couple of seconds), then High/Urgent/Immediate priority as the
+    // within-partition tiebreak. AG-Grid virtualises, so the on-screen set is the
+    // small subset of rows currently in the DOM. Comparator is stable: equal keys
+    // keep their original _queueRowUuids insertion order.
+    const onScreen = new Set();
+    queueScope().querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri != null) onScreen.add(Number(ri));
+    });
+    const sorted = [..._queueRowUuids.entries()].sort(([ia, ua], [ib, ub]) => {
+      const aVis = onScreen.has(ia);
+      const bVis = onScreen.has(ib);
+      if (aVis !== bVis) return (bVis ? 1 : 0) - (aVis ? 1 : 0);
       const aHigh = /high|urgent|immediate/i.test((_queueResultCache.get(ua) || {}).priorityDisplay || '');
       const bHigh = /high|urgent|immediate/i.test((_queueResultCache.get(ub) || {}).priorityDisplay || '');
       return (bHigh ? 1 : 0) - (aHigh ? 1 : 0);
     });
 
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 5;
     let idx = 0;
     let aborted = false;
 
@@ -2576,7 +2618,13 @@
             e2.ts = sev === null ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
           injectResultChip(rowIndex, sev);
-          await new Promise(res => setTimeout(res, 200));
+          // Budget-aware inter-fetch delay (only on actual fetches, not cache hits):
+          // fast 100ms base while we're under the soft threshold; once we cross it,
+          // ease linearly from 100ms up to 1000ms across the last 20% of the budget
+          // so we back off as we approach the hard cap rather than slamming into it.
+          const over = Math.max(0, _resultFetchCount - _RESULT_FETCH_SOFT);
+          const delay = 100 + Math.round((over / (_RESULT_FETCH_MAX - _RESULT_FETCH_SOFT || 1)) * 900);
+          await new Promise(res => setTimeout(res, delay));
         }
       }
     };
@@ -2753,6 +2801,11 @@
   let queueObservedContainer = null;   // tracks which DOM node the observer is watching
   let queueRafScheduled = false;
 
+  // Restrict per-frame queue DOM sweeps to the live AG-Grid container when we have
+  // one attached; fall back to `document` so behaviour is identical when the
+  // container isn't (yet) tracked. Used by the wipe/re-decorate/re-inject hot paths.
+  const queueScope = () => (queueObservedContainer && document.contains(queueObservedContainer)) ? queueObservedContainer : document;
+
   // Fully tear down the queue observer and forget the container reference.
   // Called whenever we navigate AWAY from the queue so that the next visit
   // to the queue page always rebuilds against the current (possibly fresh) DOM.
@@ -2766,17 +2819,22 @@
   const refreshQueueChips = () => {
     log('queue: refreshQueueChips, rows=' + _queueRowUuids.size);
     if (queueObserver) queueObserver.disconnect();
-    document.querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
-    document.querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
+    queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
+    queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
     // Restore result chips synchronously from the per-task cache via each row's row-id.
     // DOM-driven (like the age chips) so they survive re-renders even when the
     // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
     reinjectCachedResultChips();
-    // Re-attach via setupQueueObserver so the observer is created if it was
-    // never initialised, and re-bound to the current container if it was.
-    queueObservedContainer = null;
-    setupQueueObserver();
+    // Re-arm the SAME observer (cheap) after the self-write disconnect above, so we
+    // don't leave it disconnected — only rebuild from scratch if the container is
+    // actually gone (SPA tore down AG-Grid). Do NOT null out queueObservedContainer
+    // first: that would force a needless full rebuild on every grid mutation.
+    if (queueObserver && queueObservedContainer && document.contains(queueObservedContainer)) {
+      queueObserver.observe(queueObservedContainer, { childList: true, subtree: true });
+    } else {
+      setupQueueObserver();
+    }
     // Result-chip DISPLAY is handled synchronously by reinjectCachedResultChips above.
     // Do NOT kick a fetch pass from here: refreshQueueChips fires on every grid mutation,
     // so doing so re-started/aborted the fetch worker and starved it (only the first few
@@ -2978,6 +3036,9 @@
       // result rules are recomputed on the next pass (not re-injected stale),
       // then wipe + redo queue chips and re-render the HUD.
       for (const entry of _queueResultCache.values()) { entry.sev = undefined; entry.ts = 0; }
+      // The memoised chip HTML is config-derived too — drop it so edited labels/
+      // kinds re-render rather than serving the stale cached string.
+      _chipHtmlMemo.clear();
       if (pageType() === 'queue') refreshQueueChips();
       run(true);
     });
