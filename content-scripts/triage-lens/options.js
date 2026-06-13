@@ -125,6 +125,14 @@
     renderResultRules();
     populateThresholds();
     populatePrefs();
+    // Deep-link: when this page is embedded as the Suite Settings "Result Rules"
+    // section (iframe src ".../options.html#resultRules"), open straight onto the
+    // Result rules tab and hide the sibling tab bar so it reads as a dedicated page.
+    if (location.hash === '#resultRules') {
+      activateTab('resultRules');
+      const tabs = $('#tlTabs');
+      if (tabs) tabs.style.display = 'none';
+    }
   };
 
   // ============================================================
