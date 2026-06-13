@@ -435,10 +435,24 @@ export async function refresh() {
 export async function initSetup(hostEl) {
   _host = hostEl;
 
+  // Hide while the guided tour is active; re-evaluate when it ends. Registered
+  // FIRST, before any await below, so a tour that auto-starts during this
+  // function's async boot can never fire suite:tour-started before we are
+  // listening — otherwise the missed event leaves _tourActive false and the
+  // checklist paints over the running tour.
+  document.addEventListener('suite:tour-started', () => {
+    _tourActive = true;
+    hide();
+  });
+  document.addEventListener('suite:tour-ended', () => {
+    _tourActive = false;
+    refresh();
+  });
+
   await loadSetupState();
   await evaluateSteps();
 
-  // Initial render decision
+  // Initial render decision (guarded by _tourActive inside show())
   if (shouldShow()) show();
 
   // Re-evaluate when panel regains visibility
@@ -460,14 +474,4 @@ export async function initSetup(hostEl) {
 
   // Listen for dispatch from module CTAs
   document.addEventListener('suite:open-setup', () => openSetup());
-
-  // Hide while the guided tour is active; re-evaluate when it ends
-  document.addEventListener('suite:tour-started', () => {
-    _tourActive = true;
-    hide();
-  });
-  document.addEventListener('suite:tour-ended', () => {
-    _tourActive = false;
-    refresh();
-  });
 }
