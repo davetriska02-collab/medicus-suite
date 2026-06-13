@@ -2158,6 +2158,9 @@
     // inject chips onto wrong rows in the new queue before the fresh
     // ch-task-list-data event arrives. Prune cache entries older than 2×TTL.
     _queueRowUuids.clear();
+    // Arm the leading-edge first result-triage pass for this queue entry: the next
+    // bridge task-list event fires the pass immediately instead of via the 150ms debounce.
+    _firstResultPassPending = true;
     const pruneTs = Date.now() - 2 * _MON_CACHE_TTL;
     for (const [uuid, entry] of _queueMonCache) {
       if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
@@ -2222,6 +2225,11 @@
   const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   let _queueResultRunning = false;
   let _queueResultGeneration = 0;
+  // Leading-edge gate: the FIRST result-triage pass per queue entry fires immediately
+  // from the bridge handler (skipping the 150ms debounce) so time-to-first-chip drops
+  // ~150ms and the fetch overlaps the grid's first paint. Set true in runQueue (where
+  // _queueRowUuids is cleared), cleared the first time the bridge fires the pass.
+  let _firstResultPassPending = false;
 
   // Rate-limit constants for ch-task-list-data: max events acted on per window,
   // and the reset period. Defends against a forged-event flood fanning out into
@@ -2304,9 +2312,21 @@
     // Debounce the monitoring trigger to coalesce event bursts into a single pass
     clearTimeout(_bridgeMonDebounceTimer);
     _bridgeMonDebounceTimer = setTimeout(scheduleQueueMonitoring, _BRIDGE_DEBOUNCE_MS);
-    // Debounce the result triage trigger
-    clearTimeout(_bridgeResultDebounceTimer);
-    _bridgeResultDebounceTimer = setTimeout(scheduleQueueResultTriage, _BRIDGE_DEBOUNCE_MS);
+    // Result triage trigger. _queueRowUuids/_durableRowMap are already populated by the
+    // synchronous loop above, so the leading-edge FIRST pass per queue entry can fire
+    // immediately (skipping the 150ms debounce) to overlap the grid's first paint. The
+    // _queueResultRunning latch + the post-Promise.all generation re-run coalesce this
+    // leading call with any trailing debounced one (the trailing one early-returns while
+    // the first runs, then re-runs once), so it cannot double-fetch. Subsequent events
+    // for this queue entry use the debounce as before.
+    if (_firstResultPassPending) {
+      _firstResultPassPending = false;
+      clearTimeout(_bridgeResultDebounceTimer);
+      scheduleQueueResultTriage();
+    } else {
+      clearTimeout(_bridgeResultDebounceTimer);
+      _bridgeResultDebounceTimer = setTimeout(scheduleQueueResultTriage, _BRIDGE_DEBOUNCE_MS);
+    }
   });
 
   const computeQueueRowMonitoring = async (taskTypeSlug, taskUuid) => {
@@ -2619,12 +2639,19 @@
           }
           injectResultChip(rowIndex, sev);
           // Budget-aware inter-fetch delay (only on actual fetches, not cache hits):
-          // fast 100ms base while we're under the soft threshold; once we cross it,
-          // ease linearly from 100ms up to 1000ms across the last 20% of the budget
-          // so we back off as we approach the hard cap rather than slamming into it.
+          // ON-SCREEN rows get ZERO delay — the ~12 visible rows are well under the
+          // 90/60s budget and the browser's ~6-connection-per-host ceiling, so firing
+          // them with no inter-fetch sleep is safe and removes ~300ms of pure sleep from
+          // the perceived time-to-tag. OFF-SCREEN rows keep the throttle: fast 100ms base
+          // while we're under the soft threshold; once we cross it, ease linearly from
+          // 100ms up to 1000ms across the last 20% of the budget so the tail backs off as
+          // it approaches the hard cap rather than slamming into it. The budget cap +
+          // 60s rolling reset (not the delay) remain the rate-limit protection.
           const over = Math.max(0, _resultFetchCount - _RESULT_FETCH_SOFT);
-          const delay = 100 + Math.round((over / (_RESULT_FETCH_MAX - _RESULT_FETCH_SOFT || 1)) * 900);
-          await new Promise(res => setTimeout(res, delay));
+          const delay = onScreen.has(rowIndex)
+            ? 0
+            : 100 + Math.round((over / (_RESULT_FETCH_MAX - _RESULT_FETCH_SOFT || 1)) * 900);
+          if (delay > 0) await new Promise(res => setTimeout(res, delay));
         }
       }
     };
@@ -2843,6 +2870,27 @@
     if (_queueRowUuids.size > 0) scheduleQueueMonitoring();
   };
 
+  // True when EVERY element node added/removed in this mutation batch is one of our own
+  // injected chips. The async injectors (injectResultChip / injectQueueMonitoringChip) run
+  // while the observer is LIVE during the fetch pass, so each injected chip is a childList
+  // mutation that would otherwise schedule another refreshQueueChips — tagging ~12 visible
+  // rows spawned ~12 spurious refresh cycles. Ignoring these batches removes that
+  // self-trigger; genuine grid mutations (rows added/removed by AG-Grid) still schedule a
+  // refresh. An empty/text-only batch returns true (nothing relevant changed → skip).
+  const _isOwnChipMutation = (mutations) => {
+    for (const m of mutations) {
+      for (const nodes of [m.addedNodes, m.removedNodes]) {
+        for (const n of nodes) {
+          if (n.nodeType !== 1) continue; // ignore text nodes
+          const cl = n.classList;
+          if (!cl) return false;
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip'))) return false;
+        }
+      }
+    }
+    return true; // every element node added/removed was one of ours
+  };
+
   const setupQueueObserver = () => {
     // If we already have an observer AND the container it's watching is still
     // live in the document, nothing to do.  But if the container was removed
@@ -2862,7 +2910,11 @@
       return;
     }
     queueObservedContainer = container;
-    queueObserver = new MutationObserver(() => {
+    queueObserver = new MutationObserver((mutations) => {
+      // Ignore batches that are entirely our own async chip injections — they would
+      // otherwise self-trigger a refresh per chip during the tag burst. Genuine grid
+      // mutations still fall through to the coalesced rAF refresh below.
+      if (_isOwnChipMutation(mutations)) return;
       if (queueRafScheduled) return;
       queueRafScheduled = true;
       requestAnimationFrame(() => {

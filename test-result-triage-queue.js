@@ -361,5 +361,26 @@ if (sqrtMatch) {
 }
 
 // ============================================================
+// Layer 3c — v3.73.0 performance plan: visible burst un-throttled, leading-edge
+// first fetch pass, MutationObserver own-chip self-trigger suppression.
+// ============================================================
+console.log('Layer 3c: v3.73.0 result-triage scheduler/observer wiring');
+
+// (a) The worker applies a ZERO inter-fetch delay for on-screen rows (the off-screen
+//     tail keeps the computed 100ms→1000ms backoff).
+if (sqrtMatch) {
+  check(
+    /onScreen\.has\(rowIndex\)\s*\n?\s*\?\s*0/.test(sqrtMatch[0]),
+    'worker applies a zero inter-fetch delay for on-screen rows (visible burst un-throttled)'
+  );
+}
+
+// (b) Leading-edge FIRST fetch pass per queue entry (skips the 150ms debounce once).
+check(/_firstResultPassPending/.test(src), 'leading-edge first fetch pass flag (_firstResultPassPending) present');
+
+// (c) The queue MutationObserver ignores batches that are entirely our own chip injections.
+check(/_isOwnChipMutation/.test(src), 'MutationObserver self-trigger suppression (_isOwnChipMutation) present');
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
