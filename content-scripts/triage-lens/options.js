@@ -874,6 +874,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
     { id: 'queue.resultUrgent',         page: 'Queue', desc: 'Investigation result has an urgent/critical analyte (lab flag or user threshold rule)', vars: ['{name}', '{count}'] },
     { id: 'queue.resultAbnormal',       page: 'Queue', desc: 'Investigation result has out-of-range analytes', vars: ['{count}'] },
+    { id: 'queue.resultRuleUrgent',     page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to urgent — names the rule', vars: ['{name}', '{rule}'] },
+    { id: 'queue.resultRuleAbnormal',   page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to abnormal — names the rule', vars: ['{name}', '{rule}'] },
     { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
     { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
     { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },

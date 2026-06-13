@@ -127,6 +127,27 @@
       }
     }
 
+    // suppressIfProblem — OPTIONAL (both kinds). Suppresses the rule when the patient
+    // already has a matching problem on record (e.g. don't flag a possible new diabetes
+    // for a known diabetic). Object: { match: string[] (≥1 non-empty), exclude?: string[] }.
+    if (rule.suppressIfProblem !== undefined) {
+      const s = rule.suppressIfProblem;
+      if (!s || typeof s !== 'object' || Array.isArray(s)) {
+        errs.push('suppressIfProblem, if present, must be an object with a match array.');
+      } else {
+        const sm = Array.isArray(s.match) ? s.match.filter(m => typeof m === 'string' && m.trim()) : null;
+        if (!sm || sm.length === 0) {
+          errs.push('suppressIfProblem.match must contain at least one non-empty string.');
+        }
+        if (
+          s.exclude !== undefined &&
+          (!Array.isArray(s.exclude) || s.exclude.some(e => typeof e !== 'string'))
+        ) {
+          errs.push('suppressIfProblem.exclude, if present, must be an array of strings.');
+        }
+      }
+    }
+
     if (kind === 'text') {
       // normalText — required non-empty array of non-empty strings
       if (!Array.isArray(rule.normalText)) {

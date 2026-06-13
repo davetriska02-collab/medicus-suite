@@ -102,18 +102,62 @@
     return { outcome: 'review', label: reviewLabel || 'Needs review', normalLabel: null };
   }
 
+  // ── Patient-record suppression helper ─────────────────────────────────────────
+  // A rule may carry suppressIfProblem:{ match:string[], exclude?:string[] } to mean
+  // "do not fire if the patient already has this on their problem record" (e.g. don't
+  // flag a possible new diabetes when the patient is already on the diabetes register).
+  //
+  // Matching mirrors the proven approach in rules-engine.patientOnRegister:
+  //   - match terms: word-boundary aware for plain alphanumeric phrases (so "diabetic"
+  //     does not match "prediabetes"), substring fallback for terms with punctuation;
+  //   - exclude terms: broad substring, checked FIRST, so compound look-alikes like
+  //     "non-diabetic hyperglycaemia" / "pre-diabetic retinopathy" are dropped before
+  //     a "diabetic" match can fire. This is patient-safety critical: an over-broad
+  //     suppression silently hides a genuine new diagnosis.
+  // Deliberately self-contained (no rules-engine import) to keep this content-world-safe.
+  function problemLabelMatches(label, term) {
+    const t = String(term || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/^[a-z0-9 ]+$/.test(t)) {
+      const rx = new RegExp('\\b' + t.replace(/\s+/g, '\\s+') + '\\b');
+      return rx.test(label);
+    }
+    return label.includes(t);
+  }
+  function ruleSuppressedByProblems(rule, problems) {
+    const cond = rule && rule.suppressIfProblem;
+    if (!cond || typeof cond !== 'object') return false;
+    if (!Array.isArray(problems) || problems.length === 0) return false;
+    const match = Array.isArray(cond.match) ? cond.match : [];
+    const exclude = Array.isArray(cond.exclude) ? cond.exclude : [];
+    if (match.length === 0) return false;
+    for (let i = 0; i < problems.length; i++) {
+      const p = problems[i];
+      const label = String((p && (p.label || p.title || p.description)) || '').toLowerCase();
+      if (!label) continue;
+      if (exclude.some(e => typeof e === 'string' && e && label.includes(e.toLowerCase()))) continue;
+      if (match.some(m => typeof m === 'string' && m && problemLabelMatches(label, m))) return true;
+    }
+    return false;
+  }
+
   // ── Compute rule-derived severity for a single result ─────────────────────────
   // Deliberately does NOT import result-rules.js to avoid a content-world dep.
-  // Uses minimal inline guards only.
-  function computeRuleSev(result, rules) {
-    if (!Array.isArray(rules) || rules.length === 0) return 'none';
-    if (!result || typeof result !== 'object') return 'none';
+  // Uses minimal inline guards only. Returns { sev, label }:
+  //   sev   — 'none' | 'abnormal' | 'urgent' (highest a matching rule produced)
+  //   label — the label of the rule that produced `sev` (for attributable chips), or null.
+  // `problems` (optional) is the patient's problem list for suppressIfProblem rules.
+  function computeRuleSev(result, rules, problems) {
+    const NONE = { sev: 'none', label: null };
+    if (!Array.isArray(rules) || rules.length === 0) return NONE;
+    if (!result || typeof result !== 'object') return NONE;
 
     const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
     const value = result.value;
-    if (!Number.isFinite(value)) return 'none';
+    if (!Number.isFinite(value)) return NONE;
 
     let best = 'none';
+    let bestLabel = null;
 
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
@@ -125,6 +169,8 @@
       if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) continue;
       // Guard: comparator must be 'above' or 'below'
       if (rule.comparator !== 'above' && rule.comparator !== 'below') continue;
+      // Suppress if the patient already has the relevant problem on record.
+      if (ruleSuppressedByProblems(rule, problems)) continue;
 
       // Check if any match substring hits the result name
       const hits = analyte.match.some(
@@ -165,11 +211,14 @@
         }
       }
 
-      best = maxSev(best, ruleSev);
+      if (SEV_ORDER[ruleSev] > SEV_ORDER[best]) {
+        best = ruleSev;
+        bestLabel = (typeof rule.label === 'string' && rule.label) || null;
+      }
       if (best === 'urgent') break; // can't go higher
     }
 
-    return best;
+    return { sev: best, label: bestLabel };
   }
 
   /**
@@ -182,6 +231,14 @@
    * @param {Array}  [opts.resultRules]      Analyte-threshold or text classification rules
    *                                         (see result-rules.js). Rules ESCALATE severity;
    *                                         they never lower lab flags.
+   * @param {Array}  [opts.problems]         Patient problem list [{label}]. Used only by rules
+   *                                         carrying suppressIfProblem (e.g. don't flag a
+   *                                         possible new diabetes when already on the register).
+   *                                         When omitted, suppressIfProblem rules are NOT
+   *                                         suppressed (fail-open — flag rather than hide).
+   *
+   * top.ruleLabel — when the salient result's severity was RAISED by a rule (not the lab
+   * flag), this carries that rule's label so the queue can render an attributable chip.
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop }}
    *
@@ -214,11 +271,14 @@
       const results = report.results;
       const priorityDisplay = (opts && opts.priorityDisplay) ? String(opts.priorityDisplay) : '';
       const resultRules = (opts && Array.isArray(opts.resultRules)) ? opts.resultRules : [];
+      const problems = (opts && Array.isArray(opts.problems)) ? opts.problems : [];
 
       let urgentCount = 0;
       let abnormalCount = 0;
       let firstUrgent = null;
+      let firstUrgentRuleLabel = null;
       let firstAbnormal = null;
+      let firstAbnormalRuleLabel = null;
 
       // Text-rule tracking (separate from numeric severity)
       let reviewCount = 0;
@@ -233,18 +293,24 @@
         const labSev = r.urgent ? 'urgent' : (r.isAbove || r.isBelow ? 'abnormal' : 'none');
 
         // Rule-derived severity for numeric (threshold) rules
-        const ruleSev = computeRuleSev(r, resultRules);
+        const ruleResult = computeRuleSev(r, resultRules, problems);
+        const ruleSev = ruleResult.sev;
 
         // Effective numeric severity: never below lab severity
         const effSev = maxSev(labSev, ruleSev);
 
+        // Was this result's effective severity RAISED by a user/base rule (not the
+        // lab flag)? If so, carry the rule's label so the chip can be attributable.
+        const ruleDriven = SEV_ORDER[ruleSev] > SEV_ORDER[labSev];
+        const ruleLabel = ruleDriven ? ruleResult.label : null;
+
         if (effSev === 'urgent') {
           urgentCount++;
-          if (!firstUrgent) firstUrgent = r;
+          if (!firstUrgent) { firstUrgent = r; firstUrgentRuleLabel = ruleLabel; }
         }
         if (effSev === 'abnormal' || effSev === 'urgent') {
           abnormalCount++;
-          if (!firstAbnormal) firstAbnormal = r;
+          if (!firstAbnormal) { firstAbnormal = r; firstAbnormalRuleLabel = ruleLabel; }
         }
 
         // Text-rule outcome — independent, does not affect urgentCount/abnormalCount
@@ -271,8 +337,14 @@
       // The single most salient analyte for chip display:
       // an urgent result if any; otherwise the first abnormal result.
       const salient = firstUrgent || firstAbnormal || null;
+      const salientRuleLabel = firstUrgent ? firstUrgentRuleLabel : firstAbnormalRuleLabel;
       const top = salient
-        ? { name: salient.name, value: salient.value, unit: salient.unit }
+        ? {
+            name: salient.name,
+            value: salient.value,
+            unit: salient.unit,
+            ruleLabel: salientRuleLabel || null
+          }
         : null;
 
       // misprioritised: red severity but the queue row priority is NOT high/urgent/immediate

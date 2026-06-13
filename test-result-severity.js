@@ -862,6 +862,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     'base-low-platelets',
     'base-low-neutrophils',
     'base-high-inr',
+    'base-hba1c-prediabetes',
+    'base-hba1c-diabetes',
   ];
   for (const id of baseIds) {
     const r = rules.find(x => x && x.id === id);
@@ -871,24 +873,95 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
       assert(validateResultRule(r).length === 0, `${id}: validates clean`);
     }
   }
-  // Fire the full shipped base set against representative results.
+  // Fire the full shipped base set against representative results (now RED-ONLY).
   const baseSet = rules.filter(r => baseIds.includes(r.id));
-  const fire = (name, value) =>
-    evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet }).level;
+  const fire = (name, value, problems) =>
+    evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
+  // Red-only: only critically-deranged values fire; the rest are left to the lab flag (none here).
   assert(fire('Haemoglobin', 65) === 'red', 'base: Haemoglobin 65 → red');
-  assert(fire('Haemoglobin', 95) === 'amber', 'base: Haemoglobin 95 → amber');
+  assert(fire('Haemoglobin', 95) === 'red', 'base: Haemoglobin 95 → red (red threshold <100)');
   assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
-  assert(fire('Haemoglobin A1c', 50) === 'none', 'base: HbA1c 50 → none (excluded from Hb rule)');
   assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
+  assert(fire('Potassium', 6.2) === 'none', 'base: Potassium 6.2 → none (red-only, <6.5)');
   assert(fire('Urine potassium', 60) === 'none', 'base: Urine potassium 60 → none (excluded)');
   assert(fire('Sodium', 118) === 'red', 'base: Sodium 118 → red');
+  assert(fire('Sodium', 125) === 'none', 'base: Sodium 125 → none (red-only, >120)');
   assert(fire('eGFR', 12) === 'red', 'base: eGFR 12 → red');
-  assert(fire('eGFR (CKD-EPI)', 28) === 'amber', 'base: eGFR 28 → amber');
+  assert(fire('eGFR (CKD-EPI)', 28) === 'none', 'base: eGFR 28 → none (red-only, ≥15)');
   assert(fire('Platelets', 25) === 'red', 'base: Platelets 25 → red');
   assert(fire('Mean platelet volume', 8.4) === 'none', 'base: MPV 8.4 → none (excluded)');
   assert(fire('Neutrophils', 0.4) === 'red', 'base: Neutrophils 0.4 → red');
   assert(fire('INR', 8.5) === 'red', 'base: INR 8.5 → red');
-  assert(fire('INR', 5.5) === 'amber', 'base: INR 5.5 → amber');
+  assert(fire('INR', 5.5) === 'none', 'base: INR 5.5 → none (red-only, <8)');
+
+  // HbA1c conditional flags
+  assert(fire('HbA1c', 50) === 'red', 'base: HbA1c 50, no record → red (possible diabetes)');
+  assert(fire('HbA1c', 44) === 'amber', 'base: HbA1c 44, no record → amber (prediabetes)');
+  assert(fire('HbA1c', 38) === 'none', 'base: HbA1c 38 → none');
+  // Known diabetic → diabetes flag suppressed (and prediabetes too)
+  assert(
+    fire('HbA1c', 60, [{ label: 'Type 2 diabetes mellitus' }]) === 'none',
+    'base: HbA1c 60 with T2DM on record → none (suppressed)'
+  );
+  // Known prediabetic with a NEW diabetic-range HbA1c → diabetes flag still fires (progression)
+  assert(
+    fire('HbA1c', 50, [{ label: 'Pre-diabetes' }]) === 'red',
+    'base: HbA1c 50 with prediabetes on record → red (progression to diabetes still flagged)'
+  );
+  // "non-diabetic hyperglycaemia" must NOT suppress the diabetes flag (footgun guard)
+  assert(
+    fire('HbA1c', 50, [{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
+    'base: HbA1c 50 with non-diabetic hyperglycaemia → red (not a diabetes diagnosis)'
+  );
+  // Prediabetes flag suppressed once prediabetes is on record
+  assert(
+    fire('HbA1c', 44, [{ label: 'Impaired glucose tolerance' }]) === 'none',
+    'base: HbA1c 44 with IGT on record → none (prediabetes suppressed)'
+  );
+
+  // Attributable rule label flows onto top for rule-driven escalations
+  const ruleDrivenRed = evaluateReportSeverity(makeReport([mkResult('Potassium', 6.7)]), { resultRules: baseSet });
+  assert(
+    ruleDrivenRed.top && ruleDrivenRed.top.ruleLabel && /potassium/i.test(ruleDrivenRed.top.ruleLabel),
+    'rule-driven red carries top.ruleLabel naming the rule'
+  );
+  // A lab-urgent result (no rule) carries no ruleLabel
+  const labUrgent = evaluateReportSeverity(makeReport([rdwUrgent]));
+  assert(labUrgent.top && labUrgent.top.ruleLabel == null, 'lab-driven urgent has null top.ruleLabel');
+}
+
+// ── suppressIfProblem: the non-diabetic / pre-diabetic footgun guards ─────────
+console.log('\n--- suppressIfProblem: word-boundary match + substring exclude ---');
+{
+  const diabetesRule = {
+    id: 'rule_dm',
+    enabled: true,
+    label: 'Possible diabetes',
+    analyte: { match: ['hba1c'] },
+    comparator: 'above',
+    red: 48,
+    unit: 'mmol/mol',
+    suppressIfProblem: {
+      match: ['diabetes mellitus', 'type 2 diabetes', 'diabetic'],
+      exclude: ['non-diabetic', 'pre-diabetic', 'prediabetes', 'pre-diabetes'],
+    },
+  };
+  const lvl = (problems) =>
+    evaluateReportSeverity(makeReport([mkResult('HbA1c', 52)]), { resultRules: [diabetesRule], problems }).level;
+  assert(lvl([]) === 'red', 'suppress: no problems → fires red (fail-open)');
+  assert(lvl(undefined) === 'red', 'suppress: undefined problems → fires red (fail-open)');
+  assert(lvl([{ label: 'Type 2 diabetes mellitus' }]) === 'none', 'suppress: T2DM on record → suppressed');
+  assert(lvl([{ label: 'Diabetic nephropathy' }]) === 'none', 'suppress: "diabetic nephropathy" → suppressed');
+  assert(
+    lvl([{ label: 'Non-diabetic hyperglycaemia' }]) === 'red',
+    'suppress: "non-diabetic hyperglycaemia" → NOT suppressed (exclude wins)'
+  );
+  assert(
+    lvl([{ label: 'Pre-diabetic retinopathy' }]) === 'red',
+    'suppress: "pre-diabetic retinopathy" → NOT suppressed (exclude wins)'
+  );
+  assert(lvl([{ label: 'Prediabetes' }]) === 'red', 'suppress: "prediabetes" → NOT suppressed (excluded)');
+  assert(lvl([{ label: 'Hypertension' }]) === 'red', 'suppress: unrelated problem → fires');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
