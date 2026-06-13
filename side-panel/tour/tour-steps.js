@@ -87,6 +87,7 @@ export const TOUR_STEPS = [
     addedIn: 1,
     module: 'sentinel',
     target: ['.sent-brief-card'],
+    centerFallback: true,
     title: 'The pre-consultation brief',
     body: 'A risk-ranked glance before you call the patient in: red chips need action, amber are due soon. Click the bar to collapse or expand it.',
   },
