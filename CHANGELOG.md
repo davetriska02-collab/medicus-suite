@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.10] — 2026-06-13
+
+### Reception — design-crit pass (three-critic review via /design-crit)
+
+- **Colour economy restored (the convergent finding across all three
+  critics)**: the per-tile colour labels no longer paint a clinical-severity
+  edge-bar down the side of a tile — a red/amber left-rule read exactly like
+  the escalation banner and overdue rows, training the eye to distrust the
+  suite's sharpest signal. The user colour-label now shows as a small corner
+  **dot** (a personal tag), in both browse and organise modes. All ten colour
+  choices are kept; this is purely a treatment change.
+- **Escalation banner now owns the moment**: a tripped red-flag banner gains a
+  solid status left-rule and a shadow lift so it reads as the apex alarm, and
+  it now carries `role="alert"` so screen-reader users in keyboard-only
+  workflows actually hear the 999/duty escalation (previously announced
+  silently — a patient-safety a11y gap). Alert salience was only ever raised,
+  never reduced.
+- **Expanded patient detail rows are proper status chips**: OVERDUE / DUE-SOON
+  / CAUTION render as the canon status-chip (dim wash + line border + ink),
+  red grouped above amber, tabular-aligned, with long drug names truncating
+  cleanly instead of bare coloured text leaning on hue alone.
+- **State & a11y hardening**: added missing `:active`/`:hover` states to the
+  status pill, sort toggle, pathway tiles, link buttons and colour
+  swatches/dots; switched form inputs from `:focus` to `:focus-visible` (no
+  more mouse-click ring flash); the draft banner is now an `aria-live` region;
+  the pill exposes `aria-controls`; decorative arrows/carets are
+  `aria-hidden`; colour dots gained real `aria-label`s.
+- **Casting & token fixes**: the NHS number now speaks in the machine voice
+  (mono, tabular-nums); the sort toggle uses the calm selected-state recipe
+  instead of a primary-accent fill (one less accent over-spend); swatch/dot
+  borders use theme tokens instead of raw `rgba(0,0,0,…)` that vanished in
+  dark; the "Copied." confirmation is green, not red; input radii follow the
+  `--r-md` semantic; and a block of dead per-opportunity chip/count CSS
+  (zero JS references) was removed.
+
 ## [v3.60.9] — 2026-06-12
 
 ### Crit follow-ups (the two deferred items from the v3.60.6–v3.60.8 passes)

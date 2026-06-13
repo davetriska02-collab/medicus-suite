@@ -352,22 +352,22 @@ function renderPatientCard() {
       )
       .join('');
     detailHtml = `
-      <div class="rcp-pill-detail">
+      <div class="rcp-pill-detail" id="rcpPillDetail">
         ${rows || '<div class="rcp-muted">No action-needed alerts in the current data.</div>'}
         ${filteredNote}
         <div class="rcp-fineprint">No alert ≠ everything is up to date — the Monitoring tab has the full picture.</div>
-        <button class="rcp-link-btn" id="rcpGotoSentinel">Open Monitoring →</button>
+        <button class="rcp-link-btn" id="rcpGotoSentinel">Open Monitoring <span aria-hidden="true">→</span></button>
       </div>`;
   }
 
   card.innerHTML = `
-    <div class="rcp-patient-line"><strong>${esc(who || 'Patient')}</strong>${pc.nhsNumber ? ` <span class="rcp-fineprint">NHS ${esc(pc.nhsNumber)}</span>` : ''}
+    <div class="rcp-patient-line"><strong>${esc(who || 'Patient')}</strong>${pc.nhsNumber ? ` <span class="rcp-nhs">NHS ${esc(pc.nhsNumber)}</span>` : ''}
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>
     </div>
     ${degradedNote}
-    <button class="rcp-pill rcp-pill-${level}" id="rcpPill" aria-expanded="${_pillExpanded}">
-      <span class="rcp-pill-dot"></span>${esc(pillText)}
-      <span class="rcp-pill-caret">${_pillExpanded ? '▴' : '▾'}</span>
+    <button class="rcp-pill rcp-pill-${level}" id="rcpPill" aria-expanded="${_pillExpanded}" aria-controls="rcpPillDetail">
+      <span class="rcp-pill-dot" aria-hidden="true"></span>${esc(pillText)}
+      <span class="rcp-pill-caret" aria-hidden="true">${_pillExpanded ? '▴' : '▾'}</span>
     </button>
     ${detailHtml}`;
 
@@ -425,7 +425,7 @@ function renderPathwayPicker(_activeDraft) {
       const draggable = _organising && !alpha;
       const handle = draggable ? `<span class="rcp-drag-handle" aria-hidden="true">&#10303;</span>` : '';
       const swatch = _organising
-        ? `<button class="rcp-tile-swatch rcp-tile-c-${esc(colour)}" data-colour-for="${esc(p.id)}" type="button" aria-label="Set tile colour" title="Tile colour"></button>`
+        ? `<button class="rcp-tile-swatch rcp-tile-c-${esc(colour)}" data-colour-for="${esc(p.id)}" type="button" aria-label="Set tile colour"></button>`
         : '';
       const palette =
         _organising && _openColourFor === p.id
@@ -433,7 +433,7 @@ function renderPathwayPicker(_activeDraft) {
             colourKeys
               .map(
                 (k) =>
-                  `<button class="rcp-colour-dot rcp-tile-c-${esc(k)} ${k === colour ? 'rcp-colour-sel' : ''}" data-set-colour="${esc(k)}" data-for="${esc(p.id)}" type="button" title="${esc(k)}"></button>`
+                  `<button class="rcp-colour-dot rcp-tile-c-${esc(k)} ${k === colour ? 'rcp-colour-sel' : ''}" data-set-colour="${esc(k)}" data-for="${esc(p.id)}" type="button" aria-label="${esc(k)}"></button>`
               )
               .join('') +
             `</div>`
@@ -442,6 +442,10 @@ function renderPathwayPicker(_activeDraft) {
         !_organising && draftPathwayId === p.id
           ? `<span class="rcp-draft-pill" aria-label="Unsaved draft">draft</span>`
           : '';
+      // Persistent colour-label dot (organise mode shows the interactive swatch
+      // in the same corner instead). A dot reads as a personal tag, not a
+      // clinical-severity edge-bar.
+      const tag = !_organising && colour !== 'default' ? `<span class="rcp-tile-tag" aria-hidden="true"></span>` : '';
       return `<div class="rcp-pathway-tile rcp-tile-c-${esc(colour)}${_organising ? ' rcp-tile-organising' : ''}" data-pathway="${esc(p.id)}"${draggable ? ' draggable="true"' : ''}>
       ${handle}
       <button class="rcp-pathway-btn" data-pathway-go="${esc(p.id)}" type="button"${_organising ? ' tabindex="-1"' : ''}>
@@ -449,7 +453,7 @@ function renderPathwayPicker(_activeDraft) {
         <span class="rcp-pathway-applies">${esc(p.appliesTo || '')}</span>
         ${draftPill}
       </button>
-      ${swatch}${palette}
+      ${tag}${swatch}${palette}
     </div>`;
     })
     .join('');
@@ -644,14 +648,14 @@ async function renderCaptureForm(pathway) {
   body.innerHTML = `
     <form class="rcp-form" id="rcpForm">
       <div class="rcp-form-head">
-        <button type="button" class="rcp-link-btn" id="rcpBack">← All pathways</button>
+        <button type="button" class="rcp-link-btn" id="rcpBack"><span aria-hidden="true">←</span> All pathways</button>
         <span class="rcp-form-title">${esc(pathway.title)}</span>
         <label class="rcp-initials">Your initials <input type="text" id="rcpInitials" maxlength="5" value="${esc(_takerInitials)}"></label>
       </div>
 
-      <div class="rcp-draft-banner rcp-draft-banner-hidden" id="rcpDraftBanner"></div>
+      <div class="rcp-draft-banner rcp-draft-banner-hidden" id="rcpDraftBanner" aria-live="polite"></div>
 
-      <div class="rcp-banner rcp-banner-hidden" id="rcpEscBanner"></div>
+      <div class="rcp-banner rcp-banner-hidden" id="rcpEscBanner" role="alert" aria-atomic="true"></div>
 
       <div class="rcp-section rcp-section-rf">
         <div class="rcp-section-title">1 · Red flags — ask every one</div>
@@ -824,12 +828,18 @@ function renderOutput(text, pathway) {
     const m = body.querySelector('#rcpCopyMsg');
     try {
       await navigator.clipboard.writeText(ta.value);
-      if (m) m.textContent = 'Copied.';
+      if (m) {
+        m.textContent = 'Copied.';
+        m.className = 'rcp-form-msg rcp-form-msg-ok';
+      }
     } catch (_) {
       ta.focus();
       ta.select();
       const ok = document.execCommand && document.execCommand('copy');
-      if (m) m.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
+      if (m) {
+        m.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
+        m.className = ok ? 'rcp-form-msg rcp-form-msg-ok' : 'rcp-form-msg';
+      }
     }
   });
   body.querySelector('#rcpNewCapture')?.addEventListener('click', renderPathwayPicker);
