@@ -2488,6 +2488,26 @@
     built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
   };
 
+  // Re-inject result chips straight from the per-task cache, keyed by each row's own
+  // `row-id` (the task UUID) read from the DOM — exactly how the durable age/decoration
+  // chips work. This does NOT depend on the bridge-provided `_queueRowUuids` map (which
+  // the Medicus SPA churn keeps clearing to 0), so chips survive every re-render.
+  // injectResultChip de-dupes, and a wipe immediately precedes this call, so it's a
+  // clean, synchronous restore with no visible gap.
+  const reinjectCachedResultChips = () => {
+    let n = 0;
+    document.querySelectorAll('.ag-row[row-id]:not(.ag-full-width-row)').forEach((row) => {
+      const taskUuid = row.getAttribute('row-id');
+      if (!taskUuid || !_BRIDGE_UUID_RE.test(taskUuid)) return;
+      const entry = _queueResultCache.get(taskUuid);
+      if (!entry || entry.sev === undefined || entry.sev === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
+      const rowIndex = row.getAttribute('row-index');
+      if (rowIndex != null) { injectResultChip(rowIndex, entry.sev); n++; }
+    });
+    if (n) log('queue-result: re-injected ' + n + ' cached chip(s) via row-id');
+  };
+
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
   let _resultFetchCount = 0;
   let _resultFetchWindowTimer = null;
@@ -2729,17 +2749,17 @@
     document.querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
     document.querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
+    // Restore result chips synchronously from the per-task cache via each row's row-id.
+    // DOM-driven (like the age chips) so they survive re-renders even when the
+    // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
+    reinjectCachedResultChips();
     // Re-attach via setupQueueObserver so the observer is created if it was
     // never initialised, and re-bound to the current container if it was.
     queueObservedContainer = null;
     setupQueueObserver();
-    // Re-inject monitoring chips — AG Grid row recycling on scroll destroys them
+    // Fetch+compute for rows not yet in the cache — this still needs the bridge map.
+    // (Already-cached rows were restored synchronously above, independent of it.)
     if (_queueRowUuids.size > 0) scheduleQueueMonitoring();
-    // Re-inject result-triage chips too. refreshQueueChips() wipes .ch-q-result
-    // above, and AG Grid mutations fire this constantly, so without this the
-    // result chips vanish on the first grid re-render and never return (even
-    // after a hard refresh). Cached per-row severities make this cheap — no
-    // re-fetch happens unless an entry is stale.
     if (_queueRowUuids.size > 0) scheduleQueueResultTriage();
   };
 
