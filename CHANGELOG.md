@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.70.0] — 2026-06-13
+
+### Fix: result-chip re-injection now uses a durable row map (v3.69.0 was a no-op)
+
+v3.69.0 keyed `reinjectCachedResultChips()` off each row's `row-id` attribute on the
+assumption it equalled the task UUID. Live `[ClinHUD]` tracing showed it never matched
+(no `re-injected …` line ever logged) — on real Medicus the AG-Grid `row-id` is **not**
+the task UUID, so re-injection was a no-op and chips still vanished.
+
+Root cause confirmed from the logs: `_queueRowUuids` (rowIndex→taskUuid) is cleared by
+`runQueue` on every queue re-entry, which the SPA churn triggers constantly, so
+`refreshQueueChips` kept running with `rows=0` and wiped chips it couldn't replace.
+
+Fix: a **durable `_durableRowMap` (rowIndex→taskUuid) written only by the bridge
+task-list event and never cleared by `runQueue`**. `reinjectCachedResultChips()` now
+iterates it, looks up the cached severity by taskUuid, and re-injects via the proven
+row-index path on every refresh — so chips survive the re-render churn the way the age
+chips do. manifest 3.69.0→3.70.0.
+
 ## [v3.69.0] — 2026-06-13
 
 ### Fix: queue result chips injected then wiped (now durable like the age chips)
