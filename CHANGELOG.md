@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.75.1] — 2026-06-13
+
+### Result text rules: match phrases across lab line-breaks
+
+A text result-rule that worked on one report would flag the next as abnormal purely
+because the lab **hard-wrapped the text across a line break**. The phrase match was a
+literal substring test against the result text, which keeps the lab's raw newlines — so
+`"no evidence of dysplasia or malignancy"` failed to match `"…no evidence\nof dysplasia
+or malignancy"`, and a benign histology report was wrongly flagged for review.
+
+The matcher now collapses every run of whitespace (newlines, tabs, multiple spaces) to a
+single space on **both** the result text and the rule phrases before comparing. This
+fixes the false amber on wrapped `normalText` matches and — more importantly — closes a
+**false-negative** on `abnormalText`: a flag phrase such as the bowel-screening
+non-responder finding split across a line break would previously have silently failed to
+fire. Whitespace-collapsing can never create a spurious match (the words are adjacent in
+the sentence regardless of wrapping). Guarded by new line-break regression tests for both
+`normalText` and `abnormalText`.
+
+manifest 3.75.0→3.75.1.
+
 ## [v3.75.0] — 2026-06-13
 
 ### Queue result triage: leaner urgent chips + bowel screening non-responders

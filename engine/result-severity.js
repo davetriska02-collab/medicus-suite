@@ -54,8 +54,17 @@
     }
 
     const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
+    // Collapse every run of whitespace (spaces, NEWLINES, tabs) to a single space before
+    // phrase matching. Lab reports hard-wrap free text, so a phrase like "no evidence of
+    // dysplasia or malignancy" can arrive as "...no evidence\nof dysplasia...". A literal
+    // includes() would miss it — calming a benign result fails (false amber), and worse, an
+    // abnormalText flag phrase split across a line break would silently NOT fire (false
+    // negative). Normalising both sides makes matches robust to the lab's line wrapping;
+    // it can never create a spurious match (the words are adjacent in the sentence anyway).
+    const collapseWs = s => s.replace(/\s+/g, ' ');
     // result.text is the pre-built combined free-text string (may be absent on old fixtures)
-    const resultText = typeof result.text === 'string' ? result.text.toLowerCase() : '';
+    const resultText =
+      typeof result.text === 'string' ? collapseWs(result.text.toLowerCase()) : '';
 
     let anyRuleApplied = false;
     let abnormalFound = false; // an abnormalText phrase positively matched → forced review
@@ -104,7 +113,7 @@
       if (hasAbnormal) {
         const foundAbnormal = rule.abnormalText.some(
           phrase => typeof phrase === 'string' && phrase.length > 0 &&
-            resultText.includes(phrase.toLowerCase())
+            resultText.includes(collapseWs(phrase.toLowerCase()))
         );
         if (foundAbnormal) {
           abnormalFound = true;
@@ -120,7 +129,7 @@
       if (hasNormal) {
         const foundNormal = rule.normalText.some(
           phrase => typeof phrase === 'string' && phrase.length > 0 &&
-            resultText.includes(phrase.toLowerCase())
+            resultText.includes(collapseWs(phrase.toLowerCase()))
         );
         if (foundNormal) {
           normalFound = true;
