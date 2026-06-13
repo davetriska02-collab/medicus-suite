@@ -7,6 +7,8 @@
 'use strict';
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
+import { downloadCsv } from '../shared/export-util.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -94,6 +96,7 @@ export async function init(el) {
 
   render();
   fetchAndRender();
+  const stopFresh = attachFreshnessTicker(container);
 
   // Listen for Pusher-triggered refresh from service worker
   document.addEventListener('suite:slots:refresh', onRefresh);
@@ -105,6 +108,7 @@ export async function init(el) {
   return () => {
     document.removeEventListener('suite:slots:refresh', onRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
+    stopFresh();
     container = null;
   };
 }
@@ -353,7 +357,7 @@ function render() {
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
       ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
-      <div class="foot">${state.lastFetched ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
+      <div class="foot">${state.lastFetched ? freshnessHtml(state.lastFetched) : ''}</div>
     </div>
   `;
 
@@ -373,6 +377,7 @@ function renderHeader() {
       <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
       <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
       <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh">${SVG_REFRESH}</button>
+      ${state.data && Object.keys(state.data.byType).length > 0 ? `<button class="ghost-btn" id="slotsCsvBtn">&#x2193; CSV</button>` : ''}
     </div>
   `;
 }
@@ -665,6 +670,22 @@ function bindEvents() {
   });
 
   container.querySelector('#refreshSlots')?.addEventListener('click', () => fetchAndRender());
+
+  container.querySelector('#slotsCsvBtn')?.addEventListener('click', () => {
+    const d = state.data;
+    if (!d) return;
+    const header = ['Clinician', 'Appointment type', 'Slots'];
+    const rows = [];
+    for (const s of d.byStaff) {
+      for (const [type, n] of Object.entries(s.byType)) {
+        rows.push([s.name, type, sumAmPm(n)]);
+      }
+    }
+    for (const [type, n] of Object.entries(d.byType)) {
+      rows.push(['All clinicians', type, sumAmPm(n)]);
+    }
+    downloadCsv(`slots-${state.date}.csv`, header, rows);
+  });
 
   container.querySelector('#slotsDate')?.addEventListener('change', (e) => {
     state.date = e.target.value;

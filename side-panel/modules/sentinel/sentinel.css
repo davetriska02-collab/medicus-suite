@@ -693,6 +693,15 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* Disambiguates the waiting-room list from a monitoring result: the list is
+   the room, not an assessment, and the minutes are wait time not overdue time. */
+.wr-pin-caption {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+  padding: 4px 0 2px;
+}
+
 /* Patient rows */
 .wr-rows {
   padding: 4px 0 3px;

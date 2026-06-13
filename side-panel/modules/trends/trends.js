@@ -167,7 +167,7 @@ function render(m) {
     return;
   }
   if (m.state === 'no-medicus') {
-    container.innerHTML = `<div class="trends-msg">Open a Medicus patient record to view trends.</div>`;
+    container.innerHTML = `<div class="trends-msg">Trends mirror the patient open in Medicus — open a record to see their results over time.</div>`;
     return;
   }
 

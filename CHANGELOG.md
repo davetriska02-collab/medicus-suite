@@ -2,6 +2,60 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.61.0] — 2026-06-13
+
+### Whole-suite usability pass — synthetic GP-practice panel ("The Practice")
+
+A new appraisal skill convened a panel of ten synthetic practice-staff personas
+(partner/salaried/trainee/locum GPs, practice manager, reception, nurse,
+pharmacist, secretary) spanning the full technophobe-to-power-user spectrum,
+reacting to real rendered screenshots of every module. The full appraisal is in
+`docs/appraisal/PRACTICE-whole-suite-2026-06-13.md`. Its convergent findings drove
+the following changes. No clinical alert salience was reduced anywhere.
+
+**Clinical-safety UX**
+
+- **Monitoring (Sentinel): "no alert" can no longer be misread as "all clear".**
+  The pinned waiting-room list now carries a caption stating it is the waiting
+  room only (and that the minutes are wait time, not overdue time), and the
+  no-record state reads "Monitoring idle" and explicitly says the list above is
+  not a monitoring result. The nurse and pharmacist personas independently
+  rated this their top concern.
+- **Monitoring rules footer now discloses scope** ("N drug rules · N QOF
+  indicators") alongside the existing currency dates, so the safety net's
+  coverage is legible at a glance.
+
+**Trust & reconciliation**
+
+- **Data freshness is now legible everywhere.** Slots, Submissions, Activity and
+  Condor show a shared relative "Updated · 12s ago" stamp with an explicit stale
+  state (amber, past a per-surface threshold) instead of an absolute clock that
+  read like wall time. New shared helper `side-panel/modules/shared/freshness.js`.
+- **Condor velocity** no longer claims "No submissions recorded today" while
+  showing a non-zero total; it states when submissions fell outside clinic hours.
+- **Condor pressure index** is relabelled "Pressure index" (was "Condor PPI",
+  misread as proton-pump inhibitor) and gains a caveat when capacity is stretched
+  but the band stays green, reconciling it with the Demand/Capacity card; the
+  index weighting is exposed on hover.
+
+**Get data out**
+
+- **CSV export** added to Slots (by clinician and type), Submissions (category
+  totals) and Activity (per staff), and a "Copy figures" snapshot to Condor.
+  New shared helper `side-panel/modules/shared/export-util.js`.
+
+**Ease of use**
+
+- Empty states in Referrals, Reception, Trends and Monitoring reframed as the
+  "mirror whatever you have open in Medicus" model rather than imperatives that
+  read as errors.
+- Referrals default range changed from 12 months to 30 days.
+- Command-palette button persistently advertises all tabs with a count, so the
+  narrow rail's off-screen tabs are discoverable.
+- Setup checklist wording softened ("key steps" not "essentials", plus a
+  "nothing is broken" reassurance) for the cautious/technophobe user.
+- Condor tab tooltip/aria now gloss the name as the practice-pressure dashboard.
+
 ## [v3.60.15] — 2026-06-13
 
 ### Suite-wide design polish — Atelier pass, verified on real-data renders

@@ -242,9 +242,10 @@ function renderCard() {
     <div class="setup-card" role="region" aria-label="Suite setup checklist">
       <div class="setup-card-header">
         <span class="setup-card-title">Get set up</span>
-        <span class="setup-card-progress">${done} of ${MANDATORY_STEPS} essentials</span>
+        <span class="setup-card-progress">${done} of ${MANDATORY_STEPS} key steps</span>
         <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
       </div>
+      <p class="setup-card-reassure">Nothing is broken — the suite works as soon as your practice code is set. The steps below the line are optional.</p>
       <ol class="setup-steps">
         ${renderPracticeCodeStep()}
         ${renderConnectionStep()}

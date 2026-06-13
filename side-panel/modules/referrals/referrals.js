@@ -9,7 +9,7 @@ function ApiNs() {
   return typeof window !== 'undefined' ? window.ReferralsApi : null;
 }
 
-const DEFAULT_PRESET = 'last12m';
+const DEFAULT_PRESET = 'last30';
 const TOP_N = 15;
 const STALE_MS = 30 * 60 * 1000;
 const DISCOVERY_KEY = 'referrals.discovery';
@@ -362,10 +362,10 @@ function renderDiscoveryPrompt() {
       <svg class="ref-discovery-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <p class="ref-discovery-head">Navigate to the referrals page</p>
+      <p class="ref-discovery-head">Waiting for the Medicus referrals report</p>
       <p class="ref-discovery-body">
-        Open <strong>Referrals → Clinical Audit Report</strong> in any Medicus tab.
-        The extension will detect the API endpoint automatically and load the charts here.
+        This panel mirrors Medicus. Open <strong>Referrals → Clinical Audit Report</strong>
+        in any Medicus tab and the charts appear here automatically — nothing to set up.
       </p>
       <div class="ref-discovery-path">Referrals → Clinical Audit Report</div>
     </div>

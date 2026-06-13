@@ -134,6 +134,26 @@ navTabsEl?.addEventListener('scroll', updateNavOverflow);
 if (navTabsEl) new ResizeObserver(updateNavOverflow).observe(navTabsEl);
 updateNavOverflow();
 
+// Persistent discoverability: at 400px only a couple of tabs are visible at a
+// time, so newcomers miss that the rest exist. The command palette reaches
+// every tab (including ones scrolled off the rail or hidden via "choose your
+// tabs"), so advertise the full count on its button permanently.
+(function initPaletteHint() {
+  const btn = document.getElementById('paletteBtn');
+  if (!btn) return;
+  const total = document.querySelectorAll('.nav-tab').length;
+  if (!total) return;
+  btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl+K)`;
+  let badge = btn.querySelector('.palette-count');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'palette-count';
+    badge.setAttribute('aria-hidden', 'true');
+    btn.appendChild(badge);
+  }
+  badge.textContent = String(total);
+})();
+
 [navIndicatorRight, navIndicatorLeft].forEach((el) => {
   if (!el) return;
   el.style.setProperty('pointer-events', 'auto');

@@ -320,7 +320,7 @@ function renderPatientCard() {
   if (!card) return;
 
   if (!_snapshot) {
-    card.innerHTML = `<span class="rcp-muted">No patient record open in the active Medicus tab.</span>
+    card.innerHTML = `<span class="rcp-muted">This panel mirrors the patient open in Medicus. Open a record and their details appear here.</span>
       <button class="rcp-link-btn" id="rcpPatientRefresh">Refresh</button>`;
     card.querySelector('#rcpPatientRefresh')?.addEventListener('click', refreshPatientCard);
     return;
