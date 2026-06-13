@@ -5,6 +5,8 @@
 'use strict';
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
+import { downloadCsv } from '../shared/export-util.js';
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
@@ -136,11 +138,13 @@ export async function init(el) {
     }
   };
   chrome.storage.onChanged.addListener(_storageListener);
+  const stopFresh = attachFreshnessTicker(container);
 
   return () => {
     clearInterval(pollInterval);
     chrome.storage.onChanged.removeListener(_storageListener);
     _storageListener = null;
+    stopFresh();
     container = null;
   };
 }
@@ -158,6 +162,7 @@ function renderShell() {
           <div class="mod-subtitle" id="subSubtitle">Live count of inbound work</div>
         </div>
         <div class="header-right">
+          <button id="subCsvBtn" class="ghost-btn hidden">&#x2193; CSV</button>
           <button id="subRefreshBtn" class="ghost-btn"><svg class="ghost-btn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>
           <button id="subSettingsBtn" class="icon-btn" title="Settings" aria-label="Submissions settings">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9"/></svg>
@@ -201,6 +206,7 @@ function renderShell() {
 function bindShellEvents() {
   container.querySelector('#subRefreshBtn')?.addEventListener('click', () => fetchAndRender(true));
   container.querySelector('#subSettingsBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  container.querySelector('#subCsvBtn')?.addEventListener('click', downloadSubCsv);
   container.querySelectorAll('.mode-tab').forEach((tab) => {
     tab.addEventListener('click', () => setMode(tab.dataset.mode));
   });
@@ -413,6 +419,21 @@ function buildDailyTotals(rangeData, startISO, endISO) {
   return { days, byDay };
 }
 
+// ── CSV export ────────────────────────────────────────────────────────────────
+
+function downloadSubCsv() {
+  if (!_lastMetricItems || !_lastMetricItems.length) return;
+  const dateStr =
+    state.mode === 'range'
+      ? `${state.rangeStart}-to-${state.rangeEnd}`
+      : state.mode === 'compare'
+        ? `${state.primaryDate}-vs-${state.compareDate}`
+        : state.primaryDate;
+  const header = ['Category', 'Count'];
+  const rows = _lastMetricItems.map((m) => [m.label, m.value]);
+  downloadCsv(`submissions-${dateStr}.csv`, header, rows);
+}
+
 // ── Render all ────────────────────────────────────────────────────────────────
 
 function renderAll() {
@@ -422,10 +443,9 @@ function renderAll() {
   else if (state.mode === 'compare') renderCompare();
   else renderRange();
   const foot = container.querySelector('#subFoot');
-  if (foot)
-    foot.textContent = state.lastFetched
-      ? `Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
-      : '';
+  if (foot) foot.innerHTML = state.lastFetched ? freshnessHtml(state.lastFetched) : '';
+  const csvBtn = container.querySelector('#subCsvBtn');
+  if (csvBtn) csvBtn.classList.toggle('hidden', !_lastMetricItems || _lastMetricItems.length === 0);
 }
 
 function updateTitles() {

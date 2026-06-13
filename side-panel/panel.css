@@ -370,6 +370,19 @@ body {
   background: var(--bg-hover);
 }
 
+/* Shared data-freshness chip (side-panel/modules/shared/freshness.js). One
+   consistent "Updated · 12s ago" relative stamp across every data module, with a
+   visible stale state so users can tell live from stale from silently-failed. */
+.freshness-stamp {
+  font-variant-numeric: tabular-nums;
+}
+.freshness-stamp.is-stale {
+  color: var(--amber);
+}
+.freshness-warn {
+  color: var(--amber);
+}
+
 /* Persistent "all N tabs live here" hint on the command-palette button, so the
    narrow rail's off-screen tabs are discoverable without hover or prior knowledge. */
 .palette-count {

@@ -1,10 +1,14 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 'use strict';
 import { fetchAllStreams } from './condor-data.js';
+import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
+import { copyText } from '../shared/export-util.js';
 // Card renderers loaded dynamically so module works even before card files land
 
 let _container = null;
 let _pollTimer = null;
+let _stopFresh = null;
+let _lastData = null;
 
 function esc(s) {
   return String(s ?? '')
@@ -38,17 +42,53 @@ async function loadCards() {
   };
 }
 
+function buildSnapshot(data) {
+  const arrivedCount = data.waitingRoom?.arrivedCount ?? 0;
+  const medical = data.submissions?.totals?.medical ?? 0;
+  const admin = data.submissions?.totals?.admin ?? 0;
+  const queueCount = medical + admin;
+  const urgentCount = data.requestMonitor?.urgentCount ?? 0;
+  const remaining = data.slots?.totalRemaining ?? 0;
+  const minimum = data.capacityPreset?.minimum ?? 0;
+  const submissionsTotal = data.submissions?.totals?.all ?? 0;
+
+  const scoreA = Math.min((arrivedCount / 10) * 100, 100);
+  const scoreB = Math.min((queueCount / 40) * 100, 100);
+  const scoreC = Math.min((urgentCount / 5) * 100, 100);
+  let scoreD = 0;
+  if (minimum !== 0) {
+    const deficit = Math.max(0, minimum - remaining);
+    scoreD = Math.min((deficit / minimum) * 100, 100);
+  }
+  const ppi = Math.round(scoreA * 0.3 + scoreB * 0.25 + scoreC * 0.25 + scoreD * 0.2);
+  const band = ppi < 40 ? 'GREEN' : ppi < 70 ? 'AMBER' : 'RED';
+
+  const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return [
+    `Condor snapshot — ${now}`,
+    `PPI\t${ppi}/100 (${band})`,
+    `Waiting room arrived\t${arrivedCount}`,
+    `Request queue (medical + admin)\t${queueCount}`,
+    `Urgent\t${urgentCount}`,
+    `Slots remaining\t${remaining}`,
+    `Submissions total today\t${submissionsTotal}`,
+  ].join('\n');
+}
+
 async function poll() {
   if (!_container) return;
   try {
     const data = await fetchAllStreams();
+    _lastData = data;
     const cards = await loadCards();
     if (!_container) return;
-    const updatedAt = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     _container.innerHTML = `
       <div class="condor-wrap">
         <div class="condor-hero">${cards.renderPpi(data)}</div>
-        <div class="condor-ts">Live · updated ${esc(updatedAt)}</div>
+        <div class="condor-ts">
+          ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
+          <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
+        </div>
         <div class="condor-grid">
           <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
           <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>
@@ -79,7 +119,22 @@ export async function init(el) {
     }
   });
 
+  // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML
+  _container.addEventListener('click', async (e) => {
+    const btn = e.target.closest('#condorCopyBtn');
+    if (!btn || !_lastData) return;
+    const ok = await copyText(buildSnapshot(_lastData));
+    if (ok) {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => {
+        btn.textContent = orig;
+      }, 1500);
+    }
+  });
+
   await poll();
+  _stopFresh = attachFreshnessTicker(_container);
 
   _pollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') poll();
@@ -92,6 +147,10 @@ export function cleanup() {
   if (_pollTimer) {
     clearInterval(_pollTimer);
     _pollTimer = null;
+  }
+  if (_stopFresh) {
+    _stopFresh();
+    _stopFresh = null;
   }
   _container = null;
 }

@@ -16,6 +16,8 @@ function ApiNs() {
 }
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
+import { downloadCsv } from '../shared/export-util.js';
 
 let container = null;
 let _inFlight = false;
@@ -54,6 +56,7 @@ export async function init(el) {
 
   render();
   fetchAndRender();
+  const stopFresh = attachFreshnessTicker(container);
 
   // Listen for practice code changes (auto-detection updates) and refetch
   const onChange = (ch) => {
@@ -63,6 +66,7 @@ export async function init(el) {
 
   return () => {
     chrome.storage.onChanged.removeListener(onChange);
+    stopFresh();
     container = null;
   };
 }
@@ -189,9 +193,10 @@ function renderControls() {
             `<button class="act-preset${activePreset === name ? ' active' : ''}" data-preset="${name}">${escHtml(PRESET_LABELS[name])}</button>`
         ).join('')}
         <span class="act-spacer"></span>
+        ${state.aggregated && state.aggregated.users.length > 0 ? `<button class="act-refresh" id="actCsvBtn">&#x2193; CSV</button>` : ''}
         <button class="act-refresh" id="actRefresh">Refresh</button>
       </div>
-      ${state.lastFetched ? `<div class="act-ts">Updated ${state.lastFetched.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>` : ''}
+      ${state.lastFetched ? `<div class="act-ts">${freshnessHtml(state.lastFetched)}</div>` : ''}
     </div>
   `;
 }
@@ -365,6 +370,21 @@ function renderBars() {
     .join('');
 }
 
+// ── CSV export ───────────────────────────────────────────────────────────────
+
+function downloadActCsv() {
+  const api = ApiNs();
+  const a = state.aggregated;
+  if (!api || !a || a.users.length === 0) return;
+  const metricLabels = api.METRICS.map((m) => m.short);
+  const header = ['Staff', ...metricLabels, 'Total'];
+  const rows = a.users.map((u) => [u.name, ...api.METRICS.map((m) => u.metrics[m.key] || 0), u.total]);
+  const start = state.startDate || '';
+  const end = state.endDate || '';
+  const datePart = start === end ? start : `${start}-to-${end}`;
+  downloadCsv(`activity-${datePart}.csv`, header, rows);
+}
+
 // ── Wiring ───────────────────────────────────────────────────────────────────
 
 function wireControls() {
@@ -404,6 +424,9 @@ function wireControls() {
       }
     });
   });
+
+  const csvBtn = container.querySelector('#actCsvBtn');
+  if (csvBtn) csvBtn.addEventListener('click', downloadActCsv);
 
   const refresh = container.querySelector('#actRefresh');
   if (refresh) refresh.addEventListener('click', fetchAndRender);
