@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.60.12] — 2026-06-13
+
+### Guided setup & onboarding tour — multi-critic design crit
+
+A single-surface design crit (art director on the pixels, a token/code
+surveyor on the CSS+JS, a fresh-eyes GP persona on screenshots only) was run
+across both onboarding surfaces. The three lenses converged on one broken
+state-signal, a misleading progress count, and a first-run collision between
+the two surfaces. Changes:
+
+- **The setup checklist's step icons now actually colour.** The done tick and
+  pending circle were emitted with BEM class names (`setup-step-icon--done`)
+  that no CSS rule matched, so both rendered in primary-text ink — "done" and
+  "to-do" looked identical bar the background wash. The tick is now `--green`,
+  the pending circle muted `--text-4`; status no longer rides on a single
+  fragile channel.
+- **Completion recedes instead of celebrating.** Done steps were filled with a
+  full `--green-dim` wash, spending the clinical green as chrome on a
+  housekeeping card that sits *above* the live "couldn't reach Medicus" /
+  waiting-room signals. The wash is dropped to a quiet `--green-line` hairline;
+  the green tick carries the signal. The card's resting border is calmed from
+  `--accent-line` to `--border`.
+- **The progress counter is honest.** It read "N/3 done" beside five rows and
+  multiple green ticks — fresh-eyes GPs could not tell whether setup was
+  complete. It now reads "N of 3 essentials", and the two non-essential steps
+  are both badged (`recommended` on Choose-your-tabs, the existing `optional`
+  on Triage) so the count reconciles with the rows.
+- **Onboarding no longer talks like a developer.** "Verify the extension can
+  reach your Medicus API" → "Check the extension can reach Medicus", with a
+  muted "add a practice code first" hint when the connection step is gated.
+  The tab-count line is recast as neutral metadata rather than clinical green.
+- **The tour is keyboard- and screen-reader-operable.** The `role=dialog`
+  overlay had no focus management: focus is now moved into the dialog on open,
+  trapped within its controls (Tab/Shift-Tab), and restored on close; step
+  content is announced via an `aria-live` region; the setup card gains
+  `aria-live` and async buttons set `aria-busy`.
+- **Skip reads differently from Back.** "Skip tour" (exits the whole
+  walkthrough) was a bordered button identical to "Back" (one step). It is now
+  a quiet text-link pulled left, clearly separated from the Back/Next nav pair,
+  with a bounded progress track so a 16-step tour no longer feels open-ended.
+- **The setup card and tour no longer collide.** On a true first run both
+  appeared at once; the checklist now hides while the tour is on screen and
+  re-evaluates when it ends.
+- Token hygiene: the shared overlay scrim is now a `--scrim` token; `:active`
+  press states added to ghost and tour buttons; dead `.setup-manual-link` CSS
+  removed.
+
 ## [v3.60.11] — 2026-06-13
 
 ### Submissions Tracker — multi-critic design crit
