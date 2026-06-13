@@ -110,13 +110,13 @@ export const TOUR_STEPS = [
     body: 'This panel is a memory aid, not the record. Verify in Medicus focuses the source tab so you can check the live record before acting on any alert.',
   },
   {
-    id: ‘unmatched-meds’,
+    id: 'unmatched-meds',
     addedIn: 1,
-    module: ‘sentinel’,
-    target: [‘.sent-unmatched-section’],
+    module: 'sentinel',
+    target: ['.sent-unmatched-section'],
     centerFallback: true,
-    title: ‘Meds without a monitoring rule’,
-    body: ‘Most medicines need no routine monitoring. Scan this list for brand names that should have matched a rule but didn’t — and report any you spot.’,
+    title: 'Meds without a monitoring rule',
+    body: 'Most medicines need no routine monitoring. Scan this list for brand names that should have matched a rule but didn’t — and report any you spot.',
   },
   {
     id: 'palette',
