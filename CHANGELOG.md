@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.72.0] — 2026-06-13
+
+### Queue result triage: tag the visible rows in ~2s, not the whole list in ~10s
+
+With the whole list now tagged reliably (v3.71.0), the remaining problem was latency:
+~9–14s to tag 58 rows, because the fetch worker chewed through them in arbitrary order
+at a fixed 200ms-per-fetch pace while the per-frame re-injection swept the whole document.
+The age chips are instant (pure DOM reads); the result chips needed the same feel for the
+rows you can actually see. Performance pass (no clinical-logic change):
+
+- **Visible-first ordering.** `scheduleQueueResultTriage` now partitions the row set by
+  on-screen first (AG-Grid virtualises, so that's the ~dozen rows in the DOM), with
+  High/Urgent/Immediate priority as the within-partition tiebreak. The visible rows tag in
+  ~2s; off-screen rows fill in behind them.
+- **Faster, budget-aware fetching.** Concurrency 3→5 and the inter-fetch delay 200→100ms
+  base. Once we cross 80% of the rolling budget the delay eases linearly from 100ms up to
+  1000ms across the last 20%, so we back off as we approach the hard cap instead of
+  slamming into it. The hard 90-fetch / 60s cap and the rolling-window reset are unchanged.
+- **On-screen re-injection.** `reinjectCachedResultChips` now iterates only the rendered
+  rows (still keyed via the durable `_durableRowMap` → taskUuid → cached sev, still
+  TTL-gated, still idempotent) rather than the whole snapshot, so the per-frame restore
+  cost scales with what's visible.
+- **Observer reuse.** After `refreshQueueChips` self-disconnects to write, it re-arms the
+  SAME observer instead of nulling the container and rebuilding from scratch every grid
+  mutation.
+- **Grid-scoped sweeps.** The per-frame wipe/re-decorate sweeps run over the live AG-Grid
+  container (`queueScope()`, with a `document` fallback) instead of the whole page.
+- **Memoised chip HTML.** Rendered result-chip HTML is memoised per (id, vars) so the hot
+  re-injection path skips repeated string-building; the memo is dropped on config change.
+
+No change to clinical severity logic (`evaluateReportSeverity` / rules), to PREPEND
+injection, to the hud.css CSS token-scope, to the durable `_durableRowMap` (v3.70.0), or
+to the whole-snapshot fetch worker with no gen-abort (v3.71.0).
+
+manifest 3.71.0→3.72.0.
+
 ## [v3.71.0] — 2026-06-13
 
 ### Queue result triage: tag the whole list, retry flaky fetches
