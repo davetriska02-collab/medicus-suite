@@ -5,6 +5,7 @@
   padding: 10px 12px;
   font-size: 13px;
   color: var(--text-1);
+  font-family: var(--sans);
 }
 
 .sweep-header {
@@ -50,7 +51,10 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--fast) var(--ease);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
 .sweep-run-btn:hover {
@@ -365,7 +369,8 @@
   cursor: pointer;
   transition:
     background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 
 .sweep-continue-btn:hover {
@@ -447,7 +452,8 @@
   cursor: pointer;
   transition:
     background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 .sweep-print-btn:hover {
   background: var(--accent);
@@ -533,7 +539,8 @@
   white-space: nowrap;
   transition:
     background var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
 }
 .sweep-batch-btn:hover:not(:disabled) {
   background: var(--accent);

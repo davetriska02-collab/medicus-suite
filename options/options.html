@@ -73,10 +73,10 @@
         --green-dim: rgba(74, 222, 128, 0.12);
         --green-line: rgba(74, 222, 128, 0.32);
         --amber: #fbbf24;
-        --amber-dim: rgba(251, 191, 36, 0.12);
+        --amber-dim: rgba(251, 191, 36, 0.16);
         --amber-line: rgba(251, 191, 36, 0.32);
         --red: #f87171;
-        --red-dim: rgba(248, 113, 113, 0.13);
+        --red-dim: rgba(248, 113, 113, 0.17);
         --red-line: rgba(248, 113, 113, 0.34);
         --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
         --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
@@ -229,9 +229,9 @@
         border-radius: var(--r-md);
         padding: 10px 12px;
       }
-      input[type='text']:focus,
-      input[type='email']:focus,
-      input[type='number']:focus {
+      input[type='text']:focus-visible,
+      input[type='email']:focus-visible,
+      input[type='number']:focus-visible {
         border-color: var(--accent);
         background: var(--bg-elev);
       }
@@ -518,7 +518,7 @@
         border-radius: var(--r-md);
         padding: 7px 10px;
       }
-      .form-row input:focus {
+      .form-row input:focus-visible {
         border-color: var(--accent);
         background: var(--bg-elev);
       }
@@ -527,7 +527,7 @@
         max-height: 200px;
         overflow-y: auto;
         border: 1px solid var(--border-hi);
-        border-radius: 6px;
+        border-radius: var(--r-md);
         background: var(--bg-mid);
         padding: 6px;
         display: flex;
@@ -539,9 +539,9 @@
         align-items: center;
         gap: 8px;
         padding: 4px 6px;
-        border-radius: 4px;
+        border-radius: var(--r-sm);
         cursor: pointer;
-        transition: background 0.1s;
+        transition: background var(--fast) var(--ease);
       }
       .type-check-row:hover {
         background: var(--bg-hover);
@@ -675,6 +675,12 @@
         color: var(--text-2);
         border-color: var(--accent);
         background: var(--accent-dim);
+      }
+
+      /* Contrast fix — release notes sub-panel: raw rgba(0,0,0,.2) is marginal on dark */
+      #updateBannerNotes {
+        background: var(--bg-mid) !important;
+        color: var(--text-2) !important;
       }
     </style>
   </head>
