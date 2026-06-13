@@ -265,15 +265,21 @@ if (OVERVIEW_URL_RE) {
 // ============================================================
 console.log('Layer 3: result-chip re-injection & cache-invalidation wiring');
 
-// refreshQueueChips() must re-run result triage, not just monitoring — otherwise
-// AG Grid re-renders strip the .ch-q-result chips and they never come back (the
-// bug that made every result rule and lab-flagged urgent look dead on the queue).
+// refreshQueueChips() must re-DISPLAY result chips on every grid re-render — otherwise
+// AG Grid strips the .ch-q-result chips and they never come back. It does this via
+// reinjectCachedResultChips (durable, from the per-task cache), NOT by kicking a fetch
+// pass (that re-started/aborted the worker and starved it — only the first few rows got
+// tagged). Guard both: re-injection present, fetch-trigger absent.
 const rqcMatch = src.match(/const refreshQueueChips = \(\) => \{[\s\S]*?\n {2}\};/);
 check(!!rqcMatch, 'refreshQueueChips function found');
 if (rqcMatch) {
   check(
-    /scheduleQueueResultTriage\(\)/.test(rqcMatch[0]),
-    'refreshQueueChips re-runs scheduleQueueResultTriage() (chips survive grid re-renders)'
+    /reinjectCachedResultChips\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips re-displays result chips via reinjectCachedResultChips() (durable)'
+  );
+  check(
+    !/scheduleQueueResultTriage\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips does NOT kick a fetch pass (would starve the worker)'
   );
   check(
     /scheduleQueueMonitoring\(\)/.test(rqcMatch[0]),
