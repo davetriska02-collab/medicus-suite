@@ -553,6 +553,150 @@ const msuTextRule = {
   normalLabel: 'No growth',
 };
 
+// ── abnormalText (flag-if-present) fixtures: bowel cancer screening ──────────────
+
+// Bowel cancer screening non-responder — the BCS:FOB result whose value is the
+// "No response to ... invitation" coded finding. Should be flagged 'review'.
+const bowelNonResponder = {
+  name: 'BCS:FOB result',
+  value: NaN,
+  rawValue: 'No response to bowel cancer screening programme invitation (finding) (preliminary)',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: 'No response to bowel cancer screening programme invitation (finding) (preliminary)',
+};
+
+// Normal bowel screening result — no "no response" phrase → left untouched (no chip).
+const bowelNormal = {
+  name: 'BCS:FOB result',
+  value: NaN,
+  rawValue: 'Bowel cancer screening programme: normal. No further action required.',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: 'Bowel cancer screening programme: normal. No further action required.',
+};
+
+// Abnormal/positive bowel screening result — the non-responder rule must NOT flag it
+// (it has no "no response" phrase) and must NOT calm it (abnormalText only ever flags).
+// Critically "abnormal" contains the substring "normal" — a normalText approach would
+// have mis-classed this as calm; abnormalText cannot.
+const bowelAbnormal = {
+  name: 'BCS:FOB result',
+  value: NaN,
+  rawValue: 'Bowel cancer screening programme abnormal — patient referred for colonoscopy',
+  comparator: null,
+  unit: null,
+  low: null,
+  high: null,
+  isAbove: false,
+  isBelow: false,
+  urgent: false,
+  interpretation: null,
+  date: '2026-06-10',
+  history: [],
+  text: 'Bowel cancer screening programme abnormal — patient referred for colonoscopy',
+};
+
+// Bowel screening non-responder rule (abnormalText-only) — mirrors the shipped builtin.
+const bowelRule = {
+  id: 'rule_bowel_nonresponder',
+  enabled: true,
+  kind: 'text',
+  label: 'Bowel screening: no response',
+  analyte: { match: ['bcs:fob', 'bowel cancer screening', 'faecal occult blood'] },
+  abnormalText: ['no response to bowel cancer screening', 'bowel cancer screening programme non-responder'],
+};
+
+// ── abnormalText: non-responder is flagged for review (amber) ────────────────────
+console.log('\n--- abnormalText: bowel screening non-responder → review, amber ---');
+{
+  const out = evaluateReportSeverity(makeReport([bowelNonResponder]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 1, 'non-responder → reviewCount 1');
+  assert(out.noGrowthCount === 0, 'non-responder → noGrowthCount 0');
+  assert(out.level === 'amber', 'non-responder → level amber');
+  assert(out.reviewTop !== null, 'reviewTop is set');
+  assert(out.reviewTop.name === 'BCS:FOB result', 'reviewTop.name is the BCS:FOB result');
+  assert(
+    out.reviewTop.label === 'Bowel screening: no response',
+    'reviewTop.label carries the rule label (for the attributable chip)'
+  );
+}
+{
+  // Case-insensitive: the same finding in uppercase still matches.
+  const upper = Object.assign({}, bowelNonResponder, {
+    text: 'NO RESPONSE TO BOWEL CANCER SCREENING PROGRAMME INVITATION',
+  });
+  const out = evaluateReportSeverity(makeReport([upper]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 1, 'uppercase non-responder text → still flagged (case-insensitive)');
+}
+
+// ── abnormalText: normal / abnormal screening results are left untouched ─────────
+console.log('\n--- abnormalText: normal & positive screening results → none (never hidden) ---');
+{
+  const out = evaluateReportSeverity(makeReport([bowelNormal]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 0, 'normal screening result → reviewCount 0 (no over-flag)');
+  assert(out.noGrowthCount === 0, 'abnormalText-only rule never produces a noGrowth/calm chip');
+  assert(out.level === 'none', 'normal screening result → level none');
+}
+{
+  // The safety case: a positive/abnormal result must NOT be flagged by this rule AND must
+  // NOT be calmed. "abnormal" contains "normal" — an abnormalText rule is immune to that trap.
+  const out = evaluateReportSeverity(makeReport([bowelAbnormal]), { resultRules: [bowelRule] });
+  assert(out.reviewCount === 0, 'abnormal result not flagged by the non-responder rule');
+  assert(out.noGrowthCount === 0, 'abnormal result NOT calmed (no false-negative)');
+  assert(out.level === 'none', 'abnormal result → none from this rule (a lab flag would still apply)');
+}
+
+// ── abnormalText: a positive flag wins over a normal phrase in the same rule ─────
+console.log('\n--- abnormalText: flag wins over normal phrase (precedence) ---');
+{
+  // A rule with BOTH lists; the result text contains both a flag phrase and a normal phrase.
+  // The explicit abnormalText flag must win — the result is reviewed, not calmed.
+  const bothRule = {
+    id: 'rule_both', enabled: true, kind: 'text', label: 'Flagged finding',
+    analyte: { match: ['bcs:fob'] },
+    normalText: ['no further action'],
+    abnormalText: ['no response to bowel cancer screening'],
+  };
+  const mixed = Object.assign({}, bowelNonResponder, {
+    text: 'No response to bowel cancer screening programme invitation. No further action recorded.',
+  });
+  const out = evaluateReportSeverity(makeReport([mixed]), { resultRules: [bothRule] });
+  assert(out.reviewCount === 1, 'flag phrase present → review (wins over normal phrase)');
+  assert(out.noGrowthCount === 0, 'not calmed despite a normal phrase being present');
+  assert(out.reviewTop.label === 'Flagged finding', 'review label from the flagging rule');
+}
+{
+  // Same rule, but only the normal phrase is present (no flag) → calm.
+  const calm = Object.assign({}, bowelNormal, { text: 'Routine recall. No further action required.' });
+  const bothRule = {
+    id: 'rule_both', enabled: true, kind: 'text', label: 'Flagged finding', normalLabel: 'Routine',
+    analyte: { match: ['bcs:fob'] },
+    normalText: ['no further action'],
+    abnormalText: ['no response to bowel cancer screening'],
+  };
+  const out = evaluateReportSeverity(makeReport([calm]), { resultRules: [bothRule] });
+  assert(out.noGrowthCount === 1, 'normal phrase, no flag → noGrowth (calm)');
+  assert(out.reviewCount === 0, 'no flag phrase → not reviewed');
+  assert(out.level === 'none', 'calm normal phrase → level none');
+}
+
 // ── Text-rule: no text rules → new counts are zero, existing fields unchanged ─
 console.log('\n--- text rules: no text rules → zero counts, existing behaviour unchanged ---');
 {

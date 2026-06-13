@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.75.0] — 2026-06-13
+
+### Queue result triage: leaner urgent chips + bowel screening non-responders
+
+Two changes from clinical feedback on the Investigation Results queue.
+
+**Dropped the "Urgent:" prefix on result chips.** A red chip already reads as urgent
+(and the row priority is shown alongside), so the word just ate horizontal space in the
+fixed-width patient-name cell. The urgent chips now show the analyte alone — `{name}`
+(e.g. "BCS:FOB result") and `{name} — {rule}` — instead of "Urgent: …". Colour still
+carries the severity; nothing about *which* results flag has changed.
+
+**New built-in rule: bowel cancer screening non-responders.** A BCS:FOB result whose
+value is the "No response to bowel cancer screening programme invitation" coded finding
+now raises an amber **"Bowel screening: no response"** chip, so non-responders surface
+for chasing instead of being filed silently.
+
+To do this safely, text result-rules gained an optional **`abnormalText`** list — a
+*flag-if-present* positive match — alongside the existing *calm-if-present* `normalText`.
+A normalText approach would have been unsafe here: guessing the "normal" phrase set risks
+a false-negative (the substring "normal" is contained in "abnormal"), which could hide a
+positive screening result. `abnormalText` only ever ADDS a review flag on an exact phrase,
+so it cannot hide or calm anything — a normal or positive screening result is left
+untouched by the rule. A new attributable `queue.resultReviewRule` chip shows the rule's
+own label, so the non-responder chip names itself rather than reading a generic "Needs
+review"; cultures (whose rule label is "Needs review") are unchanged.
+
+manifest 3.74.1→3.75.0.
+
 ## [v3.74.1] — 2026-06-13
 
 ### Monitoring pane: faster, render-storm-proof reload on patient switch

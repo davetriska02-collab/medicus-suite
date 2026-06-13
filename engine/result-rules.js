@@ -51,15 +51,26 @@
 //       match     : string[]        — required, ≥ 1 non-empty string; matched against result.name
 //       exclude   : string[]        — OPTIONAL; same skip-on-substring semantics as above
 //     }
-//     normalText  : string[]        — required, ≥ 1 non-empty string; if any phrase is found
-//                                    (case-insensitive) in result.text → outcome 'noGrowth'
+//     normalText  : string[]        — calm-if-present; if any phrase is found
+//                                    (case-insensitive) in result.text → outcome 'noGrowth'.
+//                                    A rule whose normalText is ABSENT → 'review'.
+//     abnormalText: string[]        — OPTIONAL; flag-if-present. If any phrase is found in
+//                                    result.text → outcome 'review' (e.g. "no response to
+//                                    bowel cancer screening"). A positive abnormalText flag
+//                                    is never overridden by a normal phrase. Use this to
+//                                    surface a specific coded finding without having to
+//                                    enumerate the full "normal" set (which risks a
+//                                    false-negative — e.g. "abnormal" contains "normal").
 //     normalLabel : string          — optional; label shown on chip when outcome is 'noGrowth'
 //                                    (default "No growth")
 //   }
+//   At least one of normalText / abnormalText must be a non-empty array.
 //
-// Text rules are ESCALATE-ONLY: a result whose text contains a normal phrase gets a
-// calm 'noGrowth' info outcome (does not raise level). A result whose text does NOT
-// contain any normal phrase gets 'review' which escalates the row to amber.
+// Text rules are ESCALATE-ONLY. A result whose text contains a normal phrase gets a
+// calm 'noGrowth' info outcome (does not raise level). A result flagged by abnormalText, or
+// (for a normalText rule) whose text does NOT contain a normal phrase, gets 'review' which
+// escalates the row to amber. A rule with ONLY abnormalText flags nothing unless a flag
+// phrase is present — normal / other results are left untouched (no chip).
 
 (function (global) {
   'use strict';
@@ -149,16 +160,26 @@
     }
 
     if (kind === 'text') {
-      // normalText — required non-empty array of non-empty strings
-      if (!Array.isArray(rule.normalText)) {
-        errs.push('normalText must be an array of strings for kind "text" rules.');
-      } else {
-        const nonEmpty = rule.normalText.filter(
-          s => typeof s === 'string' && s.trim().length > 0
+      // A text rule classifies by phrase lists: normalText (calm-if-present) and/or
+      // abnormalText (flag-if-present). At least one must be a non-empty array of strings.
+      const countNonEmpty = arr =>
+        Array.isArray(arr) ? arr.filter(s => typeof s === 'string' && s.trim().length > 0).length : -1;
+      const normalCount = countNonEmpty(rule.normalText); // -1 = not an array
+      const abnormalCount = countNonEmpty(rule.abnormalText);
+
+      // normalText — if present, must be an array of strings.
+      if (rule.normalText !== undefined && !Array.isArray(rule.normalText)) {
+        errs.push('normalText, if present, must be an array of strings for kind "text" rules.');
+      }
+      // abnormalText — if present, must be an array of strings.
+      if (rule.abnormalText !== undefined && !Array.isArray(rule.abnormalText)) {
+        errs.push('abnormalText, if present, must be an array of strings for kind "text" rules.');
+      }
+      // At least one non-empty classification list is required.
+      if (normalCount <= 0 && abnormalCount <= 0) {
+        errs.push(
+          'A text rule must define at least one non-empty normalText or abnormalText array.'
         );
-        if (nonEmpty.length === 0) {
-          errs.push('normalText must contain at least one non-empty string.');
-        }
       }
 
       // normalLabel — optional string
@@ -237,12 +258,18 @@ There are TWO rule kinds. Choose the correct kind for the analyte you are target
                       the numeric result value is above or below a threshold. Omitting
                       kind is also treated as "threshold".
 
-  kind:"text"       — free-text / microbiology result (e.g. MSU, urine culture, blood
-                      culture, HVS). These results have no numeric high/low flag, so the
-                      engine searches the result text for normal phrases (e.g. "no growth").
-                      If a normal phrase is found → calm "No growth" info chip (does NOT
-                      raise severity). If no normal phrase is found → "Needs review" amber
-                      chip. Use this kind for all microbiology and culture results.
+  kind:"text"       — free-text / coded-finding result (e.g. MSU, urine culture, blood
+                      culture, HVS, bowel cancer screening). These results have no numeric
+                      high/low flag, so the engine searches the result text for phrases.
+                      Two complementary lists (at least one required):
+                        • normalText  — calm-if-present. If a normal phrase is found → calm
+                          "No growth" info chip (does NOT raise severity). If a normalText
+                          rule finds NO normal phrase → "Needs review" amber chip. Best for
+                          microbiology/cultures where "normal" is one of a few known phrases.
+                        • abnormalText — flag-if-present. If a flag phrase is found → amber
+                          review chip; nothing else about the result is flagged or calmed.
+                          Best for surfacing ONE specific coded finding (e.g. a bowel cancer
+                          screening non-responder) without enumerating the whole normal set.
 
 === CLINICAL SAFETY INSTRUCTIONS ===
 
@@ -251,7 +278,7 @@ There are TWO rule kinds. Choose the correct kind for the analyte you are target
 3. Imported rules arrive DISABLED (enabled:false is forced on import). A clinician MUST review the analyte match strings and threshold/text values before enabling the rule. Incorrect rules are a patient-safety risk.
 4. For threshold rules: use current UK reference ranges and NICE/BNF guidance when choosing threshold values. When in doubt, use a more conservative (wider) threshold rather than a narrower one.
 5. The 'unit' field is for display only — the engine does not perform unit conversion. Ensure the threshold values are in the same units as reported by your laboratory system.
-6. For text rules: normalText phrases are matched case-insensitively anywhere in the result text (rawValue, interpretation, performer comments). Only include phrases that unambiguously indicate a negative / no-growth result. A phrase that is too short or too generic risks false-negative classification (a positive culture classed as "no growth").
+6. For text rules: normalText / abnormalText phrases are matched case-insensitively anywhere in the result text (rawValue, interpretation, performer comments). For normalText, only include phrases that unambiguously indicate a negative / no-growth result — a phrase that is too short or too generic risks a false-negative (a positive result classed as normal; note "abnormal" contains the substring "normal", so never use a bare "normal"). For abnormalText, prefer a positive match on the exact finding you want to surface; it only ever ADDS a review flag, so it cannot hide a result.
 
 === SCHEMA — kind:"threshold" ===
 
@@ -308,17 +335,24 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
     exclude   (string[], optional) — Case-insensitive substrings; a result whose name contains
                                      any is skipped even if matched (drops shared-token false
                                      positives).
-  normalText  (string[], required, non-empty) — Phrases searched (case-insensitive) in the
-                                                combined result text (rawValue + interpretation +
+  normalText  (string[], optional*) — Phrases searched (case-insensitive) in the combined
+                                                result text (rawValue + interpretation +
                                                 performer/filing comments). If ANY phrase is found,
                                                 outcome is 'noGrowth' (calm info chip, no severity
-                                                escalation). If NONE are found, outcome is 'review'
-                                                (amber chip — the result needs a clinician's eye).
+                                                escalation). If a normalText rule finds NONE,
+                                                outcome is 'review' (amber — needs a clinician's eye).
                                                 e.g. ["no growth", "no significant growth"]
+  abnormalText (string[], optional*) — Phrases searched the same way. If ANY phrase is found, the
+                                                result is flagged 'review' (amber). Unlike normalText
+                                                it ONLY adds a flag — a result with no abnormalText
+                                                phrase is left untouched (no chip), so a lone
+                                                abnormalText rule cannot hide or calm anything.
+                                                e.g. ["no response to bowel cancer screening"]
+                                   * At least one of normalText / abnormalText is required.
   normalLabel (string, optional) — Label on the calm chip when a normal phrase is found.
                                    Default "No growth" if omitted.
 
---- TEXT EXAMPLE (MSU / urine culture) ---
+--- TEXT EXAMPLE (MSU / urine culture — normalText) ---
 {
   "id": "rule_placeholder",
   "enabled": false,
@@ -334,6 +368,22 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
 --- END TEXT EXAMPLE ---
 
 This example applies to any result whose name contains "MSU" or "urine culture". If the result text contains "no growth" → calm "No growth" info chip (level not raised). If no normal phrase is found → "Needs review" amber chip (prompts a clinician to look at the result).
+
+--- TEXT EXAMPLE (bowel cancer screening non-responder — abnormalText) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "text",
+  "label": "Bowel screening: no response",
+  "analyte": {
+    "match": ["bcs:fob", "bowel cancer screening", "faecal occult blood"]
+  },
+  "abnormalText": ["no response to bowel cancer screening", "bowel cancer screening programme non-responder"]
+}
+--- END TEXT EXAMPLE ---
+
+This example surfaces bowel cancer screening non-responders: it applies to bowel-screening results and flags 'review' ONLY when the text contains a "no response" phrase. A normal or abnormal screening result contains no such phrase, so it is left untouched — the rule can never hide a positive result.
 
 === CLOSING REMINDER ===
 

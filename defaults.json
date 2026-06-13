@@ -3817,7 +3817,7 @@
     },
     "queue.resultUrgent": {
       "enabled": true,
-      "label": "Urgent: {name}",
+      "label": "{name}",
       "kind": "red",
       "actions": []
     },
@@ -3829,7 +3829,7 @@
     },
     "queue.resultRuleUrgent": {
       "enabled": true,
-      "label": "Urgent: {name} — {rule}",
+      "label": "{name} — {rule}",
       "kind": "red",
       "actions": []
     },
@@ -3854,6 +3854,12 @@
     "queue.resultReview": {
       "enabled": true,
       "label": "Needs review",
+      "kind": "amber",
+      "actions": []
+    },
+    "queue.resultReviewRule": {
+      "enabled": true,
+      "label": "{rule}",
       "kind": "amber",
       "actions": []
     },
@@ -3909,6 +3915,17 @@
         "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
       },
       "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    },
+    {
+      "id": "base-bowel-screening-nonresponder",
+      "kind": "text",
+      "enabled": true,
+      "builtin": true,
+      "label": "Bowel screening: no response",
+      "analyte": {
+        "match": ["bcs:fob", "bcs fob", "bowel cancer screening", "faecal occult blood"]
+      },
+      "abnormalText": ["no response to bowel cancer screening", "no response to bowel screening", "non-response to bowel cancer screening", "bowel cancer screening programme non-responder", "bowel cancer screening non-responder", "non-responder", "non responder"]
     },
     {
       "id": "base-low-haemoglobin",
