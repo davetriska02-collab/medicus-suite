@@ -99,6 +99,11 @@ Elevation = hairline border **plus** shadow, always both, both subtle.
 `--shadow-1` cards at rest · `--shadow-2` hover lift & dropdowns ·
 `--shadow-3` modals/HUD only.
 
+Overlay veil: `--scrim` — the dimming layer behind modals, the tab chooser and
+the tour spotlight. Light `rgba(15,23,42,.55)`; dark `rgba(0,0,0,.66)` (the
+light slate value barely darkens an already-dark page, so dark is re-picked
+deeper, not inherited). Consume `var(--scrim)` — never a raw scrim rgba.
+
 Focus: `panel.css` ships a global
 `:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }`.
 Never suppress it; never use `:focus` for the ring (mouse users get flashed).
