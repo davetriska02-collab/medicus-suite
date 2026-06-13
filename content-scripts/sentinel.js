@@ -1052,40 +1052,83 @@
       try {
         const rules = await loadRules();
         evaluateAndPublish(rules);
-        // Re-evaluate on URL changes inside the SPA. Single observer per page;
-        // the idempotency guard above prevents stacking on re-injection.
+        // Re-evaluation timing. A CONFIRMED patient switch (the new URL resolves to
+        // a different, known patient) re-evaluates almost immediately; the longer
+        // window is reserved for ambiguous churn — journal-search keystrokes emit a
+        // burst of patient-unresolvable URLs, and coalescing those avoids the
+        // "QOF rules flash up then vanish" flicker. Paying the long window on a
+        // confirmed switch was pure dead time (most visible when leaving a heavy
+        // documents view), so it now branches on confidence.
+        const REEVAL_DELAY_CONFIRMED_MS = 150;
+        const REEVAL_DELAY_AMBIGUOUS_MS = 800;
+        const URL_POLL_MS = 400; // backstop-poll period (see signal 3 below)
+
+        // Re-evaluate on URL changes inside the SPA. Detection is driven by THREE
+        // independent signals so no single one being starved can stall it:
+        //   1. a MutationObserver on <body> — the SPA re-render signal (original),
+        //   2. the Navigation API `currententrychange` event — fires on pushState/
+        //      replaceState/traversal independent of DOM-mutation volume, and
+        //   3. a low-frequency `location.href` backstop poll.
+        // Why three: a heavy documents view (a large PNG/PDF rendered inline) floods
+        // the observer and pins the main thread, which used to delay patient-change
+        // detection — the pane appeared "not to reload" until a manual F5, while
+        // lightweight task views (labs / med requests) detected instantly. The extra
+        // signals make detection robust to that render storm. The handler is
+        // idempotent (it no-ops when the URL is unchanged), so all three calling it
+        // is harmless — whichever fires first wins and the rest short-circuit.
         let lastUrl = location.href;
         let reevalTimer = null;
-        const obs = new MutationObserver(() => {
-          if (location.href !== lastUrl) {
-            lastUrl = location.href;
-            // A SPA URL change is EITHER a genuine patient change OR same-patient
-            // sub-navigation (journal search, care-record tab switch, a filter).
-            // Only a genuine patient change should blank the panel. Wiping valid
-            // chips on every journal-search URL update is what made the QOF rules
-            // "flash up then get overwritten": invalidate → "Loading…" → re-eval →
-            // chips → next keystroke → invalidate again.
-            const urlPatient = resolveUrlPatientUuid();
-            if (urlPatient && _lastPatientUuid && urlPatient === _lastPatientUuid) {
-              // Same patient still on screen — keep the existing chips untouched.
-              return;
-            }
-            // Genuine navigation (different patient, or patient not resolvable from
-            // the new URL): invalidate immediately so the side panel can never show
-            // the previous patient's chips during the fetch window, then re-evaluate.
-            invalidateSnapshot();
-            if (reevalTimer) clearTimeout(reevalTimer);
-            reevalTimer = setTimeout(async () => {
-              try {
-                evaluateAndPublish(await loadRules());
-              } catch (e) {
-                invalidateSnapshot();
-              }
-            }, 800);
+
+        function onUrlMaybeChanged() {
+          if (location.href === lastUrl) return;
+          lastUrl = location.href;
+          // A SPA URL change is EITHER a genuine patient change OR same-patient
+          // sub-navigation (journal search, care-record tab switch, a filter).
+          // Only a genuine patient change should blank the panel. Wiping valid
+          // chips on every journal-search URL update is what made the QOF rules
+          // "flash up then get overwritten": invalidate → "Loading…" → re-eval →
+          // chips → next keystroke → invalidate again.
+          const urlPatient = resolveUrlPatientUuid();
+          if (urlPatient && _lastPatientUuid && urlPatient === _lastPatientUuid) {
+            // Same patient still on screen — keep the existing chips untouched.
+            return;
           }
-        });
+          // Genuine navigation (different patient, or patient not resolvable from
+          // the new URL): invalidate immediately so the side panel can never show
+          // the previous patient's chips during the fetch window, then re-evaluate.
+          invalidateSnapshot();
+          const confirmedSwitch = !!(urlPatient && _lastPatientUuid && urlPatient !== _lastPatientUuid);
+          const delay = confirmedSwitch ? REEVAL_DELAY_CONFIRMED_MS : REEVAL_DELAY_AMBIGUOUS_MS;
+          if (reevalTimer) clearTimeout(reevalTimer);
+          reevalTimer = setTimeout(async () => {
+            try {
+              evaluateAndPublish(await loadRules());
+            } catch (e) {
+              invalidateSnapshot();
+            }
+          }, delay);
+        }
+
+        // Signal 1: SPA re-render observer (original).
+        const obs = new MutationObserver(onUrlMaybeChanged);
         obs.observe(document.body, { childList: true, subtree: true });
         window.__sentinelBootDataObserver = obs;
+
+        // Signal 2: Navigation API — the direct SPA-navigation signal, independent
+        // of DOM-mutation volume so a render storm cannot starve it. Feature-detected
+        // (older Chromium without it falls back to signals 1 + 3) and wrapped so a
+        // throw can never break boot. `popstate` covers back/forward everywhere.
+        try {
+          if (window.navigation && typeof window.navigation.addEventListener === 'function') {
+            window.navigation.addEventListener('currententrychange', onUrlMaybeChanged);
+          }
+        } catch (_) {}
+        window.addEventListener('popstate', onUrlMaybeChanged);
+
+        // Signal 3: backstop poll. One string compare per tick; bounds detection
+        // latency to ~URL_POLL_MS even if signals 1 and 2 are both delayed by a
+        // heavy render. Stored so a future teardown can clear it.
+        window.__sentinelUrlPoll = setInterval(onUrlMaybeChanged, URL_POLL_MS);
       } catch (e) {}
     });
   }
