@@ -9,7 +9,14 @@
   'use strict';
 
   const VERSION = '0.6.0';
-  const DEBUG = false;
+  // Debug logging is off by default; flip it on at runtime from the page console
+  // with: localStorage.setItem('ch-debug','1') then reload. (Content script and
+  // page share localStorage on the same origin.) Lets us trace the queue
+  // result-triage pipeline live without shipping a special build.
+  const DEBUG = (() => {
+    try { return typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1'; }
+    catch (e) { return false; }
+  })();
   const log = (...a) => DEBUG && console.log('[ClinHUD]', ...a);
 
   // Inlined hud.css — substituted at build time so PiP can style its detached
@@ -2324,8 +2331,8 @@
     const span = document.createElement('span');
     span.className = host.inPreview ? 'ch-q-mon' : 'ch-q-mon ch-q-mon-inline';
     span.innerHTML = renderChipHtml(chip);
-    if (host.inPreview) host.target.insertBefore(span, host.target.firstChild);
-    else host.target.appendChild(span);
+    // Always prepend (see injectResultChip — appended nodes are reconciled away).
+    host.target.insertBefore(span, host.target.firstChild);
   };
 
   const scheduleQueueMonitoring = async () => {
@@ -2446,11 +2453,13 @@
       }
     } catch (e) { log('queue-result: problem fetch failed', e.message); }
 
-    return SEV.evaluateReportSeverity(report, {
+    const sev = SEV.evaluateReportSeverity(report, {
       priorityDisplay: entry.priorityDisplay,
       resultRules,
       problems
     });
+    log('queue-result: sev for', taskUuid, '=', sev && sev.level, '(rules=' + resultRules.length + ')');
+    return sev;
   };
 
   const injectResultChip = (rowIndex, sev) => {
@@ -2469,8 +2478,12 @@
     span.className = host.inPreview ? 'ch-q-result' : 'ch-q-result ch-q-result-inline';
     span.setAttribute('role', 'note');
     span.innerHTML = built.map((b) => renderChipHtml(b.chip)).join('');
-    if (host.inPreview) host.target.insertBefore(span, host.target.firstChild);
-    else host.target.appendChild(span);
+    // Always PREPEND. Appending to the end of the (Vue-managed) patient-name cell
+    // gets reconciled away by Medicus's renderer on its next re-render; prepending
+    // before the cell's own content survives. The name stays visible via the CSS
+    // width-cap on .ch-q-result-inline, not by position.
+    host.target.insertBefore(span, host.target.firstChild);
+    log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview);
     const rendered = span.querySelectorAll('.ch-chip');
     built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
   };
@@ -2485,6 +2498,7 @@
     const gen = ++_queueResultGeneration;
     if (_queueResultRunning) return;
     _queueResultRunning = true;
+    log('queue-result: triage start, rows=' + _queueRowUuids.size + ', gen=' + gen);
 
     // Sort by priority: High/Urgent/Immediate first
     const sorted = [..._queueRowUuids.entries()].sort(([, ua], [, ub]) => {
@@ -2710,6 +2724,7 @@
   };
 
   const refreshQueueChips = () => {
+    log('queue: refreshQueueChips, rows=' + _queueRowUuids.size);
     if (queueObserver) queueObserver.disconnect();
     document.querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
     document.querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
