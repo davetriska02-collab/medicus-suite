@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3897,6 +3897,109 @@
         "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
       },
       "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    },
+    {
+      "id": "base-low-haemoglobin",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low haemoglobin (amber <100, red <70 g/L)",
+      "analyte": {
+        "match": ["haemoglobin", "hemoglobin"],
+        "exclude": ["a1c", "glycated", "glycosylated"]
+      },
+      "comparator": "below",
+      "amber": 100,
+      "red": 70,
+      "unit": "g/L"
+    },
+    {
+      "id": "base-high-potassium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High potassium (amber ≥6.0, red ≥6.5 mmol/L)",
+      "analyte": {
+        "match": ["potassium"],
+        "exclude": ["urine", "urinary"]
+      },
+      "comparator": "above",
+      "amber": 6.0,
+      "red": 6.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-sodium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low sodium (amber ≤128, red ≤120 mmol/L)",
+      "analyte": {
+        "match": ["sodium"],
+        "exclude": ["urine", "urinary", "valproate"]
+      },
+      "comparator": "below",
+      "amber": 128,
+      "red": 120,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-egfr",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low eGFR (amber <30, red <15 mL/min/1.73m²)",
+      "analyte": {
+        "match": ["gfr"]
+      },
+      "comparator": "below",
+      "amber": 30,
+      "red": 15,
+      "unit": "mL/min/1.73m²"
+    },
+    {
+      "id": "base-low-platelets",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low platelets (amber <100, red <30 ×10⁹/L)",
+      "analyte": {
+        "match": ["platelet"],
+        "exclude": ["mean platelet", "volume", "ratio", "large"]
+      },
+      "comparator": "below",
+      "amber": 100,
+      "red": 30,
+      "unit": "×10⁹/L"
+    },
+    {
+      "id": "base-low-neutrophils",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low neutrophils (amber <1.0, red <0.5 ×10⁹/L)",
+      "analyte": {
+        "match": ["neutrophil"],
+        "exclude": ["%", "percent", "ratio"]
+      },
+      "comparator": "below",
+      "amber": 1.0,
+      "red": 0.5,
+      "unit": "×10⁹/L"
+    },
+    {
+      "id": "base-high-inr",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High INR (amber ≥5, red ≥8)",
+      "analyte": {
+        "match": ["inr", "international normalised ratio", "international normalized ratio"]
+      },
+      "comparator": "above",
+      "amber": 5,
+      "red": 8,
+      "unit": "ratio"
     }
   ]
 }

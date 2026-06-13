@@ -67,6 +67,17 @@
         m => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
       );
       if (!nameHit) continue;
+      // analyte.exclude (optional) — same semantics as in computeRuleSev: skip a
+      // result whose name contains an exclude substring (a different test that
+      // happens to share a match token).
+      if (
+        Array.isArray(analyte.exclude) &&
+        analyte.exclude.some(
+          e => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase())
+        )
+      ) {
+        continue;
+      }
 
       anyRuleApplied = true;
       // Does the result text contain a normal phrase?
@@ -120,6 +131,19 @@
         m => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
       );
       if (!hits) continue;
+      // analyte.exclude (optional) drops false-positive analytes whose name
+      // contains a match substring but are a different test — e.g. a "platelet"
+      // rule must NOT fire on "Mean platelet volume", a "haemoglobin" rule must
+      // NOT fire on "Haemoglobin A1c", and a serum-electrolyte rule must skip a
+      // "Urine ..." analyte. Same case-insensitive substring semantics as match.
+      if (
+        Array.isArray(analyte.exclude) &&
+        analyte.exclude.some(
+          e => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase())
+        )
+      ) {
+        continue;
+      }
 
       // Evaluate threshold
       let ruleSev = 'none';

@@ -225,5 +225,48 @@ if (OVERVIEW_URL_RE) {
 }
 
 // ============================================================
+// Layer 3 — result-chip re-injection wiring (regression guards)
+// ============================================================
+console.log('Layer 3: result-chip re-injection & cache-invalidation wiring');
+
+// refreshQueueChips() must re-run result triage, not just monitoring — otherwise
+// AG Grid re-renders strip the .ch-q-result chips and they never come back (the
+// bug that made every result rule and lab-flagged urgent look dead on the queue).
+const rqcMatch = src.match(/const refreshQueueChips = \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!rqcMatch, 'refreshQueueChips function found');
+if (rqcMatch) {
+  check(
+    /scheduleQueueResultTriage\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips re-runs scheduleQueueResultTriage() (chips survive grid re-renders)'
+  );
+  check(
+    /scheduleQueueMonitoring\(\)/.test(rqcMatch[0]),
+    'refreshQueueChips still re-runs scheduleQueueMonitoring()'
+  );
+}
+
+// A config change must invalidate the cached per-row result severities so an
+// edited/enabled rule is recomputed rather than re-shown stale.
+const watchMatch = src.match(/watchConfig\(\(\) => \{[\s\S]*?\n {4}\}\);/);
+check(!!watchMatch, 'watchConfig(onChange) callback found');
+if (watchMatch) {
+  check(
+    /_queueResultCache\.values\(\)[\s\S]*?\.sev = undefined/.test(watchMatch[0]),
+    'config change invalidates cached _queueResultCache severities (recompute, not stale)'
+  );
+}
+
+// scheduleQueueResultTriage must release its run latch in a finally so a thrown
+// worker cannot permanently block every future result-triage pass.
+const sqrtMatch = src.match(/const scheduleQueueResultTriage = async \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!sqrtMatch, 'scheduleQueueResultTriage function found');
+if (sqrtMatch) {
+  check(
+    /finally\s*\{[\s\S]*?_queueResultRunning = false/.test(sqrtMatch[0]),
+    'scheduleQueueResultTriage resets _queueResultRunning in a finally block'
+  );
+}
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

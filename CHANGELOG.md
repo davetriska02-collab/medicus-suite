@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.65.0] — 2026-06-13
+
+### Investigation Results queue — result chips now persist + a pack of built-in threshold rules
+
+**Fix: queue result chips were stripped and never re-injected.** On every AG Grid
+re-render (which fires constantly on the queue), `refreshQueueChips()` wiped the
+`.ch-q-result` chips but only re-ran the *monitoring* pass — never the result-triage
+pass. So result chips vanished a frame after they appeared and never came back, even
+after a hard refresh, making every result rule (and lab-flagged urgent) look dead.
+`refreshQueueChips()` now also re-runs result triage (cheap — served from the per-row
+cache, no re-fetch unless stale).
+
+- **Config edits take effect live:** changing or enabling a result rule now invalidates
+  the cached per-row severities, so the queue recomputes instead of re-showing stale
+  chips. Previously an edited/enabled rule did nothing until the 5-minute cache expired.
+- **Robustness:** the result-triage pass now releases its run latch in a `finally`, so a
+  thrown worker can no longer permanently block all future passes.
+
+### `analyte.exclude` for result rules
+
+Result rules gain an optional `analyte.exclude` (case-insensitive substrings). A result
+whose name contains an exclude term is skipped even if it matched — dropping shared-token
+false positives. This is editable in the rule editor and honoured by the in-editor tester.
+
+### Seven built-in base result rules (enabled, escalate-only)
+
+A starter pack of common UK critical-result thresholds, shipped enabled. Each escalates
+severity only (never lowers a lab flag) and can be disabled per-rule in settings:
+
+- **Low haemoglobin** — amber <100, red <70 g/L (excludes HbA1c).
+- **High potassium** — amber ≥6.0, red ≥6.5 mmol/L (excludes urine).
+- **Low sodium** — amber ≤128, red ≤120 mmol/L (excludes urine).
+- **Low eGFR** — amber <30, red <15 mL/min/1.73m².
+- **Low platelets** — amber <100, red <30 ×10⁹/L (excludes "Mean platelet volume").
+- **Low neutrophils** — amber <1.0, red <0.5 ×10⁹/L.
+- **High INR** — amber ≥5, red ≥8.
+
+> Thresholds compare the raw number the lab reports — verify the units listed match your
+> laboratory before relying on a rule (the engine does not convert units).
+
 ## [v3.64.0] — 2026-06-13
 
 ### Investigation Results queue — microbiology (MSU / culture) text rules

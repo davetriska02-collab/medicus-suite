@@ -23,6 +23,12 @@
 //     analyte     : {
 //       match     : string[]        — required, ≥ 1 non-empty string; case-insensitive
 //                                    substring matched against result.name
+//       exclude   : string[]        — OPTIONAL; case-insensitive substrings. A result
+//                                    whose name contains any exclude string is skipped
+//                                    even if it matched (drops shared-token false
+//                                    positives, e.g. "platelet" rule vs "Mean platelet
+//                                    volume", "haemoglobin" rule vs "Haemoglobin A1c",
+//                                    serum-electrolyte rule vs a "Urine ..." analyte).
 //     }
 //     comparator  : 'above'|'below' — required
 //     amber       : number|null     — threshold for amber (abnormal); null = not set
@@ -43,6 +49,7 @@
 //     label       : string          — required, ≤ ~60 chars; shown on chip when outcome is 'review'
 //     analyte     : {
 //       match     : string[]        — required, ≥ 1 non-empty string; matched against result.name
+//       exclude   : string[]        — OPTIONAL; same skip-on-substring semantics as above
 //     }
 //     normalText  : string[]        — required, ≥ 1 non-empty string; if any phrase is found
 //                                    (case-insensitive) in result.text → outcome 'noGrowth'
@@ -107,6 +114,15 @@
         const nonEmpty = match.filter(m => typeof m === 'string' && m.trim().length > 0);
         if (nonEmpty.length === 0) {
           errs.push('analyte.match must contain at least one non-empty string.');
+        }
+      }
+      // analyte.exclude — OPTIONAL. If present, must be an array of strings.
+      // Drops false-positive analytes that share a match token (see header).
+      if (analyte.exclude !== undefined) {
+        if (!Array.isArray(analyte.exclude)) {
+          errs.push('analyte.exclude, if present, must be an array of strings.');
+        } else if (analyte.exclude.some(e => typeof e !== 'string')) {
+          errs.push('analyte.exclude must contain only strings.');
         }
       }
     }
@@ -226,6 +242,12 @@ There are TWO rule kinds. Choose the correct kind for the analyte you are target
                                    e.g. "High potassium", "Low sodium — critical".
   analyte     (object, required)
     match     (string[], required, non-empty) — Case-insensitive substrings against result.name.
+    exclude   (string[], optional) — Case-insensitive substrings. A result whose name contains
+                                     any of these is skipped even if it matched. Use to drop
+                                     shared-token false positives, e.g. exclude ["mean platelet"]
+                                     on a "platelet" rule so it does not fire on "Mean platelet
+                                     volume"; exclude ["a1c"] on a "haemoglobin" rule; exclude
+                                     ["urine"] on a serum potassium/sodium rule.
   comparator  ("above"|"below", required)
   amber       (number|null, required) — Amber threshold; null = not set.
   red         (number|null, required) — Red threshold; null = not set.
@@ -262,6 +284,9 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
   analyte     (object, required)
     match     (string[], required, non-empty) — Case-insensitive substrings against result.name.
                                                 e.g. ["MSU", "urine culture"]
+    exclude   (string[], optional) — Case-insensitive substrings; a result whose name contains
+                                     any is skipped even if matched (drops shared-token false
+                                     positives).
   normalText  (string[], required, non-empty) — Phrases searched (case-insensitive) in the
                                                 combined result text (rawValue + interpretation +
                                                 performer/filing comments). If ANY phrase is found,

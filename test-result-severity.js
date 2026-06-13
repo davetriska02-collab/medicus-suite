@@ -766,6 +766,131 @@ console.log('\n--- text rules: null report → new keys are zero/null ---');
   assert(out.noGrowthTop === null, 'null report → noGrowthTop null');
 }
 
+// ── analyte.exclude: shared-token false positives are skipped ─────────────────
+console.log('\n--- resultRules: analyte.exclude skips look-alike analytes ---');
+function mkResult(name, value, extra) {
+  return Object.assign(
+    {
+      name,
+      value,
+      rawValue: String(value),
+      comparator: null,
+      unit: null,
+      low: null,
+      high: null,
+      isAbove: false,
+      isBelow: false,
+      urgent: false,
+      interpretation: null,
+      date: '2026-06-13',
+      history: [],
+    },
+    extra || {}
+  );
+}
+{
+  // "haemoglobin" rule must NOT fire on "Haemoglobin A1c" (excluded), MUST on "Haemoglobin"
+  const hbRule = {
+    id: 'rule_hb_excl',
+    enabled: true,
+    label: 'Low Hb',
+    analyte: { match: ['haemoglobin'], exclude: ['a1c'] },
+    comparator: 'below',
+    amber: 100,
+    red: 70,
+    unit: 'g/L',
+  };
+  const a1c = evaluateReportSeverity(makeReport([mkResult('Haemoglobin A1c', 50)]), {
+    resultRules: [hbRule],
+  });
+  assert(a1c.level === 'none', 'exclude: HbA1c 50 not fired by haemoglobin rule');
+  const hb = evaluateReportSeverity(makeReport([mkResult('Haemoglobin', 65)]), {
+    resultRules: [hbRule],
+  });
+  assert(hb.level === 'red', 'exclude: real Haemoglobin 65 still fires red');
+}
+{
+  // "platelet" rule must NOT fire on "Mean platelet volume" (8.4 fL)
+  const pltRule = {
+    id: 'rule_plt_excl',
+    enabled: true,
+    label: 'Low platelets',
+    analyte: { match: ['platelet'], exclude: ['mean platelet'] },
+    comparator: 'below',
+    amber: 100,
+    red: 30,
+    unit: '×10⁹/L',
+  };
+  const mpv = evaluateReportSeverity(makeReport([mkResult('Mean platelet volume', 8.4)]), {
+    resultRules: [pltRule],
+  });
+  assert(mpv.level === 'none', 'exclude: MPV 8.4 not fired by platelet rule');
+  const plt = evaluateReportSeverity(makeReport([mkResult('Platelets', 25)]), {
+    resultRules: [pltRule],
+  });
+  assert(plt.level === 'red', 'exclude: real Platelets 25 still fires red');
+}
+{
+  // exclude is optional — absent exclude reproduces the false positive (proves it's the guard)
+  const noExcl = {
+    id: 'rule_noexcl',
+    enabled: true,
+    label: 'Low Hb',
+    analyte: { match: ['haemoglobin'] },
+    comparator: 'below',
+    amber: 100,
+    red: 70,
+    unit: 'g/L',
+  };
+  const out = evaluateReportSeverity(makeReport([mkResult('Haemoglobin A1c', 50)]), {
+    resultRules: [noExcl],
+  });
+  assert(out.level === 'red', 'without exclude, HbA1c 50 DOES match — exclude is what prevents it');
+}
+
+// ── Shipped base result rules (defaults.json) ────────────────────────────────
+console.log('\n--- shipped base result rules: present, valid, and fire correctly ---');
+{
+  const defaults = require('./defaults.json');
+  const { validateResultRule } = require('./engine/result-rules.js');
+  const rules = Array.isArray(defaults.resultRules) ? defaults.resultRules : [];
+  const baseIds = [
+    'base-low-haemoglobin',
+    'base-high-potassium',
+    'base-low-sodium',
+    'base-low-egfr',
+    'base-low-platelets',
+    'base-low-neutrophils',
+    'base-high-inr',
+  ];
+  for (const id of baseIds) {
+    const r = rules.find(x => x && x.id === id);
+    assert(!!r, `base rule present in defaults.json: ${id}`);
+    if (r) {
+      assert(r.builtin === true && r.enabled === true, `${id}: builtin + enabled`);
+      assert(validateResultRule(r).length === 0, `${id}: validates clean`);
+    }
+  }
+  // Fire the full shipped base set against representative results.
+  const baseSet = rules.filter(r => baseIds.includes(r.id));
+  const fire = (name, value) =>
+    evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet }).level;
+  assert(fire('Haemoglobin', 65) === 'red', 'base: Haemoglobin 65 → red');
+  assert(fire('Haemoglobin', 95) === 'amber', 'base: Haemoglobin 95 → amber');
+  assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
+  assert(fire('Haemoglobin A1c', 50) === 'none', 'base: HbA1c 50 → none (excluded from Hb rule)');
+  assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
+  assert(fire('Urine potassium', 60) === 'none', 'base: Urine potassium 60 → none (excluded)');
+  assert(fire('Sodium', 118) === 'red', 'base: Sodium 118 → red');
+  assert(fire('eGFR', 12) === 'red', 'base: eGFR 12 → red');
+  assert(fire('eGFR (CKD-EPI)', 28) === 'amber', 'base: eGFR 28 → amber');
+  assert(fire('Platelets', 25) === 'red', 'base: Platelets 25 → red');
+  assert(fire('Mean platelet volume', 8.4) === 'none', 'base: MPV 8.4 → none (excluded)');
+  assert(fire('Neutrophils', 0.4) === 'red', 'base: Neutrophils 0.4 → red');
+  assert(fire('INR', 8.5) === 'red', 'base: INR 8.5 → red');
+  assert(fire('INR', 5.5) === 'amber', 'base: INR 5.5 → amber');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

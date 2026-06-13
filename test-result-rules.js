@@ -497,6 +497,34 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
   );
 }
 
+// ── analyte.exclude (optional) validation ────────────────────────────────────
+console.log('\n--- analyte.exclude validation ---');
+{
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: ['urine'] } })).length === 0,
+    'exclude: array of strings is valid'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'] } })).length === 0,
+    'exclude: omitted is valid (optional)'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: [] } })).length === 0,
+    'exclude: empty array is valid'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: 'urine' } })).length > 0,
+    'exclude: a string (not array) is rejected'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: ['urine', 5] } })).length > 0,
+    'exclude: non-string members are rejected'
+  );
+  // exclude is documented in the authoring prompt
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('exclude'), 'prompt documents the exclude field');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
