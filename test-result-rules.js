@@ -497,6 +497,65 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
   );
 }
 
+// ── analyte.exclude (optional) validation ────────────────────────────────────
+console.log('\n--- analyte.exclude validation ---');
+{
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: ['urine'] } })).length === 0,
+    'exclude: array of strings is valid'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'] } })).length === 0,
+    'exclude: omitted is valid (optional)'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: [] } })).length === 0,
+    'exclude: empty array is valid'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: 'urine' } })).length > 0,
+    'exclude: a string (not array) is rejected'
+  );
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], exclude: ['urine', 5] } })).length > 0,
+    'exclude: non-string members are rejected'
+  );
+  // exclude is documented in the authoring prompt
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('exclude'), 'prompt documents the exclude field');
+}
+
+// ── suppressIfProblem (optional) validation ──────────────────────────────────
+console.log('\n--- suppressIfProblem validation ---');
+{
+  const withSuppress = (s) => validRule({ suppressIfProblem: s });
+  assert(
+    validateResultRule(withSuppress({ match: ['diabetes mellitus'], exclude: ['non-diabetic'] })).length === 0,
+    'suppressIfProblem: {match, exclude} is valid'
+  );
+  assert(
+    validateResultRule(withSuppress({ match: ['diabetes mellitus'] })).length === 0,
+    'suppressIfProblem: match alone is valid'
+  );
+  assert(validateResultRule(validRule({})).length === 0, 'suppressIfProblem: omitted is valid (optional)');
+  assert(
+    validateResultRule(withSuppress({ exclude: ['x'] })).length > 0,
+    'suppressIfProblem: missing match is rejected'
+  );
+  assert(
+    validateResultRule(withSuppress({ match: [] })).length > 0,
+    'suppressIfProblem: empty match is rejected'
+  );
+  assert(
+    validateResultRule(withSuppress(['diabetes'])).length > 0,
+    'suppressIfProblem: array (not object) is rejected'
+  );
+  assert(
+    validateResultRule(withSuppress({ match: ['dm'], exclude: 'non-diabetic' })).length > 0,
+    'suppressIfProblem: string exclude (not array) is rejected'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

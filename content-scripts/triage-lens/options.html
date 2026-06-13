@@ -366,6 +366,11 @@
           <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
         </label>
 
+        <label class="tl-field">
+          <span>Analyte exclude <small>(optional — one per line; skips look-alike analytes, e.g. "mean platelet" or "urine")</small></span>
+          <textarea id="rrAnalyteExclude" rows="2" placeholder="mean platelet&#10;urine"></textarea>
+        </label>
+
         <div class="tl-field">
           <span>Test match <small>(advisory — not saved)</small></span>
           <input type="text" id="rrTestName" placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)">
@@ -419,7 +424,7 @@
       <div class="tl-edit-col">
         <div class="tl-help">
           <strong>How result rules work:</strong><br>
-          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab.
+          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab. <strong>Analyte exclude</strong> (optional) skips look-alike analytes that share a match token — e.g. a "platelet" rule with exclude "mean platelet" won't fire on "Mean platelet volume", and a serum potassium rule with exclude "urine" won't fire on a urine potassium.
           <br><br>
           <strong>Text / culture rules</strong> match a result by analyte name, then inspect the result text: if any <em>normal phrase</em> is found (case-insensitive) the calm "normal" chip is shown; otherwise the label chip is shown (amber by default). Use this for microbiology culture reports such as MSU.
         </div>
