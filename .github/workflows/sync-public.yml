@@ -17,6 +17,9 @@ on:
   push:
     branches:
       - main
+  # Manual trigger — lets you (re)seed the public repo on demand, e.g. to verify
+  # the pipeline before merging to main, or to re-run after fixing the secret.
+  workflow_dispatch:
 
 # Only ever runs in the private workshop repo. If this file somehow lands in
 # the public repo, this guard makes it inert.
