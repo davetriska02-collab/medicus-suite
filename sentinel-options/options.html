@@ -1,1069 +1,2253 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Sentinel Settings</title>
-<link rel="stylesheet" href="../side-panel/modules/sentinel/sentinel.css" />
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  /* Canon tokens — keep in sync with side-panel/panel.css :root */
-  --bg-deep:    #f8fafc;
-  --bg-mid:     #f1f5f9;
-  --bg-elev:    #ffffff;
-  --bg-hover:   #e2eaf5;
-  --border:     #cbd5e1;
-  --border-hi:  #94a3b8;
-  --accent:       #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-dim:   rgba(37,99,235,0.09);
-  --accent-line:  rgba(37,99,235,0.30);
-  --text-1: #0f172a;
-  --text-2: #1e3a5f;
-  --text-3: #475569;
-  --text-4: #64748b;
-  --text-5: #94a3b8;
-  --green:      #16a34a;
-  --green-dim:  rgba(22,163,74,0.09);
-  --green-line: rgba(22,163,74,0.30);
-  --amber:      #b45309;
-  --amber-dim:  rgba(180,83,9,0.09);
-  --amber-line: rgba(180,83,9,0.32);
-  --red:        #dc2626;
-  --red-dim:    rgba(220,38,38,0.08);
-  --red-line:   rgba(220,38,38,0.30);
-  --purple: #7c3aed;
-  --r-sm:   4px;
-  --r-md:   6px;
-  --r-lg:   8px;
-  --r-pill: 999px;
-  --shadow-1: 0 1px 2px rgba(15,23,42,0.05);
-  --shadow-2: 0 2px 8px rgba(15,23,42,0.08);
-  --shadow-3: 0 8px 28px rgba(15,23,42,0.14);
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --fast: 120ms;
-  --med:  200ms;
-  --mono: 'JetBrains Mono', 'Courier New', monospace;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* Legacy aliases — existing rules reference --bg/--bg-e/--t1..--t5 */
-  --bg:   var(--bg-mid);
-  --bg-e: var(--bg-elev);
-  --t1: var(--text-1);
-  --t2: var(--text-2);
-  --t3: var(--text-3);
-  --t4: var(--text-4);
-  --t5: var(--text-5);
-}
-html[data-theme="dark"] {
-  --bg-deep:    #050a14;
-  --bg-mid:     #0b1424;
-  --bg-elev:    #131e34;
-  --bg-hover:   #1a2a44;
-  --border:     #1c2e4e;
-  --border-hi:  #2a4060;
-  --accent:       #5b8fc7;
-  --accent-hover: #7eaad6;
-  --accent-dim:   rgba(91,143,199,0.14);
-  --accent-line:  rgba(91,143,199,0.35);
-  --text-1: #f1f5f9;
-  --text-2: #cfe1ff;
-  --text-3: #93a8c5;
-  --text-4: #5d7a9d;
-  --text-5: #3d5070;
-  --green:      #4ade80;
-  --green-dim:  rgba(74,222,128,0.12);
-  --green-line: rgba(74,222,128,0.32);
-  --amber:      #fbbf24;
-  --amber-dim:  rgba(251,191,36,0.12);
-  --amber-line: rgba(251,191,36,0.32);
-  --red:        #f87171;
-  --red-dim:    rgba(248,113,113,0.13);
-  --red-line:   rgba(248,113,113,0.34);
-  --purple: #a78bfa;
-  --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
-  --shadow-2: 0 4px 12px rgba(0,0,0,0.45);
-  --shadow-3: 0 10px 32px rgba(0,0,0,0.55);
-}
-html[data-size="small"]  { zoom: 0.85; }
-html[data-size="medium"] { zoom: 1; }
-html[data-size="large"]  { zoom: 1.25; }
-body { background: var(--bg); color: var(--t1); font-family: var(--sans); font-size: 13px; }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sentinel Settings</title>
+    <link rel="stylesheet" href="../side-panel/modules/sentinel/sentinel.css" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        /* Canon tokens — keep in sync with side-panel/panel.css :root */
+        --bg-deep: #f8fafc;
+        --bg-mid: #f1f5f9;
+        --bg-elev: #ffffff;
+        --bg-hover: #e2eaf5;
+        --border: #cbd5e1;
+        --border-hi: #94a3b8;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --accent-dim: rgba(37, 99, 235, 0.09);
+        --accent-line: rgba(37, 99, 235, 0.3);
+        --text-1: #0f172a;
+        --text-2: #1e3a5f;
+        --text-3: #475569;
+        --text-4: #64748b;
+        --text-5: #94a3b8;
+        --green: #16a34a;
+        --green-dim: rgba(22, 163, 74, 0.09);
+        --green-line: rgba(22, 163, 74, 0.3);
+        --amber: #b45309;
+        --amber-dim: rgba(180, 83, 9, 0.09);
+        --amber-line: rgba(180, 83, 9, 0.32);
+        --red: #dc2626;
+        --red-dim: rgba(220, 38, 38, 0.08);
+        --red-line: rgba(220, 38, 38, 0.3);
+        --violet: #7c3aed;
+        --violet-dim: rgba(124, 58, 237, 0.09);
+        --violet-line: rgba(124, 58, 237, 0.3);
+        --r-sm: 4px;
+        --r-md: 6px;
+        --r-lg: 8px;
+        --r-pill: 999px;
+        --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+        --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+        --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+        --ease: cubic-bezier(0.2, 0, 0, 1);
+        --fast: 120ms;
+        --med: 200ms;
+        --mono: 'JetBrains Mono', 'Courier New', monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        /* Legacy aliases — existing rules reference --bg/--bg-e/--t1..--t5 */
+        --bg: var(--bg-mid);
+        --bg-e: var(--bg-elev);
+        --t1: var(--text-1);
+        --t2: var(--text-2);
+        --t3: var(--text-3);
+        --t4: var(--text-4);
+        --t5: var(--text-5);
+      }
+      html[data-theme='dark'] {
+        --bg-deep: #050a14;
+        --bg-mid: #0b1424;
+        --bg-elev: #131e34;
+        --bg-hover: #1a2a44;
+        --border: #1c2e4e;
+        --border-hi: #2a4060;
+        --accent: #5b8fc7;
+        --accent-hover: #7eaad6;
+        --accent-dim: rgba(91, 143, 199, 0.14);
+        --accent-line: rgba(91, 143, 199, 0.35);
+        --text-1: #f1f5f9;
+        --text-2: #cfe1ff;
+        --text-3: #93a8c5;
+        --text-4: #5d7a9d;
+        --text-5: #3d5070;
+        --green: #4ade80;
+        --green-dim: rgba(74, 222, 128, 0.12);
+        --green-line: rgba(74, 222, 128, 0.32);
+        --amber: #fbbf24;
+        --amber-dim: rgba(251, 191, 36, 0.16);
+        --amber-line: rgba(251, 191, 36, 0.32);
+        --red: #f87171;
+        --red-dim: rgba(248, 113, 113, 0.17);
+        --red-line: rgba(248, 113, 113, 0.34);
+        --violet: #a78bfa;
+        --violet-dim: rgba(167, 139, 250, 0.14);
+        --violet-line: rgba(167, 139, 250, 0.35);
+        --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+        --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
+      }
+      html[data-size='small'] {
+        zoom: 0.85;
+      }
+      html[data-size='medium'] {
+        zoom: 1;
+      }
+      html[data-size='large'] {
+        zoom: 1.25;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        font-family: var(--sans);
+        font-size: 13px;
+      }
 
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-.tab-nav { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px; background: var(--bg); position: sticky; top: 0; z-index: 10; }
-.tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; padding: 11px 12px; cursor: pointer; transition: color 0.15s; margin-bottom: -1px; }
-.tab-btn:hover { color: var(--t2); }
-.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab-panel { display: none; padding: 18px 20px 28px; }
-.tab-panel.active { display: block; }
-h2 { font-size: 13px; font-weight: 600; color: var(--t2); margin: 16px 0 10px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
-h2:first-child { margin-top: 0; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t4); margin-bottom: 4px; }
-select, input[type=number], input[type=text], input[type=url] { background: var(--bg-e); border: 1px solid var(--border); color: var(--t1); font-size: 12px; border-radius: var(--r-md); padding: 6px 10px; width: 100%; }
-select:focus, input:focus { border-color: var(--accent); }
-textarea { width: 100%; background: var(--bg-e); border: 1px solid var(--border); color: var(--t1); font-family: var(--mono); font-size: 10px; border-radius: var(--r-md); padding: 8px; resize: vertical; }
-textarea:focus { border-color: var(--accent); }
-.checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.checkbox-row input[type=checkbox] { accent-color: var(--accent); }
-.checkbox-row label { font-size: 12px; color: var(--t2); cursor: pointer; }
-.actions { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
-button.primary { background: var(--accent); border: none; color: #fff; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-md); padding: 7px 14px; transition: background var(--fast) var(--ease); }
-button.primary:hover { background: var(--accent-hover); }
-button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
-button.ghost { background: transparent; border: 1px solid var(--border-hi); color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-md); padding: 6px 12px; transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease); }
-button.ghost:hover { color: var(--t2); border-color: var(--accent); background: var(--accent-dim); }
-button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
-button.ghost.danger { border-color: rgba(248,113,113,0.3); color: var(--red); }
-.saved { color: var(--green); font-family: var(--mono); font-size: 10px; opacity: 0; transition: opacity 0.3s; }
-.saved.show { opacity: 1; }
-.io-row { display: flex; gap: 6px; margin-bottom: 8px; }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-.cr-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
-.cr-card { background: var(--bg-e); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 13px; display: flex; align-items: center; gap: 10px; }
-.cr-card.disabled { opacity: 0.5; }
-.cr-card-info { flex: 1; min-width: 0; }
-.cr-card-name { font-size: 12px; color: var(--t2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cr-card-meta { font-size: 10px; color: var(--t4); font-family: var(--mono); margin-top: 2px; }
-.cr-card-actions { display: flex; gap: 5px; flex-shrink: 0; }
-.cr-empty { color: var(--t4); font-size: 12px; font-style: italic; padding: 10px 0; }
-.cr-bar { display: flex; gap: 7px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
-.cr-form { background: var(--bg-e); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; }
-.cr-section-label { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t4); margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); display: block; }
-.test-card { background: var(--bg-e); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 11px 13px; margin-bottom: 9px; }
-.test-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-.test-card-title { flex: 1; font-size: 11px; color: var(--t2); font-weight: 600; font-family: var(--mono); letter-spacing: 0.05em; text-transform: uppercase; }
-.interval-row { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
-.interval-row label { font-family: var(--mono); font-size: 10px; color: var(--t4); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; width: 80px; flex-shrink: 0; }
-.interval-row input[type=number] { width: 64px; flex-shrink: 0; }
-.interval-row select { width: 90px; flex-shrink: 0; }
-.form-hint { font-size: 10px; color: var(--t4); margin-top: 3px; line-height: 1.4; }
-.cr-preview-wrap { background: var(--accent-dim); border: 1px solid var(--accent-line); border-radius: var(--r-lg); padding: 13px 15px; margin-top: 14px; }
-.cr-preview-head { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
-.cr-preview-head select { width: auto; font-size: 10px; padding: 3px 8px; }
-#crPreviewChip { min-height: 56px; }
-.cr-form-error { color: var(--red); font-size: 11px; font-family: var(--mono); margin-top: 8px; min-height: 18px; }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+      .tab-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 0 20px;
+        background: var(--bg);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .tab-btn {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--t4);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 600;
+        padding: 11px 12px;
+        cursor: pointer;
+        transition: color var(--fast) var(--ease);
+        margin-bottom: -1px;
+      }
+      .tab-btn:hover {
+        color: var(--t2);
+      }
+      .tab-btn.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      .tab-panel {
+        display: none;
+        padding: 18px 20px 28px;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--t2);
+        margin: 16px 0 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid var(--border);
+      }
+      h2:first-child {
+        margin-top: 0;
+      }
+      .field {
+        margin-bottom: 12px;
+      }
+      .field label {
+        display: block;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--t4);
+        margin-bottom: 4px;
+      }
+      select,
+      input[type='number'],
+      input[type='text'],
+      input[type='url'] {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        color: var(--t1);
+        font-size: 12px;
+        border-radius: var(--r-md);
+        padding: 6px 10px;
+        width: 100%;
+      }
+      select:focus-visible,
+      input:focus-visible {
+        border-color: var(--accent);
+      }
+      textarea {
+        width: 100%;
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        color: var(--t1);
+        font-family: var(--mono);
+        font-size: 10px;
+        border-radius: var(--r-md);
+        padding: 8px;
+        resize: vertical;
+      }
+      textarea:focus-visible {
+        border-color: var(--accent);
+      }
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .checkbox-row input[type='checkbox'] {
+        accent-color: var(--accent);
+      }
+      .checkbox-row label {
+        font-size: 12px;
+        color: var(--t2);
+        cursor: pointer;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 14px;
+      }
+      button.primary {
+        background: var(--accent);
+        border: none;
+        color: #fff;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 7px 14px;
+        transition: background var(--fast) var(--ease);
+      }
+      button.primary:hover {
+        background: var(--accent-hover);
+      }
+      button.primary:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      button.ghost {
+        background: transparent;
+        border: 1px solid var(--border-hi);
+        color: var(--t4);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 6px 12px;
+        transition:
+          border-color var(--fast) var(--ease),
+          color var(--fast) var(--ease),
+          background var(--fast) var(--ease);
+      }
+      button.ghost:hover {
+        color: var(--t2);
+        border-color: var(--accent);
+        background: var(--accent-dim);
+      }
+      button.ghost:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      button.ghost.danger {
+        border-color: rgba(248, 113, 113, 0.3);
+        color: var(--red);
+      }
+      .saved {
+        color: var(--green);
+        font-family: var(--mono);
+        font-size: 10px;
+        opacity: 0;
+        transition: opacity var(--med) var(--ease);
+      }
+      .saved.show {
+        opacity: 1;
+      }
+      .io-row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      ::-webkit-scrollbar {
+        width: 5px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+      .cr-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        margin-bottom: 14px;
+      }
+      .cr-card {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 10px 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .cr-card.disabled {
+        opacity: 0.5;
+      }
+      .cr-card-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .cr-card-name {
+        font-size: 12px;
+        color: var(--t2);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cr-card-meta {
+        font-size: 10px;
+        color: var(--t4);
+        font-family: var(--mono);
+        margin-top: 2px;
+      }
+      .cr-card-actions {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+      }
+      .cr-empty {
+        color: var(--t4);
+        font-size: 12px;
+        font-style: italic;
+        padding: 10px 0;
+      }
+      .cr-bar {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      .cr-form {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 16px 18px;
+      }
+      .cr-section-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--t4);
+        margin-bottom: 10px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+        display: block;
+      }
+      .test-card {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 11px 13px;
+        margin-bottom: 9px;
+      }
+      .test-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+      }
+      .test-card-title {
+        flex: 1;
+        font-size: 11px;
+        color: var(--t2);
+        font-weight: 600;
+        font-family: var(--mono);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .interval-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 7px;
+      }
+      .interval-row label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--t4);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        width: 80px;
+        flex-shrink: 0;
+      }
+      .interval-row input[type='number'] {
+        width: 64px;
+        flex-shrink: 0;
+      }
+      .interval-row select {
+        width: 90px;
+        flex-shrink: 0;
+      }
+      .form-hint {
+        font-size: 10px;
+        color: var(--t4);
+        margin-top: 3px;
+        line-height: 1.4;
+      }
+      .cr-preview-wrap {
+        background: var(--accent-dim);
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-lg);
+        padding: 13px 15px;
+        margin-top: 14px;
+      }
+      .cr-preview-head {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .cr-preview-head select {
+        width: auto;
+        font-size: 10px;
+        padding: 3px 8px;
+      }
+      #crPreviewChip {
+        min-height: 56px;
+      }
+      .cr-form-error {
+        color: var(--red);
+        font-size: 11px;
+        font-family: var(--mono);
+        margin-top: 8px;
+        min-height: 18px;
+      }
 
-/* ── Mock-patient live preview ───────────────────────────────────────────── */
-.mock-patient { margin-bottom: 10px; }
-.mock-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-.mock-grid label, .mock-row label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--t3); display: flex; flex-direction: column; gap: 3px; }
-.mock-grid textarea { font-family: var(--mono); font-size: 11px; height: 44px; }
-.mock-row { display: flex; align-items: flex-end; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
-.mock-row label { flex-direction: row; align-items: center; gap: 5px; text-transform: none; font-weight: 600; }
-.mock-row input[type=number], .mock-row input[type=date], .mock-row select { font-size: 11px; padding: 3px 6px; }
-.mock-row button { margin-left: auto; font-size: 11px; }
-.preview-fire { border-left: 3px solid var(--green); padding: 8px 11px; background: var(--green-dim); border-radius: var(--r-md); font-size: 12px; }
-.preview-fire.preview-overdue, .preview-fire.preview-alert, .preview-fire.preview-stale { border-left-color: var(--red); background: var(--red-dim); }
-.preview-fire strong { font-family: var(--mono); }
-.preview-summary { margin: 5px 0; color: var(--t2); }
-.preview-facts { margin: 4px 0 0; padding-left: 16px; font-size: 11px; color: var(--t3); }
-.preview-facts span { color: var(--t2); font-weight: 600; }
-.preview-nofire { color: var(--t4); font-size: 12px; font-style: italic; padding: 8px 0; }
-.preview-incomplete { color: var(--amber); font-size: 11px; font-family: var(--mono); padding: 6px 0; }
+      /* ── Mock-patient live preview ───────────────────────────────────────────── */
+      .mock-patient {
+        margin-bottom: 10px;
+      }
+      .mock-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+      }
+      .mock-grid label,
+      .mock-row label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--t3);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .mock-grid textarea {
+        font-family: var(--mono);
+        font-size: 11px;
+        height: 44px;
+      }
+      .mock-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
+      .mock-row label {
+        flex-direction: row;
+        align-items: center;
+        gap: 5px;
+        text-transform: none;
+        font-weight: 600;
+      }
+      .mock-row input[type='number'],
+      .mock-row input[type='date'],
+      .mock-row select {
+        font-size: 11px;
+        padding: 3px 6px;
+      }
+      .mock-row button {
+        margin-left: auto;
+        font-size: 11px;
+      }
+      .preview-fire {
+        border-left: 3px solid var(--green);
+        padding: 8px 11px;
+        background: var(--green-dim);
+        border-radius: var(--r-md);
+        font-size: 12px;
+      }
+      .preview-fire.preview-overdue,
+      .preview-fire.preview-alert,
+      .preview-fire.preview-stale {
+        border-left-color: var(--red);
+        background: var(--red-dim);
+      }
+      .preview-fire strong {
+        font-family: var(--mono);
+      }
+      .preview-summary {
+        margin: 5px 0;
+        color: var(--t2);
+      }
+      .preview-facts {
+        margin: 4px 0 0;
+        padding-left: 16px;
+        font-size: 11px;
+        color: var(--t3);
+      }
+      .preview-facts span {
+        color: var(--t2);
+        font-weight: 600;
+      }
+      .preview-nofire {
+        color: var(--t4);
+        font-size: 12px;
+        font-style: italic;
+        padding: 8px 0;
+      }
+      .preview-incomplete {
+        color: var(--amber);
+        font-size: 11px;
+        font-family: var(--mono);
+        padding: 6px 0;
+      }
 
-/* ── Alert Library ───────────────────────────────────────────────────────── */
-.lib-panel { background: var(--bg-e); border: 1px solid var(--border); border-radius: var(--r-lg); margin-bottom: 20px; overflow: hidden; }
-.lib-toggle { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; color: var(--t1); }
-.lib-toggle-icon { font-size: 15px; }
-.lib-toggle-text { flex: 1; }
-.lib-toggle-title { font-size: 13px; font-weight: 600; color: var(--t2); display: block; }
-.lib-toggle-sub { font-size: 10px; color: var(--t4); display: block; margin-top: 1px; }
-.lib-toggle-chevron { font-family: var(--mono); font-size: 12px; color: var(--t5); transition: transform 0.2s; }
-.lib-panel.open .lib-toggle-chevron { transform: rotate(90deg); }
-.lib-body { display: none; padding: 0 16px 16px; }
-.lib-panel.open .lib-body { display: block; }
-.lib-placeholder { color: var(--t4); font-size: 12px; font-style: italic; padding: 12px 0; }
-.lib-category { margin-bottom: 16px; }
-.lib-category-title { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t4); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
-.lib-cards { display: flex; flex-direction: column; gap: 6px; }
-.lib-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; }
-.lib-card-body { flex: 1; min-width: 0; }
-.lib-card-title { font-size: 12px; font-weight: 600; color: var(--t2); margin-bottom: 3px; }
-.lib-card-desc { font-size: 11px; color: var(--t4); line-height: 1.4; margin-bottom: 5px; }
-.lib-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.lib-source-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; }
-.lib-source-badge.pincer { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-line); }
-.lib-source-badge.other { background: rgba(100,116,139,0.12); color: var(--t4); border: 1px solid var(--border); }
-.lib-type-badge { font-family: var(--mono); font-size: 9px; color: var(--t5); }
-.lib-card-action { flex-shrink: 0; }
-button.lib-add-btn { background: var(--green-dim); border: 1px solid var(--green-line); color: var(--green); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-md); padding: 6px 10px; white-space: nowrap; transition: background var(--fast) var(--ease); }
-button.lib-add-btn:hover { background: var(--green-line); }
-button.lib-add-btn.added { background: rgba(100,116,139,0.1); border-color: var(--border); color: var(--t5); cursor: default; }
-.lib-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--t2); color: var(--bg-e); font-family: var(--mono); font-size: 11px; border-radius: var(--r-lg); padding: 9px 16px; z-index: 100; opacity: 0; transition: opacity var(--med) var(--ease); pointer-events: none; white-space: nowrap; }
-.lib-toast.show { opacity: 1; }
+      /* ── Alert Library ───────────────────────────────────────────────────────── */
+      .lib-panel {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        margin-bottom: 20px;
+        overflow: hidden;
+      }
+      .lib-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        color: var(--t1);
+      }
+      .lib-toggle-icon {
+        font-size: 15px;
+      }
+      .lib-toggle-text {
+        flex: 1;
+      }
+      .lib-toggle-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--t2);
+        display: block;
+      }
+      .lib-toggle-sub {
+        font-size: 10px;
+        color: var(--t4);
+        display: block;
+        margin-top: 1px;
+      }
+      .lib-toggle-chevron {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--t5);
+        transition: transform var(--med) var(--ease);
+      }
+      .lib-panel.open .lib-toggle-chevron {
+        transform: rotate(90deg);
+      }
+      .lib-body {
+        display: none;
+        padding: 0 16px 16px;
+      }
+      .lib-panel.open .lib-body {
+        display: block;
+      }
+      .lib-placeholder {
+        color: var(--t4);
+        font-size: 12px;
+        font-style: italic;
+        padding: 12px 0;
+      }
+      .lib-category {
+        margin-bottom: 16px;
+      }
+      .lib-category-title {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--t4);
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+      }
+      .lib-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .lib-card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 10px 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .lib-card-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .lib-card-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--t2);
+        margin-bottom: 3px;
+      }
+      .lib-card-desc {
+        font-size: 11px;
+        color: var(--t4);
+        line-height: 1.4;
+        margin-bottom: 5px;
+      }
+      .lib-card-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .lib-source-badge {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border-radius: var(--r-sm);
+      }
+      .lib-source-badge.pincer {
+        background: var(--red-dim);
+        color: var(--red);
+        border: 1px solid var(--red-line);
+      }
+      .lib-source-badge.other {
+        background: rgba(100, 116, 139, 0.12);
+        color: var(--t4);
+        border: 1px solid var(--border);
+      }
+      .lib-type-badge {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--t5);
+      }
+      .lib-card-action {
+        flex-shrink: 0;
+      }
+      button.lib-add-btn {
+        background: var(--green-dim);
+        border: 1px solid var(--green-line);
+        color: var(--green);
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 6px 10px;
+        white-space: nowrap;
+        transition: background var(--fast) var(--ease);
+      }
+      button.lib-add-btn:hover {
+        background: var(--green-line);
+      }
+      button.lib-add-btn.added {
+        background: rgba(100, 116, 139, 0.1);
+        border-color: var(--border);
+        color: var(--t5);
+        cursor: default;
+      }
+      .lib-toast {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--t2);
+        color: var(--bg-e);
+        font-family: var(--mono);
+        font-size: 11px;
+        border-radius: var(--r-lg);
+        padding: 9px 16px;
+        z-index: 100;
+        opacity: 0;
+        transition: opacity var(--med) var(--ease);
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .lib-toast.show {
+        opacity: 1;
+      }
 
-/* One-time unlock — alpha-feature acknowledgement gate */
-.lib-unlock { background: var(--amber-dim); border: 1px solid var(--amber-line); border-radius: var(--r-lg); padding: 14px 16px; margin-bottom: 14px; display: flex; gap: 12px; align-items: flex-start; }
-.lib-unlock-icon { font-size: 22px; line-height: 1; color: var(--amber); flex-shrink: 0; margin-top: 1px; }
-.lib-unlock-text { flex: 1; }
-.lib-unlock-title { font-size: 13px; font-weight: 700; color: var(--amber); margin-bottom: 6px; }
-.lib-unlock-body { font-size: 11px; color: var(--t3); line-height: 1.55; margin-bottom: 10px; }
-.lib-unlock-body strong { color: var(--t2); }
-.lib-unlock-btn { background: var(--amber); border: 1px solid var(--amber); color: var(--bg); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: 6px; padding: 8px 14px; }
-.lib-unlock-btn:hover { filter: brightness(0.95); }
-.lib-body.lib-locked .lib-cards { opacity: 0.45; pointer-events: none; filter: grayscale(0.5); }
-.lib-body.lib-locked .lib-category-title { opacity: 0.55; }
-.lib-body.lib-locked button.lib-add-btn { cursor: not-allowed; }
-.lib-add-all-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0 4px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
-button.lib-add-all-btn { background: var(--green-dim); border: 1px solid var(--green-line); color: var(--green); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-md); padding: 6px 10px; white-space: nowrap; transition: background var(--fast) var(--ease); }
-button.lib-add-all-btn:hover { background: var(--green-line); }
-.lib-add-all-count { font-size: 10px; color: var(--t4); font-family: var(--mono); }
-.lib-body.lib-locked .lib-add-all-bar { opacity: 0.45; pointer-events: none; }
+      /* One-time unlock — alpha-feature acknowledgement gate */
+      .lib-unlock {
+        background: var(--amber-dim);
+        border: 1px solid var(--amber-line);
+        border-radius: var(--r-lg);
+        padding: 14px 16px;
+        margin-bottom: 14px;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .lib-unlock-icon {
+        font-size: 22px;
+        line-height: 1;
+        color: var(--amber);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .lib-unlock-text {
+        flex: 1;
+      }
+      .lib-unlock-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--amber);
+        margin-bottom: 6px;
+      }
+      .lib-unlock-body {
+        font-size: 11px;
+        color: var(--t3);
+        line-height: 1.55;
+        margin-bottom: 10px;
+      }
+      .lib-unlock-body strong {
+        color: var(--t2);
+      }
+      .lib-unlock-btn {
+        background: var(--amber);
+        border: 1px solid var(--amber);
+        color: var(--bg);
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 8px 14px;
+      }
+      .lib-unlock-btn:hover {
+        filter: brightness(0.95);
+      }
+      .lib-body.lib-locked .lib-cards {
+        opacity: 0.45;
+        pointer-events: none;
+        filter: grayscale(0.5);
+      }
+      .lib-body.lib-locked .lib-category-title {
+        opacity: 0.55;
+      }
+      .lib-body.lib-locked button.lib-add-btn {
+        cursor: not-allowed;
+      }
+      .lib-add-all-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0 4px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      button.lib-add-all-btn {
+        background: var(--green-dim);
+        border: 1px solid var(--green-line);
+        color: var(--green);
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border-radius: var(--r-md);
+        padding: 6px 10px;
+        white-space: nowrap;
+        transition: background var(--fast) var(--ease);
+      }
+      button.lib-add-all-btn:hover {
+        background: var(--green-line);
+      }
+      .lib-add-all-count {
+        font-size: 10px;
+        color: var(--t4);
+        font-family: var(--mono);
+      }
+      .lib-body.lib-locked .lib-add-all-bar {
+        opacity: 0.45;
+        pointer-events: none;
+      }
 
-/* ── Severity badge ──────────────────────────────────────────────────────── */
-.sev-badge { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
-.sev-badge.red   { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-line); }
-.sev-badge.amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-line); }
-.sev-badge.info  { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-line); }
+      /* ── Severity badge ──────────────────────────────────────────────────────── */
+      .sev-badge {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 2px 7px;
+        border-radius: var(--r-sm);
+      }
+      .sev-badge.red {
+        background: var(--red-dim);
+        color: var(--red);
+        border: 1px solid var(--red-line);
+      }
+      .sev-badge.amber {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border: 1px solid var(--amber-line);
+      }
+      .sev-badge.info {
+        background: var(--accent-dim);
+        color: var(--accent);
+        border: 1px solid var(--accent-line);
+      }
 
-/* ── Drug-set card ──────────────────────────────────────────────────────── */
-.dc-set-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 10px 12px; margin-bottom: 8px; }
-.dc-set-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.dc-set-title { flex: 1; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t4); }
+      /* ── Drug-set card ──────────────────────────────────────────────────────── */
+      .dc-set-card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 10px 12px;
+        margin-bottom: 8px;
+      }
+      .dc-set-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .dc-set-title {
+        flex: 1;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--t4);
+      }
 
-/* ── Patient filters collapsible ─────────────────────────────────────────── */
-.filters-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; color: var(--t4); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 0; margin-bottom: 8px; }
-.filters-toggle:hover { color: var(--t2); }
-.filters-toggle-chevron { font-size: 10px; transition: transform 0.15s; }
-.filters-toggle.open .filters-toggle-chevron { transform: rotate(90deg); }
-.filters-body { display: none; }
-.filters-body.open { display: block; }
+      /* ── Patient filters collapsible ─────────────────────────────────────────── */
+      .filters-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        background: none;
+        border: none;
+        color: var(--t4);
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0;
+        margin-bottom: 8px;
+      }
+      .filters-toggle:hover {
+        color: var(--t2);
+      }
+      .filters-toggle-chevron {
+        font-size: 10px;
+        transition: transform var(--fast) var(--ease);
+      }
+      .filters-toggle.open .filters-toggle-chevron {
+        transform: rotate(90deg);
+      }
+      .filters-body {
+        display: none;
+      }
+      .filters-body.open {
+        display: block;
+      }
 
-/* ── Composite rule multi-select listbox ────────────────────────────────── */
-.cm-rule-list { background: var(--bg-e); border: 1px solid var(--border); border-radius: var(--r-md); max-height: 140px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
-.cm-rule-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 5px; cursor: pointer; }
-.cm-rule-item:hover { background: var(--accent-dim); }
-.cm-rule-item input[type=checkbox] { accent-color: var(--accent); flex-shrink: 0; }
-.cm-rule-item-label { font-size: 11px; color: var(--t2); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cm-rule-item-type { font-family: var(--mono); font-size: 9px; color: var(--t5); flex-shrink: 0; }
-.cm-rule-empty { font-size: 11px; color: var(--t4); font-style: italic; padding: 8px; }
-.cm-warn { background: var(--amber-dim); border: 1px solid var(--amber-line); color: var(--amber); font-size: 10px; border-radius: var(--r-md); padding: 6px 10px; margin-top: 6px; display: none; }
+      /* ── Composite rule multi-select listbox ────────────────────────────────── */
+      .cm-rule-list {
+        background: var(--bg-e);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        max-height: 140px;
+        overflow-y: auto;
+        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .cm-rule-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        border-radius: var(--r-sm);
+        cursor: pointer;
+      }
+      .cm-rule-item:hover {
+        background: var(--accent-dim);
+      }
+      .cm-rule-item input[type='checkbox'] {
+        accent-color: var(--accent);
+        flex-shrink: 0;
+      }
+      .cm-rule-item-label {
+        font-size: 11px;
+        color: var(--t2);
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cm-rule-item-type {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--t5);
+        flex-shrink: 0;
+      }
+      .cm-rule-empty {
+        font-size: 11px;
+        color: var(--t4);
+        font-style: italic;
+        padding: 8px;
+      }
+      .cm-warn {
+        background: var(--amber-dim);
+        border: 1px solid var(--amber-line);
+        color: var(--amber);
+        font-size: 10px;
+        border-radius: var(--r-md);
+        padding: 6px 10px;
+        margin-top: 6px;
+        display: none;
+      }
 
-/* ── Highlight flash on newly-added card ────────────────────────────────── */
-@keyframes row-flash { 0%,100% { background: var(--bg-e); } 40% { background: var(--green-dim); } }
-.cr-card.flash { animation: row-flash 1.4s ease; }
-@media (prefers-reduced-motion: reduce) { .cr-card.flash { animation: none; } }
-</style>
-</head>
-<body>
-
-<div class="tab-nav">
-  <button class="tab-btn active" data-tab="display">Display</button>
-  <button class="tab-btn" data-tab="customrules">Custom Rules</button>
-  <button class="tab-btn" data-tab="overrides">Rule Overrides</button>
-</div>
-
-<!-- Display tab -->
-<div class="tab-panel active" id="tab-display">
-  <h2>Display</h2>
-  <div class="two-col">
-    <div class="field"><label for="chipStyle">Chip style</label><select id="chipStyle"><option value="subtle">Subtle</option><option value="bold">Bold</option><option value="minimal">Minimal</option></select></div>
-    <div class="field"><label for="density">Density</label><select id="density"><option value="compact">Compact</option><option value="normal">Normal</option><option value="spacious">Spacious</option></select></div>
-    <div class="field"><label for="fontSize">Font size</label><select id="fontSize"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></div>
-    <div class="field"><label for="sidebarSide">Sidebar side</label><select id="sidebarSide"><option value="right">Right</option><option value="left">Left</option></select></div>
-    <div class="field"><label for="sidebarWidth">Sidebar width (px)</label><input type="number" id="sidebarWidth" min="300" max="600" step="20" /></div>
-    <div class="field"><label for="chipSort">Sort chips by</label><select id="chipSort"><option value="status">Status</option><option value="name">Name</option><option value="points">Points</option></select></div>
-  </div>
-  <div class="field"><label for="chipGrouping">Grouping</label><select id="chipGrouping" style="width:auto"><option value="by-type">By type</option><option value="flat">Flat</option></select></div>
-
-  <h2>Visibility</h2>
-  <div class="checkbox-row"><input type="checkbox" id="showAchieved" /><label for="showAchieved">Show achieved indicators</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="showNoData" /><label for="showNoData">Show no-data indicators</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="showRegisterPills" /><label for="showRegisterPills">Show register pills</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="showViewLabel" /><label for="showViewLabel">Show view label</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="showDataSourceLine" /><label for="showDataSourceLine">Show data-source line</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="showDebugPanel" /><label for="showDebugPanel">Show debug panel</label></div>
-  <div class="checkbox-row"><input type="checkbox" id="expandChipsByDefault" /><label for="expandChipsByDefault">Expand chips by default</label></div>
-
-  <h2>Behaviour</h2>
-  <div class="checkbox-row"><input type="checkbox" id="autoRefresh" /><label for="autoRefresh">Auto-refresh on page navigation</label></div>
-  <div class="field" style="margin-top:8px"><label for="defaultMode">Default mode</label><select id="defaultMode" style="width:auto"><option value="live">Live</option><option value="mock">Mock</option></select></div>
-
-  <div class="actions">
-    <button class="primary" id="saveBtn">Save settings</button>
-    <span class="saved" id="savedMsg">Saved ✓</span>
-  </div>
-
-  <h2>Hidden / Snoozed Alerts</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Alerts you have dismissed from the monitoring panel. Snoozed alerts reappear automatically once their date passes. Click <strong>Enable</strong> to bring an alert back immediately.
-  </p>
-  <div class="cr-list" id="hiddenRulesList"><div class="cr-empty">No alerts are currently hidden.</div></div>
-
-  <h2>Manage Alerts</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Permanently turn the bundled vaccination alerts on or off. Switching one off hides it for every patient until you turn it back on.
-  </p>
-  <div class="cr-list" id="manageRulesList"><div class="cr-empty">Loading…</div></div>
-</div>
-
-<!-- Custom Rules tab -->
-<div class="tab-panel" id="tab-customrules">
-
-  <!-- ── Alert Library ─────────────────────────────────────────────────── -->
-  <div class="lib-panel" id="alertLibraryPanel">
-    <button class="lib-toggle" id="libToggleBtn" aria-expanded="false">
-      <span class="lib-toggle-icon">📚</span>
-      <span class="lib-toggle-text">
-        <span class="lib-toggle-title">Alert Library — quick-add common alerts</span>
-        <span class="lib-toggle-sub">Curated alerts based on PINCER and UK prescribing safety guidelines. Click to add — edit anything afterwards.</span>
-      </span>
-      <span class="lib-toggle-chevron">▶</span>
-    </button>
-    <div class="lib-body" id="libBody">
-      <div class="lib-unlock" id="libUnlockBanner" hidden>
-        <div class="lib-unlock-icon">⚠</div>
-        <div class="lib-unlock-text">
-          <div class="lib-unlock-title">Alpha feature — review before relying on these alerts</div>
-          <div class="lib-unlock-body">
-            Library alerts are starter templates derived from published prescribing-safety guidelines (PINCER, NICE, MHRA). They have <strong>not been clinically validated</strong> in this codebase and individual rules may match incorrectly, miss cases, or fire on irrelevant medications. You are responsible for reviewing match terms, thresholds, and behaviour against your local formulary and patient population before clinical use. By acknowledging, you accept that these alerts are decision support only — they do not replace clinical judgement, and the suite author accepts no liability for their use.
-          </div>
-          <button class="lib-unlock-btn" id="libUnlockBtn">I understand — enable the library</button>
-        </div>
-      </div>
-      <div class="lib-add-all-bar" id="libAddAllBar" hidden>
-        <button class="lib-add-all-btn" id="libAddAllBtn">+ Add all</button>
-        <span class="lib-add-all-count" id="libAddAllCount"></span>
-      </div>
-      <div class="lib-placeholder" id="libPlaceholder">Loading library…</div>
+      /* ── Highlight flash on newly-added card ────────────────────────────────── */
+      @keyframes row-flash {
+        0%,
+        100% {
+          background: var(--bg-e);
+        }
+        40% {
+          background: var(--green-dim);
+        }
+      }
+      .cr-card.flash {
+        animation: row-flash 1.4s ease;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .cr-card.flash {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="display">Display</button>
+      <button class="tab-btn" data-tab="customrules">Custom Rules</button>
+      <button class="tab-btn" data-tab="overrides">Rule Overrides</button>
     </div>
-  </div>
 
-  <h2>Custom Drug-Monitoring Rules</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">Add monitoring rules for shared-care drugs not in the bundled set. Rules use the same passive display engine — no recommendation, no record write.</p>
-
-  <div id="crListView">
-    <div class="cr-bar">
-      <button class="primary" id="crAddBtn">+ Add custom rule</button>
-      <button class="ghost" id="crImportBtn">Import</button>
-      <input type="file" id="crImportFile" accept=".json" style="display:none" />
-      <button class="ghost" id="crExportBtn">Export</button>
-    </div>
-    <div class="cr-list" id="crList"><div class="cr-empty">No custom rules yet.</div></div>
-
-    <!-- LLM rule authoring tool -->
-    <details id="crLlmBlock" style="margin-top:14px; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
-      <summary style="padding:10px 14px; font-size:12px; font-weight:600; color:var(--t2); cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
-        <span style="font-size:10px; color:var(--t4);">&#9654;</span>
-        Author a rule with an LLM
-      </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--border);">
-        <p style="font-size:12px; color:var(--t3); margin:0 0 12px; line-height:1.6;">
-          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
-          (e.g. "make me a rule that flags methotrexate without recent FBC"), then paste the JSON response into the box below to import it.
-          Imported rules arrive <strong>disabled</strong> and must be reviewed and enabled before they fire.
-        </p>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-          <button class="ghost" id="crLlmCopyPrompt" style="font-size:11px; padding:5px 12px;">Copy LLM prompt</button>
-          <span id="crLlmCopied" style="font-family:var(--mono); font-size:11px; color:var(--green); opacity:0; transition:opacity 0.3s;">Copied.</span>
-        </div>
-        <label style="display:block; font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--t3); font-weight:600; margin-bottom:5px;">
-          Paste LLM JSON output here
-        </label>
-        <textarea id="crLlmJson" rows="8" placeholder='Paste the JSON object (or array, or {&quot;rules&quot;:[...]}) returned by the LLM here, then click &quot;Import rule(s)&quot;.'
-          style="width:100%; box-sizing:border-box;"></textarea>
-        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-          <button class="primary" id="crLlmImport" style="font-size:11px; padding:5px 14px;">Import rule(s)</button>
-          <span id="crLlmStatus" style="font-size:12px; line-height:1.5;"></span>
-        </div>
-      </div>
-    </details>
-  </div>
-
-  <div id="crFormView" style="display:none;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      <h2 id="crFormTitle" style="margin:0; border:none; padding:0; flex:1;">New custom rule</h2>
-      <button class="ghost" id="crCancelBtn">Cancel</button>
-    </div>
-    <div class="cr-form">
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Drug identification</span>
+    <!-- Display tab -->
+    <div class="tab-panel active" id="tab-display">
+      <h2>Display</h2>
+      <div class="two-col">
         <div class="field">
-          <label for="crDrugNames">Drug names (one per line)</label>
-          <textarea id="crDrugNames" rows="3" style="height:62px;" placeholder="leflunomide&#10;arava"></textarea>
-          <div class="form-hint">Case-insensitive substring match against the medication name. Include brand names if needed.</div>
-        </div>
-        <div class="field">
-          <label for="crExcludeNames">Exclude names (optional, one per line)</label>
-          <textarea id="crExcludeNames" rows="2" style="height:44px;" placeholder="leflunomide cream"></textarea>
-        </div>
-        <div class="two-col">
-          <div class="field"><label for="crDrugClass">Drug class</label><input type="text" id="crDrugClass" placeholder="e.g. DMARD" /></div>
-          <div class="field" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
-            <input type="checkbox" id="crSharedCare" /><label for="crSharedCare" style="font-size:12px; color:var(--t2); cursor:pointer;">Shared care drug</label>
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Tests to monitor</span>
-        <div id="crTestCards"></div>
-        <button class="ghost" id="crAddTestBtn" style="margin-top:4px;">+ Add test</button>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Patient filters (optional)</span>
-        <div class="two-col">
-          <div class="field"><label for="crAgeMin">Min age</label><input type="number" id="crAgeMin" min="0" max="120" /></div>
-          <div class="field"><label for="crAgeMax">Max age</label><input type="number" id="crAgeMax" min="0" max="120" /></div>
-        </div>
-        <div class="field">
-          <label for="crSex">Sex</label>
-          <select id="crSex">
-            <option value="">Any</option>
-            <option value="F">Female only</option>
-            <option value="M">Male only</option>
+          <label for="chipStyle">Chip style</label
+          ><select id="chipStyle">
+            <option value="subtle">Subtle</option>
+            <option value="bold">Bold</option>
+            <option value="minimal">Minimal</option>
           </select>
         </div>
         <div class="field">
-          <label for="crRequiresProblem">Requires problem — ALL must be present (one per line)</label>
-          <textarea id="crRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. rheumatoid arthritis"></textarea>
-        </div>
-        <div class="field">
-          <label for="crExcludesProblem">Exclude if problem present (one per line)</label>
-          <textarea id="crExcludesProblem" rows="2" style="height:44px;" placeholder="e.g. palliative care"></textarea>
-        </div>
-      </div>
-
-      <div style="margin-bottom:6px;">
-        <span class="cr-section-label">Additional information</span>
-        <div class="field">
-          <label for="crNotes">Notes (shown on chip hover)</label>
-          <textarea id="crNotes" rows="2" style="height:44px;" placeholder="e.g. Annual review per shared care protocol."></textarea>
-        </div>
-        <div class="field">
-          <label for="crSource">Source reference (URL or citation)</label>
-          <input type="url" id="crSource" placeholder="https://" />
-        </div>
-      </div>
-
-      <div class="cr-preview-wrap">
-        <div class="cr-preview-head">Live preview — test patient</div>
-        <div id="crMockMount"></div>
-        <div id="crPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Enter drug names and at least one test to see a preview.</span></div>
-      </div>
-
-      <div class="cr-form-error" id="crFormError"></div>
-
-      <div class="actions" style="margin-top:16px;">
-        <button class="primary" id="crSaveBtn">Save custom rule</button>
-        <button class="ghost" id="crCancelBtn2">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Custom Clinical Indicators (v1.2) -->
-  <h2 style="margin-top:28px;">Custom Clinical Indicators</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Threshold-based indicators against the bundled QOF registers or all patients. <strong>Custom indicators do not count toward QOF achievement.</strong> They are visually marked with a Custom tag.
-  </p>
-
-  <div id="ciListView">
-    <div class="cr-bar">
-      <button class="primary" id="ciAddBtn">+ Add custom indicator</button>
-    </div>
-    <div class="cr-list" id="ciList"><div class="cr-empty">No custom indicators yet.</div></div>
-  </div>
-
-  <div id="ciFormView" style="display:none;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      <h2 id="ciFormTitle" style="margin:0; border:none; padding:0; flex:1;">New custom indicator</h2>
-      <button class="ghost" id="ciCancelBtn">Cancel</button>
-    </div>
-    <div class="cr-form">
-      <!-- Section A: Identification -->
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Indicator identification</span>
-        <div class="two-col">
-          <div class="field">
-            <label for="ciIndicatorCode">Indicator code</label>
-            <input type="text" id="ciIndicatorCode" placeholder="e.g. LOCAL-ACR-DM" />
-            <div class="form-hint">Short code shown in the chip header.</div>
-          </div>
-          <div class="field">
-            <label for="ciPoints">Points (optional, metadata only)</label>
-            <input type="number" id="ciPoints" min="0" max="100" placeholder="" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="ciIndicatorName">Indicator name</label>
-          <input type="text" id="ciIndicatorName" placeholder="e.g. ACR within 12 months" />
-        </div>
-      </div>
-
-      <!-- Section B: Check kind picker -->
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">What to check</span>
-        <div class="checkbox-row" style="margin-bottom:6px;">
-          <input type="radio" id="ciKindThreshold" name="ciKind" value="observation-threshold" checked />
-          <label for="ciKindThreshold">Recent observation against a threshold (e.g. HbA1c, BP)</label>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:6px;">
-          <input type="radio" id="ciKindMedPresent" name="ciKind" value="medication-present" />
-          <label for="ciKindMedPresent">Patient is currently on a medication</label>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:6px;">
-          <input type="radio" id="ciKindObsWithin" name="ciKind" value="observation-recent" />
-          <label for="ciKindObsWithin">Observation has been recorded within a time window</label>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:6px;">
-          <input type="radio" id="ciKindObsTrend" name="ciKind" value="observation-trend" />
-          <label for="ciKindObsTrend">Observation is showing a rising or falling trend</label>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:6px;">
-          <input type="radio" id="ciKindObsAlert" name="ciKind" value="observation-alert" />
-          <label for="ciKindObsAlert">Latest observation crosses a safety threshold (amber/red bands)</label>
-        </div>
-      </div>
-
-      <!-- Section C: Observation threshold (visible when kind = observation-threshold) -->
-      <div id="ciSectionThreshold" style="margin-bottom:14px;">
-        <span class="cr-section-label">Threshold details</span>
-        <div class="field">
-          <label for="ciThresholdObsMatch">Observation match terms (one per line)</label>
-          <textarea id="ciThresholdObsMatch" rows="2" style="height:48px;" placeholder="hba1c&#10;haemoglobin a1c"></textarea>
-        </div>
-        <div class="checkbox-row" style="margin-bottom:10px;">
-          <input type="checkbox" id="ciDualThreshold" />
-          <label for="ciDualThreshold">Two thresholds (e.g. blood pressure systolic/diastolic)</label>
-        </div>
-        <div id="ciSingleThreshold">
-          <div class="interval-row">
-            <label>Operator</label>
-            <select id="ciOperator" style="width:90px;">
-              <option value="<=">≤</option>
-              <option value="<">&lt;</option>
-              <option value=">=">≥</option>
-              <option value=">">&gt;</option>
-              <option value="=">=</option>
-            </select>
-            <input type="number" id="ciThreshold" placeholder="e.g. 58" style="width:90px;" step="any" />
-          </div>
-        </div>
-        <div id="ciDualThresholdInputs" style="display:none;">
-          <div class="interval-row">
-            <label>Systolic ≤</label>
-            <input type="number" id="ciThresholdSys" placeholder="e.g. 140" style="width:90px;" />
-          </div>
-          <div class="interval-row">
-            <label>Diastolic ≤</label>
-            <input type="number" id="ciThresholdDia" placeholder="e.g. 90" style="width:90px;" />
-          </div>
-        </div>
-        <div class="field" style="margin-top:10px;">
-          <span style="font-family:var(--mono); font-size:10px; color:var(--t4); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px; display:block;">Window</span>
-          <div class="checkbox-row" style="margin-bottom:5px;">
-            <input type="radio" id="ciWindowQofYearT" name="ciWindowThreshold" value="qof" checked />
-            <label for="ciWindowQofYearT">QOF year (1 April to 31 March)</label>
-          </div>
-          <div class="checkbox-row" style="margin-bottom:5px;">
-            <input type="radio" id="ciWindowRollingT" name="ciWindowThreshold" value="rolling" />
-            <label for="ciWindowRollingT">
-              Rolling
-              <input type="number" id="ciWithinDaysT" min="1" max="3650" value="365" style="width:64px; margin:0 6px;" />
-              days
-            </label>
-          </div>
-          <div class="form-hint">QOF year: only observations dated on or after the most recent 1 April count. Observations from before 1 April will show as overdue until the next QOF year begins.</div>
-        </div>
-      </div>
-
-      <!-- Section D: Medication presence (hidden by default) -->
-      <div id="ciSectionMedPresent" style="margin-bottom:14px; display:none;">
-        <span class="cr-section-label">Medication match</span>
-        <div class="field">
-          <label for="ciMedMatch">Medication match terms (one per line)</label>
-          <textarea id="ciMedMatch" rows="3" style="height:60px;" placeholder="atorvastatin&#10;simvastatin&#10;rosuvastatin"></textarea>
-        </div>
-        <div class="field">
-          <label for="ciMedExclude">Exclude terms (optional)</label>
-          <textarea id="ciMedExclude" rows="2" style="height:44px;" placeholder=""></textarea>
-        </div>
-      </div>
-
-      <!-- Section E: Observation presence within window (hidden by default) -->
-      <div id="ciSectionObsWithin" style="margin-bottom:14px; display:none;">
-        <span class="cr-section-label">Observation recorded within window</span>
-        <div class="field">
-          <label for="ciWithinObsMatch">Observation match terms (one per line)</label>
-          <textarea id="ciWithinObsMatch" rows="2" style="height:48px;" placeholder="frailty review&#10;clinical frailty scale"></textarea>
-        </div>
-        <div class="field">
-          <span style="font-family:var(--mono); font-size:10px; color:var(--t4); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px; display:block;">Window</span>
-          <div class="checkbox-row" style="margin-bottom:5px;">
-            <input type="radio" id="ciWindowQofYearW" name="ciWindowWithin" value="qof" checked />
-            <label for="ciWindowQofYearW">QOF year (1 April to 31 March)</label>
-          </div>
-          <div class="checkbox-row" style="margin-bottom:5px;">
-            <input type="radio" id="ciWindowRollingW" name="ciWindowWithin" value="rolling" />
-            <label for="ciWindowRollingW">
-              Rolling
-              <input type="number" id="ciWithinDaysW" min="1" max="3650" value="365" style="width:64px; margin:0 6px;" />
-              days
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Section E2: Observation trend (hidden by default) -->
-      <div id="ciSectionTrend" style="margin-bottom:14px; display:none;">
-        <span class="cr-section-label">Observation trend details</span>
-        <div class="field">
-          <label for="ciTrendObsMatch">Observation match terms (one per line)</label>
-          <textarea id="ciTrendObsMatch" rows="2" style="height:48px;" placeholder="psa&#10;prostate specific antigen"></textarea>
-        </div>
-        <div class="field">
-          <label>Direction</label>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ciTrendRising" name="ciTrendDirection" value="rising" checked /><label for="ciTrendRising">Rising</label></div>
-          <div class="checkbox-row"><input type="radio" id="ciTrendFalling" name="ciTrendDirection" value="falling" /><label for="ciTrendFalling">Falling</label></div>
-        </div>
-        <div class="two-col">
-          <div class="field">
-            <label for="ciTrendMinPoints">Minimum data points</label>
-            <input type="number" id="ciTrendMinPoints" min="2" max="100" value="3" />
-            <div class="form-hint">Minimum readings needed to detect trend (min 2).</div>
-          </div>
-          <div class="field">
-            <label for="ciTrendWithinMonths">Within months</label>
-            <input type="number" id="ciTrendWithinMonths" min="1" max="360" value="24" />
-            <div class="form-hint">Only readings within this window count.</div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="ciTrendMinDelta">Minimum delta (optional)</label>
-          <input type="number" id="ciTrendMinDelta" min="0" step="any" placeholder="e.g. 1.0" />
-          <div class="form-hint">Minimum total change across data points to qualify as a trend.</div>
-        </div>
-      </div>
-
-      <!-- Section E3: Observation safety alert (hidden by default) -->
-      <div id="ciSectionAlert" style="margin-bottom:14px; display:none;">
-        <span class="cr-section-label">Observation alert details</span>
-        <div class="field">
-          <label for="ciAlertObsMatch">Observation match terms (one per line)</label>
-          <textarea id="ciAlertObsMatch" rows="2" style="height:48px;" placeholder="potassium&#10;serum potassium"></textarea>
-        </div>
-        <div class="field">
-          <label for="ciAlertComparator">Dangerous direction</label>
-          <select id="ciAlertComparator" style="width:auto;">
-            <option value="above">High values are dangerous (fires at/above thresholds)</option>
-            <option value="below">Low values are dangerous (fires at/below thresholds)</option>
-          </select>
-        </div>
-        <div class="two-col">
-          <div class="field">
-            <label for="ciAlertAmber">Amber threshold</label>
-            <input type="number" id="ciAlertAmber" step="any" placeholder="e.g. 5.5" />
-            <div class="form-hint">Lower-severity band. Optional if a red threshold is set.</div>
-          </div>
-          <div class="field">
-            <label for="ciAlertRed">Red threshold</label>
-            <input type="number" id="ciAlertRed" step="any" placeholder="e.g. 6.0" />
-            <div class="form-hint">Higher-severity band. Optional if an amber threshold is set.</div>
-          </div>
-        </div>
-        <div class="two-col">
-          <div class="field">
-            <label for="ciAlertUnit">Unit (optional)</label>
-            <input type="text" id="ciAlertUnit" placeholder="e.g. mmol/L" />
-          </div>
-          <div class="field">
-            <label for="ciAlertWithinDays">Within days</label>
-            <input type="number" id="ciAlertWithinDays" min="1" max="3650" value="180" />
-            <div class="form-hint">Ignore results older than this.</div>
-          </div>
-        </div>
-        <div class="form-hint">Fires only when the latest matching value crosses a band — no chip when the value is in the safe range, stale, or absent.</div>
-      </div>
-
-      <!-- Section F: Patient filters -->
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Patient filters</span>
-        <div class="field">
-          <label for="ciRequiresRegister">Applies to register</label>
-          <select id="ciRequiresRegister">
-            <option value="">Any patient (no register required)</option>
-            <option value="DM">Diabetes Mellitus (DM)</option>
-            <option value="HYP">Hypertension (HYP)</option>
-            <option value="CHD">Coronary Heart Disease (CHD)</option>
-            <option value="HF">Heart Failure (HF)</option>
-            <option value="STIA">Stroke / TIA (STIA)</option>
-            <option value="CKD">Chronic Kidney Disease (CKD)</option>
-            <option value="PAD">Peripheral Arterial Disease (PAD)</option>
-            <option value="ASTHMA">Asthma</option>
-            <option value="COPD">COPD</option>
-            <option value="AF">Atrial Fibrillation (AF)</option>
-          </select>
-        </div>
-        <div class="two-col">
-          <div class="field"><label for="ciAgeMin">Min age (optional)</label><input type="number" id="ciAgeMin" min="0" max="120" /></div>
-          <div class="field"><label for="ciAgeMax">Max age (optional)</label><input type="number" id="ciAgeMax" min="0" max="120" /></div>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="ciExcludeFrailty" />
-          <label for="ciExcludeFrailty">Exclude patients with moderate or severe frailty</label>
-        </div>
-        <div class="field">
-          <label for="ciSex">Sex</label>
-          <select id="ciSex">
-            <option value="">Any</option>
-            <option value="F">Female only</option>
-            <option value="M">Male only</option>
+          <label for="density">Density</label
+          ><select id="density">
+            <option value="compact">Compact</option>
+            <option value="normal">Normal</option>
+            <option value="spacious">Spacious</option>
           </select>
         </div>
         <div class="field">
-          <label for="ciRequiresProblem">Requires problem — ALL must be present (one per line)</label>
-          <textarea id="ciRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. heart failure with reduced ejection fraction"></textarea>
+          <label for="fontSize">Font size</label
+          ><select id="fontSize">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
         </div>
         <div class="field">
-          <label for="ciRequiresAnyProblem">Requires ANY of these problems (one per line)</label>
-          <textarea id="ciRequiresAnyProblem" rows="2" style="height:44px;" placeholder="e.g. coronary heart disease&#10;stroke&#10;peripheral arterial disease"></textarea>
+          <label for="sidebarSide">Sidebar side</label
+          ><select id="sidebarSide">
+            <option value="right">Right</option>
+            <option value="left">Left</option>
+          </select>
         </div>
         <div class="field">
-          <label for="ciExcludeProblems">Exclude if problem present (one per line)</label>
-          <textarea id="ciExcludeProblems" rows="2" style="height:44px;" placeholder="e.g. haemorrhagic stroke"></textarea>
-        </div>
-      </div>
-
-      <!-- Section G: Source -->
-      <div style="margin-bottom:6px;">
-        <span class="cr-section-label">Additional information</span>
-        <div class="field">
-          <label for="ciNotes">Notes (shown on chip hover)</label>
-          <textarea id="ciNotes" rows="2" style="height:44px;" placeholder="e.g. Locally agreed standard, reviewed Q3 2026"></textarea>
+          <label for="sidebarWidth">Sidebar width (px)</label
+          ><input type="number" id="sidebarWidth" min="300" max="600" step="20" />
         </div>
         <div class="field">
-          <label for="ciSource">Source reference (URL or citation)</label>
-          <input type="url" id="ciSource" placeholder="https://" />
+          <label for="chipSort">Sort chips by</label
+          ><select id="chipSort">
+            <option value="status">Status</option>
+            <option value="name">Name</option>
+            <option value="points">Points</option>
+          </select>
         </div>
       </div>
-
-      <!-- Section H: Live preview -->
-      <div class="cr-preview-wrap">
-        <div class="cr-preview-head">Live preview — test patient</div>
-        <div id="ciMockMount"></div>
-        <div id="ciPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Fill in code, name, and check details to see a preview.</span></div>
+      <div class="field">
+        <label for="chipGrouping">Grouping</label
+        ><select id="chipGrouping" style="width: auto">
+          <option value="by-type">By type</option>
+          <option value="flat">Flat</option>
+        </select>
       </div>
 
-      <div class="cr-form-error" id="ciFormError"></div>
-
-      <div class="actions" style="margin-top:16px;">
-        <button class="primary" id="ciSaveBtn">Save custom indicator</button>
-        <button class="ghost" id="ciCancelBtn2">Cancel</button>
+      <h2>Visibility</h2>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showAchieved" /><label for="showAchieved">Show achieved indicators</label>
       </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showNoData" /><label for="showNoData">Show no-data indicators</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showRegisterPills" /><label for="showRegisterPills">Show register pills</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showViewLabel" /><label for="showViewLabel">Show view label</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showDataSourceLine" /><label for="showDataSourceLine">Show data-source line</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="showDebugPanel" /><label for="showDebugPanel">Show debug panel</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="expandChipsByDefault" /><label for="expandChipsByDefault"
+          >Expand chips by default</label
+        >
+      </div>
+
+      <h2>Behaviour</h2>
+      <div class="checkbox-row">
+        <input type="checkbox" id="autoRefresh" /><label for="autoRefresh">Auto-refresh on page navigation</label>
+      </div>
+      <div class="field" style="margin-top: 8px">
+        <label for="defaultMode">Default mode</label
+        ><select id="defaultMode" style="width: auto">
+          <option value="live">Live</option>
+          <option value="mock">Mock</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="saveBtn">Save settings</button>
+        <span class="saved" id="savedMsg">Saved ✓</span>
+      </div>
+
+      <h2>Hidden / Snoozed Alerts</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Alerts you have dismissed from the monitoring panel. Snoozed alerts reappear automatically once their date
+        passes. Click <strong>Enable</strong> to bring an alert back immediately.
+      </p>
+      <div class="cr-list" id="hiddenRulesList"><div class="cr-empty">No alerts are currently hidden.</div></div>
+
+      <h2>Manage Alerts</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Permanently turn the bundled vaccination alerts on or off. Switching one off hides it for every patient until
+        you turn it back on.
+      </p>
+      <div class="cr-list" id="manageRulesList"><div class="cr-empty">Loading…</div></div>
     </div>
-  </div>
 
-  <!-- ── Drug-Combo Alerts ──────────────────────────────────────────────── -->
-  <h2 style="margin-top:28px;">Drug-Combo Alerts</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Flag patients currently prescribed two or more drug groups concurrently. Based on PINCER and NICE prescribing safety indicators.
-  </p>
-
-  <div id="dcListView">
-    <div class="cr-bar">
-      <button class="primary" id="dcAddBtn">+ Add drug-combo alert</button>
-    </div>
-    <div class="cr-list" id="dcList"><div class="cr-empty">No drug-combo alerts yet.</div></div>
-  </div>
-
-  <div id="dcFormView" style="display:none;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      <h2 id="dcFormTitle" style="margin:0; border:none; padding:0; flex:1;">New drug-combo alert</h2>
-      <button class="ghost" id="dcCancelBtn">Cancel</button>
-    </div>
-    <div class="cr-form">
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Alert identification</span>
-        <div class="field">
-          <label for="dcLabel">Alert label</label>
-          <input type="text" id="dcLabel" placeholder="e.g. Warfarin + NSAID concurrent" />
-        </div>
-        <div class="field">
-          <label>Severity</label>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSevRed" name="dcSeverity" value="red" checked /><label for="dcSevRed" style="color:var(--red);">Red — high risk</label></div>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSevAmber" name="dcSeverity" value="amber" /><label for="dcSevAmber" style="color:var(--amber);">Amber — caution</label></div>
-          <div class="checkbox-row"><input type="radio" id="dcSevInfo" name="dcSeverity" value="info" /><label for="dcSevInfo" style="color:var(--accent);">Info — note only</label></div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Drug sets (all must be present)</span>
-        <div id="dcSetCards"></div>
-        <button class="ghost" id="dcAddSetBtn" style="margin-top:4px;">+ Add drug set</button>
-        <div class="form-hint" style="margin-top:6px;">Each set defines a drug group. The alert fires only when the patient has at least one drug from every set.</div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Must NOT be co-prescribed (optional)</span>
-        <div class="field">
-          <label for="dcMustNotBePresent">Suppress the alert if any of these drugs is also prescribed (one per line)</label>
-          <textarea id="dcMustNotBePresent" rows="2" style="height:44px;" placeholder="e.g. omeprazole&#10;lansoprazole"></textarea>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <button class="filters-toggle" id="dcFiltersToggle" aria-expanded="false">
-          <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
+    <!-- Custom Rules tab -->
+    <div class="tab-panel" id="tab-customrules">
+      <!-- ── Alert Library ─────────────────────────────────────────────────── -->
+      <div class="lib-panel" id="alertLibraryPanel">
+        <button class="lib-toggle" id="libToggleBtn" aria-expanded="false">
+          <span class="lib-toggle-icon">📚</span>
+          <span class="lib-toggle-text">
+            <span class="lib-toggle-title">Alert Library — quick-add common alerts</span>
+            <span class="lib-toggle-sub"
+              >Curated alerts based on PINCER and UK prescribing safety guidelines. Click to add — edit anything
+              afterwards.</span
+            >
+          </span>
+          <span class="lib-toggle-chevron">▶</span>
         </button>
-        <div class="filters-body" id="dcFiltersBody">
-          <div class="two-col">
-            <div class="field"><label for="dcAgeMin">Min age</label><input type="number" id="dcAgeMin" min="0" max="120" placeholder="any" /></div>
-            <div class="field"><label for="dcAgeMax">Max age</label><input type="number" id="dcAgeMax" min="0" max="120" placeholder="any" /></div>
+        <div class="lib-body" id="libBody">
+          <div class="lib-unlock" id="libUnlockBanner" hidden>
+            <div class="lib-unlock-icon">⚠</div>
+            <div class="lib-unlock-text">
+              <div class="lib-unlock-title">Alpha feature — review before relying on these alerts</div>
+              <div class="lib-unlock-body">
+                Library alerts are starter templates derived from published prescribing-safety guidelines (PINCER, NICE,
+                MHRA). They have <strong>not been clinically validated</strong> in this codebase and individual rules
+                may match incorrectly, miss cases, or fire on irrelevant medications. You are responsible for reviewing
+                match terms, thresholds, and behaviour against your local formulary and patient population before
+                clinical use. By acknowledging, you accept that these alerts are decision support only — they do not
+                replace clinical judgement, and the suite author accepts no liability for their use.
+              </div>
+              <button class="lib-unlock-btn" id="libUnlockBtn">I understand — enable the library</button>
+            </div>
           </div>
-          <div class="field">
-            <label>Sex</label>
-            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSexAny" name="dcSex" value="any" checked /><label for="dcSexAny">Any</label></div>
-            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="dcSexM" name="dcSex" value="M" /><label for="dcSexM">Male</label></div>
-            <div class="checkbox-row"><input type="radio" id="dcSexF" name="dcSex" value="F" /><label for="dcSexF">Female</label></div>
+          <div class="lib-add-all-bar" id="libAddAllBar" hidden>
+            <button class="lib-add-all-btn" id="libAddAllBtn">+ Add all</button>
+            <span class="lib-add-all-count" id="libAddAllCount"></span>
           </div>
-          <div class="field">
-            <label for="dcRequiresProblem">Requires problem (one per line — all must match)</label>
-            <textarea id="dcRequiresProblem" rows="2" style="height:44px;" placeholder="e.g. atrial fibrillation"></textarea>
+          <div class="lib-placeholder" id="libPlaceholder">Loading library…</div>
+        </div>
+      </div>
+
+      <h2>Custom Drug-Monitoring Rules</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Add monitoring rules for shared-care drugs not in the bundled set. Rules use the same passive display engine —
+        no recommendation, no record write.
+      </p>
+
+      <div id="crListView">
+        <div class="cr-bar">
+          <button class="primary" id="crAddBtn">+ Add custom rule</button>
+          <button class="ghost" id="crImportBtn">Import</button>
+          <input type="file" id="crImportFile" accept=".json" style="display: none" />
+          <button class="ghost" id="crExportBtn">Export</button>
+        </div>
+        <div class="cr-list" id="crList"><div class="cr-empty">No custom rules yet.</div></div>
+
+        <!-- LLM rule authoring tool -->
+        <details
+          id="crLlmBlock"
+          style="margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden"
+        >
+          <summary
+            style="
+              padding: 10px 14px;
+              font-size: 12px;
+              font-weight: 600;
+              color: var(--t2);
+              cursor: pointer;
+              user-select: none;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              list-style: none;
+            "
+          >
+            <span style="font-size: 10px; color: var(--t4)">&#9654;</span>
+            Author a rule with an LLM
+          </summary>
+          <div style="padding: 14px 16px; border-top: 1px solid var(--border)">
+            <p style="font-size: 12px; color: var(--t3); margin: 0 0 12px; line-height: 1.6">
+              Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule
+              you want (e.g. "make me a rule that flags methotrexate without recent FBC"), then paste the JSON response
+              into the box below to import it. Imported rules arrive <strong>disabled</strong> and must be reviewed and
+              enabled before they fire.
+            </p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px">
+              <button class="ghost" id="crLlmCopyPrompt" style="font-size: 11px; padding: 5px 12px">
+                Copy LLM prompt
+              </button>
+              <span
+                id="crLlmCopied"
+                style="
+                  font-family: var(--mono);
+                  font-size: 11px;
+                  color: var(--green);
+                  opacity: 0;
+                  transition: opacity 0.3s;
+                "
+                >Copied.</span
+              >
+            </div>
+            <label
+              style="
+                display: block;
+                font-family: var(--mono);
+                font-size: 10px;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--t3);
+                font-weight: 600;
+                margin-bottom: 5px;
+              "
+            >
+              Paste LLM JSON output here
+            </label>
+            <textarea
+              id="crLlmJson"
+              rows="8"
+              placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'
+              style="width: 100%; box-sizing: border-box"
+            ></textarea>
+            <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px">
+              <button class="primary" id="crLlmImport" style="font-size: 11px; padding: 5px 14px">
+                Import rule(s)
+              </button>
+              <span id="crLlmStatus" style="font-size: 12px; line-height: 1.5"></span>
+            </div>
           </div>
-          <div class="field">
-            <label for="dcExcludesProblem">Excludes problem (one per line — any match disqualifies)</label>
-            <textarea id="dcExcludesProblem" rows="2" style="height:44px;" placeholder="e.g. end of life care"></textarea>
+        </details>
+      </div>
+
+      <div id="crFormView" style="display: none">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+          <h2 id="crFormTitle" style="margin: 0; border: none; padding: 0; flex: 1">New custom rule</h2>
+          <button class="ghost" id="crCancelBtn">Cancel</button>
+        </div>
+        <div class="cr-form">
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Drug identification</span>
+            <div class="field">
+              <label for="crDrugNames">Drug names (one per line)</label>
+              <textarea id="crDrugNames" rows="3" style="height: 62px" placeholder="leflunomide&#10;arava"></textarea>
+              <div class="form-hint">
+                Case-insensitive substring match against the medication name. Include brand names if needed.
+              </div>
+            </div>
+            <div class="field">
+              <label for="crExcludeNames">Exclude names (optional, one per line)</label>
+              <textarea id="crExcludeNames" rows="2" style="height: 44px" placeholder="leflunomide cream"></textarea>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label for="crDrugClass">Drug class</label
+                ><input type="text" id="crDrugClass" placeholder="e.g. DMARD" />
+              </div>
+              <div class="field" style="display: flex; align-items: center; gap: 8px; padding-top: 18px">
+                <input type="checkbox" id="crSharedCare" /><label
+                  for="crSharedCare"
+                  style="font-size: 12px; color: var(--t2); cursor: pointer"
+                  >Shared care drug</label
+                >
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Tests to monitor</span>
+            <div id="crTestCards"></div>
+            <button class="ghost" id="crAddTestBtn" style="margin-top: 4px">+ Add test</button>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Patient filters (optional)</span>
+            <div class="two-col">
+              <div class="field">
+                <label for="crAgeMin">Min age</label><input type="number" id="crAgeMin" min="0" max="120" />
+              </div>
+              <div class="field">
+                <label for="crAgeMax">Max age</label><input type="number" id="crAgeMax" min="0" max="120" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="crSex">Sex</label>
+              <select id="crSex">
+                <option value="">Any</option>
+                <option value="F">Female only</option>
+                <option value="M">Male only</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="crRequiresProblem">Requires problem — ALL must be present (one per line)</label>
+              <textarea
+                id="crRequiresProblem"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. rheumatoid arthritis"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="crExcludesProblem">Exclude if problem present (one per line)</label>
+              <textarea
+                id="crExcludesProblem"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. palliative care"
+              ></textarea>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 6px">
+            <span class="cr-section-label">Additional information</span>
+            <div class="field">
+              <label for="crNotes">Notes (shown on chip hover)</label>
+              <textarea
+                id="crNotes"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. Annual review per shared care protocol."
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="crSource">Source reference (URL or citation)</label>
+              <input type="url" id="crSource" placeholder="https://" />
+            </div>
+          </div>
+
+          <div class="cr-preview-wrap">
+            <div class="cr-preview-head">Live preview — test patient</div>
+            <div id="crMockMount"></div>
+            <div id="crPreviewChip">
+              <span style="color: var(--t4); font-size: 11px; font-style: italic"
+                >Enter drug names and at least one test to see a preview.</span
+              >
+            </div>
+          </div>
+
+          <div class="cr-form-error" id="crFormError"></div>
+
+          <div class="actions" style="margin-top: 16px">
+            <button class="primary" id="crSaveBtn">Save custom rule</button>
+            <button class="ghost" id="crCancelBtn2">Cancel</button>
           </div>
         </div>
       </div>
 
-      <div style="margin-bottom:6px;">
-        <span class="cr-section-label">Additional information</span>
-        <div class="field">
-          <label for="dcNotes">Notes (shown on alert)</label>
-          <textarea id="dcNotes" rows="2" style="height:44px;" placeholder="e.g. Review prescribing — consider PPI cover."></textarea>
+      <!-- Custom Clinical Indicators (v1.2) -->
+      <h2 style="margin-top: 28px">Custom Clinical Indicators</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Threshold-based indicators against the bundled QOF registers or all patients.
+        <strong>Custom indicators do not count toward QOF achievement.</strong> They are visually marked with a Custom
+        tag.
+      </p>
+
+      <div id="ciListView">
+        <div class="cr-bar">
+          <button class="primary" id="ciAddBtn">+ Add custom indicator</button>
         </div>
-        <div class="field">
-          <label for="dcSource">Source reference (URL or citation)</label>
-          <input type="url" id="dcSource" placeholder="https://" />
-        </div>
+        <div class="cr-list" id="ciList"><div class="cr-empty">No custom indicators yet.</div></div>
       </div>
 
-      <div class="cr-preview-wrap">
-        <div class="cr-preview-head">Live preview — test patient</div>
-        <div id="dcMockMount"></div>
-        <div id="dcPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Add a label and at least one drug set to see a preview.</span></div>
-      </div>
-
-      <div class="cr-form-error" id="dcFormError"></div>
-
-      <div class="actions" style="margin-top:16px;">
-        <button class="primary" id="dcSaveBtn">Save drug-combo alert</button>
-        <button class="ghost" id="dcCancelBtn2">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Event-Count Alerts ────────────────────────────────────────────── -->
-  <h2 style="margin-top:28px;">Event-Count Alerts</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Alert when a patient has a coded problem or observation recorded more than N times within a time window (e.g. recurrent UTIs, repeated falls).
-  </p>
-
-  <div id="ecListView">
-    <div class="cr-bar">
-      <button class="primary" id="ecAddBtn">+ Add event-count alert</button>
-    </div>
-    <div class="cr-list" id="ecList"><div class="cr-empty">No event-count alerts yet.</div></div>
-  </div>
-
-  <div id="ecFormView" style="display:none;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      <h2 id="ecFormTitle" style="margin:0; border:none; padding:0; flex:1;">New event-count alert</h2>
-      <button class="ghost" id="ecCancelBtn">Cancel</button>
-    </div>
-    <div class="cr-form">
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Alert identification</span>
-        <div class="field">
-          <label for="ecLabel">Alert label</label>
-          <input type="text" id="ecLabel" placeholder="e.g. Recurrent UTI (≥3 in 12 months)" />
+      <div id="ciFormView" style="display: none">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+          <h2 id="ciFormTitle" style="margin: 0; border: none; padding: 0; flex: 1">New custom indicator</h2>
+          <button class="ghost" id="ciCancelBtn">Cancel</button>
         </div>
-        <div class="field">
-          <label>Severity</label>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSevRed" name="ecSeverity" value="red" /><label for="ecSevRed" style="color:var(--red);">Red — high risk</label></div>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSevAmber" name="ecSeverity" value="amber" checked /><label for="ecSevAmber" style="color:var(--amber);">Amber — caution</label></div>
-          <div class="checkbox-row"><input type="radio" id="ecSevInfo" name="ecSeverity" value="info" /><label for="ecSevInfo" style="color:var(--accent);">Info — note only</label></div>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">What to count</span>
-        <div class="field">
-          <label>Source</label>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSrcProblems" name="ecSourceKind" value="problems" checked /><label for="ecSrcProblems">Problems / coded diagnoses</label></div>
-          <div class="checkbox-row"><input type="radio" id="ecSrcObs" name="ecSourceKind" value="observations" /><label for="ecSrcObs">Observations / test results</label></div>
-        </div>
-        <div class="form-hint" id="ecObsHint" style="display:none; background:var(--amber-dim); border:1px solid var(--amber-line); border-radius:var(--r-md); padding:7px 10px; margin-bottom:8px;">Note: observation history counting requires v3.1 — currently only the latest observation value is used.</div>
-        <div class="field">
-          <label for="ecMatch">Match terms (one per line)</label>
-          <textarea id="ecMatch" rows="3" style="height:60px;" placeholder="urinary tract infection&#10;uti"></textarea>
-        </div>
-        <div class="field">
-          <label for="ecExclude">Exclude terms (optional, one per line)</label>
-          <textarea id="ecExclude" rows="2" style="height:44px;" placeholder="history of&#10;resolved"></textarea>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Threshold</span>
-        <div class="interval-row">
-          <label>Window</label>
-          <input type="number" id="ecWindowMonths" min="1" max="120" value="12" style="width:64px;" />
-          <span style="font-size:11px; color:var(--t4);">months</span>
-        </div>
-        <div class="interval-row">
-          <label>Count</label>
-          <select id="ecOperator" style="width:72px;">
-            <option value=">=" selected>≥</option>
-            <option value=">">&gt;</option>
-            <option value="=">=</option>
-            <option value="<=">≤</option>
-            <option value="<">&lt;</option>
-          </select>
-          <input type="number" id="ecCountThreshold" min="0" max="9999" value="3" style="width:64px;" />
-          <span style="font-size:11px; color:var(--t4);">events</span>
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <button class="filters-toggle" id="ecFiltersToggle" aria-expanded="false">
-          <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
-        </button>
-        <div class="filters-body" id="ecFiltersBody">
-          <div class="two-col">
-            <div class="field"><label for="ecAgeMin">Min age</label><input type="number" id="ecAgeMin" min="0" max="120" placeholder="any" /></div>
-            <div class="field"><label for="ecAgeMax">Max age</label><input type="number" id="ecAgeMax" min="0" max="120" placeholder="any" /></div>
+        <div class="cr-form">
+          <!-- Section A: Identification -->
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Indicator identification</span>
+            <div class="two-col">
+              <div class="field">
+                <label for="ciIndicatorCode">Indicator code</label>
+                <input type="text" id="ciIndicatorCode" placeholder="e.g. LOCAL-ACR-DM" />
+                <div class="form-hint">Short code shown in the chip header.</div>
+              </div>
+              <div class="field">
+                <label for="ciPoints">Points (optional, metadata only)</label>
+                <input type="number" id="ciPoints" min="0" max="100" placeholder="" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="ciIndicatorName">Indicator name</label>
+              <input type="text" id="ciIndicatorName" placeholder="e.g. ACR within 12 months" />
+            </div>
           </div>
-          <div class="field">
-            <label>Sex</label>
-            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSexAny" name="ecSex" value="any" checked /><label for="ecSexAny">Any</label></div>
-            <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="ecSexM" name="ecSex" value="M" /><label for="ecSexM">Male</label></div>
-            <div class="checkbox-row"><input type="radio" id="ecSexF" name="ecSex" value="F" /><label for="ecSexF">Female</label></div>
+
+          <!-- Section B: Check kind picker -->
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">What to check</span>
+            <div class="checkbox-row" style="margin-bottom: 6px">
+              <input type="radio" id="ciKindThreshold" name="ciKind" value="observation-threshold" checked />
+              <label for="ciKindThreshold">Recent observation against a threshold (e.g. HbA1c, BP)</label>
+            </div>
+            <div class="checkbox-row" style="margin-bottom: 6px">
+              <input type="radio" id="ciKindMedPresent" name="ciKind" value="medication-present" />
+              <label for="ciKindMedPresent">Patient is currently on a medication</label>
+            </div>
+            <div class="checkbox-row" style="margin-bottom: 6px">
+              <input type="radio" id="ciKindObsWithin" name="ciKind" value="observation-recent" />
+              <label for="ciKindObsWithin">Observation has been recorded within a time window</label>
+            </div>
+            <div class="checkbox-row" style="margin-bottom: 6px">
+              <input type="radio" id="ciKindObsTrend" name="ciKind" value="observation-trend" />
+              <label for="ciKindObsTrend">Observation is showing a rising or falling trend</label>
+            </div>
+            <div class="checkbox-row" style="margin-bottom: 6px">
+              <input type="radio" id="ciKindObsAlert" name="ciKind" value="observation-alert" />
+              <label for="ciKindObsAlert">Latest observation crosses a safety threshold (amber/red bands)</label>
+            </div>
+          </div>
+
+          <!-- Section C: Observation threshold (visible when kind = observation-threshold) -->
+          <div id="ciSectionThreshold" style="margin-bottom: 14px">
+            <span class="cr-section-label">Threshold details</span>
+            <div class="field">
+              <label for="ciThresholdObsMatch">Observation match terms (one per line)</label>
+              <textarea
+                id="ciThresholdObsMatch"
+                rows="2"
+                style="height: 48px"
+                placeholder="hba1c&#10;haemoglobin a1c"
+              ></textarea>
+            </div>
+            <div class="checkbox-row" style="margin-bottom: 10px">
+              <input type="checkbox" id="ciDualThreshold" />
+              <label for="ciDualThreshold">Two thresholds (e.g. blood pressure systolic/diastolic)</label>
+            </div>
+            <div id="ciSingleThreshold">
+              <div class="interval-row">
+                <label>Operator</label>
+                <select id="ciOperator" style="width: 90px">
+                  <option value="<=">≤</option>
+                  <option value="<">&lt;</option>
+                  <option value=">=">≥</option>
+                  <option value=">">&gt;</option>
+                  <option value="=">=</option>
+                </select>
+                <input type="number" id="ciThreshold" placeholder="e.g. 58" style="width: 90px" step="any" />
+              </div>
+            </div>
+            <div id="ciDualThresholdInputs" style="display: none">
+              <div class="interval-row">
+                <label>Systolic ≤</label>
+                <input type="number" id="ciThresholdSys" placeholder="e.g. 140" style="width: 90px" />
+              </div>
+              <div class="interval-row">
+                <label>Diastolic ≤</label>
+                <input type="number" id="ciThresholdDia" placeholder="e.g. 90" style="width: 90px" />
+              </div>
+            </div>
+            <div class="field" style="margin-top: 10px">
+              <span
+                style="
+                  font-family: var(--mono);
+                  font-size: 10px;
+                  color: var(--t4);
+                  letter-spacing: 0.06em;
+                  text-transform: uppercase;
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Window</span
+              >
+              <div class="checkbox-row" style="margin-bottom: 5px">
+                <input type="radio" id="ciWindowQofYearT" name="ciWindowThreshold" value="qof" checked />
+                <label for="ciWindowQofYearT">QOF year (1 April to 31 March)</label>
+              </div>
+              <div class="checkbox-row" style="margin-bottom: 5px">
+                <input type="radio" id="ciWindowRollingT" name="ciWindowThreshold" value="rolling" />
+                <label for="ciWindowRollingT">
+                  Rolling
+                  <input
+                    type="number"
+                    id="ciWithinDaysT"
+                    min="1"
+                    max="3650"
+                    value="365"
+                    style="width: 64px; margin: 0 6px"
+                  />
+                  days
+                </label>
+              </div>
+              <div class="form-hint">
+                QOF year: only observations dated on or after the most recent 1 April count. Observations from before 1
+                April will show as overdue until the next QOF year begins.
+              </div>
+            </div>
+          </div>
+
+          <!-- Section D: Medication presence (hidden by default) -->
+          <div id="ciSectionMedPresent" style="margin-bottom: 14px; display: none">
+            <span class="cr-section-label">Medication match</span>
+            <div class="field">
+              <label for="ciMedMatch">Medication match terms (one per line)</label>
+              <textarea
+                id="ciMedMatch"
+                rows="3"
+                style="height: 60px"
+                placeholder="atorvastatin&#10;simvastatin&#10;rosuvastatin"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ciMedExclude">Exclude terms (optional)</label>
+              <textarea id="ciMedExclude" rows="2" style="height: 44px" placeholder=""></textarea>
+            </div>
+          </div>
+
+          <!-- Section E: Observation presence within window (hidden by default) -->
+          <div id="ciSectionObsWithin" style="margin-bottom: 14px; display: none">
+            <span class="cr-section-label">Observation recorded within window</span>
+            <div class="field">
+              <label for="ciWithinObsMatch">Observation match terms (one per line)</label>
+              <textarea
+                id="ciWithinObsMatch"
+                rows="2"
+                style="height: 48px"
+                placeholder="frailty review&#10;clinical frailty scale"
+              ></textarea>
+            </div>
+            <div class="field">
+              <span
+                style="
+                  font-family: var(--mono);
+                  font-size: 10px;
+                  color: var(--t4);
+                  letter-spacing: 0.06em;
+                  text-transform: uppercase;
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Window</span
+              >
+              <div class="checkbox-row" style="margin-bottom: 5px">
+                <input type="radio" id="ciWindowQofYearW" name="ciWindowWithin" value="qof" checked />
+                <label for="ciWindowQofYearW">QOF year (1 April to 31 March)</label>
+              </div>
+              <div class="checkbox-row" style="margin-bottom: 5px">
+                <input type="radio" id="ciWindowRollingW" name="ciWindowWithin" value="rolling" />
+                <label for="ciWindowRollingW">
+                  Rolling
+                  <input
+                    type="number"
+                    id="ciWithinDaysW"
+                    min="1"
+                    max="3650"
+                    value="365"
+                    style="width: 64px; margin: 0 6px"
+                  />
+                  days
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section E2: Observation trend (hidden by default) -->
+          <div id="ciSectionTrend" style="margin-bottom: 14px; display: none">
+            <span class="cr-section-label">Observation trend details</span>
+            <div class="field">
+              <label for="ciTrendObsMatch">Observation match terms (one per line)</label>
+              <textarea
+                id="ciTrendObsMatch"
+                rows="2"
+                style="height: 48px"
+                placeholder="psa&#10;prostate specific antigen"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label>Direction</label>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="ciTrendRising" name="ciTrendDirection" value="rising" checked /><label
+                  for="ciTrendRising"
+                  >Rising</label
+                >
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" id="ciTrendFalling" name="ciTrendDirection" value="falling" /><label
+                  for="ciTrendFalling"
+                  >Falling</label
+                >
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label for="ciTrendMinPoints">Minimum data points</label>
+                <input type="number" id="ciTrendMinPoints" min="2" max="100" value="3" />
+                <div class="form-hint">Minimum readings needed to detect trend (min 2).</div>
+              </div>
+              <div class="field">
+                <label for="ciTrendWithinMonths">Within months</label>
+                <input type="number" id="ciTrendWithinMonths" min="1" max="360" value="24" />
+                <div class="form-hint">Only readings within this window count.</div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="ciTrendMinDelta">Minimum delta (optional)</label>
+              <input type="number" id="ciTrendMinDelta" min="0" step="any" placeholder="e.g. 1.0" />
+              <div class="form-hint">Minimum total change across data points to qualify as a trend.</div>
+            </div>
+          </div>
+
+          <!-- Section E3: Observation safety alert (hidden by default) -->
+          <div id="ciSectionAlert" style="margin-bottom: 14px; display: none">
+            <span class="cr-section-label">Observation alert details</span>
+            <div class="field">
+              <label for="ciAlertObsMatch">Observation match terms (one per line)</label>
+              <textarea
+                id="ciAlertObsMatch"
+                rows="2"
+                style="height: 48px"
+                placeholder="potassium&#10;serum potassium"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ciAlertComparator">Dangerous direction</label>
+              <select id="ciAlertComparator" style="width: auto">
+                <option value="above">High values are dangerous (fires at/above thresholds)</option>
+                <option value="below">Low values are dangerous (fires at/below thresholds)</option>
+              </select>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label for="ciAlertAmber">Amber threshold</label>
+                <input type="number" id="ciAlertAmber" step="any" placeholder="e.g. 5.5" />
+                <div class="form-hint">Lower-severity band. Optional if a red threshold is set.</div>
+              </div>
+              <div class="field">
+                <label for="ciAlertRed">Red threshold</label>
+                <input type="number" id="ciAlertRed" step="any" placeholder="e.g. 6.0" />
+                <div class="form-hint">Higher-severity band. Optional if an amber threshold is set.</div>
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label for="ciAlertUnit">Unit (optional)</label>
+                <input type="text" id="ciAlertUnit" placeholder="e.g. mmol/L" />
+              </div>
+              <div class="field">
+                <label for="ciAlertWithinDays">Within days</label>
+                <input type="number" id="ciAlertWithinDays" min="1" max="3650" value="180" />
+                <div class="form-hint">Ignore results older than this.</div>
+              </div>
+            </div>
+            <div class="form-hint">
+              Fires only when the latest matching value crosses a band — no chip when the value is in the safe range,
+              stale, or absent.
+            </div>
+          </div>
+
+          <!-- Section F: Patient filters -->
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Patient filters</span>
+            <div class="field">
+              <label for="ciRequiresRegister">Applies to register</label>
+              <select id="ciRequiresRegister">
+                <option value="">Any patient (no register required)</option>
+                <option value="DM">Diabetes Mellitus (DM)</option>
+                <option value="HYP">Hypertension (HYP)</option>
+                <option value="CHD">Coronary Heart Disease (CHD)</option>
+                <option value="HF">Heart Failure (HF)</option>
+                <option value="STIA">Stroke / TIA (STIA)</option>
+                <option value="CKD">Chronic Kidney Disease (CKD)</option>
+                <option value="PAD">Peripheral Arterial Disease (PAD)</option>
+                <option value="ASTHMA">Asthma</option>
+                <option value="COPD">COPD</option>
+                <option value="AF">Atrial Fibrillation (AF)</option>
+              </select>
+            </div>
+            <div class="two-col">
+              <div class="field">
+                <label for="ciAgeMin">Min age (optional)</label><input type="number" id="ciAgeMin" min="0" max="120" />
+              </div>
+              <div class="field">
+                <label for="ciAgeMax">Max age (optional)</label><input type="number" id="ciAgeMax" min="0" max="120" />
+              </div>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="ciExcludeFrailty" />
+              <label for="ciExcludeFrailty">Exclude patients with moderate or severe frailty</label>
+            </div>
+            <div class="field">
+              <label for="ciSex">Sex</label>
+              <select id="ciSex">
+                <option value="">Any</option>
+                <option value="F">Female only</option>
+                <option value="M">Male only</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ciRequiresProblem">Requires problem — ALL must be present (one per line)</label>
+              <textarea
+                id="ciRequiresProblem"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. heart failure with reduced ejection fraction"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ciRequiresAnyProblem">Requires ANY of these problems (one per line)</label>
+              <textarea
+                id="ciRequiresAnyProblem"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. coronary heart disease&#10;stroke&#10;peripheral arterial disease"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ciExcludeProblems">Exclude if problem present (one per line)</label>
+              <textarea
+                id="ciExcludeProblems"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. haemorrhagic stroke"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Section G: Source -->
+          <div style="margin-bottom: 6px">
+            <span class="cr-section-label">Additional information</span>
+            <div class="field">
+              <label for="ciNotes">Notes (shown on chip hover)</label>
+              <textarea
+                id="ciNotes"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. Locally agreed standard, reviewed Q3 2026"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ciSource">Source reference (URL or citation)</label>
+              <input type="url" id="ciSource" placeholder="https://" />
+            </div>
+          </div>
+
+          <!-- Section H: Live preview -->
+          <div class="cr-preview-wrap">
+            <div class="cr-preview-head">Live preview — test patient</div>
+            <div id="ciMockMount"></div>
+            <div id="ciPreviewChip">
+              <span style="color: var(--t4); font-size: 11px; font-style: italic"
+                >Fill in code, name, and check details to see a preview.</span
+              >
+            </div>
+          </div>
+
+          <div class="cr-form-error" id="ciFormError"></div>
+
+          <div class="actions" style="margin-top: 16px">
+            <button class="primary" id="ciSaveBtn">Save custom indicator</button>
+            <button class="ghost" id="ciCancelBtn2">Cancel</button>
           </div>
         </div>
       </div>
 
-      <div style="margin-bottom:6px;">
-        <span class="cr-section-label">Additional information</span>
-        <div class="field">
-          <label for="ecNotes">Notes (shown on alert)</label>
-          <textarea id="ecNotes" rows="2" style="height:44px;" placeholder="e.g. Consider referral or further investigation."></textarea>
+      <!-- ── Drug-Combo Alerts ──────────────────────────────────────────────── -->
+      <h2 style="margin-top: 28px">Drug-Combo Alerts</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Flag patients currently prescribed two or more drug groups concurrently. Based on PINCER and NICE prescribing
+        safety indicators.
+      </p>
+
+      <div id="dcListView">
+        <div class="cr-bar">
+          <button class="primary" id="dcAddBtn">+ Add drug-combo alert</button>
+        </div>
+        <div class="cr-list" id="dcList"><div class="cr-empty">No drug-combo alerts yet.</div></div>
+      </div>
+
+      <div id="dcFormView" style="display: none">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+          <h2 id="dcFormTitle" style="margin: 0; border: none; padding: 0; flex: 1">New drug-combo alert</h2>
+          <button class="ghost" id="dcCancelBtn">Cancel</button>
+        </div>
+        <div class="cr-form">
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Alert identification</span>
+            <div class="field">
+              <label for="dcLabel">Alert label</label>
+              <input type="text" id="dcLabel" placeholder="e.g. Warfarin + NSAID concurrent" />
+            </div>
+            <div class="field">
+              <label>Severity</label>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="dcSevRed" name="dcSeverity" value="red" checked /><label
+                  for="dcSevRed"
+                  style="color: var(--red)"
+                  >Red — high risk</label
+                >
+              </div>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="dcSevAmber" name="dcSeverity" value="amber" /><label
+                  for="dcSevAmber"
+                  style="color: var(--amber)"
+                  >Amber — caution</label
+                >
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" id="dcSevInfo" name="dcSeverity" value="info" /><label
+                  for="dcSevInfo"
+                  style="color: var(--accent)"
+                  >Info — note only</label
+                >
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Drug sets (all must be present)</span>
+            <div id="dcSetCards"></div>
+            <button class="ghost" id="dcAddSetBtn" style="margin-top: 4px">+ Add drug set</button>
+            <div class="form-hint" style="margin-top: 6px">
+              Each set defines a drug group. The alert fires only when the patient has at least one drug from every set.
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Must NOT be co-prescribed (optional)</span>
+            <div class="field">
+              <label for="dcMustNotBePresent"
+                >Suppress the alert if any of these drugs is also prescribed (one per line)</label
+              >
+              <textarea
+                id="dcMustNotBePresent"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. omeprazole&#10;lansoprazole"
+              ></textarea>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <button class="filters-toggle" id="dcFiltersToggle" aria-expanded="false">
+              <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
+            </button>
+            <div class="filters-body" id="dcFiltersBody">
+              <div class="two-col">
+                <div class="field">
+                  <label for="dcAgeMin">Min age</label
+                  ><input type="number" id="dcAgeMin" min="0" max="120" placeholder="any" />
+                </div>
+                <div class="field">
+                  <label for="dcAgeMax">Max age</label
+                  ><input type="number" id="dcAgeMax" min="0" max="120" placeholder="any" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Sex</label>
+                <div class="checkbox-row" style="margin-bottom: 4px">
+                  <input type="radio" id="dcSexAny" name="dcSex" value="any" checked /><label for="dcSexAny">Any</label>
+                </div>
+                <div class="checkbox-row" style="margin-bottom: 4px">
+                  <input type="radio" id="dcSexM" name="dcSex" value="M" /><label for="dcSexM">Male</label>
+                </div>
+                <div class="checkbox-row">
+                  <input type="radio" id="dcSexF" name="dcSex" value="F" /><label for="dcSexF">Female</label>
+                </div>
+              </div>
+              <div class="field">
+                <label for="dcRequiresProblem">Requires problem (one per line — all must match)</label>
+                <textarea
+                  id="dcRequiresProblem"
+                  rows="2"
+                  style="height: 44px"
+                  placeholder="e.g. atrial fibrillation"
+                ></textarea>
+              </div>
+              <div class="field">
+                <label for="dcExcludesProblem">Excludes problem (one per line — any match disqualifies)</label>
+                <textarea
+                  id="dcExcludesProblem"
+                  rows="2"
+                  style="height: 44px"
+                  placeholder="e.g. end of life care"
+                ></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 6px">
+            <span class="cr-section-label">Additional information</span>
+            <div class="field">
+              <label for="dcNotes">Notes (shown on alert)</label>
+              <textarea
+                id="dcNotes"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. Review prescribing — consider PPI cover."
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="dcSource">Source reference (URL or citation)</label>
+              <input type="url" id="dcSource" placeholder="https://" />
+            </div>
+          </div>
+
+          <div class="cr-preview-wrap">
+            <div class="cr-preview-head">Live preview — test patient</div>
+            <div id="dcMockMount"></div>
+            <div id="dcPreviewChip">
+              <span style="color: var(--t4); font-size: 11px; font-style: italic"
+                >Add a label and at least one drug set to see a preview.</span
+              >
+            </div>
+          </div>
+
+          <div class="cr-form-error" id="dcFormError"></div>
+
+          <div class="actions" style="margin-top: 16px">
+            <button class="primary" id="dcSaveBtn">Save drug-combo alert</button>
+            <button class="ghost" id="dcCancelBtn2">Cancel</button>
+          </div>
         </div>
       </div>
 
-      <div class="cr-preview-wrap">
-        <div class="cr-preview-head">Live preview — test patient</div>
-        <div id="ecMockMount"></div>
-        <div id="ecPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Set the source, terms and threshold to see a preview.</span></div>
-      </div>
+      <!-- ── Event-Count Alerts ────────────────────────────────────────────── -->
+      <h2 style="margin-top: 28px">Event-Count Alerts</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Alert when a patient has a coded problem or observation recorded more than N times within a time window (e.g.
+        recurrent UTIs, repeated falls).
+      </p>
 
-      <div class="cr-form-error" id="ecFormError"></div>
-
-      <div class="actions" style="margin-top:16px;">
-        <button class="primary" id="ecSaveBtn">Save event-count alert</button>
-        <button class="ghost" id="ecCancelBtn2">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Composite Alerts ──────────────────────────────────────────────── -->
-  <h2 style="margin-top:28px;">Composite Alerts</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">
-    Combine two or more existing custom alerts with AND/OR logic to create compound safety checks.
-  </p>
-
-  <div id="cmListView">
-    <div class="cr-bar">
-      <button class="primary" id="cmAddBtn">+ Add composite alert</button>
-    </div>
-    <div class="cr-list" id="cmList"><div class="cr-empty">No composite alerts yet.</div></div>
-  </div>
-
-  <div id="cmFormView" style="display:none;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-      <h2 id="cmFormTitle" style="margin:0; border:none; padding:0; flex:1;">New composite alert</h2>
-      <button class="ghost" id="cmCancelBtn">Cancel</button>
-    </div>
-    <div class="cr-form">
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Alert identification</span>
-        <div class="field">
-          <label for="cmLabel">Alert label</label>
-          <input type="text" id="cmLabel" placeholder="e.g. Anticoagulant + Renal impairment" />
+      <div id="ecListView">
+        <div class="cr-bar">
+          <button class="primary" id="ecAddBtn">+ Add event-count alert</button>
         </div>
-        <div class="field">
-          <label>Severity</label>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmSevRed" name="cmSeverity" value="red" checked /><label for="cmSevRed" style="color:var(--red);">Red — high risk</label></div>
-          <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmSevAmber" name="cmSeverity" value="amber" /><label for="cmSevAmber" style="color:var(--amber);">Amber — caution</label></div>
-          <div class="checkbox-row"><input type="radio" id="cmSevInfo" name="cmSeverity" value="info" /><label for="cmSevInfo" style="color:var(--accent);">Info — note only</label></div>
+        <div class="cr-list" id="ecList"><div class="cr-empty">No event-count alerts yet.</div></div>
+      </div>
+
+      <div id="ecFormView" style="display: none">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+          <h2 id="ecFormTitle" style="margin: 0; border: none; padding: 0; flex: 1">New event-count alert</h2>
+          <button class="ghost" id="ecCancelBtn">Cancel</button>
+        </div>
+        <div class="cr-form">
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Alert identification</span>
+            <div class="field">
+              <label for="ecLabel">Alert label</label>
+              <input type="text" id="ecLabel" placeholder="e.g. Recurrent UTI (≥3 in 12 months)" />
+            </div>
+            <div class="field">
+              <label>Severity</label>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="ecSevRed" name="ecSeverity" value="red" /><label
+                  for="ecSevRed"
+                  style="color: var(--red)"
+                  >Red — high risk</label
+                >
+              </div>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="ecSevAmber" name="ecSeverity" value="amber" checked /><label
+                  for="ecSevAmber"
+                  style="color: var(--amber)"
+                  >Amber — caution</label
+                >
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" id="ecSevInfo" name="ecSeverity" value="info" /><label
+                  for="ecSevInfo"
+                  style="color: var(--accent)"
+                  >Info — note only</label
+                >
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">What to count</span>
+            <div class="field">
+              <label>Source</label>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="ecSrcProblems" name="ecSourceKind" value="problems" checked /><label
+                  for="ecSrcProblems"
+                  >Problems / coded diagnoses</label
+                >
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" id="ecSrcObs" name="ecSourceKind" value="observations" /><label for="ecSrcObs"
+                  >Observations / test results</label
+                >
+              </div>
+            </div>
+            <div
+              class="form-hint"
+              id="ecObsHint"
+              style="
+                display: none;
+                background: var(--amber-dim);
+                border: 1px solid var(--amber-line);
+                border-radius: var(--r-md);
+                padding: 7px 10px;
+                margin-bottom: 8px;
+              "
+            >
+              Note: observation history counting requires v3.1 — currently only the latest observation value is used.
+            </div>
+            <div class="field">
+              <label for="ecMatch">Match terms (one per line)</label>
+              <textarea
+                id="ecMatch"
+                rows="3"
+                style="height: 60px"
+                placeholder="urinary tract infection&#10;uti"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="ecExclude">Exclude terms (optional, one per line)</label>
+              <textarea id="ecExclude" rows="2" style="height: 44px" placeholder="history of&#10;resolved"></textarea>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Threshold</span>
+            <div class="interval-row">
+              <label>Window</label>
+              <input type="number" id="ecWindowMonths" min="1" max="120" value="12" style="width: 64px" />
+              <span style="font-size: 11px; color: var(--t4)">months</span>
+            </div>
+            <div class="interval-row">
+              <label>Count</label>
+              <select id="ecOperator" style="width: 72px">
+                <option value=">=" selected>≥</option>
+                <option value=">">&gt;</option>
+                <option value="=">=</option>
+                <option value="<=">≤</option>
+                <option value="<">&lt;</option>
+              </select>
+              <input type="number" id="ecCountThreshold" min="0" max="9999" value="3" style="width: 64px" />
+              <span style="font-size: 11px; color: var(--t4)">events</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 14px">
+            <button class="filters-toggle" id="ecFiltersToggle" aria-expanded="false">
+              <span class="filters-toggle-chevron">▶</span> Patient filters (optional)
+            </button>
+            <div class="filters-body" id="ecFiltersBody">
+              <div class="two-col">
+                <div class="field">
+                  <label for="ecAgeMin">Min age</label
+                  ><input type="number" id="ecAgeMin" min="0" max="120" placeholder="any" />
+                </div>
+                <div class="field">
+                  <label for="ecAgeMax">Max age</label
+                  ><input type="number" id="ecAgeMax" min="0" max="120" placeholder="any" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Sex</label>
+                <div class="checkbox-row" style="margin-bottom: 4px">
+                  <input type="radio" id="ecSexAny" name="ecSex" value="any" checked /><label for="ecSexAny">Any</label>
+                </div>
+                <div class="checkbox-row" style="margin-bottom: 4px">
+                  <input type="radio" id="ecSexM" name="ecSex" value="M" /><label for="ecSexM">Male</label>
+                </div>
+                <div class="checkbox-row">
+                  <input type="radio" id="ecSexF" name="ecSex" value="F" /><label for="ecSexF">Female</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 6px">
+            <span class="cr-section-label">Additional information</span>
+            <div class="field">
+              <label for="ecNotes">Notes (shown on alert)</label>
+              <textarea
+                id="ecNotes"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. Consider referral or further investigation."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="cr-preview-wrap">
+            <div class="cr-preview-head">Live preview — test patient</div>
+            <div id="ecMockMount"></div>
+            <div id="ecPreviewChip">
+              <span style="color: var(--t4); font-size: 11px; font-style: italic"
+                >Set the source, terms and threshold to see a preview.</span
+              >
+            </div>
+          </div>
+
+          <div class="cr-form-error" id="ecFormError"></div>
+
+          <div class="actions" style="margin-top: 16px">
+            <button class="primary" id="ecSaveBtn">Save event-count alert</button>
+            <button class="ghost" id="ecCancelBtn2">Cancel</button>
+          </div>
         </div>
       </div>
 
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Logic operator</span>
-        <div class="checkbox-row" style="margin-bottom:4px;"><input type="radio" id="cmOpAnd" name="cmOperator" value="AND" checked /><label for="cmOpAnd"><strong>AND</strong> — all selected rules must fire</label></div>
-        <div class="checkbox-row"><input type="radio" id="cmOpOr" name="cmOperator" value="OR" /><label for="cmOpOr"><strong>OR</strong> — any selected rule firing is sufficient</label></div>
-      </div>
+      <!-- ── Composite Alerts ──────────────────────────────────────────────── -->
+      <h2 style="margin-top: 28px">Composite Alerts</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Combine two or more existing custom alerts with AND/OR logic to create compound safety checks.
+      </p>
 
-      <div style="margin-bottom:14px;">
-        <span class="cr-section-label">Rules to combine</span>
-        <div class="form-hint" style="margin-bottom:8px;">Select two or more rules. Composite rules cannot reference other composite rules.</div>
-        <div class="cm-rule-list" id="cmRuleList"><div class="cm-rule-empty">No eligible rules yet — create drug-monitoring, drug-combo, or event-count rules first.</div></div>
-        <div class="cm-warn" id="cmCompositeWarn">One or more selected rules is a composite — this is not allowed. Deselect them to continue.</div>
-      </div>
-
-      <div style="margin-bottom:6px;">
-        <span class="cr-section-label">Additional information</span>
-        <div class="field">
-          <label for="cmNotes">Notes (shown on alert)</label>
-          <textarea id="cmNotes" rows="2" style="height:44px;" placeholder="e.g. Review urgently — multiple risk factors present."></textarea>
+      <div id="cmListView">
+        <div class="cr-bar">
+          <button class="primary" id="cmAddBtn">+ Add composite alert</button>
         </div>
+        <div class="cr-list" id="cmList"><div class="cr-empty">No composite alerts yet.</div></div>
       </div>
 
-      <div class="cr-preview-wrap">
-        <div class="cr-preview-head">Live preview — test patient</div>
-        <div id="cmMockMount"></div>
-        <div id="cmPreviewChip"><span style="color:var(--t4); font-size:11px; font-style:italic;">Pick a label, operator and at least two child rules to see a preview.</span></div>
-      </div>
+      <div id="cmFormView" style="display: none">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
+          <h2 id="cmFormTitle" style="margin: 0; border: none; padding: 0; flex: 1">New composite alert</h2>
+          <button class="ghost" id="cmCancelBtn">Cancel</button>
+        </div>
+        <div class="cr-form">
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Alert identification</span>
+            <div class="field">
+              <label for="cmLabel">Alert label</label>
+              <input type="text" id="cmLabel" placeholder="e.g. Anticoagulant + Renal impairment" />
+            </div>
+            <div class="field">
+              <label>Severity</label>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="cmSevRed" name="cmSeverity" value="red" checked /><label
+                  for="cmSevRed"
+                  style="color: var(--red)"
+                  >Red — high risk</label
+                >
+              </div>
+              <div class="checkbox-row" style="margin-bottom: 4px">
+                <input type="radio" id="cmSevAmber" name="cmSeverity" value="amber" /><label
+                  for="cmSevAmber"
+                  style="color: var(--amber)"
+                  >Amber — caution</label
+                >
+              </div>
+              <div class="checkbox-row">
+                <input type="radio" id="cmSevInfo" name="cmSeverity" value="info" /><label
+                  for="cmSevInfo"
+                  style="color: var(--accent)"
+                  >Info — note only</label
+                >
+              </div>
+            </div>
+          </div>
 
-      <div class="cr-form-error" id="cmFormError"></div>
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Logic operator</span>
+            <div class="checkbox-row" style="margin-bottom: 4px">
+              <input type="radio" id="cmOpAnd" name="cmOperator" value="AND" checked /><label for="cmOpAnd"
+                ><strong>AND</strong> — all selected rules must fire</label
+              >
+            </div>
+            <div class="checkbox-row">
+              <input type="radio" id="cmOpOr" name="cmOperator" value="OR" /><label for="cmOpOr"
+                ><strong>OR</strong> — any selected rule firing is sufficient</label
+              >
+            </div>
+          </div>
 
-      <div class="actions" style="margin-top:16px;">
-        <button class="primary" id="cmSaveBtn">Save composite alert</button>
-        <button class="ghost" id="cmCancelBtn2">Cancel</button>
+          <div style="margin-bottom: 14px">
+            <span class="cr-section-label">Rules to combine</span>
+            <div class="form-hint" style="margin-bottom: 8px">
+              Select two or more rules. Composite rules cannot reference other composite rules.
+            </div>
+            <div class="cm-rule-list" id="cmRuleList">
+              <div class="cm-rule-empty">
+                No eligible rules yet — create drug-monitoring, drug-combo, or event-count rules first.
+              </div>
+            </div>
+            <div class="cm-warn" id="cmCompositeWarn">
+              One or more selected rules is a composite — this is not allowed. Deselect them to continue.
+            </div>
+          </div>
+
+          <div style="margin-bottom: 6px">
+            <span class="cr-section-label">Additional information</span>
+            <div class="field">
+              <label for="cmNotes">Notes (shown on alert)</label>
+              <textarea
+                id="cmNotes"
+                rows="2"
+                style="height: 44px"
+                placeholder="e.g. Review urgently — multiple risk factors present."
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="cr-preview-wrap">
+            <div class="cr-preview-head">Live preview — test patient</div>
+            <div id="cmMockMount"></div>
+            <div id="cmPreviewChip">
+              <span style="color: var(--t4); font-size: 11px; font-style: italic"
+                >Pick a label, operator and at least two child rules to see a preview.</span
+              >
+            </div>
+          </div>
+
+          <div class="cr-form-error" id="cmFormError"></div>
+
+          <div class="actions" style="margin-top: 16px">
+            <button class="primary" id="cmSaveBtn">Save composite alert</button>
+            <button class="ghost" id="cmCancelBtn2">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+    <div class="tab-panel" id="tab-overrides">
+      <h2>Rule overrides — Import / Export</h2>
+      <p style="font-size: 11px; color: var(--t4); margin-bottom: 12px; line-height: 1.5">
+        Export your per-rule interval and threshold overrides for backup or sharing with the practice.
+      </p>
+      <div class="io-row">
+        <button class="ghost" id="exportBtn">Export rules</button>
+        <button class="ghost" id="importBtn">Import rules</button>
+      </div>
+      <textarea id="ioArea" style="height: 80px" placeholder="Paste exported JSON here then click Import…"></textarea>
+    </div>
 
-</div>
-<div class="tab-panel" id="tab-overrides">
-  <h2>Rule overrides — Import / Export</h2>
-  <p style="font-size:11px; color:var(--t4); margin-bottom:12px; line-height:1.5;">Export your per-rule interval and threshold overrides for backup or sharing with the practice.</p>
-  <div class="io-row">
-    <button class="ghost" id="exportBtn">Export rules</button>
-    <button class="ghost" id="importBtn">Import rules</button>
-  </div>
-  <textarea id="ioArea" style="height:80px;" placeholder="Paste exported JSON here then click Import…"></textarea>
-</div>
-
-<div class="lib-toast" id="libToast"></div>
-<script src="../shared/chip-renderer.js"></script>
-<script src="../shared/io/sentinel-io.js"></script>
-<script src="../engine/rules-engine.js"></script>
-<script src="../shared/display-prefs.js"></script>
-<script src="options.js"></script>
-</body>
+    <div class="lib-toast" id="libToast"></div>
+    <script src="../shared/chip-renderer.js"></script>
+    <script src="../shared/io/sentinel-io.js"></script>
+    <script src="../engine/rules-engine.js"></script>
+    <script src="../shared/display-prefs.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

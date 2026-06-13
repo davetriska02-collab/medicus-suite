@@ -15,11 +15,12 @@
 }
 
 .condor-ts {
+  font-family: var(--mono);
   font-size: 9px;
   color: var(--text-3);
   text-align: right;
   padding: 2px 12px 0;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
 }
 
 .condor-grid {
@@ -54,7 +55,7 @@
 .condor-card {
   background: var(--bg-mid);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-1);
   padding: 12px;
   font-family: var(--sans);
@@ -64,7 +65,7 @@
   font-family: var(--mono);
   font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.10em;
+  letter-spacing: 0.1em;
   color: var(--text-4);
   margin-bottom: 6px;
 }
@@ -103,8 +104,10 @@
 }
 
 .condor-num-sm {
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Pills ────────────────────────────────────────────────────────────────── */

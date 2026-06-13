@@ -31,7 +31,9 @@
   scrollbar-width: none;
   gap: 2px;
 }
-.popout-tabs::-webkit-scrollbar { display: none; }
+.popout-tabs::-webkit-scrollbar {
+  display: none;
+}
 
 .popout-actions {
   display: flex;
@@ -50,5 +52,5 @@
 
 /* Slightly wider default content padding for popup windows */
 .popout-shell .module-wrap {
-  padding: 14px 16px;
+  padding: 16px;
 }
