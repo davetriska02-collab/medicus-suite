@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.76.1] — 2026-06-14
+
+### Polish: result-rule labels and settings copy (from The Practice appraisal)
+
+Acting on the synthetic-panel appraisal of the new result rules
+(`docs/appraisal/PRACTICE-result-rules-2026-06-13.md`):
+
+- **Result-rule labels no longer embed thresholds.** The label was doing double
+  duty as both the queue-chip text and the settings description, which made the
+  chip verbose (`Lithium — Lithium level high — toxicity risk (amber >1.0, red
+  ≥1.5)`) and, on three rules, misstated the firing boundary with a strict `>`/`<`
+  where the engine fires inclusively (`≥`/`≤`). Labels are now short clinical names
+  (e.g. `High lithium level — toxicity risk`, `Critical low potassium`); the
+  settings row still shows the exact threshold via its auto-generated summary, which
+  already renders the correct `≥`/`≤`. Applied to all built-in threshold rules (the
+  six new ones and the eight pre-existing ones that shared the pattern). The two
+  HbA1c labels keep their iconic 42 / ≥48 values, which are correct and clinically
+  load-bearing.
+- **"Absent chip is not an all-clear" stated explicitly.** Added to the Result
+  rules pane intro and the editor help panel: a result that no rule matches shows
+  only the lab's own flag, so an absent rule chip does not mean a result was
+  checked and cleared.
+- **"built-in" and "Unreviewed" now carry tooltips** in the rule list explaining
+  what each state means.
+
+No threshold, comparator, match or exclude values changed — behaviour is identical;
+this is label and copy only.
+
 ## [v3.76.0] — 2026-06-13
 
 ### Feature: six new built-in Investigation Results rules

@@ -3932,7 +3932,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low haemoglobin (red <100 g/L)",
+      "label": "Critical low haemoglobin",
       "analyte": {
         "match": ["haemoglobin", "hemoglobin"],
         "exclude": ["a1c", "glycated", "glycosylated"]
@@ -3946,7 +3946,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical high potassium (red ≥6.5 mmol/L)",
+      "label": "Critical high potassium",
       "analyte": {
         "match": ["potassium"],
         "exclude": ["urine", "urinary"]
@@ -3960,7 +3960,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low sodium (red ≤120 mmol/L)",
+      "label": "Critical low sodium",
       "analyte": {
         "match": ["sodium"],
         "exclude": ["urine", "urinary", "valproate"]
@@ -3974,7 +3974,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low eGFR (red <15 mL/min/1.73m²)",
+      "label": "Critical low eGFR",
       "analyte": {
         "match": ["gfr"]
       },
@@ -3987,7 +3987,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low platelets (red <30 ×10⁹/L)",
+      "label": "Critical low platelets",
       "analyte": {
         "match": ["platelet"],
         "exclude": ["mean platelet", "volume", "ratio", "large"]
@@ -4001,7 +4001,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low neutrophils (red <0.5 ×10⁹/L)",
+      "label": "Critical low neutrophils",
       "analyte": {
         "match": ["neutrophil"],
         "exclude": ["%", "percent", "ratio"]
@@ -4015,7 +4015,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "High INR (red ≥8)",
+      "label": "High INR",
       "analyte": {
         "match": ["inr", "international normalised ratio", "international normalized ratio"]
       },
@@ -4062,7 +4062,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Lithium level high — toxicity risk (amber >1.0, red ≥1.5)",
+      "label": "High lithium level — toxicity risk",
       "analyte": {
         "match": ["lithium"]
       },
@@ -4076,7 +4076,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Digoxin level high — toxicity risk (red ≥2.0)",
+      "label": "High digoxin level — toxicity risk",
       "analyte": {
         "match": ["digoxin"]
       },
@@ -4090,7 +4090,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low potassium (amber <3.0, red ≤2.5 mmol/L)",
+      "label": "Critical low potassium",
       "analyte": {
         "match": ["potassium"],
         "exclude": ["urine", "urinary"]
@@ -4105,7 +4105,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "High calcium — hypercalcaemia (amber ≥2.6, red ≥3.0)",
+      "label": "High calcium — hypercalcaemia",
       "analyte": {
         "match": ["calcium"],
         "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
@@ -4120,7 +4120,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Low eGFR — significant CKD (amber <30 mL/min/1.73m²)",
+      "label": "Low eGFR — significant CKD",
       "analyte": {
         "match": ["gfr"]
       },

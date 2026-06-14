@@ -1132,8 +1132,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         <span></span>
         <span>
           <span class="tl-rule-label">${escHtml(rule.label)}</span>
-          ${!rule.enabled ? '<span class="tl-rr-unreviewed">Unreviewed</span>' : ''}
-          <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${summary ? '· ' + escHtml(summary) : ''}</span>
+          ${!rule.enabled ? '<span class="tl-rr-unreviewed" title="Not yet enabled. Review this rule\'s analyte match strings and thresholds, then tick the box to let it fire.">Unreviewed</span>' : ''}
+          <span class="tl-rule-meta">  ${rule.builtin ? '<span title="Shipped with the suite. You can edit, disable or delete it like any other rule.">· built-in</span> ' : ''}${summary ? '· ' + escHtml(summary) : ''}</span>
         </span>
         <span class="tl-rule-meta">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
         <span></span>
