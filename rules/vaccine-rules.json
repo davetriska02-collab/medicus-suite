@@ -1,6 +1,6 @@
 {
-  "lastUpdated": "2026-06-10",
-  "specVersion": "JCVI/UKHSA 2025/26 season",
+  "lastUpdated": "2026-06-14",
+  "specVersion": "JCVI/UKHSA 2026/27 season",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
     {
@@ -10,7 +10,7 @@
       "vaccine": "flu",
       "displayName": "Flu vaccine",
       "season": { "startMonth": 9, "startDay": 1, "endMonth": 3, "endDay": 31 },
-      "source": "JCVI/UKHSA Green Book Chapter 19 (updated May 2025)",
+      "source": "JCVI/UKHSA Green Book Chapter 19 (Influenza). JCVI statement on the 2026/27 influenza programme confirmed NO eligible-cohort changes from 2025/26 — eligible groups, age bands and risk groups carried forward unchanged.",
       "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
       "eligibility": {
         "anyOf": [
@@ -36,7 +36,7 @@
       "vaccine": "covid",
       "displayName": "COVID vaccine",
       "season": { "startMonth": 10, "startDay": 1, "endMonth": 3, "endDay": 31 },
-      "source": "JCVI COVID-19 autumn 2025 eligibility",
+      "source": "JCVI COVID-19 autumn 2026/27 eligibility statement — confirmed NO eligible-cohort changes from autumn 2025: only age 75+, care home residents, and the immunosuppressed remain eligible.",
       "notes": "DOUBLE-CHECK ELIGIBILITY: As of 2025/26, clinical risk groups (diabetes, CHD, CKD, asthma) are NO LONGER eligible for COVID booster — only age 75+, care home residents, and immunosuppressed. Status inferred from coded records only — vaccination given elsewhere may not appear.",
       "eligibility": {
         "anyOf": [

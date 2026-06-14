@@ -356,6 +356,64 @@ console.log('\n--- START 12: Diabetes + CKD + no ACEi/ARB ---');
   assert(!find(flags, 'start_acei_arb_dm_ckd'), 'START 12 does NOT fire: eGFR 65 + no CKD problem');
 }
 
+// ── medrev-001: ACEi/ARB term-list parity ─────────────────────────────────
+// trandolapril (ACEi) and telmisartan (ARB) were missing from stopp-start.js;
+// brought to parity with visualiser-core.js. A diabetic-CKD patient on either
+// must therefore NOT trigger the START "consider ACEi/ARB" flag (they are on one).
+console.log('\n--- medrev-001: ACEi/ARB parity (trandolapril, telmisartan) ---');
+{
+  // trandolapril now recognised as ACEi → START 12 suppressed
+  const flags = computeStoppStart({
+    drugs: ['trandolapril 2mg'],
+    problems: [{ name: 'type 2 diabetes' }, { name: 'chronic kidney disease' }],
+    ageYears: 65,
+    egfr: 50,
+  });
+  assert(!find(flags, 'start_acei_arb_dm_ckd'), 'trandolapril recognised as ACEi (START 12 suppressed)');
+}
+{
+  // telmisartan now recognised as ARB → START 12 suppressed
+  const flags = computeStoppStart({
+    drugs: ['telmisartan 40mg'],
+    problems: [{ name: 'type 2 diabetes' }, { name: 'chronic kidney disease' }],
+    ageYears: 65,
+    egfr: 50,
+  });
+  assert(!find(flags, 'start_acei_arb_dm_ckd'), 'telmisartan recognised as ARB (START 12 suppressed)');
+}
+
+// ── medrev-004: Anticholinergic burden in age ≥65 ─────────────────────────
+console.log('\n--- medrev-004: Anticholinergic burden in age >=65 ---');
+{
+  // Age 70 on amitriptyline (ACB 3) → fires
+  const flags = computeStoppStart({ drugs: ['amitriptyline 10mg'], problems: [], ageYears: 70, egfr: null });
+  const f = find(flags, 'stopp-anticholinergic-elderly');
+  assert(!!f, 'anticholinergic-elderly fires: amitriptyline + age 70');
+  assert(f.severity === 'amber', 'anticholinergic-elderly severity = amber');
+  assert(f.kind === 'stopp', 'anticholinergic-elderly kind = stopp');
+  assert(/STOPP\/START v3/.test(f.source) && /2023/.test(f.source), 'anticholinergic-elderly source cites STOPP/START v3 (2023)');
+}
+{
+  // Age 70 on no anticholinergic → does NOT fire
+  const flags = computeStoppStart({ drugs: ['amlodipine 5mg'], problems: [], ageYears: 70, egfr: null });
+  assert(!find(flags, 'stopp-anticholinergic-elderly'), 'anticholinergic-elderly does NOT fire: age 70 + no anticholinergic');
+}
+{
+  // Age 50 on amitriptyline → does NOT fire (age gate)
+  const flags = computeStoppStart({ drugs: ['amitriptyline 10mg'], problems: [], ageYears: 50, egfr: null });
+  assert(!find(flags, 'stopp-anticholinergic-elderly'), 'anticholinergic-elderly does NOT fire at age 50');
+}
+{
+  // Age unknown → fail-closed
+  const flags = computeStoppStart({ drugs: ['amitriptyline 10mg'], problems: [], ageYears: null, egfr: null });
+  assert(!find(flags, 'stopp-anticholinergic-elderly'), 'anticholinergic-elderly does NOT fire when age unknown (fail-closed)');
+}
+{
+  // Score-1 drug only (digoxin, ACB 1) at age 70 → does NOT fire (below burden threshold)
+  const flags = computeStoppStart({ drugs: ['digoxin 125 micrograms'], problems: [], ageYears: 70, egfr: null });
+  assert(!find(flags, 'stopp-anticholinergic-elderly'), 'anticholinergic-elderly does NOT fire for ACB score-1 drug only');
+}
+
 // ── START 13: MI + no beta-blocker ────────────────────────────────────────
 console.log('\n--- START 13: MI + no beta-blocker ---');
 {
