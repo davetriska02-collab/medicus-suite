@@ -168,32 +168,6 @@ body {
   border-bottom-color: var(--accent);
 }
 
-/* Dark theme header overrides — tokens resolve from html[data-theme="dark"] :root block above */
-html[data-theme='dark'] .tl-head {
-  background: var(--bg-mid);
-  color: var(--text-1);
-  border-bottom-color: var(--border);
-}
-html[data-theme='dark'] .tl-tabs {
-  background: var(--bg-mid);
-  border-bottom-color: var(--border);
-}
-html[data-theme='dark'] .tl-tab {
-  color: var(--text-4);
-}
-html[data-theme='dark'] .tl-tab:hover {
-  color: var(--text-2);
-}
-html[data-theme='dark'] .tl-tab-active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-html[data-theme='dark'] .tl-status.tl-status-ok {
-  color: var(--green);
-}
-html[data-theme='dark'] .tl-status.tl-status-err {
-  color: var(--red);
-}
 html[data-size='small'] {
   zoom: 0.85;
 }
@@ -272,12 +246,16 @@ main {
 }
 .tl-btn-primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-deep);
   border-color: var(--accent);
 }
 .tl-btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+.tl-btn-primary:focus-visible {
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--accent-line);
 }
 .tl-btn-secondary {
   background: var(--bg-mid);
@@ -331,7 +309,7 @@ main {
 .tl-rule-kind {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -705,14 +683,14 @@ details summary {
 .tl-rr-unreviewed {
   display: inline-block;
   margin-left: 6px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: var(--r-pill);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: var(--amber-dim);
-  color: var(--amber);
+  background: var(--accent-dim);
+  color: var(--accent);
   vertical-align: middle;
 }
 
@@ -720,4 +698,44 @@ details summary {
 .rr-fields-threshold,
 .rr-fields-text {
   margin-top: 0;
+}
+
+/* ---- Built-in provenance badge ---- */
+.tl-builtin-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+  background: var(--bg-mid);
+  color: var(--text-4);
+  border: 1px solid var(--border);
+}
+
+/* ---- Mono meta text in result rule rows ---- */
+.tl-rr-summary {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+
+.tl-rr-analyte {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* ---- Threshold field label colors in editor ---- */
+.tl-field:has(#rrAmber) > span:first-child { color: var(--amber); }
+.tl-field:has(#rrRed) > span:first-child { color: var(--red); }
+
+/* ---- Dark mode: raise meta text contrast ---- */
+html[data-theme='dark'] .tl-rule-meta {
+  color: var(--text-3);
 }
