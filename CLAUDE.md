@@ -149,6 +149,30 @@ Bump `manifest.json` `version` for every pushed change. Use semantic versioning:
 
 Always add a `CHANGELOG.md` entry on the same commit.
 
+## Shipped-config (`defaults.json`) version — bump when you change shipped rules/chips
+
+`defaults.json` carries its **own integer `"version"`** at the top (separate from the
+manifest semver). It gates `mergeShippedDefaults` in BOTH
+`content-scripts/triage-lens/content.js` **and** `content-scripts/triage-lens/options.js`:
+the migration that propagates newly-shipped config to an existing install only runs when
+this integer is **higher** than the version stored in that user's saved config.
+
+**Whenever you change any migration-propagated content in `defaults.json` — `rules`,
+`thresholds`, `prefs`, `systemChips`, or `resultRules` — bump this integer `"version"`**,
+or the change silently never reaches anyone who already has a saved config. (This is how
+the v3.75.0 `Urgent:` chip-label change and the bowel-screening rule were stranded — see
+CHANGELOG v3.75.2.)
+
+- A **changed existing value** needs more than the bump to land: the merge is
+  `{ ...shipped, ...cfg }`, so the user's stored value wins. New *keys* arrive; changed
+  *values* do not. For chip labels, add the old value to **`RETIRED_CHIP_LABELS`** (kept
+  in lock-step in content.js + options.js) so it un-sticks on migration.
+- After editing `defaults.json`: run `node scripts/regen-defaults.js` (propagates the two
+  derived copies) **and** `node scripts/defaults-config-lock.js` (refreshes the version
+  lock). The lock script **refuses** to bless a content change that wasn't version-bumped,
+  and CI (`scripts/defaults-config-lock.js --check`, also `test-defaults-config-lock.js`)
+  fails closed on it — so "silently doesn't ship" becomes "CI tells you".
+
 ## Running the tests
 
 - **Run all tests:** `npm test` (or `node --test --test-concurrency=1 test-*.js`)
