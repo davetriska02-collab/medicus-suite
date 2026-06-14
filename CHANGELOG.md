@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.7] — 2026-06-14
+
+### docs: SEAL augmentation-layer proposal (v0.2)
+
+- Added `docs/SEAL-augmentation-proposal.md` — a v0.2 rewrite of the "national EHR
+  augmentation layer" proposal. Renamed from EAL-1 (collided with Common Criteria
+  Evaluation Assurance Levels) to **SEAL — Safe EHR Augmentation Layer**. Adds the
+  missing positioning against SMART on FHIR and CDS Hooks (client-side/local-only as
+  the differentiator), reframes the read-only claim honestly (architectural in the
+  extension today vs sandbox-enforced under a vendor interface), adds a clinical-safety
+  governance section (risk tiers, manufacturer ownership, DCB0129/MHRA SaMD), tones the
+  proof-of-concept claims to what the repo backs (single-practice real use, "style-of"
+  not certified DCB0129), narrows the ask to a Medicus-first pilot, and includes an
+  illustrative manifest JSON appendix. Docs-only; no behaviour change.
+
 ## [v3.77.6] — 2026-06-14
 
 ### docs: VISION.md positioning statement
