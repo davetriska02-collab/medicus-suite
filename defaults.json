@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3866,6 +3866,12 @@
     "queue.resultNoGrowth": {
       "enabled": true,
       "label": "No growth",
+      "kind": "info",
+      "actions": []
+    },
+    "queue.resultNoGrowthRule": {
+      "enabled": true,
+      "label": "{label}",
       "kind": "info",
       "actions": []
     },
