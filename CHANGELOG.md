@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.8] — 2026-06-14
+
+### docs: remove SEAL augmentation-layer proposal
+
+- Removed `docs/SEAL-augmentation-proposal.md` — the proposal was not intended to live
+  in this repo. Removed from the working tree; it remains in git history.
+
 ## [v3.77.7] — 2026-06-14
 
 ### docs: SEAL augmentation-layer proposal (v0.2)
