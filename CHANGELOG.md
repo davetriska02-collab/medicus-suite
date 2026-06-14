@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.84.2] — 2026-06-14
+
+### DTAC assessment — initial governance drafts
+
+Added four DRAFT governance documents that map existing artefacts onto the
+NHS Digital Technology Assessment Criteria (DTAC) domains, for use in NHS
+procurement/due-diligence conversations. These assemble and reference existing
+material (hazard log, safety notice, intended purpose, SOUP, security audit);
+they introduce no code, rules, `defaults.json`, or clinical-threshold changes.
+
+- `docs/CLINICAL-SAFETY-CASE-REPORT.md` (MS-CSO-CSCR-001) — DCB0129-style safety
+  case summarising the hazard log and controls (Section A).
+- `docs/DPIA.md` (MS-DPO-DPIA-001) — Data Protection Impact Assessment for the
+  local-only, zero-egress processing model (Section B).
+- `docs/INTEROPERABILITY-STATEMENT.md` (MS-DOC-INTEROP-001) — reasoned N/A
+  statement (Section D).
+- `docs/CSO-DECLARATION.md` (MS-CSO-DECL-001 + MS-CSO-DCB0160-001) — CSO
+  declaration plus a deploying-organisation (DCB0160-style) hand-off note.
+
+All four are marked DRAFT pending sign-off and carry placeholders for facts held
+outside the repo (ICO registration number, sign-off dates, signature).
+
 ## [v3.84.1] — 2026-06-14
 
 ### Corrected CSO GMC number in governance documents
