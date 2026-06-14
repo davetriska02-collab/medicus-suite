@@ -153,6 +153,20 @@
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    // Glossary tooltip (U1): explain the drug class. "DMARD" routes to the glossary
+    // (data-tip-key); any other class shows its own literal name. title= fallback.
+    let drugClassTip = '';
+    if (chip.drugClass) {
+      const cls = String(chip.drugClass).trim();
+      if (cls.toUpperCase() === 'DMARD') {
+        // title= mirrors the glossary text for native-hover fallback when
+        // tooltip.js/Glossary are not loaded. Kept in sync with shared/glossary.js.
+        const dmardText = 'Disease-Modifying Anti-Rheumatic Drug (e.g. methotrexate). Needs regular blood monitoring.';
+        drugClassTip = ` data-tip-key="dmard" title="${escAttr(dmardText)}" tabindex="0" role="button" aria-label="${escAttr(cls)} — what is this?"`;
+      } else {
+        drugClassTip = ` data-tip="${escAttr(cls)}" title="${escAttr(cls)}" tabindex="0" role="button"`;
+      }
+    }
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
@@ -161,7 +175,7 @@
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
           ${evChevron}
         </div>
-        ${chip.drugClass ? `<div class="sent-chip-cat">${escHtml(chip.drugClass)}</div>` : ''}
+        ${chip.drugClass ? `<div class="sent-chip-cat"${drugClassTip}>${escHtml(chip.drugClass)}</div>` : ''}
         ${hrtCtxHtml}
         ${testLines ? `<div class="sent-test-list">${testLines}</div>` : ''}
       </div>`;
@@ -207,11 +221,18 @@
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    // Glossary tooltip (U1): the QOF code (e.g. AST007) is opaque jargon — decorate
+    // it with the human-readable indicatorName via data-tip (+ title fallback) so a
+    // click/hover explains the code. Inert/harmless if tooltip.js is not loaded.
+    const codeTip =
+      !isCustom && chip.indicatorName
+        ? ` data-tip="${escAttr(chip.indicatorName)}" title="${escAttr(chip.indicatorName)}" tabindex="0" role="button"`
+        : '';
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
+          <span class="sent-chip-name"${codeTip}>${escHtml(chip.indicatorCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}${pointsText}</span>
           ${evChevron}
         </div>
@@ -340,10 +361,20 @@
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    // Glossary tooltip (U1): explain the combo label. The classic "triple whammy"
+    // routes to the glossary; otherwise use the chip's own notes as the explanation.
+    const comboLabel = String(chip.label || chip.ruleId || '');
+    let comboTip = '';
+    if (/triple\s*whammy/i.test(comboLabel)) {
+      const twText = 'NSAID + ACE inhibitor or ARB + diuretic taken together. Raises the risk of acute kidney injury.';
+      comboTip = ` data-tip-key="triple-whammy" title="${escAttr(twText)}" tabindex="0" role="button" aria-label="${escAttr(comboLabel)} — what is this?"`;
+    } else if (chip.notes) {
+      comboTip = ` data-tip="${escAttr(chip.notes)}" title="${escAttr(chip.notes)}" tabindex="0" role="button"`;
+    }
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.label || chip.ruleId)}</span>
+          <span class="sent-chip-name"${comboTip}>${escHtml(chip.label || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
           ${evChevron}
         </div>

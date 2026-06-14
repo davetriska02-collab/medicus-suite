@@ -45,7 +45,18 @@ function summariseActionChips(chips, hiddenRuleIds) {
     if (chip.ruleId && hidden[chip.ruleId] === true) { hiddenCount++; continue; }
     if (colour === 'red') red++; else amber++;
     items.push({
-      name: chip.drugName || chip.indicatorCode || chip.displayName || chip.registerName || chip.ruleName || chip.ruleId || '',
+      // G1: non-clinical reception staff should see a friendly label, not a raw
+      // QOF code. Prefer human-readable names (indicatorName/drugName/displayName)
+      // ahead of opaque codes (indicatorCode/ruleId), which remain as a last resort.
+      name:
+        chip.indicatorName ||
+        chip.drugName ||
+        chip.displayName ||
+        chip.registerName ||
+        chip.ruleName ||
+        chip.indicatorCode ||
+        chip.ruleId ||
+        '',
       statusLabel: STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase(),
       colour
     });

@@ -612,6 +612,9 @@ function renderScaffold() {
       id: 'rm',
       label: 'Triage Load',
       navModule: 'reception',
+      // Glossary tooltip (U1): explain what "Triage Load" means + that it needs setup.
+      tipKey: 'triage-load',
+      tipText: 'How many triage requests are waiting. Needs the Triage Monitor set up in Options.',
     },
     {
       id: 'demand',
@@ -643,7 +646,7 @@ function renderScaffold() {
             (c) => `
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
-              <span class="today-card-label">${esc(c.label)}</span>
+              <span class="today-card-label"${c.tipKey ? ` data-tip-key="${esc(c.tipKey)}" title="${esc(c.tipText || '')}" tabindex="0" role="button"` : ''}>${esc(c.label)}</span>
               ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">Open →</button>` : ''}
             </div>
             <div class="today-card-body" aria-live="polite"><span class="today-loading">Loading…</span></div>

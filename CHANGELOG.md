@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.79.0] — 2026-06-14
+
+### Glossary tooltips — explain clinical codes & jargon in place (U1/G1/R3)
+
+The whole-suite Practice appraisal flagged that unexplained clinical codes and jargon
+have no explanation anywhere (U1), non-clinical reception staff see raw codes (G1), and
+the Condor pressure index is a black box (R3). This adds a small click-to-explain tooltip
+backbone and wires it into the highest-value spots. No clinical-rule or data changes.
+
+- **New shared backbone:** `shared/glossary.js` (`window.Glossary`) — a small static map
+  of jargon with no source text elsewhere (RAG, DMARD, triple-whammy, PPI, eFI, triage
+  load). `shared/tooltip.js` (`window.Tip`) — a self-initialising, document-level popover:
+  any element carrying `data-tip="…"` or `data-tip-key="<glossary key>"` gets a `cursor:help`
+  dotted-underline affordance and opens a `role="tooltip"` popover on click or Enter/Space;
+  Esc / outside-click / re-activation closes it, one open at a time. Both are CLASSIC
+  scripts loaded in `side-panel/panel.html` and `pop-out/pop-out.html` (glossary before
+  tooltip). Everything degrades gracefully — every `data-tip` also sets a matching `title=`
+  for native-hover fallback if the scripts never load.
+- **Sentinel chips (U1):** the QOF code label (e.g. `AST007`) now explains itself via the
+  chip's `indicatorName`; the drug-class label routes `DMARD` to the glossary (other
+  classes show their own name); drug-combo labels explain via their `notes`, with the
+  classic "triple whammy" routed to the glossary. Attributes only — no `window.*` calls
+  from `chip-renderer.js`.
+- **Reception friendly names (G1):** `summariseActionChips()` now prefers a human-readable
+  label (`indicatorName` / `drugName` / `displayName` …) ahead of the raw code, so the
+  receptionist view no longer leads with opaque QOF codes.
+- **Condor PPI transparency (R3):** added a visible info button by the gauge whose tooltip
+  spells out the weighting (waiting room 30%, request queue 25%, urgent 25%, capacity 20%),
+  the live component scores and the band thresholds; the `Cap:` chip now explains
+  "slots remaining / your daily minimum".
+- **Today:** the "Triage Load" tile label carries a `triage-load` glossary tip.
+
 ## [v3.78.0] — 2026-06-14
 
 ### Usability fixes from the whole-suite Practice appraisal
