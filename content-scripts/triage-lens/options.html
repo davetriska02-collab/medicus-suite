@@ -131,12 +131,12 @@
     <!-- LLM rule authoring tool — shown only when the new-rule / edit pane is
          open (suite-standard copy-prompt → paste-JSON → validate → import-disabled
          flow, same as Sentinel custom rules / Reception pathways / Knowledge). -->
-    <details id="llmDetails" style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+    <details id="llmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
       <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
         <span style="font-size:10px; opacity:0.6;">&#9654;</span>
         Or generate with an LLM
       </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
         <p class="tl-help" style="margin:0 0 12px;">
           Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
           (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste the JSON response into
@@ -295,6 +295,7 @@
   <section class="tl-pane" id="paneResultRules">
     <div class="tl-help">
       Analyte-threshold rules <strong>escalate</strong> investigation result severity — they can raise a chip from none to amber or red, but never lower a lab-flagged result. Imported rules arrive <strong>disabled</strong>; review each rule's analyte match strings and threshold values before enabling.
+      <br><strong>A result that no rule matches shows only the lab's own flag — an absent chip is not a clinical all-clear.</strong>
     </div>
     <div class="tl-toolbar">
       <button class="tl-btn tl-btn-primary" id="btnAddResultRule">+ New result rule</button>
@@ -302,12 +303,12 @@
     <div class="tl-rule-list" id="resultRuleList"></div>
     <div class="tl-empty" id="resultRuleListEmpty" style="display:none">No result rules configured. Add one manually or import via the LLM tool in the editor.</div>
 
-    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
       <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
         <span style="font-size:10px; opacity:0.6;">&#9654;</span>
         Import rule(s) from LLM
       </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
         <p class="tl-help" style="margin:0 0 12px;">
           Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the analyte rule you want
           (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the JSON response into
@@ -386,17 +387,17 @@
             </select>
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
             <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Red threshold <small>(optional — leave blank to omit)</small></span>
             <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Unit <small>(display only, e.g. mmol/L)</small></span>
             <input type="text" id="rrUnit" placeholder="mmol/L">
             <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
@@ -409,13 +410,13 @@
             <textarea id="rrNormalText" rows="5" placeholder="no growth&#10;no significant growth&#10;no organisms isolated"></textarea>
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Normal chip label <small>(shown when a normal phrase is matched)</small></span>
             <input type="text" id="rrNormalLabel" maxlength="60" placeholder="No growth">
           </label>
         </div>
 
-        <label class="tl-field tl-field-inline" style="margin-top:8px">
+        <label class="tl-field tl-field-inline">
           <input type="checkbox" id="rrEnabled">
           <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
         </label>
@@ -427,6 +428,8 @@
           Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab. <strong>Analyte exclude</strong> (optional) skips look-alike analytes that share a match token — e.g. a "platelet" rule with exclude "mean platelet" won't fire on "Mean platelet volume", and a serum potassium rule with exclude "urine" won't fire on a urine potassium.
           <br><br>
           <strong>Text / culture rules</strong> match a result by analyte name, then inspect the result text: if any <em>normal phrase</em> is found (case-insensitive) the calm "normal" chip is shown; otherwise the label chip is shown (amber by default). Use this for microbiology culture reports such as MSU.
+          <br><br>
+          <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule chip is not a clinical all-clear: it only means no rule covered that analyte.
         </div>
       </div>
     </div>

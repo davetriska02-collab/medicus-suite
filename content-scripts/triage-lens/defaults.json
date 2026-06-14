@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 12,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3932,7 +3932,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low haemoglobin (red <100 g/L)",
+      "label": "Critical low haemoglobin",
       "analyte": {
         "match": ["haemoglobin", "hemoglobin"],
         "exclude": ["a1c", "glycated", "glycosylated"]
@@ -3946,7 +3946,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical high potassium (red ≥6.5 mmol/L)",
+      "label": "Critical high potassium",
       "analyte": {
         "match": ["potassium"],
         "exclude": ["urine", "urinary"]
@@ -3960,7 +3960,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low sodium (red ≤120 mmol/L)",
+      "label": "Critical low sodium",
       "analyte": {
         "match": ["sodium"],
         "exclude": ["urine", "urinary", "valproate"]
@@ -3974,7 +3974,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low eGFR (red <15 mL/min/1.73m²)",
+      "label": "Critical low eGFR",
       "analyte": {
         "match": ["gfr"]
       },
@@ -3987,7 +3987,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low platelets (red <30 ×10⁹/L)",
+      "label": "Critical low platelets",
       "analyte": {
         "match": ["platelet"],
         "exclude": ["mean platelet", "volume", "ratio", "large"]
@@ -4001,7 +4001,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical low neutrophils (red <0.5 ×10⁹/L)",
+      "label": "Critical low neutrophils",
       "analyte": {
         "match": ["neutrophil"],
         "exclude": ["%", "percent", "ratio"]
@@ -4015,7 +4015,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "High INR (red ≥8)",
+      "label": "High INR",
       "analyte": {
         "match": ["inr", "international normalised ratio", "international normalized ratio"]
       },
@@ -4055,6 +4055,158 @@
       "suppressIfProblem": {
         "match": ["diabetes", "diabetic", "t1dm", "t2dm", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "type i diabetes", "type ii diabetes", "insulin dependent diabetes", "non insulin dependent diabetes"],
         "exclude": ["family history", "non-diabetic", "pre-diabetic", "prediabetes", "pre-diabetes", "impaired glucose", "impaired fasting", "diabetes insipidus", "gestational"]
+      }
+    },
+    {
+      "id": "base-lithium-toxicity",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High lithium level — toxicity risk",
+      "analyte": {
+        "match": ["lithium"]
+      },
+      "comparator": "above",
+      "amber": 1.0,
+      "red": 1.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-digoxin-toxicity",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High digoxin level — toxicity risk",
+      "analyte": {
+        "match": ["digoxin"]
+      },
+      "comparator": "above",
+      "amber": 1.5,
+      "red": 2.0,
+      "unit": "micrograms/L"
+    },
+    {
+      "id": "base-low-potassium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical low potassium",
+      "analyte": {
+        "match": ["potassium"],
+        "exclude": ["urine", "urinary"]
+      },
+      "comparator": "below",
+      "amber": 3.0,
+      "red": 2.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-calcium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High calcium — hypercalcaemia",
+      "analyte": {
+        "match": ["calcium"],
+        "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
+      },
+      "comparator": "above",
+      "amber": 2.6,
+      "red": 3.0,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-egfr-amber",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low eGFR — significant CKD",
+      "analyte": {
+        "match": ["gfr"]
+      },
+      "comparator": "below",
+      "amber": 30,
+      "unit": "mL/min/1.73m²"
+    },
+    {
+      "id": "base-blood-culture",
+      "kind": "text",
+      "enabled": true,
+      "builtin": true,
+      "label": "Blood culture — needs review",
+      "normalLabel": "No growth",
+      "analyte": {
+        "match": ["blood culture", "blood cx", "blood c&s"],
+        "exclude": ["urine", "wound", "sputum", "csf", "swab", "stool", "faeces", "faecal"]
+      },
+      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    },
+    {
+      "id": "base-low-calcium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low adjusted calcium — hypocalcaemia",
+      "analyte": {
+        "match": ["adjusted calcium", "corrected calcium", "albumin-adjusted calcium", "albumin adjusted calcium"],
+        "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
+      },
+      "comparator": "below",
+      "amber": 2.1,
+      "red": 1.9,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-magnesium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low magnesium — hypomagnesaemia",
+      "analyte": {
+        "match": ["magnesium"],
+        "exclude": ["urine", "urinary", "24 hour", "24-hour"]
+      },
+      "comparator": "below",
+      "amber": 0.6,
+      "red": 0.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-tsh",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High TSH — possible hypothyroidism",
+      "analyte": {
+        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
+        "exclude": ["receptor", "antibody", "antibodies"]
+      },
+      "comparator": "above",
+      "amber": 10,
+      "red": 20,
+      "unit": "mU/L",
+      "suppressIfProblem": {
+        "match": ["hypothyroidism", "hypothyroid", "levothyroxine", "thyroxine", "myxoedema", "myxedema"],
+        "exclude": ["family history"]
+      }
+    },
+    {
+      "id": "base-low-tsh",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Suppressed TSH — possible thyrotoxicosis",
+      "analyte": {
+        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
+        "exclude": ["receptor", "antibody", "antibodies"]
+      },
+      "comparator": "below",
+      "amber": 0.1,
+      "red": 0.01,
+      "unit": "mU/L",
+      "suppressIfProblem": {
+        "match": ["thyrotoxicosis", "hyperthyroidism", "hyperthyroid", "graves", "carbimazole", "propylthiouracil", "thyroid cancer", "levothyroxine", "thyroxine"],
+        "exclude": ["family history"]
       }
     }
   ]

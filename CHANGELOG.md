@@ -2,6 +2,137 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.2] — 2026-06-14
+
+### Enable the four Keeper result rules (CSO sign-off)
+
+The hypocalcaemia, hypomagnesaemia, high-TSH and suppressed-TSH rules added
+disabled in v3.77.0 are now **enabled** following Clinical-Safety-Officer
+sign-off. `suppressIfProblem` on the TSH rules is effective in the live queue:
+the content script lazily fetches the patient problem list whenever a
+suppressing rule's analyte is present and passes it to the severity engine
+(`content.js` ~L2515-2540), so a coded hypothyroid / thyrotoxicosis patient is
+suppressed rather than re-flagged. Residual TSH false-positives are bounded to
+patients on levothyroxine without a coded thyroid diagnosis, and to pregnancy;
+each rule remains individually toggleable per practice. Guard test updated to
+assert the enabled state and live firing.
+
+## [v3.77.1] — 2026-06-14
+
+### Polish: Result rules settings page (design-crit pass)
+
+Multi-critic design crit-and-improve pass on the Triage Lens *Result rules*
+settings page (art-director, token/markup surveyor, fresh-eyes GP lenses);
+CSS/markup only, no behaviour change.
+
+- **Severity badge on every rule row** — each row now shows a RED / AMBER / INFO
+  chip derived from its thresholds, so the list's severity ceiling is scannable at
+  a glance instead of 21 identical grey rows (the appraisal's density finding).
+- **"Unreviewed" recoloured amber → blue** — amber is reserved for clinical alert
+  state; a workflow state should not borrow clinical temperature.
+- **"built-in" is now a proper mono badge** (kept its explanatory tooltip), and the
+  threshold-summary and analyte-match columns render in the mono "machine-voice"
+  face.
+- **Editor:** the Amber/Red threshold field labels now carry status-ink colour cues.
+- **Accessibility:** aria-labels on the per-row toggle / Edit / Delete; primary
+  button contrast raised to WCAG AA on the dark accent with a visible focus ring;
+  dark-mode meta-text contrast fixed; token/radius tidy-ups and dead dark-theme CSS
+  removed.
+
+## [v3.77.0] — 2026-06-14
+
+### Feature: four more result rules from a Keeper currency-check (shipped disabled)
+
+Ran The Keeper (clinical-rule currency check) on the result-triage rules for the
+items raised by The Practice appraisal. Full Clinical-Safety-Officer change
+proposal: `docs/appraisal/KEEPER-result-rules-2026-06-14.md`. Four new built-in
+result rules added to `defaults.json`, all **disabled-by-default ("Unreviewed")**:
+
+- **Hypocalcaemia** (`base-low-calcium`) — amber ≤2.1, red ≤1.9 mmol/L. Matches
+  **adjusted/corrected calcium only** (not bare "Calcium"): the deliberate guard
+  against hypoalbuminaemia false-positives, where total calcium reads low but the
+  albumin-adjusted value is normal. Excludes ionised calcium.
+- **Hypomagnesaemia** (`base-low-magnesium`) — amber ≤0.6, red ≤0.5 mmol/L
+  (arrhythmia / refractory-hypokalaemia risk; PPIs a recognised cause, MHRA 2011).
+- **High TSH** (`base-high-tsh`) — amber ≥10, red ≥20 mU/L (NICE NG145 treatment
+  threshold). Excludes TSH-receptor-antibody results; `suppressIfProblem` for known
+  hypothyroidism/levothyroxine.
+- **Suppressed TSH** (`base-low-tsh`) — amber ≤0.1, red ≤0.01 mU/L (thyrotoxicosis /
+  over-replacement). `suppressIfProblem` for known thyrotoxicosis/antithyroid drugs.
+
+These ship **disabled** because WebFetch egress to NICE/NHS/BNF was blocked this run
+(HTTP 403), so thresholds were corroborated via multi-source search rather than
+confirmed against the primary page — the CSO verifies and enables. The TSH rules
+also have a high treated-patient false-positive rate (and `suppressIfProblem` fails
+open in the live queue when the problem list is absent), so disabled-by-default is
+the right shipping state regardless.
+
+**Rejected:** narrowing the existing high-calcium match from bare `"calcium"` to
+adjusted-only — that would silently miss UK labs reporting hypercalcaemia under an
+un-prefixed "Calcium" name (a high total calcium is not raised by hypoalbuminaemia,
+so the false-positive concern there is cosmetic). The high-calcium rule is unchanged.
+
+Bumped `defaults.json` `"version"` (11 → 12) so the new disabled builtins reach
+existing users (inert until enabled). Guarded by new `test-result-severity.js`
+assertions (present, disabled-as-shipped, and correct firing/exclude/suppress once
+enabled). No behaviour change to any existing rule.
+
+## [v3.76.1] — 2026-06-14
+
+### Polish: result-rule labels and settings copy (from The Practice appraisal)
+
+Acting on the synthetic-panel appraisal of the new result rules
+(`docs/appraisal/PRACTICE-result-rules-2026-06-13.md`):
+
+- **Result-rule labels no longer embed thresholds.** The label was doing double
+  duty as both the queue-chip text and the settings description, which made the
+  chip verbose (`Lithium — Lithium level high — toxicity risk (amber >1.0, red
+  ≥1.5)`) and, on three rules, misstated the firing boundary with a strict `>`/`<`
+  where the engine fires inclusively (`≥`/`≤`). Labels are now short clinical names
+  (e.g. `High lithium level — toxicity risk`, `Critical low potassium`); the
+  settings row still shows the exact threshold via its auto-generated summary, which
+  already renders the correct `≥`/`≤`. Applied to all built-in threshold rules (the
+  six new ones and the eight pre-existing ones that shared the pattern). The two
+  HbA1c labels keep their iconic 42 / ≥48 values, which are correct and clinically
+  load-bearing.
+- **"Absent chip is not an all-clear" stated explicitly.** Added to the Result
+  rules pane intro and the editor help panel: a result that no rule matches shows
+  only the lab's own flag, so an absent rule chip does not mean a result was
+  checked and cleared.
+- **"built-in" and "Unreviewed" now carry tooltips** in the rule list explaining
+  what each state means.
+
+No threshold, comparator, match or exclude values changed — behaviour is identical;
+this is label and copy only.
+
+## [v3.76.0] — 2026-06-13
+
+### Feature: six new built-in Investigation Results rules
+
+Added six built-in result-triage rules to `defaults.json`, escalate-only (they never
+lower a lab-flagged result). Authored via a two-agent clinical-safety deliberation
+(acute/cancer-safety-netting lens + biochemistry/drug-monitoring lens) and converged on
+the highest-value, lowest-false-positive additions with clean analyte match strings:
+
+- **Lithium level high** — amber > 1.0, red ≥ 1.5 mmol/L (BNF target 0.4–1.0; toxicity
+  risk). Drug-level monitoring miss-prevention.
+- **Digoxin level high** — amber ≥ 1.5, red ≥ 2.0 micrograms/L (UK therapeutic 0.5–2.0).
+- **Critical low potassium** — amber < 3.0, red ≤ 2.5 mmol/L. Fills the hypokalaemia gap
+  (only high potassium was covered); excludes urine potassium.
+- **High adjusted calcium (hypercalcaemia)** — amber ≥ 2.6, red ≥ 3.0 mmol/L
+  (malignancy / hyperparathyroidism); excludes urine and ionised calcium.
+- **Low eGFR amber band** — amber < 30 mL/min/1.73m² (CKD G4). Additive to the existing
+  red < 15 (G5) rule.
+- **Blood culture — needs review** (text): a known-negative phrase ("no growth" family)
+  calms the row; anything else escalates to amber review, so a positive culture can never
+  be hidden. Deliberately omits bare "negative"/"sterile" so a "Gram negative … isolated"
+  report is not falsely calmed; excludes urine/wound/sputum/CSF/swab/stool cultures.
+
+Bumped `defaults.json` `"version"` (10 → 11) so `mergeShippedDefaults` appends these
+builtins to existing users' stored config (by id; user-deleted builtins are not
+resurrected). Guarded by new assertions in `test-result-severity.js` that validate every
+shipped rule against the schema and confirm each new rule fires (and excludes) as labelled.
+
 ## [v3.75.3] — 2026-06-13
 
 ### Internal: guard against shipped-config changes that don't bump the schema version
