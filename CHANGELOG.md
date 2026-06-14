@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.8] — 2026-06-14
+
+### Fix: no stray "0 abnormal" chip on text-review queue results
+
+- **Queue result-triage chips** — a result flagged for review by a text rule (e.g. an
+  H. pylori positive, a microbiology culture needing review) raises the row severity to
+  amber while its numeric `abnormalCount` is still 0. `selectResultChips`
+  (`content-scripts/triage-lens/content.js`) was then emitting the generic clinical
+  `queue.resultAbnormal` chip with `{count}` = 0, rendering a meaningless **"0 abnormal"**
+  beside the review chip. The amber clinical-chip emission is now guarded on
+  `abnormalCount > 0`, so a pure text-review shows only its review chip; a result with a
+  genuine numeric abnormal *and* a review still shows both. Regression tests added.
+
 ## [v3.77.7] — 2026-06-14
 
 ### Fix: custom result rules now show their own "normal" label on queue chips

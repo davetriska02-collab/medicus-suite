@@ -2455,7 +2455,11 @@
       } else {
         chips.push({ id: 'queue.resultUrgent', vars: { name: topName, count: sev.urgentCount } });
       }
-    } else if (sev.level === 'amber') {
+    } else if (sev.level === 'amber' && sev.abnormalCount > 0) {
+      // Guard on abnormalCount > 0: `level` is ALSO raised to amber by a text-rule
+      // review (reviewCount > 0) that found no numeric abnormal. In that case the
+      // review chip below carries the signal and this clinical abnormal chip must NOT
+      // render — otherwise it shows a meaningless "0 abnormal" next to the review chip.
       if (ruleLabel) {
         chips.push({ id: 'queue.resultRuleAbnormal', vars: { name: topName, rule: ruleLabel } });
       } else {

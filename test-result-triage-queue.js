@@ -224,6 +224,16 @@ if (selectResultChips) {
     rrr && rrr.vars.rule === 'Bowel screening: no response',
     'resultReviewRule carries the rule label in {rule}'
   );
+  // A text-review raises `level` to amber with abnormalCount=0 — the clinical abnormal
+  // chip must NOT render (it would show a meaningless "0 abnormal" beside the review chip).
+  check(
+    !reviewLabelledChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'labelled text review (abnormalCount=0) → NO stray "0 abnormal" chip'
+  );
+  check(
+    !reviewLabelledChips.some((c) => c.id === 'queue.resultRuleAbnormal'),
+    'labelled text review (abnormalCount=0) → NO stray resultRuleAbnormal chip'
+  );
 
   // text-review with the GENERIC "Needs review" label (e.g. a culture) → generic chip
   const reviewGeneric = {
@@ -239,6 +249,31 @@ if (selectResultChips) {
   check(
     !reviewGenericChips.some((c) => c.id === 'queue.resultReviewRule'),
     'generic "Needs review" text review → NOT the attributable chip'
+  );
+  check(
+    !reviewGenericChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'generic text review (abnormalCount=0) → NO stray "0 abnormal" chip'
+  );
+
+  // amber WITH a real numeric abnormal AND a text review → BOTH chips (abnormal not suppressed)
+  const abnormalPlusReview = {
+    level: 'amber', urgentCount: 0, abnormalCount: 2,
+    top: { name: 'ALT', value: 120, unit: 'U/L', ruleLabel: null },
+    misprioritised: false, unmatched: false,
+    reviewCount: 1, reviewTop: { name: 'MSU', label: 'Needs review' },
+  };
+  const abnormalPlusReviewChips = selectResultChips(abnormalPlusReview);
+  check(
+    abnormalPlusReviewChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'amber with real abnormal (count>0) + review → abnormal chip STILL renders'
+  );
+  check(
+    abnormalPlusReviewChips.find((c) => c.id === 'queue.resultAbnormal')?.vars.count === 2,
+    'amber abnormal chip carries the real count (2), not 0'
+  );
+  check(
+    abnormalPlusReviewChips.some((c) => c.id === 'queue.resultReview'),
+    'amber with real abnormal + review → review chip also renders'
   );
 
   // text-noGrowth with a CUSTOM normal label (e.g. "Negative" H. pylori) → attributable
