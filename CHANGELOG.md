@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.4] — 2026-06-14
+
+### Add SECURITY.md vulnerability-reporting policy
+
+- New root `SECURITY.md` documenting private vulnerability reporting (email),
+  supported-version policy, audit scope, and links to the existing
+  `SECURITY-AUDIT.md`, `docs/SOUP.md`, and clinical-safety docs. Fills the one
+  standard security artifact the repo was missing; no code change.
+
 ## [v3.77.3] — 2026-06-14
 
 ### Result rules settings: fixes from The Practice re-run
