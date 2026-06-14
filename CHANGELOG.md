@@ -25,6 +25,11 @@ they introduce no code, rules, `defaults.json`, or clinical-threshold changes.
 - `docs/DTAC-STATUS.md` (MS-DOC-DTAC-001) — readiness tracker across all DTAC
   domains, including a flagged note that the clinical-safety documents are pinned
   at v3.64.0 and need CSO re-synchronisation to the current version.
+- `docs/CLINICAL-SAFETY-RESYNC-v3.84.2-DRAFT.md` (MS-CSO-RESYNC-001) — DRAFT CSO
+  change-proposal preparing audit task T4: classifies every release v3.65.0 →
+  v3.84.2, concludes no new hazard arises and no residual increases, and proposes
+  the specific edits to bring the three signed safety docs onto v3.84.2. Prepared
+  for CSO review; makes no safety attestation itself.
 
 All are marked DRAFT pending sign-off and carry placeholders for facts held
 outside the repo (ICO registration number, sign-off dates, signature).
