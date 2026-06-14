@@ -1,7 +1,7 @@
 # Medicus Suite — Intended Purpose Statement
 
-**Version:** 3.16.0  
-**Date:** May 2026  
+**Version:** 3.77.5  
+**Date:** June 2026  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Status:** Limited distribution — named clinical users only
 
@@ -19,12 +19,18 @@ The extension comprises the following functional modules:
 | **Custom Alert Builder** | Form-based authoring of practice custom rules across five rule types (drug-monitoring, drug-combo, qof-indicator, event-count, composite), with an engine-backed live preview against an editable test patient and schema validation on save. Passive — produces rules the Monitoring module later displays. |
 | **Slots** | Displays appointment slot availability data already present in the Medicus scheduling system. |
 | **Capacity Forecast** | Aggregates slot and session data to assist with practice-level capacity visibility. |
-| **Triage Lens** | In-page overlay displaying structured triage information for patients in the current consultation queue, drawn from data already present in Medicus. On the patient record view it also surfaces deterministic STOPP/START-style prescribing-combination prompts, a risk-tool signpost chip (links to the QRISK3 / QCancer / eFI calculators — computes no score), and NHS Pharmacy First pathway signposting reference snippets — all supplementary prompts to review, not clinical decisions. |
+| **Triage Lens** | In-page overlay displaying structured triage information for patients in the current consultation queue, drawn from data already present in Medicus. On the patient record view it also surfaces deterministic STOPP/START-style prescribing-combination prompts, a risk-tool signpost chip (links to the QRISK3 / QCancer / eFI calculators — computes no score), and NHS Pharmacy First pathway signposting reference snippets — all supplementary prompts to review, not clinical decisions. From v3.62.0 the Triage Lens additionally annotates rows in the Medicus Investigation Results filing queue with severity chips (urgent, abnormal, under-prioritised, unmatched-patient) derived from the laboratory's own flags and, from v3.63.0, user-authored and built-in result-triage rules (threshold and text-classification). All are escalate-only; the Triage Lens never files a result or changes its status. |
 | **Submissions** | Displays submission status counts for QOF and enhanced services as already recorded in Medicus. |
 | **Activity** | Displays aggregated activity data for the current clinical session, drawn from Medicus. |
 | **Referrals Tracker** | Displays referral audit data drawn from Medicus, including specialty, priority, status, and clinician breakdowns. |
 | **Waiting Room / Request Monitor** | Displays live waiting-room patient counts and new-request demand counts with configurable amber/red thresholds. |
-| **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. No patient data leaves the browser at any stage. |
+| **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. From v3.51.0 a Structured Medication Review (SMR) tab adds ACB scoring (Boustani scale) and a starter set of STOPP/START v3 prescribing flags as supplementary aids. No patient data leaves the browser at any stage. |
+| **Trends** | Graphical trend charts for blood pressure, albumin-creatinine ratio (ACR), HbA1c, cholesterol, and weight, drawn from the Medicus investigation dashboard. BP and ACR charts include condition-specific target lines and NICE/KDIGO threshold-based action banners as prompts to consider and verify — not clinical decisions. Display only; no data transmitted externally. |
+| **Condor** | Operational intelligence dashboard displaying practice-level administrative metrics: live waiting-room arrivals, appointment-book demand/capacity, submission velocity, Practice Pressure Index, and task-inbox age. Administrative and situational-awareness tool only; no clinical decisions. |
+| **Pre-clinic Monitoring Sweep** | Runs the Sentinel rules engine against today's booked patients before clinic to produce a priority-ordered action worklist. Generates printable reception handouts, per-chip Action Packs (copy-ready booking and recall instructions), and batch artefacts for the full worklist. A morning-huddle aid only; not an audited monitoring record. Results persist locally for up to two hours; excluded from backups. |
+| **Reception** | Guided, fixed-question structured history capture for non-clinical front-desk staff. Produces a plain-text complaint description for manual pasting into Medicus. Not a triage tool; all pathways ship disabled and require clinician review before enablement. Also displays a configurable RAG status pill summarising the current patient's Sentinel chips for reception use. |
+| **Knowledge** | Practice-owned reference base for referral criteria, local contacts, internal pathways, and protocols. Explicitly non-clinical-decision-support reference material; presented with a first-open acknowledgement to that effect. |
+| **Today** | Aggregated morning-overview tab combining waiting-room counts, triage load, demand counts, slot availability, last Sweep summary, and a recent-alerts log. Administrative glance view only; all data drawn from existing module feeds. The recent-alerts log records the extension's own operational alert events (counts and labels, never patient identifiers) and is not an audit trail. |
 
 ---
 

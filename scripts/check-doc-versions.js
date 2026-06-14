@@ -61,9 +61,11 @@ const DOCS = [
 // reissue. Re-pinned as known-stale so the guard WARNs (does not fail) until the
 // next CSO refresh brings them onto the 3.77 line; remove each entry when its
 // doc is updated. (feature-list.md tracks normally and is intentionally unpinned.)
+//
+// 2026-06-14 (weekly safety sync): CLINICAL-SAFETY-NOTICE (CSN v3.9) and
+// HAZARD-LOG (HL v3.10) updated to v3.77.5 — their pins removed. SOUP.md
+// remains at v3.64.0 pending next CSO refresh; its pin is retained.
 const KNOWN_STALE = {
-  'docs/CLINICAL-SAFETY-NOTICE.md': '3.64.0',
-  'docs/HAZARD-LOG.md': '3.64.0',
   'docs/SOUP.md': '3.64.0',
 };
 

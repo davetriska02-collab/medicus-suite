@@ -359,6 +359,147 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.77.5 addendum ---
+
+This addendum records the state of the software at Medicus Suite v3.77.5. The
+following features and changes have been added since the v3.26.4 addendum. In
+each case the feature remains within the intended purpose at section 3 and does
+not alter the fundamental nature of the software, its regulatory status, or its
+data-handling characteristics. All obligations stated in this disclaimer and in
+prior addenda continue to apply in full.
+
+Pre-clinic Monitoring Sweep and Action Packs (v3.37.0–v3.56.0). The Sweep
+module runs the existing Sentinel rules engine against today's booked patients
+before clinic, producing a priority-ordered worklist of patients with
+action-needed monitoring, QOF, or vaccine chips. The Sweep is a morning-huddle
+aid only and shares all the limitations of the Sentinel monitoring module: the
+"no chip does not mean monitoring is complete" principle applies with full force
+to the Sweep output. From v3.44.0 it generates a printable reception handout of
+copy-ready booking instructions per patient; from v3.48.0 the Sentinel panel
+gains Action Packs (copy-ready blood-form requests, recall SMS messages, letters
+and tasks per chip); from v3.56.0 the Sweep generates batch Action-Pack artefacts
+for the full morning worklist. Every batch artefact carries the patient name and
+NHS number and must be verified against the destination Medicus record before use:
+wrong-patient paste risk is higher in batch than in single-patient use. None of
+these artefacts are automatically submitted to any system; they are copy-ready
+text only. Sweep results persist as a local working copy for up to two hours to
+allow resume after an accidental tab switch; a resumed sweep reflects records at
+the time the sweep ran and must not be treated as current.
+
+Reception guided capture (v3.38.0). The Reception module presents a fixed
+question set to non-clinical front-desk staff for a set of presenting problems,
+with red-flag questions asked first. It produces a plain-text complaint
+description for manual pasting into Medicus. It is not a triage tool: red-flag
+prompts are escalation triggers only, not exclusion criteria, and a full set of
+"no" answers does not mean the contact is routine. The receiving clinician reviews
+every capture. All capture pathways ship disabled and require explicit practice
+administrator enablement after clinician review. The user must confirm the correct
+patient record before pasting generated text.
+
+Condor operational dashboard (v3.35.0) and the Today tab (v3.60.0). Condor
+displays administrative and operational practice metrics — waiting-room arrivals,
+demand/capacity ratios, submission velocity, Practice Pressure Index, task-inbox
+age — as an operational situational-awareness tool. The Today tab aggregates the
+same administrative feeds into a single morning glance view. Neither tool makes
+clinical decisions, assesses individual patients, or produces clinical output.
+The Practice Pressure Index is an arithmetic composite of operational indicators
+and does not assess clinical urgency or patient safety.
+
+Triage Lens red-flag engine expansion (v3.46.0+). From v3.46.0 the free-text
+triage-lens rule set was substantially expanded across clinical domains (stroke/TIA,
+sepsis, anaphylaxis, meningitis, pregnancy emergencies, paediatric presentations,
+2WW cancer flags, mental health, and others). These are supplementary pattern-
+matching prompts surfaced for non-clinical staff handling incoming patient requests;
+they are an aide-memoire, not a triage system. Absence of a chip is not absence of
+risk; every contact must be reviewed by a clinician. The rule set cannot be
+exhaustive. From v3.52.0 the engine was hardened with dropped-pattern warnings and
+curly-quote normalisation; neither change alters the software's fundamental
+character or user obligations.
+
+Patient Record Visualiser SMR tab (v3.51.0). The SMR tab adds an anticholinergic
+cognitive burden (ACB) score using the Boustani scale and a subset of STOPP/START
+v3 prescribing flags. The ACB score is an arithmetic sum of per-drug published
+burden scores; it is not a validated clinical assessment instrument. The
+STOPP/START criteria implemented are a starter subset; absence of a flag does not
+guarantee prescribing safety. Both outputs are supplementary aids to the clinician's
+own prescribing assessment and to Medicus's own prescribing-safety systems.
+
+Investigation Results queue triage chips (v3.62.0–v3.64.0). From v3.62.0 the
+Triage Lens decorates rows in the Medicus Investigation Results filing queue with
+per-row severity chips (urgent, abnormal) derived solely from the laboratory's own
+reference-range and urgent-review flags, an under-prioritised flag, and an
+unmatched-patient flag. There is deliberately no "normal" or "safe to file" chip:
+absence of a chip asserts nothing about result normality. From v3.63.0 users may
+author analyte-threshold rules that escalate a result's severity (for example
+"Potassium >= 6.0 -> red"); such rules arrive disabled and require clinician review
+before firing; they can only raise severity, never lower it or suppress the
+laboratory's own flags. From v3.64.0 a built-in text-classification rule flags
+MSU/urine-culture results as "Needs review" (amber) or shows a "No growth" info
+chip based on configurable normal-phrase matching; the "No growth" chip is an
+information chip — it is not a verdict that the result is safe to file. Users must
+be alert to sterile pyuria and to laboratory comments recommending repeat culture
+even when culture is negative. Every result must be opened and reviewed in Medicus
+regardless of chip status; the chips only assist with prioritisation of that review.
+
+Navigation API detection hardening (v3.74.1). The patient-change detection
+mechanism used by the Investigation Results queue and the Triage Lens was hardened
+by adding the browser Navigation API alongside the existing MutationObserver, with
+a backstop polling interval, to reduce the risk of a missed patient-switch event.
+This is a safety-engineering improvement to the wrong-patient guard; it does not
+alter any user obligation.
+
+Built-in result-rule expansion (v3.75.0–v3.77.2). A bowel-cancer-screening
+non-responder text rule (v3.75.0) uses a flag-if-present "abnormalText" primitive:
+it fires if the result text does not contain a configured normal phrase. By design,
+this primitive cannot suppress a positive screening result. Six further built-in
+threshold rules were added disabled by default (v3.76.0): lithium-level toxicity,
+digoxin-level toxicity, critical low potassium, high adjusted calcium
+(hypercalcaemia), low eGFR CKD G4 band, and a blood-culture calmer. These rules
+ship disabled and must be explicitly enabled by a clinician who has reviewed their
+clinical appropriateness for the practice's case mix; they are not activated by any
+user configuration change other than deliberate enablement. Four further Keeper
+rules were added disabled (v3.77.0) then enabled after CSO sign-off (v3.77.2):
+hypocalcaemia, hypomagnesaemia, high TSH, and suppressed TSH. The TSH rules carry
+a "suppressIfProblem" gate that suppresses the chip for patients with a coded
+thyroid diagnosis. Users must understand that this gate is a heuristic that does
+not replace clinical assessment: it may suppress a chip for a patient with a
+thyroid diagnosis who still requires TSH monitoring. The clinician is responsible
+for verifying that suppression is appropriate for each individual patient. All
+result rules are escalate-only and cannot lower or suppress the laboratory's own
+flags. Absence of a chip still asserts nothing about result normality.
+
+Tombstoning and import hardening (v3.77.3–v3.77.5). The "removedBuiltins"
+tombstone mechanism (v3.77.3) ensures that a built-in result rule deliberately
+deleted by the user is not silently resurrected when the shipped configuration is
+updated. Import hardening (v3.77.5) extended the 10 MB backup-import size cap and
+per-field type validation to all per-module import paths, reducing the risk of
+corrupt or maliciously-crafted import data reaching the rules engine. These are
+data-integrity controls; they do not alter the intended purpose or any user
+obligation.
+
+User obligations specific to features in this addendum:
+
+(a) The user must treat the Sweep worklist and Action-Pack artefacts as
+    supplementary aids to clinical workflow, not as an authoritative record. Every
+    artefact must be verified against the destination patient record before use.
+
+(b) The user must ensure that Reception guided-capture pathways have been reviewed
+    by a clinician before enablement, and must confirm the destination patient
+    record before pasting generated text.
+
+(c) The user must open and review every result in Medicus independently of any
+    chip shown by the Investigation Results queue decoration. Absence of a chip
+    does not indicate that a result is normal, safe to file, or has been reviewed.
+
+(d) The user must not enable the v3.76.0 disabled-by-default threshold rules
+    without reviewing their clinical appropriateness for the practice's case mix.
+
+(e) Where TSH chips are suppressed by the suppressIfProblem thyroid-diagnosis gate
+    (v3.77.2), the user must satisfy themselves independently that TSH monitoring
+    is not required for that patient, and must not rely on the absence of a chip
+    as evidence that monitoring is not needed.
+
+
 --- v3.26.4 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.26.4. The
