@@ -172,8 +172,8 @@ export function extractBookedPatients(raw, opts) {
   let diagnosticMessage = null;
   if (allEntries.length === 0) {
     diagnosticMessage = clinicianFilter
-      ? `No booked appointments found for ${clinicianFilter} in today's appointment book.`
-      : "No booked appointments found in today's appointment book.";
+      ? `No booked appointments found for ${clinicianFilter} in the appointment book for the selected day.`
+      : 'No booked appointments found in the appointment book for the selected day.';
   } else if (seen.size === 0) {
     diagnosticMessage =
       'Could not identify patients from the appointment book — sweep unavailable; field layout may have changed';
@@ -320,10 +320,10 @@ export function chipInstruction(chip) {
 // Build the printable reception worklist from the sweep's action rows.
 // Pure: no DOM, no chrome APIs — the caller renders it.
 //
-// meta: { runAt, clinician (or null = all), suiteVersion }
+// meta: { runAt, clinicDate (YYYY-MM-DD of the swept day), clinician (or null = all), suiteVersion }
 //
 // Returns {
-//   generatedAt, clinician, suiteVersion,
+//   generatedAt, clinicDate, clinician, suiteVersion,
 //   patients: [{ time, name, clinician, redCount, amberCount,
 //                actions: [{ action, detail }],   // deduplicated, red-first order preserved
 //                hasHiddenActionChips }]
@@ -365,6 +365,7 @@ export function buildHandout(actionRows, meta) {
 
   return {
     generatedAt: m.runAt || new Date().toISOString(),
+    clinicDate: m.clinicDate || null,
     clinician: m.clinician || null,
     suiteVersion: m.suiteVersion || '',
     patients,

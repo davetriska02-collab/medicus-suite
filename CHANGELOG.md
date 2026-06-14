@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.83.0] — 2026-06-14
+
+### Pre-clinic Sweep — choose the day
+
+The Pre-clinic Sweep was hardwired to today; you can now sweep any day, including
+days in advance, and the clinician picker + printed handout follow the chosen day.
+
+- Added a day picker to the Sweep controls (past and future allowed). Both
+  appointment-book fetches use the selected day instead of today.
+- Changing the day clears stale results, re-fetches that day's book, and repopulates
+  the clinician dropdown for that day (resetting a clinician filter that has no clinic
+  then). The existing per-clinician filter is unchanged.
+- The clinic day is carried into the printable handout and batch handout headers
+  ("Pre-clinic sweep for &lt;day&gt;"), distinct from the "generated &lt;timestamp&gt;" line, and
+  into the persisted last-run so re-opening restores the swept day. Empty/zero-result
+  copy is now day-agnostic. Default behaviour (today) is unchanged.
+
+`side-panel/modules/sweep/` (sweep.js, sweep.css, sweep-core.js handout model,
+handout.js, batch-handout.js). Core extraction/sort logic unchanged; `test-sweep-core.js`
+covers the new `clinicDate` passthrough. No clinical-rule or `defaults.json` changes.
+
 ## [v3.82.0] — 2026-06-14
 
 ### Practice profile — central attestation + request-monitor practice-code coupling

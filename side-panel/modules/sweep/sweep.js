@@ -59,6 +59,7 @@ const LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 let container = null;
 let _abortFlag = false; // set to true to stop the in-progress sweep loop
 let _selectedClinician = ''; // '' = all clinicians
+let _selectedDate = todayISO(); // YYYY-MM-DD — day being swept (defaults to today)
 let _running = false; // true while a batch is in progress
 
 // Sequential sweep state — preserved across "Continue" clicks within one session
@@ -104,6 +105,19 @@ function fmtTs(d) {
     return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   } catch (_) {
     return String(d);
+  }
+}
+
+// Format a YYYY-MM-DD clinic date for display (en-GB). Falls back to the raw
+// string if it isn't a parseable date.
+function fmtClinicDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T12:00:00');
+  if (isNaN(d.getTime())) return String(iso);
+  try {
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (_) {
+    return String(iso);
   }
 }
 
@@ -153,6 +167,7 @@ async function persistLastRun() {
     await chrome.storage.local.set({
       [LAST_RUN_KEY]: {
         runAt: _sweepMeta?.runAt || new Date().toISOString(),
+        clinicDate: _sweepMeta?.clinicDate || _selectedDate,
         clinician: _selectedClinician || null,
         results: serialiseResults(_cumulativeResults),
         missingUuidCount: _sweepMeta?.missingUuidCount ?? 0,
@@ -291,8 +306,62 @@ async function preloadClinicians() {
   if (!code) return;
 
   try {
-    const raw = await fetchSchedulingOverview(code, todayISO(), {});
+    const raw = await fetchSchedulingOverview(code, _selectedDate || todayISO(), {});
     const { clinicians } = extractBookedPatients(raw, { limit: null });
+    populateClinicianSelect(clinicians);
+  } catch (_) {}
+}
+
+// ── Day selector ──────────────────────────────────────────────────────────────
+// When the user picks a different day: reset any displayed/persisted results
+// (they're for the old day), re-fetch that day's appointment book to repopulate
+// the clinician dropdown, and drop a clinician selection that day doesn't have.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+async function onDateChange(e) {
+  const val = (e.target.value || '').trim();
+  const dateInput = container?.querySelector('#sweepDate');
+
+  // Guard: never fetch with a blank/invalid value — fall back to today.
+  if (!ISO_DATE_RE.test(val) || isNaN(new Date(val + 'T12:00:00').getTime())) {
+    _selectedDate = todayISO();
+    if (dateInput) dateInput.value = _selectedDate;
+  } else {
+    _selectedDate = val;
+  }
+
+  // The previously-shown results belong to the OLD day — clear them so they
+  // can't be mistaken for the newly-selected day's sweep.
+  clearLastRun();
+  _allPatients = [];
+  _sweepOffset = 0;
+  _cumulativeResults = [];
+  _selectedUuids = new Set();
+  _lastActionRows = [];
+  _sweepMeta = null;
+  const runArea = container?.querySelector('.sweep-run-area');
+  if (runArea) runArea.innerHTML = '';
+
+  // Re-fetch the chosen day's overview so the clinician dropdown reflects that
+  // day. Mirrors the init pre-populate pattern.
+  let code = null;
+  try {
+    const res = await window.PracticeCode.resolve();
+    code = res.code;
+  } catch (_) {
+    return;
+  }
+  if (!code) return;
+
+  try {
+    const raw = await fetchSchedulingOverview(code, _selectedDate, {});
+    const { clinicians } = extractBookedPatients(raw, { limit: null });
+    // If the previously-selected clinician isn't booked on the new day, reset to
+    // "All clinicians" so the user isn't filtering on a name with no clinic.
+    if (_selectedClinician && !clinicians.includes(_selectedClinician)) {
+      _selectedClinician = '';
+    }
     populateClinicianSelect(clinicians);
   } catch (_) {}
 }
@@ -305,7 +374,7 @@ async function runSweep(apiBase, hiddenRules) {
   const code = apiBase.match(/^https:\/\/([^.]+)\./)?.[1] ?? '';
   let raw;
   try {
-    raw = await fetchSchedulingOverview(code, todayISO(), { bypassCache: true });
+    raw = await fetchSchedulingOverview(code, _selectedDate || todayISO(), { bypassCache: true });
   } catch (e) {
     renderError(`Could not fetch the appointment book: ${esc(e.message)}`);
     return;
@@ -347,7 +416,7 @@ async function runSweep(apiBase, hiddenRules) {
   _sweepApiBase = apiBase;
   // ISO string, not a Date: chrome.storage.local serialises Date objects to {},
   // which would break the printable handout (it reads runAt back from storage).
-  _sweepMeta = { missingUuidCount, runAt: new Date().toISOString() };
+  _sweepMeta = { missingUuidCount, runAt: new Date().toISOString(), clinicDate: _selectedDate };
 
   await runNextBatch();
 }
@@ -714,6 +783,7 @@ async function onPrintHandout() {
   if (!_lastActionRows.length) return;
   const model = buildHandout(_lastActionRows, {
     runAt: _sweepMeta?.runAt || new Date().toISOString(),
+    clinicDate: _sweepMeta?.clinicDate || _selectedDate,
     clinician: _selectedClinician || null,
     suiteVersion: chrome.runtime.getManifest().version,
   });
@@ -739,6 +809,7 @@ async function onGenerateBatch() {
 
   // Annotate with meta for the renderer
   batchPack.runAt = _sweepMeta?.runAt || new Date().toISOString();
+  batchPack.clinicDate = _sweepMeta?.clinicDate || _selectedDate;
   batchPack.clinician = _selectedClinician || null;
   batchPack.suiteVersion = chrome.runtime.getManifest().version;
 
@@ -802,6 +873,7 @@ function renderResumeCard(stored) {
   const runAtTs = typeof stored.runAt === 'string' ? new Date(stored.runAt).getTime() : stored.runAt;
   const timeStr = fmtTs(stored.runAt);
   const clinLabel = stored.clinician || 'All clinicians';
+  const dayLabel = stored.clinicDate ? fmtClinicDate(stored.clinicDate) : '';
 
   const deserialisedResults = deserialiseResults(stored.results || []);
   const { actionRows } = summariseSweep(deserialisedResults);
@@ -811,7 +883,7 @@ function renderResumeCard(stored) {
   runArea.innerHTML = `
     <div class="sweep-resume-card" id="sweepResumeCard">
       <div class="sweep-resume-line">
-        Last sweep ${esc(timeStr)} · ${esc(clinLabel)} · <strong>${actionCount} action-needed</strong> · ${selectedCount} selected
+        Last sweep ${esc(timeStr)}${dayLabel ? ` · ${esc(dayLabel)}` : ''} · ${esc(clinLabel)} · <strong>${actionCount} action-needed</strong> · ${selectedCount} selected
       </div>
       <div class="sweep-resume-actions">
         <button class="sweep-continue-btn" type="button" id="sweepResumeBtn">Resume</button>
@@ -837,9 +909,17 @@ function onResumeClick(stored) {
   _allPatients = []; // can't restore full list — Continue is unavailable after resume
   _sweepMeta = {
     runAt: stored.runAt,
+    clinicDate: stored.clinicDate || null,
     missingUuidCount: stored.missingUuidCount ?? 0,
   };
   _selectedClinician = stored.clinician || '';
+  // Restore the swept day so the date input, fetches and printed handouts all
+  // reflect the resumed run rather than today.
+  if (stored.clinicDate) {
+    _selectedDate = stored.clinicDate;
+    const dateInput = container?.querySelector('#sweepDate');
+    if (dateInput) dateInput.value = _selectedDate;
+  }
 
   // Restore selection
   _selectedUuids = new Set(Array.isArray(stored.selectedUuids) ? stored.selectedUuids : []);
@@ -864,6 +944,7 @@ export async function init(el) {
   container = el;
   _abortFlag = false;
   _running = false;
+  _selectedDate = todayISO();
   _allPatients = [];
   _sweepOffset = 0;
   _cumulativeResults = [];
@@ -874,7 +955,7 @@ export async function init(el) {
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Checks today's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Use the dropdown to sweep one clinician's list.
+          Checks the selected day's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Pick a day and (optionally) one clinician.
         </div>
         <div class="sweep-disclaimer-top">
           <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. No alert &#8800; monitoring complete &mdash; results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.
@@ -883,6 +964,9 @@ export async function init(el) {
 
       <div class="sweep-controls">
         <button class="sweep-run-btn" type="button">Run sweep</button>
+        <label class="sweep-ctl-label">Day
+          <input type="date" id="sweepDate" value="${esc(_selectedDate)}">
+        </label>
         <label class="sweep-clin-label">for
           <select id="sweepClinician"><option value="">All clinicians</option></select>
         </label>
@@ -898,6 +982,7 @@ export async function init(el) {
   container.querySelector('#sweepClinician')?.addEventListener('change', (e) => {
     _selectedClinician = e.target.value || '';
   });
+  container.querySelector('#sweepDate')?.addEventListener('change', onDateChange);
 
   // Invalidate merged rules cache when rules change (mirrors sentinel.js)
   _storageListener = (changes, area) => {

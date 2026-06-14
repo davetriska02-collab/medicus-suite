@@ -418,6 +418,28 @@
 .sweep-clin-label select:focus-visible {
   border-color: var(--accent);
 }
+/* Day selector — mirrors the clinician filter so it lines up alongside it */
+.sweep-ctl-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-left: 8px;
+}
+.sweep-ctl-label input[type='date'] {
+  font: inherit;
+  margin-left: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-mid);
+  color: var(--text-2);
+  transition: border-color var(--fast) var(--ease);
+}
+.sweep-ctl-label input[type='date']:focus-visible {
+  border-color: var(--accent);
+}
 /* Meta line: clinician (left) + open record link (right) */
 .sweep-row-meta {
   display: flex;

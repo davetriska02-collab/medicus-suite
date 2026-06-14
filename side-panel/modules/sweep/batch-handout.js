@@ -112,6 +112,11 @@ async function render() {
 
   const whoFor = model.clinician ? `${model.clinician}'s patients` : 'All clinicians';
   const runAt = model.runAt || model.generatedAt;
+  // The clinic day this batch was swept for — distinct from when it was
+  // generated, so a batch prepared for a future clinic states which day.
+  const clinicDay = model.clinicDate
+    ? fmtDate(/^\d{4}-\d{2}-\d{2}$/.test(model.clinicDate) ? model.clinicDate + 'T12:00:00' : model.clinicDate)
+    : fmtDate(runAt);
 
   // Build consolidated SMS block (all patients with an SMS, one entry each,
   // identified by name + time — no NHS numbers here since the appointment book
@@ -138,7 +143,7 @@ async function render() {
       : '';
 
   content.innerHTML = `
-    <h1>Batch output &mdash; ${esc(fmtDate(runAt))}</h1>
+    <h1>Pre-clinic sweep for ${esc(clinicDay)} &mdash; batch output</h1>
     <div class="meta">${esc(whoFor)} &middot; ${model.patients.length} patient${model.patients.length === 1 ? '' : 's'} &middot; generated ${esc(new Date(runAt).toLocaleString('en-GB'))} &middot; Medicus Suite v${esc(model.suiteVersion || '')}</div>
     <div class="confidential">Confidential &mdash; patient identifiable. Do not leave unattended. Destroy after use.</div>
     ${patientCardsHtml}
