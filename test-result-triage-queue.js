@@ -224,6 +224,16 @@ if (selectResultChips) {
     rrr && rrr.vars.rule === 'Bowel screening: no response',
     'resultReviewRule carries the rule label in {rule}'
   );
+  // A text-review raises `level` to amber with abnormalCount=0 — the clinical abnormal
+  // chip must NOT render (it would show a meaningless "0 abnormal" beside the review chip).
+  check(
+    !reviewLabelledChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'labelled text review (abnormalCount=0) → NO stray "0 abnormal" chip'
+  );
+  check(
+    !reviewLabelledChips.some((c) => c.id === 'queue.resultRuleAbnormal'),
+    'labelled text review (abnormalCount=0) → NO stray resultRuleAbnormal chip'
+  );
 
   // text-review with the GENERIC "Needs review" label (e.g. a culture) → generic chip
   const reviewGeneric = {
@@ -239,6 +249,83 @@ if (selectResultChips) {
   check(
     !reviewGenericChips.some((c) => c.id === 'queue.resultReviewRule'),
     'generic "Needs review" text review → NOT the attributable chip'
+  );
+  check(
+    !reviewGenericChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'generic text review (abnormalCount=0) → NO stray "0 abnormal" chip'
+  );
+
+  // amber WITH a real numeric abnormal AND a text review → BOTH chips (abnormal not suppressed)
+  const abnormalPlusReview = {
+    level: 'amber', urgentCount: 0, abnormalCount: 2,
+    top: { name: 'ALT', value: 120, unit: 'U/L', ruleLabel: null },
+    misprioritised: false, unmatched: false,
+    reviewCount: 1, reviewTop: { name: 'MSU', label: 'Needs review' },
+  };
+  const abnormalPlusReviewChips = selectResultChips(abnormalPlusReview);
+  check(
+    abnormalPlusReviewChips.some((c) => c.id === 'queue.resultAbnormal'),
+    'amber with real abnormal (count>0) + review → abnormal chip STILL renders'
+  );
+  check(
+    abnormalPlusReviewChips.find((c) => c.id === 'queue.resultAbnormal')?.vars.count === 2,
+    'amber abnormal chip carries the real count (2), not 0'
+  );
+  check(
+    abnormalPlusReviewChips.some((c) => c.id === 'queue.resultReview'),
+    'amber with real abnormal + review → review chip also renders'
+  );
+
+  // text-noGrowth with a CUSTOM normal label (e.g. "Negative" H. pylori) → attributable
+  // chip carrying that label, NOT the generic "No growth". This is the reported bug: the
+  // chip must read the matched rule's normalLabel (sev.noGrowthTop.label), not the
+  // hard-coded generic system-chip text.
+  const noGrowthLabelled = {
+    level: 'none', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    noGrowthCount: 1, noGrowthTop: { name: 'Helicobacter pylori stool antigen', label: 'Negative' },
+  };
+  const noGrowthLabelledChips = selectResultChips(noGrowthLabelled);
+  check(
+    noGrowthLabelledChips.some((c) => c.id === 'queue.resultNoGrowthRule'),
+    'custom normal label → queue.resultNoGrowthRule'
+  );
+  check(
+    !noGrowthLabelledChips.some((c) => c.id === 'queue.resultNoGrowth'),
+    'custom normal label → NOT the generic resultNoGrowth'
+  );
+  const ngr = noGrowthLabelledChips.find((c) => c.id === 'queue.resultNoGrowthRule');
+  check(
+    ngr && ngr.vars.label === 'Negative',
+    'resultNoGrowthRule carries the rule normalLabel in {label}'
+  );
+
+  // text-noGrowth with the DEFAULT "No growth" label (e.g. an MSU culture) → generic chip
+  const noGrowthGeneric = {
+    level: 'none', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    noGrowthCount: 2, noGrowthTop: { name: 'MSU', label: 'No growth' },
+  };
+  const noGrowthGenericChips = selectResultChips(noGrowthGeneric);
+  check(
+    noGrowthGenericChips.some((c) => c.id === 'queue.resultNoGrowth'),
+    'default "No growth" normal label → generic queue.resultNoGrowth (cultures unchanged)'
+  );
+  check(
+    !noGrowthGenericChips.some((c) => c.id === 'queue.resultNoGrowthRule'),
+    'default "No growth" normal label → NOT the attributable chip'
+  );
+
+  // text-noGrowth with NO noGrowthTop (defensive) → falls back to the generic chip
+  const noGrowthNoTop = {
+    level: 'none', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    noGrowthCount: 1,
+  };
+  const noGrowthNoTopChips = selectResultChips(noGrowthNoTop);
+  check(
+    noGrowthNoTopChips.some((c) => c.id === 'queue.resultNoGrowth'),
+    'noGrowth with no noGrowthTop → generic queue.resultNoGrowth (defensive fallback)'
   );
 }
 

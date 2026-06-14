@@ -912,6 +912,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
     { id: 'queue.resultReviewRule',     page: 'Queue', desc: 'A text rule flagged a result for review and named it (e.g. bowel screening non-responder) — shows the rule label', vars: ['{rule}'] },
     { id: 'queue.resultNoGrowth',       page: 'Queue', desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip', vars: ['{count}'] },
+    { id: 'queue.resultNoGrowthRule',   page: 'Queue', desc: 'A text rule with a custom normal label (e.g. Negative, Not detected) matched a normal phrase — shows that rule\'s normal label', vars: ['{label}'] },
     // Record
     { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
     { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },

@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.8] — 2026-06-14
+
+### Fix: no stray "0 abnormal" chip on text-review queue results
+
+- **Queue result-triage chips** — a result flagged for review by a text rule (e.g. an
+  H. pylori positive, a microbiology culture needing review) raises the row severity to
+  amber while its numeric `abnormalCount` is still 0. `selectResultChips`
+  (`content-scripts/triage-lens/content.js`) was then emitting the generic clinical
+  `queue.resultAbnormal` chip with `{count}` = 0, rendering a meaningless **"0 abnormal"**
+  beside the review chip. The amber clinical-chip emission is now guarded on
+  `abnormalCount > 0`, so a pure text-review shows only its review chip; a result with a
+  genuine numeric abnormal *and* a review still shows both. Regression tests added.
+
+## [v3.77.7] — 2026-06-14
+
+### Fix: custom result rules now show their own "normal" label on queue chips
+
+- **Queue result-triage chips** — a custom text/culture result rule with a custom
+  `normalLabel` (e.g. *Negative*, *Not detected*) now renders that label on the calm
+  queue chip instead of the hard-coded generic *No growth*. The noGrowth path in
+  `selectResultChips` (`content-scripts/triage-lens/content.js`) was emitting the
+  generic `queue.resultNoGrowth` system chip and ignoring the matched rule's
+  `normalLabel` (already carried on `sev.noGrowthTop.label`) — so a rule's configured
+  normal label never reached the chip. It now mirrors the review path: a custom normal
+  label routes to a new attributable chip `queue.resultNoGrowthRule` (`{label}`), while
+  the default *No growth* (cultures such as MSU) keeps the generic chip unchanged.
+- New customisable/disable-able system chip `queue.resultNoGrowthRule` (registered in
+  the Result-rules settings system-chip list). `defaults.json` migration `version`
+  bumped 12 → 13 so the new chip reaches existing installs.
+
 ## [v3.77.6] — 2026-06-14
 
 ### docs: VISION.md positioning statement
