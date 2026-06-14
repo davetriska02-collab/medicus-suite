@@ -141,6 +141,93 @@ if (content && options) {
   }
 }
 
+// ── Result-rule abnormalText backfill migration (lock-step + behaviour) ───────
+// The resultRules migration is append-only by id, so a builtin the user already holds
+// never receives newly-shipped abnormalText positive flags. backfillBuiltinAbnormalText
+// (added v3.77.10) patches those onto held builtins. It is purely additive (abnormalText
+// only ever ADDS a review). This pins: the two copies are in lock-step; the listed ids are
+// shipped builtins carrying abnormalText; and the backfill adds-but-never-clobbers.
+function extractBackfill(file) {
+  const src = fs.readFileSync(file, 'utf8');
+  const listMatch = src.match(/const RESULT_RULES_GAINED_ABNORMALTEXT = \[[\s\S]*?\];/);
+  const fnMatch = src.match(
+    /const backfillBuiltinAbnormalText = \(resultRules, shippedResultRules\) => \{[\s\S]*?\n {2}\};/
+  );
+  if (!listMatch || !fnMatch) return null;
+  const sandbox = {};
+  vm.runInNewContext(
+    listMatch[0] +
+      '\n' +
+      fnMatch[0] +
+      '\nthis.ids = RESULT_RULES_GAINED_ABNORMALTEXT;\nthis.backfill = backfillBuiltinAbnormalText;',
+    sandbox
+  );
+  return { ids: sandbox.ids, backfill: sandbox.backfill };
+}
+
+const contentBF = extractBackfill(contentPath);
+const optionsBF = extractBackfill(optionsPath);
+check(!!contentBF, 'backfillBuiltinAbnormalText + id list extracted from content.js');
+check(!!optionsBF, 'backfillBuiltinAbnormalText + id list extracted from options.js');
+
+if (contentBF && optionsBF) {
+  check(
+    JSON.stringify(contentBF.ids) === JSON.stringify(optionsBF.ids),
+    'content.js and options.js RESULT_RULES_GAINED_ABNORMALTEXT are identical (lock-step)'
+  );
+
+  const shippedRR = require(path.join(__dirname, 'defaults.json')).resultRules || [];
+
+  // Every backfill id must be a shipped builtin that actually carries a non-empty abnormalText.
+  for (const id of contentBF.ids) {
+    const r = shippedRR.find(x => x.id === id);
+    check(
+      r && r.builtin === true && Array.isArray(r.abnormalText) && r.abnormalText.length > 0,
+      `backfill id "${id}" is a shipped builtin with a non-empty abnormalText`
+    );
+  }
+
+  // Behaviour: a held OLD builtin lacking abnormalText receives the shipped set.
+  {
+    const held = [{ id: 'msu-culture', builtin: true, kind: 'text', normalText: ['no growth'] }];
+    contentBF.backfill(held, shippedRR);
+    const shippedMsu = shippedRR.find(r => r.id === 'msu-culture');
+    check(
+      Array.isArray(held[0].abnormalText) &&
+        JSON.stringify(held[0].abnormalText) === JSON.stringify(shippedMsu.abnormalText),
+      'backfill: a held old builtin without abnormalText receives the shipped abnormalText'
+    );
+  }
+  // A held builtin with the user's OWN abnormalText is NOT clobbered.
+  {
+    const held = [
+      { id: 'msu-culture', builtin: true, kind: 'text', normalText: ['no growth'], abnormalText: ['my own flag'] }
+    ];
+    contentBF.backfill(held, shippedRR);
+    check(
+      JSON.stringify(held[0].abnormalText) === JSON.stringify(['my own flag']),
+      'backfill: a held rule with an existing abnormalText is left untouched'
+    );
+  }
+  // A non-builtin rule sharing the id is NOT touched (only builtins are backfilled).
+  {
+    const held = [{ id: 'msu-culture', builtin: false, kind: 'text', normalText: ['no growth'] }];
+    contentBF.backfill(held, shippedRR);
+    check(held[0].abnormalText === undefined, 'backfill: a non-builtin sharing the id is not touched');
+  }
+  // Empty / null held set is a safe no-op (no throw).
+  {
+    let threw = false;
+    try {
+      contentBF.backfill([], shippedRR);
+      contentBF.backfill(null, shippedRR);
+    } catch (e) {
+      threw = true;
+    }
+    check(!threw, 'backfill: empty/null held set is a safe no-op');
+  }
+}
+
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
 if (failed > 0) {

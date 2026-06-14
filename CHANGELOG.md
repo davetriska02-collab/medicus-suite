@@ -2,6 +2,75 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.11] — 2026-06-14
+
+### Result rules: word-boundary matching on the normalText (calm) path
+
+Implements the engine hardening assessed (and deferred) in v3.77.10, after CSO go-ahead —
+refined to the safe asymmetric design.
+
+- **`computeTextOutcome` (`engine/result-severity.js`)** — `normalText` (calm) phrases are
+  now matched word-boundary-aware (the proven `problemLabelMatches` pattern: `\b…\b` for
+  plain-alphanumeric phrases, substring fallback for punctuated ones). A short normal token
+  can no longer false-calm inside a larger word — `"normal"` no longer matches inside
+  `"abnormal"`, `"negative"` no longer matches inside `"seronegative"`. This only ever makes
+  calming *stricter* (→ more review), so it cannot hide a positive. Multi-word phrases such
+  as `"no growth"` are unaffected.
+- **Deliberate asymmetry:** `abnormalText` (the positive-flag path) is **left substring**,
+  not word-bounded. Word-bounding it would *weaken* it — `"candida"` would stop catching
+  `"candidaemia"` — so the flag path stays broad (every shipped term is already
+  collision-verified against negative text). Both paths therefore bias the same safe way:
+  toward review. Regression tests added (`test-result-severity.js`).
+
+## [v3.77.10] — 2026-06-14
+
+### The Keeper (CSO change-proposal): culture result-rule false-calm hardening
+
+Clinical-safety hardening of the result-triage text classifier, produced by The Keeper
+(scan → independent verify → conservative apply). Addresses a substring false-calm: the
+shipped `msu-culture` and `base-blood-culture` rules carried only `normalText` ("no growth"
+phrases), so a **positive** culture whose free-text also contained a "no growth" substring
+(e.g. a blood culture positive in one bottle — *"…; no growth in anaerobic bottle"*) was
+silently classified as a calm "no growth" result instead of flagged for review.
+
+- **`base-blood-culture` (Red)** and **`msu-culture` (Amber)** — added `abnormalText`
+  positive-flag sets (`engine` checks these FIRST and they override `normalText`). Every
+  term was independently collision-verified **not** to appear in realistic UK negative /
+  contaminant report text (e.g. "significant growth of" was dropped because negatives read
+  *"no significant growth of a pathogen"*; "organism grown"/"growth detected in" dropped
+  because negatives read *"No organism grown"* / *"No growth detected in either bottle"*).
+  Source corroboration: UKHSA SMI B 41 (urine) / B 37 (blood culture) reporting vocabulary
+  via PMC-indexed UK lab literature (the primary SMI PDFs were access-walled — logged as a
+  source gap). Purely additive: `abnormalText` only ever **adds** a review, never calms, so
+  `weakens_safety: false`.
+- **Migration reach** — the `resultRules` migration is append-only by id, so existing
+  installs holding the old builtins would never receive the new flags. Added
+  `backfillBuiltinAbnormalText` (content.js + options.js, lock-step) to backfill the shipped
+  `abnormalText` onto a held builtin that lacks one (add-but-never-clobber). `defaults.json`
+  migration `version` 13 → 14.
+- **Options edit-preservation fix** — `saveCurrentResultRule` rebuilt a text rule omitting
+  `abnormalText`, so editing any text rule silently stripped its positive flags (this also
+  affected the shipped bowel-screening rule). The value is now preserved across edits.
+- **Regression guards** — `test-result-severity.js` (positives → review, negatives &
+  contaminants → still calm, for both shipped rules) and `test-chip-label-migration.js`
+  (backfill lock-step + add-but-never-clobber).
+- **Assessed but NOT applied:** hardening `computeTextOutcome` to word-boundary matching.
+  It only fixes the single-token class ("normal" ⊂ "abnormal") — which no shipped rule has —
+  and not the multi-word phrase-in-mixed-report class (the actual hazard, fixed above by the
+  positive flags). Left as a documented recommendation for separate CSO decision.
+
+## [v3.77.9] — 2026-06-14
+
+### Fix: culture-only result-chip configs now actually fetch and show
+
+- **Queue result-triage fetch gate** — `computeQueueRowResult`'s `anyEnabled` short-circuit
+  (`content-scripts/triage-lens/content.js`) only checked the six numeric/meta result chips
+  and omitted the four text-outcome chips (`queue.resultReview`, `queue.resultReviewRule`,
+  `queue.resultNoGrowth`, `queue.resultNoGrowthRule`). A user who disabled the numeric chips
+  but kept the culture/normal chips enabled therefore fetched nothing per row and saw no
+  chips at all. The gate now includes all four text-outcome chips. No change in the default
+  (all-enabled) configuration. Regression guard added (`test-result-triage-queue.js` Layer 4).
+
 ## [v3.77.8] — 2026-06-14
 
 ### Fix: no stray "0 abnormal" chip on text-review queue results
