@@ -506,5 +506,22 @@ check(/_firstResultPassPending/.test(src), 'leading-edge first fetch pass flag (
 check(/_isOwnChipMutation/.test(src), 'MutationObserver self-trigger suppression (_isOwnChipMutation) present');
 
 // ============================================================
+// Layer 4 — per-row fetch gate honours the text-outcome chips
+// ============================================================
+// computeQueueRowResult skips the per-row fetch when no result chip is enabled. The gate
+// must include the culture/text chips (review + normal/noGrowth and their attributable
+// variants) — otherwise a config that disables the numeric chips but keeps the culture
+// chips fetches nothing and shows nothing.
+console.log('Layer 4: per-row fetch gate (anyEnabled) honours text-outcome chips');
+const gateMatch = src.match(/const anyEnabled = \[[\s\S]*?\]\s*\n?\s*\.some\(c => c && c\.enabled !== false\);/);
+check(!!gateMatch, 'computeQueueRowResult anyEnabled gate found');
+if (gateMatch) {
+  check(/reviewCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultReview chip');
+  check(/reviewRuleCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultReviewRule chip');
+  check(/noGrowthCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultNoGrowth chip');
+  check(/noGrowthRuleCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultNoGrowthRule chip');
+}
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

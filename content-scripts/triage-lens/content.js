@@ -2503,8 +2503,18 @@
     const ruleAbnormalCfg = findSystemChip('queue.resultRuleAbnormal');
     const misPriCfg  = findSystemChip('queue.resultMisprioritised');
     const unmatchCfg = findSystemChip('queue.resultUnmatched');
-    const anyEnabled = [urgentCfg, abnormalCfg, ruleUrgentCfg, ruleAbnormalCfg, misPriCfg, unmatchCfg]
-      .some(c => c && c.enabled !== false);
+    // Text-outcome chips (culture "needs review" + normal/noGrowth, plus their
+    // attributable {rule}/{label} variants) must ALSO gate the per-row fetch. Omitting
+    // them meant a config that disables the numeric chips but keeps the culture chips
+    // enabled fetched nothing and showed nothing (the text chips never got the chance).
+    const reviewCfg = findSystemChip('queue.resultReview');
+    const reviewRuleCfg = findSystemChip('queue.resultReviewRule');
+    const noGrowthCfg = findSystemChip('queue.resultNoGrowth');
+    const noGrowthRuleCfg = findSystemChip('queue.resultNoGrowthRule');
+    const anyEnabled = [
+      urgentCfg, abnormalCfg, ruleUrgentCfg, ruleAbnormalCfg, misPriCfg, unmatchCfg,
+      reviewCfg, reviewRuleCfg, noGrowthCfg, noGrowthRuleCfg
+    ].some(c => c && c.enabled !== false);
     if (!anyEnabled) return null;
     const API  = window.SentinelApiClient;
     const NORM = window.SentinelNormalisers;

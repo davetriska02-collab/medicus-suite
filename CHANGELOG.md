@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.9] — 2026-06-14
+
+### Fix: culture-only result-chip configs now actually fetch and show
+
+- **Queue result-triage fetch gate** — `computeQueueRowResult`'s `anyEnabled` short-circuit
+  (`content-scripts/triage-lens/content.js`) only checked the six numeric/meta result chips
+  and omitted the four text-outcome chips (`queue.resultReview`, `queue.resultReviewRule`,
+  `queue.resultNoGrowth`, `queue.resultNoGrowthRule`). A user who disabled the numeric chips
+  but kept the culture/normal chips enabled therefore fetched nothing per row and saw no
+  chips at all. The gate now includes all four text-outcome chips. No change in the default
+  (all-enabled) configuration. Regression guard added (`test-result-triage-queue.js` Layer 4).
+
 ## [v3.77.8] — 2026-06-14
 
 ### Fix: no stray "0 abnormal" chip on text-review queue results
