@@ -716,6 +716,10 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (file.size > 10 * 1024 * 1024) {
+      setBackupStatus('File is too large (max 10 MB). Import cancelled.', true);
+      return;
+    }
     try {
       const text = await file.text();
       const raw = JSON.parse(text);
