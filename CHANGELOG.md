@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.6] — 2026-06-14
+
+### docs: VISION.md positioning statement
+
+- Added `docs/VISION.md` — a grounded "first-of-type augmentation layer" positioning
+  statement: why the suite exists, the read-only on-top-of-Medicus delivery model, a
+  Medicus-native vs Suite capability table, and an honest statement of the bounded
+  "first-of-type" claim (white-space capabilities plus the documented gaps — recall
+  loop, coded-refset precision, compliance stack). Every capability claim is traceable
+  to shipped code; no impact metrics are asserted. Cross-links `INTENDED-PURPOSE.md`,
+  `feature-list.md`, and the Gauntlet benchmark. Docs-only; no behaviour change.
+
 ## [v3.77.5] — 2026-06-14
 
 ### Security audit follow-up: import hardening parity
