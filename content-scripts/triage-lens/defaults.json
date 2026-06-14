@@ -4144,7 +4144,7 @@
     {
       "id": "base-low-calcium",
       "kind": "threshold",
-      "enabled": false,
+      "enabled": true,
       "builtin": true,
       "label": "Low adjusted calcium — hypocalcaemia",
       "analyte": {
@@ -4159,7 +4159,7 @@
     {
       "id": "base-low-magnesium",
       "kind": "threshold",
-      "enabled": false,
+      "enabled": true,
       "builtin": true,
       "label": "Low magnesium — hypomagnesaemia",
       "analyte": {
@@ -4174,7 +4174,7 @@
     {
       "id": "base-high-tsh",
       "kind": "threshold",
-      "enabled": false,
+      "enabled": true,
       "builtin": true,
       "label": "High TSH — possible hypothyroidism",
       "analyte": {
@@ -4193,7 +4193,7 @@
     {
       "id": "base-low-tsh",
       "kind": "threshold",
-      "enabled": false,
+      "enabled": true,
       "builtin": true,
       "label": "Suppressed TSH — possible thyrotoxicosis",
       "analyte": {

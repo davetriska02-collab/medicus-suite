@@ -1244,27 +1244,28 @@ console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---')
   assert(gramNeg.level === 'amber' && gramNeg.reviewCount === 1, 'blood culture "Gram negative ... isolated" → still amber review');
 }
 
-// ── The Keeper additions: hypocalcaemia / hypomagnesaemia / TSH (disabled) ────
-// These four ship disabled-by-default (Unreviewed) pending CSO source verification.
-// Guard: they exist, are inert as shipped, and fire/exclude/suppress correctly once enabled.
-console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH ship disabled, behave when enabled ---');
+// ── The Keeper additions: hypocalcaemia / hypomagnesaemia / TSH (enabled) ─────
+// These four were CSO-signed-off and enabled. Guard: they are enabled, fire as
+// shipped, and exclude / suppress correctly.
+console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/suppress ---');
 {
   const shipped = require('./defaults.json').resultRules;
   const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
   const keeperIds = ['base-low-calcium', 'base-low-magnesium', 'base-high-tsh', 'base-low-tsh'];
 
   keeperIds.forEach(id => {
-    assert(byId[id] && byId[id].enabled === false,
-      `${id} ships disabled-by-default (Unreviewed, awaiting CSO sign-off)`);
+    assert(byId[id] && byId[id].enabled === true,
+      `${id} is enabled (CSO signed off; live in defaults)`);
   });
 
-  // As shipped (disabled), they must NOT fire even on a critical value.
+  // As shipped (now enabled), a critical value fires.
   const asShipped = (name, value) =>
     evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]),
       { resultRules: shipped });
-  assert(asShipped('Adjusted calcium', 1.5).level === 'none', 'disabled low-Ca rule does not fire as shipped');
-  assert(asShipped('Serum magnesium', 0.3).level === 'none', 'disabled low-Mg rule does not fire as shipped');
-  assert(asShipped('TSH', 50).level === 'none', 'disabled high-TSH rule does not fire as shipped');
+  assert(asShipped('Adjusted calcium', 1.5).level === 'red', 'enabled low-Ca rule fires red as shipped');
+  assert(asShipped('Serum magnesium', 0.3).level === 'red', 'enabled low-Mg rule fires red as shipped');
+  assert(asShipped('TSH', 50).level === 'red', 'enabled high-TSH rule fires red as shipped');
+  assert(asShipped('TSH', 0.005).level === 'red', 'enabled suppressed-TSH rule fires red as shipped');
 
   // Force-enable a single rule and grade against it (+ optional problem list).
   const withRule = (id, name, value, problems) =>

@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.2] — 2026-06-14
+
+### Enable the four Keeper result rules (CSO sign-off)
+
+The hypocalcaemia, hypomagnesaemia, high-TSH and suppressed-TSH rules added
+disabled in v3.77.0 are now **enabled** following Clinical-Safety-Officer
+sign-off. `suppressIfProblem` on the TSH rules is effective in the live queue:
+the content script lazily fetches the patient problem list whenever a
+suppressing rule's analyte is present and passes it to the severity engine
+(`content.js` ~L2515-2540), so a coded hypothyroid / thyrotoxicosis patient is
+suppressed rather than re-flagged. Residual TSH false-positives are bounded to
+patients on levothyroxine without a coded thyroid diagnosis, and to pregnancy;
+each rule remains individually toggleable per practice. Guard test updated to
+assert the enabled state and live firing.
+
 ## [v3.77.1] — 2026-06-14
 
 ### Polish: Result rules settings page (design-crit pass)
