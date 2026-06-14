@@ -602,6 +602,7 @@ getEl('crImportFile')?.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   e.target.value = '';
+  if (file.size > 10 * 1024 * 1024) { alert('File is too large (max 10 MB). Import cancelled.'); return; }
   try {
     const text = await file.text();
     const raw = JSON.parse(text);
