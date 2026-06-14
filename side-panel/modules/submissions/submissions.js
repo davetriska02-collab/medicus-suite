@@ -7,6 +7,7 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
+import { DEFAULT_SUB_THRESHOLDS, getRagLevel } from './submissions-core.js';
 
 // ── Task types ────────────────────────────────────────────────────────────────
 
@@ -70,10 +71,8 @@ const TASK_TYPES = [
 
 const DEFAULTS = { practiceCode: '' };
 
-const DEFAULT_THRESHOLDS = {
-  medical: { amber: 30, red: 60, enabled: false },
-  admin: { amber: 20, red: 40, enabled: false },
-};
+// DEFAULT_THRESHOLDS + getRagLevel live in submissions-core.js (shared with panel.js).
+const DEFAULT_THRESHOLDS = DEFAULT_SUB_THRESHOLDS;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -96,14 +95,6 @@ let pollInterval = null;
 let _lastMetricItems = null;
 let _inFlight = false;
 let _storageListener = null;
-
-function getRagLevel(key, value, thresholds) {
-  const t = thresholds[key];
-  if (!t || !t.enabled) return null;
-  if (value >= (t.red || Infinity)) return 'red';
-  if (value >= (t.amber || Infinity)) return 'amber';
-  return null;
-}
 
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
