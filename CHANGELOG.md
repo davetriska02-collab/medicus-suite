@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.84.1] — 2026-06-14
+
+### Repo-audit follow-up: testable logic cores + RAG single-source-of-truth + regenerated feature list
+
+Acting on the principal-engineer repo audit (HIGH finding: side-panel modules had
+logic branches reachable only through the DOM, so form-validation and threshold
+edge cases were untested). Pure-logic cores extracted from two of the largest
+modules, with no behaviour change. Feature list regenerated to v3.84.1.
+
+- **`side-panel/modules/capacity/capacity-core.js`** — extracted `minimumForDate`
+  (per-weekday minimum with legacy `minimumPerDay` fallback), `defaultMinimumByDay`,
+  `presetSummary`, and a new pure `validatePreset` (replacing the inline save-path
+  validation in `capacity.js`). 23 assertions in `test-capacity-core.js`, including
+  the "explicit 0 on a weekday is honoured, not treated as missing" edge case.
+- **`side-panel/modules/submissions/submissions-core.js`** — extracted the RAG
+  (red/amber/green) threshold logic as the **single source of truth** for both the
+  Submissions charts and the global `#subRagStrip` in `panel.js`. The two had
+  duplicate inline copies (`getRagLevel` / `_subRagLevel`) that could silently
+  drift — a missed amber/red is a demand-management failure. Both now import
+  `ragLevel` / `getRagLevel` / `DEFAULT_SUB_THRESHOLDS` from the core. 18
+  assertions in `test-submissions-core.js`.
+- **`SECURITY.md`** — added a "Backup data minimisation" section documenting the
+  config-only export policy, the two enforced PHI exclusions (`referrals.discovery`,
+  `sentinel.extractionBaseline`), and the convention for new IO modules.
+- **`docs/feature-list.md`** — regenerated to v3.84.1, reflecting all changes since
+  v3.77.3: investigation result rules (v3.76–3.77), glossary tooltips (v3.79), clinical
+  corrections (v3.80), whole-suite Keeper sweep (v3.81), CSO 999 promotions (v3.81.1),
+  central practice attestation (v3.82), Sweep day-picker (v3.83) and multi-clinician
+  filter (v3.84).
+
+No clinical-rule or `defaults.json` changes. Pure refactor + tests + docs; all
+existing tests pass.
+
 ## [v3.84.0] — 2026-06-14
 
 ### Pre-clinic Sweep — select several clinicians
