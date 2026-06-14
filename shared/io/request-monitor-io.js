@@ -31,11 +31,35 @@
   async function requestMonitorImport(data) {
     if (!data || typeof data !== 'object') return;
     const toSet = {};
-    if (data.enabled       !== undefined) toSet['suite.requestMonitor.enabled']       = data.enabled;
-    if (data.assigneeId    !== undefined) toSet['suite.requestMonitor.assigneeId']    = data.assigneeId;
-    if (data.pollSeconds   !== undefined) toSet['suite.requestMonitor.pollSeconds']   = data.pollSeconds;
-    if (data.notifyEnabled !== undefined) toSet['suite.requestMonitor.notifyEnabled'] = data.notifyEnabled;
-    if (data.notifySound   !== undefined) toSet['suite.requestMonitor.notifySound']   = data.notifySound;
+    // Validate types so a crafted/corrupt backup cannot write a NaN/Infinity/string
+    // pollSeconds (parity with submissions-io / triage-alert-io M2 hardening). The
+    // consumer already clamps via Math.max(MIN_POLL_SECONDS, …); this rejects the
+    // bad value at the import boundary rather than relying on runtime coercion.
+    if (data.enabled !== undefined) {
+      if (typeof data.enabled !== 'boolean') {
+        throw new Error(`requestMonitor.enabled must be a boolean (got ${JSON.stringify(data.enabled)}).`);
+      }
+      toSet['suite.requestMonitor.enabled'] = data.enabled;
+    }
+    if (data.assigneeId !== undefined) toSet['suite.requestMonitor.assigneeId'] = data.assigneeId;
+    if (data.pollSeconds !== undefined && data.pollSeconds !== null) {
+      if (!Number.isFinite(data.pollSeconds) || data.pollSeconds <= 0) {
+        throw new Error(`requestMonitor.pollSeconds must be a finite positive number (got ${JSON.stringify(data.pollSeconds)}).`);
+      }
+      toSet['suite.requestMonitor.pollSeconds'] = data.pollSeconds;
+    }
+    if (data.notifyEnabled !== undefined) {
+      if (typeof data.notifyEnabled !== 'boolean') {
+        throw new Error(`requestMonitor.notifyEnabled must be a boolean (got ${JSON.stringify(data.notifyEnabled)}).`);
+      }
+      toSet['suite.requestMonitor.notifyEnabled'] = data.notifyEnabled;
+    }
+    if (data.notifySound !== undefined) {
+      if (typeof data.notifySound !== 'boolean') {
+        throw new Error(`requestMonitor.notifySound must be a boolean (got ${JSON.stringify(data.notifySound)}).`);
+      }
+      toSet['suite.requestMonitor.notifySound'] = data.notifySound;
+    }
     if (Object.keys(toSet).length > 0) {
       await chrome.storage.local.set(toSet);
     }

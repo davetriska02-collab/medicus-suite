@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.5] — 2026-06-14
+
+### Security audit follow-up: import hardening parity
+
+Low-severity defense-in-depth fixes from the v3.77.4 red-team pass (no
+Critical/High/Medium found):
+
+- **`shared/io/request-monitor-io.js`** — validate types on import (parity with
+  `submissions-io` / `triage-alert-io` M2): reject a non-finite/non-positive
+  `pollSeconds` and non-boolean toggles at the import boundary rather than relying
+  on runtime `Math.max` coercion. New regression case `(k)` in
+  `test-import-hardening.js` (111 assertions pass).
+- **Backup import size cap** — apply the existing 10 MB guard (already on the
+  full-suite import) to the per-module import in `options/options.js`, the Sentinel
+  custom-rules import (`sentinel-options/options.js`), and the Triage Lens config
+  import (`content-scripts/triage-lens/options.js`), so an oversized JSON cannot
+  hang the settings tab.
+
 ## [v3.77.4] — 2026-06-14
 
 ### Add SECURITY.md vulnerability-reporting policy
