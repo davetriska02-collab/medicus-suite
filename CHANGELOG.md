@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.81.1] — 2026-06-14
+
+### Reception pathways — CSO 999-promotion pass
+
+Following the v3.81.0 CSO sign-off, the practice Clinical Safety Officer promoted five
+reception red flags from urgent-duty to **999** on clinical review (`rules/reception-pathways.json`,
+v1.3). No wording changed; only the escalation tier:
+
+- Suspected **SJS/TEN** — widespread blistering / mucosal involvement, unwell (rash).
+- **Sepsis with rigors** — fever with uncontrollable shivering (UTI pathway).
+- Possible **cauda equina** — weakness or numbness in both legs (back pain).
+- **Mastoiditis** — redness/swelling behind the ear (earache).
+- Suspected **acute angle-closure glaucoma** — red painful eye / halos with headache.
+
+Feverish-child under-3-months remains urgent-duty (CSO decision). No other tiers changed.
+
 ## [v3.81.0] — 2026-06-14
 
 ### Clinical rule currency — The Keeper sweep, CSO-signed-off
