@@ -66,6 +66,24 @@
     const resultText =
       typeof result.text === 'string' ? collapseWs(result.text.toLowerCase()) : '';
 
+    // normalText (calm) phrases are matched WORD-BOUNDARY-aware so a short normal token can't
+    // false-calm inside a larger word — the classic "normal" ⊂ "abnormal", or "negative" ⊂
+    // "seronegative". Plain alphanumeric phrases get \b…\b (the proven problemLabelMatches
+    // pattern); phrases with punctuation/symbols fall back to substring (they can't be
+    // \b-wrapped safely). This only ever makes calming STRICTER (→ more review), never hides a
+    // positive. abnormalText is DELIBERATELY left substring (see below): keeping the positive-
+    // flag path broad biases it toward flagging (e.g. "candida" still catches "candidaemia") —
+    // the safe direction — and every shipped abnormalText term is collision-verified against
+    // negative report text, so breadth there cannot false-flag a true negative.
+    const normalPhrasePresent = (text, phrase) => {
+      const p = collapseWs(String(phrase || '').toLowerCase().trim());
+      if (!p) return false;
+      if (/^[a-z0-9 ]+$/.test(p)) {
+        return new RegExp('\\b' + p.replace(/\s+/g, '\\s+') + '\\b').test(text);
+      }
+      return text.includes(p);
+    };
+
     let anyRuleApplied = false;
     let abnormalFound = false; // an abnormalText phrase positively matched → forced review
     let abnormalLabel = null;
@@ -129,7 +147,7 @@
       if (hasNormal) {
         const foundNormal = rule.normalText.some(
           phrase => typeof phrase === 'string' && phrase.length > 0 &&
-            resultText.includes(collapseWs(phrase.toLowerCase()))
+            normalPhrasePresent(resultText, phrase)
         );
         if (foundNormal) {
           normalFound = true;

@@ -1364,6 +1364,73 @@ console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rul
   }
 }
 
+// ── Word-boundary normalText matching (calm path tightened; flag path left broad) ─
+// normalText is matched word-boundary-aware so a short normal token cannot false-calm
+// inside a larger word ("normal" ⊂ "abnormal", "negative" ⊂ "seronegative"). abnormalText
+// is DELIBERATELY left substring, so the positive-flag path stays broad and still catches
+// inflections ("candida" ⊂ "candidaemia"). Both biases point the same safe way: toward review.
+console.log('\n--- word-boundary normalText: short token cannot false-calm inside a larger word ---');
+{
+  // normalText "normal" must NOT match inside "abnormal" → flagged for review, not calmed.
+  const rule = {
+    id: 'wb_normal', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'Normal',
+    analyte: { match: ['cytology'] }, normalText: ['normal'],
+  };
+  const abnormal = evaluateReportSeverity(
+    makeReport([{ name: 'Cervical cytology', value: NaN, urgent: false, isAbove: false, isBelow: false,
+      text: 'Result: abnormal — high-grade dyskaryosis. Refer colposcopy.' }]),
+    { resultRules: [rule] }
+  );
+  assert(abnormal.noGrowthCount === 0 && abnormal.reviewCount === 1,
+    'normalText "normal" does NOT calm "abnormal" (word-boundary) → review');
+  // A genuine whole-word "normal" is still calmed.
+  const genuine = evaluateReportSeverity(
+    makeReport([{ name: 'Cervical cytology', value: NaN, urgent: false, isAbove: false, isBelow: false,
+      text: 'Result: normal. Routine recall in 3 years.' }]),
+    { resultRules: [rule] }
+  );
+  assert(genuine.noGrowthCount === 1, 'normalText "normal" still calms a genuine whole-word "normal"');
+
+  // "negative" must NOT calm "seronegative".
+  const seroRule = {
+    id: 'wb_neg', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'Negative',
+    analyte: { match: ['serology'] }, normalText: ['negative'],
+  };
+  const sero = evaluateReportSeverity(
+    makeReport([{ name: 'Hepatitis B serology', value: NaN, urgent: false, isAbove: false, isBelow: false,
+      text: 'Patient is seronegative for surface antigen but core antibody positive.' }]),
+    { resultRules: [seroRule] }
+  );
+  assert(sero.noGrowthCount === 0, 'normalText "negative" does NOT calm "seronegative" (word-boundary)');
+
+  // Multi-word normal phrases are unaffected — "no growth" still calms.
+  const cultureRule = {
+    id: 'wb_growth', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'No growth',
+    analyte: { match: ['culture'] }, normalText: ['no growth'],
+  };
+  const noGrowth = evaluateReportSeverity(
+    makeReport([{ name: 'Wound culture', value: NaN, urgent: false, isAbove: false, isBelow: false,
+      text: 'No growth after 48 hours.' }]),
+    { resultRules: [cultureRule] }
+  );
+  assert(noGrowth.noGrowthCount === 1, 'multi-word normalText "no growth" still calms "No growth after 48 hours"');
+
+  // Asymmetry guard: abnormalText stays SUBSTRING, so "candida" still catches "candidaemia"
+  // even though that has no word boundary around "candida". (Word-boundary here would miss
+  // it AND the "no growth" substring would then false-calm — the exact failure we avoid.)
+  const bloodRule = {
+    id: 'wb_candida', enabled: true, kind: 'text', label: 'Blood culture — review', normalLabel: 'No growth',
+    analyte: { match: ['blood culture'] }, normalText: ['no growth'], abnormalText: ['candida'],
+  };
+  const candidaemia = evaluateReportSeverity(
+    makeReport([{ name: 'Blood culture', value: NaN, urgent: false, isAbove: false, isBelow: false,
+      text: 'Candidaemia confirmed on blood culture. No growth in anaerobic bottle.' }]),
+    { resultRules: [bloodRule] }
+  );
+  assert(candidaemia.reviewCount === 1 && candidaemia.noGrowthCount === 0,
+    'abnormalText "candida" still catches "candidaemia" (substring kept — deliberate asymmetry)');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

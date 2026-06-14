@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.11] — 2026-06-14
+
+### Result rules: word-boundary matching on the normalText (calm) path
+
+Implements the engine hardening assessed (and deferred) in v3.77.10, after CSO go-ahead —
+refined to the safe asymmetric design.
+
+- **`computeTextOutcome` (`engine/result-severity.js`)** — `normalText` (calm) phrases are
+  now matched word-boundary-aware (the proven `problemLabelMatches` pattern: `\b…\b` for
+  plain-alphanumeric phrases, substring fallback for punctuated ones). A short normal token
+  can no longer false-calm inside a larger word — `"normal"` no longer matches inside
+  `"abnormal"`, `"negative"` no longer matches inside `"seronegative"`. This only ever makes
+  calming *stricter* (→ more review), so it cannot hide a positive. Multi-word phrases such
+  as `"no growth"` are unaffected.
+- **Deliberate asymmetry:** `abnormalText` (the positive-flag path) is **left substring**,
+  not word-bounded. Word-bounding it would *weaken* it — `"candida"` would stop catching
+  `"candidaemia"` — so the flag path stays broad (every shipped term is already
+  collision-verified against negative text). Both paths therefore bias the same safe way:
+  toward review. Regression tests added (`test-result-severity.js`).
+
 ## [v3.77.10] — 2026-06-14
 
 ### The Keeper (CSO change-proposal): culture result-rule false-calm hardening
