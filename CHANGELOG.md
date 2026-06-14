@@ -2,6 +2,61 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.81.1] — 2026-06-14
+
+### Reception pathways — CSO 999-promotion pass
+
+Following the v3.81.0 CSO sign-off, the practice Clinical Safety Officer promoted five
+reception red flags from urgent-duty to **999** on clinical review (`rules/reception-pathways.json`,
+v1.3). No wording changed; only the escalation tier:
+
+- Suspected **SJS/TEN** — widespread blistering / mucosal involvement, unwell (rash).
+- **Sepsis with rigors** — fever with uncontrollable shivering (UTI pathway).
+- Possible **cauda equina** — weakness or numbness in both legs (back pain).
+- **Mastoiditis** — redness/swelling behind the ear (earache).
+- Suspected **acute angle-closure glaucoma** — red painful eye / halos with headache.
+
+Feverish-child under-3-months remains urgent-duty (CSO decision). No other tiers changed.
+
+## [v3.81.0] — 2026-06-14
+
+### Clinical rule currency — The Keeper sweep, CSO-signed-off
+
+A full six-domain Keeper sweep (report in `docs/keeper/KEEPER-whole-suite-2026-06-14.md`),
+applied after practice Clinical Safety Officer sign-off. All additive; no monitoring
+weakened. Findings were WebSearch-corroborated (WebFetch was blocked this run) and
+confirmed by the CSO before applying; the two highest-value items were verified directly
+against the repository.
+
+- **Medication-review instruments (`engine/stopp-start.js`, `engine/acb-scores.js`,
+  `visualiser-core.js`):**
+  - Synced the STOPP/START ACEi/ARB term lists up to parity with the rest of the suite —
+    added `trandolapril, fosinopril, quinapril, imidapril, cilazapril` (ACEi) and
+    `telmisartan, azilsartan, eprosartan` (ARB), which were silently unmatched.
+  - Added the missing UK beta-blockers `acebutolol, celiprolol, nadolol, oxprenolol` to the
+    PINCER high-risk-drug table so the beta-blocker-in-asthma hazard cannot silently miss
+    them; added `pitavastatin` to the statin term list.
+  - New live STOPP criterion `stopp-anticholinergic-elderly` (amber, age ≥65), reusing the
+    shared ACB table at score ≥2; fail-closed on unknown age. Added `amoxapine` (score 2)
+    to the ACB table.
+- **Medicines monitoring (`rules/drug-rules.json`):** added the brand `jayempi` (licensed UK
+  azathioprine oral suspension) to the azathioprine monitoring rule.
+- **Prescribing-safety alerts (`rules/alert-library.json`):** added a GLP-1/GIP
+  acute-pancreatitis awareness alert (MHRA Drug Safety Update — strengthened warnings,
+  including necrotising and fatal cases).
+- **QOF (`rules/qof-rules.json`):** added `HF003`/`HF006` as `enabled:false` (retired into
+  HF009) for year-on-year diff visibility. The new obesity (OB) register remains disabled
+  pending a separate CSO go-live decision.
+- **Vaccines (`rules/vaccine-rules.json`):** refreshed `specVersion` and source citations to
+  2026/27 (JCVI confirmed no cohort changes) — metadata only, eligibility unchanged.
+- **Reception pathways (`rules/reception-pathways.json`):** CSO-signed-off (DRAFT status
+  lifted to v1.2); feverish-child under-3-months confirmed as urgent-duty-immediately;
+  sepsis citation updated NG51 → NG253/NG254/NG255; headache source NG150 → NG228.
+  No red-flag or escalation-tier values changed.
+
+Regression tests extended across `test-drug-brand-coverage.js`, `test-stopp-start.js`,
+`test-acb-scores.js`, `test-visualiser-pincer.js`, and `test-custom-rules.js`.
+
 ## [v3.80.0] — 2026-06-14
 
 ### Three clinical-safety / UX corrections from the Practice appraisal (R2a / R6 / R1)

@@ -90,11 +90,33 @@
   // Statins — from HIGH_RISK_DRUGS id:'statin'
   const STATIN_TERMS = ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin'];
 
-  // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first 5 entries are ACEi)
-  const ACEI_TERMS = ['ramipril', 'lisinopril', 'perindopril', 'enalapril', 'captopril'];
+  // ACE inhibitors — from HIGH_RISK_DRUGS id:'acei' (first entries are ACEi).
+  // Kept at parity with visualiser-core.js's ACEi list (medrev-001).
+  const ACEI_TERMS = [
+    'ramipril',
+    'lisinopril',
+    'perindopril',
+    'enalapril',
+    'captopril',
+    'trandolapril',
+    'fosinopril',
+    'quinapril',
+    'imidapril',
+    'cilazapril',
+  ];
 
-  // ARBs — from HIGH_RISK_DRUGS id:'acei' (remaining entries are ARBs)
-  const ARB_TERMS = ['candesartan', 'losartan', 'irbesartan', 'valsartan', 'olmesartan'];
+  // ARBs — from HIGH_RISK_DRUGS id:'acei' (remaining entries are ARBs).
+  // Kept at parity with visualiser-core.js's ARB list (medrev-001).
+  const ARB_TERMS = [
+    'candesartan',
+    'losartan',
+    'irbesartan',
+    'valsartan',
+    'olmesartan',
+    'telmisartan',
+    'azilsartan',
+    'eprosartan',
+  ];
 
   // Beta-blockers — from HIGH_RISK_DRUGS id:'beta_block'
   const BETA_BLOCKER_TERMS = [
@@ -107,6 +129,33 @@
     'nebivolol',
     'labetalol',
   ];
+
+  // Anticholinergic drugs with a meaningful burden — REUSED from the shared
+  // ACB table (engine/acb-scores.js, Boustani/ACBcalc scale) rather than
+  // re-listed, so the two stay in lock-step (medrev-004). "Meaningful burden"
+  // = ACB score ≥2 (definite/moderate anticholinergic activity); score-1
+  // (mild/possible) drugs are deliberately excluded to avoid over-flagging.
+  // Dual-mode load: Node require, else the browser global set by acb-scores.js
+  // (loaded before this file in visualiser-core.html).
+  function loadAcbTable() {
+    try {
+      if (typeof module !== 'undefined' && module.exports) {
+        return require('./acb-scores.js').ACB_TABLE;
+      }
+    } catch (e) {
+      /* fall through to global */
+    }
+    if (global && global.ACBScores && global.ACBScores.ACB_TABLE) {
+      return global.ACBScores.ACB_TABLE;
+    }
+    return null;
+  }
+
+  const ACB_TABLE = loadAcbTable();
+  // Terms for drugs with meaningful anticholinergic burden (ACB score ≥2).
+  // If the shared table is unavailable (unexpected load order), this is an
+  // empty list and the criterion simply does not fire (fail-closed).
+  const ANTICHOLINERGIC_TERMS = (ACB_TABLE || []).filter((e) => e.score >= 2).map((e) => e.term);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -403,6 +452,31 @@
           'Prefer a shorter-acting agent (gliclazide) or alternative class.',
         severity: 'amber',
         source: 'STOPP/START v3 (2023) — Section J: Endocrine',
+      });
+    }
+
+    // STOPP 10b: Anticholinergic burden in age ≥65 (amber)
+    // Fires when an older patient (age ≥65) is on one or more drugs with a
+    // meaningful anticholinergic burden (ACB score ≥2). Anticholinergic load
+    // in older adults raises the risk of cognitive impairment, delirium,
+    // falls, constipation, and urinary retention. Term set is REUSED from the
+    // shared ACB table (engine/acb-scores.js). Fail-closed: if age unknown or
+    // the ACB table is unavailable, this flag does NOT fire.
+    if (ANTICHOLINERGIC_TERMS.length && hasDrug(drugs, ANTICHOLINERGIC_TERMS) && ageKnown && age >= 65) {
+      const matched = ANTICHOLINERGIC_TERMS.filter((t) => drugs.some((d) => drugName(d).includes(t)));
+      const matchedList = Array.from(new Set(matched)).join(', ');
+      flags.push({
+        id: 'stopp-anticholinergic-elderly',
+        kind: 'stopp',
+        criterion: 'Drug(s) with meaningful anticholinergic burden in patient aged ≥65',
+        detail:
+          `Anticholinergic drug(s) detected (${matchedList || 'anticholinergic'}) in patient aged ` +
+          `${Math.floor(age)}y. Cumulative anticholinergic burden in older adults increases the risk of ` +
+          'cognitive impairment, delirium, falls, constipation, urinary retention, and dry mouth/eyes. ' +
+          'Review the total anticholinergic load (ACB score) and seek lower-burden alternatives where possible. ' +
+          'Note: burden is cumulative across the whole drug list — assess the full regimen, not this drug alone.',
+        severity: 'amber',
+        source: 'STOPP/START v3 (O’Mahony 2023) — Section B: CNS/Psychotropic (anticholinergic burden)',
       });
     }
 

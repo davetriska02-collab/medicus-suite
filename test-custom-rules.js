@@ -382,6 +382,39 @@ console.log('\n--- customRuleSchemaPrompt: embedded example validation ---');
   });
 }
 
+// ── alert-library: GLP-1 acute-pancreatitis awareness alert fires ────────────
+// CSO-approved Keeper addition (2026-06-14): mhra-glp1-acute-pancreatitis is an
+// awareness drug-combo alert modelled on the SGLT2 DKA entry. Assert the bundled
+// library entry is well-formed and fires for a GLP-1/GIP patient via the real
+// drug-combo evaluator (and does NOT fire for an unrelated med).
+
+console.log('\n--- alert-library: GLP-1 acute-pancreatitis alert ---');
+
+{
+  const alertLib = require('./rules/alert-library.json');
+  const glp1Entry = (alertLib.library || []).find(e => e.libId === 'mhra-glp1-acute-pancreatitis');
+  assert(!!glp1Entry, 'alert-library contains mhra-glp1-acute-pancreatitis entry');
+  assert(glp1Entry && glp1Entry.rule && glp1Entry.rule.type === 'drug-combo', 'GLP-1 alert is a drug-combo rule');
+  assert(glp1Entry && glp1Entry.rule.enabled === true, 'GLP-1 alert is enabled');
+
+  if (glp1Entry) {
+    const rule = glp1Entry.rule;
+    // Fires for a GLP-1 patient (brand and generic).
+    for (const med of ['Ozempic 1mg', 'Semaglutide injection', 'Mounjaro 5mg', 'Trulicity 1.5mg']) {
+      const data = { medications: [makeMed(med)], observations: [], problems: [], patientContext: null };
+      const chips = engine.evaluateDrugComboRule(rule, data);
+      assert(chips.length === 1, `GLP-1 alert fires for "${med}"`);
+      if (chips.length) {
+        assert(chips[0].type === 'drug-combo', `GLP-1 alert chip type is drug-combo for "${med}"`);
+        assert(chips[0].status === 'caution', `GLP-1 alert status is caution (amber) for "${med}"`);
+      }
+    }
+    // Does NOT fire for an unrelated med.
+    const noMatch = engine.evaluateDrugComboRule(rule, { medications: [makeMed('Amlodipine 5mg')], observations: [], problems: [], patientContext: null });
+    assert(noMatch.length === 0, 'GLP-1 alert does NOT fire for an unrelated med (amlodipine)');
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

@@ -879,6 +879,26 @@
       "notes": "For HF diagnosed on or after 1 April 2023, confirmation by echo or specialist within 6 months of diagnosis (or registration). Sentinel cannot verify the timing window against diagnosis date, so this rule fires on presence of any echo/specialist code in record. Clinician must verify the timing rule."
     },
     {
+      "id": "qof-hf003",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "HF003",
+      "indicatorName": "[RETIRED 25/26] ACE-I or ARB therapy in HF due to LVSD",
+      "requiresRegister": "HF",
+      "source": "QOF 25/26 HF003 (retired)",
+      "notes": "Retired in 26/27. HF003 required current treatment with an ACE inhibitor or ARB in patients with heart failure due to left ventricular systolic dysfunction. Consolidated into HF009 (four-pillar HFrEF therapy), where the ACE-I/ARB/ARNI class is the RAAS pillar. Kept disabled for year-on-year diff visibility."
+    },
+    {
+      "id": "qof-hf006",
+      "type": "qof-indicator",
+      "enabled": false,
+      "indicatorCode": "HF006",
+      "indicatorName": "[RETIRED 25/26] Beta-blocker therapy in HF due to LVSD",
+      "requiresRegister": "HF",
+      "source": "QOF 25/26 HF006 (retired)",
+      "notes": "Retired in 26/27. HF006 required current treatment with a beta-blocker licensed for heart failure in patients with heart failure due to left ventricular systolic dysfunction. Consolidated into HF009 (four-pillar HFrEF therapy), where the beta-blocker class is one of the four pillars. Kept disabled for year-on-year diff visibility."
+    },
+    {
       "id": "qof-hf009",
       "type": "qof-indicator",
       "enabled": true,

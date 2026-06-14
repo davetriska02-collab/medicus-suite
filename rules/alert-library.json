@@ -1,8 +1,8 @@
 {
   "version": "1.2",
-  "lastUpdated": "2026-06-11",
+  "lastUpdated": "2026-06-14",
   "specVersion": "PINCER/NICE prescribing-safety alert library v1.2",
-  "keeperNote": "2026-06-11 (The Keeper): triage-lens ruleset review follow-up. (a) NSAID drug-set — added etodolac (Lodine SR, emc 3857, active May 2026) and flurbiprofen (Froben, emc 327/326), which were absent from every NSAID-combo rule AND from the built-in content.js NSAIDS regex, so a patient on either silently fired no NSAID PINCER/STOPP alert; also added the UK dm+d/BNF spelling 'indometacin' (the existing 'indomethacin' does not substring-match the UK spelling — content.js already handled this via 'indometh?acin'). Note: 'dexibuprofen'/'dexketoprofen' are redundant under substring matching ('ibuprofen'/'ketoprofen' already cover them) but kept for explicitness. (b) Anticoagulant set (pincer-2, pincer-13) — added acenocoumarol (Sinthrome) and phenindione (Dindevan), both active UK oral VKAs in BNF 2.8.2, previously listed in content.js's regex but not here. (c) ACEi/ARB set (pincer-4) — added quinapril (Accupro), imidapril (Tanatril), eprosartan (Teveten) and cilazapril (Vascace, discontinued for new patients but legacy repeats persist); moexipril deliberately NOT added (UK-discontinued March 2016). 2026-06-04 prior note: completed shared NSAID set with tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid, fenoprofen. SOURCE GAP this run: bnf.nice.org.uk / OpenPrescribing / MHRA register returned 403; additions corroborated against emc SmPC product IDs + multiple NHS ICB formularies (confidence medium-high; all additive, cannot weaken matching).",
+  "keeperNote": "2026-06-14 CSO-approved Keeper addition: added awareness alert 'mhra-glp1-acute-pancreatitis' (GLP-1 / dual GLP-1-GIP receptor agonists — strengthened acute-pancreatitis warning incl. necrotising/fatal cases; watch for severe persistent abdominal pain radiating to the back), modelled on the existing SGLT2 DKA awareness entry and matching the GLP-1/GIP drug set used in drug-rules.json. Source: MHRA Drug Safety Update (gov.uk) — WebSearch-corroborated, CSO-signed-off. 2026-06-11 (The Keeper): triage-lens ruleset review follow-up. (a) NSAID drug-set — added etodolac (Lodine SR, emc 3857, active May 2026) and flurbiprofen (Froben, emc 327/326), which were absent from every NSAID-combo rule AND from the built-in content.js NSAIDS regex, so a patient on either silently fired no NSAID PINCER/STOPP alert; also added the UK dm+d/BNF spelling 'indometacin' (the existing 'indomethacin' does not substring-match the UK spelling — content.js already handled this via 'indometh?acin'). Note: 'dexibuprofen'/'dexketoprofen' are redundant under substring matching ('ibuprofen'/'ketoprofen' already cover them) but kept for explicitness. (b) Anticoagulant set (pincer-2, pincer-13) — added acenocoumarol (Sinthrome) and phenindione (Dindevan), both active UK oral VKAs in BNF 2.8.2, previously listed in content.js's regex but not here. (c) ACEi/ARB set (pincer-4) — added quinapril (Accupro), imidapril (Tanatril), eprosartan (Teveten) and cilazapril (Vascace, discontinued for new patients but legacy repeats persist); moexipril deliberately NOT added (UK-discontinued March 2016). 2026-06-04 prior note: completed shared NSAID set with tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid, fenoprofen. SOURCE GAP this run: bnf.nice.org.uk / OpenPrescribing / MHRA register returned 403; additions corroborated against emc SmPC product IDs + multiple NHS ICB formularies (confidence medium-high; all additive, cannot weaken matching).",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
 
@@ -394,6 +394,29 @@
         "severity": "info",
         "notes": "MHRA Drug Safety Updates 2020–2024. SGLT2 inhibitors carry risk of euglycaemic DKA (blood glucose may be near-normal). Sick-day rules: withhold during acute illness, dehydration, surgery, or prolonged fasting. Counsel on symptoms of DKA. Annual eGFR monitoring via drug-monitoring rule (sglt2-inhibitor). This alert is an informational prompt — review sick-day rule education at each medication review.",
         "source": "MHRA"
+      }
+    },
+
+    {
+      "libId": "mhra-glp1-acute-pancreatitis",
+      "category": "Prescribing safety",
+      "subcategory": "GI",
+      "title": "GLP-1 / GIP agonist — acute pancreatitis awareness reminder",
+      "description": "Patient on a GLP-1 or dual GLP-1/GIP receptor agonist: counselling reminder to watch for severe persistent abdominal pain radiating to the back (acute pancreatitis, including necrotising and fatal cases).",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "GLP-1 / GIP agonist — acute pancreatitis reminder",
+        "drugSets": [
+          { "name": "GLP-1 / GIP agonist", "match": ["semaglutide","ozempic","wegovy","rybelsus","tirzepatide","mounjaro","zepbound","dulaglutide","trulicity","liraglutide","victoza","saxenda","xultophy","lixisenatide","lyxumia","exenatide","byetta","bydureon"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update — GLP-1/GIP receptor agonists: strengthened warnings on acute pancreatitis (including necrotising and fatal cases), following Yellow Card reports. Counsel patients to seek urgent medical attention for severe, persistent abdominal pain that may radiate to the back, with or without vomiting — a red-flag symptom of acute pancreatitis. Discontinue the GLP-1/GIP agonist if pancreatitis is suspected and do not restart if confirmed. This alert is an awareness/counselling prompt — review the pancreatitis safety counselling point at each medication review.",
+        "source": "MHRA Drug Safety Update — GLP-1/GIP receptor agonists: strengthened warnings on acute pancreatitis (including necrotising and fatal cases) — https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-dual-glp-1-slash-gip-receptor-agonists-strengthened-warnings-on-acute-pancreatitis-including-necrotising-and-fatal-cases"
       }
     },
 

@@ -43,7 +43,7 @@ const EXPECTED = {
     'Hydroxychloroquine 200mg tablets', 'Quinoric 200mg tablets',
     'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets'
   ],
-  'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets', 'Azapress 50mg tablets'],
+  'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets', 'Azapress 50mg tablets', 'Jayempi 10mg/ml oral suspension'],
   'sulfasalazine-maintenance': [
     'Sulfasalazine 500mg tablets', 'Sulphasalazine 500mg', 'Salazopyrin EN-Tabs 500mg',
     'Sulazine EC 500mg tablets'
