@@ -20,8 +20,13 @@ they introduce no code, rules, `defaults.json`, or clinical-threshold changes.
   statement (Section D).
 - `docs/CSO-DECLARATION.md` (MS-CSO-DECL-001 + MS-CSO-DCB0160-001) — CSO
   declaration plus a deploying-organisation (DCB0160-style) hand-off note.
+- `docs/ACCESSIBILITY-STATEMENT.md` (MS-DOC-A11Y-001) — heuristic WCAG 2.1 AA
+  self-assessment with disclosed known gaps (Section E).
+- `docs/DTAC-STATUS.md` (MS-DOC-DTAC-001) — readiness tracker across all DTAC
+  domains, including a flagged note that the clinical-safety documents are pinned
+  at v3.64.0 and need CSO re-synchronisation to the current version.
 
-All four are marked DRAFT pending sign-off and carry placeholders for facts held
+All are marked DRAFT pending sign-off and carry placeholders for facts held
 outside the repo (ICO registration number, sign-off dates, signature).
 
 ## [v3.84.1] — 2026-06-14
