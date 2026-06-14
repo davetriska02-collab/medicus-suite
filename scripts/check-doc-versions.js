@@ -55,7 +55,17 @@ const DOCS = [
 // v3.56.0 while the CSO reissue was outstanding. The CSO directed and
 // reviewed the v3.60.0 reissue (CSN v3.5, HAZARD-LOG v3.6 incl. H-027..029,
 // SOUP v1.2, feature-list v3.60.0) on 2026-06-12, so the pins are removed.
-const KNOWN_STALE = {};
+//
+// 2026-06-14: the three CSO-signed safety docs sit at product v3.64.0 while the
+// manifest has since advanced to the 3.77 line without a corresponding CSO doc
+// reissue. Re-pinned as known-stale so the guard WARNs (does not fail) until the
+// next CSO refresh brings them onto the 3.77 line; remove each entry when its
+// doc is updated. (feature-list.md tracks normally and is intentionally unpinned.)
+const KNOWN_STALE = {
+  'docs/CLINICAL-SAFETY-NOTICE.md': '3.64.0',
+  'docs/HAZARD-LOG.md': '3.64.0',
+  'docs/SOUP.md': '3.64.0',
+};
 
 function majorMinor(ver) {
   const parts = ver.split('.');

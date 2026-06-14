@@ -19,6 +19,11 @@ Critical/High/Medium found):
   custom-rules import (`sentinel-options/options.js`), and the Triage Lens config
   import (`content-scripts/triage-lens/options.js`), so an oversized JSON cannot
   hang the settings tab.
+- **`scripts/check-doc-versions.js`** — re-pin the three CSO-signed safety docs
+  (`CLINICAL-SAFETY-NOTICE`, `HAZARD-LOG`, `SOUP`) as `KNOWN_STALE` at their
+  current `3.64.0` while a CSO refresh onto the 3.77 line is outstanding. The
+  guard now WARNs instead of failing CI; pins to be removed when each doc is
+  reissued.
 
 ## [v3.77.4] — 2026-06-14
 
