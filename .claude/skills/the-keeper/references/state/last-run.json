@@ -1,18 +1,41 @@
 {
   "last_run": "2026-06-14",
-  "scope": "FOCUSED — result-triage text classifier (red-team Finding 2)",
-  "manifest_after": "3.77.10",
-  "defaults_version_after": 14,
-  "changes_applied": ["res-001 msu-culture (Amber)", "res-002 base-blood-culture (Red)"],
-  "confirmed_no_change": ["res-003 base-bowel-screening-nonresponder (Green)"],
-  "assessed_not_applied": ["res-004 computeTextOutcome word-boundary matching"],
-  "source_urls_checked": [
-    "https://www.rcpath.org/resourceLibrary/uk-smi-b-41i88-investigation-of-urine-december-2025pdf.html",
-    "https://www.gov.uk/government/publications/smi-b-37-investigation-of-blood-cultures-for-organisms-other-than-mycobacterium-species",
-    "https://www.gov.uk/guidance/bowel-cancer-screening-programme-overview"
+  "scope": "FULL SWEEP — all 6 domains (drugs, qof, vaccines, alerts, medreview, pathways); focus on drug brand-list completeness",
+  "manifest_after": "3.80.0 (UNBUMPED — proposal only, no rule files edited)",
+  "changes_applied": [],
+  "proposed_not_applied": [
+    "medrev-001 stopp-start.js ACEi/ARB term lists incomplete vs visualiser-core.js (Red, repo-verified)",
+    "medrev-002 visualiser-core.js beta-blocker list missing acebutolol/celiprolol/nadolol/oxprenolol (Red, repo-verified)",
+    "drug-001 add Jayempi to azathioprine match (Amber)",
+    "alert-001 GLP-1 acute-pancreatitis MHRA DSU alert (Amber)",
+    "medrev-003 add pitavastatin/Livazo to statin list (Amber)",
+    "medrev-004 STOPP anticholinergic-in-elderly criterion (Amber, needs engine)",
+    "medrev-005 ACB amoxapine score 2 (Green, low UK relevance)",
+    "qof-001 add HF003/HF006 disabled for diff (Green)",
+    "qof-002 OB register enable decision (Amber, CSO)",
+    "vacc-001 refresh flu/COVID specVersion to 2026/27, cohorts unchanged (Green)",
+    "path-001 <3m fever escalation tier (CSO sign-off)",
+    "path-002 bundle of duty-vs-999 tier reviews (CSO sign-off, secondary-source only)",
+    "path-003 headache NG150->NG228 source fix (Green)"
   ],
-  "source_gaps": ["UKHSA SMI B41/B37/S12 primary PDFs (HTTP 403) — corroborated via PMC-indexed UK lab literature"],
-  "branch": "claude/affectionate-tesla-8ry6a4",
+  "killed": [
+    "ziprasidone/Zeldox (not UK-marketed)",
+    "lovastatin (not UK-marketed)",
+    "drug discontinuation notes + semaglutide-generic watch (no match-list delta)",
+    "finasteride / falls NG249 (not page-verified; left for CSO)"
+  ],
+  "source_urls_checked": [
+    "https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-dual-glp-1-slash-gip-receptor-agonists-strengthened-warnings-on-acute-pancreatitis-including-necrotising-and-fatal-cases",
+    "https://www.medicines.org.uk/emc/product/12745/smpc",
+    "https://www.england.nhs.uk/gp/investment/gp-contract/",
+    "https://www.nice.org.uk/guidance/ng143",
+    "https://www.acbcalc.com/"
+  ],
+  "source_gaps": [
+    "WebFetch HTTP 403 to EVERY url this run (BNF/gov.uk/NICE/CKS/ACBcalc/wikipedia); NICE CKS additionally UK-geo-restricted. All findings WebSearch-corroborated only, none page-verified — nothing applied per The Keeper's verification discipline."
+  ],
+  "branch": "claude/repo-practice-run-8gm97q",
+  "report": "docs/keeper/KEEPER-whole-suite-2026-06-14.md",
   "merged": false,
-  "status": "CSO change-proposal — awaiting sign-off"
+  "status": "CSO change-proposal — awaiting sign-off; NO rule files edited (environment could not page-verify sources)"
 }
