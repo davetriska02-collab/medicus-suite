@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.82.0] — 2026-06-14
+
+### Practice profile — central attestation + request-monitor practice-code coupling
+
+Managed deployments can now propagate the practice's clinical config to end users
+without each clinician re-confirming, and the Request Monitor works from a published
+profile without the user re-entering the practice code.
+
+- **Central practice attestation.** A published profile can carry a signed
+  `practiceAttestation { attestedBy, attestedAt, gates }`, built at publish time from
+  the gates the practice admin has themselves accepted (reception disclaimer, alert-library
+  acknowledgement, knowledge notice). On a managed install, an explicitly-signed gate
+  satisfies that per-install attestation, so pushed reception pathways / alert library /
+  knowledge activate without a per-user click. Recorded locally under
+  `suite.practiceProfile.attestations` and surfaced as "Accepted centrally by &lt;CSO&gt; via
+  practice profile". **Fail-safe:** with no attestation block (or a gate not explicitly
+  true) behaviour is unchanged — the per-install attestation is never written, and a
+  genuine local acceptance is never overwritten or downgraded.
+- **Request Monitor practice-code coupling.** Publishing a profile that includes the
+  Request Monitor now auto-includes the `suite` module (carrying `suite.practiceCode`) so
+  the monitor can poll for managed users, and blocks publishing with a clear warning if the
+  admin's own practice code is unset. The code stays in one place (the suite module) — not
+  duplicated into the request-monitor section.
+
+`shared/io/practice-profile.js` apply path, `options/options.js` + `options/options.html`
+publish flow and reception provenance, `side-panel/modules/knowledge/knowledge.js` central
+notice hint. Tests extended in `test-practice-profile.js` (80 assertions). No clinical-rule
+or `defaults.json` changes.
+
 ## [v3.81.1] — 2026-06-14
 
 ### Reception pathways — CSO 999-promotion pass

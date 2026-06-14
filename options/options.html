@@ -1673,6 +1673,29 @@
                 </div>
               </div>
 
+              <!-- Central attestations (per-install clinical gates) -->
+              <div
+                id="ppAttestationBlock"
+                style="
+                  margin-bottom: 12px;
+                  border: 1px solid var(--border);
+                  border-radius: var(--r-md);
+                  padding: 10px 12px;
+                  background: var(--bg-mid);
+                "
+              >
+                <div style="font-size: 11px; font-weight: 600; color: var(--text-1); margin-bottom: 4px">
+                  Central attestations
+                </div>
+                <div style="font-size: 11px; color: var(--text-3); margin-bottom: 8px; line-height: 1.5">
+                  Your acceptance of the reception disclaimer / alert library / knowledge notice will satisfy
+                  these for managed users on this profile, so they don't each have to accept them locally.
+                </div>
+                <div id="ppAttestationRows" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px">
+                  <!-- rows injected by JS -->
+                </div>
+              </div>
+
               <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
                 <button class="primary" id="ppPublishBtn" style="font-size: 11px; padding: 5px 14px">
                   Publish to shared folder
