@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.1] — 2026-06-14
+
+### Polish: Result rules settings page (design-crit pass)
+
+Multi-critic design crit-and-improve pass on the Triage Lens *Result rules*
+settings page (art-director, token/markup surveyor, fresh-eyes GP lenses);
+CSS/markup only, no behaviour change.
+
+- **Severity badge on every rule row** — each row now shows a RED / AMBER / INFO
+  chip derived from its thresholds, so the list's severity ceiling is scannable at
+  a glance instead of 21 identical grey rows (the appraisal's density finding).
+- **"Unreviewed" recoloured amber → blue** — amber is reserved for clinical alert
+  state; a workflow state should not borrow clinical temperature.
+- **"built-in" is now a proper mono badge** (kept its explanatory tooltip), and the
+  threshold-summary and analyte-match columns render in the mono "machine-voice"
+  face.
+- **Editor:** the Amber/Red threshold field labels now carry status-ink colour cues.
+- **Accessibility:** aria-labels on the per-row toggle / Edit / Delete; primary
+  button contrast raised to WCAG AA on the dark accent with a visible focus ring;
+  dark-mode meta-text contrast fixed; token/radius tidy-ups and dead dark-theme CSS
+  removed.
+
 ## [v3.77.0] — 2026-06-14
 
 ### Feature: four more result rules from a Keeper currency-check (shipped disabled)
