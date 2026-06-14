@@ -150,9 +150,9 @@
           Paste LLM JSON output here
         </label>
         <textarea id="llmJson" rows="8" spellcheck="false"
-          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'></textarea>
+          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'></textarea>
         <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rule(s)</button>
+          <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rules</button>
           <span id="llmStatus" class="tl-llm-status"></span>
         </div>
       </div>
@@ -295,7 +295,10 @@
   <section class="tl-pane" id="paneResultRules">
     <div class="tl-help">
       Analyte-threshold rules <strong>escalate</strong> investigation result severity — they can raise a chip from none to amber or red, but never lower a lab-flagged result. Imported rules arrive <strong>disabled</strong>; review each rule's analyte match strings and threshold values before enabling.
-      <br><strong>A result that no rule matches shows only the lab's own flag — an absent chip is not a clinical all-clear.</strong>
+      <br><br>
+      <strong>Scope.</strong> These built-in rules are a safety-net layer covering common acute biochemistry, FBC indices and therapeutic drug levels — electrolytes, eGFR, platelets, neutrophils, INR, calcium, magnesium, lithium, digoxin, TSH and HbA1c — plus key microbiology text rules (MSU, blood culture, bowel screening). They are <strong>not</strong> a complete results-interpretation system: an analyte with no rule (for example ferritin, B12/folate or LFTs) simply shows the lab's own flag, so <strong>an absent chip is not a clinical all-clear</strong>. Add your own rule for anything else your practice wants flagged.
+      <br><br>
+      <em>Viewing or editing this screen changes nothing in the queue until you tick a rule on.</em>
     </div>
     <div class="tl-toolbar">
       <button class="tl-btn tl-btn-primary" id="btnAddResultRule">+ New result rule</button>
@@ -306,13 +309,13 @@
     <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
       <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
         <span style="font-size:10px; opacity:0.6;">&#9654;</span>
-        Import rule(s) from LLM
+        Import rules from LLM
       </summary>
       <div style="padding:14px 16px; border-top:1px solid var(--border);">
         <p class="tl-help" style="margin:0 0 12px;">
           Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the analyte rule you want
           (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the JSON response into
-          the box below to import it. Imported rules arrive <strong>disabled</strong> — review and enable each before it fires.
+          the box below to import it. <strong>You</strong> run the LLM — this tool only generates a prompt to copy out and reads the JSON you paste back, so <strong>no patient data is involved</strong>. Imported rules arrive <strong>disabled</strong> — review and enable each before it fires.
         </p>
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
           <button class="tl-btn" id="btnResultLlmCopyPrompt">Copy LLM prompt</button>
@@ -322,15 +325,15 @@
           Paste LLM JSON output here
         </label>
         <textarea id="resultLlmJson" rows="8" spellcheck="false"
-          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rule(s)".'></textarea>
+          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'></textarea>
         <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rule(s)</button>
+          <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rules</button>
           <span id="resultLlmStatus" class="tl-llm-status"></span>
         </div>
         <div id="resultLlmPreview" class="tl-rr-llm-preview" style="display:none;">
           <div class="tl-rr-llm-preview-list" id="resultLlmPreviewList"></div>
           <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
-            <button class="tl-btn tl-btn-primary" id="btnResultLlmConfirm">Add rule(s), disabled</button>
+            <button class="tl-btn tl-btn-primary" id="btnResultLlmConfirm">Add rules (disabled)</button>
             <button class="tl-btn" id="btnResultLlmCancel">Cancel</button>
           </div>
         </div>
@@ -352,6 +355,11 @@
         <label class="tl-field">
           <span>Label <small>(shown on the chip, max ~60 chars)</small></span>
           <input type="text" id="rrLabel" maxlength="60">
+        </label>
+
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" id="rrEnabled">
+          <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
         </label>
 
         <label class="tl-field">
@@ -416,10 +424,6 @@
           </label>
         </div>
 
-        <label class="tl-field tl-field-inline">
-          <input type="checkbox" id="rrEnabled">
-          <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
-        </label>
       </div>
 
       <div class="tl-edit-col">

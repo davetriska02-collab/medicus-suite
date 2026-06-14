@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.3] — 2026-06-14
+
+### Result rules settings: fixes from The Practice re-run
+
+UX/copy fixes from the second appraisal (`docs/appraisal/PRACTICE-result-rules-rerun-2026-06-14.md`):
+
+- **Scope note** on the Result rules list — states what the built-in rules cover
+  and, explicitly, what they do not (e.g. ferritin, B12/folate, LFTs), so an
+  un-flagged analyte is clearly "out of scope" rather than "checked and clear".
+  Resolves the nurse band's residual trust gap; also reassures that the screen is
+  informational until a rule is ticked on.
+- **Directional ↑/↓ glyph** on each threshold rule so a high/low pair (e.g. high
+  vs low calcium, high vs suppressed TSH) is distinguishable at a glance.
+- **"Enabled" moved to the top** of the rule editor (under the label) so the
+  live/not-live state is visible before reading the rest of the form.
+- **"Unit (display only)" warning promoted** to amber with a rule, since a
+  units mismatch is a silent-misfire risk, not an ordinary hint.
+- **LLM import copy** clarified ("you run the LLM; no patient data is involved")
+  and "Import rule(s)" reworded to "Import rules" (it was misread as "rulesy").
+- **built-in tooltip** now states the rules use UK-standard values (verify
+  against your own lab) and that unticking silences a rule while delete is
+  permanent.
+
+### Fix: deleting a built-in result rule is now honoured
+
+Deleting a built-in result rule now records a `removedBuiltins` tombstone (as the
+alert-rule delete already did), so `mergeShippedDefaults` does not silently
+re-add it on the next update — the delete confirmation no longer over-promises.
+To keep a rule but silence it, untick Enabled instead.
+
 ## [v3.77.2] — 2026-06-14
 
 ### Enable the four Keeper result rules (CSO sign-off)

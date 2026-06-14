@@ -1128,13 +1128,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       row.className = 'tl-rule-row' + (rule.enabled ? '' : ' tl-rule-disabled');
       const summary = rrSeveritySummary(rule);
       const _rrKind = rule.red != null ? 'red' : rule.amber != null ? 'amber' : rule.kind === 'text' ? 'info' : 'info';
+      // Direction glyph so a high/low pair (e.g. high vs low calcium) is distinguishable at a glance.
+      const _rrDir = rule.kind === 'text' ? '' : rule.comparator === 'above' ? '↑' : rule.comparator === 'below' ? '↓' : '';
+      const _rrDirTitle = _rrDir === '↑' ? 'Fires on a HIGH value' : _rrDir === '↓' ? 'Fires on a LOW value' : '';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
         <span class="tl-rule-kind tl-rule-kind-${_rrKind}">${KIND_LABEL[_rrKind] || _rrKind.toUpperCase()}</span>
         <span>
-          <span class="tl-rule-label">${escHtml(rule.label)}</span>
+          ${_rrDir ? `<span class="tl-rr-dir" title="${_rrDirTitle}">${_rrDir}</span> ` : ''}<span class="tl-rule-label">${escHtml(rule.label)}</span>
           ${!rule.enabled ? '<span class="tl-rr-unreviewed" title="Not yet enabled. Review this rule\'s analyte match strings and thresholds, then tick the box to let it fire.">Unreviewed</span>' : ''}
-          <span class="tl-rule-meta">${rule.builtin ? '<span class="tl-builtin-badge" title="Shipped with the suite. You can edit, disable or delete it like any other rule.">built-in</span>' : ''}${summary ? '<span class="tl-rr-summary">' + escHtml(summary) + '</span>' : ''}</span>
+          <span class="tl-rule-meta">${rule.builtin ? '<span class="tl-builtin-badge" title="Shipped with the suite using UK-standard reference / critical values — verify against your own lab before relying on it. To silence one, untick it (it stays in the list, greyed). Delete removes it for good.">built-in</span>' : ''}${summary ? '<span class="tl-rr-summary">' + escHtml(summary) + '</span>' : ''}</span>
         </span>
         <span class="tl-rule-meta tl-rr-analyte">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
         <span></span>
@@ -1150,8 +1153,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       });
       row.querySelector('[data-act="edit"]').addEventListener('click', () => openResultRuleEditor(rule.id));
       row.querySelector('[data-act="del"]').addEventListener('click', async () => {
-        if (!confirm(`Delete result rule "${rule.label}"? This can't be undone.`)) return;
+        const msg = rule.builtin
+          ? `Delete built-in result rule "${rule.label}"? It will NOT return on the next update. (To silence it instead, just untick it.)`
+          : `Delete result rule "${rule.label}"? This can't be undone.`;
+        if (!confirm(msg)) return;
         CONFIG.resultRules = CONFIG.resultRules.filter(r => r.id !== rule.id);
+        // Tombstone a deleted builtin so mergeShippedDefaults doesn't resurrect it on update
+        // (mirrors the alert-rule delete path).
+        if (rule.builtin) {
+          CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), rule.id])];
+        }
         await saveConfig(CONFIG);
         flash('Deleted');
         renderResultRules();
@@ -1220,8 +1231,14 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (!rrEditingId) return;
       const r = CONFIG.resultRules.find(x => x.id === rrEditingId);
       if (!r) return;
-      if (!confirm(`Delete result rule "${r.label}"?`)) return;
+      const msg = r.builtin
+        ? `Delete built-in result rule "${r.label}"? It will NOT return on the next update. (To silence it instead, untick Enabled.)`
+        : `Delete result rule "${r.label}"?`;
+      if (!confirm(msg)) return;
       CONFIG.resultRules = CONFIG.resultRules.filter(x => x.id !== rrEditingId);
+      if (r.builtin) {
+        CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), r.id])];
+      }
       await saveConfig(CONFIG);
       rrEditingId = null;
       flash('Deleted');
