@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.0] — 2026-06-14
+
+### Feature: four more result rules from a Keeper currency-check (shipped disabled)
+
+Ran The Keeper (clinical-rule currency check) on the result-triage rules for the
+items raised by The Practice appraisal. Full Clinical-Safety-Officer change
+proposal: `docs/appraisal/KEEPER-result-rules-2026-06-14.md`. Four new built-in
+result rules added to `defaults.json`, all **disabled-by-default ("Unreviewed")**:
+
+- **Hypocalcaemia** (`base-low-calcium`) — amber ≤2.1, red ≤1.9 mmol/L. Matches
+  **adjusted/corrected calcium only** (not bare "Calcium"): the deliberate guard
+  against hypoalbuminaemia false-positives, where total calcium reads low but the
+  albumin-adjusted value is normal. Excludes ionised calcium.
+- **Hypomagnesaemia** (`base-low-magnesium`) — amber ≤0.6, red ≤0.5 mmol/L
+  (arrhythmia / refractory-hypokalaemia risk; PPIs a recognised cause, MHRA 2011).
+- **High TSH** (`base-high-tsh`) — amber ≥10, red ≥20 mU/L (NICE NG145 treatment
+  threshold). Excludes TSH-receptor-antibody results; `suppressIfProblem` for known
+  hypothyroidism/levothyroxine.
+- **Suppressed TSH** (`base-low-tsh`) — amber ≤0.1, red ≤0.01 mU/L (thyrotoxicosis /
+  over-replacement). `suppressIfProblem` for known thyrotoxicosis/antithyroid drugs.
+
+These ship **disabled** because WebFetch egress to NICE/NHS/BNF was blocked this run
+(HTTP 403), so thresholds were corroborated via multi-source search rather than
+confirmed against the primary page — the CSO verifies and enables. The TSH rules
+also have a high treated-patient false-positive rate (and `suppressIfProblem` fails
+open in the live queue when the problem list is absent), so disabled-by-default is
+the right shipping state regardless.
+
+**Rejected:** narrowing the existing high-calcium match from bare `"calcium"` to
+adjusted-only — that would silently miss UK labs reporting hypercalcaemia under an
+un-prefixed "Calcium" name (a high total calcium is not raised by hypoalbuminaemia,
+so the false-positive concern there is cosmetic). The high-calcium rule is unchanged.
+
+Bumped `defaults.json` `"version"` (11 → 12) so the new disabled builtins reach
+existing users (inert until enabled). Guarded by new `test-result-severity.js`
+assertions (present, disabled-as-shipped, and correct firing/exclude/suppress once
+enabled). No behaviour change to any existing rule.
+
 ## [v3.76.1] — 2026-06-14
 
 ### Polish: result-rule labels and settings copy (from The Practice appraisal)
