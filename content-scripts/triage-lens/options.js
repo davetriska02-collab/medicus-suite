@@ -1127,19 +1127,20 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const row = document.createElement('div');
       row.className = 'tl-rule-row' + (rule.enabled ? '' : ' tl-rule-disabled');
       const summary = rrSeveritySummary(rule);
+      const _rrKind = rule.red != null ? 'red' : rule.amber != null ? 'amber' : rule.kind === 'text' ? 'info' : 'info';
       row.innerHTML = `
-        <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''}>
-        <span></span>
+        <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
+        <span class="tl-rule-kind tl-rule-kind-${_rrKind}">${KIND_LABEL[_rrKind] || _rrKind.toUpperCase()}</span>
         <span>
           <span class="tl-rule-label">${escHtml(rule.label)}</span>
           ${!rule.enabled ? '<span class="tl-rr-unreviewed" title="Not yet enabled. Review this rule\'s analyte match strings and thresholds, then tick the box to let it fire.">Unreviewed</span>' : ''}
-          <span class="tl-rule-meta">  ${rule.builtin ? '<span title="Shipped with the suite. You can edit, disable or delete it like any other rule.">· built-in</span> ' : ''}${summary ? '· ' + escHtml(summary) : ''}</span>
+          <span class="tl-rule-meta">${rule.builtin ? '<span class="tl-builtin-badge" title="Shipped with the suite. You can edit, disable or delete it like any other rule.">built-in</span>' : ''}${summary ? '<span class="tl-rr-summary">' + escHtml(summary) + '</span>' : ''}</span>
         </span>
-        <span class="tl-rule-meta">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
+        <span class="tl-rule-meta tl-rr-analyte">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
         <span></span>
         <span class="tl-rule-actions">
-          <button class="tl-btn" data-act="edit">Edit</button>
-          <button class="tl-btn tl-btn-danger" data-act="del">×</button>
+          <button class="tl-btn" data-act="edit" aria-label="Edit ${escAttr(rule.label)}">Edit</button>
+          <button class="tl-btn tl-btn-danger" data-act="del" aria-label="Delete ${escAttr(rule.label)}">×</button>
         </span>`;
       row.querySelector('.tl-rule-toggle').addEventListener('change', async (e) => {
         rule.enabled = e.target.checked;

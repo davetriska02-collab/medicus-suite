@@ -131,12 +131,12 @@
     <!-- LLM rule authoring tool — shown only when the new-rule / edit pane is
          open (suite-standard copy-prompt → paste-JSON → validate → import-disabled
          flow, same as Sentinel custom rules / Reception pathways / Knowledge). -->
-    <details id="llmDetails" style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+    <details id="llmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
       <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
         <span style="font-size:10px; opacity:0.6;">&#9654;</span>
         Or generate with an LLM
       </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
         <p class="tl-help" style="margin:0 0 12px;">
           Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
           (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste the JSON response into
@@ -303,12 +303,12 @@
     <div class="tl-rule-list" id="resultRuleList"></div>
     <div class="tl-empty" id="resultRuleListEmpty" style="display:none">No result rules configured. Add one manually or import via the LLM tool in the editor.</div>
 
-    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--tl-border, #e2e8f0); border-radius:8px; overflow:hidden;">
+    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
       <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
         <span style="font-size:10px; opacity:0.6;">&#9654;</span>
         Import rule(s) from LLM
       </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--tl-border, #e2e8f0);">
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
         <p class="tl-help" style="margin:0 0 12px;">
           Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the analyte rule you want
           (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the JSON response into
@@ -387,17 +387,17 @@
             </select>
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
             <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Red threshold <small>(optional — leave blank to omit)</small></span>
             <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Unit <small>(display only, e.g. mmol/L)</small></span>
             <input type="text" id="rrUnit" placeholder="mmol/L">
             <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
@@ -410,13 +410,13 @@
             <textarea id="rrNormalText" rows="5" placeholder="no growth&#10;no significant growth&#10;no organisms isolated"></textarea>
           </label>
 
-          <label class="tl-field" style="margin-top:8px">
+          <label class="tl-field">
             <span>Normal chip label <small>(shown when a normal phrase is matched)</small></span>
             <input type="text" id="rrNormalLabel" maxlength="60" placeholder="No growth">
           </label>
         </div>
 
-        <label class="tl-field tl-field-inline" style="margin-top:8px">
+        <label class="tl-field tl-field-inline">
           <input type="checkbox" id="rrEnabled">
           <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
         </label>
