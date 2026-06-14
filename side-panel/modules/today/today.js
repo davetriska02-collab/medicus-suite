@@ -357,7 +357,8 @@ function buildWrBody() {
 function buildRmBody() {
   if (!_rmData) return '<span class="today-loading">Loading…</span>';
   if (!_rmData.configured) {
-    return `<span class="today-muted">Triage monitor not configured.</span>
+    return `<span class="today-optional-tag">Optional</span>
+      <span class="today-muted">Triage monitor not set up.</span>
       <a class="today-setup-link" href="#" data-action="open-setup">Set up in options →</a>`;
   }
   if (_rmData.error && !Object.keys(_rmData.buckets).length) {
@@ -517,7 +518,7 @@ function buildSweepBody() {
 
 function buildNoCodeMsg() {
   return `
-    <span class="today-muted">No practice code configured.</span>
+    <span class="today-muted">No practice code — open a Medicus tab or set it up.</span>
     <a class="today-setup-link" href="#" data-action="open-setup">Set up now →</a>
   `;
 }

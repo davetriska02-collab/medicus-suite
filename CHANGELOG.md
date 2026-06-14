@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.0] — 2026-06-14
+
+### Usability fixes from the whole-suite Practice appraisal
+
+Five low-risk UX corrections raised by the synthetic GP-practice usability appraisal,
+spanning four modules plus the setup card. No clinical-rule or data changes.
+
+- **Trends — CSV export (R5):** the Trends module had no way to get numbers out. Added a
+  `↓ CSV` button to the picker row that exports the *active* view — BP (date/systolic/
+  diastolic), Renal (ACR + eGFR rows), or the observation views (HbA1c / Cholesterol /
+  Weight). Uses the shared `downloadCsv` helper; no-ops when there is no data.
+- **Referrals — filter chips lifted up (R4):** the priority/status filter chips now render
+  in the controls block beside the date/preset rows instead of below the fold, so the
+  secretary persona can see and reach them without scrolling. Chips enlarged modestly for
+  legibility. Wiring unchanged (handlers re-bind to the container on every render).
+- **Today — "not configured" tiles demoted (U3):** the optional "Triage monitor not set up"
+  tile now carries a calm `Optional` tag and neutral styling so it no longer reads like the
+  red `today-card-error` failure state.
+- **Setup card — auto-collapse once the practice code is detected (U2):** once the mandatory
+  practice code is confirmed, the multi-step "Get set up" card collapses to a thin one-line
+  strip ("Setup: practice code ready · N optional steps") with Expand / Dismiss, so it stops
+  dominating whichever module is open. Collapse happens live via the existing
+  `chrome.storage.onChanged` path when the code is detected.
+- **Cold-start practice-code copy unified (G3):** Today's no-practice-code message now matches
+  Capacity's guidance — "No practice code — open a Medicus tab or set it up." (Slots already
+  used the unified wording.)
+
 ## [v3.77.11] — 2026-06-14
 
 ### Result rules: word-boundary matching on the normalText (calm) path

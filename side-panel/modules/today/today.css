@@ -149,6 +149,23 @@
   color: var(--text-4);
 }
 
+/* Calm "optional / not set up" tag — deliberately neutral so an unconfigured
+   optional feature does not read as the red .today-card-error failure state. */
+.today-optional-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+  margin-right: 6px;
+}
+
 /* ── Setup link ──────────────────────────────────────────────────────────────── */
 
 .today-setup-link {

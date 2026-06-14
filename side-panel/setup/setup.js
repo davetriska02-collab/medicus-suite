@@ -38,6 +38,10 @@ let _stepStatus = {
   triage: { done: false, optional: true },
 };
 let _visible = false;
+// Session-only: once the mandatory practice code is detected the card collapses
+// to a thin strip; the user can Expand it for the rest of this session. Never
+// persisted — a fresh panel load starts collapsed again if the code is present.
+let _expanded = false;
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
@@ -100,6 +104,17 @@ async function evaluateSteps() {
 function mandatoryDoneCount() {
   return [_stepStatus.practiceCode.done, _stepStatus.connection.done, _stepStatus.notifications.done].filter(Boolean)
     .length;
+}
+
+// Count the remaining (not-yet-done) non-practice-code steps to advertise on the
+// collapsed strip — connection, notifications, tabs, triage.
+function remainingStepCount() {
+  return [
+    _stepStatus.connection.done,
+    _stepStatus.notifications.done,
+    _stepStatus.tabs.done,
+    _stepStatus.triage.done,
+  ].filter((d) => !d).length;
 }
 
 // ── Auto-show decision ────────────────────────────────────────────────────────
@@ -236,6 +251,20 @@ function renderTriageStep() {
     </li>`;
 }
 
+// Thin one-line strip shown once the practice code (the mandatory first step) is
+// ready, instead of the full multi-step card dominating the module body.
+function renderCollapsedStrip() {
+  const remaining = remainingStepCount();
+  const optionalLabel = remaining === 0 ? 'all steps done' : `${remaining} optional step${remaining === 1 ? '' : 's'}`;
+  return `
+    <div class="setup-card setup-card--collapsed" role="region" aria-label="Suite setup">
+      <span class="setup-collapsed-icon setup-step-icon--done" aria-hidden="true">&#10003;</span>
+      <span class="setup-collapsed-text">Setup: practice code ready &middot; ${esc(optionalLabel)}</span>
+      <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
+      <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
+    </div>`;
+}
+
 function renderCard() {
   const done = mandatoryDoneCount();
   return `
@@ -269,6 +298,13 @@ function wireEvents() {
     _setupState.dismissedAt = new Date().toISOString();
     await saveSetupState();
     hide();
+  });
+
+  // Expand the collapsed strip into the full checklist for this session
+  _host.querySelector('.setup-expand')?.addEventListener('click', () => {
+    _expanded = true;
+    renderInto(_host);
+    wireEvents();
   });
 
   // Confirm detected code (dual-write like options.js:138-151)
@@ -382,7 +418,13 @@ async function runConnectionTest() {
 
 function renderInto(host) {
   if (!host) return;
-  host.innerHTML = renderCard();
+  // Once the mandatory practice code is detected, collapse to a thin strip
+  // (unless the user has expanded it for this session).
+  if (_stepStatus.practiceCode.done && !_setupState.dismissedAt && !_expanded) {
+    host.innerHTML = renderCollapsedStrip();
+  } else {
+    host.innerHTML = renderCard();
+  }
 }
 
 function show() {
