@@ -667,6 +667,36 @@ function makeProfile(over = {}) {
   check(store['reception.config'].disclaimerAcceptedAt === '2025-01-01T00:00:00Z',
     'attestation reception: genuine local acceptance not overwritten');
 
+  // ── Central attestation is MODULE-INDEPENDENT ─────────────────────────────
+  // A signed gate opens its per-install attestation even when that module is NOT
+  // part of this push (the acceptance rides the signature, not the content —
+  // which an earlier profile version may have pushed). Here NO modules are
+  // pushed at all, yet all three gates must still apply.
+  console.log('\n--- central attestation: applies even when the gated module is not in the push ---');
+  reset();
+  const attIndepProfile = makeProfile({
+    profileVersion: 'att-indep-1',
+    apply: { modules: {} }, // no modules pushed
+    practiceAttestation: {
+      attestedBy: 'cso@gp.nhs.uk',
+      attestedAt: '2026-06-02T08:00:00Z',
+      gates: { reception: true, knowledge: true, alertLibrary: true },
+    },
+    envelope: { modules: {} },
+  });
+  await PP.applyProfile(attIndepProfile);
+  check(store['reception.config']?.disclaimerAcceptedAt === '2026-06-02T08:00:00Z',
+    'attestation independent: reception disclaimer written though reception module absent');
+  check(store['knowledge.config']?.noticeAcknowledgedAt === '2026-06-02T08:00:00Z',
+    'attestation independent: knowledge notice written though knowledge module absent');
+  check(store['sentinel.alertLibrary.acknowledged'] === true,
+    'attestation independent: alert-library ack written though sentinel module absent');
+  check(
+    store['suite.practiceProfile.attestations']?.reception?.via === 'practice-profile' &&
+    store['suite.practiceProfile.attestations']?.knowledge?.via === 'practice-profile' &&
+    store['suite.practiceProfile.attestations']?.alertLibrary?.via === 'practice-profile',
+    'attestation independent: provenance recorded for all three gates');
+
   // ── Central attestation: alertLibrary gate ────────────────────────────────
   console.log('\n--- central attestation: alertLibrary gate ---');
   reset();
