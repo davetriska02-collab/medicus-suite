@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.1] — 2026-06-14
+
+### Brand rollout + brand guide
+
+- **Mark wired into the remaining surfaces** — the pop-out titlebar and the
+  visualiser drop screen now use the logo mark; the Options Suite section shows
+  the tagline.
+- **Store description** (`manifest.json`) rewritten from the version stamp to a
+  real one-liner: "The clinical intelligence layer for Medicus: read-only safety
+  monitoring, triage red-flags, QOF tracking and operational dashboards."
+- **`brand/BRAND.md`** — a one-page brand guide: name, tagline, mark files,
+  colours, wordmark, how to regenerate the icons, and where the brand appears.
+
 ## [v3.78.0] — 2026-06-14
 
 ### Brand identity: logo + visual mark
