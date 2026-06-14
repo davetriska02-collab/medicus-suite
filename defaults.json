@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3920,7 +3920,8 @@
       "analyte": {
         "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
       },
-      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"],
+      "abnormalText": ["pure growth of", "predominant growth of", "heavy growth of", "sensitive to", "resistant to", "sensitivities shown", "antimicrobial sensitivity"]
     },
     {
       "id": "base-bowel-screening-nonresponder",
@@ -4145,7 +4146,8 @@
         "match": ["blood culture", "blood cx", "blood c&s"],
         "exclude": ["urine", "wound", "sputum", "csf", "swab", "stool", "faeces", "faecal"]
       },
-      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"],
+      "abnormalText": ["grown in aerobic bottle", "grown in anaerobic bottle", "positive blood culture", "gram positive", "gram negative", "gram-positive", "gram-negative", "bacteraemia", "bacteremia", "fungaemia", "sensitive to", "resistant to", "sensitivities shown", "staphylococcus", "streptococcus", "escherichia", "klebsiella", "enterococcus", "pseudomonas", "haemophilus", "neisseria", "listeria", "salmonella", "candida", "acinetobacter", "serratia", "enterobacter", "proteus", "citrobacter", "stenotrophomonas"]
     },
     {
       "id": "base-low-calcium",

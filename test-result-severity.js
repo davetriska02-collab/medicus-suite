@@ -1304,6 +1304,66 @@ console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/sup
   );
 }
 
+// ── The Keeper: culture/blood-culture abnormalText positive-flag guard ────────
+// Hardening for the result-triage false-calm hazard: a POSITIVE culture whose free text
+// ALSO contains a "no growth" normalText substring (e.g. a blood culture positive in only
+// one bottle: "...; no growth in anaerobic bottle") was being silently CALMED. The shipped
+// msu-culture and base-blood-culture rules now carry abnormalText positive flags
+// (sensitivities / Gram / organism / growth-quantity terms), checked FIRST so a positive is
+// forced to review. Guard: positives → review; true negatives & contaminants → still calm.
+console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rules) ---');
+{
+  const shipped = require('./defaults.json').resultRules;
+  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  const run = (name, text) =>
+    evaluateReportSeverity(
+      makeReport([{ name, value: NaN, urgent: false, isAbove: false, isBelow: false, text }]),
+      { resultRules: shipped }
+    );
+
+  // msu-culture
+  assert(
+    Array.isArray(byId['msu-culture'].abnormalText) && byId['msu-culture'].abnormalText.length > 0,
+    'msu-culture ships an abnormalText positive-flag set'
+  );
+  assert(
+    run('MSU - Microscopy and Culture', 'No growth after 48 hours.').noGrowthCount === 1,
+    'urine "No growth" → still calmed (noGrowth)'
+  );
+  assert(
+    run('Mid-stream urine', 'Mixed growth of 3 organisms — probable contamination. No significant growth of a urinary pathogen.').noGrowthCount === 1,
+    'urine contaminant "no significant growth" → still calmed (not over-flagged — "mixed growth" was dropped)'
+  );
+  assert(
+    run('Urine culture', 'Significant growth of Escherichia coli >10^5 cfu/mL. No significant growth of a second organism. Sensitive to nitrofurantoin, resistant to trimethoprim.').reviewCount === 1,
+    'urine positive carrying a "no significant growth" substring → review (not falsely calmed)'
+  );
+
+  // base-blood-culture (highest stakes)
+  assert(
+    Array.isArray(byId['base-blood-culture'].abnormalText) && byId['base-blood-culture'].abnormalText.length > 0,
+    'base-blood-culture ships an abnormalText positive-flag set'
+  );
+  assert(
+    run('Blood culture', 'No growth after 5 days incubation.').noGrowthCount === 1,
+    'blood culture "No growth after 5 days" → still calmed'
+  );
+  {
+    const positiveOneBottle = run(
+      'Blood culture',
+      'Staphylococcus aureus grown in aerobic bottle; no growth in anaerobic bottle. Gram-positive cocci in clusters seen. Sensitive to flucloxacillin.'
+    );
+    assert(
+      positiveOneBottle.reviewCount === 1,
+      'blood culture positive with "no growth in anaerobic bottle" substring → review (not falsely calmed)'
+    );
+    assert(
+      positiveOneBottle.noGrowthCount === 0,
+      'blood culture positive-in-one-bottle is NOT counted as noGrowth'
+    );
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

@@ -99,6 +99,27 @@
       }
     }
   };
+  // Builtin result rules that GAINED an abnormalText positive-flag set in a later shipped
+  // version. The resultRules migration below is append-only (it adds builtins the user
+  // lacks BY ID), so a builtin the user already holds keeps its OLD shape and never
+  // receives the new positive flags — leaving the false-calm hazard those flags fix (e.g. a
+  // positive blood culture reading "...no growth in anaerobic bottle" being calmed). Adding
+  // abnormalText is purely additive (it only ever ADDS a 'review' outcome, never calms), so
+  // backfill the shipped abnormalText onto a held builtin that still lacks one. This also
+  // repairs a rule whose abnormalText was dropped by an older options edit. Kept in
+  // lock-step with content.js; bump defaults.json "version" when you add an id here.
+  const RESULT_RULES_GAINED_ABNORMALTEXT = ['msu-culture', 'base-blood-culture'];
+  const backfillBuiltinAbnormalText = (resultRules, shippedResultRules) => {
+    if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
+    for (const id of RESULT_RULES_GAINED_ABNORMALTEXT) {
+      const held = resultRules.find(r => r && r.id === id && r.builtin);
+      if (!held || (Array.isArray(held.abnormalText) && held.abnormalText.length)) continue;
+      const shippedRule = shippedResultRules.find(r => r && r.id === id);
+      if (shippedRule && Array.isArray(shippedRule.abnormalText) && shippedRule.abnormalText.length) {
+        held.abnormalText = [...shippedRule.abnormalText];
+      }
+    }
+  };
   const mergeShippedDefaults = (cfg, shipped) => {
     if (!cfg || !Array.isArray(cfg.rules) || !shipped) return null;
     if ((cfg.version || 0) >= (shipped.version || 0)) return null;
@@ -117,6 +138,7 @@
     for (const r of (shipped.resultRules || [])) {
       if (r.builtin && !haveRR.has(r.id) && !removed.has(r.id)) out.resultRules.push(r);
     }
+    backfillBuiltinAbnormalText(out.resultRules, shipped.resultRules);
     out.version = shipped.version;
     return out;
   };
@@ -1297,6 +1319,15 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (selectedKind === 'text') {
       const normalText = ($('#rrNormalText').value || '').split('\n').map(s => s.trim()).filter(Boolean);
       const normalLabel = $('#rrNormalLabel').value.trim() || 'No growth';
+      // Preserve abnormalText (positive-flag phrases — e.g. the culture/blood-culture
+      // safety flags, or the bowel-screening non-responder phrases). The editor has no
+      // field for it, so carry forward the existing value rather than silently dropping it
+      // on every save (which would strip the positive-flag guard and re-open the
+      // false-calm hazard). Captured before rrEditingDraft is reassigned below.
+      const keptAbnormalText =
+        Array.isArray(rrEditingDraft.abnormalText) && rrEditingDraft.abnormalText.length
+          ? rrEditingDraft.abnormalText
+          : null;
       rrEditingDraft = {
         id: rrEditingDraft.id,
         builtin: rrEditingDraft.builtin || false,
@@ -1307,6 +1338,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         normalText,
         enabled
       };
+      if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
     } else {
       rrEditingDraft.label = label;
       rrEditingDraft.analyte = analyte;
