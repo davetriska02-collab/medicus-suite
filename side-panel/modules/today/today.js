@@ -357,7 +357,8 @@ function buildWrBody() {
 function buildRmBody() {
   if (!_rmData) return '<span class="today-loading">Loading…</span>';
   if (!_rmData.configured) {
-    return `<span class="today-muted">Triage monitor not configured.</span>
+    return `<span class="today-optional-tag">Optional</span>
+      <span class="today-muted">Triage monitor not set up.</span>
       <a class="today-setup-link" href="#" data-action="open-setup">Set up in options →</a>`;
   }
   if (_rmData.error && !Object.keys(_rmData.buckets).length) {
@@ -517,7 +518,7 @@ function buildSweepBody() {
 
 function buildNoCodeMsg() {
   return `
-    <span class="today-muted">No practice code configured.</span>
+    <span class="today-muted">No practice code — open a Medicus tab or set it up.</span>
     <a class="today-setup-link" href="#" data-action="open-setup">Set up now →</a>
   `;
 }
@@ -611,6 +612,9 @@ function renderScaffold() {
       id: 'rm',
       label: 'Triage Load',
       navModule: 'reception',
+      // Glossary tooltip (U1): explain what "Triage Load" means + that it needs setup.
+      tipKey: 'triage-load',
+      tipText: 'How many triage requests are waiting. Needs the Triage Monitor set up in Options.',
     },
     {
       id: 'demand',
@@ -642,7 +646,7 @@ function renderScaffold() {
             (c) => `
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
-              <span class="today-card-label">${esc(c.label)}</span>
+              <span class="today-card-label"${c.tipKey ? ` data-tip-key="${esc(c.tipKey)}" title="${esc(c.tipText || '')}" tabindex="0" role="button"` : ''}>${esc(c.label)}</span>
               ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">Open →</button>` : ''}
             </div>
             <div class="today-card-body" aria-live="polite"><span class="today-loading">Loading…</span></div>

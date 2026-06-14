@@ -58,6 +58,31 @@
   color: var(--text-2);
 }
 
+/* Export button: mirrors .trends-tab, pushed to the right of the picker row */
+.trends-export {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  margin-left: auto;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.trends-export:hover {
+  color: var(--text-2);
+  border-color: var(--border-hi);
+}
+.trends-export:active {
+  opacity: 0.85;
+}
+
 /* ── Shared chart primitives (tc-*) ─────────────────────────────────────────── */
 .tc-svg {
   width: 100%;

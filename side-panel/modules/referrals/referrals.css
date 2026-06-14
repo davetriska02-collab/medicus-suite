@@ -698,9 +698,9 @@
   background: var(--bg-mid);
   border: 1px solid var(--border);
   color: var(--text-4);
-  padding: 3px 8px;
+  padding: 4px 9px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   border-radius: var(--r-pill);
   cursor: pointer;
   white-space: nowrap;

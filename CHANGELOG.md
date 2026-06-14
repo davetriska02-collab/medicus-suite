@@ -2,6 +2,97 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.80.0] — 2026-06-14
+
+### Three clinical-safety / UX corrections from the Practice appraisal (R2a / R6 / R1)
+
+Targeted follow-ups to the rules engine and the Sentinel monitoring view. No
+matching/threshold logic changed — these surface and harden what already fires.
+
+For context, two earlier asks were already satisfied and are NOT rebuilt here: the
+silent-false-negative audit (the "Meds without a monitoring rule (N)" disclosure with
+exclude annotations + report-missing-brand mailto, `renderUnmatchedMedsSection()`, shown
+even in the all-clear state) and the patient identity banner (name / NHS / DOB / age +
+"Verify in Medicus", `.sent-patient-banner`). This pass instead surfaces the matched rule
+term, guarantees a RED item is never hidden in the digest, and strengthens the identity
+label.
+
+- **R2(a) — matched rule term per fired drug alert:** `engine/rules-engine.js` now carries
+  `matchedTerm` on each drug-monitoring chip (pure passthrough of the existing
+  `drugMatchDetail()` helper). `shared/chip-renderer.js` decorates the drug name span with a
+  `data-tip`/`title` tooltip ("Matched monitoring rule on '<term>'") when the term is present
+  and not a trivial echo of the displayed name, so a clinician can tell a correct hit from a
+  lucky substring. Attribute-only; falls back to native hover.
+- **R6 — brief digest must not hide a RED item:** `brief-core.js` `buildBrief()` now also
+  returns `moreRed` (how many of the hidden "+N more" chips are red, rank 0). The Sentinel
+  brief card annotates the line as `+N more (M red) below` when any hidden chip is red, so a
+  red signal beyond the top-4 is never silently swallowed.
+- **R1 — identity banner reads as the SUBJECT:** the patient banner gains a muted, uppercase
+  `Monitoring for` lead-in label (`.sent-patient-lead`) so it is unmistakable WHO the
+  monitoring is about when the waiting-room pinned list sits above it. Prominence/labelling
+  only — no cross-system "mismatch" detection (the data to do that reliably is not present).
+- **Test:** new `test-drug-matched-term.js` asserts a fired methotrexate chip from the engine
+  carries `matchedTerm === 'methotrexate'` (the rule term, not the med display name).
+
+## [v3.79.0] — 2026-06-14
+
+### Glossary tooltips — explain clinical codes & jargon in place (U1/G1/R3)
+
+The whole-suite Practice appraisal flagged that unexplained clinical codes and jargon
+have no explanation anywhere (U1), non-clinical reception staff see raw codes (G1), and
+the Condor pressure index is a black box (R3). This adds a small click-to-explain tooltip
+backbone and wires it into the highest-value spots. No clinical-rule or data changes.
+
+- **New shared backbone:** `shared/glossary.js` (`window.Glossary`) — a small static map
+  of jargon with no source text elsewhere (RAG, DMARD, triple-whammy, PPI, eFI, triage
+  load). `shared/tooltip.js` (`window.Tip`) — a self-initialising, document-level popover:
+  any element carrying `data-tip="…"` or `data-tip-key="<glossary key>"` gets a `cursor:help`
+  dotted-underline affordance and opens a `role="tooltip"` popover on click or Enter/Space;
+  Esc / outside-click / re-activation closes it, one open at a time. Both are CLASSIC
+  scripts loaded in `side-panel/panel.html` and `pop-out/pop-out.html` (glossary before
+  tooltip). Everything degrades gracefully — every `data-tip` also sets a matching `title=`
+  for native-hover fallback if the scripts never load.
+- **Sentinel chips (U1):** the QOF code label (e.g. `AST007`) now explains itself via the
+  chip's `indicatorName`; the drug-class label routes `DMARD` to the glossary (other
+  classes show their own name); drug-combo labels explain via their `notes`, with the
+  classic "triple whammy" routed to the glossary. Attributes only — no `window.*` calls
+  from `chip-renderer.js`.
+- **Reception friendly names (G1):** `summariseActionChips()` now prefers a human-readable
+  label (`indicatorName` / `drugName` / `displayName` …) ahead of the raw code, so the
+  receptionist view no longer leads with opaque QOF codes.
+- **Condor PPI transparency (R3):** added a visible info button by the gauge whose tooltip
+  spells out the weighting (waiting room 30%, request queue 25%, urgent 25%, capacity 20%),
+  the live component scores and the band thresholds; the `Cap:` chip now explains
+  "slots remaining / your daily minimum".
+- **Today:** the "Triage Load" tile label carries a `triage-load` glossary tip.
+
+## [v3.78.0] — 2026-06-14
+
+### Usability fixes from the whole-suite Practice appraisal
+
+Five low-risk UX corrections raised by the synthetic GP-practice usability appraisal,
+spanning four modules plus the setup card. No clinical-rule or data changes.
+
+- **Trends — CSV export (R5):** the Trends module had no way to get numbers out. Added a
+  `↓ CSV` button to the picker row that exports the *active* view — BP (date/systolic/
+  diastolic), Renal (ACR + eGFR rows), or the observation views (HbA1c / Cholesterol /
+  Weight). Uses the shared `downloadCsv` helper; no-ops when there is no data.
+- **Referrals — filter chips lifted up (R4):** the priority/status filter chips now render
+  in the controls block beside the date/preset rows instead of below the fold, so the
+  secretary persona can see and reach them without scrolling. Chips enlarged modestly for
+  legibility. Wiring unchanged (handlers re-bind to the container on every render).
+- **Today — "not configured" tiles demoted (U3):** the optional "Triage monitor not set up"
+  tile now carries a calm `Optional` tag and neutral styling so it no longer reads like the
+  red `today-card-error` failure state.
+- **Setup card — auto-collapse once the practice code is detected (U2):** once the mandatory
+  practice code is confirmed, the multi-step "Get set up" card collapses to a thin one-line
+  strip ("Setup: practice code ready · N optional steps") with Expand / Dismiss, so it stops
+  dominating whichever module is open. Collapse happens live via the existing
+  `chrome.storage.onChanged` path when the code is detected.
+- **Cold-start practice-code copy unified (G3):** Today's no-practice-code message now matches
+  Capacity's guidance — "No practice code — open a Medicus tab or set it up." (Slots already
+  used the unified wording.)
+
 ## [v3.77.11] — 2026-06-14
 
 ### Result rules: word-boundary matching on the normalText (calm) path

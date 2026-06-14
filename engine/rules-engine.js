@@ -632,6 +632,10 @@
         type: 'drug-monitoring',
         ruleId: rule.id,
         drugName: med.name,
+        // Surface WHICH rule term matched so a clinician can distinguish a
+        // correct hit ("matched on 'methotrexate'") from a lucky substring.
+        // Pure passthrough of the existing detail helper — no matching change.
+        matchedTerm: drugMatchDetail(med.name, rule).matchedTerm || null,
         drugClass: rule.drugClass || null,
         status: worstStatus,
         tests: testEvaluations,

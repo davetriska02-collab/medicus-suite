@@ -2,6 +2,7 @@
 'use strict';
 import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-chart.js';
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { downloadCsv } from '../shared/export-util.js';
 
 // ── Observation metrics (passive display — no clinical thresholds) ─────────────
 const OBS_METRICS = [
@@ -142,6 +143,7 @@ function pickerHtml() {
       (v) =>
         `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" id="trendsTab-${esc(v.key)}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}" aria-controls="trendsPanel">${esc(v.label)}</button>`
     ).join('') +
+    `<button class="trends-export" id="trendsExport" title="Download the current view as CSV" aria-label="Export CSV">↓ CSV</button>` +
     `</div>`
   );
 }
@@ -157,6 +159,39 @@ function wirePicker() {
       render({ state: lastData ? 'ok' : 'no-data' });
     });
   });
+  container.querySelector('#trendsExport')?.addEventListener('click', exportCsv);
+}
+
+// ── CSV export of the active view ───────────────────────────────────────────────
+function exportCsv() {
+  if (!lastData) return;
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `trends-${selectedView}-${stamp}.csv`;
+
+  if (selectedView === 'bp') {
+    const bm = buildBpModel(lastData);
+    if (!bm.pairs.length) return;
+    const rows = bm.pairs.map((p) => [fmtDate(p.date), p.bp.systolic, p.bp.diastolic]);
+    downloadCsv(filename, ['Date', 'Systolic (mmHg)', 'Diastolic (mmHg)'], rows);
+    return;
+  }
+
+  if (selectedView === 'renal') {
+    const rm = buildRenalModel(lastData);
+    if (!rm.acrPts.length && !rm.egfrPts.length) return;
+    const rows = [
+      ...rm.acrPts.map((p) => [fmtDate(p.date), 'ACR', p.value, rm.acrUnit]),
+      ...rm.egfrPts.map((p) => [fmtDate(p.date), 'eGFR', p.value, rm.egfrUnit]),
+    ];
+    downloadCsv(filename, ['Date', 'Measure', 'Value', 'Unit'], rows);
+    return;
+  }
+
+  const metric = OBS_METRICS.find((x) => x.key === selectedView) || OBS_METRICS[0];
+  const { pts, unit } = seriesFor(metric, lastData);
+  if (!pts.length) return;
+  const rows = pts.map((p) => [fmtDate(p.date), p.value]);
+  downloadCsv(filename, ['Date', `${metric.label} (${unit})`], rows);
 }
 
 // ── Main render dispatcher ─────────────────────────────────────────────────────

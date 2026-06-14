@@ -1028,6 +1028,7 @@ function render(payload) {
   const patientHtml = patient
     ? `
     <div class="sent-patient-banner">
+      <span class="sent-patient-lead">Monitoring for</span>
       <div class="sent-patient-banner-row">
         <div class="sent-patient-name">${escHtml(patient.displayName || patient.name || '')}</div>
         ${verifyBtn}
@@ -1608,8 +1609,12 @@ function renderBriefCard(brief) {
     )
     .join('');
 
-  // "+N more below" text (plain, not a link)
-  const moreLine = brief.moreCount > 0 ? `<div class="sent-brief-more">+${brief.moreCount} more below</div>` : '';
+  // "+N more below" text (plain, not a link). R6: when some of the hidden
+  // chips are RED, annotate the count so a red item is never silently swallowed.
+  const moreLine =
+    brief.moreCount > 0
+      ? `<div class="sent-brief-more">+${brief.moreCount} more${brief.moreRed > 0 ? ` (${brief.moreRed} red)` : ''} below</div>`
+      : '';
 
   const bodyHtml = `
     <div class="sent-brief-body" id="sentBriefBody">
