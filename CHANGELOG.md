@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.84.2] — 2026-06-14
+
+### DTAC assessment — governance drafts + CSO GMC correction
+
+Documentation-only step toward NHS Digital Technology Assessment Criteria (DTAC)
+readiness. No code, rules, `defaults.json`, or clinical-threshold changes.
+
+First, corrected an incorrect General Medical Council registration number for the
+Clinical Safety Officer (Dr Dave Triska) — now the correct **GMC 6159481** in all
+six places it appeared (`CLINICAL-SAFETY-NOTICE.md`, `HAZARD-LOG.md`, `SOUP.md`).
+
+Then added seven DRAFT governance documents mapping existing artefacts onto the
+DTAC domains (they assemble and reference the hazard log, safety notice, intended
+purpose, SOUP, and security audit):
+
+- `docs/CLINICAL-SAFETY-CASE-REPORT.md` (MS-CSO-CSCR-001) — DCB0129-style safety
+  case summarising the hazard log and controls (Section A).
+- `docs/DPIA.md` (MS-DPO-DPIA-001) — Data Protection Impact Assessment for the
+  local-only, zero-egress processing model (Section B).
+- `docs/INTEROPERABILITY-STATEMENT.md` (MS-DOC-INTEROP-001) — reasoned N/A
+  statement (Section D).
+- `docs/CSO-DECLARATION.md` (MS-CSO-DECL-001 + MS-CSO-DCB0160-001) — CSO
+  declaration plus a deploying-organisation (DCB0160-style) hand-off note.
+- `docs/ACCESSIBILITY-STATEMENT.md` (MS-DOC-A11Y-001) — heuristic WCAG 2.1 AA
+  self-assessment with disclosed known gaps (Section E).
+- `docs/DTAC-STATUS.md` (MS-DOC-DTAC-001) — readiness tracker across all DTAC
+  domains.
+- `docs/CLINICAL-SAFETY-RESYNC-v3.84.2-DRAFT.md` (MS-CSO-RESYNC-001) — DRAFT CSO
+  change-proposal preparing audit task T4: classifies every release v3.65.0 →
+  v3.84.2, concludes no new hazard arises and no residual increases, and proposes
+  the specific edits to bring the three signed safety docs onto current.
+
+All are marked DRAFT pending sign-off and carry placeholders for facts held
+outside the repo (ICO registration number, sign-off dates, signature).
+
 ## [v3.84.1] — 2026-06-14
 
 ### Repo-audit follow-up: testable logic cores + RAG single-source-of-truth + regenerated feature list

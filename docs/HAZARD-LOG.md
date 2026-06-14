@@ -6,7 +6,7 @@
 **Document version:** 3.9  
 **Date issued:** 2026-06-13  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
-**Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP  
+**Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP  
 **Status:** Live — reviewed at each minor or major release  
 **Applicable standards:** Drafted in the style of DCB0129 (Manufacturer) with consideration of DCB0160 (Deploying Organisation) responsibilities, noting that Medicus Suite is not a Health IT system under the formal scope of those standards but is voluntarily managed against them by the author.
 
@@ -747,7 +747,7 @@ If an incident meeting the threshold of a patient safety incident is identified,
 
 I confirm that I have reviewed each hazard recorded in this log, that the controls described are in place at v3.64.0, and that the residual risks are acceptable for limited distribution to named GP users who have read and accepted the Clinical Safety Notice and the full disclaimer.
 
-**Dr Dave Triska, GMC 7534932**  
+**Dr Dave Triska, GMC 6159481**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
 **Date:** 2026-06-13 _(reviewed and reissued with v3.64.0)_
