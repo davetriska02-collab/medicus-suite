@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "rules": [
     {
       "id": "mh-crisis",
@@ -4140,6 +4140,74 @@
         "exclude": ["urine", "wound", "sputum", "csf", "swab", "stool", "faeces", "faecal"]
       },
       "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"]
+    },
+    {
+      "id": "base-low-calcium",
+      "kind": "threshold",
+      "enabled": false,
+      "builtin": true,
+      "label": "Low adjusted calcium — hypocalcaemia",
+      "analyte": {
+        "match": ["adjusted calcium", "corrected calcium", "albumin-adjusted calcium", "albumin adjusted calcium"],
+        "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
+      },
+      "comparator": "below",
+      "amber": 2.1,
+      "red": 1.9,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-magnesium",
+      "kind": "threshold",
+      "enabled": false,
+      "builtin": true,
+      "label": "Low magnesium — hypomagnesaemia",
+      "analyte": {
+        "match": ["magnesium"],
+        "exclude": ["urine", "urinary", "24 hour", "24-hour"]
+      },
+      "comparator": "below",
+      "amber": 0.6,
+      "red": 0.5,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-tsh",
+      "kind": "threshold",
+      "enabled": false,
+      "builtin": true,
+      "label": "High TSH — possible hypothyroidism",
+      "analyte": {
+        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
+        "exclude": ["receptor", "antibody", "antibodies"]
+      },
+      "comparator": "above",
+      "amber": 10,
+      "red": 20,
+      "unit": "mU/L",
+      "suppressIfProblem": {
+        "match": ["hypothyroidism", "hypothyroid", "levothyroxine", "thyroxine", "myxoedema", "myxedema"],
+        "exclude": ["family history"]
+      }
+    },
+    {
+      "id": "base-low-tsh",
+      "kind": "threshold",
+      "enabled": false,
+      "builtin": true,
+      "label": "Suppressed TSH — possible thyrotoxicosis",
+      "analyte": {
+        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
+        "exclude": ["receptor", "antibody", "antibodies"]
+      },
+      "comparator": "below",
+      "amber": 0.1,
+      "red": 0.01,
+      "unit": "mU/L",
+      "suppressIfProblem": {
+        "match": ["thyrotoxicosis", "hyperthyroidism", "hyperthyroid", "graves", "carbimazole", "propylthiouracil", "thyroid cancer", "levothyroxine", "thyroxine"],
+        "exclude": ["family history"]
+      }
     }
   ]
 }

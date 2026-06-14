@@ -1244,6 +1244,65 @@ console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---')
   assert(gramNeg.level === 'amber' && gramNeg.reviewCount === 1, 'blood culture "Gram negative ... isolated" → still amber review');
 }
 
+// ── The Keeper additions: hypocalcaemia / hypomagnesaemia / TSH (disabled) ────
+// These four ship disabled-by-default (Unreviewed) pending CSO source verification.
+// Guard: they exist, are inert as shipped, and fire/exclude/suppress correctly once enabled.
+console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH ship disabled, behave when enabled ---');
+{
+  const shipped = require('./defaults.json').resultRules;
+  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  const keeperIds = ['base-low-calcium', 'base-low-magnesium', 'base-high-tsh', 'base-low-tsh'];
+
+  keeperIds.forEach(id => {
+    assert(byId[id] && byId[id].enabled === false,
+      `${id} ships disabled-by-default (Unreviewed, awaiting CSO sign-off)`);
+  });
+
+  // As shipped (disabled), they must NOT fire even on a critical value.
+  const asShipped = (name, value) =>
+    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]),
+      { resultRules: shipped });
+  assert(asShipped('Adjusted calcium', 1.5).level === 'none', 'disabled low-Ca rule does not fire as shipped');
+  assert(asShipped('Serum magnesium', 0.3).level === 'none', 'disabled low-Mg rule does not fire as shipped');
+  assert(asShipped('TSH', 50).level === 'none', 'disabled high-TSH rule does not fire as shipped');
+
+  // Force-enable a single rule and grade against it (+ optional problem list).
+  const withRule = (id, name, value, problems) =>
+    evaluateReportSeverity(
+      makeReport([{ name, value, text: '', urgent: false, isAbove: false, isBelow: false }]),
+      { resultRules: [{ ...byId[id], enabled: true }], problems: problems || [] }
+    );
+
+  // Hypocalcaemia: matches adjusted/corrected only; amber 2.1, red 1.9; ionised excluded.
+  assert(withRule('base-low-calcium', 'Adjusted calcium', 2.05).level === 'amber', 'adjusted calcium 2.05 → amber');
+  assert(withRule('base-low-calcium', 'Corrected calcium', 1.8).level === 'red', 'corrected calcium 1.8 → red');
+  assert(withRule('base-low-calcium', 'Ionised calcium', 1.1).level === 'none', 'ionised calcium 1.1 → none (excluded)');
+  // Deliberate design: a bare/un-adjusted "Calcium" must NOT trip the low rule (hypoalbuminaemia false-positive guard).
+  assert(withRule('base-low-calcium', 'Calcium', 1.8).level === 'none', 'bare "Calcium" 1.8 → none (adjusted-only match)');
+
+  // Hypomagnesaemia: amber 0.6, red 0.5; urine excluded.
+  assert(withRule('base-low-magnesium', 'Serum magnesium', 0.58).level === 'amber', 'magnesium 0.58 → amber');
+  assert(withRule('base-low-magnesium', 'Magnesium', 0.4).level === 'red', 'magnesium 0.4 → red');
+  assert(withRule('base-low-magnesium', 'Urine magnesium', 0.4).level === 'none', 'urine magnesium → none (excluded)');
+
+  // High TSH: amber 10, red 20; "TSH receptor antibody" excluded; suppressed by hypothyroidism on record.
+  assert(withRule('base-high-tsh', 'TSH', 12).level === 'amber', 'TSH 12 → amber');
+  assert(withRule('base-high-tsh', 'TSH', 25).level === 'red', 'TSH 25 → red');
+  assert(withRule('base-high-tsh', 'TSH receptor antibody', 40).level === 'none', 'TSH receptor antibody → none (excluded)');
+  assert(
+    withRule('base-high-tsh', 'TSH', 25, [{ label: 'Hypothyroidism' }]).level === 'none',
+    'high TSH suppressed when hypothyroidism is on the problem record'
+  );
+
+  // Suppressed TSH: amber 0.1, red 0.01; suppressed by thyrotoxicosis/carbimazole on record.
+  assert(withRule('base-low-tsh', 'TSH', 0.05).level === 'amber', 'TSH 0.05 → amber');
+  assert(withRule('base-low-tsh', 'TSH', 0.005).level === 'red', 'TSH 0.005 → red');
+  assert(
+    withRule('base-low-tsh', 'TSH', 0.005, [{ label: 'Thyrotoxicosis on carbimazole' }]).level === 'none',
+    'suppressed TSH suppressed when thyrotoxicosis is on the problem record'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
