@@ -10,6 +10,10 @@ monitor into one extension that reads the user's logged-in Medicus session.
 Built by Dr Dave Triska (Witley & Milford Surgery). Not affiliated with
 Medicus the company.
 
+For *why* the suite is built this way — the read-only on-top-of-Medicus
+augmentation model and a grounded "first-of-type" positioning, including its
+honest limits — see [`docs/VISION.md`](docs/VISION.md).
+
 ## Installation
 
 1. Download the latest `medicus-suite-vX.Y.Z.zip` from the

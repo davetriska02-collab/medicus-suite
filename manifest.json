@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.77.5",
-  "description": "Medicus Suite v3.77.5",
+  "version": "3.77.6",
+  "description": "Medicus Suite v3.77.6",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
