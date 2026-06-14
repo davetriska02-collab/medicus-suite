@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.80.0] — 2026-06-14
+
+### Three clinical-safety / UX corrections from the Practice appraisal (R2a / R6 / R1)
+
+Targeted follow-ups to the rules engine and the Sentinel monitoring view. No
+matching/threshold logic changed — these surface and harden what already fires.
+
+For context, two earlier asks were already satisfied and are NOT rebuilt here: the
+silent-false-negative audit (the "Meds without a monitoring rule (N)" disclosure with
+exclude annotations + report-missing-brand mailto, `renderUnmatchedMedsSection()`, shown
+even in the all-clear state) and the patient identity banner (name / NHS / DOB / age +
+"Verify in Medicus", `.sent-patient-banner`). This pass instead surfaces the matched rule
+term, guarantees a RED item is never hidden in the digest, and strengthens the identity
+label.
+
+- **R2(a) — matched rule term per fired drug alert:** `engine/rules-engine.js` now carries
+  `matchedTerm` on each drug-monitoring chip (pure passthrough of the existing
+  `drugMatchDetail()` helper). `shared/chip-renderer.js` decorates the drug name span with a
+  `data-tip`/`title` tooltip ("Matched monitoring rule on '<term>'") when the term is present
+  and not a trivial echo of the displayed name, so a clinician can tell a correct hit from a
+  lucky substring. Attribute-only; falls back to native hover.
+- **R6 — brief digest must not hide a RED item:** `brief-core.js` `buildBrief()` now also
+  returns `moreRed` (how many of the hidden "+N more" chips are red, rank 0). The Sentinel
+  brief card annotates the line as `+N more (M red) below` when any hidden chip is red, so a
+  red signal beyond the top-4 is never silently swallowed.
+- **R1 — identity banner reads as the SUBJECT:** the patient banner gains a muted, uppercase
+  `Monitoring for` lead-in label (`.sent-patient-lead`) so it is unmistakable WHO the
+  monitoring is about when the waiting-room pinned list sits above it. Prominence/labelling
+  only — no cross-system "mismatch" detection (the data to do that reliably is not present).
+- **Test:** new `test-drug-matched-term.js` asserts a fired methotrexate chip from the engine
+  carries `matchedTerm === 'methotrexate'` (the rule term, not the med display name).
+
 ## [v3.79.0] — 2026-06-14
 
 ### Glossary tooltips — explain clinical codes & jargon in place (U1/G1/R3)

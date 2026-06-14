@@ -148,6 +148,22 @@
       hrtCtxHtml = `<div class="sent-chip-hrt-ctx ${ctxClass}">${ctxText}</div>`;
     }
 
+    // R2(a): surface the matched monitoring rule term on the name span so a
+    // clinician can tell a correct hit from a lucky substring. Attribute-only
+    // (Phase-2 tooltip backbone) — no window.* calls from the renderer. Skip
+    // when the matched term is a trivial echo of the displayed name.
+    let matchedTermTip = '';
+    if (chip.matchedTerm) {
+      const term = String(chip.matchedTerm).trim();
+      const shown = String(chip.drugName || chip.ruleId || '')
+        .trim()
+        .toLowerCase();
+      if (term && shown !== term.toLowerCase()) {
+        const tipText = `Matched monitoring rule on '${term}'`;
+        matchedTermTip = ` data-tip="${escAttr(tipText)}" title="${escAttr(tipText)}" tabindex="0" role="button"`;
+      }
+    }
+
     const evAttrs = chip.evidence
       ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
       : '';
@@ -171,7 +187,7 @@
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
-          <span class="sent-chip-name">${escHtml(chip.drugName || chip.ruleId)}${customTag}</span>
+          <span class="sent-chip-name"${matchedTermTip}>${escHtml(chip.drugName || chip.ruleId)}${customTag}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
           ${evChevron}
         </div>
