@@ -818,6 +818,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#importFile').addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
+      if (f.size > 10 * 1024 * 1024) { alert('File is too large (max 10 MB). Import cancelled.'); return; }
       const text = await f.text();
       try {
         const parsed = JSON.parse(text);

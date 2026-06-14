@@ -994,6 +994,45 @@ const { sentinelImport } = require('./shared/io/sentinel-io.js');
     );
   }
 
+  // ── (k) request-monitor import type validation ───────────────────────────────
+  // Parity with submissions/triage-alert M2: a crafted backup must not write a
+  // NaN/Infinity/string pollSeconds or a non-boolean toggle to storage.
+  console.log('\n--- (k) request-monitor import type validation ---');
+
+  const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
+
+  async function expectRmReject(data, msgFragment, label) {
+    try {
+      await requestMonitorImport(data);
+      assert(false, `${label}: should have thrown`);
+    } catch (e) {
+      assert(e.message.includes(msgFragment), `${label}: error mentions "${msgFragment}" (got: ${e.message})`);
+    }
+  }
+  async function expectRmResolve(data, label) {
+    try {
+      await requestMonitorImport(data);
+      assert(true, `${label}: valid data accepted without error`);
+    } catch (e) {
+      assert(false, `${label}: unexpectedly threw: ${e.message}`);
+    }
+  }
+
+  await expectRmReject({ pollSeconds: '60' }, 'finite positive number', 'requestMonitor.pollSeconds as string');
+  await expectRmReject({ pollSeconds: NaN }, 'finite positive number', 'requestMonitor.pollSeconds as NaN');
+  await expectRmReject({ pollSeconds: Infinity }, 'finite positive number', 'requestMonitor.pollSeconds as Infinity');
+  await expectRmReject({ pollSeconds: 0 }, 'finite positive number', 'requestMonitor.pollSeconds as zero');
+  await expectRmReject({ enabled: 'yes' }, 'boolean', 'requestMonitor.enabled as string');
+  await expectRmReject({ notifySound: 1 }, 'boolean', 'requestMonitor.notifySound as number');
+
+  await expectRmResolve(
+    { enabled: true, pollSeconds: 60, notifyEnabled: false, notifySound: true },
+    'requestMonitor valid: all fields'
+  );
+  await expectRmResolve({ assigneeId: 'abc-123' }, 'requestMonitor valid: assigneeId only');
+  await expectRmResolve({ pollSeconds: null }, 'requestMonitor valid: null pollSeconds tolerated');
+  await expectRmResolve({}, 'requestMonitor valid: empty object');
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

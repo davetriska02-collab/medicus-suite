@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.77.5] — 2026-06-14
+
+### Security audit follow-up: import hardening parity
+
+Low-severity defense-in-depth fixes from the v3.77.4 red-team pass (no
+Critical/High/Medium found):
+
+- **`shared/io/request-monitor-io.js`** — validate types on import (parity with
+  `submissions-io` / `triage-alert-io` M2): reject a non-finite/non-positive
+  `pollSeconds` and non-boolean toggles at the import boundary rather than relying
+  on runtime `Math.max` coercion. New regression case `(k)` in
+  `test-import-hardening.js` (111 assertions pass).
+- **Backup import size cap** — apply the existing 10 MB guard (already on the
+  full-suite import) to the per-module import in `options/options.js`, the Sentinel
+  custom-rules import (`sentinel-options/options.js`), and the Triage Lens config
+  import (`content-scripts/triage-lens/options.js`), so an oversized JSON cannot
+  hang the settings tab.
+- **`scripts/check-doc-versions.js`** — re-pin the three CSO-signed safety docs
+  (`CLINICAL-SAFETY-NOTICE`, `HAZARD-LOG`, `SOUP`) as `KNOWN_STALE` at their
+  current `3.64.0` while a CSO refresh onto the 3.77 line is outstanding. The
+  guard now WARNs instead of failing CI; pins to be removed when each doc is
+  reissued.
+
+## [v3.77.4] — 2026-06-14
+
+### Add SECURITY.md vulnerability-reporting policy
+
+- New root `SECURITY.md` documenting private vulnerability reporting (email),
+  supported-version policy, audit scope, and links to the existing
+  `SECURITY-AUDIT.md`, `docs/SOUP.md`, and clinical-safety docs. Fills the one
+  standard security artifact the repo was missing; no code change.
+
 ## [v3.77.3] — 2026-06-14
 
 ### Result rules settings: fixes from The Practice re-run
