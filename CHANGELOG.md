@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.84.1] — 2026-06-14
+
+### Corrected CSO GMC number in governance documents
+
+Fixed an incorrect General Medical Council registration number for the Clinical
+Safety Officer (Dr Dave Triska) in the clinical-safety governance documents. The
+number now reads the correct GMC 6159481 in all six places it appeared.
+
+- `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md`, `docs/SOUP.md`.
+- Documentation-only correction; no code, rules, `defaults.json`, or clinical
+  threshold changes.
+
 ## [v3.84.0] — 2026-06-14
 
 ### Pre-clinic Sweep — select several clinicians

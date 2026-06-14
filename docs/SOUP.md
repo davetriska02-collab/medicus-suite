@@ -6,7 +6,7 @@
 **Document version:** 1.5
 **Date issued:** 2026-06-13
 **Author:** Dr Dave Triska, Graysbrook Ltd
-**Clinical Safety Officer:** Dr Dave Triska (GMC 7534932), registered GP
+**Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP
 **Status:** Live — reviewed at each minor or major release, and whenever a vendored library is upgraded
 **Applicable standards:** Drafted in the style of IEC 62304 §8.1.2 (SOUP identification) and §7 (SOUP risk management), consistent with the voluntary DCB0129-style management described in `docs/HAZARD-LOG.md`.
 
