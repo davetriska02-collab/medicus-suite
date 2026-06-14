@@ -36,6 +36,22 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// "Who is this handout for?" label. Prefers the canonical `clinicians` array;
+// falls back to the single-name `clinician` for older payloads.
+//   0 selected → "All clinicians"
+//   1          → "<name>'s patients"
+//   ≥2         → "<name1>, <name2>… (N clinicians)"
+function clinicianWhoFor(model) {
+  const list = Array.isArray(model.clinicians)
+    ? model.clinicians.filter(Boolean)
+    : model.clinician
+      ? [model.clinician]
+      : [];
+  if (list.length === 0) return 'All clinicians';
+  if (list.length === 1) return `${list[0]}'s patients`;
+  return `${list.join(', ')} (${list.length} clinicians)`;
+}
+
 function patientHtml(p, showClinician) {
   const time = p.time ? `<span class="patient-time">${esc(fmtTime(p.time))}</span>` : '';
   const clin = showClinician && p.clinician ? `<span class="patient-clin">${esc(p.clinician)}</span>` : '';
@@ -69,7 +85,7 @@ async function render() {
     return;
   }
 
-  const whoFor = model.clinician ? `${model.clinician}'s patients` : 'All clinicians';
+  const whoFor = clinicianWhoFor(model);
   const taskCount = model.patients.reduce((n, p) => n + (p.actions ? p.actions.length : 0), 0);
 
   // The clinic day the sweep was for (may be today or a future clinic) — kept

@@ -38,6 +38,21 @@ function fmtDate(iso) {
   });
 }
 
+// "Who is this batch for?" label. Prefers the canonical `clinicians` array;
+// falls back to the single-name `clinician` for older payloads.
+//   0 selected → "All clinicians"; 1 → "<name>'s patients";
+//   ≥2 → "<name1>, <name2>… (N clinicians)".
+function clinicianWhoFor(model) {
+  const list = Array.isArray(model.clinicians)
+    ? model.clinicians.filter(Boolean)
+    : model.clinician
+      ? [model.clinician]
+      : [];
+  if (list.length === 0) return 'All clinicians';
+  if (list.length === 1) return `${list[0]}'s patients`;
+  return `${list.join(', ')} (${list.length} clinicians)`;
+}
+
 // Render a "Copy" button that copies `text` to the clipboard when clicked.
 // Returns an HTML string; the onclick is wired after innerHTML insertion.
 let _copyButtonSeq = 0;
@@ -110,7 +125,7 @@ async function render() {
   // Consume-on-read: remove the transient key immediately.
   chrome.storage.local.remove('sweep.batchPack');
 
-  const whoFor = model.clinician ? `${model.clinician}'s patients` : 'All clinicians';
+  const whoFor = clinicianWhoFor(model);
   const runAt = model.runAt || model.generatedAt;
   // The clinic day this batch was swept for — distinct from when it was
   // generated, so a batch prepared for a future clinic states which day.

@@ -58,7 +58,8 @@ const LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 let container = null;
 let _abortFlag = false; // set to true to stop the in-progress sweep loop
-let _selectedClinician = ''; // '' = all clinicians
+let _selectedClinicians = []; // array of clinician names; [] = all clinicians
+let _clinicianList = []; // clinicians booked for the current day (for the picker)
 let _selectedDate = todayISO(); // YYYY-MM-DD — day being swept (defaults to today)
 let _running = false; // true while a batch is in progress
 
@@ -90,6 +91,23 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// Normalise a persisted/restored clinician selection (which may be an array,
+// a single legacy string, or null) into an array of names. [] = all clinicians.
+function normaliseClinicianSelection(val) {
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (typeof val === 'string' && val) return [val];
+  return [];
+}
+
+// Human-readable label for a clinician selection (array of names; [] = all).
+// 0 → "All clinicians"; 1 → "<name>'s patients"; ≥2 → "<a>, <b>… (N clinicians)".
+function clinicianSelectionLabel(names) {
+  const list = Array.isArray(names) ? names.filter(Boolean) : [];
+  if (list.length === 0) return 'All clinicians';
+  if (list.length === 1) return `${list[0]}'s patients`;
+  return `${list.join(', ')} (${list.length} clinicians)`;
 }
 
 function formatTime(t) {
@@ -168,7 +186,8 @@ async function persistLastRun() {
       [LAST_RUN_KEY]: {
         runAt: _sweepMeta?.runAt || new Date().toISOString(),
         clinicDate: _sweepMeta?.clinicDate || _selectedDate,
-        clinician: _selectedClinician || null,
+        clinicians: _selectedClinicians.slice(),
+        clinician: _selectedClinicians.length === 1 ? _selectedClinicians[0] : null,
         results: serialiseResults(_cumulativeResults),
         missingUuidCount: _sweepMeta?.missingUuidCount ?? 0,
         totalCount: _allPatients.length,
@@ -308,7 +327,7 @@ async function preloadClinicians() {
   try {
     const raw = await fetchSchedulingOverview(code, _selectedDate || todayISO(), {});
     const { clinicians } = extractBookedPatients(raw, { limit: null });
-    populateClinicianSelect(clinicians);
+    renderClinicianPicker(clinicians);
   } catch (_) {}
 }
 
@@ -357,12 +376,10 @@ async function onDateChange(e) {
   try {
     const raw = await fetchSchedulingOverview(code, _selectedDate, {});
     const { clinicians } = extractBookedPatients(raw, { limit: null });
-    // If the previously-selected clinician isn't booked on the new day, reset to
-    // "All clinicians" so the user isn't filtering on a name with no clinic.
-    if (_selectedClinician && !clinicians.includes(_selectedClinician)) {
-      _selectedClinician = '';
-    }
-    populateClinicianSelect(clinicians);
+    // Preserve the selection by intersecting it with the new day's clinicians;
+    // drop any selected clinician not booked that day. renderClinicianPicker
+    // applies the intersect-preserve logic (and falls back to All if emptied).
+    renderClinicianPicker(clinicians);
   } catch (_) {}
 }
 
@@ -380,13 +397,14 @@ async function runSweep(apiBase, hiddenRules) {
     return;
   }
 
-  // limit: null — fetch the full list; sweep.js handles batching
+  // limit: null — fetch the full list; sweep.js handles batching.
+  // Empty _selectedClinicians → all clinicians (per the core normalisation).
   const { patients, clinicians, missingUuidCount, diagnosticMessage } = extractBookedPatients(raw, {
-    clinician: _selectedClinician || null,
+    clinicians: _selectedClinicians,
     limit: null,
   });
 
-  populateClinicianSelect(clinicians);
+  renderClinicianPicker(clinicians);
 
   if (diagnosticMessage && patients.length === 0) {
     if (/^No booked appointments/.test(diagnosticMessage)) renderNotice(esc(diagnosticMessage));
@@ -784,7 +802,7 @@ async function onPrintHandout() {
   const model = buildHandout(_lastActionRows, {
     runAt: _sweepMeta?.runAt || new Date().toISOString(),
     clinicDate: _sweepMeta?.clinicDate || _selectedDate,
-    clinician: _selectedClinician || null,
+    clinicians: _selectedClinicians.slice(),
     suiteVersion: chrome.runtime.getManifest().version,
   });
   await chrome.storage.local.set({ 'sweep.handout': model });
@@ -810,7 +828,8 @@ async function onGenerateBatch() {
   // Annotate with meta for the renderer
   batchPack.runAt = _sweepMeta?.runAt || new Date().toISOString();
   batchPack.clinicDate = _sweepMeta?.clinicDate || _selectedDate;
-  batchPack.clinician = _selectedClinician || null;
+  batchPack.clinicians = _selectedClinicians.slice();
+  batchPack.clinician = _selectedClinicians.length === 1 ? _selectedClinicians[0] : null;
   batchPack.suiteVersion = chrome.runtime.getManifest().version;
 
   await chrome.storage.local.set({ 'sweep.batchPack': batchPack });
@@ -835,18 +854,75 @@ function renderNotice(message) {
   _running = false;
 }
 
-// Fill the clinician filter dropdown.
-// Preserves the current selection if that clinician is still in the list.
-function populateClinicianSelect(clinicians) {
-  const sel = container?.querySelector('#sweepClinician');
-  if (!sel || !Array.isArray(clinicians)) return;
-  const current = _selectedClinician;
-  sel.innerHTML =
-    `<option value="">All clinicians</option>` +
-    clinicians.map((c) => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  if (current && !clinicians.includes(current)) {
-    _selectedClinician = '';
-    sel.value = '';
+// Build the per-clinician checkbox picker for the current day.
+// Preserves the current selection by intersecting _selectedClinicians with the
+// new day's clinician list (any selected clinician not booked that day is
+// dropped). If that empties the selection, falls back to "All clinicians".
+function renderClinicianPicker(clinicians) {
+  const listEl = container?.querySelector('#sweepClinList');
+  const allCb = container?.querySelector('#sweepClinAll');
+  if (!listEl || !Array.isArray(clinicians)) return;
+
+  _clinicianList = clinicians.slice();
+
+  // Intersect-preserve: keep only selected names that are booked this day.
+  _selectedClinicians = _selectedClinicians.filter((c) => clinicians.includes(c));
+
+  const allChecked = _selectedClinicians.length === 0;
+  if (allCb) allCb.checked = allChecked;
+
+  listEl.innerHTML = clinicians
+    .map((c, i) => {
+      const id = `sweepClin_${i}`;
+      const checked = _selectedClinicians.includes(c) ? ' checked' : '';
+      return `<label class="sweep-clin-chip">
+        <input type="checkbox" class="sweep-clin-cb" id="${id}" value="${esc(c)}"${checked}>
+        <span>${esc(c)}</span>
+      </label>`;
+    })
+    .join('');
+
+  // Wire individual checkboxes
+  listEl.querySelectorAll('.sweep-clin-cb').forEach((cb) => {
+    cb.addEventListener('change', onClinicianToggle);
+  });
+}
+
+// Re-tick the existing picker checkboxes from _selectedClinicians without
+// rebuilding the list (used when restoring a persisted run).
+function syncClinicianPickerChecks() {
+  const listEl = container?.querySelector('#sweepClinList');
+  const allCb = container?.querySelector('#sweepClinAll');
+  if (listEl) {
+    listEl.querySelectorAll('.sweep-clin-cb').forEach((cb) => {
+      cb.checked = _selectedClinicians.includes(cb.value);
+    });
+  }
+  if (allCb) allCb.checked = _selectedClinicians.length === 0;
+}
+
+// Recompute _selectedClinicians from the ticked individual checkboxes.
+// Empty selection = all clinicians; ticking any individual unchecks "All".
+function onClinicianToggle() {
+  const listEl = container?.querySelector('#sweepClinList');
+  const allCb = container?.querySelector('#sweepClinAll');
+  if (!listEl) return;
+  const ticked = Array.from(listEl.querySelectorAll('.sweep-clin-cb:checked')).map((cb) => cb.value);
+  _selectedClinicians = ticked;
+  if (allCb) allCb.checked = ticked.length === 0;
+}
+
+// "All clinicians" toggle: checking it clears every individual selection;
+// unchecking it with nothing else ticked is a no-op (empty = all anyway).
+function onAllCliniciansToggle(e) {
+  const listEl = container?.querySelector('#sweepClinList');
+  if (e.target.checked) {
+    _selectedClinicians = [];
+    if (listEl) listEl.querySelectorAll('.sweep-clin-cb').forEach((cb) => (cb.checked = false));
+  } else {
+    // Re-tick "All" — an empty individual selection is treated as all, so we
+    // never leave a state that silently sweeps zero clinicians.
+    e.target.checked = true;
   }
 }
 
@@ -872,7 +948,9 @@ function renderResumeCard(stored) {
 
   const runAtTs = typeof stored.runAt === 'string' ? new Date(stored.runAt).getTime() : stored.runAt;
   const timeStr = fmtTs(stored.runAt);
-  const clinLabel = stored.clinician || 'All clinicians';
+  const clinLabel = clinicianSelectionLabel(
+    normaliseClinicianSelection(stored.clinicians !== undefined ? stored.clinicians : stored.clinician)
+  );
   const dayLabel = stored.clinicDate ? fmtClinicDate(stored.clinicDate) : '';
 
   const deserialisedResults = deserialiseResults(stored.results || []);
@@ -912,7 +990,12 @@ function onResumeClick(stored) {
     clinicDate: stored.clinicDate || null,
     missingUuidCount: stored.missingUuidCount ?? 0,
   };
-  _selectedClinician = stored.clinician || '';
+  // Restore the clinician selection (accept the new array form or an old
+  // single-string `clinician`) and re-tick the picker checkboxes.
+  _selectedClinicians = normaliseClinicianSelection(
+    stored.clinicians !== undefined ? stored.clinicians : stored.clinician
+  );
+  syncClinicianPickerChecks();
   // Restore the swept day so the date input, fetches and printed handouts all
   // reflect the resumed run rather than today.
   if (stored.clinicDate) {
@@ -945,6 +1028,8 @@ export async function init(el) {
   _abortFlag = false;
   _running = false;
   _selectedDate = todayISO();
+  _selectedClinicians = [];
+  _clinicianList = [];
   _allPatients = [];
   _sweepOffset = 0;
   _cumulativeResults = [];
@@ -955,7 +1040,7 @@ export async function init(el) {
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Checks the selected day's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Pick a day and (optionally) one clinician.
+          Checks the selected day's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Pick a day and tick one or more clinicians, or leave All.
         </div>
         <div class="sweep-disclaimer-top">
           <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. No alert &#8800; monitoring complete &mdash; results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.
@@ -963,13 +1048,21 @@ export async function init(el) {
       </div>
 
       <div class="sweep-controls">
-        <button class="sweep-run-btn" type="button">Run sweep</button>
-        <label class="sweep-ctl-label">Day
-          <input type="date" id="sweepDate" value="${esc(_selectedDate)}">
-        </label>
-        <label class="sweep-clin-label">for
-          <select id="sweepClinician"><option value="">All clinicians</option></select>
-        </label>
+        <div class="sweep-controls-row">
+          <button class="sweep-run-btn" type="button">Run sweep</button>
+          <label class="sweep-ctl-label">Day
+            <input type="date" id="sweepDate" value="${esc(_selectedDate)}">
+          </label>
+        </div>
+        <div class="sweep-clin-picker" role="group" aria-label="Clinicians to sweep">
+          <label class="sweep-clin-chip sweep-clin-all">
+            <input type="checkbox" id="sweepClinAll" checked>
+            <span>All clinicians</span>
+          </label>
+          <div class="sweep-clin-list" id="sweepClinList">
+            <!-- per-clinician checkboxes for the selected day rendered here -->
+          </div>
+        </div>
       </div>
 
       <div class="sweep-run-area">
@@ -979,9 +1072,7 @@ export async function init(el) {
 
   const btn = container.querySelector('.sweep-run-btn');
   btn.addEventListener('click', onRunClick);
-  container.querySelector('#sweepClinician')?.addEventListener('change', (e) => {
-    _selectedClinician = e.target.value || '';
-  });
+  container.querySelector('#sweepClinAll')?.addEventListener('change', onAllCliniciansToggle);
   container.querySelector('#sweepDate')?.addEventListener('change', onDateChange);
 
   // Invalidate merged rules cache when rules change (mirrors sentinel.js)
