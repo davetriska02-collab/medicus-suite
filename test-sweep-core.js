@@ -192,6 +192,49 @@ const path = require('path');
   check(twoClin.patients.length === 0 && /No booked appointments found for Dr Nobody/.test(twoClin.diagnosticMessage || ''),
         'filter matching nothing → explicit per-clinician diagnostic');
 
+  // ── extractBookedPatients — MULTI-clinician selection (v3.84.0) ──────────────
+  console.log('\n--- extractBookedPatients: multi-clinician selection ---');
+  const threeClinRaw = { staffSchedules: [
+    { name: 'Dr A', schedule: [{ entries: [
+      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000001', name: 'PA' }, startDateTime: '2026-06-10T09:00:00' },
+    ] }] },
+    { name: 'Dr B', schedule: [{ entries: [
+      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000002', name: 'PB' }, startDateTime: '2026-06-10T10:00:00' },
+    ] }] },
+    { name: 'Dr C', schedule: [{ entries: [
+      { diaryEntryType: { value: 'appointment' }, patient: { id: '22222222-0000-0000-0000-000000000003', name: 'PC' }, startDateTime: '2026-06-10T11:00:00' },
+    ] }] },
+  ] };
+
+  // Two named clinicians → only those two patients, Dr C excluded.
+  let multi = extractBookedPatients(threeClinRaw, { clinicians: ['Dr A', 'Dr B'] });
+  const multiNames = multi.patients.map((p) => p.name).sort();
+  check(multi.patients.length === 2, 'clinicians: ["Dr A","Dr B"] → 2 patients');
+  check(multiNames.join(',') === 'PA,PB', 'clinicians: includes only Dr A + Dr B patients');
+  check(!multi.patients.some((p) => p.name === 'PC'), 'clinicians: Dr C (not selected) excluded');
+  check(multi.clinicians.length === 3, 'clinicians list stays unfiltered with multi-select (all 3)');
+
+  // Single-string API still works (back-compat).
+  multi = extractBookedPatients(threeClinRaw, { clinician: 'Dr A' });
+  check(multi.patients.length === 1 && multi.patients[0].name === 'PA', 'single { clinician: "Dr A" } still works (back-compat)');
+
+  // Empty array → all clinicians (never a silent zero).
+  multi = extractBookedPatients(threeClinRaw, { clinicians: [] });
+  check(multi.patients.length === 3, 'clinicians: [] → all clinicians');
+
+  // No filter at all → all clinicians.
+  multi = extractBookedPatients(threeClinRaw);
+  check(multi.patients.length === 3, 'no filter → all clinicians');
+
+  // Array with only falsy entries → treated as all (filtered out by .filter(Boolean)).
+  multi = extractBookedPatients(threeClinRaw, { clinicians: ['', null, undefined] });
+  check(multi.patients.length === 3, 'clinicians: [falsy…] → all clinicians');
+
+  // Multi-select matching nobody → explicit diagnostic listing the names.
+  multi = extractBookedPatients(threeClinRaw, { clinicians: ['Dr X', 'Dr Y'] });
+  check(multi.patients.length === 0 && /No booked appointments found for Dr X, Dr Y/.test(multi.diagnosticMessage || ''),
+        'multi-select matching nothing → diagnostic lists the names');
+
   // ── extractBookedPatients — deduplication ─────────────────────────────────────
   console.log('\n--- extractBookedPatients: deduplication ---');
   const dupeRaw = {
@@ -435,6 +478,24 @@ const path = require('path');
     'merged booking keeps all reasons in the detail');
   check(handout.generatedAt === '2026-06-10T08:00:00Z' && handout.suiteVersion === '9.9.9', 'meta carried through');
   check(buildHandout([], {}).patients.length === 0, 'empty rows → empty handout');
+
+  // ── buildHandout — multi-clinician meta (v3.84.0) ────────────────────────────
+  console.log('\n--- buildHandout: multi-clinician meta ---');
+  const oneRow = [{ name: 'P', time: '2026-06-10T09:00:00Z', clinician: 'Dr A', redCount: 1, amberCount: 0,
+    chips: [{ type: 'qof-indicator', status: 'not_met', indicatorCode: 'HYP010', indicatorName: 'BP' }], hasHiddenActionChips: false }];
+
+  let h = buildHandout(oneRow, { clinicians: ['Dr A', 'Dr B'] });
+  check(Array.isArray(h.clinicians) && h.clinicians.join(',') === 'Dr A,Dr B', 'clinicians array carried into model');
+  check(h.clinician === null, 'clinician (single back-compat) null when ≥2 selected');
+
+  h = buildHandout(oneRow, { clinicians: ['Dr A'] });
+  check(h.clinician === 'Dr A', 'clinician set to the one name when exactly one selected');
+
+  h = buildHandout(oneRow, { clinicians: [] });
+  check(h.clinicians.length === 0 && h.clinician === null, 'empty selection → all (clinicians [], clinician null)');
+
+  h = buildHandout(oneRow, { clinician: 'Dr Z' });
+  check(h.clinicians.join(',') === 'Dr Z' && h.clinician === 'Dr Z', 'single-string clinician meta normalised into array (back-compat)');
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
