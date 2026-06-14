@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.77.3
+**Version:** v3.78.0
 **Generated:** 2026-06-14 (automated)
 
 ## What it is
@@ -155,6 +155,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.78.0 (2026-06-14)** — Brand identity: first logo + visual mark (clinical pulse whose apex is the amber RAG status dot), built from the existing design tokens; regenerated extension icons; wired into the side panel, Options, About panel, and README
 - **v3.77.3 (2026-06-14)** — Result rules settings: scope note, directional ↑/↓ glyphs on threshold rules, UX fixes from GP appraisal; deleting a built-in result rule now tombstones it so it is not silently re-added on config updates
 - **v3.77.2 (2026-06-14)** — Four result rules enabled after Clinical Safety Officer sign-off: hypocalcaemia, hypomagnesaemia, high-TSH, suppressed-TSH; TSH rules suppress on coded thyroid diagnosis in the problem list
 - **v3.77.1 (2026-06-14)** — Design-crit polish on Result rules settings: severity badges on every rule row, semantic badge colours, WCAG AA contrast, dark-mode fixes

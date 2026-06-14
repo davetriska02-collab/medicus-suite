@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.0] — 2026-06-14
+
+### Brand identity: logo + visual mark
+
+The suite had no identity of its own. Added a first brand mark, built entirely
+from the existing design tokens so it belongs to the product rather than sitting
+on top of it.
+
+- **New `brand/` assets** — `logo-mark.svg` (app mark), `logo-mark-small.svg`
+  (simplified variant that drives the 16px icon so the pulse + dot stay legible),
+  `logo-wordmark.svg` (lockup with the tagline *"The clinical intelligence layer
+  for Medicus"*), and `generate-icons.mjs`, which regenerates all `icons/*.png`
+  from the SVGs (run with `node brand/generate-icons.mjs`; needs `sharp`).
+- **The mark.** A navy→accent-blue app tile (`#2563eb`) with a clinical pulse
+  line whose apex *is* the amber RAG status dot — the product's actual job
+  (in-record safety signal surfacing) in one glyph. The RAG chip is already the
+  suite's visual language everywhere; the logo makes it the brand signature too.
+- **Regenerated extension icons** (`icons/icon-16/48/128.png`) from the mark,
+  replacing the placeholder lozenge.
+- **Wired into the surfaces** — the side-panel nav brand, the Options sidebar
+  brand, the About panel (now with a brand header + tagline), and the README
+  banner.
+- **Release packaging** — `brand/` SVG marks ship in the zip; the dev generator
+  script and large preview PNGs are excluded.
+
 ## [v3.77.6] — 2026-06-14
 
 ### docs: VISION.md positioning statement

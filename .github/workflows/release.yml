@@ -66,6 +66,9 @@ jobs:
             --exclude='.prettierrc.json' \
             --exclude='.prettierignore' \
             --exclude='.githooks/' \
+            --exclude='brand/generate-icons.mjs' \
+            --exclude='brand/logo-mark-512.png' \
+            --exclude='brand/logo-wordmark-1000.png' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
           cd _build
           zip -r ../medicus-suite-v${{ steps.version.outputs.version }}.zip medicus-suite-v${{ steps.version.outputs.version }}/

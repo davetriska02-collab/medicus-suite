@@ -125,6 +125,9 @@
       }
 
       .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         padding: 0 16px 20px;
         font-family: var(--mono);
         font-size: 10px;
@@ -133,6 +136,13 @@
         color: var(--text-4);
         border-bottom: 1px solid var(--border);
         margin-bottom: 8px;
+      }
+
+      .nav-brand-logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        flex: none;
       }
 
       .nav-item {
@@ -687,7 +697,10 @@
   <body>
     <div class="layout">
       <nav class="side-nav">
-        <div class="nav-brand">Suite Settings</div>
+        <div class="nav-brand">
+          <img class="nav-brand-logo" src="../brand/logo-mark.svg" alt="" width="20" height="20" />
+          <span>Suite Settings</span>
+        </div>
         <button class="nav-item active" data-section="suite">Suite</button>
         <button class="nav-item" data-section="notifications">Notifications</button>
         <button class="nav-item" data-section="slots">Slot Counter</button>

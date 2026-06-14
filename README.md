@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/logo-wordmark.svg" alt="Medicus Suite — the clinical intelligence layer for Medicus" width="440" />
+</p>
+
 # Medicus Suite
 
 Chrome extension toolkit for GP practices using the Medicus clinical system.

@@ -1,0 +1,34 @@
+<svg width="500" height="132" viewBox="0 0 500 132" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Medicus Suite">
+  <defs>
+    <linearGradient id="ms-wm-tile" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f6bf0"/>
+      <stop offset="1" stop-color="#16307c"/>
+    </linearGradient>
+    <radialGradient id="ms-wm-halo" cx="64" cy="42" r="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- mark, scaled to 100px -->
+  <g transform="translate(16,16) scale(0.78125)">
+    <rect x="2" y="2" width="124" height="124" rx="28" fill="url(#ms-wm-tile)"/>
+    <rect x="2.75" y="2.75" width="122.5" height="122.5" rx="27.25" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+    <path d="M16 78 L42 78 L50 92 L64 42 L78 92 L86 78 L112 78"
+          fill="none" stroke="#ffffff" stroke-width="9"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64" cy="42" r="18" fill="url(#ms-wm-halo)"/>
+    <circle cx="64" cy="42" r="10.5" fill="#fbbf24" stroke="#15307c" stroke-width="3"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="134" y="64" font-family="'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif"
+        font-size="46" font-weight="700" letter-spacing="-0.5">
+    <tspan fill="#0f172a">Medicus</tspan><tspan dx="12" fill="#2563eb">Suite</tspan>
+  </text>
+  <!-- tagline -->
+  <text x="136" y="92" font-family="'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif"
+        font-size="15.5" font-weight="500" letter-spacing="0.2" fill="#475569">
+    The clinical intelligence layer for Medicus
+  </text>
+</svg>

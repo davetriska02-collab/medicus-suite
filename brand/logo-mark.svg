@@ -1,0 +1,26 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Medicus Suite">
+  <defs>
+    <linearGradient id="ms-tile" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f6bf0"/>
+      <stop offset="1" stop-color="#16307c"/>
+    </linearGradient>
+    <radialGradient id="ms-halo" cx="64" cy="42" r="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- app tile -->
+  <rect x="2" y="2" width="124" height="124" rx="28" fill="url(#ms-tile)"/>
+  <!-- premium inner rim -->
+  <rect x="2.75" y="2.75" width="122.5" height="122.5" rx="27.25" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+
+  <!-- clinical pulse: flat baseline, dip, dominant peak, return -->
+  <path d="M16 78 L42 78 L50 92 L64 42 L78 92 L86 78 L112 78"
+        fill="none" stroke="#ffffff" stroke-width="9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- the alert surfaces at the apex: amber RAG status dot -->
+  <circle cx="64" cy="42" r="18" fill="url(#ms-halo)"/>
+  <circle cx="64" cy="42" r="10.5" fill="#fbbf24" stroke="#15307c" stroke-width="3"/>
+</svg>
