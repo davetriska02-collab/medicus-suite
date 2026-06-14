@@ -643,9 +643,11 @@ details summary {
 /* ---- Result rules ---- */
 .tl-rr-unit-note {
   font-size: 11px;
-  color: var(--text-4);
+  color: var(--amber);
   font-style: italic;
-  margin-top: 2px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--amber-line);
 }
 .tl-rr-test-result {
   font-size: 11px;
@@ -715,6 +717,16 @@ details summary {
   background: var(--bg-mid);
   color: var(--text-4);
   border: 1px solid var(--border);
+}
+
+/* Direction glyph (↑/↓) so a high/low pair is distinguishable at a glance. */
+.tl-rr-dir {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-3);
+  vertical-align: baseline;
 }
 
 /* ---- Mono meta text in result rule rows ---- */
