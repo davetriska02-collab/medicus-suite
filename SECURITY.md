@@ -60,6 +60,37 @@ Out of scope:
   checks, no patient data) besides the user's own Medicus session. It does not
   create, modify, or transmit patient records to any external server.
 
+## Backup data minimisation
+
+Suite and per-module backups (`.json` files the user exports from Options) must
+contain **configuration only** — never patient-identifiable data. A backup is a
+file the user may email, sync, or move between machines, so PHI in a backup is a
+disclosure risk even though the export never leaves the user's control
+automatically.
+
+Rules for the per-module IO files under [`shared/io/`](shared/io/):
+
+- **Export config, not captures.** Each `*Export()` function returns named
+  configuration keys (rules, thresholds, preferences, UI state). Live data
+  fetched from the Medicus API — task rows, referral payloads, lab values,
+  extraction telemetry — is **live-only**: it is re-fetched on demand and never
+  written into an export. The two enforced exclusions are documented at their
+  source: `referrals.discovery` (patient-identifiable referral rows — see
+  [`shared/io/referrals-io.js`](shared/io/referrals-io.js)) and
+  `sentinel.extractionBaseline` (machine-local drift telemetry — see
+  [`shared/io/sentinel-io.js`](shared/io/sentinel-io.js)).
+- **Allowlist, not blocklist.** Export functions enumerate the exact keys they
+  emit rather than dumping a storage namespace, so a newly-added storage key is
+  *not* exported until someone deliberately adds it.
+- **Adding a new IO module?** Before adding a key to a `*Export()` function, ask
+  the referrals test: *"could a real patient appear in this value?"* If yes, keep
+  it live-only and add the exclusion rationale as a comment next to the key list,
+  plus an allowlist entry in `test-backup-coverage.js`.
+- **Import is hardened.** Every import boundary type-validates the payload,
+  strips `__proto__`/`constructor`/`prototype`, and enforces a 10 MB size cap
+  (full-suite import in `options/options.js`, plus the per-module Sentinel and
+  Triage Lens imports). See [`test-import-hardening.js`](test-import-hardening.js).
+
 ## Related documents
 
 - [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) — audit history and findings

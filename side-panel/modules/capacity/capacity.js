@@ -5,6 +5,7 @@
 'use strict';
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
+import { WEEKDAYS, minimumForDate, defaultMinimumByDay, presetSummary, validatePreset } from './capacity-core.js';
 
 import {
   fetchSchedulingOverview,
@@ -204,19 +205,7 @@ function dayStatus(date) {
   return computeStatus(agg.total, minimum, preset.thresholds || { tight: 75, low: 50 });
 }
 
-// Get the per-weekday minimum for a given date, with sensible fallback to legacy minimumPerDay
-const DOW_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-function minimumForDate(preset, dateISO) {
-  if (!preset) return 0;
-  const dow = new Date(dateISO + 'T12:00:00').getDay();
-  const key = DOW_KEYS[dow];
-  if (preset.minimumByDay && preset.minimumByDay[key] !== undefined) {
-    return preset.minimumByDay[key];
-  }
-  // Legacy fallback
-  if (isWeekend(dateISO)) return 0;
-  return preset.minimumPerDay || 0;
-}
+// minimumForDate / defaultMinimumByDay / presetSummary / WEEKDAYS live in capacity-core.js
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -771,31 +760,7 @@ function escAttr(s) {
 }
 
 // ── Preset editor (inline) ────────────────────────────────────────────────────
-
-const WEEKDAYS = [
-  { key: 'mon', label: 'Mon' },
-  { key: 'tue', label: 'Tue' },
-  { key: 'wed', label: 'Wed' },
-  { key: 'thu', label: 'Thu' },
-  { key: 'fri', label: 'Fri' },
-  { key: 'sat', label: 'Sat' },
-  { key: 'sun', label: 'Sun' },
-];
-
-function defaultMinimumByDay(legacyMin) {
-  const m = legacyMin || 0;
-  return { mon: m, tue: m, wed: m, thu: m, fri: m, sat: 0, sun: 0 };
-}
-
-function presetSummary(p) {
-  const mins = p.minimumByDay;
-  if (!mins) return `min ${p.minimumPerDay || 0}/day`;
-  const values = WEEKDAYS.map((d) => mins[d.key] || 0);
-  const allSame = values.slice(0, 5).every((v) => v === values[0]);
-  if (allSame && values[5] === 0 && values[6] === 0) return `min ${values[0]}/weekday`;
-  const wkTotal = values.reduce((a, b) => a + b, 0);
-  return `min ${wkTotal}/week`;
-}
+// WEEKDAYS / defaultMinimumByDay / presetSummary live in capacity-core.js
 
 async function openNewPreset() {
   state.uiMode = 'new';
@@ -976,20 +941,9 @@ async function savePreset() {
   const low = parseInt(container.querySelector('#capFLow').value, 10) || 50;
   const slotTypes = Array.from(container.querySelectorAll('#capTypesList input:checked')).map((i) => i.value);
 
-  if (!name) {
-    alert('Preset needs a name.');
-    return;
-  }
-  if (slotTypes.length === 0) {
-    alert('Select at least one slot type.');
-    return;
-  }
-  if (low >= tight) {
-    alert('Low threshold must be below Tight threshold.');
-    return;
-  }
-  if (tight >= 100 || low >= 100) {
-    alert('Thresholds must be below 100%.');
+  const check = validatePreset({ name, slotTypes, tight, low });
+  if (!check.valid) {
+    alert(check.error);
     return;
   }
 

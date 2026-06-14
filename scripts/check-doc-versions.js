@@ -61,18 +61,10 @@ const DOCS = [
 // reissue. Re-pinned as known-stale so the guard WARNs (does not fail) until the
 // next CSO refresh brings them onto the 3.77 line; remove each entry when its
 // doc is updated. (feature-list.md tracks normally and is intentionally unpinned.)
-//
-// 2026-06-14 (later): today's release burst advanced the manifest to the 3.84
-// line. docs/feature-list.md is an auto-generated inventory (weekly-feature-list
-// scheduled task) and was last generated at v3.77.3, so it now lags the manifest
-// and would fail this guard. Pinned known-stale at its last-generated version so
-// the guard WARNs rather than fails; the next weekly feature-list regeneration
-// brings it current — remove this pin when that runs.
 const KNOWN_STALE = {
   'docs/CLINICAL-SAFETY-NOTICE.md': '3.64.0',
   'docs/HAZARD-LOG.md': '3.64.0',
   'docs/SOUP.md': '3.64.0',
-  'docs/feature-list.md': '3.77.3',
 };
 
 function majorMinor(ver) {
