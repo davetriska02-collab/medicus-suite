@@ -1,5 +1,17 @@
 # Security Audit — Medicus Suite
 
+## Executable pen-test simulation — v3.77.11 (2026-06-14)
+
+Authorised, **executable** red-team simulation (the active counterpart to the
+static passes below): exploit harnesses driven against the real modules, each
+attack recorded as BLOCKED or EXPLOITED with reproducible evidence. 17 scenarios
+across import, messaging, XSS, network and rules surfaces — **17 BLOCKED, 0
+EXPLOITED**. Full report: [`docs/PEN-TEST-2026-06-14.md`](docs/PEN-TEST-2026-06-14.md).
+Re-runnable harness: `node .claude/skills/pen-test-simulator/scripts/pentest-harness.js`
+(exit-coded; usable as a CI gate). Skill: `.claude/skills/pen-test-simulator/`.
+
+---
+
 ## Third Pass — v3.56.0 (2026-06-11)
 
 **Version audited:** 3.56.0 (commit dd6a61f)
