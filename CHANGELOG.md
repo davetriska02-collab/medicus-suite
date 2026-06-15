@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.87.1] — 2026-06-15
+
+### "Accept for practice" now unlocks all three central attestations
+
+The practice-profile "Central attestations" box (Backup & Restore → Publish to
+shared folder) greyed out the alert-library and knowledge gates until each was
+accepted locally. The single "Accept this for practice" switch
+(`suite.practiceAcceptedAt`) now satisfies all three gates at once, so ticking it
+makes all three central attestations tickable in one go. The box also explains
+this, so a greyed gate is no longer a dead end.
+
 ## [v3.87.0] — 2026-06-15
 
 ### Single "Accept this for practice" switch (Options → Clinical Safety)
