@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.86.2] — 2026-06-15
+
+### Reception referrals — wording tweaks from the re-poll
+
+- Populated card now states explicitly that referrals **older than 12 months are
+  not shown** (so an outstanding older referral isn't assumed absent).
+- Empty result now reads as a *completed* search ("Referral lookup ran — no
+  referrals found under this name …") so it is clearly distinct from the
+  load-error state.
+
+(See `docs/appraisal/PRACTICE-referrals-on-file-2026-06-15.md` §7–8 for the
+re-poll scores and the parked "Most seen clinician" feature verdict.)
+
 ## [v3.86.1] — 2026-06-15
 
 ### Reception referrals — red-team hardening

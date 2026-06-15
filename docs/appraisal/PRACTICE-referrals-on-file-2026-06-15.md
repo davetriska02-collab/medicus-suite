@@ -183,3 +183,51 @@ fixtures) into `/tmp/the-practice/referrals-on-file/`:
 Panel cast: Chloe Danvers (haiku), Maureen Castle (haiku), Sister Eileen Cobb
 (sonnet), Dr Tom Hollis (sonnet), Janet Briggs (sonnet), Dr Priya Nair (sonnet),
 each screenshots-only, one persona per subagent.
+
+## 7. Follow-up re-poll (post-fix + red-team, v3.86.1)
+
+After implementing the fixes (canonical fetch removing the setup step, shared
+cache, prominent caveat, 2WW, window/status wording, last-updated time) plus a
+red-team pass (practice-code host-injection guard; capture-note field
+sanitisation), the four personas who drove the findings re-scored:
+
+| Persona | Before | After | Note |
+|---|---|---|---|
+| Chloe (reception) | 8 | 9 | 2WW + Incomplete explanation resolved her asks |
+| Sister Eileen (nurse) | 5 | 7 | Caveat now prominent; empty state honest |
+| Janet (manager) | 4 | 7.5 | Timestamp + in-memory-only + no-setup all defensible |
+| Dr Priya (registrar) | 6 | 8 | All prior findings resolved bar empty-vs-error clarity |
+
+Two small wording tweaks adopted in v3.86.2: state explicitly that referrals
+older than 12 months are not shown (Eileen); make the empty result read as a
+*successful* lookup ("Referral lookup ran — …") so it is distinct from the error
+state (Priya). The F2 sanitiser was verified end-to-end against a malicious
+referral whose fields carried newlines + a forged "*** RED FLAG" — the forged
+content collapsed onto a single labelled referral line, not a standalone line.
+
+## 8. Feature idea appraised & PARKED — "Most seen clinician"
+
+Proposed: a line showing the GP/ANP/paramedic/nurse the patient has consulted
+**most over 12 months** (e.g. "Most seen (12m): Dr Hollis · 6 of 14 clinical
+contacts") for continuity of care. Source would be **regex over consultation
+history** (no clean field). Panel: Tom 6, Eileen 6, Chloe 8, Janet 6, Priya 6 —
+clear appetite (continuity is a real priority; reception most keen), but every
+score is held down by trust in regex-derived data.
+
+**Decision: PARKED** (Dave, 2026-06-15) — recorded, not built. If revisited, it
+is a **go/no-go gated on the data extraction**, with these convergent conditions
+(all required before any UI work):
+1. Exclude clinicians who have **left** the practice (a ghost name is actively
+   harmful) — needs a live active-staff cross-check.
+2. **Clinical contacts only** — exclude filed letters, results, admin/phone
+   tasks, DNAs. If regex cannot reliably separate these, do NOT ship (Priya's
+   decisive condition; a confident-but-wrong "most seen" erodes trust in the
+   whole card).
+3. Filter/flag **locums & duty doctors** (not continuity).
+4. Label **"approximate"** on the card itself, not in a tooltip.
+5. Show the **denominator** ("6 of 14 clinical contacts"), not a bare name.
+6. **Suppress on ties**; dim when "most seen" is the clinician already viewing.
+7. Optional: inline "Book with them" link (reception ask).
+
+First move if un-parked: a feasibility probe of what consultation/encounter data
+Medicus exposes (same shape as the lab-orderer question), before any UI.

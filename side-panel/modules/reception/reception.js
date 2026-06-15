@@ -504,8 +504,10 @@ function renderReferralsCard() {
     case 'ready': {
       const rows = _matchedReferralRows || [];
       if (rows.length === 0) {
+        // "Referral lookup ran" affirms a SUCCESSFUL search that found nothing — so an
+        // empty result reads differently from the error state (a failed load).
         html = `${caveat}
-          <div class="rcp-muted">No referrals found under this name in the last 12 months. If the patient may be referred under another name, check the record.</div>
+          <div class="rcp-muted">Referral lookup ran — no referrals found under this name in the last 12 months (anything older is not shown). If the patient may be referred under another name, check the record.</div>
           <div class="rcp-fineprint">${updated ? `${updated} &middot; ` : ''}${refreshBtn}</div>`;
       } else {
         const items = rows
@@ -532,7 +534,7 @@ function renderReferralsCard() {
             ? `<div class="rcp-fineprint">+${rows.length - MAX_REF_DISPLAY} more not shown.</div>`
             : '';
         html = `${caveat}${items}${more}
-          <div class="rcp-fineprint">Outgoing referrals, last 12 months. Status is from the practice referral report (Incomplete = not yet completed in Medicus).${updated ? ` &middot; ${updated}` : ''} ${refreshBtn}</div>`;
+          <div class="rcp-fineprint">Outgoing referrals from the last 12 months — anything older is not shown. Status is from the practice referral report (Incomplete = not yet completed in Medicus).${updated ? ` &middot; ${updated}` : ''} ${refreshBtn}</div>`;
       }
       break;
     }
