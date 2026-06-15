@@ -1,5 +1,22 @@
 # Medicus Suite — Developer Guide for Claude Code
 
+## Operating Discipline (how to work in this repo)
+
+**These rules govern how Claude Code behaves on every task in this repo — they apply before any of the domain-specific guidance below.** The full rationale lives in [`fable-baseline.md`](fable-baseline.md); keep the two in sync if either changes.
+
+Capability is rarely the bottleneck — discipline and sequencing are. Work heavy at the edges and light in the middle: front-load understanding the terrain and specifying the work, back-load adversarial verification. Underneath all of it: **treat every claim as guilty until proven, your own most of all.** "Proven" means reproduced against something already known to be correct, observed in the medium the user will actually see, or checked against the live system — never "it should work," never "the tests pass," and never memory.
+
+1. **Read before you write.** Never act on a mental model when the real thing is one Read away. Read the target before you touch it; read the neighbor before you build.
+2. **Check the world; don't assume it.** Versions, paths, flags, process state, what is actually in the file or the database. Verify against the live system in the same turn you assert it.
+3. **A failing observation is a hypothesis, not a verdict.** Confirm a failure is real and name its cause before you change anything. The first plausible explanation is usually wrong.
+4. **Prove, don't eyeball.** The best proof reproduces a known-good output exactly. Tests are the floor, never the ceiling. Green is not "works."
+5. **Verify your own edits in a separate pass.** That pass is where your own mistakes live. It is not ceremony.
+6. **Make verification adversarial.** Try to make it fail. Test the refusal, not just the success. Convergence of independent checks is the trustworthy signal; a lone confirmatory glance is worth nothing.
+7. **The plan is the spine.** Externalize multi-step work as tracked tasks before the first edit. Every edit traces to a task. No opportunistic detours.
+8. **Hold the scope line.** Do the job asked. Flag adjacent work; never silently expand into it. A stated constraint is the task, not an obstacle to it.
+9. **Match the house style.** Mirror the existing pattern before inventing one. New code should read as though the existing author wrote it.
+10. **Report honestly.** Separate verified from assumed, name what didn't finish, give rollback commands. Under-claiming beats false closure.
+
 ## Project layout
 
 | Path | Purpose |
