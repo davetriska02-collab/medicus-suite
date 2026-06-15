@@ -52,3 +52,23 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: ESLint (lenient config, repo-wide, fails closed)
         run: npx eslint .
+
+  visualiser:
+    # Headless render gate for the patient-record visualiser. Loads the page
+    # under a faithful emulation of the MV3 extension-page CSP (script-src 'self')
+    # and asserts PDF.js loads, the drop-zone/file-input is wired, and a PDF
+    # parses end-to-end. This closes the gap that let the v3.92.1 CSP regression
+    # (inline <script type=module> blocked → dead button) ship un-caught.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm install --no-audit --no-fund
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save playwright@1.61.0
+          npx playwright install --with-deps chromium
+      - name: Verify visualiser loads + parses a PDF under the MV3 CSP (headless, fails closed)
+        run: node scripts/verify-visualiser.mjs
+
