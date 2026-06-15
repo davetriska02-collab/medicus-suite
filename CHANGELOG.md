@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.0] — 2026-06-15
+
+### Canonical pill, and the alert roll-up adopts it (Atelier foundation pass)
+
+The appointment-type pills on the Slots page — a coloured dot, a name, and a
+count — are the suite's best small component, so they are now the **canonical
+`.pill`** in the design canon (TOKENS.md): a dot (category/severity carrier), a
+name in the human/sans voice, and a count in the machine/mono voice. Colour
+rides on two custom properties (`--pill-line`, `--pill-fill`) so a forthcoming
+organise mode can set them per pill.
+
+The alert roll-up is the first surface to adopt it, which lands two appraisal
+fixes at once:
+
+- **Reconcilable counts (F1).** The collapsed pills now show the actual flagged
+  total — "Demand 115" sums to the expanded "Medical 70 / Admin 45" — instead of
+  a category count that read as "2". The manager can tie the number to the
+  detail.
+- **Colourblind-safe severity (F3).** Severity no longer rides on hue alone: a
+  **red** pill has a filled dot, an **amber** pill a hollow ring dot, so the two
+  tiers are distinguishable by shape under colourblind mode.
+
+Safety: a red pill's fill is locked to the red wash — the planned colour config
+will be able to change a red pill's border only, never neutralise its red fill.
+Other per-surface pills (Slots, Condor, the strips) converge on the canonical
+pill in a later pass; nothing else was restyled here.
+
 ## [v3.95.0] — 2026-06-15
 
 ### Alert roll-up — one severity bar when alerts pile up

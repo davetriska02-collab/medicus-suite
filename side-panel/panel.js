@@ -660,9 +660,9 @@ function renderRollup() {
   const pills = elevated
     .map(
       (a) =>
-        `<span class="alert-rollup-pill alert-rollup-pill--${a.level}">${escStrip(a.label)}${
-          a.count != null ? ' ' + a.count : ''
-        }</span>`
+        `<span class="pill pill--${a.level}"><span class="pill-dot"></span><span class="pill-name">${escStrip(
+          a.label
+        )}</span>${a.count != null ? `<span class="pill-count">${a.count}</span>` : ''}</span>`
     )
     .join('');
 
@@ -1057,7 +1057,10 @@ async function applyTriageAlerts(buckets) {
 
   // Feed the alert roll-up: triage counts as elevated only when a threshold is
   // crossed (calm pill counts aren't an alert). Count = buckets over threshold.
-  reportAlert('triage', maxLevel ? { level: maxLevel, label: 'Triage', count: triggered.length } : null);
+  // F1: report the total flagged TASK count (sum across over-threshold buckets),
+  // not the bucket count — so the collapsed pill reconciles with the expanded strip.
+  const triageTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
+  reportAlert('triage', maxLevel ? { level: maxLevel, label: 'Triage', count: triageTasks } : null);
 
   // Desktop notifications — once per threshold crossing per session
   const quietNow = (await window.QuietMode?.isQuiet?.()) ?? false;
@@ -1218,7 +1221,10 @@ async function fetchAndRenderSubRagStrip() {
     <button class="sub-rag-goto" title="Go to Submissions">Submissions →</button>
   `;
   subRagStripEl.querySelector('.sub-rag-goto')?.addEventListener('click', () => switchModule('submissions'));
-  reportAlert('demand', { level: maxLevel, label: 'Demand', count: triggered.length });
+  // F1: report total demand TASKS (Medical + Admin sum), not the category count,
+  // so "Demand N" reconciles with the expanded "Medical X / Admin Y" detail.
+  const demandTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
+  reportAlert('demand', { level: maxLevel, label: 'Demand', count: demandTasks });
   return !anyFailed;
 }
 

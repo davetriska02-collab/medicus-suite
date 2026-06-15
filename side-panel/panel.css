@@ -933,6 +933,89 @@ body {
 /* ── Waiting Room global strip ───────────────────────────────────────────────
    Sits between the nav bar and the module content. Visible on every tab.   */
 
+/* ── Canonical pill (TOKENS.md §Pill) ─────────────────────────────────────────
+   The suite-wide pill, generalised from the Slots per-type pills: a coloured
+   DOT (category/severity carrier — survives colourblind because shape, not only
+   hue), a NAME in the human/sans voice, and a COUNT in the machine/mono tabular
+   voice. Colour rides on two custom props so the (future) organise mode can set
+   them per-pill: --pill-line (border + dot) and --pill-fill (background).
+
+   Two modes, never mixed:
+   • Categorical (.pill, set --pill-line/--pill-fill from --cat-*): non-clinical
+     organising colour, fully user-configurable in the config pass.
+   • Clinical RAG (.pill--green/.pill--amber/.pill--red): severity triad.
+     SAFETY: a red pill's FILL is locked to --red-dim with !important, so the
+     forthcoming colour config can only ever change a red pill's BORDER, never
+     neutralise the red fill. Alert salience is a safety property. */
+.pill {
+  --pill-line: var(--border);
+  --pill-fill: var(--bg-mid);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  background: var(--pill-fill);
+  border: 1px solid var(--pill-line);
+  border-radius: var(--r-pill);
+  max-width: 100%;
+  white-space: nowrap;
+}
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pill-line);
+  flex-shrink: 0;
+}
+.pill-name {
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pill-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+/* Clinical RAG variants — dot + border take the triad line, fill takes the wash,
+   count takes the ink. The non-colour severity cue: red = FILLED dot (default),
+   amber = HOLLOW ring dot, so red vs amber is distinguishable by shape alone. */
+.pill--green {
+  --pill-line: var(--green-line);
+  --pill-fill: var(--green-dim);
+}
+.pill--green .pill-dot {
+  background: var(--green);
+}
+.pill--green .pill-count {
+  color: var(--green);
+}
+.pill--amber {
+  --pill-line: var(--amber-line);
+  --pill-fill: var(--amber-dim);
+}
+.pill--amber .pill-dot {
+  background: transparent;
+  border: 1.5px solid var(--amber);
+}
+.pill--amber .pill-count {
+  color: var(--amber);
+}
+.pill--red {
+  --pill-line: var(--red-line);
+  --pill-fill: var(--red-dim) !important; /* red fill is locked — see note above */
+}
+.pill--red .pill-dot {
+  background: var(--red);
+}
+.pill--red .pill-count {
+  color: var(--red);
+}
+
 /* ── Alert roll-up (groups 2+ elevated strips into one bar; see panel.js) ───── */
 .alert-rollup {
   display: flex;
@@ -976,31 +1059,24 @@ body {
 }
 .alert-rollup-pills {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
-.alert-rollup-pill {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: var(--r-pill);
-  white-space: nowrap;
-  border: 1px solid transparent;
-  font-variant-numeric: tabular-nums;
+/* Roll-up pills are the canonical .pill in clinical-RAG mode, sized down a touch
+   to sit in the compact bar. Name + count anatomy carries F1 (a count that
+   reconciles to the expanded detail); the dot shape carries F3 (red filled vs
+   amber ring — severity without relying on hue). */
+.alert-rollup-pills .pill {
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
 }
-.alert-rollup-pill--amber {
-  background: var(--amber-dim);
-  color: var(--amber);
-  border-color: var(--amber-line);
+.alert-rollup-pills .pill-name {
+  font-size: 10px;
 }
-.alert-rollup-pill--red {
-  background: var(--red-dim);
-  color: var(--red);
-  border-color: var(--red-line);
+.alert-rollup-pills .pill-count {
+  font-size: 10px;
 }
 .alert-rollup-toggle {
   margin-left: auto;

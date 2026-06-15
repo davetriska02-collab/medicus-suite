@@ -146,7 +146,27 @@ copy buttons, tour/tabs CTAs).
 border: 1px solid var(--<c>-line); border-radius: var(--r-sm);` mono 10px.
 Pair every chip hue with a glyph or label — hue is never the only signal.
 
-**Pill** — chip but `border-radius: var(--r-pill); padding: 2–3px 8–10px`.
+**Pill** (canonical — `.pill` in `panel.css`) — the suite-wide pill,
+generalised from the Slots per-type pills. Anatomy: a coloured **dot**
+(`.pill-dot`, category/severity carrier), a **name** (`.pill-name`, sans, human
+voice, `--text-2`), a **count** (`.pill-count`, mono, tabular, `--text-1`).
+`border-radius: var(--r-pill)`, `padding: 3px 9px 3px 7px`. Colour rides on two
+custom props so an organise mode can set them per pill: `--pill-line` (border +
+dot) and `--pill-fill` (background); defaults `--border` / `--bg-mid`.
+
+- _Categorical mode_ (non-clinical organising): set `--pill-line`/`--pill-fill`
+  from the `--cat-*` ramp — never raw hex, never a status hue. Fully
+  user-configurable.
+- _Clinical RAG mode_ (`.pill--green` / `.pill--amber` / `.pill--red`): dot +
+  border = triad line, fill = triad wash, count = triad ink. **Non-colour
+  severity cue:** red dot is FILLED, amber dot is a HOLLOW ring — so red vs amber
+  survives colourblind by shape, not hue alone.
+- **Safety lock:** `.pill--red` fixes `--pill-fill` to `--red-dim` with
+  `!important`. User colour config may change a red pill's border only, never
+  neutralise its red fill. Alert salience is a safety property — see SKILL.md.
+
+Legacy per-surface pills (`.slot-pill`, `.condor-pill`, strip chips, …) converge
+on this over time; do not mass-rename in one pass.
 
 **Input** — `background: var(--bg-mid); border: 1px solid var(--border);
 border-radius: var(--r-md); color: var(--text-2);` focus:
