@@ -19,7 +19,9 @@
 'use strict';
 
 // The fixed organising palette. Order matters (it's the swatch row order).
-// 'default' means "no colour". Mirrors the --swatch-* token set in panel.css.
+// 'default' means "no colour" (no --swatch token; rendered transparent).
+// Kept in lock-step with Reception's TILE_COLOUR_KEYS (shared/reception-pathway-utils.js)
+// and the --swatch-* tokens (panel.css) by test-pill-palette-sync.js — edit all three together.
 export const SWATCH_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
 
 // Validate raw stored prefs into a safe { order, colours } shape: order is a

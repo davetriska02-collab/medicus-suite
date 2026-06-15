@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.5] — 2026-06-15
+
+### Palette drift-guard across Slots, Reception and the tokens
+
+Completes the colour-palette unification. The user-colour swatch list is
+referenced from three places that cannot import one another — the ESM
+`pill-prefs.js` (`SWATCH_KEYS`), the classic `reception-pathway-utils.js`
+(`TILE_COLOUR_KEYS`), and the `--swatch-*` design tokens in `panel.css`. A new
+`test-pill-palette-sync.js` pins all three together so they can't drift, the same
+convert-drift-into-CI-failure approach used for clinical thresholds. Reception's
+organise logic is intentionally left as-is (it is richer than the shared helper —
+alpha sort, id validation, prototype-pollution guard — so merging it would
+regress it); only the shared palette is unified and guarded.
+
 ## [v3.96.4] — 2026-06-15
 
 ### Shared pill organise-mode helper (extraction)
