@@ -41,6 +41,11 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+function safeUrl(u) {
+  const s = String(u || '').trim();
+  return /^(https?:|mailto:|tel:)/i.test(s) ? s : '';
+}
+
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
 export async function init(el) {
@@ -237,7 +242,7 @@ function renderCard(e) {
     const urlRow = e.url
       ? `
       <div class="kb-detail-row"><span class="kb-detail-label">Link</span>
-        <a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.url)}</a></div>`
+        <a href="${esc(safeUrl(e.url))}" target="_blank" rel="noopener noreferrer">${esc(e.url)}</a></div>`
       : '';
     const reviewRow = e.reviewBy
       ? `

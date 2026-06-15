@@ -442,7 +442,8 @@ export async function init(el) {
 
   // Listen for refresh signals: waiting-room polls (Pusher) + sentinel snapshot
   // updates pushed by the content script when the patient context changes.
-  const onMsg = (msg) => {
+  const onMsg = (msg, sender) => {
+    if (!sender || sender.id !== chrome.runtime.id) return;
     if (msg?.type === 'waiting:refresh') fetchWaitingRoom(true);
     if (msg?.type === 'sentinel:snapshot-updated') refresh();
   };
@@ -624,13 +625,13 @@ async function loadRuleCurrencyFooter() {
 
     if (result.overall === 'red') {
       _ruleCurrencyFooter =
-        `<div class="sent-rules-footer sent-rules-footer-red" title="${escHtml(result.warnings.join(' | '))}">` +
+        `<div class="sent-rules-footer sent-rules-footer-red" title="${escAttr(result.warnings.join(' | '))}">` +
         `<span class="sent-rules-footer-icon">&#9888;</span> ` +
         `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}` +
         `</div>`;
     } else if (result.overall === 'amber') {
       _ruleCurrencyFooter =
-        `<div class="sent-rules-footer sent-rules-footer-amber" title="${escHtml(result.warnings.join(' | '))}">` +
+        `<div class="sent-rules-footer sent-rules-footer-amber" title="${escAttr(result.warnings.join(' | '))}">` +
         `<span class="sent-rules-footer-icon">&#9888;</span> ` +
         `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}` +
         `</div>`;
@@ -1132,7 +1133,7 @@ function render(payload) {
   // Deliberately unobtrusive: a small muted line near the extraction health
   // block, not a banner (the chip list is still usable; this is advisory only).
   const journalAugmentHtml = journalAugmentFailed
-    ? `<div class="sent-journal-warn" title="Journal fetch error: ${escHtml(journalAugmentError || 'unknown error')}">` +
+    ? `<div class="sent-journal-warn" title="Journal fetch error: ${escAttr(journalAugmentError || 'unknown error')}">` +
       `&#9888; Journal data unavailable — QOF journal-coded indicators may show no data. Reload or check network.` +
       `</div>`
     : '';
@@ -1201,7 +1202,7 @@ function render(payload) {
     const row = document.createElement('div');
     row.className = 'sent-act-row';
     row.dataset.actKey = key;
-    row.innerHTML = `<button class="sent-act-btn" data-act-key="${escHtml(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Copy actions</button>`;
+    row.innerHTML = `<button class="sent-act-btn" data-act-key="${escAttr(key)}" title="Copy-ready blood form, recall SMS, letter and task for this chip">Copy actions</button>`;
     chipEl.insertAdjacentElement('afterend', row);
   });
 
@@ -1562,7 +1563,7 @@ function renderBriefCard(brief) {
 
   // Header: "Brief" label + patientLine + red/amber count badges
   const patPart = brief.patientLine
-    ? ` <span class="sent-brief-patient" title="${escHtml(brief.patientLine)}">${escHtml(brief.patientLine)}</span>`
+    ? ` <span class="sent-brief-patient" title="${escAttr(brief.patientLine)}">${escHtml(brief.patientLine)}</span>`
     : '';
 
   // Count badges — include text labels for colour-blind safety
@@ -1858,6 +1859,10 @@ function escHtml(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function escAttr(s) {
+  return escHtml(s).replace(/"/g, '&quot;');
 }
 
 // Cached feedback email (suite.feedbackEmail) loaded at render time.

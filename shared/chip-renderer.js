@@ -116,7 +116,7 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = isCustom && tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const customTag = isCustom ? `<span class="sent-custom-tag">Custom</span>` : '';
 
     let hrtCtxHtml = '';
@@ -165,7 +165,7 @@
     }
 
     const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
@@ -230,10 +230,10 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = isCustom && tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = isCustom && tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
 
     const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
@@ -371,9 +371,9 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
@@ -410,9 +410,9 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
@@ -437,9 +437,9 @@
     const tooltipBits = [];
     if (chip.notes) tooltipBits.push(chip.notes);
     if (chip.source) tooltipBits.push('Source: ' + chip.source);
-    const titleAttr = tooltipBits.length ? ` title="${escHtml(tooltipBits.join(' — '))}"` : '';
+    const titleAttr = tooltipBits.length ? ` title="${escAttr(tooltipBits.join(' — '))}"` : '';
     const evAttrs = chip.evidence
-      ? ` data-rule-id="${escHtml(chip.ruleId || '')}" data-evidence-key="${escHtml(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
+      ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
@@ -539,7 +539,7 @@
           ${evidence.refs
             .map(
               (r) => `
-            <button class="sent-ev-ref${r.fired ? ' fired' : ''}" data-ref-rule-id="${escHtml(r.ruleId)}">
+            <button class="sent-ev-ref${r.fired ? ' fired' : ''}" data-ref-rule-id="${escAttr(r.ruleId)}">
               <span class="sent-ev-ref-dot${r.fired ? ' on' : ''}"></span>
               <span class="sent-ev-ref-label">${escHtml(r.label)}</span>
               <span class="sent-ev-ref-state">${r.fired ? 'fired' : 'did not fire'}</span>

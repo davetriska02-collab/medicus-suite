@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.2] — 2026-06-15
+
+### Security: close attribute-injection XSS in side-panel chip / rule renderers
+
+A repo audit found that several `escHtml` helpers escape only `&`, `<` and `>` — **not**
+the double-quote `"` — yet were being used to interpolate untrusted data into
+double-quoted HTML attributes. Because angle brackets were escaped, raw `<script>`
+injection was already blocked, but a value containing a `"` could break out of the
+attribute and inject an event-handler attribute (`x" onmouseover="…`), i.e. a DOM-based
+XSS in the privileged side-panel context. The reachable vectors:
+
+- **`shared/chip-renderer.js`** — patient medication names (`chip.drugName`, straight from
+  the Medicus API) and rule ids flowed into `data-evidence-key` / `data-rule-id` / `title`
+  attributes via the quote-unsafe `escHtml`.
+- **`side-panel/modules/sentinel/sentinel.js`** — the brief patient line, copy-action key
+  and rule-currency / journal-error tooltips, into `title=` / `data-act-key=` attributes.
+- **`sentinel-options/options.js`** — imported custom-rule ids into `data-rule-id=` /
+  `data-id=` across all five custom-rule list renderers.
+
+**Fix.** Every attribute-context interpolation now uses the quote-safe `escAttr`
+(which additionally escapes `"`); an `escAttr` helper was added to the two files that
+lacked one. As defence-in-depth, `validateCustomRule` (`shared/io/sentinel-io.js`) now
+constrains an imported rule `id` to `/^custom-[a-z0-9-]{1,60}$/` rather than only
+requiring the `custom-` prefix, and the knowledge-base link renderer
+(`side-panel/modules/knowledge/knowledge.js`) scheme-checks the `href` (`http(s)`/
+`mailto`/`tel` only) at the sink in addition to the existing data-layer sanitisation.
+The sentinel side-panel `chrome.runtime.onMessage` listener also gained the `sender.id`
+guard its eight siblings already have.
+
+A new `test-xss-attribute-escaping.js` renders a chip with a hostile `"`-bearing drug
+name / rule id and asserts the full payload stays contained and quote-escaped inside the
+attribute, plus a source guard that fails closed if any fixed file reintroduces the
+quote-unsafe `="${escHtml(…)}"` attribute pattern.
+
 ## [v3.91.1] — 2026-06-15
 
 ### Fix: "Load a recent result" now fetches on demand instead of showing an empty picker
