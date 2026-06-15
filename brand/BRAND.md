@@ -10,11 +10,10 @@ appears.
 
 ## The mark
 
-A Corinthian operator helmet ("Medicus Operator") in brushed gold on a deep navy
-rounded-square tile, with a glowing cyan **beacon** at the centre of the visor.
-The helmet signals protective vigilance (Sentinel / monitoring); the beacon is
-the recurring "insight" element and the focal point that keeps the mark legible
-when it shrinks.
+A brushed-gold **guardian shield** on a deep navy rounded-square tile, with a
+glowing cyan **beacon** at its centre. The shield signals protection and
+vigilance (Sentinel / monitoring); the beacon is the recurring "insight" element
+and the focal point that keeps the mark legible when it shrinks.
 
 | File | Use |
 |---|---|

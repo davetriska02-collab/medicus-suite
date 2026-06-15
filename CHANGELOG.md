@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.3] — 2026-06-15
+
+### App icon: guardian shield
+
+- Replaced the operator-helmet icon with a brushed-gold guardian **shield** (deep
+  navy tile, glowing cyan beacon) — same premium treatment, less martial, after a
+  synthetic in-practice appraisal flagged the warrior helmet as off-register for a
+  clinical tool. Swapped `brand/app-icon.png` and regenerated `icons/*.png`; all
+  surfaces already point at the master so no markup changes were needed.
+
 ## [v3.78.2] — 2026-06-15
 
 ### New app icon: Medicus Operator
