@@ -22,13 +22,7 @@
 
 'use strict';
 
-import {
-  summariseActionChips,
-  evaluateRedFlags,
-  buildCaptureText,
-  pharmacyFirstHint,
-  referralMatchesPatient,
-} from './reception-core.js';
+import { summariseActionChips, evaluateRedFlags, buildCaptureText, pharmacyFirstHint } from './reception-core.js';
 
 let container = null;
 let _bundledDoc = null; // reception-pathways.json document
@@ -39,27 +33,6 @@ let _takerInitials = ''; // in-memory only, per panel session
 let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
-
-// ── Referrals-on-file card ─────────────────────────────────────────────────────
-// "Who referred what to where and when" for the open patient. Sourced from the
-// practice-wide referral report. A discovered URL (referrals.discovery, captured
-// when the user visits Referrals → Clinical Audit Report) is used when present, but
-// is NOT required — otherwise the canonical endpoint is built from the practice
-// code, so the card works without any setup step. Rows are filtered to the open
-// record BY NAME (the report carries no NHS number). Raw rows include OTHER
-// patients' names, so they live in ReferralsApi's shared in-memory cache ONLY and
-// are never persisted (mirrors Audit M1 for referrals).
-const REF_DISCOVERY_KEY = 'referrals.discovery';
-const REF_WINDOW_PRESET = 'last12m'; // window kept wide for completeness; cost handled by caching, not a shorter window
-const REF_CACHE_TTL_MS = 10 * 60 * 1000;
-const MAX_REF_DISPLAY = 5; // rows shown in the card
-const MAX_REF_LINES = 3; // referral lines folded into the capture text
-const PRIORITY_LABEL = { TwoWeekWait: '2WW', Urgent: 'Urgent', Routine: 'Routine' };
-let _matchedReferralRows = []; // current patient's matched rows (for the card + capture text)
-let _referralsState = 'idle'; // idle | loading | ready | error | nopatient
-let _referralsError = '';
-let _referralsFetchedAt = 0; // when the shared cache was last populated by us
-let _referralsInFlight = null; // promise guard against concurrent fetches
 
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
@@ -216,7 +189,6 @@ export async function init(el) {
         <span class="rcp-subtitle">Capture a structured history — a clinician always reviews and decides.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
-      <div class="rcp-card" id="rcpReferralsCard"><div class="rcp-card-title">Referrals on file</div><div class="rcp-card-body rcp-muted">Looking for referrals…</div></div>
       <div class="rcp-card" id="rcpCaptureCard"><div class="rcp-card-title">Guided capture</div><div class="rcp-card-body" id="rcpCaptureBody"></div></div>
     </div>`;
 
@@ -284,9 +256,6 @@ function cleanup() {
     _draftDebounceTimer = null;
   }
   _snapshot = null;
-  window.ReferralsApi?.cacheClear?.(); // drop in-memory PHI (other patients' rows) on unmount
-  _matchedReferralRows = [];
-  _referralsFetchedAt = 0;
   container = null;
 }
 
@@ -344,211 +313,6 @@ async function refreshPatientCard() {
   }
   if (!container) return; // cleaned up mid-fetch
   renderPatientCard();
-  refreshReferralsCard();
-}
-
-// ── Card: referrals on file ───────────────────────────────────────────────────
-
-function formatDateUK(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return String(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
-
-// Strip control chars and collapse whitespace/newlines. Referral fields come from
-// the Medicus API; sanitising here stops a stray newline in a field from forging a
-// separate line in the plain-text capture note (e.g. a fake "*** RED FLAG").
-function cleanField(s) {
-  return String(s == null ? '' : s)
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ') // strip control chars / newlines
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Parse a referral row into display parts. priorityKey drives the badge CSS class;
-// priority is the human label (e.g. "2WW" instead of the raw "TwoWeekWait").
-function referralParts(r) {
-  const api = window.ReferralsApi;
-  const parsed = api ? api.parseReferralService(r.referralService) : {};
-  const where =
-    cleanField([parsed.specialty, parsed.hospital].filter((x) => x && x !== '(unknown)').join(', ')) ||
-    cleanField(r.referralService) ||
-    'Referral';
-  const priorityKey = api ? api.normalisePriority(r.priority || '') : r.priority || '';
-  return {
-    where,
-    who: cleanField(r.referringClinician) || 'Unknown clinician',
-    when: formatDateUK(r.referralDate),
-    priorityKey,
-    priority: cleanField(PRIORITY_LABEL[priorityKey] || priorityKey),
-    status: cleanField(r.displayStatus),
-  };
-}
-
-// A single ASCII-safe line for the capture text: "Specialty, Hospital · referred by Dr X · 12/03/2026 · 2WW · Incomplete"
-function formatReferralLine(r) {
-  const p = referralParts(r);
-  return [p.where, p.who ? `referred by ${p.who}` : '', p.when, p.priority, p.status].filter(Boolean).join(' · ');
-}
-
-// Filter rows to the open patient by name, newest first.
-function matchReferrals(rows, patientName) {
-  if (!patientName || !Array.isArray(rows)) return [];
-  return rows
-    .filter((r) => referralMatchesPatient(r, patientName))
-    .sort((a, b) => String(b.referralDate || '').localeCompare(String(a.referralDate || '')));
-}
-
-// The window range as [start, end] for the configured preset.
-function referralRange() {
-  const api = window.ReferralsApi;
-  return (api && api.preset(REF_WINDOW_PRESET)) || [null, null];
-}
-
-// Fetch the practice report once, de-duped across concurrent callers, and publish
-// it into the shared in-memory cache. A discovered URL wins; otherwise the canonical
-// endpoint is built from the practice code (no Clinical Audit Report visit needed).
-function fetchReferralRows(code) {
-  if (_referralsInFlight) return _referralsInFlight;
-  _referralsInFlight = (async () => {
-    const api = window.ReferralsApi;
-    const [start, end] = referralRange();
-    let discoveryUrl = null;
-    try {
-      const r = await chrome.storage.local.get(REF_DISCOVERY_KEY);
-      discoveryUrl = r[REF_DISCOVERY_KEY]?.url || null;
-    } catch (_) {}
-    const result = await api.fetchReferrals(code, start, end, discoveryUrl ? { templateUrl: discoveryUrl } : {});
-    const rows = result.referrals || [];
-    if (code) api.cachePut(code, start, end, rows);
-    _referralsFetchedAt = Date.now();
-    return rows;
-  })().finally(() => {
-    _referralsInFlight = null;
-  });
-  return _referralsInFlight;
-}
-
-async function refreshReferralsCard() {
-  if (!container) return;
-  const pc = _snapshot?.patientContext || null;
-  const patientName = pc?.patientName || null;
-
-  if (!patientName) {
-    _referralsState = 'nopatient';
-    _matchedReferralRows = [];
-    renderReferralsCard();
-    return;
-  }
-  const api = window.ReferralsApi;
-  if (!api) {
-    _referralsState = 'error';
-    _referralsError = 'Referrals module not loaded';
-    renderReferralsCard();
-    return;
-  }
-
-  const code = (await window.PracticeCode?.resolve())?.code || null;
-  if (!container) return;
-
-  // Reuse the shared cache when it covers our window; otherwise fetch (de-duped).
-  const [start, end] = referralRange();
-  let rows = code ? api.cacheGet(code, start, end, REF_CACHE_TTL_MS) : null;
-
-  if (!rows) {
-    _referralsState = 'loading';
-    renderReferralsCard();
-    try {
-      rows = await fetchReferralRows(code);
-    } catch (e) {
-      _referralsState = 'error';
-      _referralsError = e?.message || String(e);
-      _matchedReferralRows = [];
-      renderReferralsCard();
-      return;
-    }
-    if (!container) return;
-  }
-
-  _matchedReferralRows = matchReferrals(rows, patientName);
-  _referralsState = 'ready';
-  renderReferralsCard();
-}
-
-function renderReferralsCard() {
-  const card = container?.querySelector('#rcpReferralsCard .rcp-card-body');
-  if (!card) return;
-  card.classList.remove('rcp-muted');
-  const refreshBtn = `<button class="rcp-link-btn" id="rcpRefRefresh">Refresh</button>`;
-  // Identity caveat — prominent and ABOVE the list, because a name-only match
-  // means everything below it is only as certain as the name.
-  const caveat = `<div class="rcp-ref-caveat">Matched <strong>by name</strong> — the source has no NHS number, so confirm it's the right patient.</div>`;
-  const updated = _referralsFetchedAt ? `Updated ${esc(fmtHHMM(_referralsFetchedAt))}` : '';
-  let html = '';
-
-  switch (_referralsState) {
-    case 'nopatient':
-      card.classList.add('rcp-muted');
-      html = `Open a patient record to see their referrals — what they were referred for, where and when.`;
-      break;
-    case 'loading':
-      card.classList.add('rcp-muted');
-      html = `Loading referrals…`;
-      break;
-    case 'error':
-      html = `<div class="rcp-error">Couldn't load referrals automatically: ${esc(_referralsError)}</div>
-        <div class="rcp-fineprint">If this keeps happening, open <strong>Referrals &rarr; Clinical Audit Report</strong> in Medicus once, then refresh. ${refreshBtn}</div>`;
-      break;
-    case 'ready': {
-      const rows = _matchedReferralRows || [];
-      if (rows.length === 0) {
-        // "Referral lookup ran" affirms a SUCCESSFUL search that found nothing — so an
-        // empty result reads differently from the error state (a failed load).
-        html = `${caveat}
-          <div class="rcp-muted">Referral lookup ran — no referrals found under this name in the last 12 months (anything older is not shown). If the patient may be referred under another name, check the record.</div>
-          <div class="rcp-fineprint">${updated ? `${updated} &middot; ` : ''}${refreshBtn}</div>`;
-      } else {
-        const items = rows
-          .slice(0, MAX_REF_DISPLAY)
-          .map((r) => {
-            const p = referralParts(r);
-            const badges =
-              (p.priority
-                ? `<span class="rcp-ref-badge rcp-ref-pri-${esc(p.priorityKey.toLowerCase())}">${esc(p.priority)}</span>`
-                : '') +
-              (p.status
-                ? `<span class="rcp-ref-badge rcp-ref-st-${esc(p.status.toLowerCase())}">${esc(p.status)}</span>`
-                : '');
-            const meta = [p.who ? `Referred by ${p.who}` : '', p.when].filter(Boolean).map(esc).join(' &middot; ');
-            return `<div class="rcp-ref-row">
-              <div class="rcp-ref-where">${esc(p.where)}</div>
-              <div class="rcp-ref-meta">${meta}</div>
-              ${badges ? `<div class="rcp-ref-badges">${badges}</div>` : ''}
-            </div>`;
-          })
-          .join('');
-        const more =
-          rows.length > MAX_REF_DISPLAY
-            ? `<div class="rcp-fineprint">+${rows.length - MAX_REF_DISPLAY} more not shown.</div>`
-            : '';
-        html = `${caveat}${items}${more}
-          <div class="rcp-fineprint">Outgoing referrals from the last 12 months — anything older is not shown. Status is from the practice referral report (Incomplete = not yet completed in Medicus).${updated ? ` &middot; ${updated}` : ''} ${refreshBtn}</div>`;
-      }
-      break;
-    }
-    default:
-      card.classList.add('rcp-muted');
-      html = `Looking for referrals…`;
-  }
-
-  card.innerHTML = html;
-  card.querySelector('#rcpRefRefresh')?.addEventListener('click', () => {
-    window.ReferralsApi?.cacheClear?.(); // force a refetch
-    _referralsFetchedAt = 0;
-    refreshReferralsCard();
-  });
 }
 
 function renderPatientCard() {
@@ -1033,8 +797,6 @@ function generateSummary(form, pathway) {
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
-      // Who referred what, to where, when — the same name-matched rows shown in the card.
-      referralLines: pc?.patientName ? _matchedReferralRows.slice(0, MAX_REF_LINES).map(formatReferralLine) : [],
     },
   });
 

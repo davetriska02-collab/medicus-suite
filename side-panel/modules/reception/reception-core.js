@@ -172,15 +172,6 @@ function buildCaptureText(input) {
     lines.push(`Pharmacy First: ${m.pharmacyFirstHint}`);
   }
 
-  // Referrals already on file for this patient (who referred what, to where, when).
-  // Matched to the open record BY NAME from the practice referral report, so it is
-  // flagged as needing clinician verification — there is no NHS-number match here.
-  if (Array.isArray(m.referralLines) && m.referralLines.length > 0) {
-    lines.push('');
-    lines.push('Referrals on file (matched by name — clinician to verify):');
-    for (const rl of m.referralLines) lines.push(`- ${rl}`);
-  }
-
   lines.push('');
   lines.push('NOTE: structured capture by reception staff using a fixed question set — not a clinical assessment. Clinician to review.');
   return lines.join('\n');
@@ -210,33 +201,6 @@ function formatWhen(nowIso) {
 }
 
 // ---------------------------------------------------------------------------
-// referralMatchesPatient(ref, patientName)
-// The practice referral report is keyed by date range, not by patient, and the
-// rows carry NO NHS number — only patientGivenName / patientFamilyName. To show
-// "this patient's referrals" in reception we match on name. To avoid attaching an
-// unrelated patient's referral, BOTH every given-name token AND every family-name
-// token from the referral must appear as whole tokens in the open record's display
-// name (case-insensitive). Returns boolean. Callers must still surface the result
-// as "matched by name — clinician to verify", never as a confirmed identity.
-// ---------------------------------------------------------------------------
-function referralMatchesPatient(ref, patientName) {
-  if (!ref || !patientName) return false;
-  const tokenise = (s) =>
-    String(s || '')
-      .toLowerCase()
-      .replace(/[^a-z\s'-]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean);
-  const givenTokens = tokenise(ref.patientGivenName);
-  const familyTokens = tokenise(ref.patientFamilyName);
-  if (givenTokens.length === 0 || familyTokens.length === 0) return false;
-  const nameTokens = new Set(tokenise(patientName));
-  if (nameTokens.size === 0) return false;
-  const allPresent = (toks) => toks.every((t) => nameTokens.has(t));
-  return allPresent(givenTokens) && allPresent(familyTokens);
-}
-
-// ---------------------------------------------------------------------------
 // pharmacyFirstHint(pathway, ageYears)
 // Returns the pathway's Pharmacy First note when the patient's age (from the
 // open record) is inside the pathway's age band, null otherwise. With no known
@@ -259,6 +223,5 @@ export {
   evaluateRedFlags,
   buildCaptureText,
   pharmacyFirstHint,
-  referralMatchesPatient,
   STATUS_COLOUR
 };

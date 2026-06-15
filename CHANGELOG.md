@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.86.3] — 2026-06-15
+
+### Removed: Reception "Referrals on file" card
+
+The reception referrals card did not work reliably against live Medicus and has
+been removed. The reception module (`reception.js`/`reception-core.js`/CSS) and the
+Referrals module + API (`referrals-api.js`, `referrals.js`) are restored to their
+pre-feature (v3.84.3) state, so the Referrals tab is back to its known-good
+behaviour. The appraisal notes are retained in `docs/appraisal/` as a record.
+
 ## [v3.86.2] — 2026-06-15
 
 ### Reception referrals — wording tweaks from the re-poll
