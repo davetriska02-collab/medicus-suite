@@ -942,6 +942,32 @@ details[open] .tl-rr-inspector-arrow {
   margin: 6px 0 0;
 }
 
+/* Click-to-add parsed-table cells: a name → Analyte match, a specimen → Specimen scope. */
+.tl-rr-cell-clickable {
+  cursor: pointer;
+  border-radius: var(--r-sm, 4px);
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.tl-rr-cell-clickable:hover,
+.tl-rr-cell-clickable:focus-visible {
+  background: var(--accent-dim, rgba(80, 140, 255, 0.16));
+  box-shadow: inset 0 0 0 1px var(--accent, #5b8cff);
+  outline: none;
+}
+.tl-rr-cell-added {
+  background: var(--green-dim, rgba(60, 180, 120, 0.22)) !important;
+  box-shadow: inset 0 0 0 1px var(--green, #3cb478) !important;
+}
+
+.tl-rr-recent-tip {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-4);
+  margin: 2px 0 0;
+}
+
 /* ── Recent-result picker ── */
 .tl-rr-recent {
   display: flex;

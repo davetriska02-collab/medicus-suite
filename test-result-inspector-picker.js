@@ -212,5 +212,35 @@ console.log('\nrender-seam equivalence — picker lines vs paste fields\n');
   assert(pickerRows[0].text.toLowerCase().includes('no growth'), 'text carried through render seam');
 }
 
+// ── appendUniqueLine — extracted from the REAL options.js source (no mirror) ──
+// This one we pull from source and run in a vm so the click-to-add / pill logic is
+// guarded against drift. It is pure (no DOM/chrome), so it runs standalone.
+console.log('\nappendUniqueLine — click-to-add / pill field append\n');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'options.js'), 'utf8');
+  const m = src.match(/function appendUniqueLine\(current, value\) \{[\s\S]*?\n  \}/);
+  assert(!!m, 'appendUniqueLine found in options.js');
+  const sandbox = {};
+  vm.runInNewContext(m[0] + '\nthis.appendUniqueLine = appendUniqueLine;', sandbox);
+  const appendUniqueLine = sandbox.appendUniqueLine;
+  assert(typeof appendUniqueLine === 'function', 'appendUniqueLine extracted and callable');
+
+  assert(appendUniqueLine('', 'Culture') === 'Culture', 'append to empty → the value');
+  assert(appendUniqueLine('Culture', 'Sensitivities') === 'Culture\nSensitivities', 'appends a new line');
+  assert(appendUniqueLine('Culture', 'Culture') === null, 'exact duplicate → null (no change)');
+  assert(appendUniqueLine('Culture', 'culture') === null, 'case-insensitive duplicate → null');
+  assert(appendUniqueLine('Culture', '  Culture  ') === null, 'trimmed duplicate → null');
+  assert(appendUniqueLine('Culture', '   ') === null, 'blank value → null');
+  assert(appendUniqueLine('Culture', null) === null, 'null value → null');
+  assert(appendUniqueLine('THROAT SWAB', 'URINE') === 'THROAT SWAB\nURINE', 'second specimen appended');
+  assert(
+    appendUniqueLine('a\n\n  b ', 'c') === 'a\nb\nc',
+    'existing list is trimmed + blanks dropped before appending'
+  );
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 if (failed) process.exit(1);
