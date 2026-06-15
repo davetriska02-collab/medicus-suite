@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "version": 16,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3875,6 +3875,12 @@
       "kind": "info",
       "actions": []
     },
+    "queue.resultCombo": {
+      "enabled": true,
+      "label": "{rule}",
+      "kind": "amber",
+      "actions": []
+    },
     "record.stoppStart": {
       "enabled": true,
       "label": "Rx review \u00d7{count}",
@@ -3922,6 +3928,18 @@
       },
       "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"],
       "abnormalText": ["pure growth of", "predominant growth of", "heavy growth of", "sensitive to", "resistant to", "sensitivities shown", "antimicrobial sensitivity"]
+    },
+    {
+      "id": "base-urine-sterile-pyuria",
+      "kind": "combo",
+      "enabled": true,
+      "builtin": true,
+      "label": "Sterile pyuria — pus cells raised, culture negative",
+      "level": "amber",
+      "conditions": [
+        { "analyte": { "match": ["pus cell", "white cell", "white blood cell", "wbc", "leucocyte", "leukocyte"], "specimen": ["urine", "msu", "mid-stream", "mid stream", "csu"] }, "comparator": "above", "value": 40 },
+        { "analyte": { "match": ["culture"], "specimen": ["urine", "msu", "mid-stream", "mid stream", "csu"] }, "contains": ["no growth", "no significant growth", "no bacterial growth", "no organisms isolated", "no organism isolated", "sterile"] }
+      ]
     },
     {
       "id": "base-bowel-screening-nonresponder",

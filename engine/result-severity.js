@@ -313,6 +313,108 @@
     return { sev: best, label: bestLabel };
   }
 
+  // ── Compute combo-rule outcome across a whole report ──────────────────────────
+  // Handles rules with kind === 'combo'. A combo fires when EVERY one of its
+  // conditions is satisfied by SOME result in the report (each condition may be met
+  // by a DIFFERENT result row). Combos are ESCALATE-ONLY: they raise the report level
+  // to their `level` (default 'amber'), never lower it, never calm/suppress.
+  // Deliberately self-contained (no result-rules.js import) — mirrors computeTextOutcome.
+  //
+  // Returns { comboCount, comboTop } where:
+  //   comboCount — number of combo rules that fired
+  //   comboTop   — { label, level } of the FIRST fired combo, or null.
+  //
+  // Numeric condition value access reuses the EXACT computeRuleSev guard
+  // (Number.isFinite(result.value)); a non-finite value never satisfies a numeric
+  // condition (fail-safe — the combo will not fire on missing data).
+  function computeComboOutcome(report, rules, problems) {
+    const NONE = { comboCount: 0, comboTop: null };
+    if (!report || !Array.isArray(report.results)) return NONE;
+    if (!Array.isArray(rules) || rules.length === 0) return NONE;
+    const results = report.results;
+
+    const collapseWs = (s) => String(s).replace(/\s+/g, ' ');
+
+    // Does `result` match a condition's analyte (name match, not excluded, specimen-allowed)?
+    function analyteMatches(analyte, result) {
+      if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) return false;
+      const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
+      const hit = analyte.match.some((m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase()));
+      if (!hit) return false;
+      if (
+        Array.isArray(analyte.exclude) &&
+        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
+      ) {
+        return false;
+      }
+      if (!specimenAllows(analyte, result)) return false;
+      return true;
+    }
+
+    // Is a single condition satisfied by SOME result in the report?
+    function conditionSatisfied(cond) {
+      if (!cond || typeof cond !== 'object') return false;
+      const analyte = cond.analyte;
+      const isNumeric = cond.comparator !== undefined;
+      const isText = cond.contains !== undefined;
+      // Exactly one form — a malformed condition (both/neither) cannot be satisfied.
+      if (isNumeric === isText) return false;
+
+      if (isNumeric) {
+        if (cond.comparator !== 'above' && cond.comparator !== 'below') return false;
+        if (!Number.isFinite(cond.value)) return false;
+        return results.some((r) => {
+          if (!r || typeof r !== 'object') return false;
+          if (!analyteMatches(analyte, r)) return false;
+          // Same numeric access + guard as computeRuleSev — fail-safe on missing data.
+          if (!Number.isFinite(r.value)) return false;
+          return cond.comparator === 'above' ? r.value >= cond.value : r.value <= cond.value;
+        });
+      }
+
+      // TEXT
+      if (!Array.isArray(cond.contains) || cond.contains.length === 0) return false;
+      const phrases = cond.contains
+        .filter((p) => typeof p === 'string' && p.trim().length > 0)
+        .map((p) => collapseWs(p.toLowerCase()));
+      if (phrases.length === 0) return false;
+      return results.some((r) => {
+        if (!r || typeof r !== 'object') return false;
+        if (!analyteMatches(analyte, r)) return false;
+        const text = typeof r.text === 'string' ? collapseWs(r.text.toLowerCase()) : '';
+        if (!text) return false;
+        return phrases.some((p) => text.includes(p));
+      });
+    }
+
+    let comboCount = 0;
+    let comboTop = null;
+
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      if (!rule || typeof rule !== 'object') continue;
+      if ((rule.kind || 'threshold') !== 'combo') continue;
+      if (rule.enabled === false) continue;
+      const conditions = rule.conditions;
+      if (!Array.isArray(conditions) || conditions.length < 2) continue;
+      // Honour suppressIfProblem (fail-open when problems absent), like every other rule.
+      if (ruleSuppressedByProblems(rule, problems)) continue;
+
+      // Every condition must be satisfied by some result (AND).
+      const allSatisfied = conditions.every((cond) => conditionSatisfied(cond));
+      if (!allSatisfied) continue;
+
+      comboCount++;
+      if (!comboTop) {
+        const level = rule.level === 'red' ? 'red' : 'amber';
+        const label = (typeof rule.label === 'string' && rule.label) || 'Combination alert';
+        comboTop = { label, level };
+      }
+    }
+
+    return { comboCount, comboTop };
+  }
+
   /**
    * evaluateReportSeverity(report, opts)
    *
@@ -332,7 +434,15 @@
    * top.ruleLabel — when the salient result's severity was RAISED by a rule (not the lab
    * flag), this carries that rule's label so the queue can render an attributable chip.
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
-   *             reviewCount, noGrowthCount, reviewTop, noGrowthTop }}
+   *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop }}
+   *
+   * Combo-rule outcomes (kind:'combo') are evaluated across the WHOLE report (not per
+   * result): a combo fires when ALL its conditions are satisfied by SOME result in the
+   * report. Combos are ESCALATE-ONLY — a fired amber combo raises level to ≥ 'amber', a
+   * fired red combo to 'red'; they never lower level and never affect misprioritised
+   * (which stays tied to a genuine urgent RESULT via urgentCount).
+   *   comboCount — number of combo rules that fired on this report
+   *   comboTop   — { label, level } of the FIRST fired combo, or null
    *
    * Text-rule outcomes (kind:'text') are SEPARATE from numeric severity. A text rule
    * flags a result via abnormalText (a flag phrase is present) or via normalText (no
@@ -358,6 +468,8 @@
       noGrowthCount: 0,
       reviewTop: null,
       noGrowthTop: null,
+      comboCount: 0,
+      comboTop: null,
     };
 
     try {
@@ -425,6 +537,12 @@
         }
       });
 
+      // Combo rules (kind:'combo') — evaluated across the whole report, not per result.
+      // ESCALATE-ONLY: a fired combo can only raise level, never lower it.
+      const combo = computeComboOutcome(report, resultRules, problems);
+      const comboCount = combo.comboCount;
+      const comboTop = combo.comboTop;
+
       let level;
       if (urgentCount > 0) {
         level = 'red';
@@ -433,6 +551,16 @@
         level = 'amber';
       } else {
         level = 'none';
+      }
+
+      // Fold in a fired combo (escalate-only). A red combo raises level to 'red';
+      // an amber combo raises a 'none' level to at least 'amber'. Never lowers.
+      if (comboTop) {
+        if (comboTop.level === 'red') {
+          level = 'red';
+        } else if (level === 'none') {
+          level = 'amber';
+        }
       }
 
       // The single most salient analyte for chip display:
@@ -448,8 +576,13 @@
           }
         : null;
 
-      // misprioritised: red severity but the queue row priority is NOT high/urgent/immediate
-      const misprioritised = level === 'red' && !/high|urgent|immediate/i.test(priorityDisplay);
+      // misprioritised: a lab-/rule-urgent result exists but the queue row priority is NOT
+      // high/urgent/immediate. Deliberately keyed on urgentCount (a genuine urgent RESULT),
+      // NOT on `level` — so a red COMBO does not flip a report to "misprioritised". A combo
+      // is a clinician-authored pattern escalation, not the lab marking the result urgent;
+      // treating it as a mis-prioritised lab-urgent result would be a category error and would
+      // create false "wrongly routed" flags on every fired red combo.
+      const misprioritised = urgentCount > 0 && !/high|urgent|immediate/i.test(priorityDisplay);
 
       return {
         level,
@@ -462,6 +595,8 @@
         noGrowthCount,
         reviewTop,
         noGrowthTop,
+        comboCount,
+        comboTop,
       };
     } catch (_) {
       return none;

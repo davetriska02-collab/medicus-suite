@@ -571,6 +571,167 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
   assert(prompt.toLowerCase().includes('abnormaltext'), 'prompt documents the abnormalText (flag-if-present) field');
 }
 
+// ── validateResultRule: combo rule — valid & invalid cases ────────────────────
+console.log('\n--- validateResultRule: combo rule cases ---');
+
+function validCombo(overrides) {
+  return Object.assign(
+    {
+      id: 'rule_combo',
+      enabled: false,
+      builtin: false,
+      kind: 'combo',
+      label: 'Sterile pyuria (pus cells, no growth)',
+      level: 'amber',
+      conditions: [
+        {
+          analyte: { match: ['pus cells', 'white cells'], specimen: ['urine', 'msu'] },
+          comparator: 'above',
+          value: 40,
+        },
+        {
+          analyte: { match: ['culture', 'msu'], specimen: ['urine', 'msu'] },
+          contains: ['no growth', 'no significant growth'],
+        },
+      ],
+    },
+    overrides
+  );
+}
+
+{
+  const errs = validateResultRule(validCombo());
+  assert(errs.length === 0, 'complete valid combo rule returns no errors');
+}
+{
+  // level omitted — defaults to amber, still valid
+  const r = validCombo();
+  delete r.level;
+  const errs = validateResultRule(r);
+  assert(errs.length === 0, 'combo rule with level omitted → valid (defaults amber)');
+}
+{
+  // level red is valid
+  const errs = validateResultRule(validCombo({ level: 'red' }));
+  assert(errs.length === 0, 'combo rule with level "red" → valid');
+}
+{
+  // bad level
+  const errs = validateResultRule(validCombo({ level: 'orange' }));
+  assert(errs.length > 0, 'combo rule with bad level → error');
+  assert(hasError(errs, 'level'), 'error mentions "level"');
+}
+{
+  // fewer than 2 conditions → error
+  const errs = validateResultRule(
+    validCombo({ conditions: [{ analyte: { match: ['pus cells'] }, comparator: 'above', value: 40 }] })
+  );
+  assert(errs.length > 0, 'combo with <2 conditions → error');
+  assert(hasError(errs, 'conditions'), 'error mentions "conditions"');
+}
+{
+  // conditions not an array → error
+  const errs = validateResultRule(validCombo({ conditions: 'nope' }));
+  assert(errs.length > 0, 'combo conditions not an array → error');
+}
+{
+  // condition with BOTH comparator and contains → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [
+        { analyte: { match: ['pus cells'] }, comparator: 'above', value: 40, contains: ['no growth'] },
+        { analyte: { match: ['culture'] }, contains: ['no growth'] },
+      ],
+    })
+  );
+  assert(errs.length > 0, 'combo condition with BOTH comparator and contains → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('xor') || e.toLowerCase().includes('not both')),
+    'error mentions numeric XOR text'
+  );
+}
+{
+  // condition with NEITHER comparator nor contains → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [{ analyte: { match: ['pus cells'] } }, { analyte: { match: ['culture'] }, contains: ['no growth'] }],
+    })
+  );
+  assert(errs.length > 0, 'combo condition with NEITHER form → error');
+}
+{
+  // numeric condition with non-finite value → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [
+        { analyte: { match: ['pus cells'] }, comparator: 'above', value: NaN },
+        { analyte: { match: ['culture'] }, contains: ['no growth'] },
+      ],
+    })
+  );
+  assert(errs.length > 0, 'combo numeric condition with NaN value → error');
+}
+{
+  // numeric condition with bad comparator → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [
+        { analyte: { match: ['pus cells'] }, comparator: 'equal', value: 40 },
+        { analyte: { match: ['culture'] }, contains: ['no growth'] },
+      ],
+    })
+  );
+  assert(errs.length > 0, 'combo numeric condition with bad comparator → error');
+}
+{
+  // text condition with empty contains → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [
+        { analyte: { match: ['pus cells'] }, comparator: 'above', value: 40 },
+        { analyte: { match: ['culture'] }, contains: [] },
+      ],
+    })
+  );
+  assert(errs.length > 0, 'combo text condition with empty contains → error');
+}
+{
+  // condition missing analyte.match → error
+  const errs = validateResultRule(
+    validCombo({
+      conditions: [
+        { analyte: { match: [] }, comparator: 'above', value: 40 },
+        { analyte: { match: ['culture'] }, contains: ['no growth'] },
+      ],
+    })
+  );
+  assert(errs.length > 0, 'combo condition with empty analyte.match → error');
+  assert(hasError(errs, 'match'), 'error mentions "match"');
+}
+{
+  // missing label → error (shared check)
+  const errs = validateResultRule(validCombo({ label: '' }));
+  assert(errs.length > 0, 'combo rule with empty label → error');
+}
+{
+  // suppressIfProblem still validated for combo
+  const errs = validateResultRule(validCombo({ suppressIfProblem: { exclude: ['x'] } }));
+  assert(errs.length > 0, 'combo suppressIfProblem missing match → error');
+}
+
+// ── resultRuleSchemaPrompt: documents the combo kind ─────────────────────────
+console.log('\n--- resultRuleSchemaPrompt: covers combo kind ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('combo'), 'prompt documents the combo kind');
+  assert(prompt.toLowerCase().includes('conditions'), 'prompt documents the combo conditions field');
+  assert(
+    prompt.toLowerCase().includes('pus cells') || prompt.toLowerCase().includes('sterile pyuria'),
+    'prompt includes the sterile-pyuria worked example'
+  );
+  assert(prompt.toLowerCase().includes('no growth'), 'combo example references the "no growth" culture condition');
+}
+
 // ── analyte.exclude (optional) validation ────────────────────────────────────
 console.log('\n--- analyte.exclude validation ---');
 {

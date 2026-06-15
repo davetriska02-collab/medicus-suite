@@ -1071,3 +1071,125 @@ details[open] .tl-rr-inspector-arrow {
   gap: 10px;
   margin-top: 10px;
 }
+
+/* ── Combo-rule builder ── */
+.tl-rr-combo {
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  overflow: hidden;
+}
+.tl-rr-combo-summary {
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+.tl-rr-combo-summary::-webkit-details-marker {
+  display: none;
+}
+.tl-rr-combo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.tl-rr-combo-head {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tl-rr-combo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.tl-rr-combo-level {
+  flex: 0 0 160px;
+}
+.tl-rr-combo-flabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-4);
+}
+.tl-rr-combo-input,
+.tl-rr-combo-ta {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+.tl-rr-combo-ta {
+  resize: vertical;
+}
+.tl-rr-combo-input:focus-visible,
+.tl-rr-combo-ta:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.tl-rr-combo-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tl-rr-combo-cond {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+.tl-rr-combo-cond-active {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px var(--accent-line);
+}
+.tl-rr-combo-cond-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-rr-combo-active {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tl-rr-combo-row2 {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tl-rr-combo-numrow {
+  display: flex;
+  gap: 6px;
+}
+.tl-rr-combo-numrow .rr-cc-comparator {
+  flex: 1 1 auto;
+}
+.tl-rr-combo-numrow .rr-cc-value {
+  flex: 0 0 90px;
+}
+.tl-rr-combo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

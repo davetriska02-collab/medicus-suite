@@ -518,45 +518,77 @@
               <select id="rrKind">
                 <option value="threshold">Numeric threshold</option>
                 <option value="text">Text / culture</option>
+                <option value="combo">Combo (multi-condition)</option>
               </select>
             </label>
 
-            <label class="tl-field">
-              <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
-              <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
-            </label>
+            <div class="rr-fields-single">
+              <label class="tl-field">
+                <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
+                <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
+              </label>
 
-            <label class="tl-field">
-              <span
-                >Analyte exclude
-                <small
-                  >(optional — one per line; skips look-alike analytes, e.g. "mean platelet" or "urine")</small
-                ></span
-              >
-              <textarea id="rrAnalyteExclude" rows="2" placeholder="mean platelet&#10;urine"></textarea>
-            </label>
+              <label class="tl-field">
+                <span
+                  >Analyte exclude
+                  <small
+                    >(optional — one per line; skips look-alike analytes, e.g. "mean platelet" or "urine")</small
+                  ></span
+                >
+                <textarea id="rrAnalyteExclude" rows="2" placeholder="mean platelet&#10;urine"></textarea>
+              </label>
 
-            <div class="tl-field">
-              <span
-                >Specimen scope
-                <small
-                  >(optional — one substring per line; case-insensitive match against the group header, e.g. "THROAT
-                  SWAB". Leave blank to match any specimen.</small
-                ></span
-              >
-              <textarea id="rrAnalyteSpecimen" rows="2" placeholder="THROAT SWAB&#10;URINE"></textarea>
-              <div id="rrSpecimenSuggestions" class="tl-rr-suggestions" style="display: none"></div>
+              <div class="tl-field">
+                <span
+                  >Specimen scope
+                  <small
+                    >(optional — one substring per line; case-insensitive match against the group header, e.g. "THROAT
+                    SWAB". Leave blank to match any specimen.</small
+                  ></span
+                >
+                <textarea id="rrAnalyteSpecimen" rows="2" placeholder="THROAT SWAB&#10;URINE"></textarea>
+                <div id="rrSpecimenSuggestions" class="tl-rr-suggestions" style="display: none"></div>
+              </div>
+
+              <div class="tl-field">
+                <span>Test match <small>(advisory — not saved)</small></span>
+                <input
+                  type="text"
+                  id="rrTestName"
+                  placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)"
+                />
+                <div id="rrMatchSuggestions" class="tl-rr-suggestions" style="display: none"></div>
+                <span id="rrTestResult" class="tl-rr-test-result"></span>
+              </div>
             </div>
 
-            <div class="tl-field">
-              <span>Test match <small>(advisory — not saved)</small></span>
-              <input
-                type="text"
-                id="rrTestName"
-                placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)"
-              />
-              <div id="rrMatchSuggestions" class="tl-rr-suggestions" style="display: none"></div>
-              <span id="rrTestResult" class="tl-rr-test-result"></span>
+            <!-- ── Combo (multi-condition) fields — shown when Rule type = Combo ── -->
+            <div class="rr-fields-combo" style="display: none">
+              <p class="tl-rr-inspector-hint">
+                A <strong>combo</strong> rule fires only when <strong>every</strong> condition below is matched by some
+                result <em>within the same report</em> (logical AND) — e.g. sterile pyuria:
+                <em>pus cells above 40</em> AND <em>culture shows no growth</em>. The combo uses the
+                <strong>Label</strong> field above. Each condition carries its own analyte match / specimen, so the
+                single-analyte fields above don't apply.
+                <br />
+                Combo rules are <strong>escalate-only</strong> and default to amber (review); leave disabled until a
+                clinician has reviewed it. Open the result inspector on the right, pick a condition to make it active,
+                then <strong>click a result name to seed its match + specimen</strong>.
+              </p>
+
+              <label class="tl-field tl-rr-combo-level-field">
+                <span>Escalate to</span>
+                <select id="rrComboLevel">
+                  <option value="amber" selected>Amber (review)</option>
+                  <option value="red">Red (urgent)</option>
+                </select>
+              </label>
+
+              <div id="rrComboConditions" class="tl-rr-combo-conditions"></div>
+
+              <div class="tl-rr-combo-actions">
+                <button class="tl-btn" id="btnRrComboAddCond" type="button">+ Add condition</button>
+              </div>
             </div>
 
             <div class="rr-fields-threshold">
@@ -629,6 +661,10 @@
               group — for example scoping a "Culture" rule to "THROAT SWAB" so it never fires on urine or blood culture
               lines. Leave blank to match any specimen. Fail-open: if the lab report carries no group header the scope
               is ignored. <br /><br />
+              <strong>Combo rules</strong> fire only when <em>every</em> condition matches within the same report
+              (logical AND) — e.g. sterile pyuria: pus cells above 40 AND culture shows no growth. Each condition
+              carries its own analyte match / specimen. Combo is escalate-only, defaults to amber (review), and should
+              stay disabled until a clinician has reviewed it. <br /><br />
               <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule
               chip is not a clinical all-clear: it only means no rule covered that analyte.
             </div>
@@ -664,6 +700,12 @@
                 </div>
 
                 <div id="rrInspectorResults" class="tl-rr-inspector-results" style="display: none"></div>
+
+                <p class="tl-rr-inspector-hint tl-rr-combo-seed-tip">
+                  <strong>Building a combo rule?</strong> Set <em>Rule type</em> to
+                  <strong>Combo (multi-condition)</strong> on the left, pick a condition to make it active, then click a
+                  result name above to seed its analyte match (or a specimen header to scope it).
+                </p>
 
                 <!-- Fallback path: paste a raw API response manually -->
                 <details class="tl-rr-paste-fallback">
