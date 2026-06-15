@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.87.2] — 2026-06-15
+
+### Accept right inside the Central attestations box
+
+Previously the "Accept for practice" control lived only in Clinical Safety, so a
+greyed-out central-attestation gate meant navigating away to unlock it. The
+Central attestations box (Backup & Restore → Publish to shared folder) now has its
+own inline **Accept all for this practice** control (same safety-gated tick +
+action), so all three gates can be accepted and unlocked in place. The accept
+logic is now shared between the two controls.
+
 ## [v3.87.1] — 2026-06-15
 
 ### "Accept for practice" now unlocks all three central attestations
