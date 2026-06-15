@@ -3,6 +3,7 @@
 'use strict';
 
 import { createModuleLoader } from './module-loader.js';
+import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
@@ -1040,17 +1041,10 @@ const SUB_RAG_TYPES = [
   { key: 'admin', label: 'Admin', apiType: 'admin_patient_request_task' },
 ];
 
-const DEFAULT_SUB_THRESHOLDS = {
-  medical: { amber: 30, red: 60, enabled: false },
-  admin: { amber: 20, red: 40, enabled: false },
-};
-
+// DEFAULT_SUB_THRESHOLDS + ragLevel are imported from submissions-core.js so the
+// strip and the Submissions module share one threshold definition.
 function _subRagLevel(key, value, thresholds) {
-  const t = { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) };
-  if (!t.enabled) return null;
-  if (value >= (t.red || Infinity)) return 'red';
-  if (value >= (t.amber || Infinity)) return 'amber';
-  return null;
+  return ragLevel(value, { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) });
 }
 
 async function fetchAndRenderSubRagStrip() {

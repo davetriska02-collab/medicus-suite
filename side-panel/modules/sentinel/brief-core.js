@@ -245,6 +245,7 @@ function buildTrendNotes(trendData) {
  *   counts: { red, amber }, // chips at rank 0 and rank 1–2
  *   signals: [ { severity, text } ],  // max 4, worst-first
  *   moreCount,              // additional action-needed chips beyond the 4 shown
+ *   moreRed,                // how many of those hidden chips are RED (rank 0)
  *   trendNotes: [ { text, direction } ] // 0–3 notable trends
  * }
  */
@@ -278,6 +279,9 @@ export function buildBrief(snapshot, trendData) {
   const MAX_SIGNALS = 4;
   const shown = sorted.slice(0, MAX_SIGNALS);
   const moreCount = sorted.length - shown.length;
+  // R6: how many of the hidden ("+N more") chips are RED (rank 0). Used by the
+  // brief card to ensure a hidden red item is never silently swallowed.
+  const moreRed = sorted.slice(MAX_SIGNALS).filter((c) => (STATUS_RANK[c.status] ?? 99) === 0).length;
 
   const signals = shown.map((chip) => ({
     severity: chipSeverity(chip),
@@ -294,6 +298,7 @@ export function buildBrief(snapshot, trendData) {
     counts: { red, amber },
     signals,
     moreCount,
+    moreRed,
     trendNotes,
   };
 }

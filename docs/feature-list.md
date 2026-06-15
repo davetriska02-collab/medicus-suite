@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.78.0
-**Generated:** 2026-06-14 (automated)
+**Version:** v3.84.3
+**Generated:** 2026-06-15 (automated)
 
 ## What it is
 
@@ -32,23 +32,26 @@ The default tab. One glance answers "what does today look like?" before clinic s
 The core per-patient alerting module. When a patient record is open in Medicus, Sentinel evaluates the practice's monitoring rules against that patient's medications, observations, problems, and vaccination history, and displays colour-coded chips for anything overdue, due soon, or not achieved.
 
 - Drug-monitoring chips show which specific blood tests are overdue and by how long, with monitoring interval and source citation
+- Each drug-monitoring chip shows the matched rule term as a hover tooltip ("Matched monitoring rule on '<term>'") so a clinician can confirm a correct hit rather than a lucky substring match
 - QOF indicator chips flag register members whose targets are not met or approaching threshold
-- Vaccine chips reflect seasonal campaign windows (flu and COVID appear only during the active season)
-- A collapsible **Brief** card gives a 30-second risk summary: patient line, red/amber count, and the four highest-priority signals
+- Vaccine chips reflect seasonal campaign windows (flu and COVID appear only during the active campaign period)
+- A collapsible **Brief** card gives a 30-second risk summary: patient line, red/amber count, and the four highest-priority signals. The "+N more" overflow line annotates how many hidden chips are red, so a red signal beyond the top-4 is never silently swallowed
 - **Action Packs**: each actionable chip carries copy-ready text — blood form, recall SMS, escalation SMS, letter, and task line for admin
 - **Patient Passport**: plain-English summary (reading age 9–11) for handing to the patient in the room
+- **Patient identity banner**: name / NHS number / DOB / age with a "Verify in Medicus" footnote and a "Monitoring for" lead-in label so the subject is unmistakable
 - Dismissed chips resurface automatically when their status escalates — an overdue chip cannot stay permanently hidden
-- "Meds without a monitoring rule" audit view shows medications not matched by any enabled rule, so brand-coverage gaps are visible rather than silent
+- "Meds without a monitoring rule" audit view shows medications not matched by any enabled rule, with a "Report missing brand" mailto link so brand-coverage gaps are visible rather than silent
 
 ### Sweep (Pre-clinic sweep)
 
 Runs the same monitoring rules as Sentinel across all patients booked in today's appointment book — before clinic starts — to produce a worst-first worklist so overdue recalls can be arranged before consultation.
 
+- **Choose the sweep day**: sweep today or any other day (past or future); the appointment book and clinician picker update for the selected day
+- **Multi-clinician filter**: select any combination of the day's clinicians (or leave "All"); an empty selection always means all — it can never silently sweep zero patients. Printed handouts label the audience accordingly (single clinician, named list, or all)
 - Manual trigger only; large practices processed in batches of 40 with a "Check next N" button
-- Clinician filter: sweep one clinician's list or the whole practice
 - Per-patient API failures render explicitly — a patient with partial data cannot appear clear
-- **Print reception handout**: tick-box worklist with plain-English booking instructions per patient, sorted by appointment time
-- Last sweep survives tab switches for up to 2 hours, with the run time shown so staleness is visible
+- **Print reception handout**: tick-box worklist with plain-English booking instructions per patient, sorted by appointment time. The clinic day and audience are stated on every printout
+- Last sweep survives tab switches for up to 2 hours, with the run time and swept day shown so staleness is visible
 
 ### Slots (Appointment slot counter)
 
@@ -64,13 +67,14 @@ Aggregates slot and session data across a configurable date range to show week-l
 
 - Week and month views; green/amber/red by sufficient/tight/low/critical thresholds
 - Configurable presets for appointment-type subsets (e.g. face-to-face only, one clinician)
+- Per-weekday minimum configuration: set different minimum slot counts for each day of the week, with graceful fallback to the legacy flat daily minimum for existing presets
 - Weekend toggle; historic dates shown as "Past"
 
 ### Submissions Tracker
 
 Live dashboard of patient submission task counts, split by type (Medical, Admin, Investigations, Routine Rx, Non-routine Rx) and presented as a stacked bar or area chart over a configurable date range.
 
-- Threshold amber/red washes per type; RAG alert strip in the side panel
+- Threshold amber/red washes per type; RAG alert strip in the side panel (shared threshold logic with the strip to prevent silent drift)
 - CSV export; configurable date presets and freshness ticker
 
 ### Activity Report
@@ -90,7 +94,7 @@ Displays referral audit data drawn from Medicus, with breakdowns by specialty, c
 
 ### Condor (Practice analytics)
 
-A live analytics dashboard pulling from multiple Medicus data streams into eight metric cards.
+A live analytics dashboard pulling from multiple Medicus data streams into eight metric cards. Jargon terms (RAG, PPI, eFI, triage load) carry click-to-explain glossary tooltips.
 
 - **PPI** (demand intensity), **Demand gap** (capacity minus demand), **Velocity** (task throughput), **Task age** (outstanding task age distribution)
 - **Workload** (clinician-level load), **Waiting room** (arrived count and wait), **Day score** (configurable end-of-day score with manual entry), **Activity** (session activity count)
@@ -106,11 +110,12 @@ Displays sparkline charts of a patient's longitudinal observations for quick cli
 
 A reception-facing panel designed for non-clinical front-desk staff.
 
-- **Patient status pill**: single green/amber/red indicator for the patient whose record is open; click to expand action-needed monitoring detail
+- **Patient status pill**: single green/amber/red indicator for the patient whose record is open; click to expand action-needed monitoring detail. RAG codes and clinical jargon carry glossary tooltips so non-clinical staff are not left guessing
 - **Guided capture**: configurable question sets per presenting problem (sore throat, earache, adult cough, urinary symptoms, headache, low back pain, feverish child, rash, general) with Pharmacy First suitability hints. Red-flag questions come first; any YES shows an immediate 999 or duty-clinician escalation banner
 - Output is a structured plain-text history block for copy-paste into the Medicus triage entry — the tool never triages, diagnoses, or advises beyond red-flag escalation
 - All pathways ship disabled; a practice administrator must accept an explicit disclaimer before enabling any
 - In-progress captures auto-save as a local draft (≤4 hours) with a timestamped Restore/Discard banner
+- Reception pathways are CSO-signed-off (v1.3): five red flags promoted from urgent-duty to 999 following clinical review (suspected SJS/TEN, sepsis with rigors, cauda equina, mastoiditis, acute-angle-closure glaucoma)
 
 ### Knowledge
 
@@ -119,6 +124,7 @@ Practice-owned reference base for referral criteria, contacts, clinical pathways
 - Add, edit, search, and categorise reference entries; near-duplicate detection on save
 - LLM-assisted starter-pack import (Options → Knowledge): paste structured JSON from an external LLM to pre-populate entries in bulk
 - Expandable detail cards; keyword search; category filter
+- Central practice attestation: if the practice administrator has accepted the knowledge notice via a published Practice Profile, individual clinicians see it activate without a per-seat click
 
 ## In-page features (content scripts)
 
@@ -139,31 +145,34 @@ The rules engine evaluates patient data against seven rule types:
 - **drug-monitoring**: drug X must have test Y within Z days. Fires overdue/due-soon/in-date chips with exact test names and intervals. 25 built-in rules covering lithium, methotrexate, azathioprine, ciclosporin, leflunomide, hydroxychloroquine, amiodarone, clozapine, and more
 - **qof-register**: detects QOF register membership from active problems. 13 built-in registers (diabetes, CKD, hypertension, COPD, asthma, AF, CHD, heart failure, dementia, depression, mental health, palliative care, obesity)
 - **qof-indicator**: evaluates a target (observation value, medication presence, or observation trend) against a QOF threshold. 48 bundled indicators covering the major QOF 2025/26 clinical domains
-- **drug-combo**: flags clinically significant prescribing combinations (STOPP/START, PINCER-style). Age and sex filters; problem-list suppression. 22 starter alerts in the prescribing-safety library
+- **drug-combo**: flags clinically significant prescribing combinations (STOPP/START, PINCER-style). Age and sex filters; problem-list suppression. 22 starter alerts in the prescribing-safety library. Term lists for ACEi/ARB, beta-blockers, and statins updated to full UK market coverage (v3.81)
 - **event-count**: fires on presence or count of coded events (e.g. A&E attendances ≥3 in 12 months). Supports count/min/max operators
 - **composite**: combines the results of other rules with AND/OR logic for complex multi-condition alerts
-- **vaccine**: seasonal window rules; flu and COVID chips appear only during the active campaign period
+- **vaccine**: seasonal window rules; flu and COVID chips appear only during the active campaign period (dates refreshed to 2026/27 JCVI guidance)
 
 Rules are practice-editable via a form-based editor in Options with a live engine preview against an editable test patient. An LLM-assisted authoring flow (copy prompt → external LLM → paste JSON → validate → import disabled) is available for custom rules.
 
 ## Settings & customisation
 
-- **Practice Profile**: shared-folder managed deployment — a practice administrator can push config and rules to all seats from a single JSON on a shared drive
-- **Backup / restore**: full suite-wide envelope export and import covering all modules and rule sets
+- **Practice Profile**: shared-folder managed deployment — a practice administrator can push config and rules to all seats from a single JSON on a shared drive. Central attestation support: gates accepted by the administrator propagate to managed seats without a per-user click
+- **Backup / restore**: full suite-wide envelope export and import covering all modules and rule sets. All backups contain configuration only — no patient-identifiable data is ever included
 - **Display preferences**: theme (light/dark/auto), size (compact/medium/large), and colourblind mode
 - **Options**: per-module configuration including triage-lens system chips, result rule editing, reception pathway management, knowledge base starter import, and QOF submission thresholds
+- **Glossary tooltips**: clinical codes, jargon, and pressure indices carry click-to-explain inline tooltips across the Condor, Reception, and Sentinel modules
 
 ## Recent additions (last 4 weeks)
 
-- **v3.78.0 (2026-06-14)** — Brand identity: first logo + visual mark (clinical pulse whose apex is the amber RAG status dot), built from the existing design tokens; regenerated extension icons; wired into the side panel, Options, About panel, and README
-- **v3.77.3 (2026-06-14)** — Result rules settings: scope note, directional ↑/↓ glyphs on threshold rules, UX fixes from GP appraisal; deleting a built-in result rule now tombstones it so it is not silently re-added on config updates
-- **v3.77.2 (2026-06-14)** — Four result rules enabled after Clinical Safety Officer sign-off: hypocalcaemia, hypomagnesaemia, high-TSH, suppressed-TSH; TSH rules suppress on coded thyroid diagnosis in the problem list
-- **v3.77.1 (2026-06-14)** — Design-crit polish on Result rules settings: severity badges on every rule row, semantic badge colours, WCAG AA contrast, dark-mode fixes
-- **v3.77.0 (2026-06-14)** — Four new built-in result rules added (shipped disabled pending CSO review): hypocalcaemia, hypomagnesaemia, high-TSH, suppressed-TSH
-- **v3.76.1 (2026-06-14)** — Result-rule labels simplified to short clinical names; absent chip explicitly stated as not an all-clear; tooltips added to built-in and Unreviewed badges
-- **v3.76.0 (2026-06-13)** — Six new built-in investigation result rules: high lithium, high digoxin, critical low potassium, high adjusted calcium, low eGFR (CKD G4), and blood culture text rule
-- **v3.75.3 (2026-06-13)** — Shipped-config version lock enforced in CI; prevents silent config drift when defaults change without a version bump
-- **v3.75.2 (2026-06-13)** — Fix: config changes from v3.75.0 never reached existing users; migration now retires stale chip labels and appends the bowel-screening result rule
+- **v3.84.3 (2026-06-15)** — Brand identity: app icon (guardian shield + cyan ECG pulse + beacon on deep navy), with a dedicated simplified 16px favicon; wired into the side panel, pop-out, Options, About panel, visualiser and README; tagline and store description added
+- **v3.84.1 (2026-06-14)** — Repo-audit follow-up: testable logic cores extracted from Capacity and Submissions modules; RAG threshold logic unified into a single source of truth; Backup data minimisation policy documented in SECURITY.md; feature list regenerated
+- **v3.84.0 (2026-06-14)** — Sweep multi-clinician filter: select any combination of the day's clinicians; printed handout labels the audience; selection persisted across tab switches
+- **v3.83.0 (2026-06-14)** — Sweep day-picker: sweep any day (past or future), not just today; handout headers and last-run display reflect the chosen day
+- **v3.82.0 (2026-06-14)** — Central practice attestation: administrator-signed gates satisfy per-install attestation on managed seats; Request Monitor couples to practice code via Practice Profile
+- **v3.81.1 (2026-06-14)** — CSO 999 promotions in reception pathways (v1.3): suspected SJS/TEN, sepsis with rigors, cauda equina, mastoiditis, acute-angle-closure glaucoma
+- **v3.81.0 (2026-06-14)** — Whole-suite Keeper sweep: ACEi/ARB/beta-blocker/statin term lists completed; GLP-1 pancreatitis alert; jayempi brand added to azathioprine rule; reception pathways CSO-signed off (v1.2); vaccine citations refreshed to 2026/27
+- **v3.80.0 (2026-06-14)** — Matched-rule-term tooltip on drug chips; Brief digest annotates hidden red chips; patient banner "Monitoring for" lead-in label
+- **v3.79.0 (2026-06-14)** — Glossary tooltips backbone: RAG, PPI, eFI, DMARD, triage load, and Condor pressure index explained inline
+- **v3.78.0 (2026-06-14)** — VISION.md first-of-type positioning statement; SECURITY.md security policy added
+- **v3.77.3 (2026-06-14)** — Result rules settings: scope note, directional ↑/↓ glyphs, tombstone-on-delete so built-in deletions survive config updates
 
 ## Safety posture
 

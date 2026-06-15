@@ -20,6 +20,7 @@ let _ignoreNextChange = false;
 let _items = [];
 let _categories = [];
 let _config = {};
+let _noticeCentral = false; // notice satisfied by a central practice-profile attestation
 
 let _query = '';
 let _activeCat = 'all'; // 'all' | category id
@@ -110,10 +111,17 @@ function cleanup() {
 export { cleanup };
 
 async function loadState() {
-  const r = await chrome.storage.local.get(['knowledge.items', 'knowledge.categories', 'knowledge.config']);
+  const r = await chrome.storage.local.get([
+    'knowledge.items',
+    'knowledge.categories',
+    'knowledge.config',
+    'suite.practiceProfile.attestations',
+  ]);
   _items = Array.isArray(r['knowledge.items']) ? r['knowledge.items'] : [];
   _categories = KU ? KU.sanitiseCategories(r['knowledge.categories']) : r['knowledge.categories'] || [];
   _config = r['knowledge.config'] || {};
+  const att = r['suite.practiceProfile.attestations'];
+  _noticeCentral = !!(att && att.knowledge && att.knowledge.via === 'practice-profile');
 }
 
 async function persistItems() {
@@ -138,6 +146,7 @@ function render() {
   const parts = [];
 
   if (!_config.noticeAcknowledgedAt) parts.push(renderNotice());
+  else if (_noticeCentral) parts.push(renderCentralHint());
   parts.push(renderToolbar());
   if (_editingId !== null) parts.push(renderForm());
   parts.push(renderList());
@@ -152,6 +161,10 @@ function renderNotice() {
       Entries can be wrong or out of date — verify against current local guidance before acting on them.</div>
       <button class="kb-btn" data-act="ack-notice">Understood</button>
     </div>`;
+}
+
+function renderCentralHint() {
+  return `<div class="kb-notice-central" style="font-size:11px; color:var(--text-3, #888); padding:2px 0 6px;">Verification notice set by your practice.</div>`;
 }
 
 function renderToolbar() {

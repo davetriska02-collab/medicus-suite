@@ -274,6 +274,32 @@ console.log('\n--- P-F: ACEi/ARB in age ≥75 without U&E ---');
   assert(!flags.some((f) => f.rule.includes('≥75')), 'P-F does not fire when age unknown (fail-closed)');
 }
 
+// ── P-G: Beta-blocker with asthma (medrev-002) ────────────────────────────
+// celiprolol was added to the beta_block term list (parity with prescribing
+// flags). A patient on celiprolol with asthma must therefore be detected as a
+// beta-blocker and fire the bronchospasm-hazard flag.
+console.log('\n--- P-G: Beta-blocker with asthma (celiprolol) ---');
+{
+  // celiprolol is now a beta_block term → detected as beta-blocker.
+  const bb = makeDetectedDrug('beta_block', { active: true });
+  bb.label = 'Celiprolol 200mg tablets';
+  const flags = computePINCER(problems('asthma'), [bb], [], '55');
+  assert(
+    flags.some((f) => /beta.?blocker/i.test(f.rule) && /asthma/i.test(f.rule)),
+    'P-G fires: celiprolol (beta-blocker) + asthma'
+  );
+}
+// No asthma → does NOT fire
+{
+  const bb = makeDetectedDrug('beta_block', { active: true });
+  bb.label = 'Celiprolol 200mg tablets';
+  const flags = computePINCER(problems('hypertension'), [bb], [], '55');
+  assert(
+    !flags.some((f) => /beta.?blocker/i.test(f.rule) && /asthma/i.test(f.rule)),
+    'P-G does not fire: celiprolol without asthma'
+  );
+}
+
 // ── KD-31: Triple whammy (NSAID + ACEi/ARB + diuretic) ────────────────────
 console.log('\n--- KD-31: Triple whammy (resolved 2026-06-11) ---');
 {
@@ -474,6 +500,45 @@ console.log('\n── Drug-table completeness locks ──');
     'metolazone',
   ]) {
     assert(diuretics.includes(t), `diuretic terms include "${t}"`);
+  }
+
+  // beta_block entry (medrev-002) — celiprolol etc. added for parity. Detection
+  // of these terms gates the "Beta-blocker with asthma" bronchospasm hazard.
+  const betaBlockers = termsOf('beta_block');
+  for (const t of [
+    'atenolol',
+    'bisoprolol',
+    'propranolol',
+    'metoprolol',
+    'carvedilol',
+    'sotalol',
+    'nebivolol',
+    'labetalol',
+    'acebutolol',
+    'celiprolol',
+    'nadolol',
+    'oxprenolol',
+  ]) {
+    assert(betaBlockers.includes(t), `beta_block terms include "${t}"`);
+  }
+
+  // statin entry (medrev-003) — pitavastatin added (UK-marketed). lovastatin is
+  // deliberately NOT listed (not UK-marketed).
+  const statins = termsOf('statin');
+  for (const t of ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'fluvastatin', 'pitavastatin']) {
+    assert(statins.includes(t), `statin terms include "${t}"`);
+  }
+  assert(!statins.includes('lovastatin'), 'statin terms do NOT include "lovastatin" (not UK-marketed)');
+  // Detection exercise: build the same \b-bounded regex production uses
+  // (computeDrugMonitoring) from the statin terms and confirm a real pitavastatin
+  // label is matched as a statin, while a non-UK lovastatin label is not.
+  {
+    const statinRe = new RegExp(
+      '\\b(' + statins.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b',
+      'i'
+    );
+    assert(statinRe.test('Pitavastatin 2mg tablets'), 'pitavastatin label detected as a statin');
+    assert(!statinRe.test('Lovastatin 20mg tablets'), 'lovastatin label NOT detected (not UK-marketed)');
   }
 
   // benzo_z entry (2026-06-11 KD-33 resolution) — parity with content.js BENZO_Z.

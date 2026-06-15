@@ -6,7 +6,7 @@
 **Document version:** 3.8  
 **Date issued:** 2026-06-13  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
-**Clinical Safety Officer:** Dr Dave Triska (GMC 7534932)  
+**Clinical Safety Officer:** Dr Dave Triska (GMC 6159481)  
 **Status:** Live — must be read before installation or use  
 **Applicable standards:** Drafted in the style of DCB0129 (Manufacturer responsibilities) with notes for deploying organisations consistent with DCB0160 expectations.
 
@@ -303,7 +303,7 @@ The author maintains a single point of contact for clinical safety matters:
 > **Clinical Safety Officer**  
 > Dr Dave Triska  
 > **Email:** dave@graysbrook.co.uk  
-> **GMC:** 7534932
+> **GMC:** 6159481
 
 The following classes of report should be escalated to the CSO:
 
@@ -377,7 +377,7 @@ This form should be retained in the practice's clinical safety records.
 
 I confirm that this notice fairly represents the clinical safety position of Medicus Suite v3.64.0; that the residual risks recorded in `docs/HAZARD-LOG.md` are acceptable for limited distribution to named GP users under the conditions set out in section 9; and that the controls described are in place at this release.
 
-**Dr Dave Triska, GMC 7534932**  
+**Dr Dave Triska, GMC 6159481**  
 **Clinical Safety Officer, Medicus Suite**  
 **Graysbrook Ltd**  
 **Date:** 2026-06-13 _(reviewed and reissued with v3.64.0)_

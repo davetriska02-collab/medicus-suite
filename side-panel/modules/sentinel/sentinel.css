@@ -205,6 +205,18 @@
   padding: 8px 12px;
   margin-bottom: 10px;
 }
+/* R1: lead-in label so the banner reads unmistakably as the SUBJECT of the
+   panel (mitigates wrong-patient risk when the WR pinned list sits above).
+   Muted/uppercase like .sent-group-label; does not reduce alert salience. */
+.sent-patient-lead {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 3px;
+}
 .sent-patient-name {
   font-weight: 600;
   font-size: 13px;

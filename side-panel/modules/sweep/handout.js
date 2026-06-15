@@ -36,6 +36,22 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// "Who is this handout for?" label. Prefers the canonical `clinicians` array;
+// falls back to the single-name `clinician` for older payloads.
+//   0 selected → "All clinicians"
+//   1          → "<name>'s patients"
+//   ≥2         → "<name1>, <name2>… (N clinicians)"
+function clinicianWhoFor(model) {
+  const list = Array.isArray(model.clinicians)
+    ? model.clinicians.filter(Boolean)
+    : model.clinician
+      ? [model.clinician]
+      : [];
+  if (list.length === 0) return 'All clinicians';
+  if (list.length === 1) return `${list[0]}'s patients`;
+  return `${list.join(', ')} (${list.length} clinicians)`;
+}
+
 function patientHtml(p, showClinician) {
   const time = p.time ? `<span class="patient-time">${esc(fmtTime(p.time))}</span>` : '';
   const clin = showClinician && p.clinician ? `<span class="patient-clin">${esc(p.clinician)}</span>` : '';
@@ -69,11 +85,18 @@ async function render() {
     return;
   }
 
-  const whoFor = model.clinician ? `${model.clinician}'s patients` : 'All clinicians';
+  const whoFor = clinicianWhoFor(model);
   const taskCount = model.patients.reduce((n, p) => n + (p.actions ? p.actions.length : 0), 0);
 
+  // The clinic day the sweep was for (may be today or a future clinic) — kept
+  // distinct from when the handout was generated, so a printout for a future
+  // clinic states which day it covers.
+  const clinicDay = model.clinicDate
+    ? fmtDate(/^\d{4}-\d{2}-\d{2}$/.test(model.clinicDate) ? model.clinicDate + 'T12:00:00' : model.clinicDate)
+    : fmtDate(model.generatedAt);
+
   content.innerHTML = `
-    <h1>Pre-clinic worklist &mdash; ${esc(fmtDate(model.generatedAt))}</h1>
+    <h1>Pre-clinic sweep for ${esc(clinicDay)}</h1>
     <div class="meta">${esc(whoFor)} &middot; ${model.patients.length} patient${model.patients.length === 1 ? '' : 's'}, ${taskCount} task${taskCount === 1 ? '' : 's'} &middot; generated ${esc(new Date(model.generatedAt).toLocaleString('en-GB'))} &middot; Medicus Suite v${esc(model.suiteVersion || '')}</div>
     <div class="confidential">Confidential &mdash; patient identifiable. Do not leave unattended. Destroy after use.</div>
     ${model.patients.map((p) => patientHtml(p, !model.clinician)).join('')}

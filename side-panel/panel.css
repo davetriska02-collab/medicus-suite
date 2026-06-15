@@ -1809,6 +1809,38 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   margin-bottom: 2px;
 }
 
+/* Collapsed strip — shown once the practice code is detected so the full
+   multi-step card no longer dominates the module body. Thin, single row. */
+.setup-card--collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  margin-bottom: 2px;
+}
+
+.setup-collapsed-icon {
+  flex: none;
+  color: var(--green);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.setup-collapsed-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setup-card--collapsed .setup-expand,
+.setup-card--collapsed .setup-dismiss {
+  flex: none;
+}
+
 .setup-card-header {
   display: flex;
   align-items: center;

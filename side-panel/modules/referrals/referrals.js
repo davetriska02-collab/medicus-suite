@@ -335,6 +335,7 @@ function renderControls() {
         <button class="ref-refresh" id="refRefresh">Refresh</button>
       </div>
       ${state.lastFetched ? `<div class="ref-ts">${renderTimestampContent()}</div>` : ''}
+      ${renderFilterChips()}
     </div>
   `;
 }
@@ -434,8 +435,6 @@ function renderData() {
       <div class="ref-card-label">Status breakdown</div>
       <div class="ref-status-tiles">${renderStatusTiles(a.byStatus, total)}</div>
     </div>
-
-    ${renderFilterChips()}
 
     <div class="ref-chart-card">
       <div class="ref-chart-head">

@@ -132,6 +132,31 @@ const PracticeProfile = (() => {
     const mode = cfg.mode || 'mergeMissing';
     const modMap = _resolveModuleMap(cfg);
 
+    // ── Central practice attestation (SAFETY-CRITICAL) ──────────────────────────
+    // A published profile MAY carry a `practiceAttestation` block recording that
+    // the practice admin has themselves accepted one or more per-install clinical
+    // gates (reception disclaimer, alert-library ack, knowledge notice). When a
+    // gate is explicitly set true here, this install treats it as satisfied so
+    // managed users don't each have to re-accept locally.
+    //
+    // FAIL-SAFE: with NO `practiceAttestation` (or a gate not === true) behaviour
+    // is EXACTLY as before — the per-install attestation is stripped/omitted and
+    // never written. The bypass only ever happens with an explicit signed gate.
+    // A genuine local acceptance always wins and is never overwritten/downgraded.
+    const att = profile.practiceAttestation || null;
+    const gate = (name) => !!(att && att.gates && att.gates[name] === true);
+    // Provenance markers to merge into suite.practiceProfile.attestations for any
+    // gate actually satisfied during this apply. Written once at the end.
+    const attestationProvenance = {};
+    function _markAttestation(name) {
+      if (!att) return;
+      attestationProvenance[name] = {
+        by: att.attestedBy || '',
+        at: att.attestedAt || '',
+        via: 'practice-profile',
+      };
+    }
+
     if (!force) {
       const status = await getStatus();
       if (mode === 'firstRunOnly' && status?.lastAppliedVersion) {
@@ -150,12 +175,22 @@ const PracticeProfile = (() => {
     if (modMap.has('sentinel') && mods.sentinel && typeof mods.sentinel === 'object') {
       try {
         const merge = modMap.get('sentinel') === 'merge';
-        // SAFETY: alertLibraryAcknowledged is a per-install attestation — never
-        // push it from the profile in either mode; it is set only when this
-        // install's admin explicitly clicks the alert library modal. Strip it
-        // from the payload before delegation so sentinelImport can't write it.
+        // SAFETY: alertLibraryAcknowledged is a per-install attestation. By
+        // default it is NEVER pushed from the profile in either mode — it is set
+        // only when this install's admin explicitly clicks the alert library
+        // modal. The ONLY exception is an explicit signed central attestation:
+        // when gate('alertLibrary') is true, force acknowledged=true so the
+        // managed user inherits the admin's central acceptance. Otherwise strip
+        // it from the payload before delegation so sentinelImport can't write it.
+        // alertLibraryAcknowledged rides through sentinelImport here only when the
+        // gate is set AND the sentinel module is being pushed; the module-independent
+        // write lives in the central-attestation pass at the end of applyProfile.
         const payload = Object.assign({}, mods.sentinel);
-        delete payload.alertLibraryAcknowledged;
+        if (gate('alertLibrary')) {
+          payload.alertLibraryAcknowledged = true;
+        } else {
+          delete payload.alertLibraryAcknowledged;
+        }
 
         const sentinelImport = _io('sentinelImport');
         if (sentinelImport) {
@@ -494,6 +529,8 @@ const PracticeProfile = (() => {
             applied.push('knowledge');
           }
         }
+        // Knowledge-notice central attestation is written module-independently in
+        // the central-attestation pass at the end of applyProfile.
       } catch (e) {
         errors.push(`knowledge: ${e.message}`);
       }
@@ -593,6 +630,8 @@ const PracticeProfile = (() => {
           await receptionImport(payload);
           applied.push('reception');
         }
+        // Reception-disclaimer central attestation is written module-independently
+        // in the central-attestation pass at the end of applyProfile.
       } catch (e) {
         errors.push(`reception: ${e.message}`);
       }
@@ -737,12 +776,87 @@ const PracticeProfile = (() => {
 
     // Silently ignore: condor, popout (unsupported, see task spec).
 
+    // ── Central practice attestation (module-independent) ───────────────────────
+    // Satisfy each per-install clinical gate the signed profile explicitly opens,
+    // REGARDLESS of whether that module's config was part of this push — the
+    // acceptance is about the gate, not the content (which an earlier profile
+    // version may have pushed). Each write is guarded: a genuine local acceptance
+    // ALWAYS wins and is never overwritten or downgraded. With no practiceAttestation
+    // block (or a gate not === true), `att` is null / gate() is false and nothing
+    // here runs — the key is never touched (fail-safe, byte-for-byte old behaviour).
+    if (att) {
+      // Alert-library acknowledgement (boolean) — never downgrade a local `true`.
+      if (gate('alertLibrary')) {
+        try {
+          const exAck = await chrome.storage.local.get('sentinel.alertLibrary.acknowledged');
+          if (exAck['sentinel.alertLibrary.acknowledged'] !== true) {
+            await chrome.storage.local.set({ 'sentinel.alertLibrary.acknowledged': true });
+          }
+          _markAttestation('alertLibrary');
+        } catch (e) {
+          errors.push(`attest.alertLibrary: ${e.message}`);
+        }
+      }
+      // Reception disclaimer (ISO) — only if not already locally accepted.
+      if (gate('reception') && att.attestedAt) {
+        try {
+          const ex = await chrome.storage.local.get('reception.config');
+          const localCfg = ex['reception.config'] || {};
+          if (localCfg.disclaimerAcceptedAt == null) {
+            await chrome.storage.local.set({
+              'reception.config': Object.assign({}, localCfg, { disclaimerAcceptedAt: att.attestedAt }),
+            });
+          }
+          _markAttestation('reception');
+        } catch (e) {
+          errors.push(`attest.reception: ${e.message}`);
+        }
+      }
+      // Knowledge notice (ISO) — only if not already locally acknowledged.
+      if (gate('knowledge') && att.attestedAt) {
+        try {
+          const ex = await chrome.storage.local.get('knowledge.config');
+          const localCfg = ex['knowledge.config'] || {};
+          if (localCfg.noticeAcknowledgedAt == null) {
+            await chrome.storage.local.set({
+              'knowledge.config': Object.assign({}, localCfg, { noticeAcknowledgedAt: att.attestedAt }),
+            });
+          }
+          _markAttestation('knowledge');
+        } catch (e) {
+          errors.push(`attest.knowledge: ${e.message}`);
+        }
+      }
+    }
+
+    // ── Central attestation provenance ──────────────────────────────────────────
+    // For each gate actually satisfied above, merge a provenance marker into
+    // suite.practiceProfile.attestations recording WHO attested centrally and WHEN,
+    // so the UI can show "Accepted centrally by <by>" rather than presenting a
+    // central acceptance as a local one. Merged (never wiped) so an existing
+    // local/other-gate marker survives.
+    if (Object.keys(attestationProvenance).length > 0) {
+      try {
+        const PROV_KEY = 'suite.practiceProfile.attestations';
+        const exProv = await chrome.storage.local.get(PROV_KEY);
+        const existing =
+          exProv[PROV_KEY] && typeof exProv[PROV_KEY] === 'object' && !Array.isArray(exProv[PROV_KEY])
+            ? exProv[PROV_KEY]
+            : {};
+        const merged = Object.assign({}, existing, attestationProvenance);
+        await chrome.storage.local.set({ [PROV_KEY]: merged });
+      } catch (e) {
+        errors.push(`attestationProvenance: ${e.message}`);
+      }
+    }
+
     await _recordApplication({
       profileVersion: profile.profileVersion,
       profileLabel: profile.profileLabel || '',
       modeSummary: _buildModeSummary(modMap),
       appliedAt: new Date().toISOString(),
       modulesApplied: applied,
+      attestationsApplied: Object.keys(attestationProvenance),
       errors,
     });
 

@@ -2,86 +2,413 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.78.5] — 2026-06-15
+## [v3.84.3] — 2026-06-15
 
-### Crisp 16px favicon
+### Brand identity + app icon
 
-- Added `brand/app-icon-16.svg` — a dedicated simplified favicon (bold gold
-  shield rim, navy centre, a single QRS pulse spike + beacon) that drives the
-  16px icon, where the full master photograph collapsed to a blob. 48px and
-  128px still come from the master. Addresses the recurring small-size
-  legibility note from the in-practice appraisal.
+Gave the suite a visual identity of its own (it previously had only a placeholder
+lozenge). Developed iteratively against a synthetic in-practice appraisal panel.
 
-## [v3.78.4] — 2026-06-15
+- **App icon** — a brushed-gold guardian **shield** with a cyan ECG/pulse line
+  and beacon on a deep navy tile (`brand/app-icon.png`, 512px master). The pulse
+  makes the clinical purpose explicit; the shield signals protective vigilance.
+  48px and 128px icons derive from the master; the 16px favicon renders from a
+  dedicated simplified vector (`brand/app-icon-16.svg`) so it stays legible.
+  `brand/generate-icons.mjs` produces `icons/icon-16/48/128.png`.
+- **Wired into the surfaces** — side-panel nav, pop-out titlebar, Options sidebar,
+  About panel (brand header + tagline), visualiser drop screen, and the README
+  banner all show the mark.
+- **Tagline / store description** — "The clinical intelligence layer for Medicus"
+  added to the About panel and Options; `manifest.json` description rewritten from
+  the version stamp to a descriptive one-liner.
+- **`brand/BRAND.md`** — one-page brand guide (mark, colours, regeneration, where
+  it appears). `eslint.config.mjs` gains a `brand/**/*.mjs` Node block; the release
+  zip excludes the dev icon generator.
 
-### App icon: clinical pulse on the shield
+## [v3.84.2] — 2026-06-14
 
-- Added a cyan ECG / pulse line across the guardian shield (with the beacon on
-  the trace) and a flatter gold, after a full ten-persona in-practice appraisal
-  found the plain shield read as security/VPN software rather than clinical. The
-  pulse makes the clinical purpose explicit. Swapped `brand/app-icon.png` and
-  regenerated `icons/*.png`.
+### DTAC assessment — governance drafts + CSO GMC correction
 
-## [v3.78.3] — 2026-06-15
+Documentation-only step toward NHS Digital Technology Assessment Criteria (DTAC)
+readiness. No code, rules, `defaults.json`, or clinical-threshold changes.
 
-### App icon: guardian shield
+First, corrected an incorrect General Medical Council registration number for the
+Clinical Safety Officer (Dr Dave Triska) — now the correct **GMC 6159481** in all
+six places it appeared (`CLINICAL-SAFETY-NOTICE.md`, `HAZARD-LOG.md`, `SOUP.md`).
 
-- Replaced the operator-helmet icon with a brushed-gold guardian **shield** (deep
-  navy tile, glowing cyan beacon) — same premium treatment, less martial, after a
-  synthetic in-practice appraisal flagged the warrior helmet as off-register for a
-  clinical tool. Swapped `brand/app-icon.png` and regenerated `icons/*.png`; all
-  surfaces already point at the master so no markup changes were needed.
+Then added seven DRAFT governance documents mapping existing artefacts onto the
+DTAC domains (they assemble and reference the hazard log, safety notice, intended
+purpose, SOUP, and security audit):
 
-## [v3.78.2] — 2026-06-15
+- `docs/CLINICAL-SAFETY-CASE-REPORT.md` (MS-CSO-CSCR-001) — DCB0129-style safety
+  case summarising the hazard log and controls (Section A).
+- `docs/DPIA.md` (MS-DPO-DPIA-001) — Data Protection Impact Assessment for the
+  local-only, zero-egress processing model (Section B).
+- `docs/INTEROPERABILITY-STATEMENT.md` (MS-DOC-INTEROP-001) — reasoned N/A
+  statement (Section D).
+- `docs/CSO-DECLARATION.md` (MS-CSO-DECL-001 + MS-CSO-DCB0160-001) — CSO
+  declaration plus a deploying-organisation (DCB0160-style) hand-off note.
+- `docs/ACCESSIBILITY-STATEMENT.md` (MS-DOC-A11Y-001) — heuristic WCAG 2.1 AA
+  self-assessment with disclosed known gaps (Section E).
+- `docs/DTAC-STATUS.md` (MS-DOC-DTAC-001) — readiness tracker across all DTAC
+  domains.
+- `docs/CLINICAL-SAFETY-RESYNC-v3.84.2-DRAFT.md` (MS-CSO-RESYNC-001) — DRAFT CSO
+  change-proposal preparing audit task T4: classifies every release v3.65.0 →
+  v3.84.2, concludes no new hazard arises and no residual increases, and proposes
+  the specific edits to bring the three signed safety docs onto current.
 
-### New app icon: Medicus Operator
+All are marked DRAFT pending sign-off and carry placeholders for facts held
+outside the repo (ICO registration number, sign-off dates, signature).
 
-- Replaced the pulse-and-dot mark with a Corinthian operator helmet (brushed
-  gold on deep navy, glowing cyan beacon) as `brand/app-icon.png` — the master
-  for all icons and in-product marks.
-- Regenerated `icons/icon-16/48/128.png`; repointed the side-panel nav, pop-out
-  titlebar, Options sidebar, About panel, visualiser drop screen and README
-  banner to the new mark.
-- `generate-icons.mjs` now derives the three PNG sizes from the single master;
-  removed the obsolete pulse SVGs. `BRAND.md` updated.
+## [v3.84.1] — 2026-06-14
 
-## [v3.78.1] — 2026-06-14
+### Repo-audit follow-up: testable logic cores + RAG single-source-of-truth + regenerated feature list
 
-### Brand rollout + brand guide
+Acting on the principal-engineer repo audit (HIGH finding: side-panel modules had
+logic branches reachable only through the DOM, so form-validation and threshold
+edge cases were untested). Pure-logic cores extracted from two of the largest
+modules, with no behaviour change. Feature list regenerated to v3.84.1.
 
-- **Mark wired into the remaining surfaces** — the pop-out titlebar and the
-  visualiser drop screen now use the logo mark; the Options Suite section shows
-  the tagline.
-- **Store description** (`manifest.json`) rewritten from the version stamp to a
-  real one-liner: "The clinical intelligence layer for Medicus: read-only safety
-  monitoring, triage red-flags, QOF tracking and operational dashboards."
-- **`brand/BRAND.md`** — a one-page brand guide: name, tagline, mark files,
-  colours, wordmark, how to regenerate the icons, and where the brand appears.
+- **`side-panel/modules/capacity/capacity-core.js`** — extracted `minimumForDate`
+  (per-weekday minimum with legacy `minimumPerDay` fallback), `defaultMinimumByDay`,
+  `presetSummary`, and a new pure `validatePreset` (replacing the inline save-path
+  validation in `capacity.js`). 23 assertions in `test-capacity-core.js`, including
+  the "explicit 0 on a weekday is honoured, not treated as missing" edge case.
+- **`side-panel/modules/submissions/submissions-core.js`** — extracted the RAG
+  (red/amber/green) threshold logic as the **single source of truth** for both the
+  Submissions charts and the global `#subRagStrip` in `panel.js`. The two had
+  duplicate inline copies (`getRagLevel` / `_subRagLevel`) that could silently
+  drift — a missed amber/red is a demand-management failure. Both now import
+  `ragLevel` / `getRagLevel` / `DEFAULT_SUB_THRESHOLDS` from the core. 18
+  assertions in `test-submissions-core.js`.
+- **`SECURITY.md`** — added a "Backup data minimisation" section documenting the
+  config-only export policy, the two enforced PHI exclusions (`referrals.discovery`,
+  `sentinel.extractionBaseline`), and the convention for new IO modules.
+- **`docs/feature-list.md`** — regenerated to v3.84.1, reflecting all changes since
+  v3.77.3: investigation result rules (v3.76–3.77), glossary tooltips (v3.79), clinical
+  corrections (v3.80), whole-suite Keeper sweep (v3.81), CSO 999 promotions (v3.81.1),
+  central practice attestation (v3.82), Sweep day-picker (v3.83) and multi-clinician
+  filter (v3.84).
+
+No clinical-rule or `defaults.json` changes. Pure refactor + tests + docs; all
+existing tests pass.
+
+## [v3.84.0] — 2026-06-14
+
+### Pre-clinic Sweep — select several clinicians
+
+The Sweep clinician filter is now multi-select: pick any combination of the day's
+clinicians (or leave "All"), for same-day and in-advance sweeps alike.
+
+- The single clinician dropdown is replaced by an "All clinicians" checkbox plus a
+  per-clinician checkbox for each clinician booked that day. Ticking any individual
+  drops "All"; an empty selection always means all (it can never silently sweep zero).
+- Changing the day re-renders the picker and intersect-preserves the selection
+  (clinicians not booked the new day are dropped).
+- The printable + batch handouts label the audience accordingly: 0 → "All clinicians",
+  1 → "&lt;name&gt;'s patients", 2+ → "&lt;name&gt;, &lt;name&gt;… (N clinicians)". The selection is
+  persisted and restored on resume (old single-clinician saves still load).
+- `extractBookedPatients` gains an `opts.clinicians` array filter; the single
+  `opts.clinician` string remains supported. Core dedupe/sort/UUID logic unchanged.
+
+`side-panel/modules/sweep/` (sweep.js, sweep.css, sweep-core.js, handout.js,
+batch-handout.js); `test-sweep-core.js` extended (114 assertions). No clinical-rule or
+`defaults.json` changes.
+
+## [v3.83.0] — 2026-06-14
+
+### Pre-clinic Sweep — choose the day
+
+The Pre-clinic Sweep was hardwired to today; you can now sweep any day, including
+days in advance, and the clinician picker + printed handout follow the chosen day.
+
+- Added a day picker to the Sweep controls (past and future allowed). Both
+  appointment-book fetches use the selected day instead of today.
+- Changing the day clears stale results, re-fetches that day's book, and repopulates
+  the clinician dropdown for that day (resetting a clinician filter that has no clinic
+  then). The existing per-clinician filter is unchanged.
+- The clinic day is carried into the printable handout and batch handout headers
+  ("Pre-clinic sweep for &lt;day&gt;"), distinct from the "generated &lt;timestamp&gt;" line, and
+  into the persisted last-run so re-opening restores the swept day. Empty/zero-result
+  copy is now day-agnostic. Default behaviour (today) is unchanged.
+
+`side-panel/modules/sweep/` (sweep.js, sweep.css, sweep-core.js handout model,
+handout.js, batch-handout.js). Core extraction/sort logic unchanged; `test-sweep-core.js`
+covers the new `clinicDate` passthrough. No clinical-rule or `defaults.json` changes.
+
+## [v3.82.0] — 2026-06-14
+
+### Practice profile — central attestation + request-monitor practice-code coupling
+
+Managed deployments can now propagate the practice's clinical config to end users
+without each clinician re-confirming, and the Request Monitor works from a published
+profile without the user re-entering the practice code.
+
+- **Central practice attestation.** A published profile can carry a signed
+  `practiceAttestation { attestedBy, attestedAt, gates }`, built at publish time from
+  the gates the practice admin has themselves accepted (reception disclaimer, alert-library
+  acknowledgement, knowledge notice). On a managed install, an explicitly-signed gate
+  satisfies that per-install attestation, so pushed reception pathways / alert library /
+  knowledge activate without a per-user click. Recorded locally under
+  `suite.practiceProfile.attestations` and surfaced as "Accepted centrally by &lt;CSO&gt; via
+  practice profile". **Fail-safe:** with no attestation block (or a gate not explicitly
+  true) behaviour is unchanged — the per-install attestation is never written, and a
+  genuine local acceptance is never overwritten or downgraded.
+- **Request Monitor practice-code coupling.** Publishing a profile that includes the
+  Request Monitor now auto-includes the `suite` module (carrying `suite.practiceCode`) so
+  the monitor can poll for managed users, and blocks publishing with a clear warning if the
+  admin's own practice code is unset. The code stays in one place (the suite module) — not
+  duplicated into the request-monitor section.
+
+`shared/io/practice-profile.js` apply path, `options/options.js` + `options/options.html`
+publish flow and reception provenance, `side-panel/modules/knowledge/knowledge.js` central
+notice hint. Tests extended in `test-practice-profile.js` (80 assertions). No clinical-rule
+or `defaults.json` changes.
+
+## [v3.81.1] — 2026-06-14
+
+### Reception pathways — CSO 999-promotion pass
+
+Following the v3.81.0 CSO sign-off, the practice Clinical Safety Officer promoted five
+reception red flags from urgent-duty to **999** on clinical review (`rules/reception-pathways.json`,
+v1.3). No wording changed; only the escalation tier:
+
+- Suspected **SJS/TEN** — widespread blistering / mucosal involvement, unwell (rash).
+- **Sepsis with rigors** — fever with uncontrollable shivering (UTI pathway).
+- Possible **cauda equina** — weakness or numbness in both legs (back pain).
+- **Mastoiditis** — redness/swelling behind the ear (earache).
+- Suspected **acute angle-closure glaucoma** — red painful eye / halos with headache.
+
+Feverish-child under-3-months remains urgent-duty (CSO decision). No other tiers changed.
+
+## [v3.81.0] — 2026-06-14
+
+### Clinical rule currency — The Keeper sweep, CSO-signed-off
+
+A full six-domain Keeper sweep (report in `docs/keeper/KEEPER-whole-suite-2026-06-14.md`),
+applied after practice Clinical Safety Officer sign-off. All additive; no monitoring
+weakened. Findings were WebSearch-corroborated (WebFetch was blocked this run) and
+confirmed by the CSO before applying; the two highest-value items were verified directly
+against the repository.
+
+- **Medication-review instruments (`engine/stopp-start.js`, `engine/acb-scores.js`,
+  `visualiser-core.js`):**
+  - Synced the STOPP/START ACEi/ARB term lists up to parity with the rest of the suite —
+    added `trandolapril, fosinopril, quinapril, imidapril, cilazapril` (ACEi) and
+    `telmisartan, azilsartan, eprosartan` (ARB), which were silently unmatched.
+  - Added the missing UK beta-blockers `acebutolol, celiprolol, nadolol, oxprenolol` to the
+    PINCER high-risk-drug table so the beta-blocker-in-asthma hazard cannot silently miss
+    them; added `pitavastatin` to the statin term list.
+  - New live STOPP criterion `stopp-anticholinergic-elderly` (amber, age ≥65), reusing the
+    shared ACB table at score ≥2; fail-closed on unknown age. Added `amoxapine` (score 2)
+    to the ACB table.
+- **Medicines monitoring (`rules/drug-rules.json`):** added the brand `jayempi` (licensed UK
+  azathioprine oral suspension) to the azathioprine monitoring rule.
+- **Prescribing-safety alerts (`rules/alert-library.json`):** added a GLP-1/GIP
+  acute-pancreatitis awareness alert (MHRA Drug Safety Update — strengthened warnings,
+  including necrotising and fatal cases).
+- **QOF (`rules/qof-rules.json`):** added `HF003`/`HF006` as `enabled:false` (retired into
+  HF009) for year-on-year diff visibility. The new obesity (OB) register remains disabled
+  pending a separate CSO go-live decision.
+- **Vaccines (`rules/vaccine-rules.json`):** refreshed `specVersion` and source citations to
+  2026/27 (JCVI confirmed no cohort changes) — metadata only, eligibility unchanged.
+- **Reception pathways (`rules/reception-pathways.json`):** CSO-signed-off (DRAFT status
+  lifted to v1.2); feverish-child under-3-months confirmed as urgent-duty-immediately;
+  sepsis citation updated NG51 → NG253/NG254/NG255; headache source NG150 → NG228.
+  No red-flag or escalation-tier values changed.
+
+Regression tests extended across `test-drug-brand-coverage.js`, `test-stopp-start.js`,
+`test-acb-scores.js`, `test-visualiser-pincer.js`, and `test-custom-rules.js`.
+
+## [v3.80.0] — 2026-06-14
+
+### Three clinical-safety / UX corrections from the Practice appraisal (R2a / R6 / R1)
+
+Targeted follow-ups to the rules engine and the Sentinel monitoring view. No
+matching/threshold logic changed — these surface and harden what already fires.
+
+For context, two earlier asks were already satisfied and are NOT rebuilt here: the
+silent-false-negative audit (the "Meds without a monitoring rule (N)" disclosure with
+exclude annotations + report-missing-brand mailto, `renderUnmatchedMedsSection()`, shown
+even in the all-clear state) and the patient identity banner (name / NHS / DOB / age +
+"Verify in Medicus", `.sent-patient-banner`). This pass instead surfaces the matched rule
+term, guarantees a RED item is never hidden in the digest, and strengthens the identity
+label.
+
+- **R2(a) — matched rule term per fired drug alert:** `engine/rules-engine.js` now carries
+  `matchedTerm` on each drug-monitoring chip (pure passthrough of the existing
+  `drugMatchDetail()` helper). `shared/chip-renderer.js` decorates the drug name span with a
+  `data-tip`/`title` tooltip ("Matched monitoring rule on '<term>'") when the term is present
+  and not a trivial echo of the displayed name, so a clinician can tell a correct hit from a
+  lucky substring. Attribute-only; falls back to native hover.
+- **R6 — brief digest must not hide a RED item:** `brief-core.js` `buildBrief()` now also
+  returns `moreRed` (how many of the hidden "+N more" chips are red, rank 0). The Sentinel
+  brief card annotates the line as `+N more (M red) below` when any hidden chip is red, so a
+  red signal beyond the top-4 is never silently swallowed.
+- **R1 — identity banner reads as the SUBJECT:** the patient banner gains a muted, uppercase
+  `Monitoring for` lead-in label (`.sent-patient-lead`) so it is unmistakable WHO the
+  monitoring is about when the waiting-room pinned list sits above it. Prominence/labelling
+  only — no cross-system "mismatch" detection (the data to do that reliably is not present).
+- **Test:** new `test-drug-matched-term.js` asserts a fired methotrexate chip from the engine
+  carries `matchedTerm === 'methotrexate'` (the rule term, not the med display name).
+
+## [v3.79.0] — 2026-06-14
+
+### Glossary tooltips — explain clinical codes & jargon in place (U1/G1/R3)
+
+The whole-suite Practice appraisal flagged that unexplained clinical codes and jargon
+have no explanation anywhere (U1), non-clinical reception staff see raw codes (G1), and
+the Condor pressure index is a black box (R3). This adds a small click-to-explain tooltip
+backbone and wires it into the highest-value spots. No clinical-rule or data changes.
+
+- **New shared backbone:** `shared/glossary.js` (`window.Glossary`) — a small static map
+  of jargon with no source text elsewhere (RAG, DMARD, triple-whammy, PPI, eFI, triage
+  load). `shared/tooltip.js` (`window.Tip`) — a self-initialising, document-level popover:
+  any element carrying `data-tip="…"` or `data-tip-key="<glossary key>"` gets a `cursor:help`
+  dotted-underline affordance and opens a `role="tooltip"` popover on click or Enter/Space;
+  Esc / outside-click / re-activation closes it, one open at a time. Both are CLASSIC
+  scripts loaded in `side-panel/panel.html` and `pop-out/pop-out.html` (glossary before
+  tooltip). Everything degrades gracefully — every `data-tip` also sets a matching `title=`
+  for native-hover fallback if the scripts never load.
+- **Sentinel chips (U1):** the QOF code label (e.g. `AST007`) now explains itself via the
+  chip's `indicatorName`; the drug-class label routes `DMARD` to the glossary (other
+  classes show their own name); drug-combo labels explain via their `notes`, with the
+  classic "triple whammy" routed to the glossary. Attributes only — no `window.*` calls
+  from `chip-renderer.js`.
+- **Reception friendly names (G1):** `summariseActionChips()` now prefers a human-readable
+  label (`indicatorName` / `drugName` / `displayName` …) ahead of the raw code, so the
+  receptionist view no longer leads with opaque QOF codes.
+- **Condor PPI transparency (R3):** added a visible info button by the gauge whose tooltip
+  spells out the weighting (waiting room 30%, request queue 25%, urgent 25%, capacity 20%),
+  the live component scores and the band thresholds; the `Cap:` chip now explains
+  "slots remaining / your daily minimum".
+- **Today:** the "Triage Load" tile label carries a `triage-load` glossary tip.
 
 ## [v3.78.0] — 2026-06-14
 
-### Brand identity: logo + visual mark
+### Usability fixes from the whole-suite Practice appraisal
 
-The suite had no identity of its own. Added a first brand mark, built entirely
-from the existing design tokens so it belongs to the product rather than sitting
-on top of it.
+Five low-risk UX corrections raised by the synthetic GP-practice usability appraisal,
+spanning four modules plus the setup card. No clinical-rule or data changes.
 
-- **New `brand/` assets** — `logo-mark.svg` (app mark), `logo-mark-small.svg`
-  (simplified variant that drives the 16px icon so the pulse + dot stay legible),
-  `logo-wordmark.svg` (lockup with the tagline *"The clinical intelligence layer
-  for Medicus"*), and `generate-icons.mjs`, which regenerates all `icons/*.png`
-  from the SVGs (run with `node brand/generate-icons.mjs`; needs `sharp`).
-- **The mark.** A navy→accent-blue app tile (`#2563eb`) with a clinical pulse
-  line whose apex *is* the amber RAG status dot — the product's actual job
-  (in-record safety signal surfacing) in one glyph. The RAG chip is already the
-  suite's visual language everywhere; the logo makes it the brand signature too.
-- **Regenerated extension icons** (`icons/icon-16/48/128.png`) from the mark,
-  replacing the placeholder lozenge.
-- **Wired into the surfaces** — the side-panel nav brand, the Options sidebar
-  brand, the About panel (now with a brand header + tagline), and the README
-  banner.
-- **Release packaging** — `brand/` SVG marks ship in the zip; the dev generator
-  script and large preview PNGs are excluded.
+- **Trends — CSV export (R5):** the Trends module had no way to get numbers out. Added a
+  `↓ CSV` button to the picker row that exports the *active* view — BP (date/systolic/
+  diastolic), Renal (ACR + eGFR rows), or the observation views (HbA1c / Cholesterol /
+  Weight). Uses the shared `downloadCsv` helper; no-ops when there is no data.
+- **Referrals — filter chips lifted up (R4):** the priority/status filter chips now render
+  in the controls block beside the date/preset rows instead of below the fold, so the
+  secretary persona can see and reach them without scrolling. Chips enlarged modestly for
+  legibility. Wiring unchanged (handlers re-bind to the container on every render).
+- **Today — "not configured" tiles demoted (U3):** the optional "Triage monitor not set up"
+  tile now carries a calm `Optional` tag and neutral styling so it no longer reads like the
+  red `today-card-error` failure state.
+- **Setup card — auto-collapse once the practice code is detected (U2):** once the mandatory
+  practice code is confirmed, the multi-step "Get set up" card collapses to a thin one-line
+  strip ("Setup: practice code ready · N optional steps") with Expand / Dismiss, so it stops
+  dominating whichever module is open. Collapse happens live via the existing
+  `chrome.storage.onChanged` path when the code is detected.
+- **Cold-start practice-code copy unified (G3):** Today's no-practice-code message now matches
+  Capacity's guidance — "No practice code — open a Medicus tab or set it up." (Slots already
+  used the unified wording.)
+
+## [v3.77.11] — 2026-06-14
+
+### Result rules: word-boundary matching on the normalText (calm) path
+
+Implements the engine hardening assessed (and deferred) in v3.77.10, after CSO go-ahead —
+refined to the safe asymmetric design.
+
+- **`computeTextOutcome` (`engine/result-severity.js`)** — `normalText` (calm) phrases are
+  now matched word-boundary-aware (the proven `problemLabelMatches` pattern: `\b…\b` for
+  plain-alphanumeric phrases, substring fallback for punctuated ones). A short normal token
+  can no longer false-calm inside a larger word — `"normal"` no longer matches inside
+  `"abnormal"`, `"negative"` no longer matches inside `"seronegative"`. This only ever makes
+  calming *stricter* (→ more review), so it cannot hide a positive. Multi-word phrases such
+  as `"no growth"` are unaffected.
+- **Deliberate asymmetry:** `abnormalText` (the positive-flag path) is **left substring**,
+  not word-bounded. Word-bounding it would *weaken* it — `"candida"` would stop catching
+  `"candidaemia"` — so the flag path stays broad (every shipped term is already
+  collision-verified against negative text). Both paths therefore bias the same safe way:
+  toward review. Regression tests added (`test-result-severity.js`).
+
+## [v3.77.10] — 2026-06-14
+
+### The Keeper (CSO change-proposal): culture result-rule false-calm hardening
+
+Clinical-safety hardening of the result-triage text classifier, produced by The Keeper
+(scan → independent verify → conservative apply). Addresses a substring false-calm: the
+shipped `msu-culture` and `base-blood-culture` rules carried only `normalText` ("no growth"
+phrases), so a **positive** culture whose free-text also contained a "no growth" substring
+(e.g. a blood culture positive in one bottle — *"…; no growth in anaerobic bottle"*) was
+silently classified as a calm "no growth" result instead of flagged for review.
+
+- **`base-blood-culture` (Red)** and **`msu-culture` (Amber)** — added `abnormalText`
+  positive-flag sets (`engine` checks these FIRST and they override `normalText`). Every
+  term was independently collision-verified **not** to appear in realistic UK negative /
+  contaminant report text (e.g. "significant growth of" was dropped because negatives read
+  *"no significant growth of a pathogen"*; "organism grown"/"growth detected in" dropped
+  because negatives read *"No organism grown"* / *"No growth detected in either bottle"*).
+  Source corroboration: UKHSA SMI B 41 (urine) / B 37 (blood culture) reporting vocabulary
+  via PMC-indexed UK lab literature (the primary SMI PDFs were access-walled — logged as a
+  source gap). Purely additive: `abnormalText` only ever **adds** a review, never calms, so
+  `weakens_safety: false`.
+- **Migration reach** — the `resultRules` migration is append-only by id, so existing
+  installs holding the old builtins would never receive the new flags. Added
+  `backfillBuiltinAbnormalText` (content.js + options.js, lock-step) to backfill the shipped
+  `abnormalText` onto a held builtin that lacks one (add-but-never-clobber). `defaults.json`
+  migration `version` 13 → 14.
+- **Options edit-preservation fix** — `saveCurrentResultRule` rebuilt a text rule omitting
+  `abnormalText`, so editing any text rule silently stripped its positive flags (this also
+  affected the shipped bowel-screening rule). The value is now preserved across edits.
+- **Regression guards** — `test-result-severity.js` (positives → review, negatives &
+  contaminants → still calm, for both shipped rules) and `test-chip-label-migration.js`
+  (backfill lock-step + add-but-never-clobber).
+- **Assessed but NOT applied:** hardening `computeTextOutcome` to word-boundary matching.
+  It only fixes the single-token class ("normal" ⊂ "abnormal") — which no shipped rule has —
+  and not the multi-word phrase-in-mixed-report class (the actual hazard, fixed above by the
+  positive flags). Left as a documented recommendation for separate CSO decision.
+
+## [v3.77.9] — 2026-06-14
+
+### Fix: culture-only result-chip configs now actually fetch and show
+
+- **Queue result-triage fetch gate** — `computeQueueRowResult`'s `anyEnabled` short-circuit
+  (`content-scripts/triage-lens/content.js`) only checked the six numeric/meta result chips
+  and omitted the four text-outcome chips (`queue.resultReview`, `queue.resultReviewRule`,
+  `queue.resultNoGrowth`, `queue.resultNoGrowthRule`). A user who disabled the numeric chips
+  but kept the culture/normal chips enabled therefore fetched nothing per row and saw no
+  chips at all. The gate now includes all four text-outcome chips. No change in the default
+  (all-enabled) configuration. Regression guard added (`test-result-triage-queue.js` Layer 4).
+
+## [v3.77.8] — 2026-06-14
+
+### Fix: no stray "0 abnormal" chip on text-review queue results
+
+- **Queue result-triage chips** — a result flagged for review by a text rule (e.g. an
+  H. pylori positive, a microbiology culture needing review) raises the row severity to
+  amber while its numeric `abnormalCount` is still 0. `selectResultChips`
+  (`content-scripts/triage-lens/content.js`) was then emitting the generic clinical
+  `queue.resultAbnormal` chip with `{count}` = 0, rendering a meaningless **"0 abnormal"**
+  beside the review chip. The amber clinical-chip emission is now guarded on
+  `abnormalCount > 0`, so a pure text-review shows only its review chip; a result with a
+  genuine numeric abnormal *and* a review still shows both. Regression tests added.
+
+## [v3.77.7] — 2026-06-14
+
+### Fix: custom result rules now show their own "normal" label on queue chips
+
+- **Queue result-triage chips** — a custom text/culture result rule with a custom
+  `normalLabel` (e.g. *Negative*, *Not detected*) now renders that label on the calm
+  queue chip instead of the hard-coded generic *No growth*. The noGrowth path in
+  `selectResultChips` (`content-scripts/triage-lens/content.js`) was emitting the
+  generic `queue.resultNoGrowth` system chip and ignoring the matched rule's
+  `normalLabel` (already carried on `sev.noGrowthTop.label`) — so a rule's configured
+  normal label never reached the chip. It now mirrors the review path: a custom normal
+  label routes to a new attributable chip `queue.resultNoGrowthRule` (`{label}`), while
+  the default *No growth* (cultures such as MSU) keeps the generic chip unchanged.
+- New customisable/disable-able system chip `queue.resultNoGrowthRule` (registered in
+  the Result-rules settings system-chip list). `defaults.json` migration `version`
+  bumped 12 → 13 so the new chip reaches existing installs.
 
 ## [v3.77.6] — 2026-06-14
 

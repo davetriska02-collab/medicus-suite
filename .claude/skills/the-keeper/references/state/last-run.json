@@ -1,26 +1,59 @@
 {
-  "last_run": "2026-06-11",
-  "scope": "visualiser drug-table completion (parity with triage-lens flags)",
-  "rule_file_lastUpdated": {
-    "alert-library.json": "2026-06-11 (v1.2)"
-  },
-  "manifest_version_after": "3.51.3",
-  "sources_checked": [
-    "https://www.medicines.org.uk/emc/product/3857/smpc",
-    "https://www.medicines.org.uk/emc/product/327/smpc",
-    "https://www.medicines.org.uk/emc/ingredient/480",
-    "https://www.medicines.org.uk/emc/product/2058/smpc",
-    "https://www.medicines.org.uk/emc/product/5677/smpc",
-    "https://www.medicines.org.uk/emc/product/1965/smpc",
-    "https://cks.nice.org.uk/topics/diabetes-type-2/"
+  "last_run": "2026-06-14",
+  "scope": "FULL SWEEP — all 6 domains (drugs, qof, vaccines, alerts, medreview, pathways); focus on drug brand-list completeness",
+  "manifest_after": "3.81.0 (CSO-signed-off; rule files edited and committed)",
+  "changes_applied": [
+    "medrev-001 stopp-start.js ACEi/ARB term parity (+8 agents)",
+    "medrev-002 visualiser-core.js beta-blockers +acebutolol/celiprolol/nadolol/oxprenolol",
+    "medrev-003 visualiser-core.js statin +pitavastatin",
+    "medrev-004 stopp-start.js new stopp-anticholinergic-elderly criterion (live, ACB>=2 reuse)",
+    "medrev-005 acb-scores.js amoxapine score 2",
+    "drug-001 drug-rules.json azathioprine +jayempi",
+    "alert-001 alert-library.json GLP-1 acute-pancreatitis awareness alert",
+    "qof-001 qof-rules.json HF003/HF006 disabled for diff",
+    "vacc-001 vaccine-rules.json specVersion/source 2026/27 (cohorts unchanged)",
+    "path-001 reception feverish-child <3m confirmed urgent-duty",
+    "path-003 reception headache NG150->NG228",
+    "path-004 reception sepsis citation NG51->NG253/NG254/NG255",
+    "reception DRAFT lifted -> v1.2 CSO-signed-off"
   ],
-  "open_proposals": [
-    "KD-30..33 rule-shape gaps (triple-whammy/NSAID+antiplatelet/benzo>=80 missing in visualiser; PINCER#1 age-gate missing in HUD) \u2014 needs logic, CSO to prioritise",
-    "KD-18..21 LMWH/heparin deliberately excluded from visualiser anticoag set \u2014 CSO may revisit"
+  "held_pending_cso": [
+    "qof-002 OB register enable (go-live decision held by CSO)",
+    "path-002 duty->999 escalation promotions (CSO signed off existing tiers; not promoted)"
+  ],
+  "proposed_superseded": [
+    "medrev-001 stopp-start.js ACEi/ARB term lists incomplete vs visualiser-core.js (Red, repo-verified)",
+    "medrev-002 visualiser-core.js beta-blocker list missing acebutolol/celiprolol/nadolol/oxprenolol (Red, repo-verified)",
+    "drug-001 add Jayempi to azathioprine match (Amber)",
+    "alert-001 GLP-1 acute-pancreatitis MHRA DSU alert (Amber)",
+    "medrev-003 add pitavastatin/Livazo to statin list (Amber)",
+    "medrev-004 STOPP anticholinergic-in-elderly criterion (Amber, needs engine)",
+    "medrev-005 ACB amoxapine score 2 (Green, low UK relevance)",
+    "qof-001 add HF003/HF006 disabled for diff (Green)",
+    "qof-002 OB register enable decision (Amber, CSO)",
+    "vacc-001 refresh flu/COVID specVersion to 2026/27, cohorts unchanged (Green)",
+    "path-001 <3m fever escalation tier (CSO sign-off)",
+    "path-002 bundle of duty-vs-999 tier reviews (CSO sign-off, secondary-source only)",
+    "path-003 headache NG150->NG228 source fix (Green)"
+  ],
+  "killed": [
+    "ziprasidone/Zeldox (not UK-marketed)",
+    "lovastatin (not UK-marketed)",
+    "drug discontinuation notes + semaglutide-generic watch (no match-list delta)",
+    "finasteride / falls NG249 (not page-verified; left for CSO)"
+  ],
+  "source_urls_checked": [
+    "https://www.gov.uk/drug-safety-update/glp-1-receptor-agonists-and-dual-glp-1-slash-gip-receptor-agonists-strengthened-warnings-on-acute-pancreatitis-including-necrotising-and-fatal-cases",
+    "https://www.medicines.org.uk/emc/product/12745/smpc",
+    "https://www.england.nhs.uk/gp/investment/gp-contract/",
+    "https://www.nice.org.uk/guidance/ng143",
+    "https://www.acbcalc.com/"
   ],
   "source_gaps": [
-    "bnf.nice.org.uk 403",
-    "openprescribing.net 403",
-    "products.mhra.gov.uk 403"
-  ]
+    "WebFetch HTTP 403 to EVERY url this run (BNF/gov.uk/NICE/CKS/ACBcalc/wikipedia); NICE CKS additionally UK-geo-restricted. All findings WebSearch-corroborated only, none page-verified — nothing applied per The Keeper's verification discipline."
+  ],
+  "branch": "claude/repo-practice-run-8gm97q",
+  "report": "docs/keeper/KEEPER-whole-suite-2026-06-14.md",
+  "merged": false,
+  "status": "APPLIED 2026-06-14 after CSO sign-off (v3.81.0). 61/61 tests pass, lint clean. Source-evidence was WebSearch-corroborated only (WebFetch 403 all-hosts); the two repo-verified items are high-confidence; the rest were CSO-confirmed before applying. OB-register enable + reception 999-promotions held for CSO."
 }

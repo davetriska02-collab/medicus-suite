@@ -37,6 +37,13 @@ console.log('\n--- Individual drug scores ---');
   assert(r.perDrug[0].matchedTerm === 'vesicare', 'Vesicare matchedTerm is "vesicare"');
 }
 {
+  // medrev-005: amoxapine (tricyclic) — ACB score 2
+  const r = computeACB(['amoxapine 50mg tablets']);
+  assert(r.perDrug.length === 1, 'amoxapine yields one entry');
+  assert(r.perDrug[0].score === 2, 'amoxapine scores 2');
+  assert(r.perDrug[0].matchedTerm === 'amoxapine', 'amoxapine matchedTerm is "amoxapine"');
+}
+{
   const r = computeACB(['cetirizine']);
   assert(r.perDrug[0].score === 1, 'cetirizine scores 1');
 }

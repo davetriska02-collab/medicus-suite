@@ -62,10 +62,16 @@ export function isActionNeeded(status) {
 // v3.36.2. The appointment book covers every clinician's booked patients.
 //
 // Options:
-//   clinician — when set, only that staff member's appointments are included
-//               (exact match on staffSchedules[].name).
-//   limit     — max patients to return (default: MAX_SWEEP_PATIENTS).
-//               Pass null for no cap (caller handles batching).
+//   clinicians — array of staff names to include (exact match on
+//                staffSchedules[].name). When non-empty, only those staff
+//                members' appointments are included. Empty/absent → all
+//                clinicians.
+//   clinician  — single-name back-compat form of `clinicians` (a string).
+//                When `clinicians` is not given, `clinician` (if set) is
+//                treated as a one-name selection. The single-string API
+//                continues to work unchanged.
+//   limit      — max patients to return (default: MAX_SWEEP_PATIENTS).
+//                Pass null for no cap (caller handles batching).
 //
 // Returns:
 //   {
@@ -85,7 +91,17 @@ export function isActionNeeded(status) {
 // earliest first).
 // ---------------------------------------------------------------------------
 export function extractBookedPatients(raw, opts) {
-  const clinicianFilter = (opts && opts.clinician) || null;
+  // Normalise the clinician selection: prefer the array form `clinicians`, fall
+  // back to the single-string `clinician` (back-compat). An empty selection
+  // means "all clinicians" (filterSet === null).
+  const names = Array.isArray(opts && opts.clinicians)
+    ? opts.clinicians.filter(Boolean)
+    : opts && opts.clinician
+      ? [opts.clinician]
+      : [];
+  const filterSet = names.length ? new Set(names) : null; // null = all clinicians
+  // For the diagnostic message: the human-readable description of the filter.
+  const filterLabel = names.length ? names.join(', ') : null;
   const limit = opts != null && 'limit' in opts ? opts.limit : MAX_SWEEP_PATIENTS;
   const staffSchedules = raw?.staffSchedules;
   if (!Array.isArray(staffSchedules)) {
@@ -112,7 +128,7 @@ export function extractBookedPatients(raw, opts) {
         if (entry?.diaryEntryType?.value !== 'appointment') continue;
         if (String(entry?.displayStatus?.value || '').toLowerCase() === 'cancelled') continue;
         staffHasAppointments = true;
-        if (clinicianFilter && staffName !== clinicianFilter) continue;
+        if (filterSet && !filterSet.has(staffName)) continue;
         allEntries.push({ entry, clinician: staffName });
       }
     }
@@ -171,9 +187,9 @@ export function extractBookedPatients(raw, opts) {
   // so the UI can never render a misleading "0 patients, nothing to action".
   let diagnosticMessage = null;
   if (allEntries.length === 0) {
-    diagnosticMessage = clinicianFilter
-      ? `No booked appointments found for ${clinicianFilter} in today's appointment book.`
-      : "No booked appointments found in today's appointment book.";
+    diagnosticMessage = filterLabel
+      ? `No booked appointments found for ${filterLabel} in the appointment book for the selected day.`
+      : 'No booked appointments found in the appointment book for the selected day.';
   } else if (seen.size === 0) {
     diagnosticMessage =
       'Could not identify patients from the appointment book — sweep unavailable; field layout may have changed';
@@ -320,10 +336,13 @@ export function chipInstruction(chip) {
 // Build the printable reception worklist from the sweep's action rows.
 // Pure: no DOM, no chrome APIs — the caller renders it.
 //
-// meta: { runAt, clinician (or null = all), suiteVersion }
+// meta: { runAt, clinicDate (YYYY-MM-DD of the swept day),
+//         clinicians (string[] — selected clinicians; [] = all),
+//         clinician (single-name back-compat: the one name when exactly one
+//                    clinician is selected, else null), suiteVersion }
 //
 // Returns {
-//   generatedAt, clinician, suiteVersion,
+//   generatedAt, clinicDate, clinicians, clinician, suiteVersion,
 //   patients: [{ time, name, clinician, redCount, amberCount,
 //                actions: [{ action, detail }],   // deduplicated, red-first order preserved
 //                hasHiddenActionChips }]
@@ -334,6 +353,11 @@ export function chipInstruction(chip) {
 // ---------------------------------------------------------------------------
 export function buildHandout(actionRows, meta) {
   const m = meta || {};
+  // Normalise the clinician selection for the model. `clinicians` is the
+  // canonical array; `clinician` is the single-name back-compat field, set to
+  // the one name only when exactly one clinician is selected (else null).
+  const clinicians = Array.isArray(m.clinicians) ? m.clinicians.filter(Boolean) : m.clinician ? [m.clinician] : [];
+  const clinician = clinicians.length === 1 ? clinicians[0] : null;
   const patients = (actionRows || [])
     .map((row) => {
       // Group by the booking action so a patient with several gaps that resolve to
@@ -365,7 +389,9 @@ export function buildHandout(actionRows, meta) {
 
   return {
     generatedAt: m.runAt || new Date().toISOString(),
-    clinician: m.clinician || null,
+    clinicDate: m.clinicDate || null,
+    clinicians,
+    clinician,
     suiteVersion: m.suiteVersion || '',
     patients,
   };

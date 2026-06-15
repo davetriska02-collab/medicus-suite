@@ -395,8 +395,75 @@
   color: var(--green);
 }
 
-/* Clinician filter (v3.40.2) */
-.sweep-clin-label {
+/* Controls: run button + day on one row, clinician picker below (v3.84.0) */
+.sweep-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Multi-clinician picker — "All" + per-clinician checkboxes that wrap as chips
+   (v3.84.0: replaces the single-select dropdown). A day's list is short
+   (~5–20 staff) so an inline wrap stays compact. */
+.sweep-clin-picker {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.sweep-clin-list {
+  display: contents; /* let the chips wrap inline with "All" in the same row */
+}
+.sweep-clin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px 7px 2px 5px;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.sweep-clin-chip:hover {
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+.sweep-clin-chip input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+/* Ticked chip reads as selected (accent wash) */
+.sweep-clin-chip:has(input:checked) {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-1);
+}
+.sweep-clin-chip input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* "All clinicians" chip — slightly distinguished as the default/reset */
+.sweep-clin-all {
+  font-weight: 600;
+}
+
+/* Day selector — mirrors the clinician filter so it lines up alongside it */
+.sweep-ctl-label {
   font-family: var(--mono);
   font-size: 10px;
   text-transform: uppercase;
@@ -404,7 +471,7 @@
   color: var(--text-4);
   margin-left: 8px;
 }
-.sweep-clin-label select {
+.sweep-ctl-label input[type='date'] {
   font: inherit;
   margin-left: 4px;
   padding: 3px 6px;
@@ -412,10 +479,9 @@
   border-radius: var(--r-sm);
   background: var(--bg-mid);
   color: var(--text-2);
-  max-width: 180px;
   transition: border-color var(--fast) var(--ease);
 }
-.sweep-clin-label select:focus-visible {
+.sweep-ctl-label input[type='date']:focus-visible {
   border-color: var(--accent);
 }
 /* Meta line: clinician (left) + open record link (right) */

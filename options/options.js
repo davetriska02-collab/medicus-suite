@@ -757,6 +757,7 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
     const labelInput = document.getElementById('ppLabelInput');
     const publishedByInput = document.getElementById('ppPublishedByInput');
     const modulePicker = document.getElementById('ppModulePicker');
+    const attestationRows = document.getElementById('ppAttestationRows');
 
     if (!statusBlock) return;
 
@@ -844,6 +845,82 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
         desc: 'Practice code and feedback email only — never personal display prefs',
       },
     ];
+
+    // ── Central attestation gates ─────────────────────────────────────────────
+    // Each gate corresponds to a per-install clinical attestation the admin may
+    // have accepted locally. If accepted, the admin can opt to attest it centrally
+    // so managed users inherit it. Default opted-in for accepted gates.
+    const GATE_DEFS = [
+      {
+        id: 'reception',
+        label: 'Reception disclaimer',
+        async accepted() {
+          try {
+            const r = await chrome.storage.local.get('reception.config');
+            return r['reception.config']?.disclaimerAcceptedAt != null;
+          } catch (_) {
+            return false;
+          }
+        },
+      },
+      {
+        id: 'alertLibrary',
+        label: 'Alert library acknowledgement',
+        async accepted() {
+          try {
+            const r = await chrome.storage.local.get('sentinel.alertLibrary.acknowledged');
+            return r['sentinel.alertLibrary.acknowledged'] === true;
+          } catch (_) {
+            return false;
+          }
+        },
+      },
+      {
+        id: 'knowledge',
+        label: 'Knowledge notice',
+        async accepted() {
+          try {
+            const r = await chrome.storage.local.get('knowledge.config');
+            return r['knowledge.config']?.noticeAcknowledgedAt != null;
+          } catch (_) {
+            return false;
+          }
+        },
+      },
+    ];
+
+    async function buildAttestationRows() {
+      if (!attestationRows) return;
+      attestationRows.innerHTML = '';
+      for (const g of GATE_DEFS) {
+        const accepted = await g.accepted();
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; line-height:1.4;';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.id = `ppAtt_${g.id}`;
+        chk.style.cssText = 'width:14px; height:14px; flex-shrink:0;';
+        chk.checked = accepted; // default opted-in for accepted gates
+        chk.disabled = !accepted;
+
+        const lbl = document.createElement('label');
+        lbl.htmlFor = `ppAtt_${g.id}`;
+        if (accepted) {
+          lbl.style.cssText = 'flex:1; cursor:pointer; color:var(--text-1);';
+          lbl.innerHTML = `<span style="font-weight:500;">${escHtml(g.label)}</span> <span style="color:var(--text-3);">— will be attested centrally</span>`;
+          chk.style.cursor = 'pointer';
+        } else {
+          row.style.opacity = '0.55';
+          lbl.style.cssText = 'flex:1; color:var(--text-3);';
+          lbl.innerHTML = `<span style="font-weight:500;">${escHtml(g.label)}</span> <span>— accept it yourself first to attest centrally</span>`;
+        }
+
+        row.appendChild(chk);
+        row.appendChild(lbl);
+        attestationRows.appendChild(row);
+      }
+    }
 
     // ── IndexedDB helpers for FileSystemFileHandle persistence ───────────────
 
@@ -1095,6 +1172,50 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
           }
         }
 
+        // ── Request Monitor ↔ practice-code coupling ──────────────────────────
+        // Request Monitor needs suite.practiceCode to make API calls on managed
+        // installs. If the admin published Request Monitor, ensure the suite
+        // module is ALSO included (so suite.practiceCode is applied) and the
+        // envelope carries the code. The code lives in ONE place (the suite
+        // module) — never duplicated into the requestMonitor section.
+        if (applyModules.requestMonitor) {
+          let localCode = '';
+          try {
+            const r = await chrome.storage.local.get('suite.practiceCode');
+            localCode = (r['suite.practiceCode'] || '').trim();
+          } catch (_) {}
+          if (!localCode) {
+            setPublishStatus(
+              'Request Monitor needs a practice code — set your practice code first, or it won’t work for managed users.',
+              true
+            );
+            return; // do NOT silently publish a request-monitor profile without the code
+          }
+          // Force the suite module in so suite.practiceCode is applied. Merge mode
+          // is safe (fills the gap without clobbering a user's own code).
+          if (!applyModules.suite) applyModules.suite = 'merge';
+        }
+
+        // ── Central practice attestation (SAFETY-CRITICAL) ────────────────────
+        // Only gates the admin has accepted locally AND not opted out of are
+        // attested. Only emit the block if at least one gate is true.
+        const gates = {};
+        for (const g of GATE_DEFS) {
+          const accepted = await g.accepted();
+          const chk = document.getElementById(`ppAtt_${g.id}`);
+          // opted-in = checkbox present, checked, and the gate is genuinely
+          // accepted locally (defensive — never attest a gate not locally held).
+          if (accepted && chk && chk.checked) gates[g.id] = true;
+        }
+        let practiceAttestation = null;
+        if (Object.keys(gates).length > 0) {
+          practiceAttestation = {
+            attestedBy: publishedBy,
+            attestedAt: new Date().toISOString(),
+            gates,
+          };
+        }
+
         const envelope = await doFullExport();
 
         const profileJson = {
@@ -1111,6 +1232,7 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
             autoReloadOnNewVersion: true,
             notifyUserOnApply: false,
           },
+          ...(practiceAttestation ? { practiceAttestation } : {}),
           envelope,
         };
 
@@ -1181,6 +1303,7 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
 
     await render();
     await buildModulePicker();
+    await buildAttestationRows();
 
     checkBtn?.addEventListener('click', async () => {
       checkBtn.disabled = true;
@@ -2103,14 +2226,17 @@ rmSaveBtn?.addEventListener('click', async () => {
 
   // ── Disclaimer ──────────────────────────────────────────────────────────────
 
-  function renderDisclaimerArea(config, resolved) {
+  function renderDisclaimerArea(config, resolved, centralProv) {
     const host = $('rcpoDisclaimerBody');
     if (!host) return;
     if (config.disclaimerAcceptedAt) {
       const enabledCount = resolved.all.filter((e) => e.enabled).length;
+      const acceptedLine = centralProv
+        ? `Accepted centrally by ${escHtml(centralProv.by || 'practice admin')} via practice profile`
+        : `Disclaimer accepted ${escHtml(String(config.disclaimerAcceptedAt).slice(0, 10))}`;
       host.innerHTML = `
         <div style="font-size:12px; color:var(--text-2); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <span>Disclaimer accepted ${escHtml(String(config.disclaimerAcceptedAt).slice(0, 10))} · ${enabledCount}/${resolved.all.length} pathway(s) enabled.</span>
+          <span>${acceptedLine} · ${enabledCount}/${resolved.all.length} pathway(s) enabled.</span>
           <button class="ghost" id="rcpoEnableAll" style="font-size:11px; padding:4px 10px;">Enable all</button>
           <button class="ghost" id="rcpoDisableAll" style="font-size:11px; padding:4px 10px;">Disable all</button>
         </div>`;
@@ -2502,7 +2628,13 @@ rmSaveBtn?.addEventListener('click', async () => {
         enabledPathways: config.enabledPathways || {},
         disclaimerAccepted: !!config.disclaimerAcceptedAt,
       });
-      renderDisclaimerArea(config, resolved);
+      let centralProv = null;
+      try {
+        const pr = await chrome.storage.local.get('suite.practiceProfile.attestations');
+        const att = pr['suite.practiceProfile.attestations'];
+        if (att && att.reception && att.reception.via === 'practice-profile') centralProv = att.reception;
+      } catch (_) {}
+      renderDisclaimerArea(config, resolved, centralProv);
       renderPathwayList(resolved, config);
       renderChipList(config);
     } catch (e) {

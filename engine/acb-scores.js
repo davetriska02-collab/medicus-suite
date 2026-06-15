@@ -33,6 +33,9 @@
     { term: 'imipramine', score: 3 },
     { term: 'clomipramine', score: 3 },
     { term: 'doxepin', score: 3 },
+    // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
+    // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
+    { term: 'amoxapine', score: 2 },
     // ── Score 3: SSRIs/SNRIs with notable ACB ───────────────────────────────
     { term: 'paroxetine', score: 3 },
     // ── Score 3: Urological / bladder antispasmodics ─────────────────────────

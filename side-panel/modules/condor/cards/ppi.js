@@ -15,6 +15,13 @@ function ensureStyles() {
     .condor-ppi-breakdown { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; padding:4px 0; }
     .condor-ppi-chip { font-size:10px; background:rgba(127,127,127,0.1); padding:1px 7px; border-radius:8px; color:var(--text-3); }
     .condor-ppi-note { font-size:10px; line-height:1.35; color:var(--amber); text-align:center; padding:2px 6px 0; }
+    .condor-card-title-row { display:flex; align-items:center; justify-content:center; gap:5px; }
+    .condor-ppi-info {
+      border:1px solid var(--border); background:transparent; color:var(--text-3);
+      width:16px; height:16px; line-height:1; border-radius:50%; padding:0;
+      font-size:11px; cursor:help; display:inline-flex; align-items:center; justify-content:center;
+    }
+    .condor-ppi-info:hover { color:var(--t1); }
   `;
   document.head.appendChild(s);
 }
@@ -97,16 +104,33 @@ export function renderPpi(data) {
       ? `<div class="condor-ppi-note">Capacity is ${demandRatio >= 1.5 ? 'over' : 'at'} limit (${queueCount} requests vs ${remaining} slots). The index weights capacity at 20%, so it can stay ${colorLabel.toLowerCase()} — see Demand / Capacity below.</div>`
       : '';
 
+  // R3: make the index transparent. The info button's data-tip explains the
+  // weighting formula AND shows the live component scores in scope here, plus the
+  // band thresholds. title= mirrors it for native-hover fallback. Plain text only
+  // (Tip uses textContent), so no HTML escaping concern, but keep quotes out.
+  const ppiInfoText =
+    `Practice Pressure Index = ` +
+    `waiting room 30% + request queue 25% + urgent 25% + capacity 20%. ` +
+    `Now: WR ${Math.round(scoreA)}/100, Queue ${Math.round(scoreB)}/100, ` +
+    `Urgent ${Math.round(scoreC)}/100, Capacity ${Math.round(scoreD)}/100 → ${ppi}/100. ` +
+    `Band: GREEN under 40, AMBER 40-70, RED 70 or over.`;
+  const ppiInfoAttr = ppiInfoText.replace(/"/g, '&quot;');
+  const capTipText = `Slots remaining (${remaining}) out of your daily minimum (${minimum}).`;
+  const capTipAttr = capTipText.replace(/"/g, '&quot;');
+
   return (
     `<div class="condor-card condor-ppi">` +
-    `<div class="condor-card-title" title="Weighted index: waiting room 30%, request queue 25%, urgent 25%, capacity 20%">Practice Pressure</div>` +
+    `<div class="condor-card-title-row">` +
+    `<span class="condor-card-title">Practice Pressure</span>` +
+    `<button class="condor-ppi-info" aria-label="How is the pressure index calculated?" data-tip="${ppiInfoAttr}" title="${ppiInfoAttr}">&#9432;</button>` +
+    `</div>` +
     svg +
     `<div class="condor-ppi-label ${colorClass}">${colorLabel} · ${ppi}/100</div>` +
     `<div class="condor-ppi-breakdown">` +
     `<span class="condor-ppi-chip">WR: ${arrivedCount}</span>` +
     `<span class="condor-ppi-chip">Queue: ${queueCount}</span>` +
     `<span class="condor-ppi-chip">Urgent: ${urgentCount}</span>` +
-    `<span class="condor-ppi-chip">Cap: ${remaining}/${minimum}</span>` +
+    `<span class="condor-ppi-chip" data-tip="${capTipAttr}" title="${capTipAttr}" tabindex="0" role="button">Cap: ${remaining}/${minimum}</span>` +
     `</div>` +
     capacityNote +
     `</div>`

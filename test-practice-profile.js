@@ -612,6 +612,180 @@ function makeProfile(over = {}) {
   check(!r13.modulesApplied.includes('popout'), 'unsupported: popout silently skipped');
   check(!r13.errors?.length, 'unsupported: no errors for condor/popout');
 
+  // ── Central practice attestation: reception gate ──────────────────────────
+  console.log('\n--- central attestation: reception gate ---');
+  reset();
+  const rcAttProfile = makeProfile({
+    profileVersion: 'att-rc-1',
+    apply: { modules: { reception: 'merge' } },
+    practiceAttestation: {
+      attestedBy: 'admin@gp.nhs.uk',
+      attestedAt: '2026-06-01T09:00:00Z',
+      gates: { reception: true },
+    },
+    envelope: {
+      modules: {
+        reception: { config: { enabledPathways: { headache: true } } },
+      },
+    },
+  });
+  await PP.applyProfile(rcAttProfile);
+  check(store['reception.config']?.disclaimerAcceptedAt === '2026-06-01T09:00:00Z',
+    'attestation reception: disclaimerAcceptedAt written from attestedAt');
+  check(store['reception.config']?.enabledPathways?.headache === true,
+    'attestation reception: other config keys preserved');
+  check(store['suite.practiceProfile.attestations']?.reception?.by === 'admin@gp.nhs.uk',
+    'attestation reception: provenance by recorded');
+  check(store['suite.practiceProfile.attestations']?.reception?.via === 'practice-profile',
+    'attestation reception: provenance via recorded');
+
+  // WITHOUT the block, disclaimerAcceptedAt is NOT written (current behaviour)
+  reset();
+  const rcNoAttProfile = makeProfile({
+    profileVersion: 'att-rc-none-1',
+    apply: { modules: { reception: 'merge' } },
+    envelope: { modules: { reception: { config: { enabledPathways: { headache: true } } } } },
+  });
+  await PP.applyProfile(rcNoAttProfile);
+  check(!('disclaimerAcceptedAt' in (store['reception.config'] || {})),
+    'no attestation reception: disclaimerAcceptedAt NOT written');
+  check(store['suite.practiceProfile.attestations'] === undefined,
+    'no attestation reception: provenance marker NOT written');
+
+  // Genuine local acceptance never overwritten/downgraded by a gate
+  reset();
+  store['reception.config'] = { disclaimerAcceptedAt: '2025-01-01T00:00:00Z' };
+  const rcLocalWins = makeProfile({
+    profileVersion: 'att-rc-local-1',
+    apply: { modules: { reception: 'merge' } },
+    practiceAttestation: {
+      attestedBy: 'admin@gp.nhs.uk', attestedAt: '2026-06-01T09:00:00Z', gates: { reception: true },
+    },
+    envelope: { modules: { reception: { config: {} } } },
+  });
+  await PP.applyProfile(rcLocalWins);
+  check(store['reception.config'].disclaimerAcceptedAt === '2025-01-01T00:00:00Z',
+    'attestation reception: genuine local acceptance not overwritten');
+
+  // ── Central attestation is MODULE-INDEPENDENT ─────────────────────────────
+  // A signed gate opens its per-install attestation even when that module is NOT
+  // part of this push (the acceptance rides the signature, not the content —
+  // which an earlier profile version may have pushed). Here NO modules are
+  // pushed at all, yet all three gates must still apply.
+  console.log('\n--- central attestation: applies even when the gated module is not in the push ---');
+  reset();
+  const attIndepProfile = makeProfile({
+    profileVersion: 'att-indep-1',
+    apply: { modules: {} }, // no modules pushed
+    practiceAttestation: {
+      attestedBy: 'cso@gp.nhs.uk',
+      attestedAt: '2026-06-02T08:00:00Z',
+      gates: { reception: true, knowledge: true, alertLibrary: true },
+    },
+    envelope: { modules: {} },
+  });
+  await PP.applyProfile(attIndepProfile);
+  check(store['reception.config']?.disclaimerAcceptedAt === '2026-06-02T08:00:00Z',
+    'attestation independent: reception disclaimer written though reception module absent');
+  check(store['knowledge.config']?.noticeAcknowledgedAt === '2026-06-02T08:00:00Z',
+    'attestation independent: knowledge notice written though knowledge module absent');
+  check(store['sentinel.alertLibrary.acknowledged'] === true,
+    'attestation independent: alert-library ack written though sentinel module absent');
+  check(
+    store['suite.practiceProfile.attestations']?.reception?.via === 'practice-profile' &&
+    store['suite.practiceProfile.attestations']?.knowledge?.via === 'practice-profile' &&
+    store['suite.practiceProfile.attestations']?.alertLibrary?.via === 'practice-profile',
+    'attestation independent: provenance recorded for all three gates');
+
+  // ── Central attestation: alertLibrary gate ────────────────────────────────
+  console.log('\n--- central attestation: alertLibrary gate ---');
+  reset();
+  const slAttProfile = makeProfile({
+    profileVersion: 'att-sl-1',
+    apply: { modules: { sentinel: 'merge' } },
+    practiceAttestation: {
+      attestedBy: 'admin@gp.nhs.uk', attestedAt: '2026-06-01T09:00:00Z', gates: { alertLibrary: true },
+    },
+    envelope: { modules: { sentinel: { config: { density: 'compact' } } } },
+  });
+  await PP.applyProfile(slAttProfile);
+  check(store['sentinel.alertLibrary.acknowledged'] === true,
+    'attestation alertLibrary: acknowledged written true with gate');
+  check(store['suite.practiceProfile.attestations']?.alertLibrary?.via === 'practice-profile',
+    'attestation alertLibrary: provenance recorded');
+
+  // WITHOUT the gate, acknowledged is NOT written (preserves current strip behaviour)
+  reset();
+  const slNoAttProfile = makeProfile({
+    profileVersion: 'att-sl-none-1',
+    apply: { modules: { sentinel: 'merge' } },
+    envelope: { modules: { sentinel: { alertLibraryAcknowledged: true, config: { density: 'compact' } } } },
+  });
+  await PP.applyProfile(slNoAttProfile);
+  check(store['sentinel.alertLibrary.acknowledged'] === undefined,
+    'no attestation alertLibrary: acknowledged NOT written even if payload carries it');
+
+  // ── Central attestation: knowledge gate ───────────────────────────────────
+  console.log('\n--- central attestation: knowledge gate ---');
+  reset();
+  store['knowledge.categories'] = [{ id: 'referrals', name: 'Referrals' }];
+  const kbAttProfile = makeProfile({
+    profileVersion: 'att-kb-1',
+    apply: { modules: { knowledge: 'replace' } },
+    practiceAttestation: {
+      attestedBy: 'admin@gp.nhs.uk', attestedAt: '2026-06-01T09:00:00Z', gates: { knowledge: true },
+    },
+    envelope: {
+      modules: {
+        knowledge: {
+          items: [{ id: 'k1', title: 'An entry', category: 'referrals', body: 'body' }],
+          categories: [{ id: 'referrals', name: 'Referrals' }],
+        },
+      },
+    },
+  });
+  await PP.applyProfile(kbAttProfile);
+  check(store['knowledge.config']?.noticeAcknowledgedAt === '2026-06-01T09:00:00Z',
+    'attestation knowledge: noticeAcknowledgedAt written from attestedAt');
+  check(store['suite.practiceProfile.attestations']?.knowledge?.via === 'practice-profile',
+    'attestation knowledge: provenance recorded');
+
+  // WITHOUT the gate, noticeAcknowledgedAt is NOT written
+  reset();
+  store['knowledge.categories'] = [{ id: 'referrals', name: 'Referrals' }];
+  const kbNoAttProfile = makeProfile({
+    profileVersion: 'att-kb-none-1',
+    apply: { modules: { knowledge: 'replace' } },
+    envelope: {
+      modules: {
+        knowledge: {
+          items: [{ id: 'k2', title: 'Another entry', category: 'referrals', body: 'body' }],
+          categories: [{ id: 'referrals', name: 'Referrals' }],
+          config: { noticeAcknowledgedAt: '2026-01-01T00:00:00Z' },
+        },
+      },
+    },
+  });
+  await PP.applyProfile(kbNoAttProfile);
+  check(!store['knowledge.config']?.noticeAcknowledgedAt,
+    'no attestation knowledge: noticeAcknowledgedAt NOT written');
+  check(store['suite.practiceProfile.attestations'] === undefined,
+    'no attestation knowledge: provenance marker NOT written');
+
+  // Gate present but value false → behaves as no gate (fail-safe)
+  reset();
+  const slGateFalse = makeProfile({
+    profileVersion: 'att-sl-false-1',
+    apply: { modules: { sentinel: 'merge' } },
+    practiceAttestation: {
+      attestedBy: 'admin@gp.nhs.uk', attestedAt: '2026-06-01T09:00:00Z', gates: { alertLibrary: false },
+    },
+    envelope: { modules: { sentinel: { alertLibraryAcknowledged: true, config: { density: 'compact' } } } },
+  });
+  await PP.applyProfile(slGateFalse);
+  check(store['sentinel.alertLibrary.acknowledged'] === undefined,
+    'attestation gate=false: behaves as no gate (acknowledged NOT written)');
+
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
