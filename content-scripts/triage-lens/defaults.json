@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "rules": [
     {
       "id": "mh-crisis",
@@ -4216,6 +4216,29 @@
         "match": ["thyrotoxicosis", "hyperthyroidism", "hyperthyroid", "graves", "carbimazole", "propylthiouracil", "thyroid cancer", "levothyroxine", "thyroxine"],
         "exclude": ["family history"]
       }
+    },
+    {
+      "id": "base-throat-swab",
+      "kind": "text",
+      "enabled": true,
+      "builtin": true,
+      "label": "Throat swab — needs review",
+      "normalLabel": "Negative",
+      "analyte": {
+        "match": ["throat swab", "throat culture", "culture"],
+        "specimen": ["throat swab", "throat"]
+      },
+      "normalText": [
+        "beta haemolytic streptococcus not isolated",
+        "beta-haemolytic streptococcus not isolated",
+        "no beta haemolytic streptococci",
+        "anaerobes not isolated",
+        "no anaerobes isolated"
+      ],
+      "abnormalText": [
+        "beta haemolytic streptococcus isolated",
+        "group a streptococcus isolated"
+      ]
     }
   ]
 }

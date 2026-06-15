@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.88.0] — 2026-06-15
+
+### Specimen-header capture and `analyte.specimen` scoping for result rules
+
+Adds a new feature that lets text result rules be scoped to a specific specimen
+type (e.g. throat swab vs urine culture), preventing a "Culture" analyte row from
+being matched by rules intended for a different specimen.
+
+**Normaliser — specimen header capture (fail-open):**
+`normaliseInvestigationReport` now reads the group's human-readable title from an
+ordered candidate-key list (`groupName`, `name`, `title`, `heading`, `description`)
+and attaches it to each result as a new `specimen` field (trimmed string, or `null`
+if not discoverable). This is strictly fail-open: results with no discoverable
+header get `specimen: null` and behave exactly as before.
+
+**Rule schema — optional `analyte.specimen`:**
+The result rule schema now accepts an optional `analyte.specimen` array (same shape
+as `analyte.exclude`) for both `text` and `threshold` rules. Validation is in
+`engine/result-rules.js`; the authoring prompt (`resultRuleSchemaPrompt`) documents
+the field in both schema sections.
+
+**Matching — fail-open AND-filter:**
+Both `computeTextOutcome` and `computeRuleSev` in `engine/result-severity.js` now
+apply a `specimenAllows(analyte, result)` gate after the existing name-hit and
+exclude checks:
+- No `analyte.specimen` (absent or empty) → pass (no behaviour change).
+- `analyte.specimen` present AND `result.specimen` is non-empty → at least one term
+  must be a case-insensitive substring of `result.specimen`; otherwise the rule is
+  skipped for this result.
+- `analyte.specimen` present but `result.specimen` is absent/null/empty → **pass
+  (fail-open)**. A rule is never dropped because the specimen header was not captured.
+
+**New starter rule — `base-throat-swab` (conservative; verify against real lab output):**
+A new builtin text rule scoped to throat-swab specimen headers (`analyte.specimen:
+["throat swab", "throat"]`). Conservative `normalText` covers only clearly-negative
+whole phrases (Beta haemolytic Streptococcus not isolated, no anaerobes isolated).
+`abnormalText` covers specific positive phrases (beta haemolytic streptococcus
+isolated, group A streptococcus isolated). "Culture to follow" is deliberately
+excluded from `normalText` (pending result — calming it would be a false-negative
+hazard). **Clinical teams should verify this rule against real lab output before
+relying on it.** Defaults.json `"version"` bumped 14→15.
+
 ## [v3.87.2] — 2026-06-15
 
 ### Accept right inside the Central attestations box

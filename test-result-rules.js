@@ -37,7 +37,7 @@ function validRule(overrides) {
 }
 
 function hasError(errs, fragment) {
-  return errs.some(e => e.toLowerCase().includes(fragment.toLowerCase()));
+  return errs.some((e) => e.toLowerCase().includes(fragment.toLowerCase()));
 }
 
 // ── validateResultRule: valid rule passes ─────────────────────────────────────
@@ -58,9 +58,7 @@ console.log('\n--- validateResultRule: valid rule passes ---');
 }
 {
   // Below comparator with valid ordering: amber 130, red 125
-  const errs = validateResultRule(
-    validRule({ comparator: 'below', amber: 130, red: 125 })
-  );
+  const errs = validateResultRule(validRule({ comparator: 'below', amber: 130, red: 125 }));
   assert(errs.length === 0, 'valid below rule with red <= amber passes');
 }
 {
@@ -225,24 +223,21 @@ console.log('\n--- resultRuleSchemaPrompt ---');
   const prompt = resultRuleSchemaPrompt();
   assert(typeof prompt === 'string', 'resultRuleSchemaPrompt returns a string');
   assert(prompt.length > 0, 'prompt is non-empty');
-  assert(prompt.toLowerCase().includes('disabled') || prompt.toLowerCase().includes('disable'),
-    'prompt mentions "disabled" (imported rules arrive disabled)');
-  assert(prompt.toLowerCase().includes('review'),
-    'prompt mentions "review" (clinician must review before enabling)');
-  assert(prompt.toLowerCase().includes('json'),
-    'prompt mentions "JSON" (output format instruction)');
-  assert(prompt.includes('"potassium"') || prompt.includes('potassium'),
-    'prompt includes example analyte (potassium)');
-  assert(prompt.includes('"above"') || prompt.includes('above'),
-    'prompt covers the above comparator');
-  assert(prompt.includes('"below"') || prompt.includes('below'),
-    'prompt covers the below comparator');
-  assert(prompt.includes('amber') || prompt.includes('5.5'),
-    'prompt gives amber threshold example');
-  assert(prompt.includes('red') || prompt.includes('6.0'),
-    'prompt gives red threshold example');
-  assert(!prompt.trimStart().startsWith('```'),
-    'prompt does not start with a markdown fence (output only JSON instruction)');
+  assert(
+    prompt.toLowerCase().includes('disabled') || prompt.toLowerCase().includes('disable'),
+    'prompt mentions "disabled" (imported rules arrive disabled)'
+  );
+  assert(prompt.toLowerCase().includes('review'), 'prompt mentions "review" (clinician must review before enabling)');
+  assert(prompt.toLowerCase().includes('json'), 'prompt mentions "JSON" (output format instruction)');
+  assert(prompt.includes('"potassium"') || prompt.includes('potassium'), 'prompt includes example analyte (potassium)');
+  assert(prompt.includes('"above"') || prompt.includes('above'), 'prompt covers the above comparator');
+  assert(prompt.includes('"below"') || prompt.includes('below'), 'prompt covers the below comparator');
+  assert(prompt.includes('amber') || prompt.includes('5.5'), 'prompt gives amber threshold example');
+  assert(prompt.includes('red') || prompt.includes('6.0'), 'prompt gives red threshold example');
+  assert(
+    !prompt.trimStart().startsWith('```'),
+    'prompt does not start with a markdown fence (output only JSON instruction)'
+  );
 }
 
 // ── RESULT_RULE_FIELDS exported ───────────────────────────────────────────────
@@ -304,7 +299,7 @@ console.log('\n--- validateResultRule: text rule — missing / bad normalText --
   });
   assert(errs.length > 0, 'text rule missing normalText → error');
   assert(
-    errs.some(e => e.toLowerCase().includes('normaltext')),
+    errs.some((e) => e.toLowerCase().includes('normaltext')),
     'error mentions "normalText"'
   );
 }
@@ -400,7 +395,7 @@ console.log('\n--- validateResultRule: text rule — bad normalLabel type ---');
   });
   assert(errs.length > 0, 'text rule normalLabel as number → error');
   assert(
-    errs.some(e => e.toLowerCase().includes('normallabel')),
+    errs.some((e) => e.toLowerCase().includes('normallabel')),
     'error mentions "normalLabel"'
   );
 }
@@ -448,7 +443,7 @@ console.log('\n--- validateResultRule: text rule — abnormalText ---');
   });
   assert(errs.length > 0, 'text rule with neither normalText nor abnormalText → error');
   assert(
-    errs.some(e => e.toLowerCase().includes('normaltext') || e.toLowerCase().includes('abnormaltext')),
+    errs.some((e) => e.toLowerCase().includes('normaltext') || e.toLowerCase().includes('abnormaltext')),
     'error mentions the required classification lists'
   );
 }
@@ -472,7 +467,7 @@ console.log('\n--- validateResultRule: text rule — abnormalText ---');
   });
   assert(errs.length > 0, 'abnormalText as string (not array) → error');
   assert(
-    errs.some(e => e.toLowerCase().includes('abnormaltext')),
+    errs.some((e) => e.toLowerCase().includes('abnormaltext')),
     'error mentions "abnormalText"'
   );
 }
@@ -498,7 +493,7 @@ console.log('\n--- validateResultRule: unknown kind rejected ---');
   });
   assert(errs.length > 0, 'unknown kind "regex" → error');
   assert(
-    errs.some(e => e.toLowerCase().includes('kind')),
+    errs.some((e) => e.toLowerCase().includes('kind')),
     'error mentions "kind"'
   );
 }
@@ -548,8 +543,10 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
 {
   const prompt = resultRuleSchemaPrompt();
   // Existing checks (duplicated here for completeness with text-rule additions)
-  assert(prompt.toLowerCase().includes('disabled') || prompt.toLowerCase().includes('disable'),
-    'prompt mentions "disabled"');
+  assert(
+    prompt.toLowerCase().includes('disabled') || prompt.toLowerCase().includes('disable'),
+    'prompt mentions "disabled"'
+  );
   assert(prompt.toLowerCase().includes('review'), 'prompt mentions "review"');
   // Text-rule specific checks
   assert(
@@ -557,20 +554,21 @@ console.log('\n--- resultRuleSchemaPrompt: covers both kinds ---');
     'prompt mentions text kind'
   );
   assert(
-    prompt.toLowerCase().includes('normallabel') || prompt.toLowerCase().includes('normal label') ||
-    prompt.toLowerCase().includes('normaltext') || prompt.toLowerCase().includes('normal text') ||
-    prompt.includes('no growth'),
+    prompt.toLowerCase().includes('normallabel') ||
+      prompt.toLowerCase().includes('normal label') ||
+      prompt.toLowerCase().includes('normaltext') ||
+      prompt.toLowerCase().includes('normal text') ||
+      prompt.includes('no growth'),
     'prompt mentions text-rule fields (normalText/normalLabel) or example phrase "no growth"'
   );
   assert(
-    prompt.toLowerCase().includes('msu') || prompt.toLowerCase().includes('urine culture') ||
-    prompt.toLowerCase().includes('microbiology') || prompt.toLowerCase().includes('culture'),
+    prompt.toLowerCase().includes('msu') ||
+      prompt.toLowerCase().includes('urine culture') ||
+      prompt.toLowerCase().includes('microbiology') ||
+      prompt.toLowerCase().includes('culture'),
     'prompt gives a microbiology / culture example for text rules'
   );
-  assert(
-    prompt.toLowerCase().includes('abnormaltext'),
-    'prompt documents the abnormalText (flag-if-present) field'
-  );
+  assert(prompt.toLowerCase().includes('abnormaltext'), 'prompt documents the abnormalText (flag-if-present) field');
 }
 
 // ── analyte.exclude (optional) validation ────────────────────────────────────
@@ -618,10 +616,7 @@ console.log('\n--- suppressIfProblem validation ---');
     validateResultRule(withSuppress({ exclude: ['x'] })).length > 0,
     'suppressIfProblem: missing match is rejected'
   );
-  assert(
-    validateResultRule(withSuppress({ match: [] })).length > 0,
-    'suppressIfProblem: empty match is rejected'
-  );
+  assert(validateResultRule(withSuppress({ match: [] })).length > 0, 'suppressIfProblem: empty match is rejected');
   assert(
     validateResultRule(withSuppress(['diabetes'])).length > 0,
     'suppressIfProblem: array (not object) is rejected'
@@ -630,6 +625,53 @@ console.log('\n--- suppressIfProblem validation ---');
     validateResultRule(withSuppress({ match: ['dm'], exclude: 'non-diabetic' })).length > 0,
     'suppressIfProblem: string exclude (not array) is rejected'
   );
+}
+
+// ── analyte.specimen (optional) validation ───────────────────────────────────
+console.log('\n--- analyte.specimen validation ---');
+{
+  // Valid: array of strings (threshold rule)
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], specimen: ['serum', 'blood'] } })).length === 0,
+    'specimen: array of strings is valid on threshold rule'
+  );
+  // Valid: array of strings (text rule)
+  assert(
+    validateResultRule({
+      kind: 'text',
+      label: 'Throat culture review',
+      analyte: { match: ['culture'], specimen: ['throat swab', 'throat'] },
+      normalText: ['beta haemolytic streptococcus not isolated'],
+    }).length === 0,
+    'specimen: array of strings is valid on text rule'
+  );
+  // Valid: omitted is fine (optional)
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'] } })).length === 0,
+    'specimen: omitted is valid (optional)'
+  );
+  // Valid: empty array is allowed (treated as absent)
+  assert(
+    validateResultRule(validRule({ analyte: { match: ['potassium'], specimen: [] } })).length === 0,
+    'specimen: empty array is valid'
+  );
+  // Invalid: a string (not array) is rejected
+  const errStr = validateResultRule(validRule({ analyte: { match: ['potassium'], specimen: 'throat swab' } }));
+  assert(errStr.length > 0, 'specimen: a string (not array) is rejected');
+  assert(
+    errStr.some((e) => e.toLowerCase().includes('specimen')),
+    'specimen: rejection error mentions "specimen"'
+  );
+  // Invalid: non-string element in array is rejected
+  const errNonStr = validateResultRule(validRule({ analyte: { match: ['potassium'], specimen: ['throat', 42] } }));
+  assert(errNonStr.length > 0, 'specimen: non-string element in array is rejected');
+  assert(
+    errNonStr.some((e) => e.toLowerCase().includes('specimen')),
+    'specimen: rejection error mentions "specimen"'
+  );
+  // The authoring prompt documents the specimen field
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('specimen'), 'resultRuleSchemaPrompt documents the specimen field');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

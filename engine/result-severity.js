@@ -29,6 +29,22 @@
     return SEV_ORDER[a] >= SEV_ORDER[b] ? a : b;
   }
 
+  // ── Specimen-header gate (fail-open narrowing AND-filter) ─────────────────────
+  // Implements the analyte.specimen scoping semantics:
+  //   - No analyte.specimen (absent or empty array) → pass (no change to today's behaviour).
+  //   - analyte.specimen present AND result.specimen is a non-empty string → require at
+  //     least one analyte.specimen term to be a case-insensitive substring of result.specimen.
+  //   - analyte.specimen present BUT result.specimen is absent/null/empty → PASS (fail-open).
+  //     Never drop a rule because the specimen header was not captured from this report.
+  // Returns true if the rule should proceed; false if the specimen gate blocks it.
+  function specimenAllows(analyte, result) {
+    if (!Array.isArray(analyte.specimen) || analyte.specimen.length === 0) return true;
+    const spec = typeof result.specimen === 'string' ? result.specimen.trim() : '';
+    if (!spec) return true; // fail-open: no header captured → do not gate
+    const specLower = spec.toLowerCase();
+    return analyte.specimen.some((t) => typeof t === 'string' && t.length > 0 && specLower.includes(t.toLowerCase()));
+  }
+
   // ── Compute text-rule outcome for a single result ────────────────────────────
   // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
   // Also returns the matched rule's label / normalLabel for chip display.
@@ -61,10 +77,9 @@
     // abnormalText flag phrase split across a line break would silently NOT fire (false
     // negative). Normalising both sides makes matches robust to the lab's line wrapping;
     // it can never create a spurious match (the words are adjacent in the sentence anyway).
-    const collapseWs = s => s.replace(/\s+/g, ' ');
+    const collapseWs = (s) => s.replace(/\s+/g, ' ');
     // result.text is the pre-built combined free-text string (may be absent on old fixtures)
-    const resultText =
-      typeof result.text === 'string' ? collapseWs(result.text.toLowerCase()) : '';
+    const resultText = typeof result.text === 'string' ? collapseWs(result.text.toLowerCase()) : '';
 
     // normalText (calm) phrases are matched WORD-BOUNDARY-aware so a short normal token can't
     // false-calm inside a larger word — the classic "normal" ⊂ "abnormal", or "negative" ⊂
@@ -76,7 +91,11 @@
     // the safe direction — and every shipped abnormalText term is collision-verified against
     // negative report text, so breadth there cannot false-flag a true negative.
     const normalPhrasePresent = (text, phrase) => {
-      const p = collapseWs(String(phrase || '').toLowerCase().trim());
+      const p = collapseWs(
+        String(phrase || '')
+          .toLowerCase()
+          .trim()
+      );
       if (!p) return false;
       if (/^[a-z0-9 ]+$/.test(p)) {
         return new RegExp('\\b' + p.replace(/\s+/g, '\\s+') + '\\b').test(text);
@@ -108,7 +127,7 @@
 
       // Does this rule apply to this result?
       const nameHit = analyte.match.some(
-        m => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
+        (m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
       );
       if (!nameHit) continue;
       // analyte.exclude (optional) — same semantics as in computeRuleSev: skip a
@@ -116,12 +135,14 @@
       // happens to share a match token).
       if (
         Array.isArray(analyte.exclude) &&
-        analyte.exclude.some(
-          e => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase())
-        )
+        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
       ) {
         continue;
       }
+      // analyte.specimen (optional, fail-open) — scope rule to a specific specimen
+      // header (e.g. "throat swab") captured by the normaliser. Fail-open: if the
+      // result has no specimen header the rule still applies.
+      if (!specimenAllows(analyte, result)) continue;
 
       anyRuleApplied = true;
 
@@ -130,8 +151,8 @@
       // is never overridden by a normal phrase, so record it and move on to the next rule.
       if (hasAbnormal) {
         const foundAbnormal = rule.abnormalText.some(
-          phrase => typeof phrase === 'string' && phrase.length > 0 &&
-            resultText.includes(collapseWs(phrase.toLowerCase()))
+          (phrase) =>
+            typeof phrase === 'string' && phrase.length > 0 && resultText.includes(collapseWs(phrase.toLowerCase()))
         );
         if (foundAbnormal) {
           abnormalFound = true;
@@ -146,8 +167,7 @@
       // contributes nothing here (neither calm nor flag).
       if (hasNormal) {
         const foundNormal = rule.normalText.some(
-          phrase => typeof phrase === 'string' && phrase.length > 0 &&
-            normalPhrasePresent(resultText, phrase)
+          (phrase) => typeof phrase === 'string' && phrase.length > 0 && normalPhrasePresent(resultText, phrase)
         );
         if (foundNormal) {
           normalFound = true;
@@ -186,7 +206,9 @@
   //     suppression silently hides a genuine new diagnosis.
   // Deliberately self-contained (no rules-engine import) to keep this content-world-safe.
   function problemLabelMatches(label, term) {
-    const t = String(term || '').toLowerCase().trim();
+    const t = String(term || '')
+      .toLowerCase()
+      .trim();
     if (!t) return false;
     if (/^[a-z0-9 ]+$/.test(t)) {
       const rx = new RegExp('\\b' + t.replace(/\s+/g, '\\s+') + '\\b');
@@ -205,8 +227,8 @@
       const p = problems[i];
       const label = String((p && (p.label || p.title || p.description)) || '').toLowerCase();
       if (!label) continue;
-      if (exclude.some(e => typeof e === 'string' && e && label.includes(e.toLowerCase()))) continue;
-      if (match.some(m => typeof m === 'string' && m && problemLabelMatches(label, m))) return true;
+      if (exclude.some((e) => typeof e === 'string' && e && label.includes(e.toLowerCase()))) continue;
+      if (match.some((m) => typeof m === 'string' && m && problemLabelMatches(label, m))) return true;
     }
     return false;
   }
@@ -243,9 +265,7 @@
       if (ruleSuppressedByProblems(rule, problems)) continue;
 
       // Check if any match substring hits the result name
-      const hits = analyte.match.some(
-        m => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
-      );
+      const hits = analyte.match.some((m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase()));
       if (!hits) continue;
       // analyte.exclude (optional) drops false-positive analytes whose name
       // contains a match substring but are a different test — e.g. a "platelet"
@@ -254,12 +274,14 @@
       // "Urine ..." analyte. Same case-insensitive substring semantics as match.
       if (
         Array.isArray(analyte.exclude) &&
-        analyte.exclude.some(
-          e => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase())
-        )
+        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
       ) {
         continue;
       }
+      // analyte.specimen (optional, fail-open) — scope rule to a specific specimen
+      // header captured by the normaliser. Fail-open: if the result has no specimen
+      // header the rule still applies.
+      if (!specimenAllows(analyte, result)) continue;
 
       // Evaluate threshold
       let ruleSev = 'none';
@@ -335,16 +357,16 @@
       reviewCount: 0,
       noGrowthCount: 0,
       reviewTop: null,
-      noGrowthTop: null
+      noGrowthTop: null,
     };
 
     try {
       if (!report || !Array.isArray(report.results)) return none;
 
       const results = report.results;
-      const priorityDisplay = (opts && opts.priorityDisplay) ? String(opts.priorityDisplay) : '';
-      const resultRules = (opts && Array.isArray(opts.resultRules)) ? opts.resultRules : [];
-      const problems = (opts && Array.isArray(opts.problems)) ? opts.problems : [];
+      const priorityDisplay = opts && opts.priorityDisplay ? String(opts.priorityDisplay) : '';
+      const resultRules = opts && Array.isArray(opts.resultRules) ? opts.resultRules : [];
+      const problems = opts && Array.isArray(opts.problems) ? opts.problems : [];
 
       let urgentCount = 0;
       let abnormalCount = 0;
@@ -359,11 +381,11 @@
       let reviewTop = null;
       let noGrowthTop = null;
 
-      results.forEach(r => {
+      results.forEach((r) => {
         if (!r || typeof r !== 'object') return;
 
         // Lab-derived severity
-        const labSev = r.urgent ? 'urgent' : (r.isAbove || r.isBelow ? 'abnormal' : 'none');
+        const labSev = r.urgent ? 'urgent' : r.isAbove || r.isBelow ? 'abnormal' : 'none';
 
         // Rule-derived severity for numeric (threshold) rules
         const ruleResult = computeRuleSev(r, resultRules, problems);
@@ -379,11 +401,17 @@
 
         if (effSev === 'urgent') {
           urgentCount++;
-          if (!firstUrgent) { firstUrgent = r; firstUrgentRuleLabel = ruleLabel; }
+          if (!firstUrgent) {
+            firstUrgent = r;
+            firstUrgentRuleLabel = ruleLabel;
+          }
         }
         if (effSev === 'abnormal' || effSev === 'urgent') {
           abnormalCount++;
-          if (!firstAbnormal) { firstAbnormal = r; firstAbnormalRuleLabel = ruleLabel; }
+          if (!firstAbnormal) {
+            firstAbnormal = r;
+            firstAbnormalRuleLabel = ruleLabel;
+          }
         }
 
         // Text-rule outcome — independent, does not affect urgentCount/abnormalCount
@@ -416,13 +444,12 @@
             name: salient.name,
             value: salient.value,
             unit: salient.unit,
-            ruleLabel: salientRuleLabel || null
+            ruleLabel: salientRuleLabel || null,
           }
         : null;
 
       // misprioritised: red severity but the queue row priority is NOT high/urgent/immediate
-      const misprioritised =
-        level === 'red' && !/high|urgent|immediate/i.test(priorityDisplay);
+      const misprioritised = level === 'red' && !/high|urgent|immediate/i.test(priorityDisplay);
 
       return {
         level,
@@ -434,7 +461,7 @@
         reviewCount,
         noGrowthCount,
         reviewTop,
-        noGrowthTop
+        noGrowthTop,
       };
     } catch (_) {
       return none;
