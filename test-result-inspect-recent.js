@@ -32,23 +32,27 @@ const sandbox = {};
 const buildMatch = src.match(/function buildRecentInspectEntry\(report, taskUuid, now\) \{[\s\S]*?\n  \}/);
 const insertMatch = src.match(/function insertRecentInspect\(store, entry, cap\) \{[\s\S]*?\n  \}/);
 const mapMatch = src.match(/function mapRecentInspectResponse\(store\) \{[\s\S]*?\n  \}/);
+const selectMatch = src.match(/function selectOnDemandFetchTargets\(candidates, haveIds, cap\) \{[\s\S]*?\n  \}/);
 
 check(!!buildMatch, 'buildRecentInspectEntry found in content.js');
 check(!!insertMatch, 'insertRecentInspect found in content.js');
 check(!!mapMatch, 'mapRecentInspectResponse found in content.js');
+check(!!selectMatch, 'selectOnDemandFetchTargets found in content.js');
 
 vm.runInNewContext(
-  [buildMatch[0], insertMatch[0], mapMatch[0]].join('\n') +
+  [buildMatch[0], insertMatch[0], mapMatch[0], selectMatch[0]].join('\n') +
     '\nthis.buildRecentInspectEntry = buildRecentInspectEntry;' +
     '\nthis.insertRecentInspect = insertRecentInspect;' +
-    '\nthis.mapRecentInspectResponse = mapRecentInspectResponse;',
+    '\nthis.mapRecentInspectResponse = mapRecentInspectResponse;' +
+    '\nthis.selectOnDemandFetchTargets = selectOnDemandFetchTargets;',
   sandbox
 );
-const { buildRecentInspectEntry, insertRecentInspect, mapRecentInspectResponse } = sandbox;
+const { buildRecentInspectEntry, insertRecentInspect, mapRecentInspectResponse, selectOnDemandFetchTargets } = sandbox;
 
 check(typeof buildRecentInspectEntry === 'function', 'buildRecentInspectEntry extracted and callable');
 check(typeof insertRecentInspect === 'function', 'insertRecentInspect extracted and callable');
 check(typeof mapRecentInspectResponse === 'function', 'mapRecentInspectResponse extracted and callable');
+check(typeof selectOnDemandFetchTargets === 'function', 'selectOnDemandFetchTargets extracted and callable');
 
 // ============================================================
 // buildRecentInspectEntry — line mapping mirrors extractResultFields
@@ -209,6 +213,41 @@ console.log('\nmapRecentInspectResponse: contract shape');
 }
 
 // ============================================================
+// selectOnDemandFetchTargets — pure fetch-target selection
+// ============================================================
+console.log('\nselectOnDemandFetchTargets: on-demand target selection');
+{
+  const cand = [
+    ['u1', '/tasks/data/x/overview/u1'],
+    ['u2', '/tasks/data/x/overview/u2'],
+    ['u3', '/tasks/data/x/overview/u3'],
+  ];
+  const all = selectOnDemandFetchTargets(cand, new Set(), 12);
+  check(all.length === 3 && all[0][0] === 'u1', 'returns all valid pairs in order when none held');
+
+  const some = selectOnDemandFetchTargets(cand, new Set(['u2']), 12);
+  check(some.length === 2 && !some.some((p) => p[0] === 'u2'), 'skips ids already held');
+
+  const capped = selectOnDemandFetchTargets(cand, new Set(), 2);
+  check(capped.length === 2, 'respects the fetch cap');
+
+  const accepts = selectOnDemandFetchTargets(cand, ['u1', 'u3'], 12);
+  check(accepts.length === 1 && accepts[0][0] === 'u2', 'accepts an array (not just a Set) for haveIds');
+
+  const dirty = selectOnDemandFetchTargets(
+    [['u1', ''], [null], ['u2', '/o/u2'], 'nope', ['', '/o/x'], ['u3', null]],
+    new Set(),
+    12
+  );
+  check(
+    dirty.length === 1 && dirty[0][0] === 'u2',
+    'drops empty/missing overviewURLs, missing uuids and malformed entries'
+  );
+
+  check(selectOnDemandFetchTargets(null, new Set(), 12).length === 0, 'non-array candidates → empty');
+}
+
+// ============================================================
 // onMessage listener wiring is present in content.js
 // ============================================================
 console.log('\ncontent.js wiring');
@@ -217,7 +256,15 @@ check(/getRecentInvestigationResults/.test(src), 'handler matches getRecentInves
 check(/sender\.id !== chrome\.runtime\.id/.test(src), 'sender validated against chrome.runtime.id');
 check(
   /insertRecentInspect\(\s*_recentInspectResults/.test(src),
-  'computeQueueRowResult populates _recentInspectResults'
+  'queue + on-demand paths populate _recentInspectResults'
+);
+// The handler must fetch ON DEMAND (async) and keep the channel open: it awaits the
+// collector, then returns true. A regression to the old synchronous return false would
+// mean the picker only ever sees the passive cache again.
+check(/await collectRecentInspectOnDemand\(\)/.test(src), 'handler awaits the on-demand collector');
+check(
+  /collectRecentInspectOnDemand[\s\S]*?fetchInvestigationReport[\s\S]*?normaliseInvestigationReport/.test(src),
+  'on-demand collector fetches + normalises investigation reports'
 );
 
 // ============================================================

@@ -427,6 +427,106 @@
         font-size: 9px;
       }
 
+      /* Tabs section (data-section="tabs") */
+      .opt-tabs-presets-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .opt-tabs-presets-label {
+        font-size: 11px;
+        color: var(--text-3);
+      }
+      .opt-tabs-presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .opt-tabs-preset {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        color: var(--text-2);
+        font-size: 11px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      .opt-tabs-preset:hover {
+        border-color: var(--border-hi);
+        color: var(--text-1);
+      }
+      .opt-tabs-count {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-3);
+      }
+      .opt-tabs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px;
+      }
+      .opt-tabs-card {
+        text-align: left;
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 10px 12px;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        opacity: 0.55;
+        transition: opacity 0.12s ease, border-color 0.12s ease;
+      }
+      .opt-tabs-card.on {
+        opacity: 1;
+        border-color: var(--green-line);
+      }
+      .opt-tabs-card:hover {
+        border-color: var(--border-hi);
+      }
+      .opt-tabs-card-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .opt-tabs-card-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .opt-tabs-card-state {
+        margin-left: auto;
+        color: var(--green);
+        font-size: 12px;
+      }
+      .opt-tabs-card-blurb {
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--text-3);
+      }
+      .opt-tabs-hint {
+        display: block;
+        margin-top: 12px;
+        font-size: 11px;
+        color: var(--text-3);
+      }
+      .opt-tabs-hint.flash {
+        color: var(--amber);
+      }
+      .opt-kbd {
+        font-family: var(--mono);
+        font-size: 10px;
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 0 4px;
+        color: var(--text-2);
+      }
+
       .preset-list {
         display: flex;
         flex-direction: column;
@@ -708,6 +808,7 @@
           <span>Suite Settings</span>
         </div>
         <button class="nav-item active" data-section="suite">Suite</button>
+        <button class="nav-item" data-section="tabs">Tabs</button>
         <button class="nav-item" data-section="notifications">Notifications</button>
         <button class="nav-item" data-section="slots">Slot Counter</button>
         <button class="nav-item" data-section="capacity">Capacity Forecast</button>
@@ -1090,6 +1191,31 @@
               Clinic mode silences desktop pop-ups and sounds only. On-screen strips, badges and clinical alerts in the
               patient record are never muted.
             </p>
+          </div>
+        </section>
+
+        <!-- Tabs section -->
+        <section class="opt-section" id="sect-tabs">
+          <h1>Tabs <span class="module-badge">side panel &amp; pop-out</span></h1>
+          <p class="section-desc">
+            Pick the tabs you actually use — a GP rarely needs Reception; reception rarely needs Slots. Hiding a tab
+            just de-clutters the nav; everything stays reachable in the side panel via
+            <kbd class="opt-kbd">Ctrl</kbd>+<kbd class="opt-kbd">K</kbd>. Changes apply immediately to the side panel
+            and pop-out.
+          </p>
+          <p class="section-desc" style="color: var(--text-3)">
+            This is <strong>your</strong> choice and is stored only on this machine — a practice-deployed shared
+            profile never changes which tabs you see.
+          </p>
+
+          <div class="field">
+            <div class="opt-tabs-presets-row">
+              <span class="opt-tabs-presets-label">Start from</span>
+              <div id="optTabsPresets" class="opt-tabs-presets"></div>
+              <span id="optTabsCount" class="opt-tabs-count"></span>
+            </div>
+            <div id="optTabsGrid" class="opt-tabs-grid"></div>
+            <span id="optTabsHint" class="opt-tabs-hint">Tap a tab to show or hide it.</span>
           </div>
         </section>
 
@@ -2209,5 +2335,6 @@
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/display-prefs.js"></script>
     <script src="options.js"></script>
+    <script type="module" src="tabs-section.js"></script>
   </body>
 </html>

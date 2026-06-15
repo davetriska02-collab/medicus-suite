@@ -2,6 +2,61 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.1] — 2026-06-15
+
+### Fix: "Load a recent result" now fetches on demand instead of showing an empty picker
+
+The result-rule inspector's **"Load a recent result"** button (v3.90.0) usually showed
+"No recent results captured yet" and appeared to do nothing. The button was firing
+correctly — the in-memory store it read was simply empty. That store was only ever
+populated as a **side-effect of the queue result-triage chip pipeline**: it required the
+user to be sitting on the live queue list, with result-triage chips **enabled**, in the
+same tab session (the store is in-memory and clears on reload). Opening an individual
+result never populated it, and with result chips off it was never populated at all.
+
+**On-demand fetch.** Clicking the button now makes the Triage Lens content script
+**actively fetch and parse** the open queue's results then and there, independent of
+whether result-triage chips are enabled or whether the background pass ran. It reuses the
+overview URLs the page-world bridge already caches for every queue row it sees, so it
+works as long as a Medicus **queue** tab is open. The `getRecentInvestigationResults`
+message handler is now async (awaits the collector, returns `true` to keep the channel
+open). A new pure `selectOnDemandFetchTargets` helper (caps the fetch fan-out, skips rows
+already held, drops malformed/empty entries) is unit-tested in `test-result-inspect-recent.js`.
+
+**Still in-memory only (IG).** The on-demand path persists nothing — same contract as the
+passive capture. The empty-state wording now points at opening the result queue (the task
+list) rather than the misleading "open a result".
+
+## [v3.91.0] — 2026-06-15
+
+### Choose your tabs — now discoverable in Options, and surfaced for managed installs
+
+The "Choose your tabs" chooser (which writes the user-owned `suite.hiddenTabs` key)
+previously had only two entry points, both inside the side panel: the first-run setup
+checklist step and the `Ctrl+K` palette command. In a **practice-deployed shared-folder
+install** the pushed practice code collapses the setup checklist before a new user ever
+reaches the tabs step, and there was **no entry point in the options page at all** — so
+new staff effectively never got the chance to pick their tabs.
+
+**New "Tabs" section in Options.** A dedicated section (second in the nav, after Suite)
+renders role presets (GP / Reception / Practice manager / Everything) plus a per-tab
+toggle grid with a one-line explainer for each tab. It reuses the single source of truth
+in `side-panel/tab-catalog.js` and writes the same `suite.hiddenTabs` key, so the side
+panel and pop-out live-apply the change immediately via their existing storage listeners.
+Loaded as `<script type="module">` (`options/tabs-section.js`) so it can import the
+catalog data; the rest of the options page remains classic script.
+
+**Surfaced on the collapsed setup strip.** When the practice code is pre-set (the managed
+deployment case), the setup checklist's thin collapsed strip now shows a direct **"Choose
+tabs"** button when the tabs step isn't yet done — one click, no need to Expand the full
+card — so the recommended tab choice isn't buried for new users.
+
+**Still user-owned.** Tab visibility remains a personal, per-machine preference: a
+practice profile never pushes `suite.hiddenTabs` (`shared/io/practice-profile.js`), and
+the Options section says so explicitly. Hiding a tab only de-clutters the nav — everything
+stays reachable via `Ctrl+K`. A new pure `toggleTabVisibility` helper (tested in
+`test-tab-catalog.js`) enforces the never-hide-the-last-tab guarantee on both surfaces.
+
 ## [v3.90.0] — 2026-06-15
 
 ### Result inspector: load a recent result live (no JSON paste needed)

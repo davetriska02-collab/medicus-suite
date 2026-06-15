@@ -28,7 +28,7 @@ function check(cond, msg) {
 
 (async () => {
   const url = pathToFileURL(path.join(__dirname, 'side-panel', 'tab-catalog.js')).href;
-  const { TAB_CATALOG, ROLE_PRESETS, hiddenFromPreset, sanitiseHiddenTabs } = await import(url);
+  const { TAB_CATALOG, ROLE_PRESETS, hiddenFromPreset, sanitiseHiddenTabs, toggleTabVisibility } = await import(url);
 
   const catalogIds = TAB_CATALOG.map((t) => t.id);
   const panelHtml = fs.readFileSync(path.join(__dirname, 'side-panel', 'panel.html'), 'utf8');
@@ -92,6 +92,40 @@ function check(cond, msg) {
     sanitiseHiddenTabs(catalogIds).length === 0,
     'sanitiser refuses to hide every tab (falls back to hiding nothing)'
   );
+
+  // ── toggleTabVisibility (pure toggle for the options section + overlay) ────
+  {
+    // turning a visible tab OFF adds it to the hidden set
+    const r1 = toggleTabVisibility([], 'condor');
+    check(!r1.blocked && r1.hidden.join(',') === 'condor', 'toggle hides a visible tab');
+
+    // turning a hidden tab back ON removes it
+    const r2 = toggleTabVisibility(['condor'], 'condor');
+    check(!r2.blocked && r2.hidden.length === 0, 'toggle re-shows a hidden tab');
+
+    // unknown id is a no-op (not blocked, set unchanged)
+    const r3 = toggleTabVisibility(['condor'], 'nope');
+    check(!r3.blocked && r3.hidden.join(',') === 'condor', 'toggle ignores unknown ids');
+
+    // hiding the last visible tab is BLOCKED and leaves the set unchanged
+    const allButOne = catalogIds.filter((id) => id !== 'today');
+    const r4 = toggleTabVisibility(allButOne, 'today');
+    check(
+      r4.blocked && r4.hidden.length === allButOne.length,
+      'toggle blocks hiding the final visible tab (never lock-out)'
+    );
+
+    // turning ON is always allowed even from a near-empty visible state
+    const r5 = toggleTabVisibility(allButOne, 'submissions');
+    check(!r5.blocked && !r5.hidden.includes('submissions'), 'toggle ON allowed even at one-visible');
+
+    // corrupt incoming hidden array is sanitised before toggling
+    const r6 = toggleTabVisibility(['nope', 42, 'condor'], 'slots');
+    check(
+      !r6.blocked && r6.hidden.includes('condor') && r6.hidden.includes('slots') && !r6.hidden.includes('nope'),
+      'toggle sanitises a corrupt hidden array first'
+    );
+  }
 
   console.log(`\n--- Results: ${pass} passed, ${failures} failed ---`);
   process.exit(failures ? 1 : 0);

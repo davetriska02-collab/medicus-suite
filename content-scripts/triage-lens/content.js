@@ -2286,22 +2286,107 @@
     return { ok: true, results: Array.isArray(store) ? store.slice() : [] };
   }
 
+  // Pure helper — choose which cached queue rows to fetch ON DEMAND for the inspector.
+  // Given [taskUuid, overviewURL] candidate pairs (the bridge caches an overviewURL for
+  // every queue row it sees, regardless of whether result chips are enabled), the set of
+  // ids we already hold a parsed copy of, and a fetch cap, return the subset to fetch:
+  // pairs with a non-empty overviewURL, not already held, in order, capped. Exported for tests.
+  function selectOnDemandFetchTargets(candidates, haveIds, cap) {
+    // Duck-type a Set (any object with .has) rather than `instanceof Set`, which is
+    // fragile across realm/context boundaries; otherwise build one from an array.
+    const have =
+      haveIds && typeof haveIds.has === 'function' ? haveIds : new Set(Array.isArray(haveIds) ? haveIds : []);
+    const out = [];
+    if (!Array.isArray(candidates)) return out;
+    for (const pair of candidates) {
+      if (!Array.isArray(pair)) continue;
+      const uuid = pair[0];
+      const overviewURL = pair[1];
+      if (!uuid || typeof overviewURL !== 'string' || !overviewURL) continue;
+      if (have.has(uuid)) continue;
+      out.push([uuid, overviewURL]);
+      if (typeof cap === 'number' && cap >= 0 && out.length >= cap) break;
+    }
+    return out;
+  }
+
+  // Max reports fetched per on-demand inspector click. A deliberate user action, so a
+  // small sequential fan-out is fine; caps the authenticated-fetch burst.
+  const _RECENT_INSPECT_ONDEMAND_MAX = 12;
+
+  // On-demand collector: actively fetch + parse the open queue's results so the
+  // inspector works even when result-triage chips are DISABLED or the background pass
+  // hasn't run this session. Uses the overviewURLs the bridge has already cached for the
+  // queue (no dependency on chips being on or the user having scrolled). Best-effort and
+  // fully guarded — any failure leaves the existing in-memory store untouched. IN-MEMORY
+  // ONLY (IG): nothing is persisted, exactly as the passive capture path.
+  async function collectRecentInspectOnDemand() {
+    const API = window.SentinelApiClient;
+    const NORM = window.SentinelNormalisers;
+    if (!API || !NORM) {
+      log('recent-inspect on-demand: globals not loaded');
+      return;
+    }
+    const ctx = API.detectMedicusContext(location.href);
+    if (!ctx) {
+      log('recent-inspect on-demand: no medicus context');
+      return;
+    }
+    const candidates = [];
+    for (const [taskUuid, entry] of _queueResultCache) {
+      if (entry && entry.overviewURL) candidates.push([taskUuid, entry.overviewURL]);
+    }
+    const have = new Set(_recentInspectResults.map((e) => e && e.id));
+    const todo = selectOnDemandFetchTargets(candidates, have, _RECENT_INSPECT_ONDEMAND_MAX);
+    for (const [taskUuid, overviewURL] of todo) {
+      let raw;
+      try {
+        raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
+      } catch (e) {
+        log('recent-inspect on-demand: fetch threw', e.message);
+        continue;
+      }
+      let report;
+      try {
+        report = NORM.normaliseInvestigationReport(raw);
+      } catch (e) {
+        log('recent-inspect on-demand: normalise threw', e.message);
+        continue;
+      }
+      if (report && Array.isArray(report.results) && report.results.length) {
+        insertRecentInspect(
+          _recentInspectResults,
+          buildRecentInspectEntry(report, taskUuid, Date.now()),
+          _RECENT_INSPECT_CAP
+        );
+      }
+    }
+  }
+
   // Serve recently-parsed investigation results to the options-page inspector.
   // House style mirrors content-scripts/sentinel.js: accept only this extension's own
-  // contexts, respond synchronously, return false (no async response kept open).
-  // Wrapped defensively so a thrown handler can never break the host page.
+  // contexts. We fetch ON DEMAND (async) so the inspector populates from the open queue
+  // even when chips are off / the passive pass never ran, then respond — return true to
+  // keep the channel open for the async sendResponse. Wrapped defensively so a thrown
+  // handler can never break the host page.
   try {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Only accept messages from this extension's own contexts.
       if (!sender || sender.id !== chrome.runtime.id) return;
       if (msg && msg.action === 'getRecentInvestigationResults') {
-        try {
-          sendResponse(mapRecentInspectResponse(_recentInspectResults));
-        } catch (e) {
-          log('getRecentInvestigationResults: handler threw', e.message);
-          sendResponse({ ok: true, results: [] });
-        }
-        return false;
+        (async () => {
+          try {
+            await collectRecentInspectOnDemand();
+          } catch (e) {
+            log('getRecentInvestigationResults: on-demand collect threw', e.message);
+          }
+          try {
+            sendResponse(mapRecentInspectResponse(_recentInspectResults));
+          } catch (e) {
+            log('getRecentInvestigationResults: sendResponse threw', e.message);
+          }
+        })();
+        return true; // keep the channel open for the async response
       }
       // Ignore unrelated actions.
       return false;
