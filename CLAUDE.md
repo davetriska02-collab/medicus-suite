@@ -2,7 +2,7 @@
 
 ## Operating Discipline (how to work in this repo)
 
-**These rules govern how Claude Code behaves on every task in this repo — they apply before any of the domain-specific guidance below.** The full rationale lives in [`fable-baseline.md`](fable-baseline.md); keep the two in sync if either changes.
+**These rules govern how Claude Code behaves on every task in this repo — they apply before any of the domain-specific guidance below.** This section is the single source of truth for the Operating Discipline; [`fable-baseline.md`](fable-baseline.md) just points here. Edit it here only.
 
 Capability is rarely the bottleneck — discipline and sequencing are. Work heavy at the edges and light in the middle: front-load understanding the terrain and specifying the work, back-load adversarial verification. Underneath all of it: **treat every claim as guilty until proven, your own most of all.** "Proven" means reproduced against something already known to be correct, observed in the medium the user will actually see, or checked against the live system — never "it should work," never "the tests pass," and never memory.
 
