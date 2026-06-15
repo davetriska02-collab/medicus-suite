@@ -10,10 +10,11 @@ appears.
 
 ## The mark
 
-A brushed-gold **guardian shield** on a deep navy rounded-square tile, with a
-glowing cyan **beacon** at its centre. The shield signals protection and
-vigilance (Sentinel / monitoring); the beacon is the recurring "insight" element
-and the focal point that keeps the mark legible when it shrinks.
+A gold **guardian shield** on a deep navy rounded-square tile, with a cyan
+**ECG / pulse line** running across it and a glowing **beacon** on the trace.
+The shield signals protection and vigilance (Sentinel / monitoring); the pulse
+line makes the clinical purpose explicit; the beacon is the recurring "insight"
+element and the focal point that keeps the mark legible when it shrinks.
 
 | File | Use |
 |---|---|

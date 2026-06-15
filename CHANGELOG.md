@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.4] — 2026-06-15
+
+### App icon: clinical pulse on the shield
+
+- Added a cyan ECG / pulse line across the guardian shield (with the beacon on
+  the trace) and a flatter gold, after a full ten-persona in-practice appraisal
+  found the plain shield read as security/VPN software rather than clinical. The
+  pulse makes the clinical purpose explicit. Swapped `brand/app-icon.png` and
+  regenerated `icons/*.png`.
+
 ## [v3.78.3] — 2026-06-15
 
 ### App icon: guardian shield
