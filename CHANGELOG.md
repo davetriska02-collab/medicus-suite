@@ -2,6 +2,80 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.89.0] — 2026-06-15
+
+### Result-rule authoring: inspector + specimen-scope UI + in-session suggestions
+
+Three user-discoverable additions to the result-rule editor in Triage Lens settings,
+building on the `analyte.specimen` engine foundation landed in v3.88.0:
+
+**`analyte.specimen` field** — the specimen-scope array now has a proper UI field
+("Specimen scope") in the editor left column. Previously the field could only be set
+via LLM import or raw JSON; it now round-trips through the editor's save/load path.
+
+**Result inspector** — a collapsible panel in the editor right column. The user pastes
+a raw investigation-report API JSON payload (no live patient data is fetched — this is
+user-initiated copy-paste). The panel runs the payload through the real
+`normaliseInvestigationReport` normaliser and displays a table of every result line
+with the three fields the engine uses: `name` (what analyte-match tests against),
+`specimen` (what specimen-scope tests against), and `text` (what the normal-phrase
+search scans). No parsed values are written to `chrome.storage` or any persistent
+store — they are shown in the panel and discarded when the page closes.
+
+**In-session suggestion pills** — after an inspect run, unique `name` and `specimen`
+strings observed are added to in-session (closure-only, never persisted) lists. Pill
+buttons appear below the "Test match" and "Specimen scope" fields; clicking a pill
+appends its value to the relevant textarea so the user picks the real lab string
+without guessing. Lists accumulate across multiple inspect runs in the same page
+session and are cleared when the options page is closed.
+
+**Privacy decision (hard constraint):** deliverable 2 (suggestion lists) is fully
+implemented because the source data is never persisted. Suggestions come exclusively
+from values the user pastes into the inspector textarea in the current session. If the
+user never runs the inspector the suggestion UI stays hidden.
+
+## [v3.88.0] — 2026-06-15
+
+### Specimen-header capture and `analyte.specimen` scoping for result rules
+
+Adds a new feature that lets text result rules be scoped to a specific specimen
+type (e.g. throat swab vs urine culture), preventing a "Culture" analyte row from
+being matched by rules intended for a different specimen.
+
+**Normaliser — specimen header capture (fail-open):**
+`normaliseInvestigationReport` now reads the group's human-readable title from an
+ordered candidate-key list (`groupName`, `name`, `title`, `heading`, `description`)
+and attaches it to each result as a new `specimen` field (trimmed string, or `null`
+if not discoverable). This is strictly fail-open: results with no discoverable
+header get `specimen: null` and behave exactly as before.
+
+**Rule schema — optional `analyte.specimen`:**
+The result rule schema now accepts an optional `analyte.specimen` array (same shape
+as `analyte.exclude`) for both `text` and `threshold` rules. Validation is in
+`engine/result-rules.js`; the authoring prompt (`resultRuleSchemaPrompt`) documents
+the field in both schema sections.
+
+**Matching — fail-open AND-filter:**
+Both `computeTextOutcome` and `computeRuleSev` in `engine/result-severity.js` now
+apply a `specimenAllows(analyte, result)` gate after the existing name-hit and
+exclude checks:
+- No `analyte.specimen` (absent or empty) → pass (no behaviour change).
+- `analyte.specimen` present AND `result.specimen` is non-empty → at least one term
+  must be a case-insensitive substring of `result.specimen`; otherwise the rule is
+  skipped for this result.
+- `analyte.specimen` present but `result.specimen` is absent/null/empty → **pass
+  (fail-open)**. A rule is never dropped because the specimen header was not captured.
+
+**New starter rule — `base-throat-swab` (conservative; verify against real lab output):**
+A new builtin text rule scoped to throat-swab specimen headers (`analyte.specimen:
+["throat swab", "throat"]`). Conservative `normalText` covers only clearly-negative
+whole phrases (Beta haemolytic Streptococcus not isolated, no anaerobes isolated).
+`abnormalText` covers specific positive phrases (beta haemolytic streptococcus
+isolated, group A streptococcus isolated). "Culture to follow" is deliberately
+excluded from `normalText` (pending result — calming it would be a false-negative
+hazard). **Clinical teams should verify this rule against real lab output before
+relying on it.** Defaults.json `"version"` bumped 14→15.
+
 ## [v3.87.2] — 2026-06-15
 
 ### Accept right inside the Central attestations box

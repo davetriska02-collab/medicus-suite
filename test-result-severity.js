@@ -669,7 +669,10 @@ console.log('\n--- abnormalText: flag wins over normal phrase (precedence) ---')
   // A rule with BOTH lists; the result text contains both a flag phrase and a normal phrase.
   // The explicit abnormalText flag must win — the result is reviewed, not calmed.
   const bothRule = {
-    id: 'rule_both', enabled: true, kind: 'text', label: 'Flagged finding',
+    id: 'rule_both',
+    enabled: true,
+    kind: 'text',
+    label: 'Flagged finding',
     analyte: { match: ['bcs:fob'] },
     normalText: ['no further action'],
     abnormalText: ['no response to bowel cancer screening'],
@@ -686,7 +689,11 @@ console.log('\n--- abnormalText: flag wins over normal phrase (precedence) ---')
   // Same rule, but only the normal phrase is present (no flag) → calm.
   const calm = Object.assign({}, bowelNormal, { text: 'Routine recall. No further action required.' });
   const bothRule = {
-    id: 'rule_both', enabled: true, kind: 'text', label: 'Flagged finding', normalLabel: 'Routine',
+    id: 'rule_both',
+    enabled: true,
+    kind: 'text',
+    label: 'Flagged finding',
+    normalLabel: 'Routine',
     analyte: { match: ['bcs:fob'] },
     normalText: ['no further action'],
     abnormalText: ['no response to bowel cancer screening'],
@@ -714,14 +721,27 @@ console.log('\n--- text rules: phrase matching survives lab line-wrapping ---');
     'evidence of dysplasia or malignancy.\n' +
     'Dr Javier Perez Consultant Histopathologist.';
   const histologyResult = {
-    name: 'Histology report', value: NaN, rawValue: histologyText,
-    comparator: null, unit: null, low: null, high: null,
-    isAbove: false, isBelow: false, urgent: false, interpretation: null,
-    date: '2026-05-21', history: [], text: histologyText,
+    name: 'Histology report',
+    value: NaN,
+    rawValue: histologyText,
+    comparator: null,
+    unit: null,
+    low: null,
+    high: null,
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    interpretation: null,
+    date: '2026-05-21',
+    history: [],
+    text: histologyText,
   };
   const histologyRule = {
-    id: 'rule_histology', enabled: true, kind: 'text',
-    label: 'Histology — review', normalLabel: 'Benign — no dysplasia/malignancy',
+    id: 'rule_histology',
+    enabled: true,
+    kind: 'text',
+    label: 'Histology — review',
+    normalLabel: 'Benign — no dysplasia/malignancy',
     analyte: { match: ['histology', 'microscopy', 'biopsy'] },
     normalText: ['no evidence of dysplasia or malignancy'],
   };
@@ -1063,7 +1083,7 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     'base-hba1c-diabetes',
   ];
   for (const id of baseIds) {
-    const r = rules.find(x => x && x.id === id);
+    const r = rules.find((x) => x && x.id === id);
     assert(!!r, `base rule present in defaults.json: ${id}`);
     if (r) {
       assert(r.builtin === true && r.enabled === true, `${id}: builtin + enabled`);
@@ -1071,7 +1091,7 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     }
   }
   // Fire the full shipped base set against representative results (now RED-ONLY).
-  const baseSet = rules.filter(r => baseIds.includes(r.id));
+  const baseSet = rules.filter((r) => baseIds.includes(r.id));
   const fire = (name, value, problems) =>
     evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
   // Red-only: only critically-deranged values fire; the rest are left to the lab flag (none here).
@@ -1121,12 +1141,18 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     'H1: HbA1c 52 with "Family history of diabetes mellitus" → red (NOT suppressed)'
   );
   // M1 (alert fatigue): known diabetics coded without "mellitus"/"type N" still suppress
-  assert(fire('HbA1c', 60, [{ label: 'Steroid-induced diabetes' }]) === 'none', 'M1: steroid-induced diabetes → suppressed');
+  assert(
+    fire('HbA1c', 60, [{ label: 'Steroid-induced diabetes' }]) === 'none',
+    'M1: steroid-induced diabetes → suppressed'
+  );
   assert(fire('HbA1c', 60, [{ label: 'Pancreatic diabetes' }]) === 'none', 'M1: pancreatic diabetes → suppressed');
   assert(fire('HbA1c', 60, [{ label: 'Type-2 diabetes' }]) === 'none', 'M1: hyphenated "Type-2 diabetes" → suppressed');
   assert(fire('HbA1c', 60, [{ label: 'T2DM' }]) === 'none', 'M1: "T2DM" abbreviation → suppressed');
   // Broadened match must NOT over-suppress the footgun look-alikes
-  assert(fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'red', 'pre-diabetic retinopathy → red (not suppressed)');
+  assert(
+    fire('HbA1c', 52, [{ label: 'Pre-diabetic retinopathy' }]) === 'red',
+    'pre-diabetic retinopathy → red (not suppressed)'
+  );
   assert(fire('HbA1c', 52, [{ label: 'Diabetes insipidus' }]) === 'red', 'diabetes insipidus → red (not suppressed)');
 
   // Attributable rule label flows onto top for rule-driven escalations
@@ -1186,26 +1212,37 @@ console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---')
   assert(Array.isArray(shipped) && shipped.length > 0, 'defaults.json ships a non-empty resultRules array');
 
   let allValid = true;
-  shipped.forEach(r => {
+  shipped.forEach((r) => {
     const errs = validateResultRule(r);
-    if (errs.length) { allValid = false; console.error(`    ${r && r.id}: ${errs.join('; ')}`); }
+    if (errs.length) {
+      allValid = false;
+      console.error(`    ${r && r.id}: ${errs.join('; ')}`);
+    }
   });
   assert(allValid, 'every shipped result rule validates against the schema');
 
-  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  const byId = Object.fromEntries(shipped.map((r) => [r.id, r]));
   // The six rules added in this change must all be present.
-  ['base-lithium-toxicity', 'base-digoxin-toxicity', 'base-low-potassium',
-   'base-high-calcium', 'base-egfr-amber', 'base-blood-culture'].forEach(id => {
+  [
+    'base-lithium-toxicity',
+    'base-digoxin-toxicity',
+    'base-low-potassium',
+    'base-high-calcium',
+    'base-egfr-amber',
+    'base-blood-culture',
+  ].forEach((id) => {
     assert(!!byId[id], `shipped rules include ${id}`);
   });
 
   // Helper: build a single-result report and grade it with the shipped rules.
   const grade = (name, value) =>
-    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]),
-      { resultRules: shipped });
+    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]), {
+      resultRules: shipped,
+    });
   const gradeText = (name, text) =>
-    evaluateReportSeverity(makeReport([{ name, value: null, text, urgent: false, isAbove: false, isBelow: false }]),
-      { resultRules: shipped });
+    evaluateReportSeverity(makeReport([{ name, value: null, text, urgent: false, isAbove: false, isBelow: false }]), {
+      resultRules: shipped,
+    });
 
   // Lithium: 0.8 calm, 1.2 amber (supratherapeutic), 1.8 red (toxic).
   assert(grade('Serum lithium', 0.8).level === 'none', 'lithium 0.8 → none (in target range)');
@@ -1241,7 +1278,10 @@ console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---')
   assert(pos.level === 'amber' && pos.reviewCount === 1, 'blood culture with organism → amber review');
   // "Gram negative" in a positive report must NOT calm it (no bare "negative" phrase).
   const gramNeg = gradeText('Blood culture', 'Escherichia coli (Gram negative bacilli) isolated');
-  assert(gramNeg.level === 'amber' && gramNeg.reviewCount === 1, 'blood culture "Gram negative ... isolated" → still amber review');
+  assert(
+    gramNeg.level === 'amber' && gramNeg.reviewCount === 1,
+    'blood culture "Gram negative ... isolated" → still amber review'
+  );
 }
 
 // ── The Keeper additions: hypocalcaemia / hypomagnesaemia / TSH (enabled) ─────
@@ -1250,18 +1290,18 @@ console.log('\n--- Shipped builtin resultRules: valid + fire as documented ---')
 console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/suppress ---');
 {
   const shipped = require('./defaults.json').resultRules;
-  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  const byId = Object.fromEntries(shipped.map((r) => [r.id, r]));
   const keeperIds = ['base-low-calcium', 'base-low-magnesium', 'base-high-tsh', 'base-low-tsh'];
 
-  keeperIds.forEach(id => {
-    assert(byId[id] && byId[id].enabled === true,
-      `${id} is enabled (CSO signed off; live in defaults)`);
+  keeperIds.forEach((id) => {
+    assert(byId[id] && byId[id].enabled === true, `${id} is enabled (CSO signed off; live in defaults)`);
   });
 
   // As shipped (now enabled), a critical value fires.
   const asShipped = (name, value) =>
-    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]),
-      { resultRules: shipped });
+    evaluateReportSeverity(makeReport([{ name, value, urgent: false, isAbove: false, isBelow: false }]), {
+      resultRules: shipped,
+    });
   assert(asShipped('Adjusted calcium', 1.5).level === 'red', 'enabled low-Ca rule fires red as shipped');
   assert(asShipped('Serum magnesium', 0.3).level === 'red', 'enabled low-Mg rule fires red as shipped');
   assert(asShipped('TSH', 50).level === 'red', 'enabled high-TSH rule fires red as shipped');
@@ -1269,17 +1309,23 @@ console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/sup
 
   // Force-enable a single rule and grade against it (+ optional problem list).
   const withRule = (id, name, value, problems) =>
-    evaluateReportSeverity(
-      makeReport([{ name, value, text: '', urgent: false, isAbove: false, isBelow: false }]),
-      { resultRules: [{ ...byId[id], enabled: true }], problems: problems || [] }
-    );
+    evaluateReportSeverity(makeReport([{ name, value, text: '', urgent: false, isAbove: false, isBelow: false }]), {
+      resultRules: [{ ...byId[id], enabled: true }],
+      problems: problems || [],
+    });
 
   // Hypocalcaemia: matches adjusted/corrected only; amber 2.1, red 1.9; ionised excluded.
   assert(withRule('base-low-calcium', 'Adjusted calcium', 2.05).level === 'amber', 'adjusted calcium 2.05 → amber');
   assert(withRule('base-low-calcium', 'Corrected calcium', 1.8).level === 'red', 'corrected calcium 1.8 → red');
-  assert(withRule('base-low-calcium', 'Ionised calcium', 1.1).level === 'none', 'ionised calcium 1.1 → none (excluded)');
+  assert(
+    withRule('base-low-calcium', 'Ionised calcium', 1.1).level === 'none',
+    'ionised calcium 1.1 → none (excluded)'
+  );
   // Deliberate design: a bare/un-adjusted "Calcium" must NOT trip the low rule (hypoalbuminaemia false-positive guard).
-  assert(withRule('base-low-calcium', 'Calcium', 1.8).level === 'none', 'bare "Calcium" 1.8 → none (adjusted-only match)');
+  assert(
+    withRule('base-low-calcium', 'Calcium', 1.8).level === 'none',
+    'bare "Calcium" 1.8 → none (adjusted-only match)'
+  );
 
   // Hypomagnesaemia: amber 0.6, red 0.5; urine excluded.
   assert(withRule('base-low-magnesium', 'Serum magnesium', 0.58).level === 'amber', 'magnesium 0.58 → amber');
@@ -1289,7 +1335,10 @@ console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/sup
   // High TSH: amber 10, red 20; "TSH receptor antibody" excluded; suppressed by hypothyroidism on record.
   assert(withRule('base-high-tsh', 'TSH', 12).level === 'amber', 'TSH 12 → amber');
   assert(withRule('base-high-tsh', 'TSH', 25).level === 'red', 'TSH 25 → red');
-  assert(withRule('base-high-tsh', 'TSH receptor antibody', 40).level === 'none', 'TSH receptor antibody → none (excluded)');
+  assert(
+    withRule('base-high-tsh', 'TSH receptor antibody', 40).level === 'none',
+    'TSH receptor antibody → none (excluded)'
+  );
   assert(
     withRule('base-high-tsh', 'TSH', 25, [{ label: 'Hypothyroidism' }]).level === 'none',
     'high TSH suppressed when hypothyroidism is on the problem record'
@@ -1314,12 +1363,11 @@ console.log('\n--- Keeper rules: low-Ca / low-Mg / TSH enabled, fire/exclude/sup
 console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rules) ---');
 {
   const shipped = require('./defaults.json').resultRules;
-  const byId = Object.fromEntries(shipped.map(r => [r.id, r]));
+  const byId = Object.fromEntries(shipped.map((r) => [r.id, r]));
   const run = (name, text) =>
-    evaluateReportSeverity(
-      makeReport([{ name, value: NaN, urgent: false, isAbove: false, isBelow: false, text }]),
-      { resultRules: shipped }
-    );
+    evaluateReportSeverity(makeReport([{ name, value: NaN, urgent: false, isAbove: false, isBelow: false, text }]), {
+      resultRules: shipped,
+    });
 
   // msu-culture
   assert(
@@ -1331,11 +1379,17 @@ console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rul
     'urine "No growth" → still calmed (noGrowth)'
   );
   assert(
-    run('Mid-stream urine', 'Mixed growth of 3 organisms — probable contamination. No significant growth of a urinary pathogen.').noGrowthCount === 1,
+    run(
+      'Mid-stream urine',
+      'Mixed growth of 3 organisms — probable contamination. No significant growth of a urinary pathogen.'
+    ).noGrowthCount === 1,
     'urine contaminant "no significant growth" → still calmed (not over-flagged — "mixed growth" was dropped)'
   );
   assert(
-    run('Urine culture', 'Significant growth of Escherichia coli >10^5 cfu/mL. No significant growth of a second organism. Sensitive to nitrofurantoin, resistant to trimethoprim.').reviewCount === 1,
+    run(
+      'Urine culture',
+      'Significant growth of Escherichia coli >10^5 cfu/mL. No significant growth of a second organism. Sensitive to nitrofurantoin, resistant to trimethoprim.'
+    ).reviewCount === 1,
     'urine positive carrying a "no significant growth" substring → review (not falsely calmed)'
   );
 
@@ -1357,10 +1411,7 @@ console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rul
       positiveOneBottle.reviewCount === 1,
       'blood culture positive with "no growth in anaerobic bottle" substring → review (not falsely calmed)'
     );
-    assert(
-      positiveOneBottle.noGrowthCount === 0,
-      'blood culture positive-in-one-bottle is NOT counted as noGrowth'
-    );
+    assert(positiveOneBottle.noGrowthCount === 0, 'blood culture positive-in-one-bottle is NOT counted as noGrowth');
   }
 }
 
@@ -1373,44 +1424,93 @@ console.log('\n--- word-boundary normalText: short token cannot false-calm insid
 {
   // normalText "normal" must NOT match inside "abnormal" → flagged for review, not calmed.
   const rule = {
-    id: 'wb_normal', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'Normal',
-    analyte: { match: ['cytology'] }, normalText: ['normal'],
+    id: 'wb_normal',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review',
+    normalLabel: 'Normal',
+    analyte: { match: ['cytology'] },
+    normalText: ['normal'],
   };
   const abnormal = evaluateReportSeverity(
-    makeReport([{ name: 'Cervical cytology', value: NaN, urgent: false, isAbove: false, isBelow: false,
-      text: 'Result: abnormal — high-grade dyskaryosis. Refer colposcopy.' }]),
+    makeReport([
+      {
+        name: 'Cervical cytology',
+        value: NaN,
+        urgent: false,
+        isAbove: false,
+        isBelow: false,
+        text: 'Result: abnormal — high-grade dyskaryosis. Refer colposcopy.',
+      },
+    ]),
     { resultRules: [rule] }
   );
-  assert(abnormal.noGrowthCount === 0 && abnormal.reviewCount === 1,
-    'normalText "normal" does NOT calm "abnormal" (word-boundary) → review');
+  assert(
+    abnormal.noGrowthCount === 0 && abnormal.reviewCount === 1,
+    'normalText "normal" does NOT calm "abnormal" (word-boundary) → review'
+  );
   // A genuine whole-word "normal" is still calmed.
   const genuine = evaluateReportSeverity(
-    makeReport([{ name: 'Cervical cytology', value: NaN, urgent: false, isAbove: false, isBelow: false,
-      text: 'Result: normal. Routine recall in 3 years.' }]),
+    makeReport([
+      {
+        name: 'Cervical cytology',
+        value: NaN,
+        urgent: false,
+        isAbove: false,
+        isBelow: false,
+        text: 'Result: normal. Routine recall in 3 years.',
+      },
+    ]),
     { resultRules: [rule] }
   );
   assert(genuine.noGrowthCount === 1, 'normalText "normal" still calms a genuine whole-word "normal"');
 
   // "negative" must NOT calm "seronegative".
   const seroRule = {
-    id: 'wb_neg', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'Negative',
-    analyte: { match: ['serology'] }, normalText: ['negative'],
+    id: 'wb_neg',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review',
+    normalLabel: 'Negative',
+    analyte: { match: ['serology'] },
+    normalText: ['negative'],
   };
   const sero = evaluateReportSeverity(
-    makeReport([{ name: 'Hepatitis B serology', value: NaN, urgent: false, isAbove: false, isBelow: false,
-      text: 'Patient is seronegative for surface antigen but core antibody positive.' }]),
+    makeReport([
+      {
+        name: 'Hepatitis B serology',
+        value: NaN,
+        urgent: false,
+        isAbove: false,
+        isBelow: false,
+        text: 'Patient is seronegative for surface antigen but core antibody positive.',
+      },
+    ]),
     { resultRules: [seroRule] }
   );
   assert(sero.noGrowthCount === 0, 'normalText "negative" does NOT calm "seronegative" (word-boundary)');
 
   // Multi-word normal phrases are unaffected — "no growth" still calms.
   const cultureRule = {
-    id: 'wb_growth', enabled: true, kind: 'text', label: 'Needs review', normalLabel: 'No growth',
-    analyte: { match: ['culture'] }, normalText: ['no growth'],
+    id: 'wb_growth',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review',
+    normalLabel: 'No growth',
+    analyte: { match: ['culture'] },
+    normalText: ['no growth'],
   };
   const noGrowth = evaluateReportSeverity(
-    makeReport([{ name: 'Wound culture', value: NaN, urgent: false, isAbove: false, isBelow: false,
-      text: 'No growth after 48 hours.' }]),
+    makeReport([
+      {
+        name: 'Wound culture',
+        value: NaN,
+        urgent: false,
+        isAbove: false,
+        isBelow: false,
+        text: 'No growth after 48 hours.',
+      },
+    ]),
     { resultRules: [cultureRule] }
   );
   assert(noGrowth.noGrowthCount === 1, 'multi-word normalText "no growth" still calms "No growth after 48 hours"');
@@ -1419,16 +1519,271 @@ console.log('\n--- word-boundary normalText: short token cannot false-calm insid
   // even though that has no word boundary around "candida". (Word-boundary here would miss
   // it AND the "no growth" substring would then false-calm — the exact failure we avoid.)
   const bloodRule = {
-    id: 'wb_candida', enabled: true, kind: 'text', label: 'Blood culture — review', normalLabel: 'No growth',
-    analyte: { match: ['blood culture'] }, normalText: ['no growth'], abnormalText: ['candida'],
+    id: 'wb_candida',
+    enabled: true,
+    kind: 'text',
+    label: 'Blood culture — review',
+    normalLabel: 'No growth',
+    analyte: { match: ['blood culture'] },
+    normalText: ['no growth'],
+    abnormalText: ['candida'],
   };
   const candidaemia = evaluateReportSeverity(
-    makeReport([{ name: 'Blood culture', value: NaN, urgent: false, isAbove: false, isBelow: false,
-      text: 'Candidaemia confirmed on blood culture. No growth in anaerobic bottle.' }]),
+    makeReport([
+      {
+        name: 'Blood culture',
+        value: NaN,
+        urgent: false,
+        isAbove: false,
+        isBelow: false,
+        text: 'Candidaemia confirmed on blood culture. No growth in anaerobic bottle.',
+      },
+    ]),
     { resultRules: [bloodRule] }
   );
-  assert(candidaemia.reviewCount === 1 && candidaemia.noGrowthCount === 0,
-    'abnormalText "candida" still catches "candidaemia" (substring kept — deliberate asymmetry)');
+  assert(
+    candidaemia.reviewCount === 1 && candidaemia.noGrowthCount === 0,
+    'abnormalText "candida" still catches "candidaemia" (substring kept — deliberate asymmetry)'
+  );
+}
+
+// ── analyte.specimen: fail-open narrowing AND-filter ─────────────────────────
+// Tests the specimenAllows() gate that scopes a text rule (or threshold rule) to
+// a specific specimen header captured by the normaliser. Four core semantics:
+//   (a) matching specimen → rule applies normally
+//   (b) non-matching specimen → rule is skipped (does not apply)
+//   (c) absent/null specimen → PASS (fail-open)
+//   (d) cross-type isolation: urine rule must not fire on throat swab + vice versa
+console.log('\n--- analyte.specimen: fail-open specimen gate ---');
+
+// Helper: build a result with a specimen header
+function mkResultWithSpecimen(name, text, specimen) {
+  return {
+    name,
+    value: NaN,
+    rawValue: text,
+    comparator: null,
+    unit: null,
+    low: null,
+    high: null,
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    interpretation: null,
+    date: '2026-06-15',
+    history: [],
+    text,
+    specimen: specimen || null,
+  };
+}
+
+// Throat-scoped text rule — mirrors the shipped base-throat-swab rule.
+const throatRule = {
+  id: 'test-throat',
+  enabled: true,
+  kind: 'text',
+  label: 'Throat swab — needs review',
+  normalLabel: 'Negative',
+  analyte: {
+    match: ['throat swab', 'throat culture', 'culture'],
+    specimen: ['throat swab', 'throat'],
+  },
+  normalText: [
+    'beta haemolytic streptococcus not isolated',
+    'no beta haemolytic streptococci',
+    'anaerobes not isolated',
+  ],
+  abnormalText: ['beta haemolytic streptococcus isolated', 'group a streptococcus isolated'],
+};
+
+// (a) Matching specimen + name hit → rule applies.
+{
+  const negative = mkResultWithSpecimen(
+    'Culture',
+    'Beta haemolytic Streptococcus NOT isolated. Anaerobes NOT isolated.',
+    'THROAT SWAB'
+  );
+  const out = evaluateReportSeverity(makeReport([negative]), { resultRules: [throatRule] });
+  assert(
+    out.noGrowthCount === 1,
+    'specimen (a): matching specimen "THROAT SWAB" + negative phrase → noGrowth (calmed)'
+  );
+  assert(out.level === 'none', 'specimen (a): noGrowth → level stays none');
+}
+{
+  const positive = mkResultWithSpecimen('Culture', 'Beta haemolytic Streptococcus isolated.', 'THROAT SWAB');
+  const out = evaluateReportSeverity(makeReport([positive]), { resultRules: [throatRule] });
+  assert(out.reviewCount === 1, 'specimen (a): matching specimen "THROAT SWAB" + positive phrase → review');
+  assert(out.level === 'amber', 'specimen (a): review → level amber');
+}
+
+// (b) Non-matching specimen → rule is skipped entirely (no chip).
+{
+  const urineResult = mkResultWithSpecimen('Culture', 'No growth after 48 hours.', 'MSU - MID STREAM URINE');
+  const out = evaluateReportSeverity(makeReport([urineResult]), { resultRules: [throatRule] });
+  assert(
+    out.noGrowthCount === 0,
+    'specimen (b): specimen "MSU - MID STREAM URINE" does NOT match throat rule → rule skipped (no noGrowth chip)'
+  );
+  assert(out.reviewCount === 0, 'specimen (b): non-matching specimen → also not flagged for review');
+  assert(out.level === 'none', 'specimen (b): non-matching specimen → level none');
+}
+
+// (c) Absent/null specimen → PASS (fail-open). Rule applies even without a header.
+{
+  const noHeader = mkResultWithSpecimen(
+    'Culture',
+    'Beta haemolytic Streptococcus NOT isolated.',
+    null // no specimen header captured
+  );
+  const out = evaluateReportSeverity(makeReport([noHeader]), { resultRules: [throatRule] });
+  assert(out.noGrowthCount === 1, 'specimen (c): null specimen → fail-open, rule still applies (noGrowth)');
+  assert(out.level === 'none', 'specimen (c): fail-open noGrowth → level none');
+}
+{
+  // Empty string specimen is also fail-open.
+  const emptySpec = mkResultWithSpecimen('Culture', 'Beta haemolytic Streptococcus NOT isolated.', '');
+  const out = evaluateReportSeverity(makeReport([emptySpec]), { resultRules: [throatRule] });
+  assert(out.noGrowthCount === 1, 'specimen (c): empty-string specimen → fail-open, rule still applies');
+}
+
+// (d) Cross-type isolation: urine rule must not claim a throat-headed result,
+//     and the throat rule must not claim a urine-headed result.
+const urineRule = {
+  id: 'test-urine',
+  enabled: true,
+  kind: 'text',
+  label: 'MSU — needs review',
+  normalLabel: 'No growth',
+  analyte: {
+    match: ['culture', 'msu', 'urine culture'],
+    specimen: ['urine', 'msu'],
+  },
+  normalText: ['no growth', 'no significant growth'],
+};
+
+{
+  // A culture result whose specimen header is a throat swab:
+  //   - the urine-scoped rule must NOT apply (specimen mismatch)
+  //   - the throat-scoped rule MUST apply (and calm it)
+  const throat = mkResultWithSpecimen(
+    'Culture',
+    'Beta haemolytic Streptococcus NOT isolated. Anaerobes NOT isolated.',
+    'THROAT SWAB'
+  );
+  const out = evaluateReportSeverity(makeReport([throat]), {
+    resultRules: [throatRule, urineRule],
+  });
+  assert(out.noGrowthCount === 1, 'cross-type (d): throat-headed culture calmed by throat rule (noGrowthCount 1)');
+  assert(out.reviewCount === 0, 'cross-type (d): urine rule did not fire on throat-headed culture');
+}
+{
+  // A culture result whose specimen header is an MSU:
+  //   - the throat-scoped rule must NOT apply (specimen mismatch)
+  //   - the urine-scoped rule MUST apply (and calm it if normal phrase present)
+  const urine = mkResultWithSpecimen('Culture', 'No growth after 48 hours.', 'MID STREAM URINE');
+  const out = evaluateReportSeverity(makeReport([urine]), {
+    resultRules: [throatRule, urineRule],
+  });
+  assert(out.noGrowthCount === 1, 'cross-type (d): urine-headed culture calmed by urine rule (noGrowthCount 1)');
+  assert(out.reviewCount === 0, 'cross-type (d): throat rule did not fire on urine-headed culture');
+}
+
+// analyte.specimen also works for threshold (numeric) rules — same gate logic.
+{
+  const specimenThreshRule = {
+    id: 'test-thr-spec',
+    enabled: true,
+    kind: 'threshold',
+    label: 'High value in urine',
+    analyte: { match: ['potassium'], specimen: ['urine'] },
+    comparator: 'above',
+    amber: null,
+    red: 10,
+    unit: 'mmol/L',
+  };
+  // Result with matching specimen: rule fires
+  const urineK = {
+    name: 'Potassium',
+    value: 12,
+    specimen: 'URINE ELECTROLYTES',
+    rawValue: '12',
+    urgent: false,
+    isAbove: false,
+    isBelow: false,
+    low: null,
+    high: null,
+  };
+  const hit = evaluateReportSeverity(makeReport([urineK]), { resultRules: [specimenThreshRule] });
+  assert(hit.level === 'red', 'threshold specimen gate (d): matching specimen fires red');
+
+  // Result with non-matching specimen: rule skipped
+  const serumK = {
+    name: 'Potassium',
+    value: 12,
+    specimen: 'SERUM',
+    rawValue: '12',
+    urgent: false,
+    isAbove: false,
+    isBelow: false,
+    low: null,
+    high: null,
+  };
+  const miss = evaluateReportSeverity(makeReport([serumK]), { resultRules: [specimenThreshRule] });
+  assert(miss.level === 'none', 'threshold specimen gate (d): non-matching specimen rule skipped → none');
+
+  // Result with null specimen: fail-open → rule fires
+  const noSpecK = {
+    name: 'Potassium',
+    value: 12,
+    specimen: null,
+    rawValue: '12',
+    urgent: false,
+    isAbove: false,
+    isBelow: false,
+    low: null,
+    high: null,
+  };
+  const openK = evaluateReportSeverity(makeReport([noSpecK]), { resultRules: [specimenThreshRule] });
+  assert(openK.level === 'red', 'threshold specimen gate: null specimen → fail-open → rule fires red');
+}
+
+// ── shipped base-throat-swab rule: present, valid, fires as documented ─────
+console.log('\n--- shipped base-throat-swab rule: valid, scoped, fires correctly ---');
+{
+  const defaults = require('./defaults.json');
+  const { validateResultRule } = require('./engine/result-rules.js');
+  const shipped = Array.isArray(defaults.resultRules) ? defaults.resultRules : [];
+  const r = shipped.find((x) => x && x.id === 'base-throat-swab');
+  assert(!!r, 'base-throat-swab is present in defaults.json resultRules');
+  if (r) {
+    assert(r.builtin === true && r.enabled === true, 'base-throat-swab: builtin + enabled');
+    const errs = validateResultRule(r);
+    assert(errs.length === 0, 'base-throat-swab: validates clean against schema');
+    assert(
+      Array.isArray(r.analyte.specimen) && r.analyte.specimen.length > 0,
+      'base-throat-swab: analyte.specimen is a non-empty array (demonstrates specimen scoping)'
+    );
+    // The shipped rule must calm a negative throat swab (specimen-scoped)
+    const neg = mkResultWithSpecimen(
+      'Culture',
+      'Beta haemolytic Streptococcus NOT isolated. Anaerobes NOT isolated.',
+      'THROAT SWAB'
+    );
+    const outNeg = evaluateReportSeverity(makeReport([neg]), { resultRules: [r] });
+    assert(outNeg.noGrowthCount === 1, 'base-throat-swab: negative throat swab → noGrowth (calmed)');
+    // The shipped rule must flag a positive throat swab
+    const pos = mkResultWithSpecimen('Culture', 'Beta haemolytic Streptococcus isolated.', 'THROAT SWAB');
+    const outPos = evaluateReportSeverity(makeReport([pos]), { resultRules: [r] });
+    assert(outPos.reviewCount === 1, 'base-throat-swab: positive throat swab → review');
+    // Must NOT fire on a urine specimen (specimen gate blocks it)
+    const urine = mkResultWithSpecimen('Culture', 'No significant growth.', 'MID STREAM URINE');
+    const outUrine = evaluateReportSeverity(makeReport([urine]), { resultRules: [r] });
+    assert(
+      outUrine.noGrowthCount === 0 && outUrine.reviewCount === 0,
+      'base-throat-swab: does NOT fire on urine-headed culture (specimen gate)'
+    );
+  }
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

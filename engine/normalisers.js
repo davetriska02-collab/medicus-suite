@@ -2,7 +2,7 @@
 // Sentinel — API Normalisers
 // Convert raw Medicus API responses to Sentinel's internal data shapes.
 
-(function(global) {
+(function (global) {
   'use strict';
 
   // ---- Patient context from banner ----
@@ -34,10 +34,10 @@
       title: urlContext?.title || (typeof document !== 'undefined' ? document.title : ''),
       view: urlContext?.view || 'api',
       patientUuid: banner.id || urlContext?.patientUuid || null,
-      badges: Array.isArray(banner.badges) ? banner.badges.map(b => ({ text: b.text, colour: b.colour })) : [],
+      badges: Array.isArray(banner.badges) ? banner.badges.map((b) => ({ text: b.text, colour: b.colour })) : [],
       isDeceased: !!banner.isDeceased,
       namedGP: banner.namedGP || null,
-      testPatient: !!banner.testPatient
+      testPatient: !!banner.testPatient,
     };
   }
 
@@ -58,12 +58,12 @@
       ['currentRepeatDispensingMedications', 'Repeat dispensing'],
       ['acuteMedicationsLastTwelveMonths', 'Acute'],
       ['medicationsPrescribedElsewhere', 'Prescribed elsewhere'],
-      ['overTheCounterMedicationStatements', 'OTC']
+      ['overTheCounterMedicationStatements', 'OTC'],
     ];
     buckets.forEach(([key, label]) => {
       const arr = regimen[key];
       if (!Array.isArray(arr)) return;
-      arr.forEach(m => {
+      arr.forEach((m) => {
         // description is the full drug name e.g. "Atenolol 50mg tablets"
         const name = m.description || m.vtmProductName || null;
         if (!name) return;
@@ -72,7 +72,7 @@
         if (Array.isArray(m.medicationIssueHistory?.data) && m.medicationIssueHistory.data.length > 0) {
           // Earliest issue is the start
           const dates = m.medicationIssueHistory.data
-            .map(i => i.issueDate || i.date)
+            .map((i) => i.issueDate || i.date)
             .filter(Boolean)
             .sort();
           if (dates.length) startDate = dates[0];
@@ -89,7 +89,7 @@
           isOverDue: !!m.isOverDue,
           isReviewOverDue: !!m.isReviewOverDue,
           vtm: m.vtmProductName || null,
-          id: m.id || null
+          id: m.id || null,
         });
       });
     });
@@ -101,10 +101,11 @@
   // procedure-history checks (e.g. hysterectomy coded as a past/ended problem).
   function normaliseProblemsAll(listing) {
     if (!listing || !Array.isArray(listing.activeProblems)) return { active: [], past: [] };
-    const active = [], past = [];
+    const active = [],
+      past = [];
     listing.activeProblems
-      .filter(p => !p.isMarkedAsIncorrect)
-      .forEach(p => {
+      .filter((p) => !p.isMarkedAsIncorrect)
+      .forEach((p) => {
         const label = p.problemCodeDescription || null;
         if (!label) return;
         const rec = {
@@ -112,7 +113,7 @@
           codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
           significance: p.significance || null,
           source: 'API:problem-listing',
-          id: p.id || null
+          id: p.id || null,
         };
         if (p.hasEnded) {
           past.push({ ...rec, status: 'past' });
@@ -123,8 +124,8 @@
     // Also pull from inactiveProblems if the API returns that array separately
     if (Array.isArray(listing.inactiveProblems)) {
       listing.inactiveProblems
-        .filter(p => !p.isMarkedAsIncorrect)
-        .forEach(p => {
+        .filter((p) => !p.isMarkedAsIncorrect)
+        .forEach((p) => {
           const label = p.problemCodeDescription || null;
           if (!label) return;
           past.push({
@@ -133,7 +134,7 @@
             significance: p.significance || null,
             source: 'API:problem-listing',
             id: p.id || null,
-            status: 'past'
+            status: 'past',
           });
         });
     }
@@ -191,9 +192,9 @@
     if (!dashboard || !Array.isArray(dashboard.rowData)) return [];
     const out = [];
     const groupLatest = {}; // groupName -> latestIsoDate
-    dashboard.rowData.forEach(row => {
+    dashboard.rowData.forEach((row) => {
       if (!row.investigationType) return;
-      const dataKeys = Object.keys(row).filter(k => /^data\d{8}$/.test(k));
+      const dataKeys = Object.keys(row).filter((k) => /^data\d{8}$/.test(k));
       if (dataKeys.length === 0) return;
       dataKeys.sort();
       const latestKey = dataKeys[dataKeys.length - 1];
@@ -211,7 +212,7 @@
         group: row.investigationGroup || null,
         isAbove: !!cell.isAboveReferenceRange,
         isBelow: !!cell.isBelowReferenceRange,
-        source: 'API:investigation-dashboard'
+        source: 'API:investigation-dashboard',
       });
       // Track latest date per group for aggregate emission below
       if (row.investigationGroup) {
@@ -229,14 +230,14 @@
       // Collect all dated values for systolic and diastolic rows
       const sysMap = {}; // dateIso -> { result, unit }
       const diaMap = {};
-      dashboard.rowData.forEach(row => {
+      dashboard.rowData.forEach((row) => {
         if (!row.investigationType) return;
-        const dataKeys = Object.keys(row).filter(k => /^data\d{8}$/.test(k));
+        const dataKeys = Object.keys(row).filter((k) => /^data\d{8}$/.test(k));
         const isSys = SYS_RE.test(row.investigationType);
         const isDia = DIA_RE.test(row.investigationType);
         if (!isSys && !isDia) return;
         const target = isSys ? sysMap : diaMap;
-        dataKeys.forEach(key => {
+        dataKeys.forEach((key) => {
           const cell = row[key];
           if (!cell || cell.result == null || cell.result === '') return;
           const d = keyToIsoDate(key);
@@ -251,7 +252,7 @@
       // Helper: add ISO date string offset by ±1 day
       function adjacentDates(d) {
         const ms = new Date(d).getTime();
-        const fmt = t => new Date(t).toISOString().slice(0, 10);
+        const fmt = (t) => new Date(t).toISOString().slice(0, 10);
         return [fmt(ms - 86400000), fmt(ms + 86400000)];
       }
       function emitBp(sysDate, diaDate) {
@@ -269,22 +270,21 @@
           group: 'Key observations',
           isAbove: false,
           isBelow: false,
-          source: 'API:investigation-dashboard (synthesised)'
+          source: 'API:investigation-dashboard (synthesised)',
         });
       }
       // Pass 1: exact same-date pairs
-      Object.keys(sysMap).forEach(d => {
+      Object.keys(sysMap).forEach((d) => {
         if (!diaMap[d]) return;
         usedDiaDates.add(d);
         emitBp(d, d);
       });
       // Pass 2: ±1-day pairs for unpaired systolic readings
-      Object.keys(sysMap).forEach(d => {
+      Object.keys(sysMap).forEach((d) => {
         if (diaMap[d]) return; // already paired in pass 1
         const [prev, next] = adjacentDates(d);
-        const diaDate = (diaMap[prev] && !usedDiaDates.has(prev)) ? prev
-                      : (diaMap[next] && !usedDiaDates.has(next)) ? next
-                      : null;
+        const diaDate =
+          diaMap[prev] && !usedDiaDates.has(prev) ? prev : diaMap[next] && !usedDiaDates.has(next) ? next : null;
         if (!diaDate) return;
         usedDiaDates.add(diaDate);
         emitBp(d, diaDate);
@@ -306,7 +306,7 @@
         group: groupName,
         isAbove: false,
         isBelow: false,
-        source: 'API:investigation-dashboard (group aggregate)'
+        source: 'API:investigation-dashboard (group aggregate)',
       });
     });
     return out;
@@ -335,13 +335,13 @@
   function normaliseObservationHistory(dashboard) {
     if (!dashboard || !Array.isArray(dashboard.rowData)) return [];
     const out = [];
-    dashboard.rowData.forEach(row => {
+    dashboard.rowData.forEach((row) => {
       if (!row.investigationType) return;
-      const dataKeys = Object.keys(row).filter(k => /^data\d{8}$/.test(k));
+      const dataKeys = Object.keys(row).filter((k) => /^data\d{8}$/.test(k));
       if (dataKeys.length === 0) return;
       // Collect all date-keyed cells that have a non-empty result
       const historyEntries = [];
-      dataKeys.forEach(key => {
+      dataKeys.forEach((key) => {
         const cell = row[key];
         if (!cell || cell.result == null || cell.result === '') return;
         historyEntries.push({
@@ -350,20 +350,20 @@
           rawValue: String(cell.result),
           isAbove: !!cell.isAboveReferenceRange,
           isBelow: !!cell.isBelowReferenceRange,
-          source: 'API:investigation-dashboard'
+          source: 'API:investigation-dashboard',
         });
       });
       if (historyEntries.length === 0) return;
       // Sort newest-first. ISO YYYY-MM-DD strings sort lexicographically the
       // same as chronologically; use plain string comparison (not localeCompare)
       // to avoid any locale-collation surprises.
-      historyEntries.sort((a, b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+      historyEntries.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
       out.push({
-        name:  row.investigationType,
-        code:  null,
+        name: row.investigationType,
+        code: null,
         group: row.investigationGroup || null,
-        unit:  row.unit || null,
-        history: historyEntries
+        unit: row.unit || null,
+        history: historyEntries,
       });
     });
     // Synthesise a combined "Blood pressure" history entry from split systolic/diastolic rows.
@@ -375,21 +375,23 @@
       const DIA_RE = /diastolic\s+blood\s+pressure/i;
       const sysMap = {};
       const diaMap = {};
-      dashboard.rowData.forEach(row => {
+      dashboard.rowData.forEach((row) => {
         if (!row.investigationType) return;
         const isSys = SYS_RE.test(row.investigationType);
         const isDia = DIA_RE.test(row.investigationType);
         if (!isSys && !isDia) return;
         const target = isSys ? sysMap : diaMap;
-        Object.keys(row).filter(k => /^data\d{8}$/.test(k)).forEach(key => {
-          const cell = row[key];
-          if (!cell || cell.result == null || cell.result === '') return;
-          const d = keyToIsoDate(key);
-          if (!target[d]) target[d] = String(cell.result);
-        });
+        Object.keys(row)
+          .filter((k) => /^data\d{8}$/.test(k))
+          .forEach((key) => {
+            const cell = row[key];
+            if (!cell || cell.result == null || cell.result === '') return;
+            const d = keyToIsoDate(key);
+            if (!target[d]) target[d] = String(cell.result);
+          });
       });
       const combinedHistory = [];
-      Object.keys(sysMap).forEach(d => {
+      Object.keys(sysMap).forEach((d) => {
         if (!diaMap[d]) return;
         combinedHistory.push({
           date: d,
@@ -397,17 +399,17 @@
           rawValue: `${sysMap[d]}/${diaMap[d]}`,
           isAbove: false,
           isBelow: false,
-          source: 'API:investigation-dashboard (synthesised)'
+          source: 'API:investigation-dashboard (synthesised)',
         });
       });
       if (combinedHistory.length > 0) {
-        combinedHistory.sort((a, b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+        combinedHistory.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
         out.unshift({
           name: 'Blood pressure',
           code: null,
           group: 'Key observations',
           unit: 'mmHg',
-          history: combinedHistory
+          history: combinedHistory,
         });
       }
     }
@@ -421,8 +423,18 @@
   //   ISO 8601 "2026-01-09T08:26:00Z" → "2026-01-09"
   // Returns null for unparseable input.
   const MONTH_MAP = {
-    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+    jan: '01',
+    feb: '02',
+    mar: '03',
+    apr: '04',
+    may: '05',
+    jun: '06',
+    jul: '07',
+    aug: '08',
+    sep: '09',
+    oct: '10',
+    nov: '11',
+    dec: '12',
   };
   function normaliseDateString(raw) {
     if (!raw) return null;
@@ -450,7 +462,7 @@
     const safe = {
       patientUuid: null,
       unmatched: false,
-      results: []
+      results: [],
     };
     try {
       if (!payload || !payload.data) return safe;
@@ -460,17 +472,29 @@
       if (!report) return safe;
       safe.unmatched = report.isMatchedToPatient === false;
 
-      // Collect all result objects from groups + ungrouped
+      // Collect all result objects from groups + ungrouped.
+      // Each result from a named group gets a `specimen` field set to the group's
+      // human-readable title (trimmed string), or null if none is discoverable.
+      // Ungrouped results and results from untitled groups get specimen: null.
+      // This is fail-open: a missing or unrecognised header never drops a result.
       const rawResults = [];
       if (Array.isArray(report.investigationGroups)) {
-        report.investigationGroups.forEach(g => {
+        report.investigationGroups.forEach((g) => {
+          // Ordered candidate keys — first non-empty string wins; never use id/uuid fields.
+          const specimenHeader =
+            (typeof g.groupName === 'string' && g.groupName.trim()) ||
+            (typeof g.name === 'string' && g.name.trim()) ||
+            (typeof g.title === 'string' && g.title.trim()) ||
+            (typeof g.heading === 'string' && g.heading.trim()) ||
+            (typeof g.description === 'string' && g.description.trim()) ||
+            null;
           if (Array.isArray(g.results)) {
-            g.results.forEach(r => rawResults.push(r));
+            g.results.forEach((r) => rawResults.push({ _raw: r, _specimen: specimenHeader }));
           }
         });
       }
       if (Array.isArray(report.ungroupedResults)) {
-        report.ungroupedResults.forEach(r => rawResults.push(r));
+        report.ungroupedResults.forEach((r) => rawResults.push({ _raw: r, _specimen: null }));
       }
 
       // Parse reference range limits from the first entry
@@ -483,7 +507,7 @@
         const high = parseObservationValue(rr.upperReferenceLimit);
         return {
           low: isFinite(low) ? low : null,
-          high: isFinite(high) ? high : null
+          high: isFinite(high) ? high : null,
         };
       }
 
@@ -496,18 +520,19 @@
         return 'unknown';
       }
 
-      rawResults.forEach(r => {
+      rawResults.forEach((entry) => {
+        // Each entry is { _raw, _specimen } from grouped path, or { _raw, _specimen: null }
+        // from ungrouped. Guard against any stray non-object entries.
+        if (!entry || typeof entry !== 'object') return;
+        const r = entry._raw;
+        const specimenHeader = entry._specimen !== undefined ? entry._specimen : null;
         if (!r || typeof r !== 'object') return;
         const name = r.description || null;
         // text-result types (e.g. microbiology / culture) carry their content in
         // `resultText`, not `resultValue` (which is absent entirely). Fall back to it
         // so the result has a displayable value and the searchable text below is populated.
         const rawValue =
-          r.resultValue != null
-            ? String(r.resultValue)
-            : r.resultText != null
-              ? String(r.resultText)
-              : '';
+          r.resultValue != null ? String(r.resultValue) : r.resultText != null ? String(r.resultText) : '';
         const numValue = parseObservationValue(rawValue);
         const { low, high } = parseRefRange(r.referenceRanges);
 
@@ -521,7 +546,7 @@
         // Build history array (newest-first) from previousResults
         const history = [];
         if (Array.isArray(r.previousResults)) {
-          r.previousResults.forEach(pr => {
+          r.previousResults.forEach((pr) => {
             if (!pr || typeof pr !== 'object') return;
             const prevRaw = pr.result != null ? String(pr.result) : '';
             const prevNum = parseObservationValue(prevRaw);
@@ -532,7 +557,7 @@
             history.push({
               date: prevDate,
               value: prevNum,
-              flag: deriveHistoryFlag(prevNum, low, high)
+              flag: deriveHistoryFlag(prevNum, low, high),
             });
           });
           // Sort newest-first (nulls last)
@@ -564,7 +589,7 @@
         }
         // resultPerformerComments — may be an array of strings or objects
         if (Array.isArray(r.resultPerformerComments)) {
-          r.resultPerformerComments.forEach(item => {
+          r.resultPerformerComments.forEach((item) => {
             if (typeof item === 'string') {
               textParts.push(item);
             } else if (item && typeof item === 'object') {
@@ -576,7 +601,7 @@
         }
         // filingComments — may be an array of strings or objects
         if (Array.isArray(r.filingComments)) {
-          r.filingComments.forEach(item => {
+          r.filingComments.forEach((item) => {
             if (typeof item === 'string') {
               textParts.push(item);
             } else if (item && typeof item === 'object') {
@@ -601,7 +626,8 @@
           interpretation: r.interpretation || null,
           date,
           history,
-          text
+          text,
+          specimen: specimenHeader,
         });
       });
     } catch (_) {
@@ -620,7 +646,7 @@
       observationHistory: normaliseObservationHistory(apiResults?.investigationDashboard),
       problems: allProbs.active,
       pastProblems: allProbs.past,
-      apiErrors: apiResults?.errors || {}
+      apiErrors: apiResults?.errors || {},
     };
   }
 
@@ -632,7 +658,7 @@
     normaliseObservationHistory,
     parseObservationValue,
     normaliseAll,
-    normaliseInvestigationReport
+    normaliseInvestigationReport,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

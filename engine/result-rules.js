@@ -100,9 +100,7 @@
     const kind = rule.kind !== undefined ? rule.kind : 'threshold';
 
     if (kind !== 'threshold' && kind !== 'text') {
-      errs.push(
-        "rule.kind must be 'threshold' or 'text' (or omitted, which defaults to 'threshold')."
-      );
+      errs.push("rule.kind must be 'threshold' or 'text' (or omitted, which defaults to 'threshold').");
       return errs; // unknown kind — no further field checks make sense
     }
 
@@ -122,7 +120,7 @@
       if (!Array.isArray(match)) {
         errs.push('analyte.match must be an array of strings.');
       } else {
-        const nonEmpty = match.filter(m => typeof m === 'string' && m.trim().length > 0);
+        const nonEmpty = match.filter((m) => typeof m === 'string' && m.trim().length > 0);
         if (nonEmpty.length === 0) {
           errs.push('analyte.match must contain at least one non-empty string.');
         }
@@ -132,8 +130,19 @@
       if (analyte.exclude !== undefined) {
         if (!Array.isArray(analyte.exclude)) {
           errs.push('analyte.exclude, if present, must be an array of strings.');
-        } else if (analyte.exclude.some(e => typeof e !== 'string')) {
+        } else if (analyte.exclude.some((e) => typeof e !== 'string')) {
           errs.push('analyte.exclude must contain only strings.');
+        }
+      }
+      // analyte.specimen — OPTIONAL. If present, must be an array of non-empty strings.
+      // Scopes the rule to results whose specimen header (from normaliseInvestigationReport)
+      // contains at least one term as a case-insensitive substring. Fail-open: if the
+      // result carries no specimen header, the rule still applies (never blocks on absence).
+      if (analyte.specimen !== undefined) {
+        if (!Array.isArray(analyte.specimen)) {
+          errs.push('analyte.specimen, if present, must be an array of strings.');
+        } else if (analyte.specimen.some((s) => typeof s !== 'string')) {
+          errs.push('analyte.specimen must contain only strings.');
         }
       }
     }
@@ -146,14 +155,11 @@
       if (!s || typeof s !== 'object' || Array.isArray(s)) {
         errs.push('suppressIfProblem, if present, must be an object with a match array.');
       } else {
-        const sm = Array.isArray(s.match) ? s.match.filter(m => typeof m === 'string' && m.trim()) : null;
+        const sm = Array.isArray(s.match) ? s.match.filter((m) => typeof m === 'string' && m.trim()) : null;
         if (!sm || sm.length === 0) {
           errs.push('suppressIfProblem.match must contain at least one non-empty string.');
         }
-        if (
-          s.exclude !== undefined &&
-          (!Array.isArray(s.exclude) || s.exclude.some(e => typeof e !== 'string'))
-        ) {
+        if (s.exclude !== undefined && (!Array.isArray(s.exclude) || s.exclude.some((e) => typeof e !== 'string'))) {
           errs.push('suppressIfProblem.exclude, if present, must be an array of strings.');
         }
       }
@@ -162,8 +168,8 @@
     if (kind === 'text') {
       // A text rule classifies by phrase lists: normalText (calm-if-present) and/or
       // abnormalText (flag-if-present). At least one must be a non-empty array of strings.
-      const countNonEmpty = arr =>
-        Array.isArray(arr) ? arr.filter(s => typeof s === 'string' && s.trim().length > 0).length : -1;
+      const countNonEmpty = (arr) =>
+        Array.isArray(arr) ? arr.filter((s) => typeof s === 'string' && s.trim().length > 0).length : -1;
       const normalCount = countNonEmpty(rule.normalText); // -1 = not an array
       const abnormalCount = countNonEmpty(rule.abnormalText);
 
@@ -177,17 +183,11 @@
       }
       // At least one non-empty classification list is required.
       if (normalCount <= 0 && abnormalCount <= 0) {
-        errs.push(
-          'A text rule must define at least one non-empty normalText or abnormalText array.'
-        );
+        errs.push('A text rule must define at least one non-empty normalText or abnormalText array.');
       }
 
       // normalLabel — optional string
-      if (
-        rule.normalLabel !== undefined &&
-        rule.normalLabel !== null &&
-        typeof rule.normalLabel !== 'string'
-      ) {
+      if (rule.normalLabel !== undefined && rule.normalLabel !== null && typeof rule.normalLabel !== 'string') {
         errs.push('normalLabel must be a string or omitted.');
       }
     } else {
@@ -199,8 +199,7 @@
       }
 
       // amber and red — each must be a finite number or null; at least one must be set
-      const hasAmber =
-        rule.amber !== null && rule.amber !== undefined && Number.isFinite(rule.amber);
+      const hasAmber = rule.amber !== null && rule.amber !== undefined && Number.isFinite(rule.amber);
       const hasRed = rule.red !== null && rule.red !== undefined && Number.isFinite(rule.red);
 
       if (rule.amber !== null && rule.amber !== undefined && !Number.isFinite(rule.amber)) {
@@ -296,6 +295,8 @@ There are TWO rule kinds. Choose the correct kind for the analyte you are target
                                      on a "platelet" rule so it does not fire on "Mean platelet
                                      volume"; exclude ["a1c"] on a "haemoglobin" rule; exclude
                                      ["urine"] on a serum potassium/sodium rule.
+    specimen  (string[], optional) — Case-insensitive substrings matched against the specimen
+                                     group header. Fail-open: absent header → rule still applies.
   comparator  ("above"|"below", required)
   amber       (number|null, required) — Amber threshold; null = not set.
   red         (number|null, required) — Red threshold; null = not set.
@@ -335,6 +336,12 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
     exclude   (string[], optional) — Case-insensitive substrings; a result whose name contains
                                      any is skipped even if matched (drops shared-token false
                                      positives).
+    specimen  (string[], optional) — Case-insensitive substrings matched against the specimen
+                                     group header captured by the normaliser (e.g. "THROAT SWAB",
+                                     "BLOOD CULTURE"). Fail-open: if the result has no specimen
+                                     header the rule still applies. Use to scope a text rule so
+                                     a generic analyte name ("Culture") only fires on the intended
+                                     specimen type and not on unrelated cultures.
   normalText  (string[], optional*) — Phrases searched (case-insensitive) in the combined
                                                 result text (rawValue + interpretation +
                                                 performer/filing comments). If ANY phrase is found,

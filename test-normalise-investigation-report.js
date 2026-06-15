@@ -296,6 +296,110 @@ console.log('\n--- Microbiology text-result (resultText) ---');
   assert(!/no growth/i.test(r.text), 'positive culture text has no normal phrase');
 }
 
+// ── specimen field: named investigationGroup → header attached to each result ──
+// This guards the Step 1 normaliser feature: each result from a named group carries
+// the group's human-readable header as `specimen`; ungrouped / untitled → null.
+console.log('\n--- specimen field: named group → header on each result ---');
+{
+  // A single group with groupName "THROAT SWAB" and two culture results.
+  const cultureA = {
+    description: 'Culture',
+    resultType: 'text-result',
+    resultText: 'Beta haemolytic Streptococcus NOT isolated',
+    interpretation: null,
+    performerComments: null,
+    resultPerformerComments: [],
+    filingComments: [],
+    referenceRanges: [],
+    previousResults: [],
+  };
+  const cultureB = {
+    description: 'Anaerobes',
+    resultType: 'text-result',
+    resultText: 'Anaerobes NOT isolated',
+    interpretation: null,
+    performerComments: null,
+    resultPerformerComments: [],
+    filingComments: [],
+    referenceRanges: [],
+    previousResults: [],
+  };
+  const payload = makePayload([{ groupName: 'THROAT SWAB', results: [cultureA, cultureB] }], []);
+  const out = normaliseInvestigationReport(payload);
+  assert(out.results.length === 2, 'two results from named group');
+  assert(out.results[0].specimen === 'THROAT SWAB', 'first result gets specimen: "THROAT SWAB" from groupName');
+  assert(out.results[1].specimen === 'THROAT SWAB', 'second result in same group also gets specimen: "THROAT SWAB"');
+}
+
+// Candidate-key fallback order: groupName → name → title → heading → description
+console.log('\n--- specimen field: candidate-key fallback order ---');
+{
+  // Only the `name` key is populated (groupName absent)
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ name: 'URINE', results: [r] }], []));
+  assert(out.results[0].specimen === 'URINE', 'falls back to g.name when g.groupName absent');
+}
+{
+  // Only `title` present
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ title: 'BLOOD CULTURE', results: [r] }], []));
+  assert(out.results[0].specimen === 'BLOOD CULTURE', 'falls back to g.title when g.groupName and g.name absent');
+}
+{
+  // Only `heading` present
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ heading: 'HVS', results: [r] }], []));
+  assert(out.results[0].specimen === 'HVS', 'falls back to g.heading');
+}
+{
+  // Only `description` present
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ description: 'SPUTUM', results: [r] }], []));
+  assert(out.results[0].specimen === 'SPUTUM', 'falls back to g.description');
+}
+{
+  // groupName takes priority over other keys
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ groupName: 'FIRST', name: 'SECOND', results: [r] }], []));
+  assert(out.results[0].specimen === 'FIRST', 'groupName takes priority over name');
+}
+
+// Groups with no title → specimen: null
+console.log('\n--- specimen field: untitled group → null ---');
+{
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ results: [r] }], []));
+  assert(out.results[0].specimen === null, 'group with no title keys → specimen null');
+}
+{
+  // All candidate keys are empty strings → null
+  const r = { ...wbcResult };
+  const out = normaliseInvestigationReport(makePayload([{ groupName: '', name: '  ', results: [r] }], []));
+  assert(out.results[0].specimen === null, 'all-empty/whitespace title keys → specimen null');
+}
+
+// Ungrouped results → specimen: null
+console.log('\n--- specimen field: ungrouped results → null ---');
+{
+  const out = normaliseInvestigationReport(makePayload([], [wbcResult]));
+  assert(out.results[0].specimen === null, 'ungrouped result → specimen null');
+}
+
+// Mixed: named group + ungrouped in same report
+console.log('\n--- specimen field: named group + ungrouped in same report ---');
+{
+  const r1 = { ...wbcResult };
+  const r2 = { ...rdwResult };
+  const out = normaliseInvestigationReport(makePayload([{ groupName: 'HAEMATOLOGY', results: [r1] }], [r2]));
+  assert(out.results.length === 2, 'one from group, one ungrouped = 2 total');
+  const byName = {};
+  out.results.forEach((r) => {
+    byName[r.name] = r;
+  });
+  assert(byName['WBC'].specimen === 'HAEMATOLOGY', 'WBC from named group has specimen header');
+  assert(byName['RDW'].specimen === null, 'RDW from ungrouped has specimen null');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);
