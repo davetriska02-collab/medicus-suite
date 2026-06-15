@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.85.0] — 2026-06-15
+
+### Reception: "Referrals on file" — who referred what, to where, and when
+
+The Reception tab now surfaces the open patient's existing referrals — answering
+"who referred them, to which service/hospital, and when" at a glance while the
+caller is on the phone.
+
+- **New "Referrals on file" card** between the Patient pill and Guided capture.
+  Shows up to five recent referrals (last 12 months): the service/specialty and
+  hospital (*what / where*), the referring clinician (*who*), the referral date
+  (*when*), plus priority (Routine / Urgent / 2WW) and status badges.
+- **Source** — reuses the practice-wide Referrals → Clinical Audit Report feed
+  (`referrals.discovery`). If that report hasn't been opened in Medicus yet, the
+  card prompts to do so once to switch the lookup on.
+- **Matched by name, flagged as such** — the referral report carries no NHS
+  number, so rows are matched to the open record by full name (every given- and
+  family-name token must match) and the card/output both say *"matched by name —
+  confirm it's the right patient"*. Never asserts a confirmed identity.
+- **Folded into the capture text** — the most recent matched referrals are added
+  to the generated copy-paste summary under a clearly-captioned heading.
+- **Privacy** — the fetched report (which includes other patients' names) is held
+  in memory only, never persisted, and dropped on unmount (mirrors the referrals
+  module's Audit-M1 discovery-URL-only rule).
+- New pure helper `referralMatchesPatient` with regression tests.
+
 ## [v3.84.3] — 2026-06-15
 
 ### Brand identity + app icon
