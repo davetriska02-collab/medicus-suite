@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.6] — 2026-06-15
+
+### Clinical safety: Triage Lens rule preview now uses the live matcher (no divergence)
+
+The Options-page rule **preview** re-implemented rule matching with its own
+`compileRule` — a different object shape from the runtime, and a silent `catch(e){}`
+that dropped invalid regexes with no feedback. So the preview could tell a clinician a
+rule fires (or not) differently from what actually fires on the live queue — and a
+malformed pattern showed simply "no match" rather than an error.
+
+Matching is now a single source of truth: a shared `content-scripts/triage-lens/rule-match.js`
+(`window.TriageLensMatch.compileRule` / `ruleMatchesText`) lifted verbatim from the content
+script. Both the live content script and the preview delegate to it, so they cannot drift.
+Invalid patterns are now **surfaced** in the preview ("N patterns failed to compile and were
+skipped: …") instead of silently dropped. `EMBEDDED_DEFAULTS` is untouched (the 3-copy
+defaults guard still passes). New `test-triage-preview-parity.js` exercises the shared matcher
+(stem vs regex mode, null/empty cases, invalid-regex surfacing) and asserts by source that
+both files route through it with no private copy remaining.
+
 ## [v3.91.5] — 2026-06-15
 
 ### Security: upgrade vendored PDF.js 3.11.174 → 4.2.67 (CVE-2024-4367)

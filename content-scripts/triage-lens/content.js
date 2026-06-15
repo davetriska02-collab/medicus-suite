@@ -337,34 +337,13 @@
     return { version: 1, rules: [], thresholds: {}, prefs: {} };
   };
 
-  const compileRule = (rule) => {
-    if (!rule || !rule.enabled) return null;
-    const compiled = [];
-    for (const p of rule.patterns || []) {
-      const s = String(p || '').trim();
-      if (!s) continue;
-      try {
-        // Plain-text mode: leading \b only — pattern is treated as a word stem
-        // ("cough" matches "cough" + "coughing" + "coughed"). This is what
-        // clinical keyword lists usually want.
-        // Regex mode: keep both \b — power-user mode, predictable bounds.
-        const src = rule.regex ? s : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wrapped = rule.regex ? ('\\b' + src + '\\b') : ('\\b' + src);
-        compiled.push(new RegExp(wrapped, 'i'));
-      } catch (e) {
-        // A dropped pattern is a silent clinical gap — log it so a bad pattern
-        // is visible, not invisible. The options editor (validateTriageRule)
-        // blocks invalid regex at author time; this catches anything that
-        // reaches runtime regardless (legacy imports, builtin regressions).
-        console.warn(`[Sentinel] rule "${rule.label || rule.id}" pattern ${JSON.stringify(s)} failed to compile and was skipped: ${e.message}`);
-      }
-    }
-    if (!compiled.length) {
-      console.warn(`[Sentinel] rule "${rule.label || rule.id}" has no usable patterns after compilation — rule will never fire`);
-      return null;
-    }
-    return { ...rule, _compiled: compiled };
-  };
+  // Rule compilation is shared with the Options preview via rule-match.js
+  // (window.TriageLensMatch), loaded immediately before this script in the
+  // manifest, so the preview can never diverge from runtime matching. The
+  // shared compileRule preserves the exact prior behaviour (plain-text = leading
+  // \b stem; regex = both \b; console.warn on dropped/empty patterns; null when
+  // no usable patterns) and additionally records compile errors on `_errors`.
+  const compileRule = (rule) => window.TriageLensMatch.compileRule(rule);
 
   const recompileRules = () => {
     COMPILED_RULES = (CONFIG?.rules || []).map(compileRule).filter(Boolean);
@@ -507,7 +486,7 @@
         if (fv == null) continue;
         const text = Array.isArray(fv) ? fv.join('\n') : String(fv);
         if (!text) continue;
-        if (rule._compiled.some(re => re.test(text))) { matched = true; break; }
+        if (window.TriageLensMatch.ruleMatchesText(rule, text)) { matched = true; break; }
       }
       if (matched) out.push(rule);
     }
