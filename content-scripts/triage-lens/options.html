@@ -641,26 +641,45 @@
               </summary>
               <div class="tl-rr-inspector-body">
                 <p class="tl-rr-inspector-hint">
-                  Paste a raw investigation-report API response (JSON) below and click <strong>Inspect</strong> to see
-                  exactly how the engine will parse each result line: the <code>name</code> the analyte-match strings
-                  are tested against, the <code>specimen</code> group header the specimen-scope is tested against, and
-                  the combined <code>text</code> body the normal-phrase check searches through.
+                  See exactly how the engine will parse each result line: the <code>name</code> the analyte-match
+                  strings are tested against, the <code>specimen</code> group header the specimen-scope is tested
+                  against, and the combined <code>text</code> body the normal-phrase check searches through.
                   <br />
                   <strong>Privacy:</strong> parsed values are shown in this panel only and never written to storage.
                 </p>
-                <textarea
-                  id="rrInspectorInput"
-                  class="tl-rr-inspector-input"
-                  rows="6"
-                  spellcheck="false"
-                  placeholder="Paste the JSON from /api/v1/data/{slug}/investigation-report here…"
-                ></textarea>
-                <div class="tl-rr-inspector-actions">
-                  <button class="tl-btn tl-btn-primary" id="btnRrInspect">Inspect</button>
-                  <button class="tl-btn" id="btnRrInspectorClear">Clear</button>
-                  <span id="rrInspectorStatus" class="tl-rr-inspector-status"></span>
+
+                <!-- Primary path: load a recent result captured by the live overlay -->
+                <div class="tl-rr-recent">
+                  <div class="tl-rr-recent-actions">
+                    <button class="tl-btn tl-btn-primary" id="btnRrLoadRecent">Load a recent result</button>
+                  </div>
+                  <div id="rrRecentPicker" class="tl-rr-recent-picker" style="display: none"></div>
                 </div>
+
                 <div id="rrInspectorResults" class="tl-rr-inspector-results" style="display: none"></div>
+
+                <!-- Fallback path: paste a raw API response manually -->
+                <details class="tl-rr-paste-fallback">
+                  <summary class="tl-rr-paste-summary">Or paste a raw response manually</summary>
+                  <div class="tl-rr-paste-body">
+                    <p class="tl-rr-inspector-hint">
+                      Offline or working from a saved payload? Paste a raw investigation-report API response (JSON)
+                      below and click <strong>Inspect</strong>.
+                    </p>
+                    <textarea
+                      id="rrInspectorInput"
+                      class="tl-rr-inspector-input"
+                      rows="6"
+                      spellcheck="false"
+                      placeholder="Paste the JSON from /api/v1/data/{slug}/investigation-report here…"
+                    ></textarea>
+                    <div class="tl-rr-inspector-actions">
+                      <button class="tl-btn tl-btn-primary" id="btnRrInspect">Inspect</button>
+                      <button class="tl-btn" id="btnRrInspectorClear">Clear</button>
+                      <span id="rrInspectorStatus" class="tl-rr-inspector-status"></span>
+                    </div>
+                  </div>
+                </details>
               </div>
             </details>
           </div>

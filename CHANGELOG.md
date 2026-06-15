@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.90.0] — 2026-06-15
+
+### Result inspector: load a recent result live (no JSON paste needed)
+
+The result-rule inspector (Triage Lens settings, added in v3.89.0) no longer requires
+the user to copy-paste a raw investigation-report API payload. A new
+**"Load a recent result"** button queries the open Medicus tab(s) and pulls the most
+recently parsed investigation reports straight from the live overlay, presenting them
+as a clickable picker (specimen-derived label, line count, relative capture time).
+Selecting one renders the same parsed `name` / `specimen` / `text` table the paste
+path produces.
+
+**Message channel.** The options page calls
+`chrome.tabs.sendMessage(tab.id, { action: 'getRecentInvestigationResults' })` against
+each `*.medicus.health` tab; the Triage Lens content script answers synchronously with
+`{ ok: true, results: [{ id, label, capturedAt, lines: [{ name, specimen, text }] }] }`.
+The content-script listener accepts only messages from this extension's own contexts
+(sender-id checked) and is wrapped so a thrown handler can never break the host page.
+
+**No persistence (IG).** Captured results live **in memory only**, in a page-scoped,
+newest-first store hard-capped at 20 entries, deduped by task UUID. Nothing is ever
+written to `chrome.storage` or anywhere at rest, on either side of the channel; the
+options-page copy is likewise session-only. Labels are derived purely from specimen
+names plus a line count and carry no patient identifiers.
+
+**Paste box retained as a fallback.** The raw-JSON paste path is preserved, demoted to a
+collapsed "Or paste a raw response manually" section for offline / saved-payload use.
+The inspector render path now also tolerates a malformed payload whose `lines` array
+contains `null` / non-object entries — they are dropped before any field access so a
+hostile or buggy response degrades gracefully instead of throwing.
+
 ## [v3.89.0] — 2026-06-15
 
 ### Result-rule authoring: inspector + specimen-scope UI + in-session suggestions
