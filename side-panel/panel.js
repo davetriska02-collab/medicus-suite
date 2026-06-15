@@ -662,7 +662,9 @@ function renderRollup() {
       (a) =>
         `<span class="pill pill--${a.level}"><span class="pill-dot"></span><span class="pill-name">${escStrip(
           a.label
-        )}</span>${a.count != null ? `<span class="pill-count">${a.count}</span>` : ''}</span>`
+        )}</span>${a.count != null ? `<span class="pill-count">${a.count}</span>` : ''}${
+          a.meta ? `<span class="pill-meta">${escStrip(a.meta)}</span>` : ''
+        }</span>`
     )
     .join('');
 
@@ -783,7 +785,14 @@ function renderStrip(patients) {
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
   });
 
-  reportAlert('waiting', { level: urgency, label: 'Waiting', count: patients.length });
+  reportAlert('waiting', {
+    level: urgency,
+    label: 'Waiting',
+    count: patients.length,
+    // F4: surface the worst single wait on the collapsed pill so proximity-to-breach
+    // isn't hidden behind DETAILS (a 12m and a 55m wait must not look identical).
+    meta: maxWait > 0 ? maxWait + 'm' : null,
+  });
 }
 
 // ── Badge-enabled cache ───────────────────────────────────────────────────────

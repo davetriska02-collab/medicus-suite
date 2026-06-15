@@ -981,6 +981,14 @@ body {
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+/* Optional secondary datum (e.g. worst wait "25m") — muted, machine voice. */
+.pill-meta {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
 /* Clinical RAG variants — dot + border take the triad line, fill takes the wash,
    count takes the ink. The non-colour severity cue: red = FILLED dot (default),
    amber = HOLLOW ring dot, so red vs amber is distinguishable by shape alone. */
@@ -2012,7 +2020,9 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
   padding: 12px 14px 10px;
-  margin-bottom: 2px;
+  /* F7: breathing room above so the card's EXPAND/DISMISS controls are not flush
+     under the alert roll-up's DETAILS toggle (mis-click hazard, Practice crit). */
+  margin: 8px 0 2px;
 }
 
 /* Collapsed strip — shown once the practice code is detected so the full

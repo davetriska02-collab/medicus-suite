@@ -149,7 +149,8 @@ Pair every chip hue with a glyph or label — hue is never the only signal.
 **Pill** (canonical — `.pill` in `panel.css`) — the suite-wide pill,
 generalised from the Slots per-type pills. Anatomy: a coloured **dot**
 (`.pill-dot`, category/severity carrier), a **name** (`.pill-name`, sans, human
-voice, `--text-2`), a **count** (`.pill-count`, mono, tabular, `--text-1`).
+voice, `--text-2`), a **count** (`.pill-count`, mono, tabular, `--text-1`), and an optional
+secondary datum (`.pill-meta`, muted mono `--text-3`, e.g. a worst-case "25m").
 `border-radius: var(--r-pill)`, `padding: 3px 9px 3px 7px`. Colour rides on two
 custom props so an organise mode can set them per pill: `--pill-line` (border +
 dot) and `--pill-fill` (background); defaults `--border` / `--bg-mid`.

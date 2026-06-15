@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.1] — 2026-06-15
+
+### Roll-up polish: worst wait-time on the pill, separated setup card
+
+Two more Practice-appraisal fixes:
+
+- **Worst wait surfaced (F4).** The collapsed waiting pill now shows the longest
+  single wait alongside the count ("Waiting 3 · 55m"), so a patient creeping
+  toward a breach is visible without expanding — a 12-minute and a 55-minute
+  wait no longer look identical. Added as an optional `.pill-meta` slot on the
+  canonical pill (muted mono secondary datum).
+- **Setup card separated (F7).** The first-run setup card now has breathing room
+  above it, so its EXPAND/DISMISS controls are no longer flush under the alert
+  roll-up's DETAILS toggle (a mis-click hazard the panel flagged).
+
 ## [v3.96.0] — 2026-06-15
 
 ### Canonical pill, and the alert roll-up adopts it (Atelier foundation pass)
