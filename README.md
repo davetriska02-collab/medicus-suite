@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/logo-wordmark.svg" alt="Medicus Suite — the clinical intelligence layer for Medicus" width="440" />
+  <img src="brand/app-icon.png" alt="Medicus Suite" width="112" />
 </p>
 
 # Medicus Suite

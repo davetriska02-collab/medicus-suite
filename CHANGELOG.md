@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.2] — 2026-06-15
+
+### New app icon: Medicus Operator
+
+- Replaced the pulse-and-dot mark with a Corinthian operator helmet (brushed
+  gold on deep navy, glowing cyan beacon) as `brand/app-icon.png` — the master
+  for all icons and in-product marks.
+- Regenerated `icons/icon-16/48/128.png`; repointed the side-panel nav, pop-out
+  titlebar, Options sidebar, About panel, visualiser drop screen and README
+  banner to the new mark.
+- `generate-icons.mjs` now derives the three PNG sizes from the single master;
+  removed the obsolete pulse SVGs. `BRAND.md` updated.
+
 ## [v3.78.1] — 2026-06-14
 
 ### Brand rollout + brand guide

@@ -348,7 +348,7 @@ function renderAbout() {
   content.innerHTML = `
     <div class="about-module">
       <div class="about-brand">
-        <img class="about-brand-logo" src="../brand/logo-mark.svg" alt="Medicus Suite" width="40" height="40" />
+        <img class="about-brand-logo" src="../brand/app-icon.png" alt="Medicus Suite" width="40" height="40" />
         <div class="about-brand-text">
           <div class="about-brand-name">Medicus Suite</div>
           <div class="about-brand-tagline">The clinical intelligence layer for Medicus</div>
