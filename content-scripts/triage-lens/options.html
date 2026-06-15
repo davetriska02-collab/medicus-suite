@@ -665,6 +665,56 @@
 
                 <div id="rrInspectorResults" class="tl-rr-inspector-results" style="display: none"></div>
 
+                <!-- ── Combo-rule builder ─────────────────────────────────── -->
+                <details id="rrComboDetails" class="tl-rr-combo">
+                  <summary class="tl-rr-combo-summary">
+                    <span class="tl-rr-inspector-arrow">&#9654;</span>
+                    Build a combo rule from this report
+                  </summary>
+                  <div class="tl-rr-combo-body">
+                    <p class="tl-rr-inspector-hint">
+                      A <strong>combo</strong> rule fires only when <strong>every</strong> condition is matched by some
+                      result <em>within the same report</em> (logical AND) — e.g. sterile pyuria:
+                      <em>pus cells above 40</em> AND <em>culture shows no growth</em>. Pick a condition below to make
+                      it active, then <strong>click a result name above to seed its match + specimen</strong>.
+                      <br />
+                      Combo rules are <strong>escalate-only</strong> and import <strong>disabled</strong>; a clinician
+                      must review and enable each one before it can fire.
+                    </p>
+
+                    <div class="tl-rr-combo-head">
+                      <label class="tl-rr-combo-field">
+                        <span class="tl-rr-combo-flabel">Label (shown on the chip)</span>
+                        <input
+                          type="text"
+                          id="rrComboLabel"
+                          class="tl-rr-combo-input"
+                          maxlength="60"
+                          placeholder="e.g. Sterile pyuria (pus cells, no growth)"
+                        />
+                      </label>
+                      <label class="tl-rr-combo-field tl-rr-combo-level">
+                        <span class="tl-rr-combo-flabel">Escalate to</span>
+                        <select id="rrComboLevel" class="tl-rr-combo-input">
+                          <option value="amber" selected>Amber (review)</option>
+                          <option value="red">Red (urgent)</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div id="rrComboConditions" class="tl-rr-combo-conditions"></div>
+
+                    <div class="tl-rr-combo-actions">
+                      <button class="tl-btn" id="btnRrComboAddCond" type="button">+ Add condition</button>
+                      <span class="tl-spacer"></span>
+                      <button class="tl-btn tl-btn-primary" id="btnRrComboSave" type="button">
+                        Save combo rule (disabled)
+                      </button>
+                    </div>
+                    <span id="rrComboStatus" class="tl-rr-inspector-status"></span>
+                  </div>
+                </details>
+
                 <!-- Fallback path: paste a raw API response manually -->
                 <details class="tl-rr-paste-fallback">
                   <summary class="tl-rr-paste-summary">Or paste a raw response manually</summary>

@@ -71,12 +71,138 @@
 // (for a normalText rule) whose text does NOT contain a normal phrase, gets 'review' which
 // escalates the row to amber. A rule with ONLY abnormalText flags nothing unless a flag
 // phrase is present — normal / other results are left untouched (no chip).
+//
+// kind:'combo':
+//   {
+//     id          : string          — set by importer
+//     enabled     : boolean         — importer forces false; clinician enables after review
+//     builtin     : boolean         — always false for user-authored rules
+//     kind        : 'combo'         — required to use this path
+//     label       : string          — required, ≤ 60 chars; shown on chip when the combo fires
+//     level       : 'amber'|'red'   — OPTIONAL; default 'amber'. Escalate-only.
+//     conditions  : <condition>[]   — required, array, length ≥ 2. ALL must be satisfied (AND).
+//     suppressIfProblem : {...}      — OPTIONAL; same semantics as the other kinds.
+//   }
+//   A <condition> targets ONE analyte and is NUMERIC or TEXT (exactly one form):
+//     common:  analyte:{ match:string[] (≥1 non-empty), exclude?:string[], specimen?:string[] }
+//     NUMERIC: comparator:'above'|'below', value:number — satisfied if some matching result's
+//              numeric value >= value (above) / <= value (below). Same Number.isFinite guard as
+//              computeRuleSev: a non-finite value never satisfies (fail-safe — combo won't fire).
+//     TEXT:    contains:string[] (≥1 non-empty) — satisfied if some matching result's combined
+//              text contains ANY phrase (case-insensitive, whitespace-collapsed substring).
+//
+// A combo FIRES iff EVERY condition is satisfied by SOME result within the SAME report (each
+// condition may be satisfied by a DIFFERENT result row). Combo is ESCALATE-ONLY: a fired amber
+// combo raises the report level to ≥ amber; a fired red combo to red. It never lowers severity
+// and never calms/suppresses (other than honouring its own suppressIfProblem).
 
 (function (global) {
   'use strict';
 
   // ── Public field list (useful for option UIs) ────────────────────────────────
   const RESULT_RULE_FIELDS = ['label', 'analyte', 'comparator', 'amber', 'red', 'unit'];
+
+  // ── Shared validators ─────────────────────────────────────────────────────────
+
+  // suppressIfProblem — OPTIONAL on every rule kind. Object:
+  //   { match: string[] (≥1 non-empty), exclude?: string[] }.
+  // Pushes any errors onto `errs`. Shared so threshold/text/combo all behave identically.
+  function validateSuppressIfProblem(rule, errs) {
+    if (rule.suppressIfProblem === undefined) return;
+    const s = rule.suppressIfProblem;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) {
+      errs.push('suppressIfProblem, if present, must be an object with a match array.');
+      return;
+    }
+    const sm = Array.isArray(s.match) ? s.match.filter((m) => typeof m === 'string' && m.trim()) : null;
+    if (!sm || sm.length === 0) {
+      errs.push('suppressIfProblem.match must contain at least one non-empty string.');
+    }
+    if (s.exclude !== undefined && (!Array.isArray(s.exclude) || s.exclude.some((e) => typeof e !== 'string'))) {
+      errs.push('suppressIfProblem.exclude, if present, must be an array of strings.');
+    }
+  }
+
+  // Validate a single combo condition's analyte block (match required, exclude/specimen
+  // optional arrays of strings). Pushes errors onto `errs`, prefixed with `where`.
+  function validateConditionAnalyte(analyte, errs, where) {
+    if (!analyte || typeof analyte !== 'object' || Array.isArray(analyte)) {
+      errs.push(where + 'analyte must be an object with a match array.');
+      return;
+    }
+    const match = analyte.match;
+    if (!Array.isArray(match)) {
+      errs.push(where + 'analyte.match must be an array of strings.');
+    } else if (match.filter((m) => typeof m === 'string' && m.trim().length > 0).length === 0) {
+      errs.push(where + 'analyte.match must contain at least one non-empty string.');
+    }
+    if (analyte.exclude !== undefined) {
+      if (!Array.isArray(analyte.exclude) || analyte.exclude.some((e) => typeof e !== 'string')) {
+        errs.push(where + 'analyte.exclude, if present, must be an array of strings.');
+      }
+    }
+    if (analyte.specimen !== undefined) {
+      if (!Array.isArray(analyte.specimen) || analyte.specimen.some((sp) => typeof sp !== 'string')) {
+        errs.push(where + 'analyte.specimen, if present, must be an array of strings.');
+      }
+    }
+  }
+
+  // Validate the combo-specific fields: level (optional amber|red) and the conditions
+  // array (≥ 2 conditions, each NUMERIC xor TEXT). Pushes errors onto `errs`.
+  function validateComboFields(rule, errs) {
+    // level — OPTIONAL; default amber. If present must be 'amber' or 'red'.
+    if (rule.level !== undefined && rule.level !== 'amber' && rule.level !== 'red') {
+      errs.push("combo level, if present, must be 'amber' or 'red'.");
+    }
+
+    const conditions = rule.conditions;
+    if (!Array.isArray(conditions)) {
+      errs.push('combo conditions must be an array.');
+      return;
+    }
+    if (conditions.length < 2) {
+      errs.push('combo conditions must contain at least 2 conditions (a combo ANDs multiple conditions).');
+    }
+
+    conditions.forEach((cond, i) => {
+      const where = 'conditions[' + i + ']: ';
+      if (!cond || typeof cond !== 'object' || Array.isArray(cond)) {
+        errs.push(where + 'each condition must be an object.');
+        return;
+      }
+      validateConditionAnalyte(cond.analyte, errs, where);
+
+      // A condition is NUMERIC iff it carries `comparator`; TEXT iff it carries `contains`.
+      // Exactly one form is permitted.
+      const isNumeric = cond.comparator !== undefined;
+      const isText = cond.contains !== undefined;
+      if (isNumeric && isText) {
+        errs.push(where + 'a condition must be NUMERIC (comparator+value) XOR TEXT (contains), not both.');
+        return;
+      }
+      if (!isNumeric && !isText) {
+        errs.push(where + 'a condition must define either comparator+value (numeric) or contains (text).');
+        return;
+      }
+
+      if (isNumeric) {
+        if (cond.comparator !== 'above' && cond.comparator !== 'below') {
+          errs.push(where + "numeric condition comparator must be 'above' or 'below'.");
+        }
+        if (!Number.isFinite(cond.value)) {
+          errs.push(where + 'numeric condition value must be a finite number.');
+        }
+      } else {
+        // TEXT
+        if (!Array.isArray(cond.contains)) {
+          errs.push(where + 'text condition contains must be an array of strings.');
+        } else if (cond.contains.filter((c) => typeof c === 'string' && c.trim().length > 0).length === 0) {
+          errs.push(where + 'text condition contains must contain at least one non-empty string.');
+        }
+      }
+    });
+  }
 
   // ── validateResultRule ────────────────────────────────────────────────────────
 
@@ -96,22 +222,33 @@
       return errs;
     }
 
-    // Determine kind — absent or 'threshold' → numeric; 'text' → text classification
+    // Determine kind — absent or 'threshold' → numeric; 'text' → text classification;
+    // 'combo' → composite (AND of conditions across results in one report).
     const kind = rule.kind !== undefined ? rule.kind : 'threshold';
 
-    if (kind !== 'threshold' && kind !== 'text') {
-      errs.push("rule.kind must be 'threshold' or 'text' (or omitted, which defaults to 'threshold').");
+    if (kind !== 'threshold' && kind !== 'text' && kind !== 'combo') {
+      errs.push("rule.kind must be 'threshold', 'text', or 'combo' (or omitted, which defaults to 'threshold').");
       return errs; // unknown kind — no further field checks make sense
     }
 
-    // label — required non-empty string (both kinds)
+    // label — required non-empty string (all kinds)
     if (!rule.label || typeof rule.label !== 'string' || !rule.label.trim()) {
       errs.push('label is required and must be a non-empty string.');
     } else if (rule.label.trim().length > 60) {
       errs.push('label should be 60 characters or fewer (got ' + rule.label.trim().length + ').');
     }
 
-    // analyte.match — required non-empty array of non-empty strings (both kinds)
+    // ── combo kind: a top-level rule with no single analyte — its analytes live on
+    //    each condition. Validate conditions then fall through to the shared
+    //    suppressIfProblem block and return; the per-kind analyte/threshold/text
+    //    checks below are for threshold/text rules only.
+    if (kind === 'combo') {
+      validateComboFields(rule, errs);
+      validateSuppressIfProblem(rule, errs);
+      return errs;
+    }
+
+    // analyte.match — required non-empty array of non-empty strings (threshold/text)
     const analyte = rule.analyte;
     if (!analyte || typeof analyte !== 'object') {
       errs.push('analyte must be an object with a match array.');
@@ -147,23 +284,10 @@
       }
     }
 
-    // suppressIfProblem — OPTIONAL (both kinds). Suppresses the rule when the patient
+    // suppressIfProblem — OPTIONAL (all kinds). Suppresses the rule when the patient
     // already has a matching problem on record (e.g. don't flag a possible new diabetes
     // for a known diabetic). Object: { match: string[] (≥1 non-empty), exclude?: string[] }.
-    if (rule.suppressIfProblem !== undefined) {
-      const s = rule.suppressIfProblem;
-      if (!s || typeof s !== 'object' || Array.isArray(s)) {
-        errs.push('suppressIfProblem, if present, must be an object with a match array.');
-      } else {
-        const sm = Array.isArray(s.match) ? s.match.filter((m) => typeof m === 'string' && m.trim()) : null;
-        if (!sm || sm.length === 0) {
-          errs.push('suppressIfProblem.match must contain at least one non-empty string.');
-        }
-        if (s.exclude !== undefined && (!Array.isArray(s.exclude) || s.exclude.some((e) => typeof e !== 'string'))) {
-          errs.push('suppressIfProblem.exclude, if present, must be an array of strings.');
-        }
-      }
-    }
+    validateSuppressIfProblem(rule, errs);
 
     if (kind === 'text') {
       // A text rule classifies by phrase lists: normalText (calm-if-present) and/or
@@ -391,6 +515,59 @@ This example applies to any result whose name contains "MSU" or "urine culture".
 --- END TEXT EXAMPLE ---
 
 This example surfaces bowel cancer screening non-responders: it applies to bowel-screening results and flags 'review' ONLY when the text contains a "no response" phrase. A normal or abnormal screening result contains no such phrase, so it is left untouched — the rule can never hide a positive result.
+
+=== SCHEMA — kind:"combo" ===
+
+A combo rule fires ONLY when MULTIPLE conditions are ALL satisfied (logical AND) by results within the SAME investigation report. Each condition may be satisfied by a DIFFERENT result row in that report. Use a combo when no single analyte is alarming on its own, but a PATTERN across several analytes is clinically significant (e.g. sterile pyuria: pus cells raised AND the culture shows no growth). A combo is ESCALATE-ONLY: when it fires it raises the report to its level (default amber); it NEVER lowers a lab flag or another rule, and it never calms or suppresses anything.
+
+  id          (string)   — Will be replaced on import.
+  enabled     (boolean)  — Set false. Forced on import.
+  builtin     (boolean)  — Always false for user-authored rules.
+  kind        (string)   — "combo" (required for this path).
+  label       (string, required) — Short label for the chip shown when the combo fires. Max ~60 chars.
+  level       ("amber"|"red", optional) — Severity the combo escalates to. Default "amber".
+  conditions  (array, required, length ≥ 2) — ALL must be satisfied for the combo to fire.
+    Each condition targets ONE analyte and is EITHER numeric OR text (exactly one form):
+      analyte (object, required)
+        match    (string[], required, non-empty) — Case-insensitive substrings against result.name.
+        exclude  (string[], optional) — Skip a result whose name contains any of these.
+        specimen (string[], optional) — Case-insensitive substrings against the specimen header.
+                                        Fail-open: a result with no header still applies.
+      NUMERIC condition — adds:
+        comparator ("above"|"below", required) — satisfied if a matching result's numeric value
+                                                  is >= value (above) or <= value (below).
+        value      (number, required)          — the threshold.
+        (A non-numeric / missing result value never satisfies the condition — fail-safe.)
+      TEXT condition — adds:
+        contains   (string[], required, non-empty) — satisfied if a matching result's combined
+                                                      text contains ANY of these phrases
+                                                      (case-insensitive substring).
+    A condition must define comparator+value (numeric) XOR contains (text) — never both, never neither.
+  suppressIfProblem (object, optional) — same as the other kinds: { match:string[], exclude?:string[] }.
+
+--- COMBO EXAMPLE (sterile pyuria — pus cells up AND culture no growth) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "combo",
+  "label": "Sterile pyuria (pus cells, no growth)",
+  "level": "amber",
+  "conditions": [
+    {
+      "analyte": { "match": ["pus cells", "white cells", "wbc"], "specimen": ["urine", "msu"] },
+      "comparator": "above",
+      "value": 40
+    },
+    {
+      "analyte": { "match": ["culture", "msu"], "specimen": ["urine", "msu"] },
+      "contains": ["no growth", "no significant growth"]
+    }
+  ]
+}
+--- END COMBO EXAMPLE ---
+
+This example fires amber ONLY when a urine report shows BOTH a pus-cell count above 40 AND a culture that reads "no growth" (sterile pyuria — a pattern a clinician should review). Either finding alone does not fire it. It cannot lower a lab-urgent flag on the same report.
 
 === CLOSING REMINDER ===
 

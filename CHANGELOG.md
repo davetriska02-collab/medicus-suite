@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.93.0] — 2026-06-15
+
+### Investigation Results queue: combo (multi-condition) result rules + sterile-pyuria flagship
+
+The Triage Lens result-triage queue can now raise severity from **combo rules** — result
+rules that fire only when **several analyte conditions are all satisfied on the same
+report**, capturing clinically significant patterns that no single per-analyte chip can
+see.
+
+**Flagship rule (`base-urine-sterile-pyuria`).** Fires **amber** when a urine/MSU/CSU
+report shows raised pus/white cells on microscopy (numeric, above threshold) **AND** a
+negative urine culture ("no growth" / "no significant growth" / "sterile" / etc.) — the
+classic **sterile-pyuria** pattern. Previously this slipped through: the microscopy chip
+and the "No growth" culture info-chip each looked individually unremarkable, so the
+combination went unflagged. Ships **enabled**, **escalate-only/amber**.
+
+**Generic combo capability.** The new `combo` rule kind in `resultRules` takes a
+`conditions` array (numeric `comparator`/`value` and/or text `contains` conditions, each
+scoped by analyte `match` + `specimen`); a fired combo contributes `comboCount` /
+`comboTop` to the report severity and raises level to amber (or red if the combo's `level`
+is red). Combo evaluation is **fail-safe**: if a numeric condition has no parseable value
+the combo simply does not fire (a possible false-negative, never a false-positive), and
+the report's own lab reference-range flags are unaffected.
+
+**New queue chip.** A fired combo renders an attributable `queue.resultCombo` chip
+(amber/review styling) carrying the combo's label (e.g. "Sterile pyuria — pus cells
+raised, culture negative"). The chip is additive attention only — it never files,
+actions, or asserts "safe to file", and chip absence remains no assurance.
+
+Shipped-config (`defaults.json`) integer version bumped 15 → 16 so the new `combo` rule
+and `queue.resultCombo` systemChip migrate to existing installs. Hazard log H-030 updated
+to cover combo rules (escalate-only; fail-safe on missing microscopy data; lab flags
+unaffected).
+
 ## [v3.92.2] — 2026-06-15
 
 ### Hotfix: patient-record visualiser button dead after the PDF.js 4.x upgrade (CSP regression)

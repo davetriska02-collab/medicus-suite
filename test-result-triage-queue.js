@@ -327,6 +327,46 @@ if (selectResultChips) {
     noGrowthNoTopChips.some((c) => c.id === 'queue.resultNoGrowth'),
     'noGrowth with no noGrowthTop → generic queue.resultNoGrowth (defensive fallback)'
   );
+
+  // combo rule fired (e.g. sterile pyuria) → attributable queue.resultCombo carrying the
+  // combo's label in {rule}. Escalate-only/amber; appears alongside any other chips.
+  const comboSev = {
+    level: 'amber', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    comboCount: 1, comboTop: { label: 'Sterile pyuria — pus cells raised, culture negative', level: 'amber' },
+  };
+  const comboChips = selectResultChips(comboSev);
+  check(
+    comboChips.some((c) => c.id === 'queue.resultCombo'),
+    'fired combo → queue.resultCombo chip'
+  );
+  const combo = comboChips.find((c) => c.id === 'queue.resultCombo');
+  check(
+    combo && combo.vars.rule === 'Sterile pyuria — pus cells raised, culture negative',
+    'queue.resultCombo carries the combo label in {rule}'
+  );
+
+  // comboCount=0 → no combo chip
+  const noComboSev = {
+    level: 'none', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    comboCount: 0, comboTop: null,
+  };
+  check(
+    !selectResultChips(noComboSev).some((c) => c.id === 'queue.resultCombo'),
+    'comboCount=0 → NO queue.resultCombo chip'
+  );
+
+  // comboCount>0 but comboTop null/missing label → defensive, no combo chip
+  const comboNoTop = {
+    level: 'amber', urgentCount: 0, abnormalCount: 0,
+    top: null, misprioritised: false, unmatched: false,
+    comboCount: 1, comboTop: null,
+  };
+  check(
+    !selectResultChips(comboNoTop).some((c) => c.id === 'queue.resultCombo'),
+    'comboCount>0 but no comboTop → NO combo chip (defensive)'
+  );
 }
 
 // ============================================================
@@ -520,6 +560,7 @@ if (gateMatch) {
   check(/reviewRuleCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultReviewRule chip');
   check(/noGrowthCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultNoGrowth chip');
   check(/noGrowthRuleCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultNoGrowthRule chip');
+  check(/comboCfg/.test(gateMatch[0]), 'fetch gate includes queue.resultCombo chip');
 }
 
 // ============================================================
