@@ -1,473 +1,724 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Triage Lens — Settings</title>
-<link rel="stylesheet" href="options.css">
-</head>
-<body>
-<header class="tl-head">
-  <div class="tl-head-row">
-    <h1>Triage Lens <span class="tl-ver" id="tlVersion"></span></h1>
-    <div class="tl-head-actions">
-      <span class="tl-status" id="tlStatus"></span>
-    </div>
-  </div>
-  <nav class="tl-tabs" id="tlTabs">
-    <button class="tl-tab tl-tab-active" data-tab="rules">Rules</button>
-    <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
-    <button class="tl-tab" data-tab="thresholds">Thresholds</button>
-    <button class="tl-tab" data-tab="resultRules">Result rules</button>
-    <button class="tl-tab" data-tab="prefs">Preferences</button>
-    <button class="tl-tab" data-tab="preview">Live preview</button>
-    <button class="tl-tab" data-tab="backup">Backup &amp; restore</button>
-    <button class="tl-tab" data-tab="about">About</button>
-  </nav>
-</header>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Triage Lens — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="tl-head">
+      <div class="tl-head-row">
+        <h1>Triage Lens <span class="tl-ver" id="tlVersion"></span></h1>
+        <div class="tl-head-actions">
+          <span class="tl-status" id="tlStatus"></span>
+        </div>
+      </div>
+      <nav class="tl-tabs" id="tlTabs">
+        <button class="tl-tab tl-tab-active" data-tab="rules">Rules</button>
+        <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
+        <button class="tl-tab" data-tab="thresholds">Thresholds</button>
+        <button class="tl-tab" data-tab="resultRules">Result rules</button>
+        <button class="tl-tab" data-tab="prefs">Preferences</button>
+        <button class="tl-tab" data-tab="preview">Live preview</button>
+        <button class="tl-tab" data-tab="backup">Backup &amp; restore</button>
+        <button class="tl-tab" data-tab="about">About</button>
+      </nav>
+    </header>
 
-<main>
-  <!-- ============================ RULES TAB ============================ -->
-  <section class="tl-pane tl-pane-active" id="paneRules">
-    <div class="tl-toolbar">
-      <button class="tl-btn tl-btn-primary" id="btnAddRule">+ New rule</button>
-      <input type="search" id="ruleSearch" placeholder="Search rules…" class="tl-search">
-      <span class="tl-spacer"></span>
-      <select id="filterKind" class="tl-select">
-        <option value="">All severities</option>
-        <option value="red">Red</option>
-        <option value="amber">Amber</option>
-        <option value="green">Green</option>
-        <option value="info">Info</option>
-      </select>
-    </div>
-    <div class="tl-rule-list" id="ruleList"></div>
-    <div class="tl-empty" id="ruleListEmpty" style="display:none">No rules match.</div>
-  </section>
-
-  <!-- ============================ EDITOR ============================ -->
-  <section class="tl-pane" id="paneEdit">
-    <div class="tl-edit-header">
-      <button class="tl-btn tl-btn-ghost" id="btnBackToRules">← Back to rules</button>
-      <h2 id="editTitle">Edit rule</h2>
-      <span class="tl-spacer"></span>
-      <button class="tl-btn tl-btn-danger" id="btnDeleteRule">Delete rule</button>
-    </div>
-
-    <div class="tl-edit-grid">
-      <div class="tl-edit-col">
-        <label class="tl-field">
-          <span>Label <small>(shown on the chip)</small></span>
-          <input type="text" id="fLabel" maxlength="40">
-        </label>
-
-        <label class="tl-field">
-          <span>Severity</span>
-          <select id="fKind">
+    <main>
+      <!-- ============================ RULES TAB ============================ -->
+      <section class="tl-pane tl-pane-active" id="paneRules">
+        <div class="tl-toolbar">
+          <button class="tl-btn tl-btn-primary" id="btnAddRule">+ New rule</button>
+          <input type="search" id="ruleSearch" placeholder="Search rules…" class="tl-search" />
+          <span class="tl-spacer"></span>
+          <select id="filterKind" class="tl-select">
+            <option value="">All severities</option>
             <option value="red">Red</option>
             <option value="amber">Amber</option>
             <option value="green">Green</option>
             <option value="info">Info</option>
           </select>
-        </label>
-
-        <label class="tl-field tl-field-inline">
-          <input type="checkbox" id="fEnabled">
-          <span>Enabled</span>
-        </label>
-
-        <label class="tl-field">
-          <span>Patterns <small>(one per line)</small></span>
-          <textarea id="fPatterns" rows="6" placeholder="UTI&#10;dysuria&#10;burning passing water"></textarea>
-        </label>
-
-        <label class="tl-field tl-field-inline">
-          <input type="checkbox" id="fRegex">
-          <span>Treat patterns as regex</span>
-        </label>
-
-        <label class="tl-field">
-          <span>Bumps tile <small>(when matched on a record/detail page)</small></span>
-          <select id="fBumpsTile">
-            <option value="">Don't bump any tile</option>
-            <option value="risk">Risk</option>
-            <option value="monitoring">Monitoring</option>
-            <option value="meds">Meds</option>
-            <option value="openLoops">Open loops</option>
-            <option value="carePlan">Care plan</option>
-            <option value="safeguarding">Safeguarding</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="tl-edit-col">
-        <fieldset class="tl-field">
-          <legend>Fields to scan</legend>
-          <div class="tl-checks" id="fFields"></div>
-        </fieldset>
-
-        <fieldset class="tl-field">
-          <legend>Pages where this rule fires</legend>
-          <div class="tl-checks" id="fPages"></div>
-        </fieldset>
-
-        <fieldset class="tl-field">
-          <legend>Actions <small>(click-to-fire from the chip)</small></legend>
-          <div id="actionList"></div>
-          <button class="tl-btn tl-btn-secondary" id="btnAddAction">+ Add action</button>
-        </fieldset>
-
-        <label class="tl-field">
-          <span>Notes (your own reference, not shown anywhere)</span>
-          <textarea id="fNotes" rows="2"></textarea>
-        </label>
-      </div>
-    </div>
-
-    <div class="tl-edit-footer">
-      <button class="tl-btn" id="btnCancelEdit">Cancel</button>
-      <button class="tl-btn tl-btn-primary" id="btnSaveEdit">Save rule</button>
-    </div>
-
-    <!-- LLM rule authoring tool — shown only when the new-rule / edit pane is
-         open (suite-standard copy-prompt → paste-JSON → validate → import-disabled
-         flow, same as Sentinel custom rules / Reception pathways / Knowledge). -->
-    <details id="llmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
-      <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
-        <span style="font-size:10px; opacity:0.6;">&#9654;</span>
-        Or generate with an LLM
-      </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--border);">
-        <p class="tl-help" style="margin:0 0 12px;">
-          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule you want
-          (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste the JSON response into
-          the box below to import it. Imported rules are <strong>disabled</strong> until you review and enable them above.
-        </p>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-          <button class="tl-btn" id="btnLlmCopyPrompt">Copy LLM prompt</button>
-          <span id="llmCopied" style="font-size:12px; color:#16a34a; opacity:0; transition:opacity 0.3s;">Copied.</span>
         </div>
-        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; opacity:0.6; margin-bottom:5px;">
-          Paste LLM JSON output here
-        </label>
-        <textarea id="llmJson" rows="8" spellcheck="false"
-          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'></textarea>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rules</button>
-          <span id="llmStatus" class="tl-llm-status"></span>
+        <div class="tl-rule-list" id="ruleList"></div>
+        <div class="tl-empty" id="ruleListEmpty" style="display: none">No rules match.</div>
+      </section>
+
+      <!-- ============================ EDITOR ============================ -->
+      <section class="tl-pane" id="paneEdit">
+        <div class="tl-edit-header">
+          <button class="tl-btn tl-btn-ghost" id="btnBackToRules">← Back to rules</button>
+          <h2 id="editTitle">Edit rule</h2>
+          <span class="tl-spacer"></span>
+          <button class="tl-btn tl-btn-danger" id="btnDeleteRule">Delete rule</button>
         </div>
-      </div>
-    </details>
-  </section>
 
-  <!-- ============================ SYSTEM CHIPS TAB ============================ -->
-  <section class="tl-pane" id="paneSystemChips">
-    <div class="tl-help">Baseline chips that fire on built-in conditions (age extremes, task age, status, frailty, polypharmacy, etc.). Edit the label, severity, or attach actions — same machinery as user rules. Variables in <code>{braces}</code> are substituted with live values when the chip renders.</div>
-    <div class="tl-rule-list" id="systemChipList"></div>
-  </section>
+        <div class="tl-edit-grid">
+          <div class="tl-edit-col">
+            <label class="tl-field">
+              <span>Label <small>(shown on the chip)</small></span>
+              <input type="text" id="fLabel" maxlength="40" />
+            </label>
 
-  <!-- System chip editor pane (mirrors the rule editor) -->
-  <section class="tl-pane" id="paneSystemEdit">
-    <div class="tl-edit-header">
-      <button class="tl-btn tl-btn-ghost" id="btnBackToSystem">← Back to baseline chips</button>
-      <h2 id="systemEditTitle">Edit baseline chip</h2>
-      <span class="tl-spacer"></span>
-      <button class="tl-btn" id="btnResetSystemChip" title="Reset this chip to its shipped default">Reset to default</button>
-    </div>
-    <div class="tl-edit-grid">
-      <div class="tl-edit-col">
-        <label class="tl-field">
-          <span>Label <small id="systemVarHelp">(use {variable} for live values)</small></span>
-          <input type="text" id="sysLabel" maxlength="60">
-        </label>
-        <label class="tl-field">
-          <span>Severity</span>
-          <select id="sysKind">
-            <option value="red">Red</option>
-            <option value="amber">Amber</option>
-            <option value="green">Green</option>
-            <option value="info">Info</option>
-          </select>
-        </label>
-        <label class="tl-field tl-field-inline">
-          <input type="checkbox" id="sysEnabled">
-          <span>Enabled</span>
-        </label>
-        <div class="tl-help" id="sysIdHelp" style="margin-top:8px"></div>
-      </div>
-      <div class="tl-edit-col">
-        <fieldset class="tl-field">
-          <legend>Actions <small>(click-to-fire from the chip)</small></legend>
-          <div id="sysActionList"></div>
-          <button class="tl-btn tl-btn-secondary" id="btnAddSysAction">+ Add action</button>
-        </fieldset>
-      </div>
-    </div>
-    <div class="tl-edit-footer">
-      <button class="tl-btn" id="btnCancelSystemEdit">Cancel</button>
-      <button class="tl-btn tl-btn-primary" id="btnSaveSystemEdit">Save</button>
-    </div>
-  </section>
+            <label class="tl-field">
+              <span>Severity</span>
+              <select id="fKind">
+                <option value="red">Red</option>
+                <option value="amber">Amber</option>
+                <option value="green">Green</option>
+                <option value="info">Info</option>
+              </select>
+            </label>
 
-  <!-- ============================ THRESHOLDS TAB ============================ -->
-  <section class="tl-pane" id="paneThresholds">
-    <div class="tl-help">Adjust the numbers that drive the built-in tiles and queue chips. Changes apply on save.</div>
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="fEnabled" />
+              <span>Enabled</span>
+            </label>
 
-    <h3>Patient record / detail tiles</h3>
-    <div class="tl-grid-2">
-      <label class="tl-field"><span>Polypharmacy red threshold (repeat count)</span><input type="number" min="0" max="100" data-th="polypharmacyRed"></label>
-      <label class="tl-field"><span>Polypharmacy amber threshold</span><input type="number" min="0" max="100" data-th="polypharmacyAmber"></label>
-      <label class="tl-field"><span>BP age limit, with LTC (months)</span><input type="number" min="0" max="120" data-th="bpAgeMonthsLtc"></label>
-      <label class="tl-field"><span>BP age limit, no LTC (months)</span><input type="number" min="0" max="120" data-th="bpAgeMonthsNoLtc"></label>
-      <label class="tl-field"><span>Weight age limit (months)</span><input type="number" min="0" max="120" data-th="weightAgeMonths"></label>
-      <label class="tl-field"><span>Frailty hits → red</span><input type="number" min="1" max="20" data-th="frailtyHitsRed"></label>
-      <label class="tl-field"><span>Frailty hits → amber</span><input type="number" min="1" max="20" data-th="frailtyHitsAmber"></label>
-      <label class="tl-field"><span>Last clinician contact (months)</span><input type="number" min="1" max="60" data-th="lastContactMonths"></label>
-      <label class="tl-field"><span>Recent discharge → red (days)</span><input type="number" min="1" max="180" data-th="recentDischargeRed"></label>
-      <label class="tl-field"><span>Recent discharge → amber (days)</span><input type="number" min="1" max="365" data-th="recentDischargeAmber"></label>
-      <label class="tl-field"><span>Anticholinergic burden → amber (≥)</span><input type="number" min="1" max="15" data-th="anticholinergicAmber"></label>
-      <label class="tl-field"><span>QOF overdue → red (count)</span><input type="number" min="1" max="20" data-th="qofOverdueRed"></label>
-      <label class="tl-field"><span>Recent referral window (days)</span><input type="number" min="1" max="365" data-th="recentReferralDays"></label>
-    </div>
+            <label class="tl-field">
+              <span>Patterns <small>(one per line)</small></span>
+              <textarea id="fPatterns" rows="6" placeholder="UTI&#10;dysuria&#10;burning passing water"></textarea>
+            </label>
 
-    <h3>Queue row chips</h3>
-    <div class="tl-grid-2">
-      <label class="tl-field"><span>Task age → amber (days)</span><input type="number" min="1" max="60" data-th="taskAgeAmber"></label>
-      <label class="tl-field"><span>Task age → red (days)</span><input type="number" min="1" max="120" data-th="taskAgeRed"></label>
-      <label class="tl-field"><span>"Elder" age threshold</span><input type="number" min="50" max="120" data-th="elderAge"></label>
-      <label class="tl-field"><span>"Child" age threshold</span><input type="number" min="0" max="20" data-th="childAge"></label>
-    </div>
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="fRegex" />
+              <span>Treat patterns as regex</span>
+            </label>
 
-    <div class="tl-edit-footer">
-      <button class="tl-btn" id="btnResetThresholds">Reset to defaults</button>
-      <button class="tl-btn tl-btn-primary" id="btnSaveThresholds">Save thresholds</button>
-    </div>
-  </section>
+            <label class="tl-field">
+              <span>Bumps tile <small>(when matched on a record/detail page)</small></span>
+              <select id="fBumpsTile">
+                <option value="">Don't bump any tile</option>
+                <option value="risk">Risk</option>
+                <option value="monitoring">Monitoring</option>
+                <option value="meds">Meds</option>
+                <option value="openLoops">Open loops</option>
+                <option value="carePlan">Care plan</option>
+                <option value="safeguarding">Safeguarding</option>
+              </select>
+            </label>
+          </div>
 
-  <!-- ============================ PREFS TAB ============================ -->
-  <section class="tl-pane" id="panePrefs">
-    <div class="tl-help">Display preferences. These don't affect what's matched, just what's shown.</div>
-    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showAgeChip"><span>Show patient age chip in HUD header</span></label>
-    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showFootStats"><span>Show footer stats (registers · problems · repeats · docs)</span></label>
-    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showRequestSnippet"><span>Show request body snippet on detail page</span></label>
-    <label class="tl-field tl-field-inline"><input type="checkbox" data-pref="showBuiltInTiles"><span>Show built-in 6 tiles (Risk / Monitoring / Meds / Open loops / Care plan / Safeguarding)</span></label>
-    <label class="tl-field"><span>Snippet max characters</span><input type="number" min="50" max="2000" data-pref="snippetMaxChars"></label>
-    <div class="tl-edit-footer">
-      <button class="tl-btn tl-btn-primary" id="btnSavePrefs">Save preferences</button>
-    </div>
-  </section>
+          <div class="tl-edit-col">
+            <fieldset class="tl-field">
+              <legend>Fields to scan</legend>
+              <div class="tl-checks" id="fFields"></div>
+            </fieldset>
 
-  <!-- ============================ LIVE PREVIEW TAB ============================ -->
-  <section class="tl-pane" id="panePreview">
-    <div class="tl-help">Paste sample text below — see which rules fire and which actions they offer. Useful for testing patterns before saving.</div>
-    <label class="tl-field"><span>Sample text (e.g. a request body or a problem name)</span>
-      <textarea id="previewInput" rows="6" placeholder="Patient has burning when peeing for 2 days, no fever, no flank pain"></textarea>
-    </label>
-    <div class="tl-help">Page context (which page-scope to test against):</div>
-    <div class="tl-checks">
-      <label><input type="radio" name="previewPage" value="queue"> Queue</label>
-      <label><input type="radio" name="previewPage" value="detail" checked> Detail</label>
-      <label><input type="radio" name="previewPage" value="record"> Record</label>
-    </div>
-    <h3>Matching rules</h3>
-    <div id="previewMatches" class="tl-preview-matches"></div>
-  </section>
+            <fieldset class="tl-field">
+              <legend>Pages where this rule fires</legend>
+              <div class="tl-checks" id="fPages"></div>
+            </fieldset>
 
-  <!-- ============================ BACKUP TAB ============================ -->
-  <section class="tl-pane" id="paneBackup">
-    <div class="tl-help">Your config is JSON. Export to share or back up; import to restore. Reset wipes all customisations and reloads the shipped defaults.</div>
-    <div class="tl-backup-actions">
-      <button class="tl-btn tl-btn-primary" id="btnExport">⬇ Export to file</button>
-      <button class="tl-btn" id="btnImport">⬆ Import from file</button>
-      <input type="file" id="importFile" accept="application/json" style="display:none">
-      <button class="tl-btn tl-btn-danger" id="btnReset">Reset to defaults</button>
-    </div>
-    <details>
-      <summary>Or paste / view JSON directly</summary>
-      <textarea id="rawJson" rows="20" spellcheck="false"></textarea>
-      <div class="tl-edit-footer">
-        <button class="tl-btn" id="btnReloadJson">Reload from storage</button>
-        <button class="tl-btn tl-btn-primary" id="btnSaveJson">Save pasted JSON</button>
-      </div>
-    </details>
-  </section>
+            <fieldset class="tl-field">
+              <legend>Actions <small>(click-to-fire from the chip)</small></legend>
+              <div id="actionList"></div>
+              <button class="tl-btn tl-btn-secondary" id="btnAddAction">+ Add action</button>
+            </fieldset>
 
-  <!-- ============================ RESULT RULES TAB ============================ -->
-  <section class="tl-pane" id="paneResultRules">
-    <div class="tl-help">
-      Analyte-threshold rules <strong>escalate</strong> investigation result severity — they can raise a chip from none to amber or red, but never lower a lab-flagged result. Imported rules arrive <strong>disabled</strong>; review each rule's analyte match strings and threshold values before enabling.
-      <br><br>
-      <strong>Scope.</strong> These built-in rules are a safety-net layer covering common acute biochemistry, FBC indices and therapeutic drug levels — electrolytes, eGFR, platelets, neutrophils, INR, calcium, magnesium, lithium, digoxin, TSH and HbA1c — plus key microbiology text rules (MSU, blood culture, bowel screening). They are <strong>not</strong> a complete results-interpretation system: an analyte with no rule (for example ferritin, B12/folate or LFTs) simply shows the lab's own flag, so <strong>an absent chip is not a clinical all-clear</strong>. Add your own rule for anything else your practice wants flagged.
-      <br><br>
-      <em>Viewing or editing this screen changes nothing in the queue until you tick a rule on.</em>
-    </div>
-    <div class="tl-toolbar">
-      <button class="tl-btn tl-btn-primary" id="btnAddResultRule">+ New result rule</button>
-    </div>
-    <div class="tl-rule-list" id="resultRuleList"></div>
-    <div class="tl-empty" id="resultRuleListEmpty" style="display:none">No result rules configured. Add one manually or import via the LLM tool in the editor.</div>
-
-    <details id="rrLlmDetails" style="margin-top:18px; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden;">
-      <summary style="padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; list-style:none;">
-        <span style="font-size:10px; opacity:0.6;">&#9654;</span>
-        Import rules from LLM
-      </summary>
-      <div style="padding:14px 16px; border-top:1px solid var(--border);">
-        <p class="tl-help" style="margin:0 0 12px;">
-          Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the analyte rule you want
-          (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the JSON response into
-          the box below to import it. <strong>You</strong> run the LLM — this tool only generates a prompt to copy out and reads the JSON you paste back, so <strong>no patient data is involved</strong>. Imported rules arrive <strong>disabled</strong> — review and enable each before it fires.
-        </p>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
-          <button class="tl-btn" id="btnResultLlmCopyPrompt">Copy LLM prompt</button>
-          <span id="resultLlmCopied" style="font-size:12px; color:#16a34a; opacity:0; transition:opacity 0.3s;">Copied.</span>
-        </div>
-        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; opacity:0.6; margin-bottom:5px;">
-          Paste LLM JSON output here
-        </label>
-        <textarea id="resultLlmJson" rows="8" spellcheck="false"
-          placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'></textarea>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
-          <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rules</button>
-          <span id="resultLlmStatus" class="tl-llm-status"></span>
-        </div>
-        <div id="resultLlmPreview" class="tl-rr-llm-preview" style="display:none;">
-          <div class="tl-rr-llm-preview-list" id="resultLlmPreviewList"></div>
-          <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
-            <button class="tl-btn tl-btn-primary" id="btnResultLlmConfirm">Add rules (disabled)</button>
-            <button class="tl-btn" id="btnResultLlmCancel">Cancel</button>
+            <label class="tl-field">
+              <span>Notes (your own reference, not shown anywhere)</span>
+              <textarea id="fNotes" rows="2"></textarea>
+            </label>
           </div>
         </div>
-      </div>
-    </details>
-  </section>
 
-  <!-- Result rule editor pane -->
-  <section class="tl-pane" id="paneResultEdit">
-    <div class="tl-edit-header">
-      <button class="tl-btn tl-btn-ghost" id="btnBackToResultRules">← Back to result rules</button>
-      <h2 id="rrEditTitle">Edit result rule</h2>
-      <span class="tl-spacer"></span>
-      <button class="tl-btn tl-btn-danger" id="btnDeleteResultRule">Delete rule</button>
-    </div>
-
-    <div class="tl-edit-grid">
-      <div class="tl-edit-col">
-        <label class="tl-field">
-          <span>Label <small>(shown on the chip, max ~60 chars)</small></span>
-          <input type="text" id="rrLabel" maxlength="60">
-        </label>
-
-        <label class="tl-field tl-field-inline">
-          <input type="checkbox" id="rrEnabled">
-          <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
-        </label>
-
-        <label class="tl-field">
-          <span>Rule type</span>
-          <select id="rrKind">
-            <option value="threshold">Numeric threshold</option>
-            <option value="text">Text / culture</option>
-          </select>
-        </label>
-
-        <label class="tl-field">
-          <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
-          <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
-        </label>
-
-        <label class="tl-field">
-          <span>Analyte exclude <small>(optional — one per line; skips look-alike analytes, e.g. "mean platelet" or "urine")</small></span>
-          <textarea id="rrAnalyteExclude" rows="2" placeholder="mean platelet&#10;urine"></textarea>
-        </label>
-
-        <div class="tl-field">
-          <span>Test match <small>(advisory — not saved)</small></span>
-          <input type="text" id="rrTestName" placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)">
-          <span id="rrTestResult" class="tl-rr-test-result"></span>
+        <div class="tl-edit-footer">
+          <button class="tl-btn" id="btnCancelEdit">Cancel</button>
+          <button class="tl-btn tl-btn-primary" id="btnSaveEdit">Save rule</button>
         </div>
 
-        <div class="rr-fields-threshold">
-          <label class="tl-field">
-            <span>Comparator <small>(engine evaluates inclusively)</small></span>
-            <select id="rrComparator">
-              <option value="above">at or above (≥ threshold) — fires when value ≥ threshold</option>
-              <option value="below">at or below (≤ threshold) — fires when value ≤ threshold</option>
-            </select>
-          </label>
+        <!-- LLM rule authoring tool — shown only when the new-rule / edit pane is
+         open (suite-standard copy-prompt → paste-JSON → validate → import-disabled
+         flow, same as Sentinel custom rules / Reception pathways / Knowledge). -->
+        <details
+          id="llmDetails"
+          style="margin-top: 18px; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden"
+        >
+          <summary
+            style="
+              padding: 10px 14px;
+              font-size: 13px;
+              font-weight: 600;
+              cursor: pointer;
+              user-select: none;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              list-style: none;
+            "
+          >
+            <span style="font-size: 10px; opacity: 0.6">&#9654;</span>
+            Or generate with an LLM
+          </summary>
+          <div style="padding: 14px 16px; border-top: 1px solid var(--border)">
+            <p class="tl-help" style="margin: 0 0 12px">
+              Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the rule
+              you want (e.g. "make me an amber rule that flags safeguarding keywords in the request text"), then paste
+              the JSON response into the box below to import it. Imported rules are <strong>disabled</strong> until you
+              review and enable them above.
+            </p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px">
+              <button class="tl-btn" id="btnLlmCopyPrompt">Copy LLM prompt</button>
+              <span id="llmCopied" style="font-size: 12px; color: #16a34a; opacity: 0; transition: opacity 0.3s"
+                >Copied.</span
+              >
+            </div>
+            <label
+              style="
+                display: block;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.07em;
+                opacity: 0.6;
+                margin-bottom: 5px;
+              "
+            >
+              Paste LLM JSON output here
+            </label>
+            <textarea
+              id="llmJson"
+              rows="8"
+              spellcheck="false"
+              placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'
+            ></textarea>
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap">
+              <button class="tl-btn tl-btn-primary" id="btnLlmImport">Import rules</button>
+              <span id="llmStatus" class="tl-llm-status"></span>
+            </div>
+          </div>
+        </details>
+      </section>
 
-          <label class="tl-field">
-            <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
-            <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5">
-          </label>
-
-          <label class="tl-field">
-            <span>Red threshold <small>(optional — leave blank to omit)</small></span>
-            <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0">
-          </label>
-
-          <label class="tl-field">
-            <span>Unit <small>(display only, e.g. mmol/L)</small></span>
-            <input type="text" id="rrUnit" placeholder="mmol/L">
-            <span class="tl-rr-unit-note">Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the units your lab reports this analyte in.</span>
-          </label>
-        </div>
-
-        <div class="rr-fields-text" style="display:none">
-          <label class="tl-field">
-            <span>Normal phrases <small>(one per line) — if any appears in the result text, the result is treated as normal, e.g. no growth</small></span>
-            <textarea id="rrNormalText" rows="5" placeholder="no growth&#10;no significant growth&#10;no organisms isolated"></textarea>
-          </label>
-
-          <label class="tl-field">
-            <span>Normal chip label <small>(shown when a normal phrase is matched)</small></span>
-            <input type="text" id="rrNormalLabel" maxlength="60" placeholder="No growth">
-          </label>
-        </div>
-
-      </div>
-
-      <div class="tl-edit-col">
+      <!-- ============================ SYSTEM CHIPS TAB ============================ -->
+      <section class="tl-pane" id="paneSystemChips">
         <div class="tl-help">
-          <strong>How result rules work:</strong><br>
-          Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one threshold must be set. Analyte matching is case-insensitive substring against the result name as reported by your lab. <strong>Analyte exclude</strong> (optional) skips look-alike analytes that share a match token — e.g. a "platelet" rule with exclude "mean platelet" won't fire on "Mean platelet volume", and a serum potassium rule with exclude "urine" won't fire on a urine potassium.
-          <br><br>
-          <strong>Text / culture rules</strong> match a result by analyte name, then inspect the result text: if any <em>normal phrase</em> is found (case-insensitive) the calm "normal" chip is shown; otherwise the label chip is shown (amber by default). Use this for microbiology culture reports such as MSU.
-          <br><br>
-          <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule chip is not a clinical all-clear: it only means no rule covered that analyte.
+          Baseline chips that fire on built-in conditions (age extremes, task age, status, frailty, polypharmacy, etc.).
+          Edit the label, severity, or attach actions — same machinery as user rules. Variables in
+          <code>{braces}</code> are substituted with live values when the chip renders.
         </div>
-      </div>
-    </div>
+        <div class="tl-rule-list" id="systemChipList"></div>
+      </section>
 
-    <div class="tl-edit-footer">
-      <button class="tl-btn" id="btnCancelResultEdit">Cancel</button>
-      <button class="tl-btn tl-btn-primary" id="btnSaveResultEdit">Save rule</button>
-    </div>
-  </section>
+      <!-- System chip editor pane (mirrors the rule editor) -->
+      <section class="tl-pane" id="paneSystemEdit">
+        <div class="tl-edit-header">
+          <button class="tl-btn tl-btn-ghost" id="btnBackToSystem">← Back to baseline chips</button>
+          <h2 id="systemEditTitle">Edit baseline chip</h2>
+          <span class="tl-spacer"></span>
+          <button class="tl-btn" id="btnResetSystemChip" title="Reset this chip to its shipped default">
+            Reset to default
+          </button>
+        </div>
+        <div class="tl-edit-grid">
+          <div class="tl-edit-col">
+            <label class="tl-field">
+              <span>Label <small id="systemVarHelp">(use {variable} for live values)</small></span>
+              <input type="text" id="sysLabel" maxlength="60" />
+            </label>
+            <label class="tl-field">
+              <span>Severity</span>
+              <select id="sysKind">
+                <option value="red">Red</option>
+                <option value="amber">Amber</option>
+                <option value="green">Green</option>
+                <option value="info">Info</option>
+              </select>
+            </label>
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="sysEnabled" />
+              <span>Enabled</span>
+            </label>
+            <div class="tl-help" id="sysIdHelp" style="margin-top: 8px"></div>
+          </div>
+          <div class="tl-edit-col">
+            <fieldset class="tl-field">
+              <legend>Actions <small>(click-to-fire from the chip)</small></legend>
+              <div id="sysActionList"></div>
+              <button class="tl-btn tl-btn-secondary" id="btnAddSysAction">+ Add action</button>
+            </fieldset>
+          </div>
+        </div>
+        <div class="tl-edit-footer">
+          <button class="tl-btn" id="btnCancelSystemEdit">Cancel</button>
+          <button class="tl-btn tl-btn-primary" id="btnSaveSystemEdit">Save</button>
+        </div>
+      </section>
 
-  <!-- ============================ ABOUT TAB ============================ -->
-  <section class="tl-pane" id="paneAbout">
-    <h2>About Triage Lens</h2>
-    <p>Triage Lens is a personal-use overlay for Medicus. It surfaces clinical signals on patient records, classifies and decorates triage queue rows, and adds a request-context panel on task detail pages. All processing is local — no data leaves the browser.</p>
-    <h3>How rules work</h3>
-    <p>Each <strong>rule</strong> has a label, a severity colour, one or more text patterns, and zero or more actions. When a rule's pattern matches the configured fields on a configured page, the chip appears on the HUD or queue row. If the chip has actions, click it to expand a menu of click-to-fire shortcuts.</p>
-    <ul>
-      <li><strong>Link</strong> — opens a URL in a new tab (NICE guidelines, questionnaires, local SOPs).</li>
-      <li><strong>Snippet</strong> — copies a text template to the clipboard (history-taking, examination, safety-net wording).</li>
-      <li><strong>Note</strong> — shows informational text in a popover (monitoring reminders, red-flag checklists).</li>
-    </ul>
-    <h3>Safety</h3>
-    <p>This is display-only. It surfaces existing record entries with provenance — no synthesis, no inference of unrecorded clinical states, no recommendations. Actions never auto-fire — every action is click-to-confirm.</p>
-    <h3>Authoring tips</h3>
-    <ul>
-      <li>If your patterns are simple words or phrases, leave <em>regex</em> off — Triage Lens will escape special characters and match whole-word.</li>
-      <li>For phrases with optional parts (e.g. <code>self.?harm</code> matching "self-harm" / "self harm"), enable <em>regex</em>.</li>
-      <li>Queue page only has <em>request</em> text available. Other fields are only on detail / record pages.</li>
-      <li>Use the live preview tab to test patterns before saving.</li>
-    </ul>
-  </section>
-</main>
+      <!-- ============================ THRESHOLDS TAB ============================ -->
+      <section class="tl-pane" id="paneThresholds">
+        <div class="tl-help">
+          Adjust the numbers that drive the built-in tiles and queue chips. Changes apply on save.
+        </div>
 
-<script src="../../engine/result-rules.js"></script>
-<script src="options.js"></script>
-</body>
+        <h3>Patient record / detail tiles</h3>
+        <div class="tl-grid-2">
+          <label class="tl-field"
+            ><span>Polypharmacy red threshold (repeat count)</span
+            ><input type="number" min="0" max="100" data-th="polypharmacyRed"
+          /></label>
+          <label class="tl-field"
+            ><span>Polypharmacy amber threshold</span
+            ><input type="number" min="0" max="100" data-th="polypharmacyAmber"
+          /></label>
+          <label class="tl-field"
+            ><span>BP age limit, with LTC (months)</span
+            ><input type="number" min="0" max="120" data-th="bpAgeMonthsLtc"
+          /></label>
+          <label class="tl-field"
+            ><span>BP age limit, no LTC (months)</span
+            ><input type="number" min="0" max="120" data-th="bpAgeMonthsNoLtc"
+          /></label>
+          <label class="tl-field"
+            ><span>Weight age limit (months)</span><input type="number" min="0" max="120" data-th="weightAgeMonths"
+          /></label>
+          <label class="tl-field"
+            ><span>Frailty hits → red</span><input type="number" min="1" max="20" data-th="frailtyHitsRed"
+          /></label>
+          <label class="tl-field"
+            ><span>Frailty hits → amber</span><input type="number" min="1" max="20" data-th="frailtyHitsAmber"
+          /></label>
+          <label class="tl-field"
+            ><span>Last clinician contact (months)</span
+            ><input type="number" min="1" max="60" data-th="lastContactMonths"
+          /></label>
+          <label class="tl-field"
+            ><span>Recent discharge → red (days)</span
+            ><input type="number" min="1" max="180" data-th="recentDischargeRed"
+          /></label>
+          <label class="tl-field"
+            ><span>Recent discharge → amber (days)</span
+            ><input type="number" min="1" max="365" data-th="recentDischargeAmber"
+          /></label>
+          <label class="tl-field"
+            ><span>Anticholinergic burden → amber (≥)</span
+            ><input type="number" min="1" max="15" data-th="anticholinergicAmber"
+          /></label>
+          <label class="tl-field"
+            ><span>QOF overdue → red (count)</span><input type="number" min="1" max="20" data-th="qofOverdueRed"
+          /></label>
+          <label class="tl-field"
+            ><span>Recent referral window (days)</span
+            ><input type="number" min="1" max="365" data-th="recentReferralDays"
+          /></label>
+        </div>
+
+        <h3>Queue row chips</h3>
+        <div class="tl-grid-2">
+          <label class="tl-field"
+            ><span>Task age → amber (days)</span><input type="number" min="1" max="60" data-th="taskAgeAmber"
+          /></label>
+          <label class="tl-field"
+            ><span>Task age → red (days)</span><input type="number" min="1" max="120" data-th="taskAgeRed"
+          /></label>
+          <label class="tl-field"
+            ><span>"Elder" age threshold</span><input type="number" min="50" max="120" data-th="elderAge"
+          /></label>
+          <label class="tl-field"
+            ><span>"Child" age threshold</span><input type="number" min="0" max="20" data-th="childAge"
+          /></label>
+        </div>
+
+        <div class="tl-edit-footer">
+          <button class="tl-btn" id="btnResetThresholds">Reset to defaults</button>
+          <button class="tl-btn tl-btn-primary" id="btnSaveThresholds">Save thresholds</button>
+        </div>
+      </section>
+
+      <!-- ============================ PREFS TAB ============================ -->
+      <section class="tl-pane" id="panePrefs">
+        <div class="tl-help">Display preferences. These don't affect what's matched, just what's shown.</div>
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="showAgeChip" /><span>Show patient age chip in HUD header</span></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="showFootStats" /><span
+            >Show footer stats (registers · problems · repeats · docs)</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="showRequestSnippet" /><span
+            >Show request body snippet on detail page</span
+          ></label
+        >
+        <label class="tl-field tl-field-inline"
+          ><input type="checkbox" data-pref="showBuiltInTiles" /><span
+            >Show built-in 6 tiles (Risk / Monitoring / Meds / Open loops / Care plan / Safeguarding)</span
+          ></label
+        >
+        <label class="tl-field"
+          ><span>Snippet max characters</span><input type="number" min="50" max="2000" data-pref="snippetMaxChars"
+        /></label>
+        <div class="tl-edit-footer">
+          <button class="tl-btn tl-btn-primary" id="btnSavePrefs">Save preferences</button>
+        </div>
+      </section>
+
+      <!-- ============================ LIVE PREVIEW TAB ============================ -->
+      <section class="tl-pane" id="panePreview">
+        <div class="tl-help">
+          Paste sample text below — see which rules fire and which actions they offer. Useful for testing patterns
+          before saving.
+        </div>
+        <label class="tl-field"
+          ><span>Sample text (e.g. a request body or a problem name)</span>
+          <textarea
+            id="previewInput"
+            rows="6"
+            placeholder="Patient has burning when peeing for 2 days, no fever, no flank pain"
+          ></textarea>
+        </label>
+        <div class="tl-help">Page context (which page-scope to test against):</div>
+        <div class="tl-checks">
+          <label><input type="radio" name="previewPage" value="queue" /> Queue</label>
+          <label><input type="radio" name="previewPage" value="detail" checked /> Detail</label>
+          <label><input type="radio" name="previewPage" value="record" /> Record</label>
+        </div>
+        <h3>Matching rules</h3>
+        <div id="previewMatches" class="tl-preview-matches"></div>
+      </section>
+
+      <!-- ============================ BACKUP TAB ============================ -->
+      <section class="tl-pane" id="paneBackup">
+        <div class="tl-help">
+          Your config is JSON. Export to share or back up; import to restore. Reset wipes all customisations and reloads
+          the shipped defaults.
+        </div>
+        <div class="tl-backup-actions">
+          <button class="tl-btn tl-btn-primary" id="btnExport">⬇ Export to file</button>
+          <button class="tl-btn" id="btnImport">⬆ Import from file</button>
+          <input type="file" id="importFile" accept="application/json" style="display: none" />
+          <button class="tl-btn tl-btn-danger" id="btnReset">Reset to defaults</button>
+        </div>
+        <details>
+          <summary>Or paste / view JSON directly</summary>
+          <textarea id="rawJson" rows="20" spellcheck="false"></textarea>
+          <div class="tl-edit-footer">
+            <button class="tl-btn" id="btnReloadJson">Reload from storage</button>
+            <button class="tl-btn tl-btn-primary" id="btnSaveJson">Save pasted JSON</button>
+          </div>
+        </details>
+      </section>
+
+      <!-- ============================ RESULT RULES TAB ============================ -->
+      <section class="tl-pane" id="paneResultRules">
+        <div class="tl-help">
+          Analyte-threshold rules <strong>escalate</strong> investigation result severity — they can raise a chip from
+          none to amber or red, but never lower a lab-flagged result. Imported rules arrive <strong>disabled</strong>;
+          review each rule's analyte match strings and threshold values before enabling. <br /><br />
+          <strong>Scope.</strong> These built-in rules are a safety-net layer covering common acute biochemistry, FBC
+          indices and therapeutic drug levels — electrolytes, eGFR, platelets, neutrophils, INR, calcium, magnesium,
+          lithium, digoxin, TSH and HbA1c — plus key microbiology text rules (MSU, blood culture, bowel screening). They
+          are <strong>not</strong> a complete results-interpretation system: an analyte with no rule (for example
+          ferritin, B12/folate or LFTs) simply shows the lab's own flag, so
+          <strong>an absent chip is not a clinical all-clear</strong>. Add your own rule for anything else your practice
+          wants flagged. <br /><br />
+          <em>Viewing or editing this screen changes nothing in the queue until you tick a rule on.</em>
+        </div>
+        <div class="tl-toolbar">
+          <button class="tl-btn tl-btn-primary" id="btnAddResultRule">+ New result rule</button>
+        </div>
+        <div class="tl-rule-list" id="resultRuleList"></div>
+        <div class="tl-empty" id="resultRuleListEmpty" style="display: none">
+          No result rules configured. Add one manually or import via the LLM tool in the editor.
+        </div>
+
+        <details
+          id="rrLlmDetails"
+          style="margin-top: 18px; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden"
+        >
+          <summary
+            style="
+              padding: 10px 14px;
+              font-size: 13px;
+              font-weight: 600;
+              cursor: pointer;
+              user-select: none;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              list-style: none;
+            "
+          >
+            <span style="font-size: 10px; opacity: 0.6">&#9654;</span>
+            Import rules from LLM
+          </summary>
+          <div style="padding: 14px 16px; border-top: 1px solid var(--border)">
+            <p class="tl-help" style="margin: 0 0 12px">
+              Copy the prompt below, paste it into any LLM (Claude, ChatGPT, etc.) followed by a description of the
+              analyte rule you want (e.g. "make me a rule that flags high potassium above 5.5 mmol/L"), then paste the
+              JSON response into the box below to import it. <strong>You</strong> run the LLM — this tool only generates
+              a prompt to copy out and reads the JSON you paste back, so <strong>no patient data is involved</strong>.
+              Imported rules arrive <strong>disabled</strong> — review and enable each before it fires.
+            </p>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px">
+              <button class="tl-btn" id="btnResultLlmCopyPrompt">Copy LLM prompt</button>
+              <span id="resultLlmCopied" style="font-size: 12px; color: #16a34a; opacity: 0; transition: opacity 0.3s"
+                >Copied.</span
+              >
+            </div>
+            <label
+              style="
+                display: block;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.07em;
+                opacity: 0.6;
+                margin-bottom: 5px;
+              "
+            >
+              Paste LLM JSON output here
+            </label>
+            <textarea
+              id="resultLlmJson"
+              rows="8"
+              spellcheck="false"
+              placeholder='Paste the JSON object (or array, or {"rules":[...]}) returned by the LLM here, then click "Import rules".'
+            ></textarea>
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap">
+              <button class="tl-btn tl-btn-primary" id="btnResultLlmImport">Import rules</button>
+              <span id="resultLlmStatus" class="tl-llm-status"></span>
+            </div>
+            <div id="resultLlmPreview" class="tl-rr-llm-preview" style="display: none">
+              <div class="tl-rr-llm-preview-list" id="resultLlmPreviewList"></div>
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px">
+                <button class="tl-btn tl-btn-primary" id="btnResultLlmConfirm">Add rules (disabled)</button>
+                <button class="tl-btn" id="btnResultLlmCancel">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- Result rule editor pane -->
+      <section class="tl-pane" id="paneResultEdit">
+        <div class="tl-edit-header">
+          <button class="tl-btn tl-btn-ghost" id="btnBackToResultRules">← Back to result rules</button>
+          <h2 id="rrEditTitle">Edit result rule</h2>
+          <span class="tl-spacer"></span>
+          <button class="tl-btn tl-btn-danger" id="btnDeleteResultRule">Delete rule</button>
+        </div>
+
+        <div class="tl-edit-grid">
+          <div class="tl-edit-col">
+            <label class="tl-field">
+              <span>Label <small>(shown on the chip, max ~60 chars)</small></span>
+              <input type="text" id="rrLabel" maxlength="60" />
+            </label>
+
+            <label class="tl-field tl-field-inline">
+              <input type="checkbox" id="rrEnabled" />
+              <span>Enabled <small>(uncheck until you have reviewed the rule)</small></span>
+            </label>
+
+            <label class="tl-field">
+              <span>Rule type</span>
+              <select id="rrKind">
+                <option value="threshold">Numeric threshold</option>
+                <option value="text">Text / culture</option>
+              </select>
+            </label>
+
+            <label class="tl-field">
+              <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
+              <textarea id="rrAnalyteMatch" rows="4" placeholder="potassium&#10;Serum Potassium"></textarea>
+            </label>
+
+            <label class="tl-field">
+              <span
+                >Analyte exclude
+                <small
+                  >(optional — one per line; skips look-alike analytes, e.g. "mean platelet" or "urine")</small
+                ></span
+              >
+              <textarea id="rrAnalyteExclude" rows="2" placeholder="mean platelet&#10;urine"></textarea>
+            </label>
+
+            <div class="tl-field">
+              <span
+                >Specimen scope
+                <small
+                  >(optional — one substring per line; case-insensitive match against the group header, e.g. "THROAT
+                  SWAB". Leave blank to match any specimen.</small
+                ></span
+              >
+              <textarea id="rrAnalyteSpecimen" rows="2" placeholder="THROAT SWAB&#10;URINE"></textarea>
+              <div id="rrSpecimenSuggestions" class="tl-rr-suggestions" style="display: none"></div>
+            </div>
+
+            <div class="tl-field">
+              <span>Test match <small>(advisory — not saved)</small></span>
+              <input
+                type="text"
+                id="rrTestName"
+                placeholder="Paste a result name as your lab sends it, e.g. Potassium (serum)"
+              />
+              <div id="rrMatchSuggestions" class="tl-rr-suggestions" style="display: none"></div>
+              <span id="rrTestResult" class="tl-rr-test-result"></span>
+            </div>
+
+            <div class="rr-fields-threshold">
+              <label class="tl-field">
+                <span>Comparator <small>(engine evaluates inclusively)</small></span>
+                <select id="rrComparator">
+                  <option value="above">at or above (≥ threshold) — fires when value ≥ threshold</option>
+                  <option value="below">at or below (≤ threshold) — fires when value ≤ threshold</option>
+                </select>
+              </label>
+
+              <label class="tl-field">
+                <span>Amber threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrAmber" step="any" placeholder="e.g. 5.5" />
+              </label>
+
+              <label class="tl-field">
+                <span>Red threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrRed" step="any" placeholder="e.g. 6.0" />
+              </label>
+
+              <label class="tl-field">
+                <span>Unit <small>(display only, e.g. mmol/L)</small></span>
+                <input type="text" id="rrUnit" placeholder="mmol/L" />
+                <span class="tl-rr-unit-note"
+                  >Display only. The rule compares the raw number the lab sends — make sure your thresholds are in the
+                  units your lab reports this analyte in.</span
+                >
+              </label>
+            </div>
+
+            <div class="rr-fields-text" style="display: none">
+              <label class="tl-field">
+                <span
+                  >Normal phrases
+                  <small
+                    >(one per line) — if any appears in the result text, the result is treated as normal, e.g. no
+                    growth</small
+                  ></span
+                >
+                <textarea
+                  id="rrNormalText"
+                  rows="5"
+                  placeholder="no growth&#10;no significant growth&#10;no organisms isolated"
+                ></textarea>
+              </label>
+
+              <label class="tl-field">
+                <span>Normal chip label <small>(shown when a normal phrase is matched)</small></span>
+                <input type="text" id="rrNormalLabel" maxlength="60" placeholder="No growth" />
+              </label>
+            </div>
+          </div>
+
+          <div class="tl-edit-col">
+            <div class="tl-help">
+              <strong>How result rules work:</strong><br />
+              Rules <em>escalate</em> severity only — they can raise a result chip to amber or red, but never lower a
+              lab-flagged result. Thresholds are evaluated <strong>inclusively</strong>: "at or above (≥)" fires when
+              value ≥ threshold; "at or below (≤)" fires when value ≤ threshold. For "at or above", set red ≥ amber (red
+              fires at a higher value). For "at or below", set red ≤ amber (red fires at a lower value). At least one
+              threshold must be set. Analyte matching is case-insensitive substring against the result name as reported
+              by your lab. <strong>Analyte exclude</strong> (optional) skips look-alike analytes that share a match
+              token — e.g. a "platelet" rule with exclude "mean platelet" won't fire on "Mean platelet volume", and a
+              serum potassium rule with exclude "urine" won't fire on a urine potassium. <br /><br />
+              <strong>Text / culture rules</strong> match a result by analyte name, then inspect the result text: if any
+              <em>normal phrase</em> is found (case-insensitive) the calm "normal" chip is shown; otherwise the label
+              chip is shown (amber by default). Use this for microbiology culture reports such as MSU. <br /><br />
+              <strong>Specimen scope</strong> (optional) restricts a rule to results that belong to a named specimen
+              group — for example scoping a "Culture" rule to "THROAT SWAB" so it never fires on urine or blood culture
+              lines. Leave blank to match any specimen. Fail-open: if the lab report carries no group header the scope
+              is ignored. <br /><br />
+              <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule
+              chip is not a clinical all-clear: it only means no rule covered that analyte.
+            </div>
+
+            <!-- ── Result inspector ─────────────────────────────────── -->
+            <details id="rrInspectorDetails" class="tl-rr-inspector-wrap">
+              <summary class="tl-rr-inspector-summary">
+                <span class="tl-rr-inspector-arrow">&#9654;</span>
+                Inspect a result — see what the engine parsed
+              </summary>
+              <div class="tl-rr-inspector-body">
+                <p class="tl-rr-inspector-hint">
+                  Paste a raw investigation-report API response (JSON) below and click <strong>Inspect</strong> to see
+                  exactly how the engine will parse each result line: the <code>name</code> the analyte-match strings
+                  are tested against, the <code>specimen</code> group header the specimen-scope is tested against, and
+                  the combined <code>text</code> body the normal-phrase check searches through.
+                  <br />
+                  <strong>Privacy:</strong> parsed values are shown in this panel only and never written to storage.
+                </p>
+                <textarea
+                  id="rrInspectorInput"
+                  class="tl-rr-inspector-input"
+                  rows="6"
+                  spellcheck="false"
+                  placeholder="Paste the JSON from /api/v1/data/{slug}/investigation-report here…"
+                ></textarea>
+                <div class="tl-rr-inspector-actions">
+                  <button class="tl-btn tl-btn-primary" id="btnRrInspect">Inspect</button>
+                  <button class="tl-btn" id="btnRrInspectorClear">Clear</button>
+                  <span id="rrInspectorStatus" class="tl-rr-inspector-status"></span>
+                </div>
+                <div id="rrInspectorResults" class="tl-rr-inspector-results" style="display: none"></div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div class="tl-edit-footer">
+          <button class="tl-btn" id="btnCancelResultEdit">Cancel</button>
+          <button class="tl-btn tl-btn-primary" id="btnSaveResultEdit">Save rule</button>
+        </div>
+      </section>
+
+      <!-- ============================ ABOUT TAB ============================ -->
+      <section class="tl-pane" id="paneAbout">
+        <h2>About Triage Lens</h2>
+        <p>
+          Triage Lens is a personal-use overlay for Medicus. It surfaces clinical signals on patient records, classifies
+          and decorates triage queue rows, and adds a request-context panel on task detail pages. All processing is
+          local — no data leaves the browser.
+        </p>
+        <h3>How rules work</h3>
+        <p>
+          Each <strong>rule</strong> has a label, a severity colour, one or more text patterns, and zero or more
+          actions. When a rule's pattern matches the configured fields on a configured page, the chip appears on the HUD
+          or queue row. If the chip has actions, click it to expand a menu of click-to-fire shortcuts.
+        </p>
+        <ul>
+          <li><strong>Link</strong> — opens a URL in a new tab (NICE guidelines, questionnaires, local SOPs).</li>
+          <li>
+            <strong>Snippet</strong> — copies a text template to the clipboard (history-taking, examination, safety-net
+            wording).
+          </li>
+          <li>
+            <strong>Note</strong> — shows informational text in a popover (monitoring reminders, red-flag checklists).
+          </li>
+        </ul>
+        <h3>Safety</h3>
+        <p>
+          This is display-only. It surfaces existing record entries with provenance — no synthesis, no inference of
+          unrecorded clinical states, no recommendations. Actions never auto-fire — every action is click-to-confirm.
+        </p>
+        <h3>Authoring tips</h3>
+        <ul>
+          <li>
+            If your patterns are simple words or phrases, leave <em>regex</em> off — Triage Lens will escape special
+            characters and match whole-word.
+          </li>
+          <li>
+            For phrases with optional parts (e.g. <code>self.?harm</code> matching "self-harm" / "self harm"), enable
+            <em>regex</em>.
+          </li>
+          <li>Queue page only has <em>request</em> text available. Other fields are only on detail / record pages.</li>
+          <li>Use the live preview tab to test patterns before saving.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="../../engine/normalisers.js"></script>
+    <script src="../../engine/result-rules.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

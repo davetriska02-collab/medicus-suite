@@ -8,37 +8,39 @@
     document.documentElement.setAttribute('data-size', p.size || 'medium');
     document.documentElement.setAttribute('data-colorblind', String(!!p.colorblind));
   }
-  chrome.storage.local.get('suite.display', r => apply(r['suite.display'] || {}));
-  chrome.storage.onChanged.addListener(c => { if (c['suite.display']) apply(c['suite.display'].newValue || {}); });
+  chrome.storage.local.get('suite.display', (r) => apply(r['suite.display'] || {}));
+  chrome.storage.onChanged.addListener((c) => {
+    if (c['suite.display']) apply(c['suite.display'].newValue || {});
+  });
 })();
 
 (() => {
   'use strict';
 
   const FIELDS = [
-    { id: 'request',       label: 'Request body / preview text' },
-    { id: 'problems',      label: 'Active problems' },
-    { id: 'registers',     label: 'Registers' },
-    { id: 'meds',          label: 'Medications' },
-    { id: 'allergies',     label: 'Allergies' },
-    { id: 'banner',        label: 'Banner warnings' },
+    { id: 'request', label: 'Request body / preview text' },
+    { id: 'problems', label: 'Active problems' },
+    { id: 'registers', label: 'Registers' },
+    { id: 'meds', label: 'Medications' },
+    { id: 'allergies', label: 'Allergies' },
+    { id: 'banner', label: 'Banner warnings' },
     { id: 'consultations', label: 'Recent consultations' },
-    { id: 'docs',          label: 'Recent documents' }
+    { id: 'docs', label: 'Recent documents' },
   ];
   const PAGES = [
-    { id: 'queue',  label: 'Queue list' },
+    { id: 'queue', label: 'Queue list' },
     { id: 'detail', label: 'Task detail' },
-    { id: 'record', label: 'Patient record' }
+    { id: 'record', label: 'Patient record' },
   ];
   const KIND_LABEL = { red: 'RED', amber: 'AMBER', green: 'GREEN', info: 'INFO' };
 
   // ============================================================
   // STATE
   // ============================================================
-  let CONFIG = null;        // current edited config
-  let DEFAULTS = null;      // shipped defaults (read once)
-  let editingId = null;     // id of rule being edited
-  let editingDraft = null;  // shallow clone of rule under edit
+  let CONFIG = null; // current edited config
+  let DEFAULTS = null; // shipped defaults (read once)
+  let editingId = null; // id of rule being edited
+  let editingDraft = null; // shallow clone of rule under edit
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -47,7 +49,12 @@
     const el = $('#tlStatus');
     el.textContent = msg;
     el.className = 'tl-status tl-status-' + kind;
-    if (msg) setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; } }, 2400);
+    if (msg)
+      setTimeout(() => {
+        if (el.textContent === msg) {
+          el.textContent = '';
+        }
+      }, 2400);
   };
 
   // ============================================================
@@ -63,7 +70,7 @@
 
   const fetchDefaults = async () => {
     const url = chrome.runtime.getURL('defaults.json');
-    return await fetch(url).then(r => r.json());
+    return await fetch(url).then((r) => r.json());
   };
 
   const saveConfig = async (cfg) => {
@@ -87,7 +94,7 @@
   // Kept in lock-step with the same table in content-scripts/triage-lens/content.js.
   const RETIRED_CHIP_LABELS = {
     'queue.resultUrgent': ['Urgent: {name}'],
-    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}']
+    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}'],
   };
   const revertRetiredChipLabels = (chips, shippedChips) => {
     if (!chips || !shippedChips) return;
@@ -112,9 +119,9 @@
   const backfillBuiltinAbnormalText = (resultRules, shippedResultRules) => {
     if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
     for (const id of RESULT_RULES_GAINED_ABNORMALTEXT) {
-      const held = resultRules.find(r => r && r.id === id && r.builtin);
+      const held = resultRules.find((r) => r && r.id === id && r.builtin);
       if (!held || (Array.isArray(held.abnormalText) && held.abnormalText.length)) continue;
-      const shippedRule = shippedResultRules.find(r => r && r.id === id);
+      const shippedRule = shippedResultRules.find((r) => r && r.id === id);
       if (shippedRule && Array.isArray(shippedRule.abnormalText) && shippedRule.abnormalText.length) {
         held.abnormalText = [...shippedRule.abnormalText];
       }
@@ -124,7 +131,7 @@
     if (!cfg || !Array.isArray(cfg.rules) || !shipped) return null;
     if ((cfg.version || 0) >= (shipped.version || 0)) return null;
     const out = { ...cfg, rules: [...cfg.rules] };
-    const have = new Set(out.rules.map(r => r && r.id));
+    const have = new Set(out.rules.map((r) => r && r.id));
     const removed = new Set(out.removedBuiltins || []);
     for (const r of shipped.rules || []) {
       if (r.builtin && !have.has(r.id) && !removed.has(r.id)) out.rules.push(r);
@@ -134,8 +141,8 @@
     out.systemChips = { ...(shipped.systemChips || {}), ...(cfg.systemChips || {}) };
     revertRetiredChipLabels(out.systemChips, shipped.systemChips);
     out.resultRules = [...(Array.isArray(cfg.resultRules) ? cfg.resultRules : [])];
-    const haveRR = new Set(out.resultRules.map(r => r && r.id));
-    for (const r of (shipped.resultRules || [])) {
+    const haveRR = new Set(out.resultRules.map((r) => r && r.id));
+    for (const r of shipped.resultRules || []) {
       if (r.builtin && !haveRR.has(r.id) && !removed.has(r.id)) out.resultRules.push(r);
     }
     backfillBuiltinAbnormalText(out.resultRules, shipped.resultRules);
@@ -198,7 +205,10 @@
       const llmJson = $('#llmJson');
       if (llmJson) llmJson.value = '';
       const llmStatus = $('#llmStatus');
-      if (llmStatus) { llmStatus.textContent = ''; llmStatus.className = 'tl-llm-status'; }
+      if (llmStatus) {
+        llmStatus.textContent = '';
+        llmStatus.className = 'tl-llm-status';
+      }
     }
     if (name !== 'resultEdit') {
       const rrLlmDetails = $('#rrLlmDetails');
@@ -206,11 +216,26 @@
       const resultLlmJson = $('#resultLlmJson');
       if (resultLlmJson) resultLlmJson.value = '';
       const resultLlmStatus = $('#resultLlmStatus');
-      if (resultLlmStatus) { resultLlmStatus.textContent = ''; resultLlmStatus.className = 'tl-llm-status'; }
+      if (resultLlmStatus) {
+        resultLlmStatus.textContent = '';
+        resultLlmStatus.className = 'tl-llm-status';
+      }
     }
-    $$('.tl-tab').forEach(t => t.classList.toggle('tl-tab-active', t.dataset.tab === name));
-    const map = { rules: 'paneRules', edit: 'paneEdit', systemChips: 'paneSystemChips', systemEdit: 'paneSystemEdit', thresholds: 'paneThresholds', prefs: 'panePrefs', preview: 'panePreview', backup: 'paneBackup', about: 'paneAbout', resultRules: 'paneResultRules', resultEdit: 'paneResultEdit' };
-    $$('.tl-pane').forEach(p => p.classList.remove('tl-pane-active'));
+    $$('.tl-tab').forEach((t) => t.classList.toggle('tl-tab-active', t.dataset.tab === name));
+    const map = {
+      rules: 'paneRules',
+      edit: 'paneEdit',
+      systemChips: 'paneSystemChips',
+      systemEdit: 'paneSystemEdit',
+      thresholds: 'paneThresholds',
+      prefs: 'panePrefs',
+      preview: 'panePreview',
+      backup: 'paneBackup',
+      about: 'paneAbout',
+      resultRules: 'paneResultRules',
+      resultEdit: 'paneResultEdit',
+    };
+    $$('.tl-pane').forEach((p) => p.classList.remove('tl-pane-active'));
     const id = map[name];
     if (id) $('#' + id).classList.add('tl-pane-active');
   };
@@ -240,13 +265,13 @@
     bumpsTile: null,
     builtin: false,
     actions: [],
-    notes: ''
+    notes: '',
   });
 
   const renderRules = () => {
     const q = ($('#ruleSearch').value || '').trim().toLowerCase();
     const kFilter = $('#filterKind').value;
-    const list = CONFIG.rules.filter(r => {
+    const list = CONFIG.rules.filter((r) => {
       if (kFilter && r.kind !== kFilter) return false;
       if (!q) return true;
       const hay = (r.label + ' ' + (r.patterns || []).join(' ') + ' ' + (r.notes || '')).toLowerCase();
@@ -269,7 +294,7 @@
         <span class="tl-rule-kind tl-rule-kind-${escAttr(rule.kind)}">${KIND_LABEL[rule.kind] || rule.kind}</span>
         <span>
           <span class="tl-rule-label">${escHtml(rule.label)}</span>
-          <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${(rule.notes ? ' · ' + escHtml(rule.notes.slice(0, 50)) : '')}</span>
+          <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${rule.notes ? ' · ' + escHtml(rule.notes.slice(0, 50)) : ''}</span>
         </span>
         <span class="tl-rule-meta">${rule.patterns.length} pattern${rule.patterns.length === 1 ? '' : 's'}</span>
         <span class="tl-rule-meta">${rule.actions.length} action${rule.actions.length === 1 ? '' : 's'}</span>
@@ -286,7 +311,7 @@
       row.querySelector('[data-act="edit"]').addEventListener('click', () => openEditor(rule.id));
       row.querySelector('[data-act="del"]').addEventListener('click', async () => {
         if (!confirm(`Delete rule "${rule.label}"? This can't be undone (unless you reset to defaults).`)) return;
-        CONFIG.rules = CONFIG.rules.filter(r => r.id !== rule.id);
+        CONFIG.rules = CONFIG.rules.filter((r) => r.id !== rule.id);
         // Tombstone deleted builtins so the defaults-version merge never
         // resurrects a rule the user deliberately removed.
         if (rule.builtin) {
@@ -306,9 +331,13 @@
   const setupEditPane = () => {
     // Build field & page checkboxes once
     const fc = $('#fFields');
-    fc.innerHTML = FIELDS.map(f => `<label><input type="checkbox" data-field="${f.id}"><span>${f.label}</span></label>`).join('');
+    fc.innerHTML = FIELDS.map(
+      (f) => `<label><input type="checkbox" data-field="${f.id}"><span>${f.label}</span></label>`
+    ).join('');
     const pc = $('#fPages');
-    pc.innerHTML = PAGES.map(p => `<label><input type="checkbox" data-page="${p.id}"><span>${p.label}</span></label>`).join('');
+    pc.innerHTML = PAGES.map(
+      (p) => `<label><input type="checkbox" data-page="${p.id}"><span>${p.label}</span></label>`
+    ).join('');
 
     $('#btnBackToRules').addEventListener('click', () => {
       editingId = null;
@@ -317,19 +346,20 @@
     $('#btnCancelEdit').addEventListener('click', () => {
       editingId = null;
       // Reload from storage to discard changes
-      chrome.storage.local.get(['triagelens.config', 'config']).then(r => {
+      chrome.storage.local.get(['triagelens.config', 'config']).then((r) => {
         const cfg = r['triagelens.config'] || r['config'];
         if (cfg) CONFIG = cfg;
-        renderRules(); activateTab('rules');
+        renderRules();
+        activateTab('rules');
       });
     });
     $('#btnSaveEdit').addEventListener('click', saveCurrentRule);
     $('#btnDeleteRule').addEventListener('click', async () => {
       if (!editingId) return;
-      const r = CONFIG.rules.find(x => x.id === editingId);
+      const r = CONFIG.rules.find((x) => x.id === editingId);
       if (!r) return;
       if (!confirm(`Delete rule "${r.label}"?`)) return;
-      CONFIG.rules = CONFIG.rules.filter(x => x.id !== editingId);
+      CONFIG.rules = CONFIG.rules.filter((x) => x.id !== editingId);
       await saveConfig(CONFIG);
       editingId = null;
       flash('Deleted');
@@ -343,7 +373,7 @@
   };
 
   const openEditor = (id) => {
-    const rule = CONFIG.rules.find(r => r.id === id);
+    const rule = CONFIG.rules.find((r) => r.id === id);
     if (!rule) return;
     editingId = id;
     editingDraft = JSON.parse(JSON.stringify(rule)); // deep clone for actions
@@ -359,8 +389,12 @@
     $('#fBumpsTile').value = editingDraft.bumpsTile || '';
     $('#fNotes').value = editingDraft.notes || '';
 
-    $$('#fFields input').forEach(c => { c.checked = (editingDraft.fields || []).includes(c.dataset.field); });
-    $$('#fPages input').forEach(c => { c.checked = (editingDraft.pages || []).includes(c.dataset.page); });
+    $$('#fFields input').forEach((c) => {
+      c.checked = (editingDraft.fields || []).includes(c.dataset.field);
+    });
+    $$('#fPages input').forEach((c) => {
+      c.checked = (editingDraft.pages || []).includes(c.dataset.page);
+    });
 
     renderActions();
     activateTab('edit');
@@ -380,13 +414,15 @@
         </select>
         <div class="tl-action-fields">
           <input type="text" data-i="${i}" data-k="label" placeholder="Label (e.g. NICE UTI)" value="${escAttr(a.label || '')}">
-          ${a.type === 'link'
-            ? `<input type="url" data-i="${i}" data-k="url" placeholder="https://..." value="${escAttr(a.url || '')}">`
-            : `<textarea data-i="${i}" data-k="text" rows="3" placeholder="${a.type === 'snippet' ? 'Text to copy to clipboard' : 'Note text shown in popover'}">${escHtml(a.text || '')}</textarea>`}
+          ${
+            a.type === 'link'
+              ? `<input type="url" data-i="${i}" data-k="url" placeholder="https://..." value="${escAttr(a.url || '')}">`
+              : `<textarea data-i="${i}" data-k="text" rows="3" placeholder="${a.type === 'snippet' ? 'Text to copy to clipboard' : 'Note text shown in popover'}">${escHtml(a.text || '')}</textarea>`
+          }
         </div>
         <button class="tl-action-remove" data-i="${i}" title="Remove action">×</button>`;
       // Wire change listeners
-      row.querySelectorAll('input, select, textarea').forEach(input => {
+      row.querySelectorAll('input, select, textarea').forEach((input) => {
         input.addEventListener('input', (e) => {
           const idx = +e.target.dataset.i;
           const key = e.target.dataset.k;
@@ -406,10 +442,10 @@
   // RULE VALIDATION (shared by save path and LLM importer)
   // ============================================================
 
-  const ALLOWED_KINDS  = ['red', 'amber', 'green', 'info'];
-  const ALLOWED_FIELDS = FIELDS.map(f => f.id);
-  const ALLOWED_PAGES  = PAGES.map(p => p.id);
-  const ALLOWED_BUMPS  = ['', 'risk', 'monitoring', 'meds', 'openLoops', 'carePlan', 'safeguarding'];
+  const ALLOWED_KINDS = ['red', 'amber', 'green', 'info'];
+  const ALLOWED_FIELDS = FIELDS.map((f) => f.id);
+  const ALLOWED_PAGES = PAGES.map((p) => p.id);
+  const ALLOWED_BUMPS = ['', 'risk', 'monitoring', 'meds', 'openLoops', 'carePlan', 'safeguarding'];
   const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
 
   // validateTriageRule(rule) → string[]
@@ -417,7 +453,10 @@
   // Used by both saveCurrentRule and the LLM importer.
   const validateTriageRule = (rule) => {
     const errs = [];
-    if (!rule || typeof rule !== 'object') { errs.push('Rule must be an object.'); return errs; }
+    if (!rule || typeof rule !== 'object') {
+      errs.push('Rule must be an object.');
+      return errs;
+    }
 
     // kind
     if (!ALLOWED_KINDS.includes(rule.kind)) {
@@ -425,13 +464,16 @@
     }
 
     // patterns — at least one non-empty
-    const patterns = Array.isArray(rule.patterns) ? rule.patterns.filter(p => typeof p === 'string' && p.trim()) : [];
+    const patterns = Array.isArray(rule.patterns) ? rule.patterns.filter((p) => typeof p === 'string' && p.trim()) : [];
     if (patterns.length === 0) {
       errs.push('At least one non-empty pattern is required.');
     } else if (rule.regex) {
       for (const p of patterns) {
-        try { new RegExp(p, 'i'); }
-        catch (e) { errs.push('Invalid regex pattern "' + p + '": ' + e.message); }
+        try {
+          new RegExp(p, 'i');
+        } catch (e) {
+          errs.push('Invalid regex pattern "' + p + '": ' + e.message);
+        }
       }
     }
 
@@ -440,8 +482,9 @@
     if (fields.length === 0) {
       errs.push('At least one field must be selected.');
     } else {
-      const bad = fields.filter(f => !ALLOWED_FIELDS.includes(f));
-      if (bad.length) errs.push('Unknown field(s): ' + bad.join(', ') + '. Allowed: ' + ALLOWED_FIELDS.join(', ') + '.');
+      const bad = fields.filter((f) => !ALLOWED_FIELDS.includes(f));
+      if (bad.length)
+        errs.push('Unknown field(s): ' + bad.join(', ') + '. Allowed: ' + ALLOWED_FIELDS.join(', ') + '.');
     }
 
     // pages — non-empty, from allowed set
@@ -449,7 +492,7 @@
     if (pages.length === 0) {
       errs.push('At least one page must be selected.');
     } else {
-      const bad = pages.filter(p => !ALLOWED_PAGES.includes(p));
+      const bad = pages.filter((p) => !ALLOWED_PAGES.includes(p));
       if (bad.length) errs.push('Unknown page(s): ' + bad.join(', ') + '. Allowed: ' + ALLOWED_PAGES.join(', ') + '.');
     }
 
@@ -461,7 +504,10 @@
     // actions — each action must be well-formed
     const actions = Array.isArray(rule.actions) ? rule.actions : [];
     actions.forEach((a, i) => {
-      if (!a || typeof a !== 'object') { errs.push('actions[' + i + ']: must be an object.'); return; }
+      if (!a || typeof a !== 'object') {
+        errs.push('actions[' + i + ']: must be an object.');
+        return;
+      }
       if (!ALLOWED_ACTION_TYPES.includes(a.type)) {
         errs.push('actions[' + i + '].type must be one of: ' + ALLOWED_ACTION_TYPES.join(', ') + '.');
       }
@@ -487,7 +533,8 @@
   // Returns a self-contained LLM instruction string for authoring a single
   // Triage Lens custom alert rule. Embed in an LLM chat, paste JSON back.
   // Embedded EXAMPLE JSON block uses stable markers for test extraction.
-  const triageRuleSchemaPrompt = () => `You are generating a single Triage Lens custom alert rule for a UK GP practice using Medicus. Output ONLY a JSON object — no prose, no markdown fences, no code blocks. The object must conform exactly to the schema below.
+  const triageRuleSchemaPrompt =
+    () => `You are generating a single Triage Lens custom alert rule for a UK GP practice using Medicus. Output ONLY a JSON object — no prose, no markdown fences, no code blocks. The object must conform exactly to the schema below.
 
 === CLINICAL SAFETY INSTRUCTIONS ===
 
@@ -588,11 +635,11 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
 `;
 
   const setupLlmPane = () => {
-    const btnCopy   = $('#btnLlmCopyPrompt');
-    const copiedEl  = $('#llmCopied');
-    const jsonEl    = $('#llmJson');
+    const btnCopy = $('#btnLlmCopyPrompt');
+    const copiedEl = $('#llmCopied');
+    const jsonEl = $('#llmJson');
     const btnImport = $('#btnLlmImport');
-    const statusEl  = $('#llmStatus');
+    const statusEl = $('#llmStatus');
     if (!btnCopy || !jsonEl || !btnImport || !statusEl) return;
 
     btnCopy.addEventListener('click', async () => {
@@ -604,13 +651,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         ta.value = prompt;
         ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
         document.body.appendChild(ta);
-        ta.focus(); ta.select();
+        ta.focus();
+        ta.select();
         document.execCommand && document.execCommand('copy');
         document.body.removeChild(ta);
       }
       if (copiedEl) {
         copiedEl.style.opacity = '1';
-        setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+        setTimeout(() => {
+          copiedEl.style.opacity = '0';
+        }, 2000);
       }
     });
 
@@ -626,8 +676,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
 
       // Parse JSON
       let parsed;
-      try { parsed = JSON.parse(raw); }
-      catch (e) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
         statusEl.className = 'tl-llm-status tl-llm-status-err';
         statusEl.textContent = 'Could not parse JSON: ' + escHtml(e.message);
         return;
@@ -667,7 +718,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       }
 
       // Assign fresh ids, force builtin:false, force enabled:false, append
-      const toAdd = candidates.map(rule => ({
+      const toAdd = candidates.map((rule) => ({
         ...rule,
         id: 'rule_' + Math.random().toString(36).slice(2, 9),
         builtin: false,
@@ -678,7 +729,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       await saveConfig(CONFIG);
       jsonEl.value = '';
       statusEl.className = 'tl-llm-status tl-llm-status-ok';
-      statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each one before it fires).';
+      statusEl.textContent =
+        'Imported ' +
+        toAdd.length +
+        ' rule' +
+        (toAdd.length !== 1 ? 's' : '') +
+        ' (disabled — review and enable each one before it fires).';
       renderRules();
     });
   };
@@ -689,12 +745,15 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     editingDraft.label = $('#fLabel').value.trim() || 'Untitled rule';
     editingDraft.kind = $('#fKind').value;
     editingDraft.enabled = $('#fEnabled').checked;
-    editingDraft.patterns = $('#fPatterns').value.split('\n').map(s => s.trim()).filter(Boolean);
+    editingDraft.patterns = $('#fPatterns')
+      .value.split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
     editingDraft.regex = $('#fRegex').checked;
     editingDraft.bumpsTile = $('#fBumpsTile').value || null;
     editingDraft.notes = $('#fNotes').value.trim();
-    editingDraft.fields = $$('#fFields input:checked').map(c => c.dataset.field);
-    editingDraft.pages = $$('#fPages input:checked').map(c => c.dataset.page);
+    editingDraft.fields = $$('#fFields input:checked').map((c) => c.dataset.field);
+    editingDraft.pages = $$('#fPages input:checked').map((c) => c.dataset.page);
 
     // Validate via the shared validator; the form builder ensures kind/fields/pages
     // come from the fixed select/checkbox sets, so the main check that can fail here
@@ -706,7 +765,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
 
     // Persist
-    const idx = CONFIG.rules.findIndex(r => r.id === editingId);
+    const idx = CONFIG.rules.findIndex((r) => r.id === editingId);
     if (idx >= 0) CONFIG.rules[idx] = editingDraft;
     else CONFIG.rules.push(editingDraft);
     await saveConfig(CONFIG);
@@ -721,7 +780,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // ============================================================
   const setupThresholdsPane = () => {
     $('#btnSaveThresholds').addEventListener('click', async () => {
-      $$('#paneThresholds input[data-th]').forEach(inp => {
+      $$('#paneThresholds input[data-th]').forEach((inp) => {
         const key = inp.dataset.th;
         const val = +inp.value;
         if (Number.isFinite(val)) CONFIG.thresholds[key] = val;
@@ -738,9 +797,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     });
   };
   const populateThresholds = () => {
-    $$('#paneThresholds input[data-th]').forEach(inp => {
+    $$('#paneThresholds input[data-th]').forEach((inp) => {
       const key = inp.dataset.th;
-      const val = (CONFIG.thresholds && CONFIG.thresholds[key]);
+      const val = CONFIG.thresholds && CONFIG.thresholds[key];
       if (val != null) inp.value = val;
     });
   };
@@ -750,7 +809,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // ============================================================
   const setupPrefsPane = () => {
     $('#btnSavePrefs').addEventListener('click', async () => {
-      $$('#panePrefs [data-pref]').forEach(inp => {
+      $$('#panePrefs [data-pref]').forEach((inp) => {
         const key = inp.dataset.pref;
         if (inp.type === 'checkbox') CONFIG.prefs[key] = inp.checked;
         else if (inp.type === 'number') CONFIG.prefs[key] = +inp.value;
@@ -761,7 +820,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     });
   };
   const populatePrefs = () => {
-    $$('#panePrefs [data-pref]').forEach(inp => {
+    $$('#panePrefs [data-pref]').forEach((inp) => {
       const key = inp.dataset.pref;
       const val = CONFIG.prefs?.[key];
       if (val == null) return;
@@ -775,7 +834,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // ============================================================
   const setupPreviewPane = () => {
     $('#previewInput').addEventListener('input', renderPreview);
-    $$('input[name="previewPage"]').forEach(r => r.addEventListener('change', renderPreview));
+    $$('input[name="previewPage"]').forEach((r) => r.addEventListener('change', renderPreview));
   };
   const compileRule = (rule) => {
     if (!rule || !rule.enabled) return null;
@@ -785,7 +844,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (!s) continue;
       try {
         const src = rule.regex ? s : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wrapped = rule.regex ? ('\\b' + src + '\\b') : ('\\b' + src);
+        const wrapped = rule.regex ? '\\b' + src + '\\b' : '\\b' + src;
         compiled.push(new RegExp(wrapped, 'i'));
       } catch (e) {}
     }
@@ -793,7 +852,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   };
   const renderPreview = () => {
     const text = $('#previewInput').value;
-    const page = $$('input[name="previewPage"]').find(r => r.checked)?.value || 'detail';
+    const page = $$('input[name="previewPage"]').find((r) => r.checked)?.value || 'detail';
     const cont = $('#previewMatches');
     if (!text.trim()) {
       cont.innerHTML = '<div class="tl-preview-empty">Type some sample text above to see which rules match.</div>';
@@ -806,7 +865,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (!rule.pages.includes(page)) continue;
       // For preview, treat the input text as the request field (most common)
       // and also test if the rule scans 'request' specifically
-      if (rule.fields.includes('request') && c.compiled.some(re => re.test(text))) {
+      if (rule.fields.includes('request') && c.compiled.some((re) => re.test(text))) {
         matches.push(rule);
       }
     }
@@ -814,12 +873,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       cont.innerHTML = '<div class="tl-preview-empty">No rules match.</div>';
       return;
     }
-    cont.innerHTML = matches.map(r => `
+    cont.innerHTML = matches
+      .map(
+        (r) => `
       <div class="tl-preview-match">
         <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
         <span class="tl-rule-label">${escHtml(r.label)}</span>
         <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>
-      </div>`).join('');
+      </div>`
+      )
+      .join('');
   };
 
   // ============================================================
@@ -840,7 +903,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#importFile').addEventListener('change', async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      if (f.size > 10 * 1024 * 1024) { alert('File is too large (max 10 MB). Import cancelled.'); return; }
+      if (f.size > 10 * 1024 * 1024) {
+        alert('File is too large (max 10 MB). Import cancelled.');
+        return;
+      }
       const text = await f.text();
       try {
         const parsed = JSON.parse(text);
@@ -858,7 +924,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       e.target.value = '';
     });
     $('#btnReset').addEventListener('click', async () => {
-      if (!confirm('Reset all rules, thresholds and preferences to shipped defaults? Your customisations will be lost.')) return;
+      if (
+        !confirm('Reset all rules, thresholds and preferences to shipped defaults? Your customisations will be lost.')
+      )
+        return;
       const fresh = await fetchDefaults();
       await saveConfig(fresh);
       flash('Reset to defaults');
@@ -902,51 +971,161 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // CONFIG.systemChips. The editor merges over the defaults.
   const SYSTEM_CHIP_META = [
     // Queue
-    { id: 'queue.child',         page: 'Queue',  desc: 'Patient under the configured "child" age threshold',     vars: ['{age}'] },
-    { id: 'queue.elder',         page: 'Queue',  desc: 'Patient at or over the "elder" age threshold',           vars: ['{age}'] },
-    { id: 'queue.taskAgeAmber',  page: 'Queue',  desc: 'Task open ≥ taskAgeAmber but < taskAgeRed days',         vars: ['{days}'] },
-    { id: 'queue.taskAgeRed',    page: 'Queue',  desc: 'Task open ≥ taskAgeRed days',                            vars: ['{days}'] },
-    { id: 'queue.priority',      page: 'Queue',  desc: 'Task priority is High or Urgent',                        vars: ['{priority}'] },
+    { id: 'queue.child', page: 'Queue', desc: 'Patient under the configured "child" age threshold', vars: ['{age}'] },
+    { id: 'queue.elder', page: 'Queue', desc: 'Patient at or over the "elder" age threshold', vars: ['{age}'] },
+    {
+      id: 'queue.taskAgeAmber',
+      page: 'Queue',
+      desc: 'Task open ≥ taskAgeAmber but < taskAgeRed days',
+      vars: ['{days}'],
+    },
+    { id: 'queue.taskAgeRed', page: 'Queue', desc: 'Task open ≥ taskAgeRed days', vars: ['{days}'] },
+    { id: 'queue.priority', page: 'Queue', desc: 'Task priority is High or Urgent', vars: ['{priority}'] },
     // Detail
-    { id: 'detail.statusAwaiting',      page: 'Detail', desc: 'Task status contains "awaiting"',                 vars: ['{status}'] },
-    { id: 'detail.statusReplyReceived', page: 'Detail', desc: 'Task status is "reply received"',                 vars: ['{status}'] },
-    { id: 'detail.statusClosed',        page: 'Detail', desc: 'Task is closed / completed / resolved',           vars: ['{status}'] },
-    { id: 'detail.statusOther',         page: 'Detail', desc: 'Any other status text',                           vars: ['{status}'] },
-    { id: 'detail.priority',            page: 'Detail', desc: 'Task priority is High or Urgent',                 vars: ['{priority}'] },
-    { id: 'detail.daysOpenInfo',        page: 'Detail', desc: 'Task open less than taskAgeAmber days',           vars: ['{days}'] },
-    { id: 'detail.daysOpenAmber',       page: 'Detail', desc: 'Task open ≥ taskAgeAmber but < taskAgeRed days',  vars: ['{days}'] },
-    { id: 'detail.daysOpenRed',         page: 'Detail', desc: 'Task open ≥ taskAgeRed days',                     vars: ['{days}'] },
-    { id: 'detail.today',               page: 'Detail', desc: 'Task created today',                              vars: [] },
-    { id: 'detail.proxy',               page: 'Detail', desc: 'Request submitted by a non-self proxy',           vars: ['{relationship}'] },
-    { id: 'detail.attachments',         page: 'Detail', desc: 'Request has one or more attachments',             vars: ['{count}'] },
-    { id: 'detail.monitoringDueAmber',  page: 'Detail', desc: 'High-risk drug monitoring due soon (Sentinel engine)',         vars: ['{count}'] },
-    { id: 'detail.monitoringDueRed',    page: 'Detail', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] },
-    { id: 'detail.docType',             page: 'Detail', desc: 'Document type label on document task pages (e.g. "Clinical letter")',    vars: ['{docType}'] },
-    { id: 'detail.docSpecialty',        page: 'Detail', desc: 'Clinical specialty or sender on document task pages',                   vars: ['{specialty}'] },
-    { id: 'queue.monitoringDueRed',   page: 'Queue', desc: 'High-risk drug monitoring overdue on queue rows (requires network per row — off by default)', vars: ['{count}'] },
-    { id: 'queue.monitoringDueAmber', page: 'Queue', desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',  vars: ['{count}'] },
-    { id: 'queue.resultUrgent',         page: 'Queue', desc: 'Investigation result has an urgent/critical analyte (lab flag or user threshold rule)', vars: ['{name}', '{count}'] },
-    { id: 'queue.resultAbnormal',       page: 'Queue', desc: 'Investigation result has out-of-range analytes', vars: ['{count}'] },
-    { id: 'queue.resultRuleUrgent',     page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to urgent — names the rule', vars: ['{name}', '{rule}'] },
-    { id: 'queue.resultRuleAbnormal',   page: 'Queue', desc: 'A user/base threshold rule (not the lab flag) raised a result to abnormal — names the rule', vars: ['{name}', '{rule}'] },
-    { id: 'queue.resultMisprioritised', page: 'Queue', desc: 'Result severity outranks the task priority (under-prioritised)', vars: [] },
-    { id: 'queue.resultUnmatched',      page: 'Queue', desc: 'Investigation report not matched to a patient record', vars: [] },
-    { id: 'queue.resultReview',         page: 'Queue', desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)', vars: ['{count}'] },
-    { id: 'queue.resultReviewRule',     page: 'Queue', desc: 'A text rule flagged a result for review and named it (e.g. bowel screening non-responder) — shows the rule label', vars: ['{rule}'] },
-    { id: 'queue.resultNoGrowth',       page: 'Queue', desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip', vars: ['{count}'] },
-    { id: 'queue.resultNoGrowthRule',   page: 'Queue', desc: 'A text rule with a custom normal label (e.g. Negative, Not detected) matched a normal phrase — shows that rule\'s normal label', vars: ['{label}'] },
+    { id: 'detail.statusAwaiting', page: 'Detail', desc: 'Task status contains "awaiting"', vars: ['{status}'] },
+    { id: 'detail.statusReplyReceived', page: 'Detail', desc: 'Task status is "reply received"', vars: ['{status}'] },
+    { id: 'detail.statusClosed', page: 'Detail', desc: 'Task is closed / completed / resolved', vars: ['{status}'] },
+    { id: 'detail.statusOther', page: 'Detail', desc: 'Any other status text', vars: ['{status}'] },
+    { id: 'detail.priority', page: 'Detail', desc: 'Task priority is High or Urgent', vars: ['{priority}'] },
+    { id: 'detail.daysOpenInfo', page: 'Detail', desc: 'Task open less than taskAgeAmber days', vars: ['{days}'] },
+    {
+      id: 'detail.daysOpenAmber',
+      page: 'Detail',
+      desc: 'Task open ≥ taskAgeAmber but < taskAgeRed days',
+      vars: ['{days}'],
+    },
+    { id: 'detail.daysOpenRed', page: 'Detail', desc: 'Task open ≥ taskAgeRed days', vars: ['{days}'] },
+    { id: 'detail.today', page: 'Detail', desc: 'Task created today', vars: [] },
+    { id: 'detail.proxy', page: 'Detail', desc: 'Request submitted by a non-self proxy', vars: ['{relationship}'] },
+    { id: 'detail.attachments', page: 'Detail', desc: 'Request has one or more attachments', vars: ['{count}'] },
+    {
+      id: 'detail.monitoringDueAmber',
+      page: 'Detail',
+      desc: 'High-risk drug monitoring due soon (Sentinel engine)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'detail.monitoringDueRed',
+      page: 'Detail',
+      desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'detail.docType',
+      page: 'Detail',
+      desc: 'Document type label on document task pages (e.g. "Clinical letter")',
+      vars: ['{docType}'],
+    },
+    {
+      id: 'detail.docSpecialty',
+      page: 'Detail',
+      desc: 'Clinical specialty or sender on document task pages',
+      vars: ['{specialty}'],
+    },
+    {
+      id: 'queue.monitoringDueRed',
+      page: 'Queue',
+      desc: 'High-risk drug monitoring overdue on queue rows (requires network per row — off by default)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'queue.monitoringDueAmber',
+      page: 'Queue',
+      desc: 'High-risk drug monitoring due soon on queue rows (requires network per row — off by default)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'queue.resultUrgent',
+      page: 'Queue',
+      desc: 'Investigation result has an urgent/critical analyte (lab flag or user threshold rule)',
+      vars: ['{name}', '{count}'],
+    },
+    {
+      id: 'queue.resultAbnormal',
+      page: 'Queue',
+      desc: 'Investigation result has out-of-range analytes',
+      vars: ['{count}'],
+    },
+    {
+      id: 'queue.resultRuleUrgent',
+      page: 'Queue',
+      desc: 'A user/base threshold rule (not the lab flag) raised a result to urgent — names the rule',
+      vars: ['{name}', '{rule}'],
+    },
+    {
+      id: 'queue.resultRuleAbnormal',
+      page: 'Queue',
+      desc: 'A user/base threshold rule (not the lab flag) raised a result to abnormal — names the rule',
+      vars: ['{name}', '{rule}'],
+    },
+    {
+      id: 'queue.resultMisprioritised',
+      page: 'Queue',
+      desc: 'Result severity outranks the task priority (under-prioritised)',
+      vars: [],
+    },
+    {
+      id: 'queue.resultUnmatched',
+      page: 'Queue',
+      desc: 'Investigation report not matched to a patient record',
+      vars: [],
+    },
+    {
+      id: 'queue.resultReview',
+      page: 'Queue',
+      desc: 'Microbiology/culture result needs review (no normal phrase found in the result text)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'queue.resultReviewRule',
+      page: 'Queue',
+      desc: 'A text rule flagged a result for review and named it (e.g. bowel screening non-responder) — shows the rule label',
+      vars: ['{rule}'],
+    },
+    {
+      id: 'queue.resultNoGrowth',
+      page: 'Queue',
+      desc: 'Culture result matched a normal phrase (e.g. No growth) — calm info chip',
+      vars: ['{count}'],
+    },
+    {
+      id: 'queue.resultNoGrowthRule',
+      page: 'Queue',
+      desc: "A text rule with a custom normal label (e.g. Negative, Not detected) matched a normal phrase — shows that rule's normal label",
+      vars: ['{label}'],
+    },
     // Record
-    { id: 'record.age',                  page: 'Record', desc: 'Patient age from banner',                        vars: ['{age}'] },
-    { id: 'record.palliative',           page: 'Record', desc: 'Patient on palliative register',                 vars: [] },
-    { id: 'record.riskToSelf',           page: 'Record', desc: 'Banner contains "risk to self"',                 vars: [] },
-    { id: 'record.frailtyAmber',         page: 'Record', desc: 'Frailty hits ≥ frailtyHitsAmber',                vars: ['{count}'] },
-    { id: 'record.frailtyRed',           page: 'Record', desc: 'Frailty hits ≥ frailtyHitsRed',                  vars: ['{count}'] },
-    { id: 'record.recentAdmissionAmber', page: 'Record', desc: 'Discharge summary in last recentDischargeAmber days',  vars: ['{days}'] },
-    { id: 'record.recentAdmissionRed',   page: 'Record', desc: 'Discharge summary in last recentDischargeRed days',    vars: ['{days}'] },
-    { id: 'record.polypharmacyAmber',    page: 'Record', desc: 'Repeat count ≥ polypharmacyAmber',               vars: ['{count}'] },
-    { id: 'record.polypharmacyRed',      page: 'Record', desc: 'Repeat count ≥ polypharmacyRed',                 vars: ['{count}'] },
-    { id: 'record.monitoringDueAmber',   page: 'Record', desc: 'High-risk drug monitoring due soon (Sentinel engine)',         vars: ['{count}'] },
-    { id: 'record.monitoringDueRed',     page: 'Record', desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)', vars: ['{count}'] }
+    { id: 'record.age', page: 'Record', desc: 'Patient age from banner', vars: ['{age}'] },
+    { id: 'record.palliative', page: 'Record', desc: 'Patient on palliative register', vars: [] },
+    { id: 'record.riskToSelf', page: 'Record', desc: 'Banner contains "risk to self"', vars: [] },
+    { id: 'record.frailtyAmber', page: 'Record', desc: 'Frailty hits ≥ frailtyHitsAmber', vars: ['{count}'] },
+    { id: 'record.frailtyRed', page: 'Record', desc: 'Frailty hits ≥ frailtyHitsRed', vars: ['{count}'] },
+    {
+      id: 'record.recentAdmissionAmber',
+      page: 'Record',
+      desc: 'Discharge summary in last recentDischargeAmber days',
+      vars: ['{days}'],
+    },
+    {
+      id: 'record.recentAdmissionRed',
+      page: 'Record',
+      desc: 'Discharge summary in last recentDischargeRed days',
+      vars: ['{days}'],
+    },
+    { id: 'record.polypharmacyAmber', page: 'Record', desc: 'Repeat count ≥ polypharmacyAmber', vars: ['{count}'] },
+    { id: 'record.polypharmacyRed', page: 'Record', desc: 'Repeat count ≥ polypharmacyRed', vars: ['{count}'] },
+    {
+      id: 'record.monitoringDueAmber',
+      page: 'Record',
+      desc: 'High-risk drug monitoring due soon (Sentinel engine)',
+      vars: ['{count}'],
+    },
+    {
+      id: 'record.monitoringDueRed',
+      page: 'Record',
+      desc: 'High-risk drug monitoring overdue / severely overdue (Sentinel engine)',
+      vars: ['{count}'],
+    },
   ];
 
   let sysEditingId = null;
@@ -1016,7 +1195,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   };
 
   const openSystemChipEditor = (id) => {
-    const meta = SYSTEM_CHIP_META.find(m => m.id === id);
+    const meta = SYSTEM_CHIP_META.find((m) => m.id === id);
     if (!meta) return;
     const cfg = getSysChipResolved(id);
     sysEditingId = id;
@@ -1026,9 +1205,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#sysLabel').value = sysEditingDraft.label || '';
     $('#sysKind').value = sysEditingDraft.kind || 'info';
     $('#sysEnabled').checked = sysEditingDraft.enabled !== false;
-    const varHelp = meta.vars.length ? 'Available variables: ' + meta.vars.join(', ') : 'No variables for this chip — label is shown as-is.';
+    const varHelp = meta.vars.length
+      ? 'Available variables: ' + meta.vars.join(', ')
+      : 'No variables for this chip — label is shown as-is.';
     $('#systemVarHelp').textContent = varHelp;
-    $('#sysIdHelp').innerHTML = '<strong>Trigger:</strong> ' + escHtml(meta.desc) + '<br><strong>System ID:</strong> <code>' + escHtml(id) + '</code> · cannot be changed.';
+    $('#sysIdHelp').innerHTML =
+      '<strong>Trigger:</strong> ' +
+      escHtml(meta.desc) +
+      '<br><strong>System ID:</strong> <code>' +
+      escHtml(id) +
+      '</code> · cannot be changed.';
     renderSysActions();
     activateTab('systemEdit');
   };
@@ -1047,12 +1233,14 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         </select>
         <div class="tl-action-fields">
           <input type="text" data-i="${i}" data-k="label" placeholder="Label" value="${escAttr(a.label || '')}">
-          ${a.type === 'link'
-            ? `<input type="url" data-i="${i}" data-k="url" placeholder="https://..." value="${escAttr(a.url || '')}">`
-            : `<textarea data-i="${i}" data-k="text" rows="3" placeholder="${a.type === 'snippet' ? 'Text to copy' : 'Note text'}">${escHtml(a.text || '')}</textarea>`}
+          ${
+            a.type === 'link'
+              ? `<input type="url" data-i="${i}" data-k="url" placeholder="https://..." value="${escAttr(a.url || '')}">`
+              : `<textarea data-i="${i}" data-k="text" rows="3" placeholder="${a.type === 'snippet' ? 'Text to copy' : 'Note text'}">${escHtml(a.text || '')}</textarea>`
+          }
         </div>
         <button class="tl-action-remove" data-i="${i}">×</button>`;
-      row.querySelectorAll('input, select, textarea').forEach(input => {
+      row.querySelectorAll('input, select, textarea').forEach((input) => {
         input.addEventListener('input', (e) => {
           const idx = +e.target.dataset.i;
           const key = e.target.dataset.k;
@@ -1101,6 +1289,113 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   let rrEditingId = null;
   let rrEditingDraft = null;
 
+  // ── In-session suggestion state ─────────────────────────────────────────────
+  // These live ONLY in this closure — never written to chrome.storage.
+  // They are populated by the result inspector when the user pastes and parses a
+  // report. If the user never runs the inspector the lists stay empty and the
+  // suggestion UI is hidden.
+  let _rrSessionNames = []; // string[] — result.name values seen this session
+  let _rrSessionSpecimens = []; // string[] — result.specimen values seen this session
+
+  /**
+   * extractResultFields(parsedReport)
+   * Pure helper: given the output of normaliseInvestigationReport, return an
+   * array of { name, specimen, text } objects — one per result line — with
+   * null/empty values preserved so the inspector can display them faithfully.
+   * Exported as window.SentinelInspectorHelpers for unit tests.
+   */
+  function extractResultFields(parsedReport) {
+    if (!parsedReport || !Array.isArray(parsedReport.results)) return [];
+    return parsedReport.results.map((r) => ({
+      name: typeof r.name === 'string' && r.name ? r.name : null,
+      specimen: typeof r.specimen === 'string' && r.specimen ? r.specimen : null,
+      text: typeof r.text === 'string' ? r.text : '',
+    }));
+  }
+
+  if (typeof window !== 'undefined') {
+    window.SentinelInspectorHelpers = { extractResultFields };
+  }
+
+  /** Collect unique name/specimen strings from a result-fields array into the session lists. */
+  function _rrAccumulateSession(fields) {
+    for (const f of fields) {
+      if (f.name && !_rrSessionNames.includes(f.name)) _rrSessionNames.push(f.name);
+      if (f.specimen && !_rrSessionSpecimens.includes(f.specimen)) _rrSessionSpecimens.push(f.specimen);
+    }
+  }
+
+  /** Render suggestion pill rows under the analyte-match and specimen-scope fields. */
+  function rrRenderSuggestions() {
+    const matchEl = $('#rrMatchSuggestions');
+    const specEl = $('#rrSpecimenSuggestions');
+
+    if (matchEl) {
+      matchEl.innerHTML = '';
+      if (_rrSessionNames.length) {
+        const label = document.createElement('span');
+        label.className = 'tl-rr-suggestion-label';
+        label.textContent = 'Seen this session:';
+        matchEl.appendChild(label);
+        for (const name of _rrSessionNames) {
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = 'tl-rr-suggestion-pill';
+          pill.title = 'Add "' + name + '" to analyte match strings';
+          pill.textContent = name;
+          pill.addEventListener('click', () => {
+            const ta = $('#rrAnalyteMatch');
+            if (!ta) return;
+            const current = ta.value
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean);
+            if (!current.includes(name)) {
+              ta.value = [...current, name].join('\n');
+              rrUpdateTestMatch();
+            }
+          });
+          matchEl.appendChild(pill);
+        }
+        matchEl.style.display = 'flex';
+      } else {
+        matchEl.style.display = 'none';
+      }
+    }
+
+    if (specEl) {
+      specEl.innerHTML = '';
+      if (_rrSessionSpecimens.length) {
+        const label = document.createElement('span');
+        label.className = 'tl-rr-suggestion-label';
+        label.textContent = 'Seen this session:';
+        specEl.appendChild(label);
+        for (const spec of _rrSessionSpecimens) {
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = 'tl-rr-suggestion-pill';
+          pill.title = 'Add "' + spec + '" to specimen scope';
+          pill.textContent = spec;
+          pill.addEventListener('click', () => {
+            const ta = $('#rrAnalyteSpecimen');
+            if (!ta) return;
+            const current = ta.value
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean);
+            if (!current.includes(spec)) {
+              ta.value = [...current, spec].join('\n');
+            }
+          });
+          specEl.appendChild(pill);
+        }
+        specEl.style.display = 'flex';
+      } else {
+        specEl.style.display = 'none';
+      }
+    }
+  }
+
   const makeBlankResultRule = () => ({
     id: 'rrule_' + Math.random().toString(36).slice(2, 9),
     enabled: false,
@@ -1110,7 +1405,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     comparator: 'above',
     amber: null,
     red: null,
-    unit: null
+    unit: null,
   });
 
   const rrSeveritySummary = (rule) => {
@@ -1118,7 +1413,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const phrases = Array.isArray(rule.normalText) ? rule.normalText : [];
       const shown = phrases.slice(0, 3).join(', ');
       const more = phrases.length > 3 ? ' …' : '';
-      return 'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more;
+      return (
+        'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more
+      );
     }
     const parts = [];
     const cmp = rule.comparator === 'above' ? '≥' : '≤';
@@ -1153,7 +1450,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const summary = rrSeveritySummary(rule);
       const _rrKind = rule.red != null ? 'red' : rule.amber != null ? 'amber' : rule.kind === 'text' ? 'info' : 'info';
       // Direction glyph so a high/low pair (e.g. high vs low calcium) is distinguishable at a glance.
-      const _rrDir = rule.kind === 'text' ? '' : rule.comparator === 'above' ? '↑' : rule.comparator === 'below' ? '↓' : '';
+      const _rrDir =
+        rule.kind === 'text' ? '' : rule.comparator === 'above' ? '↑' : rule.comparator === 'below' ? '↓' : '';
       const _rrDirTitle = _rrDir === '↑' ? 'Fires on a HIGH value' : _rrDir === '↓' ? 'Fires on a LOW value' : '';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
@@ -1163,7 +1461,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           ${!rule.enabled ? '<span class="tl-rr-unreviewed" title="Not yet enabled. Review this rule\'s analyte match strings and thresholds, then tick the box to let it fire.">Unreviewed</span>' : ''}
           <span class="tl-rule-meta">${rule.builtin ? '<span class="tl-builtin-badge" title="Shipped with the suite using UK-standard reference / critical values — verify against your own lab before relying on it. To silence one, untick it (it stays in the list, greyed). Delete removes it for good.">built-in</span>' : ''}${summary ? '<span class="tl-rr-summary">' + escHtml(summary) + '</span>' : ''}</span>
         </span>
-        <span class="tl-rule-meta tl-rr-analyte">${escHtml((rule.analyte && rule.analyte.match || []).join(', '))}</span>
+        <span class="tl-rule-meta tl-rr-analyte">${escHtml(((rule.analyte && rule.analyte.match) || []).join(', '))}</span>
         <span></span>
         <span class="tl-rule-actions">
           <button class="tl-btn" data-act="edit" aria-label="Edit ${escAttr(rule.label)}">Edit</button>
@@ -1181,7 +1479,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           ? `Delete built-in result rule "${rule.label}"? It will NOT return on the next update. (To silence it instead, just untick it.)`
           : `Delete result rule "${rule.label}"? This can't be undone.`;
         if (!confirm(msg)) return;
-        CONFIG.resultRules = CONFIG.resultRules.filter(r => r.id !== rule.id);
+        CONFIG.resultRules = CONFIG.resultRules.filter((r) => r.id !== rule.id);
         // Tombstone a deleted builtin so mergeShippedDefaults doesn't resurrect it on update
         // (mirrors the alert-rule delete path).
         if (rule.builtin) {
@@ -1199,8 +1497,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const thresholdEls = document.querySelectorAll('.rr-fields-threshold');
     const textEls = document.querySelectorAll('.rr-fields-text');
     const isText = kind === 'text';
-    thresholdEls.forEach(el => { el.style.display = isText ? 'none' : ''; });
-    textEls.forEach(el => { el.style.display = isText ? '' : 'none'; });
+    thresholdEls.forEach((el) => {
+      el.style.display = isText ? 'none' : '';
+    });
+    textEls.forEach((el) => {
+      el.style.display = isText ? '' : 'none';
+    });
   };
 
   const rrUpdateTestMatch = () => {
@@ -1213,16 +1515,22 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       resultEl.className = 'tl-rr-test-result';
       return;
     }
-    const matchLines = ($('#rrAnalyteMatch').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const matchLines = ($('#rrAnalyteMatch').value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (!matchLines.length) {
       resultEl.textContent = '✗ no match strings defined';
       resultEl.className = 'tl-rr-test-result tl-rr-test-nomatch';
       return;
     }
-    const excludeLines = ($('#rrAnalyteExclude').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const excludeLines = ($('#rrAnalyteExclude').value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
     const nameLower = testName.toLowerCase();
-    const matched = matchLines.some(m => nameLower.includes(m.toLowerCase()));
-    const excluded = excludeLines.some(e => nameLower.includes(e.toLowerCase()));
+    const matched = matchLines.some((m) => nameLower.includes(m.toLowerCase()));
+    const excluded = excludeLines.some((e) => nameLower.includes(e.toLowerCase()));
     if (matched && !excluded) {
       resultEl.textContent = '✓ would match';
       resultEl.className = 'tl-rr-test-result tl-rr-test-match';
@@ -1242,7 +1550,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     });
     $('#btnCancelResultEdit').addEventListener('click', () => {
       rrEditingId = null;
-      chrome.storage.local.get(['triagelens.config', 'config']).then(r => {
+      chrome.storage.local.get(['triagelens.config', 'config']).then((r) => {
         const cfg = r['triagelens.config'] || r['config'];
         if (cfg) CONFIG = cfg;
         if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
@@ -1253,13 +1561,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#btnSaveResultEdit').addEventListener('click', saveCurrentResultRule);
     $('#btnDeleteResultRule').addEventListener('click', async () => {
       if (!rrEditingId) return;
-      const r = CONFIG.resultRules.find(x => x.id === rrEditingId);
+      const r = CONFIG.resultRules.find((x) => x.id === rrEditingId);
       if (!r) return;
       const msg = r.builtin
         ? `Delete built-in result rule "${r.label}"? It will NOT return on the next update. (To silence it instead, untick Enabled.)`
         : `Delete result rule "${r.label}"?`;
       if (!confirm(msg)) return;
-      CONFIG.resultRules = CONFIG.resultRules.filter(x => x.id !== rrEditingId);
+      CONFIG.resultRules = CONFIG.resultRules.filter((x) => x.id !== rrEditingId);
       if (r.builtin) {
         CONFIG.removedBuiltins = [...new Set([...(CONFIG.removedBuiltins || []), r.id])];
       }
@@ -1273,18 +1581,146 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrAnalyteExclude').addEventListener('input', rrUpdateTestMatch);
     $('#rrTestName').addEventListener('input', rrUpdateTestMatch);
     $('#rrKind').addEventListener('change', (e) => rrApplyKindVisibility(e.target.value));
+
+    // ── Inspector ─────────────────────────────────────────────────────────────
+    const inspectBtn = $('#btnRrInspect');
+    const clearBtn = $('#btnRrInspectorClear');
+    const statusEl = $('#rrInspectorStatus');
+    const resultsEl = $('#rrInspectorResults');
+    const inputEl = $('#rrInspectorInput');
+
+    if (inspectBtn) {
+      inspectBtn.addEventListener('click', () => {
+        if (!inputEl || !statusEl || !resultsEl) return;
+        statusEl.textContent = '';
+        statusEl.className = 'tl-rr-inspector-status';
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+
+        const raw = (inputEl.value || '').trim();
+        if (!raw) {
+          statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+          statusEl.textContent = 'Paste a JSON investigation-report payload first.';
+          return;
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(raw);
+        } catch (e) {
+          statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+          statusEl.textContent = 'Could not parse JSON: ' + e.message;
+          return;
+        }
+
+        const NORM = window.SentinelNormalisers;
+        if (!NORM || typeof NORM.normaliseInvestigationReport !== 'function') {
+          statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+          statusEl.textContent = 'normaliseInvestigationReport not loaded — check normalisers.js script tag.';
+          return;
+        }
+
+        let parsed;
+        try {
+          parsed = NORM.normaliseInvestigationReport(payload);
+        } catch (e) {
+          statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+          statusEl.textContent = 'Normaliser threw: ' + e.message;
+          return;
+        }
+
+        const fields = extractResultFields(parsed);
+        if (!fields.length) {
+          statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+          statusEl.textContent =
+            'No result lines found in the payload. Check it is a valid investigation-report response.';
+          return;
+        }
+
+        // Accumulate into session suggestion lists (memory only — never persisted)
+        _rrAccumulateSession(fields);
+        rrRenderSuggestions();
+
+        // Build result table
+        const table = document.createElement('table');
+        table.className = 'tl-rr-inspector-table';
+        const thead = table.createTHead();
+        const hrow = thead.insertRow();
+        ['#', 'name (analyte match)', 'specimen (specimen scope)', 'text (phrase search)'].forEach((h) => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          hrow.appendChild(th);
+        });
+        const tbody = table.createTBody();
+        fields.forEach((f, i) => {
+          const tr = tbody.insertRow();
+          tr.className = 'tl-rr-inspector-row';
+          const tdIdx = tr.insertCell();
+          tdIdx.className = 'tl-rr-inspector-idx';
+          tdIdx.textContent = String(i + 1);
+          const tdName = tr.insertCell();
+          tdName.className = 'tl-rr-inspector-name';
+          tdName.textContent = f.name != null ? f.name : '(none)';
+          const tdSpec = tr.insertCell();
+          tdSpec.className = f.specimen ? 'tl-rr-inspector-spec' : 'tl-rr-inspector-spec tl-rr-inspector-null';
+          tdSpec.textContent = f.specimen != null ? f.specimen : '(none — rule will fail-open)';
+          const tdText = tr.insertCell();
+          tdText.className = 'tl-rr-inspector-text';
+          const SHORT = 160;
+          const display = f.text.length > SHORT ? f.text.slice(0, SHORT) + '…' : f.text;
+          tdText.textContent = display || '(empty)';
+          if (f.text.length > SHORT) tdText.title = f.text;
+        });
+
+        resultsEl.appendChild(table);
+
+        const summary = document.createElement('p');
+        summary.className = 'tl-rr-inspector-count';
+        const specCount = fields.filter((f) => f.specimen).length;
+        summary.textContent =
+          fields.length +
+          ' result line' +
+          (fields.length !== 1 ? 's' : '') +
+          ' parsed. ' +
+          specCount +
+          ' with a specimen header. ' +
+          'Click any suggestion pill above to fill the corresponding field.';
+        resultsEl.appendChild(summary);
+
+        resultsEl.style.display = 'block';
+        statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-ok';
+        statusEl.textContent = 'Parsed.';
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (inputEl) inputEl.value = '';
+        if (statusEl) {
+          statusEl.textContent = '';
+          statusEl.className = 'tl-rr-inspector-status';
+        }
+        if (resultsEl) {
+          resultsEl.style.display = 'none';
+          resultsEl.innerHTML = '';
+        }
+      });
+    }
   };
 
   const openResultRuleEditor = (id) => {
-    const rule = CONFIG.resultRules.find(r => r.id === id);
+    const rule = CONFIG.resultRules.find((r) => r.id === id);
     if (!rule) return;
     rrEditingId = id;
     rrEditingDraft = JSON.parse(JSON.stringify(rule));
 
-    $('#rrEditTitle').textContent = rule.builtin ? 'Edit built-in result rule: ' + rule.label : 'Edit result rule: ' + rule.label;
+    $('#rrEditTitle').textContent = rule.builtin
+      ? 'Edit built-in result rule: ' + rule.label
+      : 'Edit result rule: ' + rule.label;
     $('#rrLabel').value = rrEditingDraft.label || '';
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
     $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');
+    $('#rrAnalyteSpecimen').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.specimen) || []).join('\n');
     const kind = rrEditingDraft.kind === 'text' ? 'text' : 'threshold';
     $('#rrKind').value = kind;
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
@@ -1300,7 +1736,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const testEl = $('#rrTestName');
     const testResEl = $('#rrTestResult');
     if (testEl) testEl.value = '';
-    if (testResEl) { testResEl.textContent = ''; testResEl.className = 'tl-rr-test-result'; }
+    if (testResEl) {
+      testResEl.textContent = '';
+      testResEl.className = 'tl-rr-test-result';
+    }
+
+    // Refresh in-session suggestion pills (non-persisted)
+    rrRenderSuggestions();
 
     activateTab('resultEdit');
   };
@@ -1309,15 +1751,28 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (!rrEditingId) return;
     const selectedKind = $('#rrKind').value;
     const label = $('#rrLabel').value.trim() || 'Untitled result rule';
-    const analyteMatch = $('#rrAnalyteMatch').value.split('\n').map(s => s.trim()).filter(Boolean);
-    const analyteExclude = ($('#rrAnalyteExclude').value || '').split('\n').map(s => s.trim()).filter(Boolean);
-    const analyte = analyteExclude.length
-      ? { match: analyteMatch, exclude: analyteExclude }
-      : { match: analyteMatch };
+    const analyteMatch = $('#rrAnalyteMatch')
+      .value.split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const analyteExclude = ($('#rrAnalyteExclude').value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const analyteSpecimen = ($('#rrAnalyteSpecimen').value || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const analyte = { match: analyteMatch };
+    if (analyteExclude.length) analyte.exclude = analyteExclude;
+    if (analyteSpecimen.length) analyte.specimen = analyteSpecimen;
     const enabled = $('#rrEnabled').checked;
 
     if (selectedKind === 'text') {
-      const normalText = ($('#rrNormalText').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const normalText = ($('#rrNormalText').value || '')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
       const normalLabel = $('#rrNormalLabel').value.trim() || 'No growth';
       // Preserve abnormalText (positive-flag phrases — e.g. the culture/blood-culture
       // safety flags, or the bowel-screening non-responder phrases). The editor has no
@@ -1336,7 +1791,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         normalLabel,
         analyte,
         normalText,
-        enabled
+        enabled,
       };
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
     } else {
@@ -1365,7 +1820,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       }
     }
 
-    const idx = CONFIG.resultRules.findIndex(r => r.id === rrEditingId);
+    const idx = CONFIG.resultRules.findIndex((r) => r.id === rrEditingId);
     if (idx >= 0) CONFIG.resultRules[idx] = rrEditingDraft;
     else CONFIG.resultRules.push(rrEditingDraft);
     await saveConfig(CONFIG);
@@ -1376,15 +1831,15 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   };
 
   const setupResultLlmPane = () => {
-    const btnCopy      = $('#btnResultLlmCopyPrompt');
-    const copiedEl     = $('#resultLlmCopied');
-    const jsonEl       = $('#resultLlmJson');
-    const btnImport    = $('#btnResultLlmImport');
-    const statusEl     = $('#resultLlmStatus');
-    const previewEl    = $('#resultLlmPreview');
-    const previewList  = $('#resultLlmPreviewList');
-    const btnConfirm   = $('#btnResultLlmConfirm');
-    const btnCancel    = $('#btnResultLlmCancel');
+    const btnCopy = $('#btnResultLlmCopyPrompt');
+    const copiedEl = $('#resultLlmCopied');
+    const jsonEl = $('#resultLlmJson');
+    const btnImport = $('#btnResultLlmImport');
+    const statusEl = $('#resultLlmStatus');
+    const previewEl = $('#resultLlmPreview');
+    const previewList = $('#resultLlmPreviewList');
+    const btnConfirm = $('#btnResultLlmConfirm');
+    const btnCancel = $('#btnResultLlmCancel');
     if (!btnCopy || !jsonEl || !btnImport || !statusEl) return;
 
     // Pending candidates awaiting confirm
@@ -1398,7 +1853,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
 
     btnCopy.addEventListener('click', async () => {
       const PROMPT = window.SentinelResultRules && window.SentinelResultRules.resultRuleSchemaPrompt;
-      if (!PROMPT) { flash('result-rules.js not loaded', 'err'); return; }
+      if (!PROMPT) {
+        flash('result-rules.js not loaded', 'err');
+        return;
+      }
       const prompt = PROMPT();
       try {
         await navigator.clipboard.writeText(prompt);
@@ -1407,13 +1865,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         ta.value = prompt;
         ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
         document.body.appendChild(ta);
-        ta.focus(); ta.select();
+        ta.focus();
+        ta.select();
         document.execCommand && document.execCommand('copy');
         document.body.removeChild(ta);
       }
       if (copiedEl) {
         copiedEl.style.opacity = '1';
-        setTimeout(() => { copiedEl.style.opacity = '0'; }, 2000);
+        setTimeout(() => {
+          copiedEl.style.opacity = '0';
+        }, 2000);
       }
     });
 
@@ -1429,8 +1890,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       }
 
       let parsed;
-      try { parsed = JSON.parse(raw); }
-      catch (e) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
         statusEl.className = 'tl-llm-status tl-llm-status-err';
         statusEl.textContent = 'Could not parse JSON: ' + e.message;
         return;
@@ -1480,7 +1942,14 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
             const phrases = Array.isArray(c.normalText) ? c.normalText : [];
             const shownPhrases = phrases.slice(0, 3).join(', ') || '(none)';
             const morePhrases = phrases.length > 3 ? ' …' : '';
-            summary = (c.label || 'Untitled') + ' — Text: "' + (c.label || 'Needs review') + '" unless: ' + shownPhrases + morePhrases + ' — will import DISABLED';
+            summary =
+              (c.label || 'Untitled') +
+              ' — Text: "' +
+              (c.label || 'Needs review') +
+              '" unless: ' +
+              shownPhrases +
+              morePhrases +
+              ' — will import DISABLED';
           } else {
             const cmp = c.comparator === 'above' ? '≥' : '≤';
             const parts = [];
@@ -1488,14 +1957,22 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
             if (c.amber != null) parts.push(cmp + c.amber + ' amber');
             const unit = c.unit ? ' (' + c.unit + ')' : '';
             const numSummary = parts.join(' / ') + unit;
-            summary = (c.label || 'Untitled') + ' — ' + (c.comparator === 'above' ? 'at or above' : 'at or below') + ': ' + numSummary + ' — will import DISABLED';
+            summary =
+              (c.label || 'Untitled') +
+              ' — ' +
+              (c.comparator === 'above' ? 'at or above' : 'at or below') +
+              ': ' +
+              numSummary +
+              ' — will import DISABLED';
           }
           const item = document.createElement('div');
           item.className = 'tl-rr-llm-preview-item';
           item.textContent = summary;
           previewList.appendChild(item);
         }
-        if (btnConfirm) btnConfirm.textContent = 'Add ' + candidates.length + ' rule' + (candidates.length !== 1 ? 's' : '') + ', disabled';
+        if (btnConfirm)
+          btnConfirm.textContent =
+            'Add ' + candidates.length + ' rule' + (candidates.length !== 1 ? 's' : '') + ', disabled';
         previewEl.style.display = 'block';
         statusEl.className = 'tl-llm-status';
         statusEl.textContent = '';
@@ -1505,7 +1982,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (btnConfirm) {
       btnConfirm.addEventListener('click', async () => {
         if (!rrPendingCandidates) return;
-        const toAdd = rrPendingCandidates.map(rule => ({
+        const toAdd = rrPendingCandidates.map((rule) => ({
           ...rule,
           id: 'rrule_' + Math.random().toString(36).slice(2, 9),
           builtin: false,
@@ -1516,7 +1993,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         jsonEl.value = '';
         clearPreview();
         statusEl.className = 'tl-llm-status tl-llm-status-ok';
-        statusEl.textContent = 'Imported ' + toAdd.length + ' rule' + (toAdd.length !== 1 ? 's' : '') + ' (disabled — review and enable each before it fires).';
+        statusEl.textContent =
+          'Imported ' +
+          toAdd.length +
+          ' rule' +
+          (toAdd.length !== 1 ? 's' : '') +
+          ' (disabled — review and enable each before it fires).';
         renderResultRules();
       });
     }
@@ -1533,11 +2015,18 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // ============================================================
   // UTIL
   // ============================================================
-  const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const escHtml = (s) =>
+    String(s == null ? '' : s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
   const escAttr = (s) => escHtml(s);
 
   // ============================================================
   // GO
   // ============================================================
-  init().catch(e => { console.error('[TriageLens options] init failed', e); flash('Init failed: ' + e.message, 'err'); });
+  init().catch((e) => {
+    console.error('[TriageLens options] init failed', e);
+    flash('Init failed: ' + e.message, 'err');
+  });
 })();

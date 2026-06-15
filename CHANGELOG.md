@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.89.0] — 2026-06-15
+
+### Result-rule authoring: inspector + specimen-scope UI + in-session suggestions
+
+Three user-discoverable additions to the result-rule editor in Triage Lens settings,
+building on the `analyte.specimen` engine foundation landed in v3.88.0:
+
+**`analyte.specimen` field** — the specimen-scope array now has a proper UI field
+("Specimen scope") in the editor left column. Previously the field could only be set
+via LLM import or raw JSON; it now round-trips through the editor's save/load path.
+
+**Result inspector** — a collapsible panel in the editor right column. The user pastes
+a raw investigation-report API JSON payload (no live patient data is fetched — this is
+user-initiated copy-paste). The panel runs the payload through the real
+`normaliseInvestigationReport` normaliser and displays a table of every result line
+with the three fields the engine uses: `name` (what analyte-match tests against),
+`specimen` (what specimen-scope tests against), and `text` (what the normal-phrase
+search scans). No parsed values are written to `chrome.storage` or any persistent
+store — they are shown in the panel and discarded when the page closes.
+
+**In-session suggestion pills** — after an inspect run, unique `name` and `specimen`
+strings observed are added to in-session (closure-only, never persisted) lists. Pill
+buttons appear below the "Test match" and "Specimen scope" fields; clicking a pill
+appends its value to the relevant textarea so the user picks the real lab string
+without guessing. Lists accumulate across multiple inspect runs in the same page
+session and are cleared when the options page is closed.
+
+**Privacy decision (hard constraint):** deliverable 2 (suggestion lists) is fully
+implemented because the source data is never persisted. Suggestions come exclusively
+from values the user pastes into the inspector textarea in the current session. If the
+user never runs the inspector the suggestion UI stays hidden.
+
 ## [v3.88.0] — 2026-06-15
 
 ### Specimen-header capture and `analyte.specimen` scoping for result rules

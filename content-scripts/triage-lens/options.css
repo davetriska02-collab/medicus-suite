@@ -744,10 +744,200 @@ details summary {
 }
 
 /* ---- Threshold field label colors in editor ---- */
-.tl-field:has(#rrAmber) > span:first-child { color: var(--amber); }
-.tl-field:has(#rrRed) > span:first-child { color: var(--red); }
+.tl-field:has(#rrAmber) > span:first-child {
+  color: var(--amber);
+}
+.tl-field:has(#rrRed) > span:first-child {
+  color: var(--red);
+}
 
 /* ---- Dark mode: raise meta text contrast ---- */
 html[data-theme='dark'] .tl-rule-meta {
   color: var(--text-3);
+}
+
+/* ── Suggestion pills ── */
+.tl-rr-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tl-rr-suggestion-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-4);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.tl-rr-suggestion-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 11px;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+  line-height: 1.5;
+}
+.tl-rr-suggestion-pill:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-elev);
+}
+
+/* ── Result inspector ── */
+.tl-rr-inspector-wrap {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.tl-rr-inspector-summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  background: var(--bg-mid);
+}
+.tl-rr-inspector-summary::-webkit-details-marker {
+  display: none;
+}
+.tl-rr-inspector-arrow {
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform var(--fast) var(--ease);
+}
+details[open] .tl-rr-inspector-arrow {
+  transform: rotate(90deg);
+}
+.tl-rr-inspector-body {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tl-rr-inspector-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 0;
+  line-height: 1.5;
+}
+.tl-rr-inspector-hint code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 4px;
+  color: var(--text-2);
+}
+.tl-rr-inspector-input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  resize: vertical;
+}
+.tl-rr-inspector-input:focus-visible {
+  border-color: var(--accent);
+}
+.tl-rr-inspector-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-rr-inspector-status {
+  font-size: 12px;
+}
+.tl-rr-inspector-ok {
+  color: var(--green);
+  font-weight: 500;
+}
+.tl-rr-inspector-err {
+  color: var(--red);
+}
+.tl-rr-inspector-results {
+  overflow-x: auto;
+}
+.tl-rr-inspector-count {
+  font-size: 11px;
+  color: var(--text-4);
+  margin: 6px 0 0;
+}
+.tl-rr-inspector-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.tl-rr-inspector-table th {
+  text-align: left;
+  padding: 5px 8px;
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.tl-rr-inspector-row td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tl-rr-inspector-row:last-child td {
+  border-bottom: none;
+}
+.tl-rr-inspector-idx {
+  color: var(--text-5);
+  font-family: var(--mono);
+  width: 24px;
+  white-space: nowrap;
+}
+.tl-rr-inspector-name {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.tl-rr-inspector-spec {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+.tl-rr-inspector-null {
+  color: var(--text-5);
+  font-style: italic;
+}
+.tl-rr-inspector-text {
+  color: var(--text-3);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-rr-inspector-count {
+  font-size: 11px;
+  color: var(--text-4);
+  margin: 6px 0 0;
 }
