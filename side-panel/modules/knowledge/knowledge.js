@@ -21,6 +21,7 @@ let _items = [];
 let _categories = [];
 let _config = {};
 let _noticeCentral = false; // notice satisfied by a central practice-profile attestation
+let _practiceAccepted = false; // notice satisfied by the suite-level "Accept for practice" switch
 
 let _query = '';
 let _activeCat = 'all'; // 'all' | category id
@@ -74,7 +75,13 @@ export async function init(el) {
 
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
-    if (!changes['knowledge.items'] && !changes['knowledge.categories'] && !changes['knowledge.config']) return;
+    if (
+      !changes['knowledge.items'] &&
+      !changes['knowledge.categories'] &&
+      !changes['knowledge.config'] &&
+      !changes['suite.practiceAcceptedAt']
+    )
+      return;
     if (_ignoreNextChange) {
       _ignoreNextChange = false;
       return;
@@ -116,12 +123,15 @@ async function loadState() {
     'knowledge.categories',
     'knowledge.config',
     'suite.practiceProfile.attestations',
+    'suite.practiceAcceptedAt',
   ]);
   _items = Array.isArray(r['knowledge.items']) ? r['knowledge.items'] : [];
   _categories = KU ? KU.sanitiseCategories(r['knowledge.categories']) : r['knowledge.categories'] || [];
   _config = r['knowledge.config'] || {};
   const att = r['suite.practiceProfile.attestations'];
   _noticeCentral = !!(att && att.knowledge && att.knowledge.via === 'practice-profile');
+  // The single suite-level "Accept for practice" switch also satisfies the notice.
+  _practiceAccepted = r['suite.practiceAcceptedAt'] != null;
 }
 
 async function persistItems() {
@@ -145,8 +155,8 @@ function render() {
   if (!body) return;
   const parts = [];
 
-  if (!_config.noticeAcknowledgedAt) parts.push(renderNotice());
-  else if (_noticeCentral) parts.push(renderCentralHint());
+  if (!_config.noticeAcknowledgedAt && !_practiceAccepted) parts.push(renderNotice());
+  else if (_noticeCentral || _practiceAccepted) parts.push(renderCentralHint());
   parts.push(renderToolbar());
   if (_editingId !== null) parts.push(renderForm());
   parts.push(renderList());

@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.87.0] — 2026-06-15
+
+### Single "Accept this for practice" switch (Options → Clinical Safety)
+
+Replaces the scattered per-feature acceptance with one clearly safety-gated tick
+that switches on the features that ship off by default, and that propagates across
+the practice via backup/restore.
+
+- **One control** in Options → Clinical Safety: a confirmation tick ("a clinician /
+  CSO / nominated GP has read the Clinical Safety Notice and accepts these features
+  for the whole practice") plus an **Accept for this practice** button, with a
+  **Withdraw** action. It sets a single suite-level flag `suite.practiceAcceptedAt`
+  and fans out to enable all reception pathways + acknowledge the Sentinel alert
+  library.
+- **Honoured by the gates:** the reception capture gate and the knowledge notice
+  now unlock from `suite.practiceAcceptedAt` as well as their own per-install
+  attestation — so the single switch turns them on.
+- **Propagates via backup (the fix for the "central override"):** unlike the
+  per-install attestations (reception disclaimer, knowledge notice), this flag is
+  carried in a suite backup (`suite-io.js`), so restoring a backup on another
+  machine enables the accepted features there. The restore preview now warns
+  loudly when a backup carries practice acceptance.
+- The existing per-install reception disclaimer and the practice-profile
+  attestation gates are unchanged and still work.
+
 ## [v3.86.3] — 2026-06-15
 
 ### Removed: Reception "Referrals on file" card

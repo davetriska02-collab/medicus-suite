@@ -1522,6 +1522,44 @@
             </div>
           </div>
 
+          <!-- Single practice-acceptance switch -->
+          <div
+            id="practiceAcceptCard"
+            style="border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 24px"
+          >
+            <h2 style="font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0 0 6px">
+              Accept clinical features for this practice
+            </h2>
+            <p class="field-help" style="margin: 0 0 12px">
+              One practice-level acceptance that switches on the features that ship off by default: the
+              <strong>reception guided-capture pathways</strong>, the <strong>Sentinel alert library</strong> (extra
+              monitoring), and the <strong>Knowledge notice</strong>. Unlike the per-install attestations, this
+              acceptance is carried in a suite backup, so restoring that backup on another machine propagates it across
+              the practice.
+            </p>
+            <div id="practiceAcceptStatus" style="margin-bottom: 10px; font-size: 12px"></div>
+            <label
+              id="practiceAcceptConfirmRow"
+              style="display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 10px"
+            >
+              <input type="checkbox" id="practiceAcceptTick" style="margin-top: 2px; flex-shrink: 0" />
+              <span style="font-size: 12px; color: var(--text-2)"
+                >A clinician (the practice's Clinical Safety Officer or a nominated GP) has read the Clinical Safety
+                Notice and accepts these features for the whole practice.</span
+              >
+            </label>
+            <button class="primary" id="practiceAcceptBtn" disabled style="font-size: 12px; padding: 6px 14px">
+              Accept for this practice
+            </button>
+            <button
+              class="ghost"
+              id="practiceWithdrawBtn"
+              style="display: none; font-size: 12px; padding: 6px 14px"
+            >
+              Withdraw acceptance
+            </button>
+          </div>
+
           <!-- Document links -->
           <h2 style="font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0 0 4px">
             Clinical safety case documents

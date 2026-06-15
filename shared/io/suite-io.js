@@ -9,10 +9,18 @@
 
 'use strict';
 
-const SUITE_KEYS = ['suite.display', 'suite.practiceCode', 'suite.feedbackEmail', 'suite.tabOrder', 'suite.hiddenTabs'];
+const SUITE_KEYS = [
+  'suite.display',
+  'suite.practiceCode',
+  'suite.feedbackEmail',
+  'suite.tabOrder',
+  'suite.hiddenTabs',
+  'suite.practiceAcceptedAt',
+];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
 const TAB_ID_RE = /^[a-z0-9][a-z0-9-]{0,40}$/i;
+const SUITE_ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 
 async function suiteExport() {
   const r = await chrome.storage.local.get(SUITE_KEYS);
@@ -22,6 +30,11 @@ async function suiteExport() {
     feedbackEmail: r['suite.feedbackEmail'] ?? null,
     tabOrder: r['suite.tabOrder'] ?? null,
     hiddenTabs: r['suite.hiddenTabs'] ?? null,
+    // Practice-level clinical acceptance (single "Accept for practice" switch).
+    // Unlike the per-install module attestations (reception disclaimer, knowledge
+    // notice) this one DOES travel in a backup, so the practice's acceptance
+    // propagates on restore. Honoured by the reception + knowledge gates.
+    practiceAcceptedAt: r['suite.practiceAcceptedAt'] ?? null,
   };
 }
 
@@ -55,6 +68,12 @@ async function suiteImport(data) {
       throw new Error('suite.hiddenTabs must be an array of tab-id strings.');
     }
     toSet['suite.hiddenTabs'] = data.hiddenTabs;
+  }
+  if (data.practiceAcceptedAt != null) {
+    if (typeof data.practiceAcceptedAt !== 'string' || !SUITE_ISO_DATETIME_RE.test(data.practiceAcceptedAt)) {
+      throw new Error('suite.practiceAcceptedAt must be null or an ISO datetime string.');
+    }
+    toSet['suite.practiceAcceptedAt'] = data.practiceAcceptedAt;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

@@ -229,7 +229,12 @@ export async function init(el) {
       });
       return;
     }
-    if (changes['reception.config'] || changes['reception.customPathways'] || changes['reception.pathwayOverrides']) {
+    if (
+      changes['reception.config'] ||
+      changes['reception.customPathways'] ||
+      changes['reception.pathwayOverrides'] ||
+      changes['suite.practiceAcceptedAt'] // the single "Accept for practice" switch
+    ) {
       loadConfigAndResolve().then(async () => {
         if (!container) return;
         renderPathwayPicker(await loadDraft());
@@ -267,8 +272,12 @@ async function loadConfigAndResolve() {
     'reception.customPathways',
     'reception.pathwayOverrides',
     'reception.tilePrefs',
+    'suite.practiceAcceptedAt',
   ]);
   _config = r['reception.config'] || {};
+  // Acceptance is satisfied by EITHER the per-install reception disclaimer OR the
+  // single suite-level "Accept for practice" switch (which travels in backups).
+  const accepted = _config.disclaimerAcceptedAt != null || r['suite.practiceAcceptedAt'] != null;
   const PU = typeof window !== 'undefined' ? window.ReceptionPathwayUtils : null;
   _tilePrefs = PU
     ? PU.sanitiseTilePrefs(r['reception.tilePrefs'] || {})
@@ -279,7 +288,7 @@ async function loadConfigAndResolve() {
       overrides: r['reception.pathwayOverrides'] || {},
       customPathways: r['reception.customPathways'] || [],
       enabledPathways: _config.enabledPathways || {},
-      disclaimerAccepted: _config.disclaimerAcceptedAt != null,
+      disclaimerAccepted: accepted,
     });
   } else {
     _effective = { all: [], enabled: [] };

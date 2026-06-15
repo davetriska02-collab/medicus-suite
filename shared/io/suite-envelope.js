@@ -270,6 +270,13 @@ function previewEnvelope(envelope) {
     if (Array.isArray(mods.suite.tabOrder) && mods.suite.tabOrder.length) {
       lines.push(`Tab order: ${mods.suite.tabOrder.length} tabs`);
     }
+    // Unlike the per-install attestations, the practice acceptance travels — flag it
+    // loudly because importing it switches clinical capture + monitoring ON here.
+    if (mods.suite.practiceAcceptedAt) {
+      lines.push(
+        'WARNING: Carries practice acceptance — importing switches ON reception capture pathways and the Sentinel alert library on THIS install.'
+      );
+    }
   }
 
   return lines;
