@@ -47,4 +47,9 @@ export default [
     files: ['test-*.js', 'scripts/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
+  {
+    // Node ESM tooling scripts (e.g. brand/generate-icons.mjs)
+    files: ['brand/**/*.mjs'],
+    languageOptions: { sourceType: 'module', globals: { ...globals.node } },
+  },
 ];

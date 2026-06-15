@@ -348,6 +348,14 @@ const switchModule = createModuleLoader({
 function renderAbout() {
   content.innerHTML = `
     <div class="about-module">
+      <div class="about-brand">
+        <img class="about-brand-logo" src="../brand/app-icon.png" alt="Medicus Suite" width="40" height="40" />
+        <div class="about-brand-text">
+          <div class="about-brand-name">Medicus Suite</div>
+          <div class="about-brand-tagline">The clinical intelligence layer for Medicus</div>
+        </div>
+      </div>
+
       <div class="feature-list-link">
         <a href="https://github.com/davetriska02-collab/medicus-suite/raw/main/docs/feature-list.docx" target="_blank" rel="noopener noreferrer">
           📄 Download the latest feature list (.docx)

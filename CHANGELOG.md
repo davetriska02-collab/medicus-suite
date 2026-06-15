@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.84.3] — 2026-06-15
+
+### Brand identity + app icon
+
+Gave the suite a visual identity of its own (it previously had only a placeholder
+lozenge). Developed iteratively against a synthetic in-practice appraisal panel.
+
+- **App icon** — a brushed-gold guardian **shield** with a cyan ECG/pulse line
+  and beacon on a deep navy tile (`brand/app-icon.png`, 512px master). The pulse
+  makes the clinical purpose explicit; the shield signals protective vigilance.
+  48px and 128px icons derive from the master; the 16px favicon renders from a
+  dedicated simplified vector (`brand/app-icon-16.svg`) so it stays legible.
+  `brand/generate-icons.mjs` produces `icons/icon-16/48/128.png`.
+- **Wired into the surfaces** — side-panel nav, pop-out titlebar, Options sidebar,
+  About panel (brand header + tagline), visualiser drop screen, and the README
+  banner all show the mark.
+- **Tagline / store description** — "The clinical intelligence layer for Medicus"
+  added to the About panel and Options; `manifest.json` description rewritten from
+  the version stamp to a descriptive one-liner.
+- **`brand/BRAND.md`** — one-page brand guide (mark, colours, regeneration, where
+  it appears). `eslint.config.mjs` gains a `brand/**/*.mjs` Node block; the release
+  zip excludes the dev icon generator.
+
 ## [v3.84.2] — 2026-06-14
 
 ### DTAC assessment — governance drafts + CSO GMC correction

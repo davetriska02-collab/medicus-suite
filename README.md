@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/app-icon.png" alt="Medicus Suite" width="112" />
+</p>
+
 # Medicus Suite
 
 Chrome extension toolkit for GP practices using the Medicus clinical system.

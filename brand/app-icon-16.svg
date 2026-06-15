@@ -1,0 +1,21 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22416d"/><stop offset="1" stop-color="#0f2647"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="20" x2="0" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e7cd86"/><stop offset="1" stop-color="#b8923f"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="27" fill="url(#bg)"/>
+  <!-- gold shield -->
+  <path d="M64 20 L99 34 L99 64 C99 90 83 108 64 116 C45 108 29 90 29 64 L29 34 Z" fill="url(#gold)"/>
+  <!-- navy interior (thick gold rim) -->
+  <path d="M64 33 L90 44 L90 64 C90 85 77 100 64 106 C51 100 38 85 38 64 L38 44 Z" fill="#0e2342"/>
+  <!-- cyan QRS pulse -->
+  <path d="M45 70 L59 70 L64 52 L69 86 L74 70 L85 70" fill="none" stroke="#43dcec" stroke-width="7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- beacon -->
+  <circle cx="64" cy="52" r="9" fill="#43dcec" fill-opacity=".30"/>
+  <circle cx="64" cy="52" r="5.4" fill="#7df0fb"/>
+</svg>

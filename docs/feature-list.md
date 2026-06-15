@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.84.1
-**Generated:** 2026-06-14 (automated)
+**Version:** v3.84.3
+**Generated:** 2026-06-15 (automated)
 
 ## What it is
 
@@ -162,6 +162,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.84.3 (2026-06-15)** — Brand identity: app icon (guardian shield + cyan ECG pulse + beacon on deep navy), with a dedicated simplified 16px favicon; wired into the side panel, pop-out, Options, About panel, visualiser and README; tagline and store description added
 - **v3.84.1 (2026-06-14)** — Repo-audit follow-up: testable logic cores extracted from Capacity and Submissions modules; RAG threshold logic unified into a single source of truth; Backup data minimisation policy documented in SECURITY.md; feature list regenerated
 - **v3.84.0 (2026-06-14)** — Sweep multi-clinician filter: select any combination of the day's clinicians; printed handout labels the audience; selection persisted across tab switches
 - **v3.83.0 (2026-06-14)** — Sweep day-picker: sweep any day (past or future), not just today; handout headers and last-run display reflect the chosen day

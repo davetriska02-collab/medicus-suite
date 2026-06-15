@@ -125,6 +125,9 @@
       }
 
       .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         padding: 0 16px 20px;
         font-family: var(--mono);
         font-size: 10px;
@@ -133,6 +136,13 @@
         color: var(--text-4);
         border-bottom: 1px solid var(--border);
         margin-bottom: 8px;
+      }
+
+      .nav-brand-logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+        flex: none;
       }
 
       .nav-item {
@@ -194,6 +204,12 @@
         color: var(--text-4);
         margin-bottom: 28px;
         line-height: 1.5;
+      }
+
+      .suite-tagline {
+        font-size: 13px;
+        color: var(--text-3);
+        margin: -2px 0 18px;
       }
 
       .field {
@@ -687,7 +703,10 @@
   <body>
     <div class="layout">
       <nav class="side-nav">
-        <div class="nav-brand">Suite Settings</div>
+        <div class="nav-brand">
+          <img class="nav-brand-logo" src="../brand/app-icon.png" alt="" width="20" height="20" />
+          <span>Suite Settings</span>
+        </div>
         <button class="nav-item active" data-section="suite">Suite</button>
         <button class="nav-item" data-section="notifications">Notifications</button>
         <button class="nav-item" data-section="slots">Slot Counter</button>
@@ -707,6 +726,7 @@
         <!-- Suite section -->
         <section class="opt-section active" id="sect-suite">
           <h1>Medicus Suite <span class="module-badge" id="suiteVersionBadge">v—</span></h1>
+          <p class="suite-tagline">The clinical intelligence layer for Medicus</p>
           <p class="section-desc">Global settings shared across all modules. Changes take effect immediately.</p>
 
           <!-- Update available banner (v1.4.2) — hidden by default; populated by JS from storage. -->
