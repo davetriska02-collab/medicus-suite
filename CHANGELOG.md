@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.93.1] — 2026-06-15
+
+### Combo result rules: full authoring parity across all three builders
+
+Combo rules can now be authored from **every** result-rule surface, not just the
+inspector:
+
+- **Manual rule editor.** "Combo (multi-condition)" is now a first-class option in the
+  rule-type dropdown. Choosing it reveals the inline condition builder (escalate-to
+  level + per-condition cards, each numeric or text) and hides the single-analyte fields
+  that don't apply. The footer **Save rule** builds, validates and persists the combo via
+  the same path as every other rule, honouring the **Enabled** checkbox. Editing an
+  existing combo repopulates its level and conditions.
+- **Result inspector.** With the editor in combo mode, clicking a parsed result
+  name/specimen still seeds the **active** condition. The old standalone combo
+  `<details>` panel was folded into the unified builder — one save path, no duplicate
+  controls.
+- **LLM-assisted paste import.** The import **preview** now summarises a combo rule
+  correctly (e.g. _"Sterile pyuria — Combo (amber): 2 conditions, all must match — will
+  import DISABLED · pus cells ≥ 40 AND culture ∋ 'no growth'"_) instead of the previous
+  garbled numeric-style line. Combo rules already validated and imported; only the
+  preview was wrong.
+
+No engine, shipped-rule, chip or `defaults.json` change — UI-only follow-up to v3.93.0.
+
 ## [v3.93.0] — 2026-06-15
 
 ### Investigation Results queue: combo (multi-condition) result rules + sterile-pyuria flagship

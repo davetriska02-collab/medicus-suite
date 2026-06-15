@@ -39,13 +39,25 @@ function extractFn(name) {
   return m ? m[0] : null;
 }
 
+function extractConstArrow(name) {
+  // Matches "const <name> = (...) => { ... \n  };" — the 2-space-indented closing
+  // "};" the file uses for these top-of-IIFE const-arrow helpers.
+  const re = new RegExp('const ' + name + ' = \\([\\s\\S]*?\\n  \\};');
+  const m = src.match(re);
+  return m ? m[0] : null;
+}
+
 const splitLinesSrc = extractFn('splitLines');
 const buildComboConditionSrc = extractFn('buildComboCondition');
 const buildComboRuleFromFormSrc = extractFn('buildComboRuleFromForm');
+const rrComboCondSummarySrc = extractConstArrow('rrComboCondSummary');
+const rrComboImportPreviewSrc = extractConstArrow('rrComboImportPreview');
 
 assert(!!splitLinesSrc, 'splitLines found in options.js');
 assert(!!buildComboConditionSrc, 'buildComboCondition found in options.js');
 assert(!!buildComboRuleFromFormSrc, 'buildComboRuleFromForm found in options.js');
+assert(!!rrComboCondSummarySrc, 'rrComboCondSummary found in options.js');
+assert(!!rrComboImportPreviewSrc, 'rrComboImportPreview found in options.js');
 
 const sandbox = {};
 vm.runInNewContext(
@@ -53,15 +65,20 @@ vm.runInNewContext(
     splitLinesSrc,
     buildComboConditionSrc,
     buildComboRuleFromFormSrc,
+    rrComboCondSummarySrc,
+    rrComboImportPreviewSrc,
     'this.splitLines = splitLines;',
     'this.buildComboCondition = buildComboCondition;',
     'this.buildComboRuleFromForm = buildComboRuleFromForm;',
+    'this.rrComboCondSummary = rrComboCondSummary;',
+    'this.rrComboImportPreview = rrComboImportPreview;',
   ].join('\n'),
   sandbox
 );
-const { buildComboCondition, buildComboRuleFromForm } = sandbox;
+const { buildComboCondition, buildComboRuleFromForm, rrComboImportPreview } = sandbox;
 assert(typeof buildComboCondition === 'function', 'buildComboCondition extracted and callable');
 assert(typeof buildComboRuleFromForm === 'function', 'buildComboRuleFromForm extracted and callable');
+assert(typeof rrComboImportPreview === 'function', 'rrComboImportPreview extracted and callable');
 
 // ── buildComboCondition — single condition assembly ──────────────────────────
 console.log('\nbuildComboCondition — numeric / text condition assembly\n');
@@ -220,6 +237,57 @@ console.log('\nbuildComboRuleFromForm — malformed variants rejected\n');
     ],
   };
   assert(validateResultRule(bothForms).length > 0, 'engine rejects a condition that is numeric AND text');
+}
+
+// ── Manual editor parity — a combo built from the main #rrKind form validates ─
+console.log('\nmanual editor — combo built from the main rule form validates []\n');
+{
+  // The footer Save (saveCurrentResultRule, combo branch) hands buildComboRuleFromForm
+  // exactly this shape: the existing rule id + #rrLabel + #rrComboLevel + the condition
+  // cards read back via readConditionForms(). Prove that round-trips to a valid rule and
+  // that the editor's Enabled checkbox can flip enabled true without breaking validation.
+  const manual = buildComboRuleFromForm({
+    id: 'rrule_existing',
+    label: 'Sterile pyuria (manual)',
+    level: 'red',
+    conditions: flagshipForm.conditions,
+  });
+  assert(!manual.error, 'manual-form combo builds without error');
+  assert(manual.rule.id === 'rrule_existing', 'manual edit preserves the existing rule id (in-place update)');
+  assert(validateResultRule(manual.rule).length === 0, 'manual-form combo validates [] (engine accepts it)');
+  const enabledByUser = { ...manual.rule, enabled: true };
+  assert(
+    validateResultRule(enabledByUser).length === 0,
+    'combo with enabled:true (honoured #rrEnabled) still validates'
+  );
+}
+
+// ── LLM-import preview summary helper (GAP A) ─────────────────────────────────
+console.log('\nrrComboImportPreview — combo preview summary string\n');
+{
+  const rule = {
+    label: 'Sterile pyuria',
+    kind: 'combo',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 40 },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const s = rrComboImportPreview(rule);
+  assert(s.includes('Sterile pyuria'), 'preview includes the label');
+  assert(s.includes('Combo (amber)'), 'preview names the kind + level');
+  assert(s.includes('2 conditions, all must match'), 'preview states condition count + AND semantics');
+  assert(s.includes('will import DISABLED'), 'preview states it imports DISABLED');
+  assert(/pus cells ≥ 40/.test(s) && /culture ∋/.test(s), 'preview appends a per-condition summary');
+  assert(s.includes(' AND '), 'per-condition summary is joined with AND');
+
+  const red = rrComboImportPreview({ ...rule, level: 'red' });
+  assert(red.includes('Combo (red)'), 'red level reflected in preview');
+  const single = rrComboImportPreview({ label: 'x', conditions: [rule.conditions[0]] });
+  assert(single.includes('1 condition, all must match'), 'singular "condition" for a one-condition rule');
+  const noLabel = rrComboImportPreview({ conditions: rule.conditions });
+  assert(noLabel.startsWith('Untitled —'), 'missing label falls back to Untitled');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');

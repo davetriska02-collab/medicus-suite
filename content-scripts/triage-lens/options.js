@@ -1289,6 +1289,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   let rrEditingId = null;
   let rrEditingDraft = null;
 
+  // Bridge to the combo-condition builder, whose state + render machinery lives in
+  // the setupResultEditPane closure. The module-scope editor save / populate paths
+  // (saveCurrentResultRule / openResultRuleEditor) drive the builder through this.
+  // Assigned once inside setupResultEditPane; null until then.
+  //   reset()                  → blank two-condition state
+  //   syncAllFromDom()         → read condition cards back into state
+  //   readConditionForms()     → array of flat condition form-bags (for buildComboRuleFromForm)
+  //   loadFromRule(rule)       → populate level + conditions from a saved combo rule
+  let _rrComboApi = null;
+
   // ── In-session suggestion state ─────────────────────────────────────────────
   // These live ONLY in this closure — never written to chrome.storage.
   // They are populated by the result inspector when the user pastes and parses a
@@ -1643,6 +1653,30 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     return name + ' ' + cmp + ' ' + (c.value != null ? c.value : '?');
   };
 
+  /**
+   * Pure one-line summary of a combo rule for the LLM-import preview list, e.g.
+   * 'Sterile pyuria — Combo (amber): 2 conditions, all must match — will import
+   * DISABLED · pus cell ≥ 40 AND culture ∋ "no growth"'. Kept pure (no DOM) so the
+   * preview string is unit-testable.
+   */
+  const rrComboImportPreview = (rule) => {
+    const r = rule || {};
+    const conds = Array.isArray(r.conditions) ? r.conditions : [];
+    const level = r.level === 'red' ? 'red' : 'amber';
+    const detail = conds.map(rrComboCondSummary).join(' AND ');
+    return (
+      (r.label || 'Untitled') +
+      ' — Combo (' +
+      level +
+      '): ' +
+      conds.length +
+      ' condition' +
+      (conds.length === 1 ? '' : 's') +
+      ', all must match — will import DISABLED' +
+      (detail ? ' · ' + detail : '')
+    );
+  };
+
   const rrSeveritySummary = (rule) => {
     if (rule.kind === 'combo') {
       const conds = Array.isArray(rule.conditions) ? rule.conditions : [];
@@ -1750,15 +1784,28 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   };
 
   const rrApplyKindVisibility = (kind) => {
-    const thresholdEls = document.querySelectorAll('.rr-fields-threshold');
-    const textEls = document.querySelectorAll('.rr-fields-text');
     const isText = kind === 'text';
-    thresholdEls.forEach((el) => {
-      el.style.display = isText ? 'none' : '';
+    const isCombo = kind === 'combo';
+    // The single-analyte block (match / exclude / specimen + advisory Test match)
+    // doesn't apply to a combo — each combo condition carries its own analyte.
+    document.querySelectorAll('.rr-fields-single').forEach((el) => {
+      el.style.display = isCombo ? 'none' : '';
     });
-    textEls.forEach((el) => {
+    document.querySelectorAll('.rr-fields-threshold').forEach((el) => {
+      el.style.display = isText || isCombo ? 'none' : '';
+    });
+    document.querySelectorAll('.rr-fields-text').forEach((el) => {
       el.style.display = isText ? '' : 'none';
     });
+    document.querySelectorAll('.rr-fields-combo').forEach((el) => {
+      el.style.display = isCombo ? '' : 'none';
+    });
+    // Initialise the builder's two starter conditions the first time combo is
+    // selected on a non-combo rule (an edit of an existing combo is seeded by
+    // openResultRuleEditor instead).
+    if (isCombo && _rrComboApi && rrEditingDraft && rrEditingDraft.kind !== 'combo') {
+      _rrComboApi.reset();
+    }
   };
 
   const rrUpdateTestMatch = () => {
@@ -2052,16 +2099,14 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
 
     // ── Combo-rule builder ────────────────────────────────────────────────────
-    // Authors a kind:'combo' rule from the inspected report. Conditions live in
-    // this closure as plain form bags; the pure helper buildComboRuleFromForm
-    // assembles the fixed-contract object, which is validated with the same
-    // SentinelResultRules.validateResultRule call the single-rule editor uses and
-    // persisted via the SAME CONFIG.resultRules + saveConfig path (disabled, user
-    // rule). No separate storage path.
-    const comboDetails = $('#rrComboDetails');
+    // Authors a kind:'combo' rule INLINE in the main rule editor (Rule type =
+    // Combo). Conditions live in this closure as plain form bags; the pure helper
+    // buildComboRuleFromForm assembles the fixed-contract object, which is
+    // validated with the same SentinelResultRules.validateResultRule call the
+    // single-rule editor uses and persisted via the SAME CONFIG.resultRules +
+    // saveConfig path the footer Save button drives. There is ONE save path
+    // (saveCurrentResultRule) and ONE conditions container — no duplicate builder.
     const comboCondsEl = $('#rrComboConditions');
-    const comboStatusEl = $('#rrComboStatus');
-    const comboLabelEl = $('#rrComboLabel');
     const comboLevelEl = $('#rrComboLevel');
 
     // condition state: [{ match, exclude, specimen, type, comparator, value, contains }]
@@ -2195,18 +2240,53 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const rrComboReset = () => {
       _rrComboConds = [blankComboCond(), blankComboCond()];
       _rrComboActive = 0;
-      if (comboLabelEl) comboLabelEl.value = '';
       if (comboLevelEl) comboLevelEl.value = 'amber';
-      if (comboStatusEl) {
-        comboStatusEl.textContent = '';
-        comboStatusEl.className = 'tl-rr-inspector-status';
-      }
       rrComboRenderConditions();
     };
 
-    // True when the combo builder is open — inspector clicks seed the active
-    // condition rather than the single-rule editor field.
-    const rrComboIsOpen = () => !!(comboDetails && comboDetails.open);
+    /** Populate the builder (level + conditions) from a saved combo rule for editing. */
+    const rrComboLoadFromRule = (rule) => {
+      const conds = Array.isArray(rule && rule.conditions) ? rule.conditions : [];
+      _rrComboConds = conds.map((cond) => {
+        const a = (cond && cond.analyte) || {};
+        const isText = Array.isArray(cond && cond.contains);
+        return {
+          match: (a.match || []).join('\n'),
+          exclude: (a.exclude || []).join('\n'),
+          specimen: (a.specimen || []).join('\n'),
+          type: isText ? 'text' : 'numeric',
+          comparator: cond && cond.comparator === 'below' ? 'below' : 'above',
+          value: cond && cond.value != null ? String(cond.value) : '',
+          contains: isText ? (cond.contains || []).join('\n') : '',
+        };
+      });
+      // A combo always carries ≥2 conditions, but stay defensive: never drop below the floor.
+      while (_rrComboConds.length < 2) _rrComboConds.push(blankComboCond());
+      _rrComboActive = 0;
+      if (comboLevelEl) comboLevelEl.value = rule && rule.level === 'red' ? 'red' : 'amber';
+      rrComboRenderConditions();
+    };
+
+    /** Read every condition card into a flat form-bag array for buildComboRuleFromForm. */
+    const rrComboReadConditionForms = () => {
+      rrComboSyncAllFromDom();
+      return _rrComboConds.map((c) => ({
+        match: c.match,
+        exclude: c.exclude,
+        specimen: c.specimen,
+        type: c.type,
+        comparator: c.comparator,
+        value: c.value,
+        contains: c.contains,
+      }));
+    };
+
+    // True when the main editor's Rule type is Combo — inspector clicks seed the
+    // active condition rather than the single-analyte editor field.
+    const rrComboIsOpen = () => {
+      const kindEl = $('#rrKind');
+      return !!(kindEl && kindEl.value === 'combo');
+    };
 
     /** Seed the active condition's analyte-match list with a clicked result name. */
     const rrComboSeedMatch = (name) => {
@@ -2233,66 +2313,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     // Expose to the inspector render seam (so result-cell clicks can seed conditions).
     _rrComboSeedHook = { isOpen: rrComboIsOpen, seedMatch: rrComboSeedMatch, seedSpecimen: rrComboSeedSpecimen };
 
-    if (comboDetails) {
-      // Lazily initialise the two starter conditions the first time it opens.
-      comboDetails.addEventListener('toggle', () => {
-        if (comboDetails.open && _rrComboConds.length === 0) rrComboReset();
-      });
-    }
+    // Bridge the builder to the module-scope editor save / populate paths
+    // (saveCurrentResultRule / openResultRuleEditor) — see _rrComboApi declaration.
+    _rrComboApi = {
+      reset: rrComboReset,
+      syncAllFromDom: rrComboSyncAllFromDom,
+      readConditionForms: rrComboReadConditionForms,
+      loadFromRule: rrComboLoadFromRule,
+    };
+
     const comboAddBtn = $('#btnRrComboAddCond');
     if (comboAddBtn) {
       comboAddBtn.addEventListener('click', () => {
         rrComboSyncAllFromDom();
         _rrComboConds.push(blankComboCond());
         rrComboRenderConditions();
-      });
-    }
-    const comboSaveBtn = $('#btnRrComboSave');
-    if (comboSaveBtn) {
-      comboSaveBtn.addEventListener('click', async () => {
-        rrComboSyncAllFromDom();
-        const form = {
-          label: comboLabelEl ? comboLabelEl.value : '',
-          level: comboLevelEl ? comboLevelEl.value : 'amber',
-          conditions: _rrComboConds.map((c) => ({
-            match: c.match,
-            exclude: c.exclude,
-            specimen: c.specimen,
-            type: c.type,
-            comparator: c.comparator,
-            value: c.value,
-            contains: c.contains,
-          })),
-        };
-        const built = buildComboRuleFromForm(form);
-        if (built.error) {
-          if (comboStatusEl) {
-            comboStatusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
-            comboStatusEl.textContent = built.error;
-          }
-          return;
-        }
-        const rule = built.rule;
-        const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
-        if (VALIDATE) {
-          const errs = VALIDATE(rule);
-          if (errs.length > 0) {
-            if (comboStatusEl) {
-              comboStatusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
-              comboStatusEl.textContent = errs[0];
-            }
-            return;
-          }
-        }
-        // Same persistence path as the single-rule editor: push, save, re-render list.
-        CONFIG.resultRules.push(rule);
-        await saveConfig(CONFIG);
-        flash('Combo rule added (disabled — review then enable)');
-        rrComboReset();
-        if (comboDetails) comboDetails.open = false;
-        rrEditingId = null;
-        renderResultRules();
-        activateTab('resultRules');
       });
     }
 
@@ -2377,8 +2412,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
     $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');
     $('#rrAnalyteSpecimen').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.specimen) || []).join('\n');
-    const kind = rrEditingDraft.kind === 'text' ? 'text' : 'threshold';
+    const kind = rrEditingDraft.kind === 'text' ? 'text' : rrEditingDraft.kind === 'combo' ? 'combo' : 'threshold';
     $('#rrKind').value = kind;
+    if (kind === 'combo' && _rrComboApi) _rrComboApi.loadFromRule(rrEditingDraft);
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
     $('#rrAmber').value = rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
     $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
@@ -2406,6 +2442,43 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   const saveCurrentResultRule = async () => {
     if (!rrEditingId) return;
     const selectedKind = $('#rrKind').value;
+    const enabled = $('#rrEnabled').checked;
+
+    // ── Combo (multi-condition) — built by the inline combo builder ───────────
+    if (selectedKind === 'combo') {
+      if (!_rrComboApi) return;
+      const built = buildComboRuleFromForm({
+        id: rrEditingDraft.id,
+        label: $('#rrLabel').value.trim(),
+        level: $('#rrComboLevel').value,
+        conditions: _rrComboApi.readConditionForms(),
+      });
+      if (built.error) {
+        flash(built.error, 'err');
+        return;
+      }
+      // Honour the editor's Enabled checkbox (the manual editor lets a clinician
+      // enable after review; the LLM-import path is the one that forces disabled).
+      const rule = { ...built.rule, enabled };
+      const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
+      if (VALIDATE) {
+        const errs = VALIDATE(rule);
+        if (errs.length > 0) {
+          flash(errs[0], 'err');
+          return;
+        }
+      }
+      const cIdx = CONFIG.resultRules.findIndex((r) => r.id === rrEditingId);
+      if (cIdx >= 0) CONFIG.resultRules[cIdx] = rule;
+      else CONFIG.resultRules.push(rule);
+      await saveConfig(CONFIG);
+      flash('Saved');
+      rrEditingId = null;
+      renderResultRules();
+      activateTab('resultRules');
+      return;
+    }
+
     const label = $('#rrLabel').value.trim() || 'Untitled result rule';
     const analyteMatch = $('#rrAnalyteMatch')
       .value.split('\n')
@@ -2422,7 +2495,6 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const analyte = { match: analyteMatch };
     if (analyteExclude.length) analyte.exclude = analyteExclude;
     if (analyteSpecimen.length) analyte.specimen = analyteSpecimen;
-    const enabled = $('#rrEnabled').checked;
 
     if (selectedKind === 'text') {
       const normalText = ($('#rrNormalText').value || '')
@@ -2461,10 +2533,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const unitVal = $('#rrUnit').value.trim();
       rrEditingDraft.unit = unitVal || null;
       rrEditingDraft.enabled = enabled;
-      // Remove text-only fields if switching from text to threshold
+      // Remove text-only / combo-only fields if switching to threshold
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;
       delete rrEditingDraft.normalLabel;
+      delete rrEditingDraft.conditions;
+      delete rrEditingDraft.level;
     }
 
     const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
@@ -2594,7 +2668,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         previewList.innerHTML = '';
         for (const c of candidates) {
           let summary;
-          if (c.kind === 'text') {
+          if (c.kind === 'combo') {
+            summary = rrComboImportPreview(c);
+          } else if (c.kind === 'text') {
             const phrases = Array.isArray(c.normalText) ? c.normalText : [];
             const shownPhrases = phrases.slice(0, 3).join(', ') || '(none)';
             const morePhrases = phrases.length > 3 ? ' …' : '';
