@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.92.0] — 2026-06-15
+
+### Build a result rule by clicking what the inspector parsed + clearer "Load" guidance
+
+**Click-to-add from the parsed table.** In the result-rule inspector, each parsed
+line's **name** and **specimen** cells are now clickable. Clicking a name adds it to the
+rule's **Analyte match**; clicking a specimen header adds it to **Specimen scope** —
+which is exactly what stops a "Culture" rule firing on urine/blood as well as throat
+swabs (the original MC&S overlap problem). Cells are keyboard-accessible (Enter/Space)
+and flash green on add; adds are deduped case-insensitively. The existing "Seen this
+session" suggestion pills now share the same append helper (`appendUniqueLine`, unit-tested).
+
+So the full build-a-rule flow is now: open the queue → Load a recent result → click the
+analyte and its specimen straight out of the parsed table into the rule.
+
+**Clearer "Load a recent result" guidance.** "Load" reads a *live* Medicus tab whose
+results queue has loaded; if you open Settings *over* your Medicus tab it closes that
+session and there's nothing to read. The empty-states now say so explicitly, and a
+permanent hint under the button tells you up-front to keep the Medicus results queue open
+in a **separate window** — and that you can click a name/specimen to build the rule. (This
+was the confusion behind "the button does nothing": it works, but needs the Medicus tab
+alive alongside Settings.)
+
 ## [v3.91.1] — 2026-06-15
 
 ### Fix: "Load a recent result" now fetches on demand instead of showing an empty picker

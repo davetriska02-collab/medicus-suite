@@ -1387,6 +1387,25 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     };
   }
 
+  /**
+   * appendUniqueLine(current, value)
+   * Pure helper: append `value` as a new line to a newline-separated list string,
+   * deduped case-insensitively (trimmed). Returns the new string, or null when the
+   * value is blank or already present (caller should treat null as "no change").
+   * Shared by the suggestion pills and the click-to-add parsed-table cells, and
+   * exported on window.SentinelInspectorHelpers for unit tests.
+   */
+  function appendUniqueLine(current, value) {
+    const v = (value == null ? '' : String(value)).trim();
+    if (!v) return null;
+    const lines = String(current || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (lines.some((l) => l.toLowerCase() === v.toLowerCase())) return null;
+    return [...lines, v].join('\n');
+  }
+
   if (typeof window !== 'undefined') {
     window.SentinelInspectorHelpers = {
       extractResultFields,
@@ -1394,7 +1413,49 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       formatRecentPickerRow,
       pickerEmptyState,
       inspectorRowData,
+      appendUniqueLine,
     };
+  }
+
+  /**
+   * _rrFillRuleField(fieldId, value)
+   * DOM helper: append `value` to a rule-editor textarea (deduped via
+   * appendUniqueLine). Re-runs the test-match advisory when the analyte-match field
+   * changes. Used by the suggestion pills and the click-to-add parsed-table cells so
+   * the user can build a rule straight from what the engine surfaced.
+   */
+  function _rrFillRuleField(fieldId, value) {
+    const ta = $('#' + fieldId);
+    if (!ta) return;
+    const next = appendUniqueLine(ta.value, value);
+    if (next == null) return;
+    ta.value = next;
+    if (fieldId === 'rrAnalyteMatch' && typeof rrUpdateTestMatch === 'function') rrUpdateTestMatch();
+  }
+
+  /**
+   * _rrMakeCellClickable(cell, title, onAdd)
+   * Turn a parsed-table cell into a keyboard-accessible button that runs `onAdd`
+   * (add this value to the rule being edited) with a brief confirmation flash.
+   */
+  function _rrMakeCellClickable(cell, title, onAdd) {
+    if (!cell) return;
+    cell.classList.add('tl-rr-cell-clickable');
+    cell.setAttribute('role', 'button');
+    cell.setAttribute('tabindex', '0');
+    cell.title = title;
+    const fire = () => {
+      onAdd();
+      cell.classList.add('tl-rr-cell-added');
+      setTimeout(() => cell.classList.remove('tl-rr-cell-added'), 700);
+    };
+    cell.addEventListener('click', fire);
+    cell.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fire();
+      }
+    });
   }
 
   /** Collect unique name/specimen strings from a result-fields array into the session lists. */
@@ -1423,18 +1484,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           pill.className = 'tl-rr-suggestion-pill';
           pill.title = 'Add "' + name + '" to analyte match strings';
           pill.textContent = name;
-          pill.addEventListener('click', () => {
-            const ta = $('#rrAnalyteMatch');
-            if (!ta) return;
-            const current = ta.value
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean);
-            if (!current.includes(name)) {
-              ta.value = [...current, name].join('\n');
-              rrUpdateTestMatch();
-            }
-          });
+          pill.addEventListener('click', () => _rrFillRuleField('rrAnalyteMatch', name));
           matchEl.appendChild(pill);
         }
         matchEl.style.display = 'flex';
@@ -1456,17 +1506,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           pill.className = 'tl-rr-suggestion-pill';
           pill.title = 'Add "' + spec + '" to specimen scope';
           pill.textContent = spec;
-          pill.addEventListener('click', () => {
-            const ta = $('#rrAnalyteSpecimen');
-            if (!ta) return;
-            const current = ta.value
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean);
-            if (!current.includes(spec)) {
-              ta.value = [...current, spec].join('\n');
-            }
-          });
+          pill.addEventListener('click', () => _rrFillRuleField('rrAnalyteSpecimen', spec));
           specEl.appendChild(pill);
         }
         specEl.style.display = 'flex';
@@ -1727,9 +1767,22 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         const tdName = tr.insertCell();
         tdName.className = 'tl-rr-inspector-name';
         tdName.textContent = rd.name;
+        // Click a real analyte name to add it to the rule's Analyte match list.
+        if (f.name) {
+          _rrMakeCellClickable(tdName, 'Click to add “' + f.name + '” to this rule’s Analyte match', () =>
+            _rrFillRuleField('rrAnalyteMatch', f.name)
+          );
+        }
         const tdSpec = tr.insertCell();
         tdSpec.className = rd.specimenNull ? 'tl-rr-inspector-spec tl-rr-inspector-null' : 'tl-rr-inspector-spec';
         tdSpec.textContent = rd.specimen;
+        // Click a specimen header to SCOPE the rule to that specimen group — this is
+        // what stops a "Culture" rule firing on urine/blood as well as throat swabs.
+        if (f.specimen) {
+          _rrMakeCellClickable(tdSpec, 'Click to scope this rule to “' + f.specimen + '” (Specimen scope)', () =>
+            _rrFillRuleField('rrAnalyteSpecimen', f.specimen)
+          );
+        }
         const tdText = tr.insertCell();
         tdText.className = 'tl-rr-inspector-text';
         tdText.textContent = rd.text;
@@ -1748,7 +1801,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         ' parsed. ' +
         specCount +
         ' with a specimen header. ' +
-        'Click any suggestion pill above to fill the corresponding field.';
+        'Click a name to add it to Analyte match, or a specimen header to scope the rule to it.';
       resultsEl.appendChild(summary);
 
       resultsEl.style.display = 'block';
@@ -1829,13 +1882,16 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const state = pickerEmptyState(tabs.length, merged.length);
       if (state === 'no-tabs') {
         rrPickerEmpty(
-          'Open Medicus and view your result queue to load a recent result — or paste a response manually below.'
+          'No Medicus tab found. Keep your Medicus results queue open in a SEPARATE window from this Settings page — ' +
+            'if Settings opened over your Medicus tab it closes that session, so there is nothing to read. ' +
+            'Then click Load again, or paste a response manually below.'
         );
         return;
       }
       if (state === 'no-results') {
         rrPickerEmpty(
-          'No results found in the open Medicus tab. Open your result queue (the task list) so the rows load, then click Load again — or paste a response manually below.'
+          'A Medicus tab is open but no results are loaded. Open your result QUEUE (the task list) so the rows load — ' +
+            'and keep it in a separate window from this Settings page — then click Load again, or paste manually below.'
         );
         return;
       }
