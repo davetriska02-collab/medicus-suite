@@ -202,6 +202,22 @@ function buildCommands() {
     run: () => window.ZenMode?.toggle(),
   });
 
+  // Keep the alert roll-up pinned open (persists across alert-set changes).
+  // Panel-only — the floating pop-out has no demand strips / roll-up.
+  if (document.getElementById('alertRollup')) {
+    cmds.push({
+      id: 'alerts:keep-expanded',
+      label: 'Alerts: keep roll-up expanded (toggle)',
+      group: 'View',
+      keywords: 'alert rollup pin expand always open detail demand waiting triage',
+      icon: GENERIC_ICONS.window,
+      run: async () => {
+        const r = await chrome.storage.local.get('suite.rollup.alwaysExpanded');
+        await chrome.storage.local.set({ 'suite.rollup.alwaysExpanded': !(r['suite.rollup.alwaysExpanded'] === true) });
+      },
+    });
+  }
+
   // Options sections — deep links straight to the right settings page.
   for (const [sect, label, keywords] of OPTIONS_SECTIONS) {
     cmds.push({

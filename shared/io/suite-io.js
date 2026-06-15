@@ -16,6 +16,7 @@ const SUITE_KEYS = [
   'suite.tabOrder',
   'suite.hiddenTabs',
   'suite.practiceAcceptedAt',
+  'suite.rollup.alwaysExpanded',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -35,6 +36,8 @@ async function suiteExport() {
     // notice) this one DOES travel in a backup, so the practice's acceptance
     // propagates on restore. Honoured by the reception + knowledge gates.
     practiceAcceptedAt: r['suite.practiceAcceptedAt'] ?? null,
+    // UI pref: keep the alert roll-up pinned open. Boolean; absent == default (false).
+    rollupAlwaysExpanded: r['suite.rollup.alwaysExpanded'] ?? null,
   };
 }
 
@@ -74,6 +77,12 @@ async function suiteImport(data) {
       throw new Error('suite.practiceAcceptedAt must be null or an ISO datetime string.');
     }
     toSet['suite.practiceAcceptedAt'] = data.practiceAcceptedAt;
+  }
+  if (data.rollupAlwaysExpanded != null) {
+    if (typeof data.rollupAlwaysExpanded !== 'boolean') {
+      throw new Error('suite.rollup.alwaysExpanded must be a boolean.');
+    }
+    toSet['suite.rollup.alwaysExpanded'] = data.rollupAlwaysExpanded;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

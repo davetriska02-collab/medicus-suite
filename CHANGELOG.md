@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.97.0] — 2026-06-15
+
+### Roll-up + Focus polish from the re-appraisal (R1/R2/R5/R6)
+
+The second Practice panel cleared the prior blockers; this closes the remaining asks:
+
+- **Plain-language tooltips on the roll-up pills (R1).** Hovering a pill now
+  explains it in words with units — e.g. "Demand: 115 new requests awaiting review
+  (Medical 70, Admin 45)", "Waiting room: 3 patients arrived, longest waiting
+  55 min" — so the front desk knows what a count means, not just its value.
+- **Severity reads as a word, not only colour (R6).** The roll-up headline now
+  says "2 URGENT" when red and "2 ALERTS" when amber, so the escalation survives
+  colourblind mode at the bar level (the pills already carried a shape cue).
+- **Keep the roll-up expanded (R5).** A new command-palette toggle, "Alerts: keep
+  roll-up expanded", pins the roll-up open and persists across alert-set changes
+  (stored in suite.rollup.alwaysExpanded, included in backups). For power users who
+  want the amber detail on screen permanently rather than clicking Details.
+- **Focus pill contrast (R2).** The on-state "Focus · Esc" pill gained a full
+  accent border and brighter text so it reads clearly on the dark nav.
+
+Demand/triage alert thresholds remain configurable in Options (Submissions /
+Triage); only the waiting-room minutes are fixed.
+
 ## [v3.96.5] — 2026-06-15
 
 ### Palette drift-guard across Slots, Reception and the tokens

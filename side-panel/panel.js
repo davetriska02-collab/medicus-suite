@@ -628,12 +628,29 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 const alertRollupEl = document.getElementById('alertRollup');
 const alertStackEl = document.getElementById('alertStack');
 const alertBus = { waiting: null, triage: null, demand: null };
-let _rollupExpanded = null; // null = use default (red→open, amber→closed); else user choice
+let _rollupExpanded = null; // null = use default (red→open, amber→closed); else session choice
+
+// Persistent "keep the roll-up expanded" preference (suite.rollup.alwaysExpanded).
+// Power users want the amber detail pinned on screen instead of clicking Details
+// every time the alert set changes; when on, the roll-up renders expanded always.
+// Toggled from the command palette; cached here, kept current via onChanged.
+let _rollupAlwaysExpanded = false;
+chrome.storage.local.get('suite.rollup.alwaysExpanded').then((r) => {
+  _rollupAlwaysExpanded = r['suite.rollup.alwaysExpanded'] === true;
+  renderRollup();
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.rollup.alwaysExpanded' in changes) {
+    _rollupAlwaysExpanded = changes['suite.rollup.alwaysExpanded'].newValue === true;
+    _rollupExpanded = null; // re-derive against the new preference
+    renderRollup();
+  }
+});
 
 const ALERT_CHANNELS = ['waiting', 'triage', 'demand'];
 
 function reportAlert(channel, state) {
-  // state = { level: 'green'|'amber'|'red', label, count } or null when inactive.
+  // state = { level, label, count, meta?, title? } or null when inactive.
   alertBus[channel] = state;
   renderRollup();
 }
@@ -655,12 +672,15 @@ function renderRollup() {
 
   const hasRed = elevated.some((a) => a.level === 'red');
   const maxLevel = hasRed ? 'red' : 'amber';
-  if (_rollupExpanded === null) _rollupExpanded = hasRed; // red opens by default
+  // Expanded when: the user pinned it open, OR (default) it's red. Amber starts
+  // collapsed unless the session toggle or the persistent pref says otherwise.
+  if (_rollupAlwaysExpanded) _rollupExpanded = true;
+  else if (_rollupExpanded === null) _rollupExpanded = hasRed;
 
   const pills = elevated
     .map(
       (a) =>
-        `<span class="pill pill--${a.level}"><span class="pill-dot"></span><span class="pill-name">${escStrip(
+        `<span class="pill pill--${a.level}"${a.title ? ` title="${escStrip(a.title)}"` : ''}><span class="pill-dot"></span><span class="pill-name">${escStrip(
           a.label
         )}</span>${a.count != null ? `<span class="pill-count">${a.count}</span>` : ''}${
           a.meta ? `<span class="pill-meta">${escStrip(a.meta)}</span>` : ''
@@ -668,11 +688,14 @@ function renderRollup() {
     )
     .join('');
 
+  // R6: severity is carried by a WORD, not only colour — red reads "URGENT",
+  // amber "ALERTS" (uppercased by CSS), so escalation survives colourblind mode.
+  const word = maxLevel === 'red' ? 'urgent' : 'alerts';
   alertRollupEl.className = `alert-rollup alert-rollup--${maxLevel}`;
   alertRollupEl.setAttribute('aria-expanded', String(_rollupExpanded));
   alertRollupEl.innerHTML = `
     <span class="alert-rollup-icon">${maxLevel === 'red' ? '🔴' : '⚠'}</span>
-    <span class="alert-rollup-count">${elevated.length} alerts</span>
+    <span class="alert-rollup-count">${elevated.length} ${word}</span>
     <span class="alert-rollup-pills">${pills}</span>
     <button class="alert-rollup-toggle">${_rollupExpanded ? 'Hide' : 'Details'}<span class="alert-rollup-chev">${
       _rollupExpanded ? '▾' : '▸'
@@ -792,6 +815,10 @@ function renderStrip(patients) {
     // F4: surface the worst single wait on the collapsed pill so proximity-to-breach
     // isn't hidden behind DETAILS (a 12m and a 55m wait must not look identical).
     meta: maxWait > 0 ? maxWait + 'm' : null,
+    // R1: plain-language hover so a non-clinical user knows what the count means.
+    title:
+      `Waiting room: ${patients.length} patient${patients.length === 1 ? '' : 's'} arrived` +
+      (maxWait > 0 ? `, longest waiting ${maxWait} min` : ''),
   });
 }
 
@@ -1069,7 +1096,18 @@ async function applyTriageAlerts(buckets) {
   // F1: report the total flagged TASK count (sum across over-threshold buckets),
   // not the bucket count — so the collapsed pill reconciles with the expanded strip.
   const triageTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
-  reportAlert('triage', maxLevel ? { level: maxLevel, label: 'Triage', count: triageTasks } : null);
+  reportAlert(
+    'triage',
+    maxLevel
+      ? {
+          level: maxLevel,
+          label: 'Triage',
+          count: triageTasks,
+          // R1: plain-language hover.
+          title: `Triage: ${triageTasks} task${triageTasks === 1 ? '' : 's'} over the alert threshold`,
+        }
+      : null
+  );
 
   // Desktop notifications — once per threshold crossing per session
   const quietNow = (await window.QuietMode?.isQuiet?.()) ?? false;
@@ -1233,7 +1271,15 @@ async function fetchAndRenderSubRagStrip() {
   // F1: report total demand TASKS (Medical + Admin sum), not the category count,
   // so "Demand N" reconciles with the expanded "Medical X / Admin Y" detail.
   const demandTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
-  reportAlert('demand', { level: maxLevel, label: 'Demand', count: demandTasks });
+  reportAlert('demand', {
+    level: maxLevel,
+    label: 'Demand',
+    count: demandTasks,
+    // R1: plain-language hover with the breakdown (e.g. "Medical 70, Admin 45").
+    title: `Demand: ${demandTasks} new request${demandTasks === 1 ? '' : 's'} awaiting review (${triggered
+      .map((t) => `${t.label} ${t.count}`)
+      .join(', ')})`,
+  });
   return !anyFailed;
 }
 

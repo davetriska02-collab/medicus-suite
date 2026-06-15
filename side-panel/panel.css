@@ -1373,7 +1373,9 @@ body {
   flex-shrink: 0;
   margin-right: 8px;
   cursor: pointer;
-  --pill-line: var(--accent-line);
+  /* R2: a full --accent border (not the faint --accent-line) so the on-state
+     pill reads clearly for tired eyes, especially on the dark nav. */
+  --pill-line: var(--accent);
   --pill-fill: var(--accent-dim);
 }
 html[data-zen='1'] .zen-pill {
@@ -1388,10 +1390,10 @@ html[data-zen='1'] .zen-pill {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-2);
+  color: var(--text-1);
 }
 .zen-pill .pill-meta {
-  color: var(--text-4);
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
