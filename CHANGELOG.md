@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.4] — 2026-06-15
+
+### Shared pill organise-mode helper (extraction)
+
+The Slots pill organise mode (drag-reorder + per-item colour) had its data layer
+inline. Extracted the reusable parts — the colour-key list, prefs validation, and
+the ordering rule — into a shared `pill-prefs.js` module (`SWATCH_KEYS`,
+`sanitisePillPrefs`, `applyPillOrder`) so any categorical-pill surface can adopt
+the same configurable behaviour without re-implementing it. Slots now consumes
+the shared module; behaviour is unchanged (verified: saved order and custom
+colours render identically). Note: Condor and Capacity pills are RAG *status*,
+not categorical, so colour config does not apply there; Reception (which already
+has its own copy) converges onto this helper in a later pass.
+
 ## [v3.96.3] — 2026-06-15
 
 ### Config foundation: one canonical user-colour palette

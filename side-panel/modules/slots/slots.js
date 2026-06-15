@@ -9,6 +9,7 @@
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
+import { SWATCH_KEYS, sanitisePillPrefs, applyPillOrder } from '../shared/pill-prefs.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -35,24 +36,10 @@ let state = {
   typesOpen: false, // whether the by-type details panel is open
 };
 
-// Palette for colour-coding pills (organising only — NOT a clinical flag).
-// Keys mirror Reception's TILE_COLOUR_KEYS; each maps to a pill-c-<key> CSS
-// class in slots.css. Status amber/red from alert rules ALWAYS overrides a
-// custom colour — safety salience is never user-configurable away.
-const PILL_COLOUR_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
-
-function sanitisePillPrefs(raw) {
-  const out = { order: [], colours: {} };
-  if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.order)) out.order = raw.order.filter((t) => typeof t === 'string');
-    if (raw.colours && typeof raw.colours === 'object') {
-      for (const [t, k] of Object.entries(raw.colours)) {
-        if (typeof t === 'string' && PILL_COLOUR_KEYS.includes(k) && k !== 'default') out.colours[t] = k;
-      }
-    }
-  }
-  return out;
-}
+// The pill colour palette, prefs validation and ordering rule are shared with
+// any other categorical-pill surface (see ../shared/pill-prefs.js). Status
+// amber/red from alert rules ALWAYS overrides a custom colour at render time —
+// safety salience is never user-configurable away.
 
 function savePillPrefs() {
   chrome.storage.local.set({ 'slots.pillPrefs': { order: state.pillPrefs.order, colours: state.pillPrefs.colours } });
@@ -421,18 +408,7 @@ function orderedPillEntries(byType) {
   const byCount = Object.entries(byType)
     .filter(([t]) => !state.hiddenTypes.has(t))
     .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
-  const saved = state.pillPrefs.order || [];
-  if (saved.length === 0) return byCount;
-  const present = new Map(byCount);
-  const out = [];
-  for (const t of saved) {
-    if (present.has(t)) {
-      out.push([t, present.get(t)]);
-      present.delete(t);
-    }
-  }
-  for (const [t, n] of byCount) if (present.has(t)) out.push([t, n]);
-  return out;
+  return applyPillOrder(byCount, state.pillPrefs.order || []);
 }
 
 function renderTypePills(byType, visibleSum) {
@@ -468,7 +444,7 @@ function renderTypePills(byType, visibleSum) {
     organising && state.openColourFor
       ? `<div class="pill-palette">
           <span class="pill-palette-label">Colour — ${escHtml(state.openColourFor)}</span>
-          <span class="pill-swatches">${PILL_COLOUR_KEYS.map(
+          <span class="pill-swatches">${SWATCH_KEYS.map(
             (k) =>
               `<button class="pill-swatch pill-c-${k}${(state.pillPrefs.colours[state.openColourFor] || 'default') === k ? ' active' : ''}" data-swatch="${k}" title="${k === 'default' ? 'No colour' : k}"></button>`
           ).join('')}</span>
