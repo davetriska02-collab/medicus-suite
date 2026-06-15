@@ -741,6 +741,49 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
   });
 });
 
+// ── Shared: the single "Accept for practice" action ──────────────────────────
+// Used by BOTH the Clinical Safety card and the Central attestations box. Sets the
+// suite-level flag plus the values the features need to actually be on (all
+// reception pathways enabled, alert library acknowledged). Honoured by the
+// reception/knowledge gates and the central-attestation gates; carried in a suite
+// backup so it propagates on restore.
+async function _allReceptionPathwayIds() {
+  const ids = {};
+  try {
+    const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
+    const doc = await r.json();
+    for (const p of doc.pathways || []) if (p && p.id) ids[p.id] = true;
+  } catch (_) {}
+  try {
+    const s = await chrome.storage.local.get('reception.customPathways');
+    for (const p of s['reception.customPathways'] || []) if (p && p.id) ids[p.id] = true;
+  } catch (_) {}
+  return ids;
+}
+async function acceptForPractice() {
+  const now = new Date().toISOString();
+  const ids = await _allReceptionPathwayIds();
+  const cfgR = await chrome.storage.local.get('reception.config');
+  const cfg = cfgR['reception.config'] || {};
+  cfg.enabledPathways = { ...(cfg.enabledPathways || {}), ...ids };
+  await chrome.storage.local.set({
+    'suite.practiceAcceptedAt': now,
+    'reception.config': cfg,
+    'sentinel.alertLibrary.acknowledged': true,
+  });
+}
+async function withdrawPracticeAcceptance() {
+  await chrome.storage.local.remove('suite.practiceAcceptedAt');
+}
+async function isPracticeAccepted() {
+  try {
+    const r = await chrome.storage.local.get('suite.practiceAcceptedAt');
+    return r['suite.practiceAcceptedAt'] != null;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ── Practice Profile (v3.0) ──────────────────────────────────────────────────
 
 (async function initPracticeProfileSection() {
@@ -933,6 +976,10 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
         row.appendChild(lbl);
         attestationRows.appendChild(row);
       }
+      // Inline accept appears only until the practice has accepted, so the greyed
+      // gates can be unlocked right here without leaving for Clinical Safety.
+      const acceptInline = document.getElementById('ppAcceptInline');
+      if (acceptInline) acceptInline.style.display = (await isPracticeAccepted()) ? 'none' : '';
     }
 
     // ── IndexedDB helpers for FileSystemFileHandle persistence ───────────────
@@ -1317,6 +1364,20 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
     await render();
     await buildModulePicker();
     await buildAttestationRows();
+
+    // Inline "Accept all for this practice" (so a greyed gate isn't a dead end).
+    const ppAcceptTick = document.getElementById('ppAcceptTick');
+    const ppAcceptBtn = document.getElementById('ppAcceptBtn');
+    ppAcceptTick?.addEventListener('change', () => {
+      if (ppAcceptBtn) ppAcceptBtn.disabled = !ppAcceptTick.checked;
+    });
+    ppAcceptBtn?.addEventListener('click', async () => {
+      if (!ppAcceptTick?.checked) return;
+      await acceptForPractice();
+      if (ppAcceptTick) ppAcceptTick.checked = false;
+      ppAcceptBtn.disabled = true;
+      await buildAttestationRows(); // re-render: all three gates now tick + the inline control hides
+    });
 
     checkBtn?.addEventListener('click', async () => {
       checkBtn.disabled = true;
@@ -2199,27 +2260,12 @@ rmSaveBtn?.addEventListener('click', async () => {
   const tick = document.getElementById('practiceAcceptTick');
   const acceptBtn = document.getElementById('practiceAcceptBtn');
   const withdrawBtn = document.getElementById('practiceWithdrawBtn');
-  const ACCEPT_KEY = 'suite.practiceAcceptedAt';
-
-  async function allPathwayIds() {
-    const ids = {};
-    try {
-      const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
-      const doc = await r.json();
-      for (const p of doc.pathways || []) if (p && p.id) ids[p.id] = true;
-    } catch (_) {}
-    try {
-      const s = await chrome.storage.local.get('reception.customPathways');
-      for (const p of s['reception.customPathways'] || []) if (p && p.id) ids[p.id] = true;
-    } catch (_) {}
-    return ids;
-  }
 
   async function render() {
-    const r = await chrome.storage.local.get(ACCEPT_KEY);
-    const acceptedAt = r[ACCEPT_KEY];
-    if (acceptedAt) {
-      statusEl.innerHTML = `<span style="color: var(--green, #15803d); font-weight: 600">&#10003; Accepted for this practice</span> <span style="color: var(--text-3)">on ${escHtml(String(acceptedAt).slice(0, 10))}</span>`;
+    const accepted = await isPracticeAccepted();
+    if (accepted) {
+      const r = await chrome.storage.local.get('suite.practiceAcceptedAt');
+      statusEl.innerHTML = `<span style="color: var(--green, #15803d); font-weight: 600">&#10003; Accepted for this practice</span> <span style="color: var(--text-3)">on ${escHtml(String(r['suite.practiceAcceptedAt']).slice(0, 10))}</span>`;
       acceptBtn.style.display = 'none';
       confirmRow.style.display = 'none';
       withdrawBtn.style.display = '';
@@ -2239,21 +2285,12 @@ rmSaveBtn?.addEventListener('click', async () => {
 
   acceptBtn?.addEventListener('click', async () => {
     if (!tick.checked) return;
-    const now = new Date().toISOString();
-    const ids = await allPathwayIds();
-    const cfgR = await chrome.storage.local.get('reception.config');
-    const cfg = cfgR['reception.config'] || {};
-    cfg.enabledPathways = { ...(cfg.enabledPathways || {}), ...ids };
-    await chrome.storage.local.set({
-      [ACCEPT_KEY]: now,
-      'reception.config': cfg,
-      'sentinel.alertLibrary.acknowledged': true,
-    });
+    await acceptForPractice();
     await render();
   });
 
   withdrawBtn?.addEventListener('click', async () => {
-    await chrome.storage.local.remove(ACCEPT_KEY);
+    await withdrawPracticeAcceptance();
     await render();
   });
 

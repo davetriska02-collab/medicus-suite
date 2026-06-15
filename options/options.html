@@ -1748,12 +1748,25 @@
                 <div style="font-size: 11px; color: var(--text-3); margin-bottom: 8px; line-height: 1.5">
                   Your acceptance of the reception disclaimer / alert library / knowledge notice will satisfy
                   these for managed users on this profile, so they don't each have to accept them locally. A
-                  greyed-out gate just means it isn't accepted on this machine yet &mdash; ticking
-                  <strong>Accept clinical features for this practice</strong> (Clinical Safety) accepts and unlocks
-                  all three at once.
+                  greyed-out gate just means it isn't accepted on this machine yet &mdash; use
+                  <strong>Accept all for this practice</strong> below to accept and unlock all three at once.
                 </div>
                 <div id="ppAttestationRows" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px">
                   <!-- rows injected by JS -->
+                </div>
+                <!-- Inline accept (so you don't have to leave this screen). Shown only
+                     when the practice hasn't accepted yet. -->
+                <div id="ppAcceptInline" style="display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px">
+                  <label style="display: flex; gap: 6px; align-items: flex-start; cursor: pointer; margin-bottom: 6px">
+                    <input type="checkbox" id="ppAcceptTick" style="margin-top: 2px; flex-shrink: 0" />
+                    <span style="font-size: 11px; color: var(--text-3)"
+                      >A clinician (CSO / nominated GP) has read the Clinical Safety Notice and accepts these features
+                      for the whole practice.</span
+                    >
+                  </label>
+                  <button class="primary" id="ppAcceptBtn" disabled style="font-size: 11px; padding: 4px 12px">
+                    Accept all for this practice
+                  </button>
                 </div>
               </div>
 
