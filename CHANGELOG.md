@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.4] — 2026-06-15
+
+### Audit follow-up: end-to-end pipeline integration test
+
+Adds `test-pipeline-e2e.js`, closing the audit's top test-coverage gap. The existing
+suite tested each clinical stage in isolation but nothing chained the real stages
+together — `test-alert-builder.js` calls `evaluatePatient` with hand-built mocks that
+bypass the normaliser, so a contract mismatch between the normaliser's output shape and
+what the rules engine reads (e.g. a med-name field rename) would pass every unit test yet
+silently drop a real monitoring alert. The new test runs raw API-shaped data through the
+**real** `engine/normalisers.js` → `engine/rules-engine.js` `evaluatePatient` →
+`shared/chip-renderer.js`, asserting an overdue methotrexate patient produces an overdue
+drug-monitoring chip (with the FBC/U&E/LFT test names threaded all the way to the rendered
+HTML), plus two negative controls (wrong drug → no chip; bloods in-date → in_date not
+overdue). It pins the specific seam fields (`med.name`, `obs.name`, `obs.date`) so a future
+rename fails the test. Writing it immediately caught one such detail — the engine spreads
+`rule.tests[]` unchanged, so the chip field is `t.name`, not `t.testName`.
+
 ## [v3.91.3] — 2026-06-15
 
 ### Audit follow-up: cache eviction + test hardening
