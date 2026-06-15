@@ -60,6 +60,13 @@ function buildDisplayPopoverHTML() {
   </div>`;
 }
 
+// Merge the popover's three prefs over the stored object so sibling keys we
+// don't manage here (e.g. zen, written by ZenMode) survive a theme/size change.
+async function persistDisplayPrefs() {
+  const r = await chrome.storage.local.get('suite.display');
+  await chrome.storage.local.set({ 'suite.display': { ...(r['suite.display'] || {}), ...panelDisplayPrefs } });
+}
+
 function renderDisplayPopover() {
   const host = document.getElementById('displayPopoverHost');
   if (!host) return;
@@ -69,13 +76,13 @@ function renderDisplayPopover() {
   host.querySelectorAll('[data-dp-key]').forEach((btn) => {
     btn.addEventListener('click', () => {
       panelDisplayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
-      chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+      persistDisplayPrefs();
       renderDisplayPopover();
     });
   });
   host.querySelector('#dpColorblind')?.addEventListener('change', (e) => {
     panelDisplayPrefs.colorblind = e.target.checked;
-    chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+    persistDisplayPrefs();
     renderDisplayPopover();
   });
 

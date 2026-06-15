@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.94.0] — 2026-06-15
+
+### Focus (Zen) mode — declutter the chrome, keep the signal
+
+A new **focus mode** strips the panel back to the active module for heads-down work
+in the narrow side panel. Toggle it from the new focus button in the nav, with
+**Ctrl/Cmd + .**, or via the command palette ("Focus mode: toggle"). **Esc** exits.
+
+- **What it hides:** the brand, the nav tab labels (tabs collapse to icons, so more
+  fit without scrolling), the overflow fade/arrows, and any *calm/green* demand strips.
+- **What it never hides:** amber and red waiting-room, triage and demand strips. Zen
+  touches chrome and calm decoration only — a clinical signal can never be suppressed
+  by it. This mirrors the Quiet-mode safety boundary (presentation, never signal).
+- **Persistent + synced.** State rides on `suite.display.zen`, so it survives reopen
+  and stays in lock-step between the docked panel and the floating pop-out, applied as
+  `html[data-zen]` by the shared display-prefs applicator.
+- Distinct from **Quiet/clinic mode**, which mutes notifications: Zen is purely visual.
+
 ## [v3.93.1] — 2026-06-15
 
 ### Combo result rules: full authoring parity across all three builders

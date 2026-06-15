@@ -1158,6 +1158,46 @@ body {
   background: var(--accent-dim);
 }
 
+#zenBtn.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* ── Zen (focus) mode ─────────────────────────────────────────────────────────
+   Visual declutter for focused work in the narrow panel: drop the brand, collapse
+   nav tab labels to icons, tighten chrome and hide CALM demand strips so the active
+   module dominates. Toggled via #zenBtn / Ctrl+. / the command palette; applied as
+   html[data-zen="1"] by shared/display-prefs.js, so it persists and syncs panel↔pop-out.
+
+   CLINICAL SAFETY: only chrome and GREEN/calm decoration is hidden. Amber and red
+   waiting-room, triage and demand strips are never matched by these rules, so a
+   clinical signal can never be hidden by Zen. Keep that invariant if you edit this. */
+html[data-zen='1'] .nav-brand {
+  display: none;
+}
+html[data-zen='1'] .nav-tab {
+  padding: 6px 7px;
+  gap: 0;
+}
+html[data-zen='1'] .nav-tab > span:not(.nav-badge) {
+  display: none;
+}
+/* Icon-only tabs usually fit, so retire the overflow fade/arrows for a calm rail. */
+html[data-zen='1'] .suite-nav::after,
+html[data-zen='1'] .suite-nav::before {
+  opacity: 0;
+}
+html[data-zen='1'] .nav-scroll-indicator {
+  display: none;
+}
+/* Hide calm/green strips only — amber and red are deliberately not selected. */
+html[data-zen='1'] #wrStrip.wr-strip-green {
+  display: none;
+}
+html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-red) {
+  display: none;
+}
+
 /* ── Submissions demand strip (global) ──────────────────────── */
 
 .sub-rag-strip {

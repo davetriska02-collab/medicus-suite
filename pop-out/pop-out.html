@@ -212,6 +212,22 @@
         </div>
         <div class="popout-actions">
           <button id="quietPill" class="quiet-pill quiet-pill-hidden"></button>
+          <button id="zenBtn" class="icon-btn" title="Focus mode — declutter chrome (Ctrl+.)" aria-pressed="false">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+              <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+              <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+              <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+            </svg>
+          </button>
           <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">
             <svg
               width="13"
@@ -251,6 +267,7 @@
     </div>
 
     <script src="../shared/quiet-mode.js"></script>
+    <script src="../shared/zen-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>
     <script src="../shared/activity-api.js"></script>

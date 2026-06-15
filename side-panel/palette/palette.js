@@ -191,6 +191,17 @@ function buildCommands() {
     run: () => window.QuietMode?.clear(),
   });
 
+  // Focus (Zen) mode — visual declutter of the chrome. Distinct from Quiet
+  // mode above, which mutes notifications; Zen hides chrome, never signal.
+  cmds.push({
+    id: 'zen:toggle',
+    label: 'Focus mode: toggle',
+    group: 'View',
+    keywords: 'zen focus declutter hide chrome distraction free minimal full screen',
+    icon: GENERIC_ICONS.window,
+    run: () => window.ZenMode?.toggle(),
+  });
+
   // Options sections — deep links straight to the right settings page.
   for (const [sect, label, keywords] of OPTIONS_SECTIONS) {
     cmds.push({
