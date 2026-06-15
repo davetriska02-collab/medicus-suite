@@ -256,10 +256,19 @@ function renderTriageStep() {
 function renderCollapsedStrip() {
   const remaining = remainingStepCount();
   const optionalLabel = remaining === 0 ? 'all steps done' : `${remaining} optional step${remaining === 1 ? '' : 's'}`;
+  // When the practice code arrives pre-set (a managed/shared-folder deployment),
+  // the strip is the first and often only setup surface a new user sees — the
+  // full card never auto-shows. Surface "Choose tabs" directly on it (one click,
+  // no Expand) so the recommended tab choice isn't buried. Reuses the
+  // .setup-choose-tabs class the full card wires, so no extra event wiring.
+  const chooseTabs = _stepStatus.tabs.done
+    ? ''
+    : `<button class="ghost-btn setup-choose-tabs" aria-label="Choose your tabs">Choose tabs</button>`;
   return `
     <div class="setup-card setup-card--collapsed" role="region" aria-label="Suite setup">
       <span class="setup-collapsed-icon setup-step-icon--done" aria-hidden="true">&#10003;</span>
       <span class="setup-collapsed-text">Setup: practice code ready &middot; ${esc(optionalLabel)}</span>
+      ${chooseTabs}
       <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
       <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
     </div>`;

@@ -73,3 +73,21 @@ export function sanitiseHiddenTabs(raw) {
   const out = [...new Set(raw.filter((id) => typeof id === 'string' && ALL_IDS.has(id)))];
   return out.length >= ALL_IDS.size ? [] : out;
 }
+
+// Pure toggle used by both the side-panel chooser overlay and the options-page
+// tab section. Given the current hidden set and a tab id, returns the new hidden
+// array. Turning a tab ON is always allowed; turning one OFF is BLOCKED when it
+// would hide the last visible tab — hiding is de-cluttering, never lock-out.
+// Returns { hidden, blocked }: when blocked, `hidden` is unchanged.
+export function toggleTabVisibility(hiddenIds, id) {
+  const set = new Set(sanitiseHiddenTabs(hiddenIds));
+  if (!ALL_IDS.has(id)) return { hidden: [...set], blocked: false };
+  if (set.has(id)) {
+    set.delete(id); // turning ON — always allowed
+    return { hidden: [...set], blocked: false };
+  }
+  // turning OFF — block if it would leave nothing visible
+  if (ALL_IDS.size - set.size <= 1) return { hidden: [...set], blocked: true };
+  set.add(id);
+  return { hidden: [...set], blocked: false };
+}

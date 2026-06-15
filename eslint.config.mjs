@@ -44,6 +44,12 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
+    // options/tabs-section.js is loaded as <script type="module"> and imports
+    // from side-panel/tab-catalog.js (the rest of options/ is classic script).
+    files: ['options/tabs-section.js'],
+    languageOptions: { sourceType: 'module' },
+  },
+  {
     files: ['test-*.js', 'scripts/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },

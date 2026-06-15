@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.0] — 2026-06-15
+
+### Choose your tabs — now discoverable in Options, and surfaced for managed installs
+
+The "Choose your tabs" chooser (which writes the user-owned `suite.hiddenTabs` key)
+previously had only two entry points, both inside the side panel: the first-run setup
+checklist step and the `Ctrl+K` palette command. In a **practice-deployed shared-folder
+install** the pushed practice code collapses the setup checklist before a new user ever
+reaches the tabs step, and there was **no entry point in the options page at all** — so
+new staff effectively never got the chance to pick their tabs.
+
+**New "Tabs" section in Options.** A dedicated section (second in the nav, after Suite)
+renders role presets (GP / Reception / Practice manager / Everything) plus a per-tab
+toggle grid with a one-line explainer for each tab. It reuses the single source of truth
+in `side-panel/tab-catalog.js` and writes the same `suite.hiddenTabs` key, so the side
+panel and pop-out live-apply the change immediately via their existing storage listeners.
+Loaded as `<script type="module">` (`options/tabs-section.js`) so it can import the
+catalog data; the rest of the options page remains classic script.
+
+**Surfaced on the collapsed setup strip.** When the practice code is pre-set (the managed
+deployment case), the setup checklist's thin collapsed strip now shows a direct **"Choose
+tabs"** button when the tabs step isn't yet done — one click, no need to Expand the full
+card — so the recommended tab choice isn't buried for new users.
+
+**Still user-owned.** Tab visibility remains a personal, per-machine preference: a
+practice profile never pushes `suite.hiddenTabs` (`shared/io/practice-profile.js`), and
+the Options section says so explicitly. Hiding a tab only de-clutters the nav — everything
+stays reachable via `Ctrl+K`. A new pure `toggleTabVisibility` helper (tested in
+`test-tab-catalog.js`) enforces the never-hide-the-last-tab guarantee on both surfaces.
+
 ## [v3.90.0] — 2026-06-15
 
 ### Result inspector: load a recent result live (no JSON paste needed)
