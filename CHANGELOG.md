@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.5] — 2026-06-15
+
+### Security: upgrade vendored PDF.js 3.11.174 → 4.2.67 (CVE-2024-4367)
+
+The visualiser vendored PDF.js 3.11.174, which is affected by **CVE-2024-4367** (a crafted
+PDF can execute arbitrary JS via the font path). It was already mitigated by calling
+`getDocument({ isEvalSupported: false })`, but the library itself was unpatched. This
+upgrades to **4.2.67**, the exact patch release that fixes the CVE.
+
+PDF.js 4.x ships **ESM-only** (there is no UMD/classic-script build), so `visualiser-core.html`
+now loads it via a small inline `<script type="module">` that imports the namespace and
+re-exposes it as `window.pdfjsLib`, with the subsequent scripts deferred so they still run
+in document order after the module evaluates. Every PDF.js API the visualiser uses
+(`GlobalWorkerOptions.workerSrc`, `getDocument` + `isEvalSupported`, `getPage`,
+`getTextContent`, the `TextItem` shape) was verified to exist unchanged in 4.2.67;
+`visualiser-core.js` itself needed no changes. `vendor-versions.json` updated (versions,
+upstream URLs, SHA-256) and `verify-vendor.js` passes.
+
+> ⚠️ **Manual render smoke-test required before this ships in a release.** This change was
+> verified statically (API presence, checksums, full test suite) but PDFs cannot be rendered
+> in CI. Before tagging a release, open the visualiser, load a real EPR export PDF, and
+> confirm text extraction + all tabs render with no `pdfjsLib`/worker console errors.
+
 ## [v3.91.4] — 2026-06-15
 
 ### Audit follow-up: end-to-end pipeline integration test
