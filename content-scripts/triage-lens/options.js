@@ -1835,7 +1835,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       }
       if (state === 'no-results') {
         rrPickerEmpty(
-          'No recent results captured yet. Open a result in your Medicus queue, then try again — or paste manually below.'
+          'No results found in the open Medicus tab. Open your result queue (the task list) so the rows load, then click Load again — or paste a response manually below.'
         );
         return;
       }

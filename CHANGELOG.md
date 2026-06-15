@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.1] — 2026-06-15
+
+### Fix: "Load a recent result" now fetches on demand instead of showing an empty picker
+
+The result-rule inspector's **"Load a recent result"** button (v3.90.0) usually showed
+"No recent results captured yet" and appeared to do nothing. The button was firing
+correctly — the in-memory store it read was simply empty. That store was only ever
+populated as a **side-effect of the queue result-triage chip pipeline**: it required the
+user to be sitting on the live queue list, with result-triage chips **enabled**, in the
+same tab session (the store is in-memory and clears on reload). Opening an individual
+result never populated it, and with result chips off it was never populated at all.
+
+**On-demand fetch.** Clicking the button now makes the Triage Lens content script
+**actively fetch and parse** the open queue's results then and there, independent of
+whether result-triage chips are enabled or whether the background pass ran. It reuses the
+overview URLs the page-world bridge already caches for every queue row it sees, so it
+works as long as a Medicus **queue** tab is open. The `getRecentInvestigationResults`
+message handler is now async (awaits the collector, returns `true` to keep the channel
+open). A new pure `selectOnDemandFetchTargets` helper (caps the fetch fan-out, skips rows
+already held, drops malformed/empty entries) is unit-tested in `test-result-inspect-recent.js`.
+
+**Still in-memory only (IG).** The on-demand path persists nothing — same contract as the
+passive capture. The empty-state wording now points at opening the result queue (the task
+list) rather than the misleading "open a result".
+
 ## [v3.91.0] — 2026-06-15
 
 ### Choose your tabs — now discoverable in Options, and surfaced for managed installs
