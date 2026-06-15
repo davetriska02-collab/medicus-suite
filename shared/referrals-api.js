@@ -38,12 +38,31 @@
 
   const API_HOST_SUFFIX = '.api.england.medicus.health';
 
+  // Practice code is a short hex site ID. Validate before it reaches a URL host, so
+  // a poisoned suite.practiceCode (e.g. from a malicious backup) can't redirect a
+  // credentialed fetch to an attacker host. Mirrors activity-api.js's F8 guard.
+  const _SITE_CODE_RE = /^[a-f0-9]{4,8}$/i;
+  function _isValidPracticeCode(code) {
+    return typeof code === 'string' && _SITE_CODE_RE.test(code);
+  }
+
+  // Defence in depth: refuse to fetch any URL whose host is not the Medicus API,
+  // whatever produced it (canonical build OR a discovered/captured template URL).
+  function _isMedicusApiHost(urlStr) {
+    try {
+      const h = new URL(urlStr).hostname.toLowerCase();
+      return h === 'api.england.medicus.health' || h.endsWith(API_HOST_SUFFIX);
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Build the canonical clinical-audit-report URL from a practice code alone, so a
   // caller can fetch WITHOUT a discovered template URL (i.e. without the user first
   // visiting Referrals → Clinical Audit Report). A discovered URL still takes
   // precedence where present, since it preserves any deployment-specific params.
   function buildCanonicalUrl(code, startDate, endDate) {
-    if (!code) return null;
+    if (!_isValidPracticeCode(code)) return null;
     const base = `https://${code}${API_HOST_SUFFIX}/referrals/clinical-audit-report`;
     const params = new URLSearchParams();
     params.append('referralStartDate', startDate);
@@ -132,6 +151,12 @@
       const end   = start + PAGE_SIZE;
       const url   = buildUrlFromTemplate(templateUrl, startDate, endDate, start, end);
       lastUrl = url;
+
+      // Never send a credentialed request to a non-Medicus host, even if the
+      // template URL was tampered with (poisoned discovery URL / practice code).
+      if (!_isMedicusApiHost(url)) {
+        throw new Error('Refusing to fetch referrals from a non-Medicus host.');
+      }
 
       const r = await fetchImpl(url, { credentials: 'include' });
       if (!r.ok) {

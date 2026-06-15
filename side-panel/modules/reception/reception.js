@@ -357,23 +357,33 @@ function formatDateUK(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
+// Strip control chars and collapse whitespace/newlines. Referral fields come from
+// the Medicus API; sanitising here stops a stray newline in a field from forging a
+// separate line in the plain-text capture note (e.g. a fake "*** RED FLAG").
+function cleanField(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ') // strip control chars / newlines
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Parse a referral row into display parts. priorityKey drives the badge CSS class;
 // priority is the human label (e.g. "2WW" instead of the raw "TwoWeekWait").
 function referralParts(r) {
   const api = window.ReferralsApi;
   const parsed = api ? api.parseReferralService(r.referralService) : {};
   const where =
-    [parsed.specialty, parsed.hospital].filter((x) => x && x !== '(unknown)').join(', ') ||
-    r.referralService ||
+    cleanField([parsed.specialty, parsed.hospital].filter((x) => x && x !== '(unknown)').join(', ')) ||
+    cleanField(r.referralService) ||
     'Referral';
   const priorityKey = api ? api.normalisePriority(r.priority || '') : r.priority || '';
   return {
     where,
-    who: r.referringClinician || 'Unknown clinician',
+    who: cleanField(r.referringClinician) || 'Unknown clinician',
     when: formatDateUK(r.referralDate),
     priorityKey,
-    priority: PRIORITY_LABEL[priorityKey] || priorityKey,
-    status: r.displayStatus || '',
+    priority: cleanField(PRIORITY_LABEL[priorityKey] || priorityKey),
+    status: cleanField(r.displayStatus),
   };
 }
 

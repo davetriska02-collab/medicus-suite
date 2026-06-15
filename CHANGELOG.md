@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.86.1] — 2026-06-15
+
+### Reception referrals — red-team hardening
+
+- **Practice-code host injection (SSRF) fixed.** `suite.practiceCode` is importable
+  via backup and was read back unvalidated, then interpolated straight into the
+  referral request host. `referrals-api.js` now validates the code
+  (`/^[a-f0-9]{4,8}$/i`, mirroring activity-api's F8 guard) before building the
+  canonical URL, AND refuses to fetch any URL whose host is not
+  `*.api.england.medicus.health` — covering both the canonical build and any
+  discovered/captured template URL. A poisoned code/discovery URL now fails closed
+  instead of sending a credentialed fetch to an attacker host.
+- **Capture-note integrity.** Referral display fields (service/hospital/clinician)
+  are sanitised (control chars and newlines collapsed) before they reach the
+  plain-text reception capture note, so a malformed API value can't forge a
+  separate line such as a fake "*** RED FLAG" in the pasted record. The on-card
+  rendering was already `esc()`-safe against XSS.
+
 ## [v3.86.0] — 2026-06-15
 
 ### Reception "Referrals on file" — no setup step, faster, safer wording

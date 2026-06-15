@@ -593,6 +593,32 @@ async function runReferralsApiTests() {
   check(cu.includes('referralStartDate=2026-01-01') && cu.includes('referralEndDate=2026-01-31'), 'buildCanonicalUrl: date params');
   check(cu.includes('priorities%5B%5D=TwoWeekWait') || cu.includes('priorities[]=TwoWeekWait'), 'buildCanonicalUrl: priorities included');
   check(buildCanonicalUrl('', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: no code → null');
+  // Red-team: a poisoned practice code (e.g. from a malicious backup) must not reach the URL host.
+  check(buildCanonicalUrl('evil.com#', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with host-injection chars → null');
+  check(buildCanonicalUrl('a1b2c3/x', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with slash → null');
+  check(buildCanonicalUrl('a1b2c3.evil', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with dot → null');
+
+  // ── host allowlist (refuse non-Medicus fetch) ─────────────────────────────
+
+  console.log('\n--- fetchReferrals: host allowlist ---');
+  await expectReject(
+    () =>
+      fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
+        templateUrl: 'https://evil.com/referrals/clinical-audit-report?referralStartDate=2026-01-01&referralEndDate=2026-01-31&startRow=0&endRow=2000',
+        fetch: async () => mockResponse(200, { referrals: [], totalCount: 0 }),
+      }),
+    'non-Medicus host',
+    'poisoned templateUrl host → rejects before any fetch'
+  );
+  await expectReject(
+    () =>
+      fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
+        templateUrl: 'https://api.england.medicus.health.evil.com/referrals/clinical-audit-report?startRow=0&endRow=2000',
+        fetch: async () => mockResponse(200, { referrals: [], totalCount: 0 }),
+      }),
+    'non-Medicus host',
+    'look-alike suffix host → rejects'
+  );
 
   // ── shared cache (cacheGet / cachePut / cacheClear) ───────────────────────
 
