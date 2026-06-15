@@ -691,13 +691,19 @@ function renderRollup() {
   // R6: severity is carried by a WORD, not only colour — red reads "URGENT",
   // amber "ALERTS" (uppercased by CSS), so escalation survives colourblind mode.
   const word = maxLevel === 'red' ? 'urgent' : 'alerts';
+  // Timestamp the bar so every figure is anchored to a moment the manager can
+  // quote ("as at 11:02") — a live number with no time is one she won't cite.
+  const stamp = _fmtHHMM(Date.now());
   alertRollupEl.className = `alert-rollup alert-rollup--${maxLevel}`;
   alertRollupEl.setAttribute('aria-expanded', String(_rollupExpanded));
   alertRollupEl.innerHTML = `
     <span class="alert-rollup-icon">${maxLevel === 'red' ? '🔴' : '⚠'}</span>
     <span class="alert-rollup-count">${elevated.length} ${word}</span>
     <span class="alert-rollup-pills">${pills}</span>
-    <button class="alert-rollup-toggle">${_rollupExpanded ? 'Hide' : 'Details'}<span class="alert-rollup-chev">${
+    <span class="alert-rollup-stamp" title="Figures as at ${stamp}">${stamp}</span>
+    <button class="alert-rollup-toggle" title="${
+      _rollupExpanded ? 'Collapse the detail — the alert stays' : 'Show the detail'
+    }">${_rollupExpanded ? 'Hide' : 'Details'}<span class="alert-rollup-chev">${
       _rollupExpanded ? '▾' : '▸'
     }</span></button>
   `;
@@ -815,10 +821,12 @@ function renderStrip(patients) {
     // F4: surface the worst single wait on the collapsed pill so proximity-to-breach
     // isn't hidden behind DETAILS (a 12m and a 55m wait must not look identical).
     meta: maxWait > 0 ? maxWait + 'm' : null,
-    // R1: plain-language hover so a non-clinical user knows what the count means.
+    // R1 + threshold context: plain-language hover, naming the wait that tripped
+    // the level (amber ≥10 min, red ≥20 min) so the count carries its own line.
     title:
       `Waiting room: ${patients.length} patient${patients.length === 1 ? '' : 's'} arrived` +
-      (maxWait > 0 ? `, longest waiting ${maxWait} min` : ''),
+      (maxWait > 0 ? `, longest waiting ${maxWait} min` : '') +
+      (urgency === 'red' ? ' (red ≥20 min)' : urgency === 'amber' ? ' (amber ≥10 min)' : ''),
   });
 }
 
@@ -1232,7 +1240,11 @@ async function fetchAndRenderSubRagStrip() {
     const { key, label, count } = res.value;
     const level = _subRagLevel(key, count, thresholds);
     if (!level) continue;
-    triggered.push({ label, count, level });
+    // Capture the threshold this category crossed, so the roll-up tooltip can
+    // show the line ("Medical 70 ≥60") — power users / the manager wanted the
+    // number to carry the threshold it tripped, not blind trust in a default.
+    const crossed = thresholds[key] ? thresholds[key][level] : null;
+    triggered.push({ label, count, level, threshold: crossed });
     if (level === 'red' || maxLevel === null) maxLevel = level;
     else if (level === 'amber' && maxLevel !== 'red') maxLevel = level;
   }
@@ -1275,9 +1287,10 @@ async function fetchAndRenderSubRagStrip() {
     level: maxLevel,
     label: 'Demand',
     count: demandTasks,
-    // R1: plain-language hover with the breakdown (e.g. "Medical 70, Admin 45").
+    // R1 + threshold context: plain-language hover with the breakdown AND the line
+    // each category crossed (e.g. "Medical 70 ≥60, Admin 45 ≥40").
     title: `Demand: ${demandTasks} new request${demandTasks === 1 ? '' : 's'} awaiting review (${triggered
-      .map((t) => `${t.label} ${t.count}`)
+      .map((t) => `${t.label} ${t.count}${t.threshold != null ? ` ≥${t.threshold}` : ''}`)
       .join(', ')})`,
   });
   return !anyFailed;

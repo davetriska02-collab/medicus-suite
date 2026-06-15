@@ -1081,12 +1081,22 @@ body {
 .alert-rollup-count {
   font-weight: 700;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-2);
   flex-shrink: 0;
   white-space: nowrap;
+}
+/* "as at HH:MM" — anchors the figures to a moment; muted, machine voice. */
+.alert-rollup-stamp {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .alert-rollup-pills {
   display: flex;
@@ -1103,10 +1113,15 @@ body {
   gap: 5px;
   padding: 2px 8px 2px 6px;
 }
+/* Slightly larger than the prior 10px so the counts clear the eyesight floor
+   (the one place the type scale was too tight for the technophobe partner). */
 .alert-rollup-pills .pill-name {
-  font-size: 10px;
+  font-size: 11px;
 }
 .alert-rollup-pills .pill-count {
+  font-size: 11px;
+}
+.alert-rollup-pills .pill-meta {
   font-size: 10px;
 }
 .alert-rollup-toggle {
@@ -1141,7 +1156,8 @@ body {
   transition:
     background var(--med) var(--ease),
     border-color var(--med) var(--ease);
-  overflow: hidden;
+  /* overflow visible + min-height so wrapped name chips show in full rather than
+     clipping into the "Monitoring →" button (the count must reconcile to the list). */
   min-height: 28px;
 }
 
@@ -1180,11 +1196,10 @@ body {
 
 .wr-strip-chips {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
 }
 
 .wr-chip {

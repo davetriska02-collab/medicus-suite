@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.97.1] — 2026-06-15
+
+### Gap-to-9 quick wins on the alert roll-up
+
+The third Practice pass asked each persona what they'd need for a 9/10; this
+lands the convergent "make the numbers explain themselves" set plus legibility:
+
+- **Timestamp (manager).** The roll-up bar now carries an "as at HH:MM" stamp so
+  every figure is anchored to a moment that can be quoted.
+- **Threshold context (power user / pharmacist / manager).** The pill hover now
+  names the line each figure crossed — "Demand: 115 … (Medical 70 ≥60, Admin 45
+  ≥40)", "…longest waiting 55 min (red ≥20 min)" — so a number isn't blind trust
+  in a shipped default. (Demand/triage thresholds remain editable in Options.)
+- **Legibility (technophobe partner).** The roll-up counts are a touch larger so
+  they clear the eyesight floor.
+- **Names reconcile (manager / pharmacist).** Waiting-room name chips now wrap to
+  full lines instead of clipping into the "Monitoring" button — if the count says
+  3, all 3 names show.
+- **Clearer toggle (pharmacist).** The expand control reads "Hide" with a tooltip
+  "collapse the detail — the alert stays", so collapsing never reads as silencing
+  the alert.
+
 ## [v3.97.0] — 2026-06-15
 
 ### Roll-up + Focus polish from the re-appraisal (R1/R2/R5/R6)
