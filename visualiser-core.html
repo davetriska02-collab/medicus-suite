@@ -1278,13 +1278,21 @@
     <div id="smr-print-block" style="display: none"></div>
 
     <!-- Vendored libraries: see vendor-versions.json for provenance, versions, upstream URLs, and SHA-256 checksums. -->
-    <script src="vendor/pdf.min.js"></script>
-    <script src="vendor/chart.min.js"></script>
-    <script src="vendor/d3.min.js"></script>
+    <!-- PDF.js 4.x ships as ESM only (no UMD/classic-script build exists). This inline
+         module imports it and re-exposes the namespace as window.pdfjsLib so the
+         classic-script visualiser-core.js sees the same global it always has. All
+         subsequent scripts are deferred so they execute in document order AFTER this
+         module's graph (incl. pdf.min.js) has evaluated and window.pdfjsLib is set. -->
+    <script type="module">
+      import * as pdfjsLib from './vendor/pdf.min.js';
+      window.pdfjsLib = pdfjsLib;
+    </script>
+    <script defer src="vendor/chart.min.js"></script>
+    <script defer src="vendor/d3.min.js"></script>
     <!-- Engine files: ACB scorer + STOPP/START (must load before visualiser-core.js) -->
-    <script src="engine/acb-scores.js"></script>
-    <script src="engine/stopp-start.js"></script>
-    <script src="shared/display-prefs.js"></script>
-    <script src="visualiser-core.js"></script>
+    <script defer src="engine/acb-scores.js"></script>
+    <script defer src="engine/stopp-start.js"></script>
+    <script defer src="shared/display-prefs.js"></script>
+    <script defer src="visualiser-core.js"></script>
   </body>
 </html>

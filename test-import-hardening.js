@@ -347,10 +347,11 @@ console.log('\n--- (c) prototype-pollution defence in mergeRules ---');
   const override = { intervalDays: 56, constructor: { stolen: true } };
   const merged = rulesetIo.mergeRules(canonicalRules, { drugRuleOverrides: { 'mtx-001': override } }, null);
   assert(merged.length === 1, 'constructor strip: mergeRules returns merged array');
-  // The merged rule's constructor should still be Object (the normal prototype chain), not {stolen:true}
+  // The dangerous own 'constructor' key must have been stripped — it must NOT be an
+  // enumerable own-property on the merged rule (a real strip; the old assertion was always-true).
   assert(
-    merged[0].constructor !== Object.assign({}, { stolen: true }).constructor || merged[0].constructor.stolen !== true,
-    'constructor strip: constructor key not applied to merged rule'
+    !Object.prototype.hasOwnProperty.call(merged[0], 'constructor'),
+    'constructor strip: constructor own-key stripped from merged rule'
   );
   assert(merged[0].intervalDays === 56, 'constructor strip: legitimate field still merged');
 }

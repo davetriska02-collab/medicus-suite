@@ -1,26 +1,26 @@
 {
-  "generated": "2026-06-04",
+  "generated": "2026-06-15",
   "note": "Vendored library provenance record. SHA-256 checksums computed over the files as shipped. Update this file whenever a vendor library is upgraded.",
   "libraries": [
     {
       "filename": "vendor/pdf.min.js",
       "library": "PDF.js (pdfjs-dist)",
-      "version": "3.11.174",
-      "version_source": "Version string found in file content: '3.11.174'",
-      "upstream_url": "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      "version": "4.2.67",
+      "version_source": "Version string found in file content: '4.2.67' (apiVersion check in getDocument call). Upgraded from 3.11.174 to remediate CVE-2024-4367 (arbitrary JS via crafted PDF font path). pdfjs-dist 4.x ships ESM only; file is legacy/build/pdf.min.mjs renamed to .js and loaded via an inline type=module shim in visualiser-core.html that exposes window.pdfjsLib.",
+      "upstream_url": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.2.67.tgz (extracted: package/legacy/build/pdf.min.mjs)",
       "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
       "license": "Apache-2.0",
-      "sha256": "e0e389e9807b2d82bebd05622e2c699a7a9a3ef279b687c1393d81244b0c31f8"
+      "sha256": "410b149eae133506e6c3f2764e95d5d444fa706bbc450d6e63060ea7605c707d"
     },
     {
       "filename": "vendor/pdf.worker.min.js",
       "library": "PDF.js worker (pdfjs-dist)",
-      "version": "3.11.174",
-      "version_source": "Version string found in file content: '3.11.174' — must match pdf.min.js exactly",
-      "upstream_url": "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
+      "version": "4.2.67",
+      "version_source": "Version string found in file content: '4.2.67' (version check in worker initialisation). Must match pdf.min.js exactly. File is legacy/build/pdf.worker.min.mjs renamed to .js; 4.x loads workers with { type: 'module' } so ESM content is valid. Same-origin chrome-extension:// URL means no blob CDN wrapper is created.",
+      "upstream_url": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.2.67.tgz (extracted: package/legacy/build/pdf.worker.min.mjs)",
       "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
       "license": "Apache-2.0",
-      "sha256": "feabdf309770ed24bba31a5467836cdc8cf639c705af27d52b585b041bb8527b"
+      "sha256": "094d2c8f779f6bc19d81bca80711748a63b4a95ffa79a5b67f9fcc6cd8c85e3b"
     },
     {
       "filename": "vendor/chart.min.js",

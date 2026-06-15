@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.84.3
+**Version:** v3.92.1
 **Generated:** 2026-06-15 (automated)
 
 ## What it is
@@ -130,7 +130,7 @@ Practice-owned reference base for referral criteria, contacts, clinical pathways
 
 **Triage Lens — request queue** (all Medicus pages): overlays the patient request queue with semantic triage chips. Red = same-day or 999; amber = urgent; info = supplementary. 77+ built-in rules across chest pain, sepsis, stroke/TIA, anaphylaxis, obstetric emergencies, mental health crisis, paediatric red flags, 2WW cancer patterns, and common acute presentations. New built-in rules reach existing users automatically; rules deliberately deleted stay deleted.
 
-**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. 21 built-in result rules ship enabled; new custom rules arrive disabled and require clinician review before firing.
+**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. Result rules can be **scoped to a specimen** (`analyte.specimen`, captured from the result's specimen header) so a threshold applies only to the right sample type, with fail-open behaviour when no specimen is present. 21 built-in result rules ship enabled; new custom rules arrive disabled and require clinician review before firing.
 
 **Sentinel content script** (all Medicus pages): provides per-patient monitoring data to the Sentinel side-panel module. Also drives prescribing-safety combination chips (STOPP/START-style), QRISK3/QCancer/eFI risk-calculator signpost chips, and NHS Pharmacy First pathway hints on the patient record view.
 
@@ -155,24 +155,27 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 ## Settings & customisation
 
 - **Practice Profile**: shared-folder managed deployment — a practice administrator can push config and rules to all seats from a single JSON on a shared drive. Central attestation support: gates accepted by the administrator propagate to managed seats without a per-user click
+- **Single "Accept this for practice" switch** (Options → Clinical Safety): one administrator control accepts all three central attestations (reception pathways, knowledge base, and managed config) together, rather than a separate click per gate
+- **Choose your tabs**: pick which side-panel tabs appear and in what order — discoverable in Options, and surfaced for managed installs so a Practice Profile can ship a tailored tab set per seat
 - **Backup / restore**: full suite-wide envelope export and import covering all modules and rule sets. All backups contain configuration only — no patient-identifiable data is ever included
 - **Display preferences**: theme (light/dark/auto), size (compact/medium/large), and colourblind mode
-- **Options**: per-module configuration including triage-lens system chips, result rule editing, reception pathway management, knowledge base starter import, and QOF submission thresholds
+- **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live **result inspector** that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, and QOF submission thresholds
 - **Glossary tooltips**: clinical codes, jargon, and pressure indices carry click-to-explain inline tooltips across the Condor, Reception, and Sentinel modules
 
 ## Recent additions (last 4 weeks)
 
-- **v3.84.3 (2026-06-15)** — Brand identity: app icon (guardian shield + cyan ECG pulse + beacon on deep navy), with a dedicated simplified 16px favicon; wired into the side panel, pop-out, Options, About panel, visualiser and README; tagline and store description added
-- **v3.84.1 (2026-06-14)** — Repo-audit follow-up: testable logic cores extracted from Capacity and Submissions modules; RAG threshold logic unified into a single source of truth; Backup data minimisation policy documented in SECURITY.md; feature list regenerated
+- **v3.92.0 (2026-06-15)** — Result-rule inspector: click a parsed line's name/specimen to build the rule (analyte match + specimen scope, deduped, keyboard-accessible); clearer "Load a recent result" guidance (keep the Medicus results queue open in a separate window)
+- **v3.91.5–v3.91.6 (2026-06-15)** — Security/safety: PDF.js upgraded to 4.2.67 (CVE-2024-4367 fixed); Triage Lens preview now shares the live rule matcher so it can't diverge from what fires on the page, and surfaces invalid patterns instead of swallowing them
+- **v3.91.2 (2026-06-15)** — Security: closed an attribute-injection XSS in the side-panel chip/rule renderers (quote-unsafe HTML-attribute escaping); imported custom-rule id validation tightened; knowledge link scheme-checked at the sink
+- **v3.91.0 (2026-06-15)** — Choose your tabs: pick which side-panel tabs appear and in what order, discoverable in Options and surfaced for managed installs
+- **v3.90.0 (2026-06-15)** — Result-rule inspector loads a recent result live, on demand — no JSON paste needed
+- **v3.89.0 (2026-06-15)** — Result-rule authoring: discoverable inspector, specimen-scope UI, and in-session analyte-name/specimen suggestions drawn from the open queue
+- **v3.88.0 (2026-06-15)** — Specimen-header capture and `analyte.specimen` scoping for result rules, with fail-open behaviour when no specimen is present
+- **v3.87.0 (2026-06-15)** — Single "Accept this for practice" switch (Options → Clinical Safety) unlocks all three central attestations together
+- **v3.86.3 (2026-06-15)** — Reception "Referrals on file" card trialled (v3.85.0) and withdrawn after live testing showed it did not work reliably on Medicus
+- **v3.84.3 (2026-06-15)** — Brand identity: app icon (guardian shield + cyan ECG pulse + beacon on deep navy), with a dedicated simplified 16px favicon; wired into the side panel, pop-out, Options, About panel, visualiser and README
 - **v3.84.0 (2026-06-14)** — Sweep multi-clinician filter: select any combination of the day's clinicians; printed handout labels the audience; selection persisted across tab switches
 - **v3.83.0 (2026-06-14)** — Sweep day-picker: sweep any day (past or future), not just today; handout headers and last-run display reflect the chosen day
-- **v3.82.0 (2026-06-14)** — Central practice attestation: administrator-signed gates satisfy per-install attestation on managed seats; Request Monitor couples to practice code via Practice Profile
-- **v3.81.1 (2026-06-14)** — CSO 999 promotions in reception pathways (v1.3): suspected SJS/TEN, sepsis with rigors, cauda equina, mastoiditis, acute-angle-closure glaucoma
-- **v3.81.0 (2026-06-14)** — Whole-suite Keeper sweep: ACEi/ARB/beta-blocker/statin term lists completed; GLP-1 pancreatitis alert; jayempi brand added to azathioprine rule; reception pathways CSO-signed off (v1.2); vaccine citations refreshed to 2026/27
-- **v3.80.0 (2026-06-14)** — Matched-rule-term tooltip on drug chips; Brief digest annotates hidden red chips; patient banner "Monitoring for" lead-in label
-- **v3.79.0 (2026-06-14)** — Glossary tooltips backbone: RAG, PPI, eFI, DMARD, triage load, and Condor pressure index explained inline
-- **v3.78.0 (2026-06-14)** — VISION.md first-of-type positioning statement; SECURITY.md security policy added
-- **v3.77.3 (2026-06-14)** — Result rules settings: scope note, directional ↑/↓ glyphs, tombstone-on-delete so built-in deletions survive config updates
 
 ## Safety posture
 

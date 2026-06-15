@@ -1,8 +1,20 @@
 #!/bin/sh
-# Lints/format-checks only the staged JS. Tuned to pass on existing code, so
-# there is never a reason to reach for --no-verify. CI is the real gate.
-files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' | grep -v '^vendor/')
-[ -z "$files" ] && exit 0
-npx --no-install eslint $files || exit 1
-npx --no-install prettier --check $files || {
-  echo "Run: npx prettier --write <file> on the files above, then re-stage."; exit 1; }
+# Pre-commit gate for staged JS (vendor/ excluded).
+#
+# ESLint runs on ALL staged JS (added + modified). Prettier --check runs on
+# ADDED files ONLY: the repo's existing JS predates Prettier and is intentionally
+# not reformatted (CLAUDE.md: "Do not reformat whole files with Prettier"; ~144
+# legacy files are not Prettier-clean, and several are matched byte-for-byte by
+# tests). So we gate *new* files for style but never block a legitimate edit to a
+# legacy file — hence there is no reason to reach for --no-verify on an ordinary
+# change. CI runs ESLint repo-wide; it does not run prettier --check repo-wide
+# (it would fail closed on the legacy files), so formatting is gated here at the
+# new-file boundary only.
+eslint_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' | grep -v '^vendor/')
+[ -n "$eslint_files" ] && { npx --no-install eslint $eslint_files || exit 1; }
+
+new_files=$(git diff --cached --name-only --diff-filter=A | grep '\.js$' | grep -v '^vendor/')
+[ -n "$new_files" ] && { npx --no-install prettier --check $new_files || {
+  echo "New files must be Prettier-clean. Run: npx prettier --write <file>, then re-stage."; exit 1; }; }
+
+exit 0

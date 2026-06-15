@@ -187,15 +187,15 @@ async function renderCrList() {
     const disabled = rule.enabled === false;
     const editedAgo = rule._authored?.at ? relativeDate(rule._authored.at) : '';
     return `
-      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
+      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(rule.label || rule.drug?.match?.[0] || rule.id)} ${rule.drugClass ? `<span style="font-size:10px;color:var(--t4)">(${escHtml(rule.drugClass)})</span>` : ''}</div>
           <div class="cr-card-meta">${testCount} test${testCount !== 1 ? 's' : ''} · ${disabled ? 'disabled' : 'enabled'}${editedAgo ? ' · ' + editedAgo : ''}</div>
         </div>
         <div class="cr-card-actions">
-          <button class="ghost cr-edit-btn" data-id="${escHtml(rule.id)}">Edit</button>
-          <button class="ghost cr-toggle-btn" data-id="${escHtml(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
-          <button class="ghost danger cr-delete-btn" data-id="${escHtml(rule.id)}">Delete</button>
+          <button class="ghost cr-edit-btn" data-id="${escAttr(rule.id)}">Edit</button>
+          <button class="ghost cr-toggle-btn" data-id="${escAttr(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
+          <button class="ghost danger cr-delete-btn" data-id="${escAttr(rule.id)}">Delete</button>
         </div>
       </div>`;
   }).join('');
@@ -440,7 +440,7 @@ function renderEnginePreview(p, rule, extraRules) {
   }
   const facts = (fired.evidence?.facts || []).map(f =>
     `<li><span>${escHtml(f.label)}:</span> ${escHtml(String(f.value ?? ''))}${f.date ? ` <em>(${escHtml(String(f.date))})</em>` : ''}</li>`).join('');
-  el.innerHTML = `<div class="preview-fire preview-${escHtml(fired.status || '')}">`
+  el.innerHTML = `<div class="preview-fire preview-${escAttr(fired.status || '')}">`
     + `<strong>✓ Would fire</strong>${fired.status ? ' — ' + escHtml(fired.status) : ''}`
     + (fired.evidence?.summary ? `<div class="preview-summary">${escHtml(fired.evidence.summary)}</div>` : '')
     + (facts ? `<ul class="preview-facts">${facts}</ul>` : '')
@@ -880,15 +880,15 @@ async function ciRenderList() {
       : rule.check?.kind || '';
     const regLabel = rule.requiresRegister || 'Any';
     return `
-      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
+      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(rule.indicatorName || rule.indicatorCode || rule.id)}${rule.indicatorCode ? ` <span style="font-size:10px;color:var(--t4)">${escHtml(rule.indicatorCode)}</span>` : ''}</div>
           <div class="cr-card-meta">${escHtml(kindLabel)} · register: ${escHtml(regLabel)} · ${disabled ? 'disabled' : 'enabled'}</div>
         </div>
         <div class="cr-card-actions">
-          <button class="ghost ci-edit-btn" data-id="${escHtml(rule.id)}">Edit</button>
-          <button class="ghost ci-toggle-btn" data-id="${escHtml(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
-          <button class="ghost danger ci-delete-btn" data-id="${escHtml(rule.id)}">Delete</button>
+          <button class="ghost ci-edit-btn" data-id="${escAttr(rule.id)}">Edit</button>
+          <button class="ghost ci-toggle-btn" data-id="${escAttr(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
+          <button class="ghost danger ci-delete-btn" data-id="${escAttr(rule.id)}">Delete</button>
         </div>
       </div>`;
   }).join('');
@@ -1676,15 +1676,15 @@ async function dcRenderList() {
     const setsLabel = (rule.drugSets || []).map(s => s.name || s.match?.[0] || '?').join(' + ');
     const sevClass = rule.severity || 'info';
     return `
-      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
+      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(rule.label || rule.id)} <span class="sev-badge ${sevClass}">${escHtml(sevClass)}</span></div>
           <div class="cr-card-meta">${escHtml(setsLabel)} · ${disabled ? 'disabled' : 'enabled'}</div>
         </div>
         <div class="cr-card-actions">
-          <button class="ghost dc-edit-btn" data-id="${escHtml(rule.id)}">Edit</button>
-          <button class="ghost dc-toggle-btn" data-id="${escHtml(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
-          <button class="ghost danger dc-delete-btn" data-id="${escHtml(rule.id)}">Delete</button>
+          <button class="ghost dc-edit-btn" data-id="${escAttr(rule.id)}">Edit</button>
+          <button class="ghost dc-toggle-btn" data-id="${escAttr(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
+          <button class="ghost danger dc-delete-btn" data-id="${escAttr(rule.id)}">Delete</button>
         </div>
       </div>`;
   }).join('');
@@ -1862,15 +1862,15 @@ async function ecRenderList() {
     const matchDesc = (rule.match || []).slice(0,2).join(', ');
     const meta = `${rule.operator || '>='}${rule.countThreshold} of "${matchDesc}" in ${rule.windowMonths}mo`;
     return `
-      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
+      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(rule.label || rule.id)} <span class="sev-badge ${sevClass}">${escHtml(sevClass)}</span></div>
           <div class="cr-card-meta">${escHtml(meta)} · ${disabled ? 'disabled' : 'enabled'}</div>
         </div>
         <div class="cr-card-actions">
-          <button class="ghost ec-edit-btn" data-id="${escHtml(rule.id)}">Edit</button>
-          <button class="ghost ec-toggle-btn" data-id="${escHtml(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
-          <button class="ghost danger ec-delete-btn" data-id="${escHtml(rule.id)}">Delete</button>
+          <button class="ghost ec-edit-btn" data-id="${escAttr(rule.id)}">Edit</button>
+          <button class="ghost ec-toggle-btn" data-id="${escAttr(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
+          <button class="ghost danger ec-delete-btn" data-id="${escAttr(rule.id)}">Delete</button>
         </div>
       </div>`;
   }).join('');
@@ -2034,15 +2034,15 @@ async function cmRenderList() {
     const sevClass = rule.severity || 'info';
     const refLabels = (rule.ruleIds || []).map(id => idToLabel[id] || id).join(` ${rule.operator || 'AND'} `);
     return `
-      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escHtml(rule.id)}">
+      <div class="cr-card${disabled ? ' disabled' : ''}" data-rule-id="${escAttr(rule.id)}">
         <div class="cr-card-info">
           <div class="cr-card-name">${escHtml(rule.label || rule.id)} <span class="sev-badge ${sevClass}">${escHtml(sevClass)}</span></div>
           <div class="cr-card-meta">${escHtml(refLabels)} · ${disabled ? 'disabled' : 'enabled'}</div>
         </div>
         <div class="cr-card-actions">
-          <button class="ghost cm-edit-btn" data-id="${escHtml(rule.id)}">Edit</button>
-          <button class="ghost cm-toggle-btn" data-id="${escHtml(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
-          <button class="ghost danger cm-delete-btn" data-id="${escHtml(rule.id)}">Delete</button>
+          <button class="ghost cm-edit-btn" data-id="${escAttr(rule.id)}">Edit</button>
+          <button class="ghost cm-toggle-btn" data-id="${escAttr(rule.id)}">${disabled ? 'Enable' : 'Disable'}</button>
+          <button class="ghost danger cm-delete-btn" data-id="${escAttr(rule.id)}">Delete</button>
         </div>
       </div>`;
   }).join('');

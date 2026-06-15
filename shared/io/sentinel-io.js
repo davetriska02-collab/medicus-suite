@@ -195,7 +195,7 @@ function validateCustomRule(rule, index) {
   const loc = index !== undefined ? ` (index ${index})` : '';
   if (!rule || typeof rule !== 'object') throw new Error(`Custom rule${loc} is not an object.`);
   if (!rule.id || typeof rule.id !== 'string') throw new Error(`Custom rule${loc}: id is required.`);
-  if (!rule.id.startsWith('custom-')) throw new Error(`Custom rule${loc}: id must start with "custom-".`);
+  if (!/^custom-[a-z0-9-]{1,60}$/.test(rule.id)) throw new Error(`Custom rule${loc}: id must match /^custom-[a-z0-9-]{1,60}$/.`);
 
   if (rule.type === 'drug-monitoring') return validateDrugMonitoringRule(rule, loc);
   if (rule.type === 'qof-indicator') return validateQofIndicatorRule(rule, loc);

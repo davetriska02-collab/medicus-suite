@@ -59,12 +59,19 @@ const DOCS = [
 // 2026-06-14: the three CSO-signed safety docs sit at product v3.64.0 while the
 // manifest has since advanced to the 3.77 line without a corresponding CSO doc
 // reissue. Re-pinned as known-stale so the guard WARNs (does not fail) until the
-// next CSO refresh brings them onto the 3.77 line; remove each entry when its
+// next CSO refresh brings them onto the current line; remove each entry when its
 // doc is updated. (feature-list.md tracks normally and is intentionally unpinned.)
+//
+// 2026-06-15: SOUP.md unpinned — reissued to v3.91.6 (doc v1.6) on the vendored-
+// library-upgrade trigger (PDF.js 3.11.174 → 4.2.67, CVE-2024-4367 fixed, NF6
+// closed; Chart.js/D3 re-verified unchanged). CLINICAL-SAFETY-NOTICE.md and
+// HAZARD-LOG.md REMAIN pinned: a truthful sync from 3.64.0 needs a CSO clinical-
+// hazard review across the intervening releases (and should fold in the v3.91.2
+// attribute-injection-XSS remediation and the PDF.js upgrade) — not a stamp bump.
+// Remove these two once that review is done.
 const KNOWN_STALE = {
   'docs/CLINICAL-SAFETY-NOTICE.md': '3.64.0',
   'docs/HAZARD-LOG.md': '3.64.0',
-  'docs/SOUP.md': '3.64.0',
 };
 
 function majorMinor(ver) {

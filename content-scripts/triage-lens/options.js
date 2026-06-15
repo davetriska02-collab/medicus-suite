@@ -836,20 +836,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#previewInput').addEventListener('input', renderPreview);
     $$('input[name="previewPage"]').forEach((r) => r.addEventListener('change', renderPreview));
   };
-  const compileRule = (rule) => {
-    if (!rule || !rule.enabled) return null;
-    const compiled = [];
-    for (const p of rule.patterns || []) {
-      const s = (p || '').trim();
-      if (!s) continue;
-      try {
-        const src = rule.regex ? s : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wrapped = rule.regex ? '\\b' + src + '\\b' : '\\b' + src;
-        compiled.push(new RegExp(wrapped, 'i'));
-      } catch (e) {}
-    }
-    return compiled.length ? { rule, compiled } : null;
-  };
+  // Use the SAME compiler the live content script uses (rule-match.js,
+  // window.TriageLensMatch, loaded before this script in options.html), so the
+  // preview can never disagree with what actually fires on the page.
+  const compileRule = (rule) => window.TriageLensMatch.compileRule(rule);
   const renderPreview = () => {
     const text = $('#previewInput').value;
     const page = $$('input[name="previewPage"]').find((r) => r.checked)?.value || 'detail';
@@ -859,30 +849,40 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       return;
     }
     const matches = [];
+    const errors = [];
     for (const rule of CONFIG.rules) {
       const c = compileRule(rule);
       if (!c) continue;
+      // Surface (don't swallow) any pattern that failed to compile.
+      for (const err of c._errors || []) errors.push(`${rule.label || rule.id}: ${err}`);
       if (!rule.pages.includes(page)) continue;
-      // For preview, treat the input text as the request field (most common)
-      // and also test if the rule scans 'request' specifically
-      if (rule.fields.includes('request') && c.compiled.some((re) => re.test(text))) {
+      // Treat the preview input as the request field (most common). Uses the
+      // shared matcher so the fire/no-fire result matches the runtime exactly.
+      if (rule.fields.includes('request') && window.TriageLensMatch.ruleMatchesText(c, text)) {
         matches.push(rule);
       }
     }
+    const errorHtml = errors.length
+      ? `<div class="tl-preview-error">⚠ ${errors.length} pattern${errors.length === 1 ? '' : 's'} failed to compile and were skipped:<ul>${errors
+          .map((e) => `<li>${escHtml(e)}</li>`)
+          .join('')}</ul></div>`
+      : '';
     if (!matches.length) {
-      cont.innerHTML = '<div class="tl-preview-empty">No rules match.</div>';
+      cont.innerHTML = errorHtml + '<div class="tl-preview-empty">No rules match.</div>';
       return;
     }
-    cont.innerHTML = matches
-      .map(
-        (r) => `
+    cont.innerHTML =
+      errorHtml +
+      matches
+        .map(
+          (r) => `
       <div class="tl-preview-match">
         <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
         <span class="tl-rule-label">${escHtml(r.label)}</span>
         <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>
       </div>`
-      )
-      .join('');
+        )
+        .join('');
   };
 
   // ============================================================

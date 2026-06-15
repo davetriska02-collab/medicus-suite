@@ -108,22 +108,42 @@ r = computeCharlson([], [], '');
 assert(r.total === 0 && Array.isArray(r.items) && r.items.length === 0, 'empty input → total 0, items []');
 
 // ── analyte longest-match selection ─────────────────────────────────────────
-// Replicate the exact selection expression used in computeConditionSummaries.
+// Exercise the REAL selection logic from computeConditionSummaries in
+// visualiser-core.js via vm extraction — mirroring the Charlson approach above
+// so that a regression in the real expression fails this test.
 
 console.log('analyte longest-match selection:');
 
-function pickAnalyteKey(analytes, analyteTerms) {
-  const keys = Object.keys(analytes || {});
-  const matches = keys.filter(k => analyteTerms.some(t => k.toLowerCase().includes(t)));
-  return matches.sort((a, b) => b.length - a.length)[0];
-}
+// Extract CONDITION_METRICS + computeConditionSummaries from the source text.
+const conditionMetricsSrc = slice(/const CONDITION_METRICS = \{/, '\n// For each register');
+const computeConditionSummariesSrc = slice(/function computeConditionSummaries\(/, '\n// Review-due badge');
 
-const analytes = {
-  'Systolic blood pressure': [],
-  'Diastolic blood pressure': [],
+const csSandbox = {};
+vm.createContext(csSandbox);
+vm.runInContext(conditionMetricsSrc + '\n' + computeConditionSummariesSrc, csSandbox);
+vm.runInContext('this.computeConditionSummaries = computeConditionSummaries;', csSandbox);
+const computeConditionSummaries = csSandbox.computeConditionSummaries;
+
+// Build an analytes map with two keys that both match 'systolic blood pressure';
+// the LONGER one must win (longest-match rule).
+const analytesMap = {
+  'Systolic blood pressure': [{ date: new Date('2024-01-01'), value: 130, unit: 'mmHg' }],
+  'Systolic blood pressure (sitting)': [{ date: new Date('2024-01-02'), value: 125, unit: 'mmHg' }],
 };
-const picked = pickAnalyteKey(analytes, ['systolic blood pressure']);
-assert(picked === 'Systolic blood pressure', "'systolic blood pressure' term → picks 'Systolic blood pressure'");
+// htn register uses analyteTerms: ['systolic blood pressure']
+const summaries = computeConditionSummaries([{ id: 'htn', overdue: false, monthsSinceReview: 3 }], analytesMap);
+assert(summaries.length === 1, 'computeConditionSummaries: returns one entry for htn register');
+assert(
+  summaries[0].key === 'Systolic blood pressure (sitting)',
+  "longest-match: 'Systolic blood pressure (sitting)' (longer) wins over 'Systolic blood pressure'"
+);
+
+// Sanity: with only the shorter key present, it should still be selected.
+const analytesShort = {
+  'Systolic blood pressure': [{ date: new Date('2024-01-01'), value: 138, unit: 'mmHg' }],
+};
+const summariesShort = computeConditionSummaries([{ id: 'htn', overdue: false, monthsSinceReview: 3 }], analytesShort);
+assert(summariesShort[0].key === 'Systolic blood pressure', "single match: 'Systolic blood pressure' selected");
 
 // ── summary ──────────────────────────────────────────────────────────────────
 

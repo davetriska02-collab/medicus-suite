@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.92.1] — 2026-06-15
+
+### Integrate repo-audit follow-ups onto v3.92.0
+
+Merges the audit follow-up work (security, clinical-safety, test, performance,
+devex and doc fixes — staged on the branch as v3.91.2–v3.91.6) on top of the
+v3.92.0 result-inspector release. The two lines did not conflict in code (the
+PDF.js upgrade, attribute-escaping XSS fix, and shared triage matcher are
+independent of the v3.92.0 click-to-build inspector work); only the manifest
+version and CHANGELOG were reconciled, and the version advanced to 3.92.1. See
+the v3.91.2–v3.91.6 entries below for detail.
+
+> ⚠️ Still carries the **PDF.js 4.2.67 render smoke-test** action from v3.91.5 —
+> open the visualiser and load a real PDF before relying on this release.
+
 ## [v3.92.0] — 2026-06-15
 
 ### Build a result rule by clicking what the inspector parsed + clearer "Load" guidance
@@ -24,6 +39,118 @@ permanent hint under the button tells you up-front to keep the Medicus results q
 in a **separate window** — and that you can click a name/specimen to build the rule. (This
 was the confusion behind "the button does nothing": it works, but needs the Medicus tab
 alive alongside Settings.)
+
+## [v3.91.6] — 2026-06-15
+
+### Clinical safety: Triage Lens rule preview now uses the live matcher (no divergence)
+
+The Options-page rule **preview** re-implemented rule matching with its own
+`compileRule` — a different object shape from the runtime, and a silent `catch(e){}`
+that dropped invalid regexes with no feedback. So the preview could tell a clinician a
+rule fires (or not) differently from what actually fires on the live queue — and a
+malformed pattern showed simply "no match" rather than an error.
+
+Matching is now a single source of truth: a shared `content-scripts/triage-lens/rule-match.js`
+(`window.TriageLensMatch.compileRule` / `ruleMatchesText`) lifted verbatim from the content
+script. Both the live content script and the preview delegate to it, so they cannot drift.
+Invalid patterns are now **surfaced** in the preview ("N patterns failed to compile and were
+skipped: …") instead of silently dropped. `EMBEDDED_DEFAULTS` is untouched (the 3-copy
+defaults guard still passes). New `test-triage-preview-parity.js` exercises the shared matcher
+(stem vs regex mode, null/empty cases, invalid-regex surfacing) and asserts by source that
+both files route through it with no private copy remaining.
+
+## [v3.91.5] — 2026-06-15
+
+### Security: upgrade vendored PDF.js 3.11.174 → 4.2.67 (CVE-2024-4367)
+
+The visualiser vendored PDF.js 3.11.174, which is affected by **CVE-2024-4367** (a crafted
+PDF can execute arbitrary JS via the font path). It was already mitigated by calling
+`getDocument({ isEvalSupported: false })`, but the library itself was unpatched. This
+upgrades to **4.2.67**, the exact patch release that fixes the CVE.
+
+PDF.js 4.x ships **ESM-only** (there is no UMD/classic-script build), so `visualiser-core.html`
+now loads it via a small inline `<script type="module">` that imports the namespace and
+re-exposes it as `window.pdfjsLib`, with the subsequent scripts deferred so they still run
+in document order after the module evaluates. Every PDF.js API the visualiser uses
+(`GlobalWorkerOptions.workerSrc`, `getDocument` + `isEvalSupported`, `getPage`,
+`getTextContent`, the `TextItem` shape) was verified to exist unchanged in 4.2.67;
+`visualiser-core.js` itself needed no changes. `vendor-versions.json` updated (versions,
+upstream URLs, SHA-256) and `verify-vendor.js` passes.
+
+> ⚠️ **Manual render smoke-test required before this ships in a release.** This change was
+> verified statically (API presence, checksums, full test suite) but PDFs cannot be rendered
+> in CI. Before tagging a release, open the visualiser, load a real EPR export PDF, and
+> confirm text extraction + all tabs render with no `pdfjsLib`/worker console errors.
+
+## [v3.91.4] — 2026-06-15
+
+### Audit follow-up: end-to-end pipeline integration test
+
+Adds `test-pipeline-e2e.js`, closing the audit's top test-coverage gap. The existing
+suite tested each clinical stage in isolation but nothing chained the real stages
+together — `test-alert-builder.js` calls `evaluatePatient` with hand-built mocks that
+bypass the normaliser, so a contract mismatch between the normaliser's output shape and
+what the rules engine reads (e.g. a med-name field rename) would pass every unit test yet
+silently drop a real monitoring alert. The new test runs raw API-shaped data through the
+**real** `engine/normalisers.js` → `engine/rules-engine.js` `evaluatePatient` →
+`shared/chip-renderer.js`, asserting an overdue methotrexate patient produces an overdue
+drug-monitoring chip (with the FBC/U&E/LFT test names threaded all the way to the rendered
+HTML), plus two negative controls (wrong drug → no chip; bloods in-date → in_date not
+overdue). It pins the specific seam fields (`med.name`, `obs.name`, `obs.date`) so a future
+rename fails the test. Writing it immediately caught one such detail — the engine spreads
+`rule.tests[]` unchanged, so the chip field is `t.name`, not `t.testName`.
+
+## [v3.91.3] — 2026-06-15
+
+### Audit follow-up: cache eviction + test hardening
+
+Picking up low-risk items from the repo audit:
+
+- **Queue result-cache eviction.** `_queueResultCache` in the Triage Lens content script
+  had a TTL used only to *skip* stale entries on read but was never *evicted*, so on a
+  long-lived Medicus tab it grew one entry per task UUID seen for the page's lifetime. It
+  now prunes entries older than 2× its TTL on each queue (re)entry — mirroring the sibling
+  `_queueMonCache` prune exactly.
+- **Stronger tests.** Fixed an always-true assertion in `test-import-hardening.js` that was
+  meant to prove the `constructor` own-key is stripped during a prototype-pollution-hardening
+  merge (it now genuinely fails if the strip is removed), and replaced a tautological
+  analyte-selection check in `test-viewer-phase1.js` (which asserted a hand-copied expression
+  against itself) with one that vm-extracts and exercises the real `computeConditionSummaries`
+  longest-match logic from `visualiser-core.js`.
+
+## [v3.91.2] — 2026-06-15
+
+### Security: close attribute-injection XSS in side-panel chip / rule renderers
+
+A repo audit found that several `escHtml` helpers escape only `&`, `<` and `>` — **not**
+the double-quote `"` — yet were being used to interpolate untrusted data into
+double-quoted HTML attributes. Because angle brackets were escaped, raw `<script>`
+injection was already blocked, but a value containing a `"` could break out of the
+attribute and inject an event-handler attribute (`x" onmouseover="…`), i.e. a DOM-based
+XSS in the privileged side-panel context. The reachable vectors:
+
+- **`shared/chip-renderer.js`** — patient medication names (`chip.drugName`, straight from
+  the Medicus API) and rule ids flowed into `data-evidence-key` / `data-rule-id` / `title`
+  attributes via the quote-unsafe `escHtml`.
+- **`side-panel/modules/sentinel/sentinel.js`** — the brief patient line, copy-action key
+  and rule-currency / journal-error tooltips, into `title=` / `data-act-key=` attributes.
+- **`sentinel-options/options.js`** — imported custom-rule ids into `data-rule-id=` /
+  `data-id=` across all five custom-rule list renderers.
+
+**Fix.** Every attribute-context interpolation now uses the quote-safe `escAttr`
+(which additionally escapes `"`); an `escAttr` helper was added to the two files that
+lacked one. As defence-in-depth, `validateCustomRule` (`shared/io/sentinel-io.js`) now
+constrains an imported rule `id` to `/^custom-[a-z0-9-]{1,60}$/` rather than only
+requiring the `custom-` prefix, and the knowledge-base link renderer
+(`side-panel/modules/knowledge/knowledge.js`) scheme-checks the `href` (`http(s)`/
+`mailto`/`tel` only) at the sink in addition to the existing data-layer sanitisation.
+The sentinel side-panel `chrome.runtime.onMessage` listener also gained the `sender.id`
+guard its eight siblings already have.
+
+A new `test-xss-attribute-escaping.js` renders a chip with a hostile `"`-bearing drug
+name / rule id and asserts the full payload stays contained and quote-escaped inside the
+attribute, plus a source guard that fails closed if any fixed file reintroduces the
+quote-unsafe `="${escHtml(…)}"` attribute pattern.
 
 ## [v3.91.1] — 2026-06-15
 
