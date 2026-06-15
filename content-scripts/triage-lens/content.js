@@ -2271,6 +2271,44 @@
   const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   let _queueResultRunning = false;
   let _queueResultGeneration = 0;
+
+  // Recently-parsed investigation reports, NEWEST FIRST, served to the options-page
+  // result-rule inspector on demand ("Load a recent result" instead of paste-a-JSON).
+  // IG requirement: IN-MEMORY ONLY — never written to chrome.storage or anywhere at
+  // rest. Page-scoped lifetime; hard-capped to avoid unbounded growth.
+  const _recentInspectResults = [];
+  const _RECENT_INSPECT_CAP = 20;
+
+  // Pure helper — shape the in-memory store into the cross-context response contract.
+  // The store is already in contract shape; return a defensive shallow copy (newest
+  // first). Empty store is normal → { ok: true, results: [] }. Exported for tests.
+  function mapRecentInspectResponse(store) {
+    return { ok: true, results: Array.isArray(store) ? store.slice() : [] };
+  }
+
+  // Serve recently-parsed investigation results to the options-page inspector.
+  // House style mirrors content-scripts/sentinel.js: accept only this extension's own
+  // contexts, respond synchronously, return false (no async response kept open).
+  // Wrapped defensively so a thrown handler can never break the host page.
+  try {
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+      // Only accept messages from this extension's own contexts.
+      if (!sender || sender.id !== chrome.runtime.id) return;
+      if (msg && msg.action === 'getRecentInvestigationResults') {
+        try {
+          sendResponse(mapRecentInspectResponse(_recentInspectResults));
+        } catch (e) {
+          log('getRecentInvestigationResults: handler threw', e.message);
+          sendResponse({ ok: true, results: [] });
+        }
+        return false;
+      }
+      // Ignore unrelated actions.
+      return false;
+    });
+  } catch (e) {
+    log('onMessage listener registration failed', e.message);
+  }
   // Leading-edge gate: the FIRST result-triage pass per queue entry fires immediately
   // from the bridge handler (skipping the 150ms debounce) so time-to-first-chip drops
   // ~150ms and the fetch overlaps the grid's first paint. Set true in runQueue (where
@@ -2461,6 +2499,50 @@
   // Mirror of the monitoring pipeline but for Investigation Results tasks.
   // Uses the engine globals: SentinelApiClient, SentinelNormalisers, SentinelResultSeverity.
 
+  // Pure helper — build a compact "recent result" inspector entry from a normalised
+  // investigation report. Exported for unit testing via regex extraction.
+  // Returns { id, label, capturedAt, lines } where each line mirrors the shape produced
+  // by options.js's extractResultFields (name: non-empty string|null, specimen:
+  // non-empty string|null, text: always a string). The label carries NO patient
+  // identifiers — it is derived purely from specimen names + a line count.
+  function buildRecentInspectEntry(report, taskUuid, now) {
+    const results = report && Array.isArray(report.results) ? report.results : [];
+    const lines = results.map((r) => ({
+      name: r && typeof r.name === 'string' && r.name ? r.name : null,
+      specimen: r && typeof r.specimen === 'string' && r.specimen ? r.specimen : null,
+      text: r && typeof r.text === 'string' ? r.text : '',
+    }));
+    const n = lines.length;
+    const countLabel = n === 1 ? '1 line' : n + ' lines';
+    const specimens = [];
+    for (const l of lines) {
+      if (l.specimen && !specimens.includes(l.specimen)) specimens.push(l.specimen);
+    }
+    let label;
+    if (specimens.length === 1) {
+      label = specimens[0] + ' · ' + countLabel;
+    } else if (specimens.length > 1) {
+      label = specimens[0] + ' +' + (specimens.length - 1) + ' more · ' + countLabel;
+    } else {
+      const firstName = lines.find((l) => l.name) ? lines.find((l) => l.name).name : null;
+      label = (firstName || 'Result') + ' · ' + countLabel;
+    }
+    return { id: taskUuid, label, capturedAt: now, lines };
+  }
+
+  // Pure helper — insert a recent-inspect entry into a NEWEST-FIRST capped store,
+  // deduping by entry.id (taskUuid): if an entry with the same id already exists it is
+  // removed and the new one is moved to the front; otherwise the new one is unshifted.
+  // The store is then trimmed to `cap`. Mutates and returns `store`. Exported for tests.
+  function insertRecentInspect(store, entry, cap) {
+    if (!Array.isArray(store) || !entry || !entry.id) return store;
+    const existing = store.findIndex((e) => e && e.id === entry.id);
+    if (existing !== -1) store.splice(existing, 1);
+    store.unshift(entry);
+    if (typeof cap === 'number' && cap >= 0 && store.length > cap) store.length = cap;
+    return store;
+  }
+
   // Pure chip-selection helper — exported for unit testing via regex extraction.
   // Returns an array of { id, vars } for the chips to show for a given severity result.
   function selectResultChips(sev) {
@@ -2550,6 +2632,18 @@
     try { raw = await API.fetchInvestigationReport(ctx.apiBase, entry.overviewURL); }
     catch (e) { log('queue-result: fetchInvestigationReport threw', e.message); return null; }
     const report = NORM.normaliseInvestigationReport(raw);
+    // Retain the just-parsed result lines in memory so the options-page result-rule
+    // inspector can offer "Load a recent result" instead of demanding a raw paste.
+    // IN-MEMORY ONLY (IG): never persisted. Deduped by taskUuid, newest-first, capped.
+    try {
+      if (report && Array.isArray(report.results) && report.results.length) {
+        insertRecentInspect(
+          _recentInspectResults,
+          buildRecentInspectEntry(report, taskUuid, Date.now()),
+          _RECENT_INSPECT_CAP
+        );
+      }
+    } catch (e) { log('queue-result: recent-inspect capture failed', e.message); }
     const resultRules = (CONFIG && Array.isArray(CONFIG.resultRules))
       ? CONFIG.resultRules.filter(r => r && r.enabled !== false)
       : [];

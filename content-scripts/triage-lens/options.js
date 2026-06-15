@@ -1313,8 +1313,88 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }));
   }
 
+  /**
+   * formatRecentResultTime(capturedAt, now)
+   * Pure helper: turn a captured-at epoch-ms into a short relative label
+   * ("just now", "3 min ago", "2 h ago", "5 d ago"). `now` is injectable for
+   * tests. Non-finite / future timestamps fall back to "just now".
+   * Exported on window.SentinelInspectorHelpers for unit tests.
+   */
+  function formatRecentResultTime(capturedAt, now) {
+    const nowMs = typeof now === 'number' && isFinite(now) ? now : Date.now();
+    if (typeof capturedAt !== 'number' || !isFinite(capturedAt)) return '';
+    const diff = nowMs - capturedAt;
+    if (diff < 45 * 1000) return 'just now';
+    const mins = Math.round(diff / 60000);
+    if (mins < 60) return mins + ' min ago';
+    const hrs = Math.round(diff / 3600000);
+    if (hrs < 24) return hrs + ' h ago';
+    const days = Math.round(diff / 86400000);
+    return days + ' d ago';
+  }
+
+  /**
+   * formatRecentPickerRow(entry, now)
+   * Pure helper: given a recent-result entry { label, capturedAt, lines } produce
+   * the picker row's display strings. Returns { label, lineCount, lineSummary, time }.
+   * `now` injectable for tests. Exported on window.SentinelInspectorHelpers.
+   */
+  function formatRecentPickerRow(entry, now) {
+    const e = entry || {};
+    const lines = Array.isArray(e.lines) ? e.lines : [];
+    const label = typeof e.label === 'string' && e.label.trim() ? e.label.trim() : 'Untitled result';
+    const n = lines.length;
+    return {
+      label,
+      lineCount: n,
+      lineSummary: n + ' line' + (n === 1 ? '' : 's'),
+      time: formatRecentResultTime(e.capturedAt, now),
+    };
+  }
+
+  /**
+   * pickerEmptyState(tabCount, resultCount)
+   * Pure helper: decide which state the picker area should show.
+   * Returns one of: 'no-tabs' | 'no-results' | 'has-results'.
+   * Exported on window.SentinelInspectorHelpers.
+   */
+  function pickerEmptyState(tabCount, resultCount) {
+    if (!tabCount) return 'no-tabs';
+    if (!resultCount) return 'no-results';
+    return 'has-results';
+  }
+
+  /**
+   * inspectorRowData(field, index)
+   * Pure helper: map one { name, specimen, text } field to the display cells the
+   * inspector table renders — { idx, name, specimen, specimenNull, text,
+   * truncated, fullText }. Used by BOTH the paste path and the picker path so the
+   * two render identically. Exported on window.SentinelInspectorHelpers for tests.
+   */
+  function inspectorRowData(field, index) {
+    const f = field || {};
+    const text = typeof f.text === 'string' ? f.text : '';
+    const SHORT = 160;
+    const truncated = text.length > SHORT;
+    return {
+      idx: index + 1,
+      name: f.name != null && f.name !== '' ? f.name : '(none)',
+      specimen: f.specimen != null && f.specimen !== '' ? f.specimen : '(none — rule will fail-open)',
+      specimenNull: !(f.specimen != null && f.specimen !== ''),
+      text: (truncated ? text.slice(0, SHORT) + '…' : text) || '(empty)',
+      truncated,
+      fullText: text,
+    };
+  }
+
   if (typeof window !== 'undefined') {
-    window.SentinelInspectorHelpers = { extractResultFields };
+    window.SentinelInspectorHelpers = {
+      extractResultFields,
+      formatRecentResultTime,
+      formatRecentPickerRow,
+      pickerEmptyState,
+      inspectorRowData,
+    };
   }
 
   /** Collect unique name/specimen strings from a result-fields array into the session lists. */
@@ -1588,7 +1668,189 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const statusEl = $('#rrInspectorStatus');
     const resultsEl = $('#rrInspectorResults');
     const inputEl = $('#rrInspectorInput');
+    const loadRecentBtn = $('#btnRrLoadRecent');
+    const pickerEl = $('#rrRecentPicker');
 
+    // Recent results pulled from the live content script live ONLY here, for the
+    // page session — never written to chrome.storage (matches the suggestion-pill
+    // privacy contract above).
+    let _rrRecentResults = [];
+
+    /**
+     * renderInspectorFields(lines, { sourceLabel })
+     * THE single render seam — called by BOTH the paste path and the picker path.
+     * Takes a fields array ({ name, specimen, text }[]) — already the shape the
+     * picker delivers and that extractResultFields returns — renders the parsed
+     * table into #rrInspectorResults, sets the status line, and accumulates the
+     * suggestion pills. Returns true if anything rendered.
+     */
+    function renderInspectorFields(lines, opts) {
+      const sourceLabel = (opts && opts.sourceLabel) || '';
+      if (!statusEl || !resultsEl) return false;
+      statusEl.textContent = '';
+      statusEl.className = 'tl-rr-inspector-status';
+      resultsEl.style.display = 'none';
+      resultsEl.innerHTML = '';
+
+      // Defensive: tolerate a malformed payload whose lines array contains null /
+      // non-object entries (a hostile or buggy producer) — drop them before any
+      // field access so the render never throws and half-draws the table.
+      const fields = (Array.isArray(lines) ? lines : []).filter((f) => f && typeof f === 'object');
+      if (!fields.length) {
+        statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-err';
+        statusEl.textContent = 'No result lines found. Check it is a valid investigation-report response.';
+        return false;
+      }
+
+      // Accumulate into session suggestion lists (memory only — never persisted)
+      _rrAccumulateSession(fields);
+      rrRenderSuggestions();
+
+      // Build result table
+      const table = document.createElement('table');
+      table.className = 'tl-rr-inspector-table';
+      const thead = table.createTHead();
+      const hrow = thead.insertRow();
+      ['#', 'name (analyte match)', 'specimen (specimen scope)', 'text (phrase search)'].forEach((h) => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        hrow.appendChild(th);
+      });
+      const tbody = table.createTBody();
+      fields.forEach((f, i) => {
+        const rd = inspectorRowData(f, i);
+        const tr = tbody.insertRow();
+        tr.className = 'tl-rr-inspector-row';
+        const tdIdx = tr.insertCell();
+        tdIdx.className = 'tl-rr-inspector-idx';
+        tdIdx.textContent = String(rd.idx);
+        const tdName = tr.insertCell();
+        tdName.className = 'tl-rr-inspector-name';
+        tdName.textContent = rd.name;
+        const tdSpec = tr.insertCell();
+        tdSpec.className = rd.specimenNull ? 'tl-rr-inspector-spec tl-rr-inspector-null' : 'tl-rr-inspector-spec';
+        tdSpec.textContent = rd.specimen;
+        const tdText = tr.insertCell();
+        tdText.className = 'tl-rr-inspector-text';
+        tdText.textContent = rd.text;
+        if (rd.truncated) tdText.title = rd.fullText;
+      });
+
+      resultsEl.appendChild(table);
+
+      const summary = document.createElement('p');
+      summary.className = 'tl-rr-inspector-count';
+      const specCount = fields.filter((f) => f.specimen).length;
+      summary.textContent =
+        fields.length +
+        ' result line' +
+        (fields.length !== 1 ? 's' : '') +
+        ' parsed. ' +
+        specCount +
+        ' with a specimen header. ' +
+        'Click any suggestion pill above to fill the corresponding field.';
+      resultsEl.appendChild(summary);
+
+      resultsEl.style.display = 'block';
+      statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-ok';
+      statusEl.textContent = sourceLabel ? 'Loaded "' + sourceLabel + '".' : 'Parsed.';
+      return true;
+    }
+
+    // ── Recent-result picker ──────────────────────────────────────────────────
+    /** Render a friendly empty state into the picker area. */
+    function rrPickerEmpty(message) {
+      if (!pickerEl) return;
+      pickerEl.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = 'tl-rr-recent-empty';
+      div.textContent = message;
+      pickerEl.appendChild(div);
+      pickerEl.style.display = 'block';
+    }
+
+    /** Render the clickable list of recent results into the picker area. */
+    function rrRenderRecentList(entries) {
+      if (!pickerEl) return;
+      pickerEl.innerHTML = '';
+      const list = document.createElement('div');
+      list.className = 'tl-rr-recent-list';
+      entries.forEach((entry) => {
+        const view = formatRecentPickerRow(entry);
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'tl-rr-recent-row';
+        const main = document.createElement('span');
+        main.className = 'tl-rr-recent-label';
+        main.textContent = view.label;
+        const meta = document.createElement('span');
+        meta.className = 'tl-rr-recent-meta';
+        meta.textContent = view.lineSummary + (view.time ? ' · ' + view.time : '');
+        row.appendChild(main);
+        row.appendChild(meta);
+        row.addEventListener('click', () => {
+          [...list.querySelectorAll('.tl-rr-recent-row')].forEach((r) => r.classList.remove('tl-rr-recent-active'));
+          row.classList.add('tl-rr-recent-active');
+          const lines = Array.isArray(entry.lines) ? entry.lines : [];
+          renderInspectorFields(lines, { sourceLabel: view.label });
+        });
+        list.appendChild(row);
+      });
+      pickerEl.appendChild(list);
+      pickerEl.style.display = 'block';
+    }
+
+    /** Query Medicus tabs and pull recent results from the content script. */
+    async function rrLoadRecentResults() {
+      if (!pickerEl) return;
+      rrPickerEmpty('Loading recent results…');
+      let tabs = [];
+      try {
+        tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+      } catch (_) {
+        tabs = [];
+      }
+
+      // Merge results across tabs; tolerate tabs with no listener (try/catch each).
+      let merged = [];
+      for (const tab of tabs) {
+        if (!tab || !tab.id) continue;
+        try {
+          const resp = await chrome.tabs.sendMessage(tab.id, { action: 'getRecentInvestigationResults' });
+          if (resp && resp.ok && Array.isArray(resp.results)) {
+            merged = merged.concat(resp.results);
+          }
+        } catch (_) {
+          // Tab has no Sentinel content script listening — skip it.
+        }
+      }
+      _rrRecentResults = merged;
+
+      const state = pickerEmptyState(tabs.length, merged.length);
+      if (state === 'no-tabs') {
+        rrPickerEmpty(
+          'Open Medicus and view your result queue to load a recent result — or paste a response manually below.'
+        );
+        return;
+      }
+      if (state === 'no-results') {
+        rrPickerEmpty(
+          'No recent results captured yet. Open a result in your Medicus queue, then try again — or paste manually below.'
+        );
+        return;
+      }
+      // Newest first.
+      const sorted = merged.slice().sort((a, b) => (Number(b && b.capturedAt) || 0) - (Number(a && a.capturedAt) || 0));
+      rrRenderRecentList(sorted);
+    }
+
+    if (loadRecentBtn) {
+      loadRecentBtn.addEventListener('click', () => {
+        rrLoadRecentResults();
+      });
+    }
+
+    // ── Paste fallback ──────────────────────────────────────────────────────
     if (inspectBtn) {
       inspectBtn.addEventListener('click', () => {
         if (!inputEl || !statusEl || !resultsEl) return;
@@ -1637,59 +1899,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           return;
         }
 
-        // Accumulate into session suggestion lists (memory only — never persisted)
-        _rrAccumulateSession(fields);
-        rrRenderSuggestions();
-
-        // Build result table
-        const table = document.createElement('table');
-        table.className = 'tl-rr-inspector-table';
-        const thead = table.createTHead();
-        const hrow = thead.insertRow();
-        ['#', 'name (analyte match)', 'specimen (specimen scope)', 'text (phrase search)'].forEach((h) => {
-          const th = document.createElement('th');
-          th.textContent = h;
-          hrow.appendChild(th);
-        });
-        const tbody = table.createTBody();
-        fields.forEach((f, i) => {
-          const tr = tbody.insertRow();
-          tr.className = 'tl-rr-inspector-row';
-          const tdIdx = tr.insertCell();
-          tdIdx.className = 'tl-rr-inspector-idx';
-          tdIdx.textContent = String(i + 1);
-          const tdName = tr.insertCell();
-          tdName.className = 'tl-rr-inspector-name';
-          tdName.textContent = f.name != null ? f.name : '(none)';
-          const tdSpec = tr.insertCell();
-          tdSpec.className = f.specimen ? 'tl-rr-inspector-spec' : 'tl-rr-inspector-spec tl-rr-inspector-null';
-          tdSpec.textContent = f.specimen != null ? f.specimen : '(none — rule will fail-open)';
-          const tdText = tr.insertCell();
-          tdText.className = 'tl-rr-inspector-text';
-          const SHORT = 160;
-          const display = f.text.length > SHORT ? f.text.slice(0, SHORT) + '…' : f.text;
-          tdText.textContent = display || '(empty)';
-          if (f.text.length > SHORT) tdText.title = f.text;
-        });
-
-        resultsEl.appendChild(table);
-
-        const summary = document.createElement('p');
-        summary.className = 'tl-rr-inspector-count';
-        const specCount = fields.filter((f) => f.specimen).length;
-        summary.textContent =
-          fields.length +
-          ' result line' +
-          (fields.length !== 1 ? 's' : '') +
-          ' parsed. ' +
-          specCount +
-          ' with a specimen header. ' +
-          'Click any suggestion pill above to fill the corresponding field.';
-        resultsEl.appendChild(summary);
-
-        resultsEl.style.display = 'block';
-        statusEl.className = 'tl-rr-inspector-status tl-rr-inspector-ok';
-        statusEl.textContent = 'Parsed.';
+        renderInspectorFields(fields, {});
       });
     }
 

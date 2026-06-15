@@ -941,3 +941,107 @@ details[open] .tl-rr-inspector-arrow {
   color: var(--text-4);
   margin: 6px 0 0;
 }
+
+/* ── Recent-result picker ── */
+.tl-rr-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tl-rr-recent-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-rr-recent-picker {
+  display: flex;
+  flex-direction: column;
+}
+.tl-rr-recent-empty {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  padding: 24px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+}
+.tl-rr-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tl-rr-recent-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+.tl-rr-recent-row:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+  background: var(--bg-hover);
+}
+.tl-rr-recent-active,
+.tl-rr-recent-active:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.tl-rr-recent-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-rr-recent-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Paste fallback (secondary) ── */
+.tl-rr-paste-fallback {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.tl-rr-paste-summary {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+}
+.tl-rr-paste-summary:hover {
+  color: var(--text-3);
+}
+.tl-rr-paste-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
