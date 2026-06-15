@@ -2211,6 +2211,10 @@
     for (const [uuid, entry] of _queueMonCache) {
       if (entry.ts && entry.ts < pruneTs) _queueMonCache.delete(uuid);
     }
+    const resultPruneTs = Date.now() - 2 * _RESULT_CACHE_TTL;
+    for (const [uuid, entry] of _queueResultCache) {
+      if (entry.ts && entry.ts < resultPruneTs) _queueResultCache.delete(uuid);
+    }
     injectQueueLegend();
     decorateQueueRows();
     setupQueueObserver();

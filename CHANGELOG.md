@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.91.3] — 2026-06-15
+
+### Audit follow-up: cache eviction + test hardening
+
+Picking up low-risk items from the repo audit:
+
+- **Queue result-cache eviction.** `_queueResultCache` in the Triage Lens content script
+  had a TTL used only to *skip* stale entries on read but was never *evicted*, so on a
+  long-lived Medicus tab it grew one entry per task UUID seen for the page's lifetime. It
+  now prunes entries older than 2× its TTL on each queue (re)entry — mirroring the sibling
+  `_queueMonCache` prune exactly.
+- **Stronger tests.** Fixed an always-true assertion in `test-import-hardening.js` that was
+  meant to prove the `constructor` own-key is stripped during a prototype-pollution-hardening
+  merge (it now genuinely fails if the strip is removed), and replaced a tautological
+  analyte-selection check in `test-viewer-phase1.js` (which asserted a hand-copied expression
+  against itself) with one that vm-extracts and exercises the real `computeConditionSummaries`
+  longest-match logic from `visualiser-core.js`.
+
 ## [v3.91.2] — 2026-06-15
 
 ### Security: close attribute-injection XSS in side-panel chip / rule renderers
