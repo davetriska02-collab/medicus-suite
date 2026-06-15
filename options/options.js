@@ -847,15 +847,26 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
     ];
 
     // ── Central attestation gates ─────────────────────────────────────────────
-    // Each gate corresponds to a per-install clinical attestation the admin may
-    // have accepted locally. If accepted, the admin can opt to attest it centrally
-    // so managed users inherit it. Default opted-in for accepted gates.
+    // Each gate corresponds to a clinical attestation the admin may have accepted
+    // locally. If accepted, the admin can opt to attest it centrally so managed
+    // users inherit it. The single suite-level "Accept for practice" switch
+    // (suite.practiceAcceptedAt) satisfies ALL of them at once, so it also unlocks
+    // every gate here. Default opted-in for accepted gates.
+    async function practiceAccepted() {
+      try {
+        const r = await chrome.storage.local.get('suite.practiceAcceptedAt');
+        return r['suite.practiceAcceptedAt'] != null;
+      } catch (_) {
+        return false;
+      }
+    }
     const GATE_DEFS = [
       {
         id: 'reception',
         label: 'Reception disclaimer',
         async accepted() {
           try {
+            if (await practiceAccepted()) return true;
             const r = await chrome.storage.local.get('reception.config');
             return r['reception.config']?.disclaimerAcceptedAt != null;
           } catch (_) {
@@ -868,6 +879,7 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
         label: 'Alert library acknowledgement',
         async accepted() {
           try {
+            if (await practiceAccepted()) return true;
             const r = await chrome.storage.local.get('sentinel.alertLibrary.acknowledged');
             return r['sentinel.alertLibrary.acknowledged'] === true;
           } catch (_) {
@@ -880,6 +892,7 @@ document.querySelectorAll('.mod-file-input').forEach((input) => {
         label: 'Knowledge notice',
         async accepted() {
           try {
+            if (await practiceAccepted()) return true;
             const r = await chrome.storage.local.get('knowledge.config');
             return r['knowledge.config']?.noticeAcknowledgedAt != null;
           } catch (_) {
