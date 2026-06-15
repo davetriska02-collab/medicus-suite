@@ -3,15 +3,36 @@
 
 // Display preferences are applied by shared/display-prefs.js (loaded before this script).
 
-// ══ PDF.JS WORKER ══════════════════════════════════════════════════════════
-// Worker is shipped as a same-origin extension resource. Use chrome.runtime
-// .getURL so pdf.js loads it as a real Worker (not the slow main-thread "fake
-// worker" fallback). Falls back to a relative URL if chrome.runtime isn't
-// available (e.g. when serving the file outside the extension during dev).
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL
-    ? chrome.runtime.getURL('vendor/pdf.worker.min.js')
-    : './vendor/pdf.worker.min.js';
+// ══ PDF.JS (lazy, CSP-safe load) ═════════════════════════════════════════════
+// PDF.js 4.x ships as ESM only. visualiser-core.html is an MV3 extension page
+// under the default `script-src 'self'` CSP, which BLOCKS inline scripts
+// (including inline `<script type="module">`). A dynamic `import()` of a
+// same-origin module IS allowed by `'self'`, so we load pdf.js lazily — only
+// when a file is actually opened — and cache the resolved namespace. This keeps
+// the module entirely out of the page's top-level execution path, so the
+// drop-zone / file-picker wiring at the bottom of this file always runs even if
+// pdf.js is slow to load or fails.
+let _pdfjsLib = null;
+async function getPdfjs() {
+  if (_pdfjsLib) return _pdfjsLib;
+  // Resolve to the extension-origin URL when available so the worker also loads
+  // as a same-origin resource; fall back to a relative path for plain dev serving.
+  const modUrl =
+    typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL
+      ? chrome.runtime.getURL('vendor/pdf.min.js')
+      : './vendor/pdf.min.js';
+  const lib = await import(modUrl);
+  // Worker is shipped as a same-origin extension resource. Use chrome.runtime
+  // .getURL so pdf.js loads it as a real Worker (not the slow main-thread "fake
+  // worker" fallback). Falls back to a relative URL if chrome.runtime isn't
+  // available (e.g. when serving the file outside the extension during dev).
+  lib.GlobalWorkerOptions.workerSrc =
+    typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL
+      ? chrome.runtime.getURL('vendor/pdf.worker.min.js')
+      : './vendor/pdf.worker.min.js';
+  _pdfjsLib = lib;
+  return lib;
+}
 
 // ══ CONSTANTS ══════════════════════════════════════════════════════════════
 
@@ -1299,6 +1320,7 @@ async function loadPDF(file) {
     const ab = await file.arrayBuffer();
     console.log('[Visualiser] read', ab.byteLength, 'bytes');
     _stage.s = 'extracting text';
+    const pdfjsLib = await getPdfjs();
     const pdf = await pdfjsLib.getDocument({ data: ab, isEvalSupported: false }).promise;
     const total = pdf.numPages;
     console.log('[Visualiser] PDF opened,', total, 'pages');
