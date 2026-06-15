@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.92.1",
+  "version": "3.92.2",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -10,6 +10,7 @@
     "https://api.github.com/repos/davetriska02-collab/medicus-suite/*"
   ],
   "background": { "service_worker": "service-worker.js" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
   "side_panel": { "default_path": "side-panel/panel.html" },
   "action": {
     "default_title": "Medicus Suite",

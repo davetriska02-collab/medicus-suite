@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.92.2] — 2026-06-15
+
+### Hotfix: patient-record visualiser button dead after the PDF.js 4.x upgrade (CSP regression)
+
+The v3.91.5/v3.92.1 PDF.js 4.2.67 upgrade loaded the library via an **inline**
+`<script type="module">` in `visualiser-core.html`. But the visualiser is an MV3
+extension page, and the default extension-page CSP (`script-src 'self'`) **blocks all
+inline scripts** — so `window.pdfjsLib` was never created, and `visualiser-core.js`'s
+top-level `pdfjsLib.GlobalWorkerOptions.workerSrc = …` threw immediately, aborting the
+whole file *before* the drop-zone/file-input was wired. Result: the visualiser's
+open-PDF button did nothing. (This is the manual render smoke-test gap flagged in
+v3.91.5 — now caught and fixed.)
+
+**Fix.** PDF.js is now loaded **lazily on first file-open** via a same-origin dynamic
+`import(chrome.runtime.getURL('vendor/pdf.min.js'))` (CSP-clean — no inline script, no
+global, no script-ordering dependency), with the worker configured at that point. The
+UI/drop-zone wiring no longer depends on PDF.js being ready, so the button works
+regardless. An explicit `content_security_policy.extension_pages` is now declared in
+`manifest.json` (matches the prior implicit default; makes the policy visible).
+
+**Verification.** A new headless harness (`scripts/verify-visualiser.mjs`, Playwright +
+Chromium) loads the page through a server that stamps the real MV3 CSP
+(`script-src 'self'`) on every response, and asserts: no CSP violations/exceptions on
+load, PDF.js resolves under the CSP, the drop-zone + file input are wired, and a minimal
+PDF parses end-to-end (drop screen → app view). The harness self-validates faithfulness
+(it confirms Chromium *does* refuse an inline module under the same CSP), so it would have
+caught this regression. Still PDF.js 4.2.67 (CVE-2024-4367 fix retained).
+
 ## [v3.92.1] — 2026-06-15
 
 ### Integrate repo-audit follow-ups onto v3.92.0
