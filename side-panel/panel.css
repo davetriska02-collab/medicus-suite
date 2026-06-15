@@ -1327,14 +1327,54 @@ body {
 }
 
 /* Popout button active state */
-#popoutBtn.active {
-  color: var(--accent);
-  background: var(--accent-dim);
-}
-
+#popoutBtn.active,
 #zenBtn.active {
   color: var(--accent);
   background: var(--accent-dim);
+}
+/* Keep the accent tint on hover of an active toggle (don't fall back to the
+   neutral hover wash, which masks the on-state). */
+#popoutBtn.active:hover,
+#zenBtn.active:hover {
+  color: var(--accent-hover);
+  background: var(--accent-dim);
+}
+
+/* On-state "FOCUS · ESC" pill — the visible, clickable answer to "you are in
+   focus mode and here is how to leave". Reuses the canonical .pill in the
+   ACCENT (non-clinical) colour so it never competes with amber/red strips, and
+   sits in the brand slot (which Zen empties). Hidden unless html[data-zen='1'].
+   Clicking it, or Esc, exits. See shared/zen-mode.js. */
+.zen-pill {
+  display: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+  cursor: pointer;
+  --pill-line: var(--accent-line);
+  --pill-fill: var(--accent-dim);
+}
+html[data-zen='1'] .zen-pill {
+  display: inline-flex;
+}
+.zen-pill .pill-dot {
+  background: var(--accent);
+}
+.zen-pill .pill-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.zen-pill .pill-meta {
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.zen-pill:hover {
+  --pill-fill: var(--bg-hover);
+  --pill-line: var(--accent);
 }
 
 /* ── Zen (focus) mode ─────────────────────────────────────────────────────────

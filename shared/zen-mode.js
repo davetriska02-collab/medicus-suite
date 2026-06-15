@@ -64,17 +64,22 @@
 
   function wire() {
     document.querySelectorAll('#zenBtn').forEach((b) => b.addEventListener('click', () => toggle()));
+    // The on-state "Focus · Esc" pill is the visible exit affordance — click it to leave.
+    document.querySelectorAll('#zenPill').forEach((b) => b.addEventListener('click', () => set(false)));
 
     chrome.storage.local.get(KEY, (r) => reflect(!!(r[KEY] || {}).zen));
     chrome.storage.onChanged.addListener((changes) => {
       if (changes[KEY]) reflect(!!(changes[KEY].newValue || {}).zen);
     });
 
-    // Esc exits Zen — but only when no modal/overlay is open, so a dialog's own
-    // Esc (command palette, tab chooser, setup) closes the dialog first.
+    // Esc exits Zen — but only when no modal/overlay is open (a dialog's own Esc
+    // closes the dialog first) and not while typing in a field (Esc there is a
+    // cancel/blur reflex, not a request to leave focus mode).
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       isOn().then((on) => {
         if (on) set(false);
       });

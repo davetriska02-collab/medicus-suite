@@ -14,6 +14,17 @@
           <img class="nav-logo" src="../brand/app-icon.png" alt="" width="16" height="16" />
           <span class="nav-name">Medicus Suite</span>
         </div>
+        <button
+          id="zenPill"
+          class="pill zen-pill"
+          type="button"
+          title="Exit focus mode (Esc)"
+          aria-label="Exit focus mode"
+        >
+          <span class="pill-dot"></span>
+          <span class="pill-name">Focus</span>
+          <span class="pill-meta">Esc</span>
+        </button>
         <div class="popout-tabs" id="popoutTabs">
           <button class="nav-tab" data-module="today" aria-label="Today">
             <svg
@@ -179,7 +190,12 @@
             </svg>
             <span>Sweep</span>
           </button>
-          <button class="nav-tab" data-module="condor" aria-label="Condor — practice pressure dashboard" title="Condor — live practice pressure dashboard">
+          <button
+            class="nav-tab"
+            data-module="condor"
+            aria-label="Condor — practice pressure dashboard"
+            title="Condor — live practice pressure dashboard"
+          >
             <svg
               width="14"
               height="14"
@@ -211,8 +227,14 @@
           </button>
         </div>
         <div class="popout-actions">
-          <button id="quietPill" class="quiet-pill quiet-pill-hidden"></button>
-          <button id="zenBtn" class="icon-btn" title="Focus mode — declutter chrome (Ctrl+.)" aria-pressed="false">
+          <button id="quietPill" class="quiet-pill quiet-pill-hidden" title=""></button>
+          <button
+            id="zenBtn"
+            class="icon-btn"
+            title="Focus mode — declutter chrome (Ctrl+.)"
+            aria-label="Focus mode"
+            aria-pressed="false"
+          >
             <svg
               width="13"
               height="13"
@@ -222,10 +244,12 @@
               stroke-width="2"
               stroke-linecap="round"
             >
-              <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-              <path d="M16 3h3a2 2 0 0 1 2 2v3" />
-              <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
-              <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="2" x2="12" y2="5" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="5" y2="12" />
+              <line x1="19" y1="12" x2="22" y2="12" />
+              <circle cx="12" cy="12" r="2.5" />
             </svg>
           </button>
           <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">

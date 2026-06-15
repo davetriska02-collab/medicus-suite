@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.2] — 2026-06-15
+
+### Focus mode is now legible and escapable (design-crit pass)
+
+A three-critic review (art director, code surveyor, fresh-eyes GP) converged on
+one problem: Focus mode's ON state was invisible and its exit unknowable — a
+non-technical user reads the vanished brand and labels as "the panel broke",
+with only a faint accent tint on one ambiguous icon to explain it. Fixed:
+
+- **On-state exit pill.** While Focus mode is on, a "Focus · Esc" pill (the
+  canonical `.pill` in the accent, non-clinical colour — never amber/red, so it
+  can't compete with alert strips) appears where the brand was. It names the
+  mode, shows the shortcut, and is itself clickable to leave.
+- **Clearer toggle.** The button glyph changed from corner-brackets (which read
+  as "fullscreen") to a crosshair that reads as "focus", and is now distinct
+  from the pop-out and settings icons beside it.
+- **Accessibility.** The toggle gains an `aria-label`; its active state keeps the
+  accent tint on hover; and Esc no longer flips Focus mode while you are typing
+  in a field. Panel and pop-out kept in lock-step.
+
 ## [v3.96.1] — 2026-06-15
 
 ### Roll-up polish: worst wait-time on the pill, separated setup card
