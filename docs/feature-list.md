@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.91.2
+**Version:** v3.92.1
 **Generated:** 2026-06-15 (automated)
 
 ## What it is
@@ -164,6 +164,8 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.92.0 (2026-06-15)** — Result-rule inspector: click a parsed line's name/specimen to build the rule (analyte match + specimen scope, deduped, keyboard-accessible); clearer "Load a recent result" guidance (keep the Medicus results queue open in a separate window)
+- **v3.91.5–v3.91.6 (2026-06-15)** — Security/safety: PDF.js upgraded to 4.2.67 (CVE-2024-4367 fixed); Triage Lens preview now shares the live rule matcher so it can't diverge from what fires on the page, and surfaces invalid patterns instead of swallowing them
 - **v3.91.2 (2026-06-15)** — Security: closed an attribute-injection XSS in the side-panel chip/rule renderers (quote-unsafe HTML-attribute escaping); imported custom-rule id validation tightened; knowledge link scheme-checked at the sink
 - **v3.91.0 (2026-06-15)** — Choose your tabs: pick which side-panel tabs appear and in what order, discoverable in Options and surfaced for managed installs
 - **v3.90.0 (2026-06-15)** — Result-rule inspector loads a recent result live, on demand — no JSON paste needed
