@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.78.5] — 2026-06-15
+
+### Crisp 16px favicon
+
+- Added `brand/app-icon-16.svg` — a dedicated simplified favicon (bold gold
+  shield rim, navy centre, a single QRS pulse spike + beacon) that drives the
+  16px icon, where the full master photograph collapsed to a blob. 48px and
+  128px still come from the master. Addresses the recurring small-size
+  legibility note from the in-practice appraisal.
+
 ## [v3.78.4] — 2026-06-15
 
 ### App icon: clinical pulse on the shield

@@ -18,8 +18,9 @@ element and the focal point that keeps the mark legible when it shrinks.
 
 | File | Use |
 |---|---|
-| `app-icon.png` | The 512px master. Source of truth for every icon and every in-product mark. |
-| `generate-icons.mjs` | Regenerates `icons/icon-16/48/128.png` from `app-icon.png`. |
+| `app-icon.png` | The 512px master. Source of truth for the in-product marks and the 48/128px icons. |
+| `app-icon-16.svg` | Simplified favicon vector (bold gold shield rim, navy centre, one QRS spike + beacon) used for the 16px icon, where the master's detail collapses to a blob. |
+| `generate-icons.mjs` | Regenerates `icons/icon-48/128.png` from the master and `icon-16.png` from the 16px vector. |
 
 `icons/icon-16.png`, `icon-48.png`, `icon-128.png` are the Chrome extension
 icons, derived from the master.
