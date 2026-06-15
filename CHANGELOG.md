@@ -2,6 +2,96 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.86.2] — 2026-06-15
+
+### Reception referrals — wording tweaks from the re-poll
+
+- Populated card now states explicitly that referrals **older than 12 months are
+  not shown** (so an outstanding older referral isn't assumed absent).
+- Empty result now reads as a *completed* search ("Referral lookup ran — no
+  referrals found under this name …") so it is clearly distinct from the
+  load-error state.
+
+(See `docs/appraisal/PRACTICE-referrals-on-file-2026-06-15.md` §7–8 for the
+re-poll scores and the parked "Most seen clinician" feature verdict.)
+
+## [v3.86.1] — 2026-06-15
+
+### Reception referrals — red-team hardening
+
+- **Practice-code host injection (SSRF) fixed.** `suite.practiceCode` is importable
+  via backup and was read back unvalidated, then interpolated straight into the
+  referral request host. `referrals-api.js` now validates the code
+  (`/^[a-f0-9]{4,8}$/i`, mirroring activity-api's F8 guard) before building the
+  canonical URL, AND refuses to fetch any URL whose host is not
+  `*.api.england.medicus.health` — covering both the canonical build and any
+  discovered/captured template URL. A poisoned code/discovery URL now fails closed
+  instead of sending a credentialed fetch to an attacker host.
+- **Capture-note integrity.** Referral display fields (service/hospital/clinician)
+  are sanitised (control chars and newlines collapsed) before they reach the
+  plain-text reception capture note, so a malformed API value can't forge a
+  separate line such as a fake "*** RED FLAG" in the pasted record. The on-card
+  rendering was already `esc()`-safe against XSS.
+
+## [v3.86.0] — 2026-06-15
+
+### Reception "Referrals on file" — no setup step, faster, safer wording
+
+Follow-up to v3.85.0 after a performance pass and a synthetic in-practice
+appraisal (`docs/appraisal/PRACTICE-referrals-on-file-2026-06-15.md`).
+
+- **Works without opening the Referrals tab first.** The card no longer requires
+  the Clinical Audit Report to have been visited. When no discovered URL is
+  present it builds the canonical `clinical-audit-report` endpoint from the
+  practice code (`ReferralsApi.buildCanonicalUrl`). The "open the report once"
+  message is now only a graceful fallback shown if the auto-fetch fails.
+- **Shared in-memory cache.** Reception and the Referrals tab now share one
+  in-memory referral cache (`ReferralsApi.cacheGet/cachePut/cacheClear`), so the
+  card reuses a fetch the tab already made when the window is covered (cached
+  range must *fully contain* the request, so a 30-day cache never silently
+  satisfies a 12-month one). Still RAM-only, never persisted, dropped on unmount.
+- **Concurrent-fetch guard** in the reception card so tab switches don't launch
+  duplicate practice-wide pulls.
+- **Referrals tab faster:** the activity report is now fetched only for the Rate
+  view (loaded lazily on switch) instead of on every load, and the per-page
+  progress update no longer triggers a full module re-render mid-load.
+- **Safety wording (from the appraisal):** the "matched by name" caveat is now a
+  prominent note **above** the list (not a grey footer); the populated card states
+  the 12-month window and what Incomplete means; the empty state is reworded so it
+  cannot read as "this patient has no referrals" (it now says "no referrals found
+  *under this name* … check the record if referred under another name").
+- **Readability:** priority shows as **2WW** not `TWOWEEKWAIT`; the clinician is
+  labelled "Referred by"; a "last updated" time is shown.
+- The 12-month window was **deliberately kept** (not shortened) because the same
+  appraisal flagged a shorter window as a clinical-completeness risk; the speed
+  comes from caching, not from dropping older referrals.
+
+## [v3.85.0] — 2026-06-15
+
+### Reception: "Referrals on file" — who referred what, to where, and when
+
+The Reception tab now surfaces the open patient's existing referrals — answering
+"who referred them, to which service/hospital, and when" at a glance while the
+caller is on the phone.
+
+- **New "Referrals on file" card** between the Patient pill and Guided capture.
+  Shows up to five recent referrals (last 12 months): the service/specialty and
+  hospital (*what / where*), the referring clinician (*who*), the referral date
+  (*when*), plus priority (Routine / Urgent / 2WW) and status badges.
+- **Source** — reuses the practice-wide Referrals → Clinical Audit Report feed
+  (`referrals.discovery`). If that report hasn't been opened in Medicus yet, the
+  card prompts to do so once to switch the lookup on.
+- **Matched by name, flagged as such** — the referral report carries no NHS
+  number, so rows are matched to the open record by full name (every given- and
+  family-name token must match) and the card/output both say *"matched by name —
+  confirm it's the right patient"*. Never asserts a confirmed identity.
+- **Folded into the capture text** — the most recent matched referrals are added
+  to the generated copy-paste summary under a clearly-captioned heading.
+- **Privacy** — the fetched report (which includes other patients' names) is held
+  in memory only, never persisted, and dropped on unmount (mirrors the referrals
+  module's Audit-M1 discovery-URL-only rule).
+- New pure helper `referralMatchesPatient` with regression tests.
+
 ## [v3.84.3] — 2026-06-15
 
 ### Brand identity + app icon

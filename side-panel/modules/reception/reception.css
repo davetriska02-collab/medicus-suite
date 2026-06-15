@@ -720,3 +720,74 @@
 .rcp-output-head {
   margin-top: 2px;
 }
+
+/* Referrals on file ──────────────────────────────────────────────────────── */
+.rcp-ref-caveat {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  margin-bottom: 6px;
+}
+.rcp-ref-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rcp-ref-row:last-of-type {
+  border-bottom: none;
+}
+.rcp-ref-where {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-1);
+}
+.rcp-ref-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.rcp-ref-badges {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rcp-ref-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-mid);
+  color: var(--text-3);
+}
+/* Priority */
+.rcp-ref-pri-twoweekwait {
+  color: var(--red);
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+.rcp-ref-pri-urgent {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+.rcp-ref-pri-routine {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+/* Status */
+.rcp-ref-st-completed {
+  color: var(--green);
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+.rcp-ref-st-incomplete {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}

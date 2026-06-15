@@ -28,7 +28,8 @@
 //
 //   fetchReferrals (referrals-api.js):
 //     no startDate/endDate    → throws Error('Date range required')
-//     no templateUrl          → throws Error('No discovered URL …')
+//     no templateUrl + code   → builds canonical URL from practice code and fetches
+//     no templateUrl + no code → throws Error('… no practice code …')
 //     401/403                 → throws Error('HTTP 401') with err.status = 401
 //     500                     → throws Error('HTTP 500') with err.status = 500
 //     network rejection       → propagates TypeError (NOTE: unhandled rejection danger — see below)
@@ -380,10 +381,28 @@ async function runReferralsApiTests() {
     'Date range required',
     'null endDate → "Date range required"'
   );
+  // No templateUrl but a practice code → builds the canonical endpoint and fetches.
+  let canonUrl = null;
+  try {
+    const res = await fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
+      fetch: async (url) => {
+        canonUrl = url;
+        return mockResponse(200, { referrals: [], totalCount: 0 });
+      },
+    });
+    check(Array.isArray(res.referrals), 'no templateUrl + code → resolves (canonical fallback)');
+    check(
+      typeof canonUrl === 'string' && canonUrl.includes('a1b2c3.api.england.medicus.health/referrals/clinical-audit-report'),
+      'no templateUrl + code → canonical URL built from practice code'
+    );
+  } catch (e) {
+    check(false, `canonical fallback: unexpected rejection: ${e.message}`);
+  }
+  // No templateUrl AND no code → cannot build a URL, rejects.
   await expectReject(
-    () => fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', { fetch: async () => mockResponse(200, {}) }),
-    'No discovered URL',
-    'missing templateUrl → "No discovered URL"'
+    () => fetchReferrals('', '2026-01-01', '2026-01-31', { fetch: async () => mockResponse(200, {}) }),
+    'no practice code',
+    'no templateUrl and no code → rejects'
   );
 
   // ── HTTP 401 ──────────────────────────────────────────────────────────────
@@ -561,6 +580,60 @@ async function runReferralsApiTests() {
   } catch (e) {
     check(false, `onProgress: unexpected rejection: ${e.message}`);
   }
+
+  // ── buildCanonicalUrl ─────────────────────────────────────────────────────
+
+  console.log('\n--- buildCanonicalUrl ---');
+  const { buildCanonicalUrl } = ReferralsApi;
+  const cu = buildCanonicalUrl('a1b2c3', '2026-01-01', '2026-01-31');
+  check(
+    typeof cu === 'string' && cu.startsWith('https://a1b2c3.api.england.medicus.health/referrals/clinical-audit-report?'),
+    'buildCanonicalUrl: correct host + path'
+  );
+  check(cu.includes('referralStartDate=2026-01-01') && cu.includes('referralEndDate=2026-01-31'), 'buildCanonicalUrl: date params');
+  check(cu.includes('priorities%5B%5D=TwoWeekWait') || cu.includes('priorities[]=TwoWeekWait'), 'buildCanonicalUrl: priorities included');
+  check(buildCanonicalUrl('', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: no code → null');
+  // Red-team: a poisoned practice code (e.g. from a malicious backup) must not reach the URL host.
+  check(buildCanonicalUrl('evil.com#', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with host-injection chars → null');
+  check(buildCanonicalUrl('a1b2c3/x', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with slash → null');
+  check(buildCanonicalUrl('a1b2c3.evil', '2026-01-01', '2026-01-31') === null, 'buildCanonicalUrl: code with dot → null');
+
+  // ── host allowlist (refuse non-Medicus fetch) ─────────────────────────────
+
+  console.log('\n--- fetchReferrals: host allowlist ---');
+  await expectReject(
+    () =>
+      fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
+        templateUrl: 'https://evil.com/referrals/clinical-audit-report?referralStartDate=2026-01-01&referralEndDate=2026-01-31&startRow=0&endRow=2000',
+        fetch: async () => mockResponse(200, { referrals: [], totalCount: 0 }),
+      }),
+    'non-Medicus host',
+    'poisoned templateUrl host → rejects before any fetch'
+  );
+  await expectReject(
+    () =>
+      fetchReferrals('a1b2c3', '2026-01-01', '2026-01-31', {
+        templateUrl: 'https://api.england.medicus.health.evil.com/referrals/clinical-audit-report?startRow=0&endRow=2000',
+        fetch: async () => mockResponse(200, { referrals: [], totalCount: 0 }),
+      }),
+    'non-Medicus host',
+    'look-alike suffix host → rejects'
+  );
+
+  // ── shared cache (cacheGet / cachePut / cacheClear) ───────────────────────
+
+  console.log('\n--- shared cache ---');
+  const { cacheGet, cachePut, cacheClear } = ReferralsApi;
+  cacheClear();
+  check(cacheGet('a1b2c3', '2026-01-01', '2026-01-31', 60000) === null, 'cacheGet: empty → null');
+  const rows = [{ referralId: 'x' }];
+  cachePut('a1b2c3', '2025-06-15', '2026-06-15', rows); // 12-month window
+  check(cacheGet('a1b2c3', '2026-01-01', '2026-01-31', 60000) === rows, 'cacheGet: cached range CONTAINS request → hit');
+  check(cacheGet('a1b2c3', '2024-01-01', '2026-06-15', 60000) === null, 'cacheGet: request wider than cache → miss (no silent drop)');
+  check(cacheGet('other', '2026-01-01', '2026-01-31', 60000) === null, 'cacheGet: different practice code → miss');
+  check(cacheGet('a1b2c3', '2026-01-01', '2026-01-31', -1) === null, 'cacheGet: stale (negative TTL) → miss');
+  cacheClear();
+  check(cacheGet('a1b2c3', '2026-01-01', '2026-01-31', 60000) === null, 'cacheClear: drops the cache');
 }
 
 // ── activity-api.js (IIFE / module.exports) ───────────────────────────────────

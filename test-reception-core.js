@@ -20,7 +20,7 @@ const path = require('path');
 
   const {
     summariseActionChips, evaluateRedFlags, buildCaptureText,
-    pharmacyFirstHint,
+    pharmacyFirstHint, referralMatchesPatient,
   } = await import(corePath);
 
   // ── evaluateRedFlags ──────────────────────────────────────────────────────────
@@ -86,6 +86,20 @@ const path = require('path');
   check(textClean.includes('In their own words: not recorded'), 'missing own-words marked');
   check(!textClean.includes('Pharmacy First:'), 'no PF line when hint null');
   check(!textClean.includes('Patient (from open record)'), 'no patient line when record not open');
+  check(!textClean.includes('Referrals on file'), 'no referral block when no referral lines supplied');
+
+  const textRef = buildCaptureText({
+    pathway, closingQuestions: closing, escalations,
+    ownWords: '',
+    redFlagAnswers: { a: 'no', b: 'no', c: 'no' },
+    questionAnswers: {}, closingAnswers: {},
+    meta: {
+      takerInitials: '', nowIso: '2026-06-10T09:00:00Z', suiteVersion: '3.38.0',
+      referralLines: ['Cardiology, St Thomas Hospital · Dr Jane Doe · 12/03/2026 · Urgent · Incomplete'],
+    },
+  });
+  check(textRef.includes('Referrals on file (matched by name'), 'referral block header present when lines supplied');
+  check(textRef.includes('- Cardiology, St Thomas Hospital · Dr Jane Doe · 12/03/2026'), 'referral line rendered as bullet');
 
   // ── buildCaptureText: label collision disambiguation ──────────────────────────
   console.log('\n--- buildCaptureText: label collision disambiguation ---');
@@ -150,6 +164,21 @@ const path = require('path');
   check(pharmacyFirstHint(pfPath, 70) === null, 'above ageMax → null');
   check(String(pharmacyFirstHint(pfPath, null)).includes('age unknown'), 'unknown age → caveated note, never silent eligibility');
   check(pharmacyFirstHint({}, 30) === null, 'no pharmacyFirst on pathway → null');
+
+  // ── referralMatchesPatient ────────────────────────────────────────────────────
+  console.log('\n--- referralMatchesPatient ---');
+  const refJS = { patientGivenName: 'John', patientFamilyName: 'Smith' };
+  check(referralMatchesPatient(refJS, 'John Smith') === true, 'given+family both present → match');
+  check(referralMatchesPatient(refJS, 'SMITH, John') === true, 'case/order/punctuation insensitive → match');
+  check(referralMatchesPatient(refJS, 'John Smith-Jones') === false, 'different surname token → no match');
+  check(referralMatchesPatient(refJS, 'Jane Smith') === false, 'surname shared but given differs → no match (no surname-only match)');
+  check(referralMatchesPatient({ patientGivenName: 'John James', patientFamilyName: 'Smith' }, 'John James Smith') === true,
+    'every given-name token must be present → multi-token given matches');
+  check(referralMatchesPatient({ patientGivenName: 'John James', patientFamilyName: 'Smith' }, 'John Smith') === false,
+    'missing one given-name token → no match');
+  check(referralMatchesPatient({ patientGivenName: '', patientFamilyName: 'Smith' }, 'John Smith') === false, 'empty given name → no match');
+  check(referralMatchesPatient(refJS, '') === false, 'empty patient name → no match');
+  check(referralMatchesPatient(null, 'John Smith') === false, 'null referral → no match');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
