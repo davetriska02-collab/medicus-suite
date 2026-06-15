@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.86.0] — 2026-06-15
+
+### Reception "Referrals on file" — no setup step, faster, safer wording
+
+Follow-up to v3.85.0 after a performance pass and a synthetic in-practice
+appraisal (`docs/appraisal/PRACTICE-referrals-on-file-2026-06-15.md`).
+
+- **Works without opening the Referrals tab first.** The card no longer requires
+  the Clinical Audit Report to have been visited. When no discovered URL is
+  present it builds the canonical `clinical-audit-report` endpoint from the
+  practice code (`ReferralsApi.buildCanonicalUrl`). The "open the report once"
+  message is now only a graceful fallback shown if the auto-fetch fails.
+- **Shared in-memory cache.** Reception and the Referrals tab now share one
+  in-memory referral cache (`ReferralsApi.cacheGet/cachePut/cacheClear`), so the
+  card reuses a fetch the tab already made when the window is covered (cached
+  range must *fully contain* the request, so a 30-day cache never silently
+  satisfies a 12-month one). Still RAM-only, never persisted, dropped on unmount.
+- **Concurrent-fetch guard** in the reception card so tab switches don't launch
+  duplicate practice-wide pulls.
+- **Referrals tab faster:** the activity report is now fetched only for the Rate
+  view (loaded lazily on switch) instead of on every load, and the per-page
+  progress update no longer triggers a full module re-render mid-load.
+- **Safety wording (from the appraisal):** the "matched by name" caveat is now a
+  prominent note **above** the list (not a grey footer); the populated card states
+  the 12-month window and what Incomplete means; the empty state is reworded so it
+  cannot read as "this patient has no referrals" (it now says "no referrals found
+  *under this name* … check the record if referred under another name").
+- **Readability:** priority shows as **2WW** not `TWOWEEKWAIT`; the clinician is
+  labelled "Referred by"; a "last updated" time is shown.
+- The 12-month window was **deliberately kept** (not shortened) because the same
+  appraisal flagged a shorter window as a clinical-completeness risk; the speed
+  comes from caching, not from dropping older referrals.
+
 ## [v3.85.0] — 2026-06-15
 
 ### Reception: "Referrals on file" — who referred what, to where, and when

@@ -201,33 +201,49 @@ async function fetchAndRender() {
 
     const { code, source } = await window.PracticeCode.resolve();
 
+    // The activity report is only consumed by the Rate chart view. Fetching it on
+    // every load doubles the network for the common (clinician/specialty/hospital)
+    // views, so only fetch it when the Rate view is active; it loads lazily on switch.
+    const wantActivity = state.chartView === 'rate';
+
     state.loading = true;
     state.error = null;
     state.loadingProgress = null;
-    state.activityLoading = true;
-    state.activityError = null;
+    if (wantActivity) {
+      state.activityLoading = true;
+      state.activityError = null;
+    }
     state.lastAttemptedUrl = api.buildUrlFromTemplate(state.discoveryUrl, state.startDate, state.endDate, 0, 2000);
     render();
 
-    const actFetch = window.ActivityApi
-      ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
-          fetch: (url, init) =>
-            window.ApiDiag.fetch({
-              module: 'referrals-rate',
-              url,
-              code: code || '(auto)',
-              codeSource: source || 'tab',
-              init,
-            }),
-        })
-      : Promise.reject(new Error('Activity module not loaded'));
+    const actFetch = !wantActivity
+      ? Promise.resolve(null)
+      : window.ActivityApi
+        ? window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
+            fetch: (url, init) =>
+              window.ApiDiag.fetch({
+                module: 'referrals-rate',
+                url,
+                code: code || '(auto)',
+                codeSource: source || 'tab',
+                init,
+              }),
+          })
+        : Promise.reject(new Error('Activity module not loaded'));
 
     const [refResult, actResult] = await Promise.allSettled([
       api.fetchReferrals(code, state.startDate, state.endDate, {
         templateUrl: state.discoveryUrl,
         onProgress: (loaded, total) => {
           state.loadingProgress = { loaded, total };
-          render();
+          // Update only the progress line in place; a full render() per page (up to
+          // 10×) tears down and re-wires the whole module mid-load for no reason.
+          const pEl = container?.querySelector('.ref-progress');
+          if (pEl && total) {
+            pEl.textContent = `Loaded ${loaded.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} referrals…`;
+          } else {
+            render();
+          }
         },
         fetch: (url, init) =>
           window.ApiDiag.fetch({
@@ -249,17 +265,24 @@ async function fetchAndRender() {
       state.lastFetched = new Date();
       state.error = null;
       if (result.url) state.lastAttemptedUrl = result.url;
+      // Publish into the shared in-memory cache so the reception "Referrals on file"
+      // card can reuse this fetch when its window is covered (PHI stays in RAM).
+      if (api.cachePut) api.cachePut(code, state.startDate, state.endDate, result.referrals || []);
     } else {
       state.error = refResult.reason?.message || String(refResult.reason);
       if (refResult.reason?.url) state.lastAttemptedUrl = refResult.reason.url;
     }
 
-    if (actResult.status === 'fulfilled') {
-      state.activityData = actResult.value?.rowData || [];
-      state.activityError = null;
-    } else {
-      state.activityData = null;
-      state.activityError = actResult.reason?.message || String(actResult.reason);
+    // Only touch activity state when we actually requested it; otherwise leave any
+    // previously-loaded activity data intact for when the user revisits the Rate view.
+    if (wantActivity) {
+      if (actResult.status === 'fulfilled') {
+        state.activityData = actResult.value?.rowData || [];
+        state.activityError = null;
+      } else {
+        state.activityData = null;
+        state.activityError = actResult.reason?.message || String(actResult.reason);
+      }
     }
 
     state.loading = false;
@@ -270,6 +293,33 @@ async function fetchAndRender() {
     _inFlight = false;
     if (refreshBtn) refreshBtn.disabled = false;
   }
+}
+
+// Lazily fetch the activity report when the user switches to the Rate view, so it
+// isn't pulled on every load for views that don't use it. No-op if already loaded
+// or in flight.
+async function loadActivityForRate() {
+  if (!container || !window.ActivityApi) return;
+  if (state.activityData != null || state.activityLoading) return;
+  const api = ApiNs();
+  if (!api) return;
+  const { code, source } = await window.PracticeCode.resolve();
+  state.activityLoading = true;
+  state.activityError = null;
+  render();
+  try {
+    const res = await window.ActivityApi.fetchActivityReport(code, state.startDate, state.endDate, {
+      fetch: (url, init) =>
+        window.ApiDiag.fetch({ module: 'referrals-rate', url, code: code || '(auto)', codeSource: source || 'tab', init }),
+    });
+    state.activityData = res?.rowData || [];
+    state.activityError = null;
+  } catch (e) {
+    state.activityData = null;
+    state.activityError = e?.message || String(e);
+  }
+  state.activityLoading = false;
+  if (container) render();
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -701,11 +751,13 @@ function wireControls() {
   if (startEl)
     startEl.addEventListener('change', () => {
       state.startDate = startEl.value;
+      state.activityData = null; // window changed — drop any cached activity (Rate view refetches)
       fetchAndRender();
     });
   if (endEl)
     endEl.addEventListener('change', () => {
       state.endDate = endEl.value;
+      state.activityData = null;
       fetchAndRender();
     });
 
@@ -717,6 +769,7 @@ function wireControls() {
       if (range) {
         state.startDate = range[0];
         state.endDate = range[1];
+        state.activityData = null;
         fetchAndRender();
       }
     });
@@ -738,6 +791,8 @@ function wireControls() {
         clinicianSearch: state.clinicianSearch,
       });
       render();
+      // Rate view needs the activity report; fetch it lazily on first switch.
+      if (state.chartView === 'rate') loadActivityForRate();
     });
   });
 

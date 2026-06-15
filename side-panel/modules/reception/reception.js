@@ -42,18 +42,24 @@ let _storageListener = null;
 
 // ── Referrals-on-file card ─────────────────────────────────────────────────────
 // "Who referred what to where and when" for the open patient. Sourced from the
-// practice-wide referral report (referrals.discovery URL, discovered when the user
-// visits Referrals → Clinical Audit Report), filtered to the open record BY NAME —
-// the report carries no NHS number. Raw rows include OTHER patients' names, so the
-// cache is in-memory ONLY and never persisted (mirrors Audit M1 for referrals).
+// practice-wide referral report. A discovered URL (referrals.discovery, captured
+// when the user visits Referrals → Clinical Audit Report) is used when present, but
+// is NOT required — otherwise the canonical endpoint is built from the practice
+// code, so the card works without any setup step. Rows are filtered to the open
+// record BY NAME (the report carries no NHS number). Raw rows include OTHER
+// patients' names, so they live in ReferralsApi's shared in-memory cache ONLY and
+// are never persisted (mirrors Audit M1 for referrals).
 const REF_DISCOVERY_KEY = 'referrals.discovery';
-const REF_CACHE_TTL_MS = 10 * 60 * 1000; // re-filter from cache on patient switch; refetch after 10 min
+const REF_WINDOW_PRESET = 'last12m'; // window kept wide for completeness; cost handled by caching, not a shorter window
+const REF_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_REF_DISPLAY = 5; // rows shown in the card
 const MAX_REF_LINES = 3; // referral lines folded into the capture text
-let _referralsCache = null; // { fetchedAt, rows } — in-memory only (PHI)
-let _matchedReferralRows = []; // current patient's matched rows (for the card)
-let _referralsState = 'idle'; // idle | loading | ready | nodiscovery | error | nopatient
+const PRIORITY_LABEL = { TwoWeekWait: '2WW', Urgent: 'Urgent', Routine: 'Routine' };
+let _matchedReferralRows = []; // current patient's matched rows (for the card + capture text)
+let _referralsState = 'idle'; // idle | loading | ready | error | nopatient
 let _referralsError = '';
+let _referralsFetchedAt = 0; // when the shared cache was last populated by us
+let _referralsInFlight = null; // promise guard against concurrent fetches
 
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
@@ -278,8 +284,9 @@ function cleanup() {
     _draftDebounceTimer = null;
   }
   _snapshot = null;
-  _referralsCache = null; // drop in-memory PHI on unmount
+  window.ReferralsApi?.cacheClear?.(); // drop in-memory PHI (other patients' rows) on unmount
   _matchedReferralRows = [];
+  _referralsFetchedAt = 0;
   container = null;
 }
 
@@ -350,7 +357,8 @@ function formatDateUK(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-// Parse a referral row into { where, who, when, priority, status } display parts.
+// Parse a referral row into display parts. priorityKey drives the badge CSS class;
+// priority is the human label (e.g. "2WW" instead of the raw "TwoWeekWait").
 function referralParts(r) {
   const api = window.ReferralsApi;
   const parsed = api ? api.parseReferralService(r.referralService) : {};
@@ -358,27 +366,59 @@ function referralParts(r) {
     [parsed.specialty, parsed.hospital].filter((x) => x && x !== '(unknown)').join(', ') ||
     r.referralService ||
     'Referral';
+  const priorityKey = api ? api.normalisePriority(r.priority || '') : r.priority || '';
   return {
     where,
     who: r.referringClinician || 'Unknown clinician',
     when: formatDateUK(r.referralDate),
-    priority: api ? api.normalisePriority(r.priority || '') : r.priority || '',
+    priorityKey,
+    priority: PRIORITY_LABEL[priorityKey] || priorityKey,
     status: r.displayStatus || '',
   };
 }
 
-// A single ASCII-safe line for the capture text: "Specialty, Hospital · Dr X · 12/03/2026 · Urgent · Incomplete"
+// A single ASCII-safe line for the capture text: "Specialty, Hospital · referred by Dr X · 12/03/2026 · 2WW · Incomplete"
 function formatReferralLine(r) {
   const p = referralParts(r);
-  return [p.where, p.who, p.when, p.priority, p.status].filter(Boolean).join(' · ');
+  return [p.where, p.who ? `referred by ${p.who}` : '', p.when, p.priority, p.status].filter(Boolean).join(' · ');
 }
 
-// Rows from the in-memory cache that match the given patient name, newest first.
-function matchedReferralRows(patientName) {
-  if (!patientName || !_referralsCache) return [];
-  return (_referralsCache.rows || [])
+// Filter rows to the open patient by name, newest first.
+function matchReferrals(rows, patientName) {
+  if (!patientName || !Array.isArray(rows)) return [];
+  return rows
     .filter((r) => referralMatchesPatient(r, patientName))
     .sort((a, b) => String(b.referralDate || '').localeCompare(String(a.referralDate || '')));
+}
+
+// The window range as [start, end] for the configured preset.
+function referralRange() {
+  const api = window.ReferralsApi;
+  return (api && api.preset(REF_WINDOW_PRESET)) || [null, null];
+}
+
+// Fetch the practice report once, de-duped across concurrent callers, and publish
+// it into the shared in-memory cache. A discovered URL wins; otherwise the canonical
+// endpoint is built from the practice code (no Clinical Audit Report visit needed).
+function fetchReferralRows(code) {
+  if (_referralsInFlight) return _referralsInFlight;
+  _referralsInFlight = (async () => {
+    const api = window.ReferralsApi;
+    const [start, end] = referralRange();
+    let discoveryUrl = null;
+    try {
+      const r = await chrome.storage.local.get(REF_DISCOVERY_KEY);
+      discoveryUrl = r[REF_DISCOVERY_KEY]?.url || null;
+    } catch (_) {}
+    const result = await api.fetchReferrals(code, start, end, discoveryUrl ? { templateUrl: discoveryUrl } : {});
+    const rows = result.referrals || [];
+    if (code) api.cachePut(code, start, end, rows);
+    _referralsFetchedAt = Date.now();
+    return rows;
+  })().finally(() => {
+    _referralsInFlight = null;
+  });
+  return _referralsInFlight;
 }
 
 async function refreshReferralsCard() {
@@ -392,38 +432,26 @@ async function refreshReferralsCard() {
     renderReferralsCard();
     return;
   }
-  if (!window.ReferralsApi) {
+  const api = window.ReferralsApi;
+  if (!api) {
     _referralsState = 'error';
     _referralsError = 'Referrals module not loaded';
     renderReferralsCard();
     return;
   }
 
-  // Need a discovered report URL (set when the user visits the Clinical Audit Report).
-  let discoveryUrl = null;
-  try {
-    const r = await chrome.storage.local.get(REF_DISCOVERY_KEY);
-    discoveryUrl = r[REF_DISCOVERY_KEY]?.url || null;
-  } catch (_) {}
+  const code = (await window.PracticeCode?.resolve())?.code || null;
   if (!container) return;
-  if (!discoveryUrl) {
-    _referralsState = 'nodiscovery';
-    _matchedReferralRows = [];
-    renderReferralsCard();
-    return;
-  }
 
-  // Fetch the practice report only when the cache is cold/stale; otherwise just re-filter.
-  const cacheFresh = _referralsCache && Date.now() - _referralsCache.fetchedAt < REF_CACHE_TTL_MS;
-  if (!cacheFresh) {
+  // Reuse the shared cache when it covers our window; otherwise fetch (de-duped).
+  const [start, end] = referralRange();
+  let rows = code ? api.cacheGet(code, start, end, REF_CACHE_TTL_MS) : null;
+
+  if (!rows) {
     _referralsState = 'loading';
     renderReferralsCard();
     try {
-      const api = window.ReferralsApi;
-      const code = (await window.PracticeCode?.resolve())?.code || null;
-      const range = api.preset('last12m') || [null, null];
-      const result = await api.fetchReferrals(code, range[0], range[1], { templateUrl: discoveryUrl });
-      _referralsCache = { fetchedAt: Date.now(), rows: result.referrals || [] };
+      rows = await fetchReferralRows(code);
     } catch (e) {
       _referralsState = 'error';
       _referralsError = e?.message || String(e);
@@ -431,10 +459,10 @@ async function refreshReferralsCard() {
       renderReferralsCard();
       return;
     }
+    if (!container) return;
   }
-  if (!container) return;
 
-  _matchedReferralRows = matchedReferralRows(patientName);
+  _matchedReferralRows = matchReferrals(rows, patientName);
   _referralsState = 'ready';
   renderReferralsCard();
 }
@@ -444,27 +472,31 @@ function renderReferralsCard() {
   if (!card) return;
   card.classList.remove('rcp-muted');
   const refreshBtn = `<button class="rcp-link-btn" id="rcpRefRefresh">Refresh</button>`;
+  // Identity caveat — prominent and ABOVE the list, because a name-only match
+  // means everything below it is only as certain as the name.
+  const caveat = `<div class="rcp-ref-caveat">Matched <strong>by name</strong> — the source has no NHS number, so confirm it's the right patient.</div>`;
+  const updated = _referralsFetchedAt ? `Updated ${esc(fmtHHMM(_referralsFetchedAt))}` : '';
   let html = '';
 
   switch (_referralsState) {
     case 'nopatient':
       card.classList.add('rcp-muted');
-      html = `Open a patient record to see who referred them, where and when.`;
+      html = `Open a patient record to see their referrals — what they were referred for, where and when.`;
       break;
     case 'loading':
       card.classList.add('rcp-muted');
       html = `Loading referrals…`;
       break;
-    case 'nodiscovery':
-      html = `<span class="rcp-muted">Referral lookup isn't set up yet. Open <strong>Referrals &rarr; Clinical Audit Report</strong> in Medicus once to switch it on.</span> ${refreshBtn}`;
-      break;
     case 'error':
-      html = `<div class="rcp-error">Couldn't load referrals: ${esc(_referralsError)}</div>${refreshBtn}`;
+      html = `<div class="rcp-error">Couldn't load referrals automatically: ${esc(_referralsError)}</div>
+        <div class="rcp-fineprint">If this keeps happening, open <strong>Referrals &rarr; Clinical Audit Report</strong> in Medicus once, then refresh. ${refreshBtn}</div>`;
       break;
     case 'ready': {
       const rows = _matchedReferralRows || [];
       if (rows.length === 0) {
-        html = `<span class="rcp-muted">No referrals on file for this patient in the last 12 months.</span> ${refreshBtn}`;
+        html = `${caveat}
+          <div class="rcp-muted">No referrals found under this name in the last 12 months. If the patient may be referred under another name, check the record.</div>
+          <div class="rcp-fineprint">${updated ? `${updated} &middot; ` : ''}${refreshBtn}</div>`;
       } else {
         const items = rows
           .slice(0, MAX_REF_DISPLAY)
@@ -472,12 +504,12 @@ function renderReferralsCard() {
             const p = referralParts(r);
             const badges =
               (p.priority
-                ? `<span class="rcp-ref-badge rcp-ref-pri-${esc(p.priority.toLowerCase())}">${esc(p.priority)}</span>`
+                ? `<span class="rcp-ref-badge rcp-ref-pri-${esc(p.priorityKey.toLowerCase())}">${esc(p.priority)}</span>`
                 : '') +
               (p.status
                 ? `<span class="rcp-ref-badge rcp-ref-st-${esc(p.status.toLowerCase())}">${esc(p.status)}</span>`
                 : '');
-            const meta = [p.who, p.when].filter(Boolean).map(esc).join(' &middot; ');
+            const meta = [p.who ? `Referred by ${p.who}` : '', p.when].filter(Boolean).map(esc).join(' &middot; ');
             return `<div class="rcp-ref-row">
               <div class="rcp-ref-where">${esc(p.where)}</div>
               <div class="rcp-ref-meta">${meta}</div>
@@ -489,7 +521,8 @@ function renderReferralsCard() {
           rows.length > MAX_REF_DISPLAY
             ? `<div class="rcp-fineprint">+${rows.length - MAX_REF_DISPLAY} more not shown.</div>`
             : '';
-        html = `${items}${more}<div class="rcp-fineprint">Matched to this record by name — confirm it's the right patient. ${refreshBtn}</div>`;
+        html = `${caveat}${items}${more}
+          <div class="rcp-fineprint">Outgoing referrals, last 12 months. Status is from the practice referral report (Incomplete = not yet completed in Medicus).${updated ? ` &middot; ${updated}` : ''} ${refreshBtn}</div>`;
       }
       break;
     }
@@ -500,7 +533,8 @@ function renderReferralsCard() {
 
   card.innerHTML = html;
   card.querySelector('#rcpRefRefresh')?.addEventListener('click', () => {
-    _referralsCache = null; // force a refetch
+    window.ReferralsApi?.cacheClear?.(); // force a refetch
+    _referralsFetchedAt = 0;
     refreshReferralsCard();
   });
 }
@@ -987,10 +1021,8 @@ function generateSummary(form, pathway) {
       suiteVersion: chrome.runtime.getManifest?.().version || '',
       patientLine,
       pharmacyFirstHint: pharmacyFirstHint(pathway, pc?.ageYears ?? null),
-      // Who referred what, to where, when — matched to the open record by name.
-      referralLines: pc?.patientName
-        ? matchedReferralRows(pc.patientName).slice(0, MAX_REF_LINES).map(formatReferralLine)
-        : [],
+      // Who referred what, to where, when — the same name-matched rows shown in the card.
+      referralLines: pc?.patientName ? _matchedReferralRows.slice(0, MAX_REF_LINES).map(formatReferralLine) : [],
     },
   });
 

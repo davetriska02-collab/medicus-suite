@@ -722,6 +722,15 @@
 }
 
 /* Referrals on file ──────────────────────────────────────────────────────── */
+.rcp-ref-caveat {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  margin-bottom: 6px;
+}
 .rcp-ref-row {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);

@@ -36,6 +36,26 @@
   const ALL_PRIORITIES = ['Routine', 'Urgent', 'TwoWeekWait'];
   const ALL_STATUSES   = ['Completed', 'Incomplete', 'Cancelled'];
 
+  const API_HOST_SUFFIX = '.api.england.medicus.health';
+
+  // Build the canonical clinical-audit-report URL from a practice code alone, so a
+  // caller can fetch WITHOUT a discovered template URL (i.e. without the user first
+  // visiting Referrals → Clinical Audit Report). A discovered URL still takes
+  // precedence where present, since it preserves any deployment-specific params.
+  function buildCanonicalUrl(code, startDate, endDate) {
+    if (!code) return null;
+    const base = `https://${code}${API_HOST_SUFFIX}/referrals/clinical-audit-report`;
+    const params = new URLSearchParams();
+    params.append('referralStartDate', startDate);
+    params.append('referralEndDate',   endDate);
+    ALL_PRIORITIES.forEach(p => params.append('priorities[]', p));
+    ALL_STATUSES.forEach(s => params.append('statuses[]', s));
+    params.append('limit',    String(PAGE_SIZE));
+    params.append('startRow', '0');
+    params.append('endRow',   String(PAGE_SIZE));
+    return `${base}?${params.toString()}`;
+  }
+
   function buildApiUrl(baseUrl, startDate, endDate, priorities, statuses) {
     const params = new URLSearchParams();
     params.append('referralStartDate', startDate);
@@ -90,10 +110,15 @@
     if (!fetchImpl) throw new Error('No fetch impl');
     if (!startDate || !endDate) throw new Error('Date range required');
 
-    if (!opts.templateUrl) {
-      // Without a captured URL we cannot reliably hit the correct endpoint
-      // (param names and pagination differ by deployment).
-      throw new Error('No discovered URL — navigate to Referrals → Clinical Audit Report first.');
+    // Prefer a captured/discovered URL (preserves deployment-specific params); fall
+    // back to the canonical endpoint built from the practice code so callers work
+    // without first visiting Referrals → Clinical Audit Report.
+    let templateUrl = opts.templateUrl;
+    if (!templateUrl) {
+      templateUrl = buildCanonicalUrl(practiceCode, startDate, endDate);
+      if (!templateUrl) {
+        throw new Error('No discovered URL and no practice code — cannot build referrals request.');
+      }
     }
 
     const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : () => {};
@@ -105,7 +130,7 @@
     for (let page = 0; page < MAX_PAGES; page++) {
       const start = page * PAGE_SIZE;
       const end   = start + PAGE_SIZE;
-      const url   = buildUrlFromTemplate(opts.templateUrl, startDate, endDate, start, end);
+      const url   = buildUrlFromTemplate(templateUrl, startDate, endDate, start, end);
       lastUrl = url;
 
       const r = await fetchImpl(url, { credentials: 'include' });
@@ -141,6 +166,40 @@
       url:        lastUrl,
     };
   }
+
+  // ── Shared in-memory referral cache ─────────────────────────────────────────
+  // Lets the reception "Referrals on file" card reuse a fetch the Referrals tab
+  // already made (and vice-versa) within ONE document, instead of each issuing its
+  // own whole-practice pull. PHI (other patients' rows) — kept in memory ONLY, never
+  // persisted to chrome.storage/disk; both consumers' cleanup paths call cacheClear().
+  // A cached range is reusable only if it FULLY CONTAINS the requested range, so a
+  // 30-day cache never silently satisfies a 12-month request.
+  let _sharedCache = null;
+
+  function cacheGet(code, startDate, endDate, ttlMs) {
+    if (!_sharedCache || !code) return null;
+    if (_sharedCache.code !== code) return null;
+    if (typeof ttlMs === 'number' && Date.now() - _sharedCache.fetchedAt > ttlMs) return null;
+    if (_sharedCache.startDate <= startDate && _sharedCache.endDate >= endDate) return _sharedCache.rows;
+    return null;
+  }
+
+  function cachePut(code, startDate, endDate, rows) {
+    if (!code || !Array.isArray(rows)) return;
+    // Keep the widest fresh set: don't let a narrow fetch evict a wider, still-fresh one.
+    if (
+      _sharedCache &&
+      _sharedCache.code === code &&
+      _sharedCache.startDate <= startDate &&
+      _sharedCache.endDate >= endDate &&
+      Date.now() - _sharedCache.fetchedAt < 60000
+    ) {
+      return;
+    }
+    _sharedCache = { code, startDate, endDate, rows, fetchedAt: Date.now() };
+  }
+
+  function cacheClear() { _sharedCache = null; }
 
   // Parse the referralService field which uses ` – ` (em-dash) or ` - ` separators.
   // Typical format: "Service Name – Specialty – Hospital Name – TrustCode"
@@ -283,9 +342,13 @@
     ALL_PRIORITIES,
     ALL_STATUSES,
     buildApiUrl,
+    buildCanonicalUrl,
     buildUrlFromTemplate,
     extractBaseUrl,
     fetchReferrals,
+    cacheGet,
+    cachePut,
+    cacheClear,
     parseReferralService,
     normalisePriority,
     aggregate,
