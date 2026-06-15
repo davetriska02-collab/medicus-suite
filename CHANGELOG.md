@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.95.0] — 2026-06-15
+
+### Alert roll-up — one severity bar when alerts pile up
+
+The three demand strips (waiting room, triage, submissions demand) used to stack
+independently below the nav, competing for the same scarce vertical space when more
+than one fired at once. They now collapse into a single **roll-up bar** at the highest
+severity:
+
+- **Appears only when 2+ strips are elevated** (amber/red). One or zero elevated alerts
+  behaves exactly as before — no change in the common case. Green/calm states never count
+  as elevated, so the bar only shows when there's genuinely more than one signal.
+- **Severity-ordered summary:** an icon at max severity, an "N alerts" count, and a pill
+  per elevated channel (Waiting / Triage / Demand) with its own amber/red colour.
+- **Expandable for detail:** click the bar (chevron) to reveal the full original strips
+  — patient names, triage buckets, demand counts. **Red auto-expands**; amber starts
+  collapsed. Your expand/collapse choice sticks until the alert set changes.
+- Each strip's poller is untouched — it still renders its own DOM and simply reports its
+  resulting level to the shared roll-up. Backoff, caching and click-through all unchanged.
+- Plays with **Focus mode**: the roll-up is a signal, so Zen never hides it.
+
 ## [v3.94.0] — 2026-06-15
 
 ### Focus (Zen) mode — declutter the chrome, keep the signal

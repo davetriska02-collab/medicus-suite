@@ -612,6 +612,79 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+// ── Alert roll-up (groups elevated demand strips into one summary bar) ────────
+// Three strips (#wrStrip, #rmStrip, #subRagStrip) each render independently below
+// the nav. When two or more are in an ELEVATED (amber/red) state they stack and
+// compete for the same scarce vertical space, so a single severity-ordered roll-up
+// bar replaces the stack: one line at max severity with a pill per elevated channel,
+// expandable (chevron) to the full strips for detail. Each strip's own poller is
+// untouched — it still renders its own DOM; it just reports its resulting level here
+// via reportAlert(), and the roll-up reads that shared bus. Red auto-expands.
+//
+// CLINICAL SAFETY: grouping only collapses the *presentation* of strips that are
+// already showing; nothing is hidden that wasn't on screen, and the roll-up itself
+// carries the max severity. Green/calm states are never "elevated", so the roll-up
+// only ever appears when there is genuinely more than one elevated signal.
+const alertRollupEl = document.getElementById('alertRollup');
+const alertStackEl = document.getElementById('alertStack');
+const alertBus = { waiting: null, triage: null, demand: null };
+let _rollupExpanded = null; // null = use default (red→open, amber→closed); else user choice
+
+const ALERT_CHANNELS = ['waiting', 'triage', 'demand'];
+
+function reportAlert(channel, state) {
+  // state = { level: 'green'|'amber'|'red', label, count } or null when inactive.
+  alertBus[channel] = state;
+  renderRollup();
+}
+
+function renderRollup() {
+  if (!alertRollupEl || !alertStackEl) return;
+  const elevated = ALERT_CHANNELS.map((k) => alertBus[k]).filter(
+    (a) => a && (a.level === 'amber' || a.level === 'red')
+  );
+
+  if (elevated.length < 2) {
+    // Nothing to group — restore the normal stacked strips, roll-up hidden.
+    alertRollupEl.className = 'alert-rollup alert-rollup-hidden';
+    alertRollupEl.innerHTML = '';
+    alertStackEl.style.display = '';
+    _rollupExpanded = null;
+    return;
+  }
+
+  const hasRed = elevated.some((a) => a.level === 'red');
+  const maxLevel = hasRed ? 'red' : 'amber';
+  if (_rollupExpanded === null) _rollupExpanded = hasRed; // red opens by default
+
+  const pills = elevated
+    .map(
+      (a) =>
+        `<span class="alert-rollup-pill alert-rollup-pill--${a.level}">${escStrip(a.label)}${
+          a.count != null ? ' ' + a.count : ''
+        }</span>`
+    )
+    .join('');
+
+  alertRollupEl.className = `alert-rollup alert-rollup--${maxLevel}`;
+  alertRollupEl.setAttribute('aria-expanded', String(_rollupExpanded));
+  alertRollupEl.innerHTML = `
+    <span class="alert-rollup-icon">${maxLevel === 'red' ? '🔴' : '⚠'}</span>
+    <span class="alert-rollup-count">${elevated.length} alerts</span>
+    <span class="alert-rollup-pills">${pills}</span>
+    <button class="alert-rollup-toggle">${_rollupExpanded ? 'Hide' : 'Details'}<span class="alert-rollup-chev">${
+      _rollupExpanded ? '▾' : '▸'
+    }</span></button>
+  `;
+  alertStackEl.style.display = _rollupExpanded ? '' : 'none';
+}
+
+// Toggle expand/collapse on click anywhere in the roll-up bar.
+alertRollupEl?.addEventListener('click', () => {
+  _rollupExpanded = !_rollupExpanded;
+  renderRollup();
+});
+
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
 let SITE_ID_WR = null;
@@ -676,6 +749,7 @@ function renderStrip(patients) {
   if (patients.length === 0) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
+    reportAlert('waiting', null);
     return;
   }
 
@@ -708,6 +782,8 @@ function renderStrip(patients) {
     switchModule('sentinel');
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
   });
+
+  reportAlert('waiting', { level: urgency, label: 'Waiting', count: patients.length });
 }
 
 // ── Badge-enabled cache ───────────────────────────────────────────────────────
@@ -893,6 +969,7 @@ async function fetchAndRenderRmStrip() {
   if (!cfg.enabled || !cfg.assigneeId) {
     rmStripEl.className = 'rm-strip rm-strip-hidden';
     rmStripEl.innerHTML = '';
+    reportAlert('triage', null);
     return true;
   }
   // Adjust poll interval if config changed — restart the poller at the new interval
@@ -905,6 +982,7 @@ async function fetchAndRenderRmStrip() {
   if (!code) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">No practice code</span>`;
+    reportAlert('triage', null);
     return true;
   }
 
@@ -917,6 +995,7 @@ async function fetchAndRenderRmStrip() {
   } catch (e) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
+    reportAlert('triage', null);
     return false;
   }
 
@@ -975,6 +1054,10 @@ async function applyTriageAlerts(buckets) {
   // Update strip class
   rmStripEl.classList.remove('rm-strip-alerted-amber', 'rm-strip-alerted-red');
   if (maxLevel) rmStripEl.classList.add(`rm-strip-alerted-${maxLevel}`);
+
+  // Feed the alert roll-up: triage counts as elevated only when a threshold is
+  // crossed (calm pill counts aren't an alert). Count = buckets over threshold.
+  reportAlert('triage', maxLevel ? { level: maxLevel, label: 'Triage', count: triggered.length } : null);
 
   // Desktop notifications — once per threshold crossing per session
   const quietNow = (await window.QuietMode?.isQuiet?.()) ?? false;
@@ -1065,11 +1148,15 @@ async function fetchAndRenderSubRagStrip() {
   if (!anyEnabled) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
+    reportAlert('demand', null);
     return true;
   }
 
   const { code, source } = await window.PracticeCode.resolve();
-  if (!code) return true;
+  if (!code) {
+    reportAlert('demand', null);
+    return true;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const results = await Promise.allSettled(
@@ -1104,6 +1191,7 @@ async function fetchAndRenderSubRagStrip() {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
     _subRagPrevLevel = null;
+    reportAlert('demand', null);
     return !anyFailed;
   }
 
@@ -1130,6 +1218,7 @@ async function fetchAndRenderSubRagStrip() {
     <button class="sub-rag-goto" title="Go to Submissions">Submissions →</button>
   `;
   subRagStripEl.querySelector('.sub-rag-goto')?.addEventListener('click', () => switchModule('submissions'));
+  reportAlert('demand', { level: maxLevel, label: 'Demand', count: triggered.length });
   return !anyFailed;
 }
 

@@ -147,7 +147,12 @@
             </svg>
             <span>Referrals</span>
           </button>
-          <button class="nav-tab" data-module="condor" aria-label="Condor — practice pressure dashboard" title="Condor — live practice pressure dashboard">
+          <button
+            class="nav-tab"
+            data-module="condor"
+            aria-label="Condor — practice pressure dashboard"
+            title="Condor — live practice pressure dashboard"
+          >
             <svg
               width="14"
               height="14"
@@ -335,9 +340,18 @@
         </div>
       </nav>
 
-      <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
-      <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
-      <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+      <div
+        id="alertRollup"
+        class="alert-rollup alert-rollup-hidden"
+        role="status"
+        aria-live="polite"
+        aria-expanded="false"
+      ></div>
+      <div id="alertStack">
+        <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+      </div>
       <div id="setupHost" aria-live="polite" style="display: none"></div>
       <main class="suite-content" id="suiteContent">
         <!-- Modules load here -->

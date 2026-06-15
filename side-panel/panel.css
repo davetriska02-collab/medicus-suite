@@ -933,6 +933,96 @@ body {
 /* ── Waiting Room global strip ───────────────────────────────────────────────
    Sits between the nav bar and the module content. Visible on every tab.   */
 
+/* ── Alert roll-up (groups 2+ elevated strips into one bar; see panel.js) ───── */
+.alert-rollup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  min-height: 30px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+}
+.alert-rollup-hidden {
+  display: none;
+}
+.alert-rollup--amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.alert-rollup--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.alert-rollup-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.alert-rollup-count {
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.alert-rollup-pills {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.alert-rollup-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  border: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+.alert-rollup-pill--amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+.alert-rollup-pill--red {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+.alert-rollup-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  flex-shrink: 0;
+  padding: 0;
+}
+.alert-rollup-chev {
+  font-size: 9px;
+}
+
 .wr-strip {
   display: flex;
   align-items: center;
