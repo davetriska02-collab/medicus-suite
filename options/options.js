@@ -2171,6 +2171,82 @@ rmSaveBtn?.addEventListener('click', async () => {
 // shared/reception-pathway-utils.js — the same code path the backup import
 // uses, so nothing invalid can reach storage from either direction.
 
+// ── Clinical Safety: single "Accept for practice" switch ──────────────────────
+// Sets ONE suite-level flag (suite.practiceAcceptedAt) that the reception and
+// knowledge gates honour, and fans out to the values that must exist/travel for
+// the features to actually be on: all reception pathways enabled + the Sentinel
+// alert library acknowledged. The flag is carried in a suite backup, so this
+// acceptance PROPAGATES on restore (the per-install attestations deliberately do
+// not). Withdrawing clears only the flag, which re-locks reception + knowledge.
+(async function initPracticeAcceptanceSection() {
+  const card = document.getElementById('practiceAcceptCard');
+  if (!card) return;
+  const statusEl = document.getElementById('practiceAcceptStatus');
+  const confirmRow = document.getElementById('practiceAcceptConfirmRow');
+  const tick = document.getElementById('practiceAcceptTick');
+  const acceptBtn = document.getElementById('practiceAcceptBtn');
+  const withdrawBtn = document.getElementById('practiceWithdrawBtn');
+  const ACCEPT_KEY = 'suite.practiceAcceptedAt';
+
+  async function allPathwayIds() {
+    const ids = {};
+    try {
+      const r = await fetch(chrome.runtime.getURL('rules/reception-pathways.json'));
+      const doc = await r.json();
+      for (const p of doc.pathways || []) if (p && p.id) ids[p.id] = true;
+    } catch (_) {}
+    try {
+      const s = await chrome.storage.local.get('reception.customPathways');
+      for (const p of s['reception.customPathways'] || []) if (p && p.id) ids[p.id] = true;
+    } catch (_) {}
+    return ids;
+  }
+
+  async function render() {
+    const r = await chrome.storage.local.get(ACCEPT_KEY);
+    const acceptedAt = r[ACCEPT_KEY];
+    if (acceptedAt) {
+      statusEl.innerHTML = `<span style="color: var(--green, #15803d); font-weight: 600">&#10003; Accepted for this practice</span> <span style="color: var(--text-3)">on ${escHtml(String(acceptedAt).slice(0, 10))}</span>`;
+      acceptBtn.style.display = 'none';
+      confirmRow.style.display = 'none';
+      withdrawBtn.style.display = '';
+    } else {
+      statusEl.innerHTML = `<span style="color: var(--text-3)">Not yet accepted &mdash; reception capture and the alert library stay off.</span>`;
+      acceptBtn.style.display = '';
+      confirmRow.style.display = '';
+      withdrawBtn.style.display = 'none';
+      tick.checked = false;
+      acceptBtn.disabled = true;
+    }
+  }
+
+  tick?.addEventListener('change', () => {
+    acceptBtn.disabled = !tick.checked;
+  });
+
+  acceptBtn?.addEventListener('click', async () => {
+    if (!tick.checked) return;
+    const now = new Date().toISOString();
+    const ids = await allPathwayIds();
+    const cfgR = await chrome.storage.local.get('reception.config');
+    const cfg = cfgR['reception.config'] || {};
+    cfg.enabledPathways = { ...(cfg.enabledPathways || {}), ...ids };
+    await chrome.storage.local.set({
+      [ACCEPT_KEY]: now,
+      'reception.config': cfg,
+      'sentinel.alertLibrary.acknowledged': true,
+    });
+    await render();
+  });
+
+  withdrawBtn?.addEventListener('click', async () => {
+    await chrome.storage.local.remove(ACCEPT_KEY);
+    await render();
+  });
+
+  await render();
+})();
+
 (function initReceptionSection() {
   const PU = window.ReceptionPathwayUtils;
   const $ = (id) => document.getElementById(id);

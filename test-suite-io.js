@@ -454,6 +454,22 @@ console.log('\n--- applyWithRollback rollback ---');
   const expUnset = await suiteIo.suiteExport();
   assert(expUnset.tabOrder === null, 'suiteExport: unset tabOrder exports as null');
 
+  // ── suite.practiceAcceptedAt round-trip + validation ──────────────────────
+  // The single "Accept for practice" flag DOES travel (unlike per-install
+  // attestations), so it must round-trip and reject non-ISO values.
+  const acceptedAt = '2026-06-15T09:30:00.000Z';
+  await suiteIo.suiteImport({ practiceAcceptedAt: acceptedAt });
+  assert(suiteStore['suite.practiceAcceptedAt'] === acceptedAt, 'suiteImport: writes suite.practiceAcceptedAt');
+  const expAcc = await suiteIo.suiteExport();
+  assert(expAcc.practiceAcceptedAt === acceptedAt, 'suiteExport: round-trips suite.practiceAcceptedAt (travels in backup)');
+  let accErr = null;
+  try { await suiteIo.suiteImport({ practiceAcceptedAt: 'not-a-date' }); } catch (e) { accErr = e.message; }
+  assert(accErr && accErr.includes('ISO datetime'), 'suiteImport: rejects non-ISO practiceAcceptedAt');
+  assert(suiteStore['suite.practiceAcceptedAt'] === acceptedAt, 'suiteImport: rejected practiceAcceptedAt leaves prior value untouched');
+  // Preview warns loudly when a backup carries the acceptance.
+  const accLines = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { practiceAcceptedAt: acceptedAt } }));
+  assert(accLines.some((l) => l.includes('practice acceptance') || l.includes('switches ON')), 'previewEnvelope: warns when practice acceptance is carried');
+
   global.chrome = savedChrome;
 
   // ── sentinel-io: resilient custom-rule import (suite restore) ──────────────
