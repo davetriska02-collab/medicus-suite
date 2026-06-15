@@ -302,31 +302,31 @@
   --tile-col: transparent;
 }
 .rcp-tile-c-slate {
-  --tile-col: #64748b;
+  --tile-col: var(--swatch-slate);
 }
 .rcp-tile-c-red {
-  --tile-col: #dc2626;
+  --tile-col: var(--swatch-red);
 }
 .rcp-tile-c-orange {
-  --tile-col: #ea580c;
+  --tile-col: var(--swatch-orange);
 }
 .rcp-tile-c-amber {
-  --tile-col: #d97706;
+  --tile-col: var(--swatch-amber);
 }
 .rcp-tile-c-green {
-  --tile-col: #16a34a;
+  --tile-col: var(--swatch-green);
 }
 .rcp-tile-c-teal {
-  --tile-col: #0d9488;
+  --tile-col: var(--swatch-teal);
 }
 .rcp-tile-c-blue {
-  --tile-col: #2563eb;
+  --tile-col: var(--swatch-blue);
 }
 .rcp-tile-c-purple {
-  --tile-col: #7c3aed;
+  --tile-col: var(--swatch-purple);
 }
 .rcp-tile-c-pink {
-  --tile-col: #db2777;
+  --tile-col: var(--swatch-pink);
 }
 
 /* User colour-label shows as a small corner DOT (a tag), never a left-rule —

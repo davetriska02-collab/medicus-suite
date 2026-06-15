@@ -77,6 +77,20 @@ Dark values are lightness-raised for legibility on `#0b1424`.
 Canon source: `side-panel/panel.css` `:root` / `html[data-theme="dark"]`.
 Do not use `--cat-*` for status chips, badges, or any clinical-meaning surface.
 
+### User colour swatches (organising palette)
+
+`--swatch-{slate,red,orange,amber,green,teal,blue,purple,pink}` — the fixed
+palette a user picks from to colour-code their own pills/tiles (Slots types,
+Reception pathways, and future organise-mode surfaces). This is purely the
+user's grouping aid, **never a clinical status**: an actual amber/red alert
+always overrides a user swatch (`status overrides custom colour`), and a red
+pill's fill stays red regardless (the canonical `.pill--red` lock). Distinct
+from `--cat-*` (chart series) and from the status triads. Light values are the
+canonical hexes; dark values are lightness-raised for `#0b1424` (mirroring the
+`--cat` lifts). Consume `var(--swatch-*)` — the `.pill-c-*` / `.rcp-tile-c-*`
+classes set `--pill-col` / `--tile-col` from these; never re-declare the hex.
+Canon source: `side-panel/panel.css` `:root` / `html[data-theme="dark"]`.
+
 Colorblind mode (`html[data-colorblind="true"]`) re-points the **whole red
 and green triads** (red→orange `#ea580c`, green→blue `#2563eb` + matching
 dim/line alphas). Components built from triads inherit the swap for free —

@@ -71,6 +71,19 @@
   --cat-4: #7c3aed;
   --cat-5: #64748b;
   --cat-6: #0891b2;
+  /* User colour swatches — the fixed organising palette a user picks from to
+     colour-code pills/tiles (Slots types, Reception pathways, …). NON-clinical:
+     purely for the user's own grouping, never a status. Distinct from --cat-*
+     (chart series) and from the status triads. Canon: TOKENS.md §swatches. */
+  --swatch-slate: #64748b;
+  --swatch-red: #dc2626;
+  --swatch-orange: #ea580c;
+  --swatch-amber: #d97706;
+  --swatch-green: #16a34a;
+  --swatch-teal: #0d9488;
+  --swatch-blue: #2563eb;
+  --swatch-purple: #7c3aed;
+  --swatch-pink: #db2777;
 }
 
 /* Dark theme override */
@@ -114,6 +127,16 @@ html[data-theme='dark'] {
   --cat-4: #a78bfa;
   --cat-5: #93a8c5;
   --cat-6: #38bdf8;
+  /* Lightness-raised for legibility on #0b1424, mirroring the --cat dark lifts. */
+  --swatch-slate: #93a8c5;
+  --swatch-red: #f87171;
+  --swatch-orange: #fb923c;
+  --swatch-amber: #fbbf24;
+  --swatch-green: #4ade80;
+  --swatch-teal: #2dd4bf;
+  --swatch-blue: #5b8fc7;
+  --swatch-purple: #a78bfa;
+  --swatch-pink: #f472b6;
 }
 
 html,

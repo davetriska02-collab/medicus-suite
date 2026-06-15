@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.96.3] — 2026-06-15
+
+### Config foundation: one canonical user-colour palette
+
+Groundwork for carrying the Slots organise mode (drag-reorder + per-item colour)
+across the suite. The user-colour swatches were duplicated as raw hex in two
+places (Slots pills and Reception pathway tiles) and didn't adapt to dark theme.
+They are now canonical `--swatch-*` tokens (slate/red/orange/amber/green/teal/
+blue/purple/pink), defined once with dark-theme legibility lifts, and both
+surfaces consume them. Light is unchanged; dark-mode user colours are now
+legible. Non-clinical by definition — an actual amber/red alert always overrides
+a user swatch, and a red pill's fill stays locked. No behaviour change; this is
+the shared palette the forthcoming inline organise-mode rollout builds on.
+
 ## [v3.96.2] — 2026-06-15
 
 ### Focus mode is now legible and escapable (design-crit pass)
