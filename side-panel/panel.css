@@ -328,7 +328,7 @@ body {
   padding: 5px 10px;
   background: transparent;
   border: 1px solid transparent; /* reserved so .active never shifts layout */
-  color: var(--text-4);
+  color: var(--text-3);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 500;
@@ -477,7 +477,7 @@ body {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-3);
   margin-bottom: 3px;
 }
 
@@ -1245,7 +1245,7 @@ body {
   font-family: var(--mono);
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: var(--text-4);
+  color: var(--text-3);
   background: none;
   border: 1px solid var(--border-hi);
   border-radius: var(--r-sm);
@@ -1258,7 +1258,7 @@ body {
 }
 .wr-strip-goto:hover {
   color: var(--text-2);
-  border-color: var(--text-4);
+  border-color: var(--accent);
 }
 .wr-strip-goto:active {
   color: var(--text-1);

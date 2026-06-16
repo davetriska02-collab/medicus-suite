@@ -371,8 +371,12 @@
 
 .bpt-foot {
   font-size: 10px;
-  color: var(--text-4);
-  padding: 0 12px 6px;
+  color: var(--text-3);
+  margin: 4px 12px 8px;
+  padding: 5px 9px;
+  background: var(--accent-dim);
+  border-left: 2px solid var(--accent-line);
+  border-radius: var(--r-sm);
 }
 
 .bpt-count {

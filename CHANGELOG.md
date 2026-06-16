@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.111.1] — 2026-06-16
+
+### Legibility pass (Atelier): load-bearing labels lifted off the faint tier
+
+Acting on finding G3 of the whole-suite appraisal — letter-spaced small-caps
+labels in the faintest slate tier strain tired eyes, and the technophobe floor
+misread them. The dual-voice mono small-caps "machine voice" is retained (it is
+the suite's brand); only the *contrast tier* moved, per the design doctrine's
+own floor that a muted tier must never be the only carrier of meaning. Token
+values are unchanged — these are class-level tier choices.
+
+- Module eyebrows (`.mod-eyebrow`), inactive nav-tab labels, and the Today card
+  section labels ("WAITING ROOM", "DEMAND TODAY", …) move from `--text-4` to
+  `--text-3` — a clear contrast lift while staying a muted label tier. (G3)
+- The Trends "Default NICE/QOF thresholds — verify any personalised target in
+  Medicus" caveat is now a tinted note box (accent wash + left accent border)
+  instead of faint grey text floating under the chart, so it is not missed. (G3)
+- The waiting-room strip "Monitoring →" link is lifted to `--text-3` and gains an
+  accent hover border so it reads as navigation, not an alert. (G1, partial)
+
+Verified rendered in light and dark themes. CSS only; no clinical-rule,
+threshold, token-canon or alert-salience changes.
+
 ## [v3.111.0] — 2026-06-16
 
 ### Usability: legibility and plain-language fixes from The Practice appraisal

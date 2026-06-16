@@ -51,7 +51,7 @@
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 /* Decision H: demote rest colour to text-4; add :focus-visible and :active */
