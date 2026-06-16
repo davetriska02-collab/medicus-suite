@@ -1096,7 +1096,8 @@ console.log('\n--- shipped base result rules: present, valid, and fire correctly
     evaluateReportSeverity(makeReport([mkResult(name, value)]), { resultRules: baseSet, problems }).level;
   // Red-only: only critically-deranged values fire; the rest are left to the lab flag (none here).
   assert(fire('Haemoglobin', 65) === 'red', 'base: Haemoglobin 65 → red');
-  assert(fire('Haemoglobin', 95) === 'red', 'base: Haemoglobin 95 → red (red threshold <100)');
+  assert(fire('Haemoglobin', 78) === 'red', 'base: Haemoglobin 78 → red (red threshold ≤80)');
+  assert(fire('Haemoglobin', 95) === 'none', 'base: Haemoglobin 95 → none (red-only, >80, CSO-lowered from 100)');
   assert(fire('Haemoglobin', 130) === 'none', 'base: Haemoglobin 130 → none');
   assert(fire('Potassium', 6.6) === 'red', 'base: Potassium 6.6 → red');
   assert(fire('Potassium', 6.2) === 'none', 'base: Potassium 6.2 → none (red-only, <6.5)');

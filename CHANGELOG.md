@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.100.0] — 2026-06-16
+
+### Critical-result chips now show their trigger value on the chip (community item — Nick)
+
+Adopts a community-contributed convention (submitted by Nick via a Triage Lens
+config export, reviewed by The Keeper): every numeric **result-rule** chip now
+carries its trigger threshold in the label, so a clinician reading the alert sees
+the cut-off at a glance and can sanity-check it against the actual value. This was
+already true for the two HbA1c chips; it is now consistent across the whole base
+set. Symbols use the engine's true (inclusive) firing semantics — `≥` for `above`
+rules, `≤` for `below` rules (correcting the strict `<` used in a few of the
+submitted labels).
+
+- **16 base result-rule labels** gained their threshold, e.g. *Critical high
+  potassium → "Critical high potassium (red ≥6.5 mmol/L)"*, *Critical low
+  neutrophils → "(red ≤0.5 ×10⁹/L)"*, *High INR → "(red ≥8)"*. Where a rule has
+  both tiers the **red (critical) trigger** is shown for brevity (≤60-char chip cap).
+- **Critical low haemoglobin red threshold lowered 100 → 80 g/L (CSO-approved).**
+  The previous 100 g/L fired "critical" on mild anaemia; 80 g/L matches the
+  severe-anaemia critical band. Surfacing the number on the chip is what prompted
+  the review. *This is a threshold change requiring CSO sign-off — flagged here.*
+- **New migration: `revertRetiredResultRuleFields`** (content.js + options.js, in
+  lock-step). The result-rules merge is append-by-id only, so changed shipped
+  labels/thresholds never reached existing users (the result-rules analogue of the
+  `RETIRED_CHIP_LABELS` systemChips trap). The new revert un-sticks a held builtin
+  **atomically per id** — only when *every* listed field still equals the retired
+  shipped value (i.e. the user hasn't customised it) does it bring the rule fully
+  up to date, so it never clobbers a user edit and never leaves a label that
+  disagrees with the live threshold. Pinned by `test-chip-label-migration.js`.
+- Bumped `defaults.json` schema `version` 16 → 17 so the migration runs for
+  existing installs; refreshed the defaults-config lock; updated
+  `test-result-severity.js` for the new Hb threshold.
+
 ## [v3.99.0] — 2026-06-16
 
 ### Whole-suite Practice appraisal: the gap-to-9 fixes

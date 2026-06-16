@@ -127,6 +127,49 @@
       }
     }
   };
+  // Builtin result-rule fields (label, and threshold values) shipped in a PRIOR version and
+  // SINCE CHANGED. The resultRules merge below is append-by-id only, so a builtin the user
+  // already holds keeps its OLD label/thresholds forever — a changed shipped label or
+  // threshold value never reaches existing users (the resultRules analogue of the
+  // RETIRED_CHIP_LABELS systemChips trap above). For each id we list, per field, the retired
+  // shipped value(s). The revert is ATOMIC per id: only when EVERY listed field still equals a
+  // retired value (i.e. the user has not customised this rule) do we bring the rule fully up to
+  // the current shipped values — so we never overwrite a user's own edit, and never leave a
+  // label that disagrees with the live threshold. v17 surfaced each numeric trigger in the chip
+  // label and lowered the Hb critical red from 100→80 g/L (CSO-approved). Kept in lock-step with
+  // content.js; bump defaults.json "version" when you add an entry here.
+  const RETIRED_RESULTRULE_FIELDS = {
+    'base-low-haemoglobin': { label: ['Critical low haemoglobin'], red: [100] },
+    'base-high-potassium': { label: ['Critical high potassium'] },
+    'base-low-sodium': { label: ['Critical low sodium'] },
+    'base-low-egfr': { label: ['Critical low eGFR'] },
+    'base-low-platelets': { label: ['Critical low platelets'] },
+    'base-low-neutrophils': { label: ['Critical low neutrophils'] },
+    'base-high-inr': { label: ['High INR'] },
+    'base-lithium-toxicity': { label: ['High lithium level — toxicity risk'] },
+    'base-digoxin-toxicity': { label: ['High digoxin level — toxicity risk'] },
+    'base-low-potassium': { label: ['Critical low potassium'] },
+    'base-high-calcium': { label: ['High calcium — hypercalcaemia'] },
+    'base-egfr-amber': { label: ['Low eGFR — significant CKD'] },
+    'base-low-calcium': { label: ['Low adjusted calcium — hypocalcaemia'] },
+    'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
+    'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
+    'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
+  };
+  const revertRetiredResultRuleFields = (resultRules, shippedResultRules) => {
+    if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
+    for (const id of Object.keys(RETIRED_RESULTRULE_FIELDS)) {
+      const held = resultRules.find((r) => r && r.id === id && r.builtin);
+      const shippedRule = shippedResultRules.find((r) => r && r.id === id);
+      if (!held || !shippedRule) continue;
+      const fields = RETIRED_RESULTRULE_FIELDS[id];
+      const stillDefault = Object.keys(fields).every((f) => fields[f].indexOf(held[f]) !== -1);
+      if (!stillDefault) continue;
+      for (const f of Object.keys(fields)) {
+        if (shippedRule[f] !== undefined) held[f] = shippedRule[f];
+      }
+    }
+  };
   const mergeShippedDefaults = (cfg, shipped) => {
     if (!cfg || !Array.isArray(cfg.rules) || !shipped) return null;
     if ((cfg.version || 0) >= (shipped.version || 0)) return null;
@@ -146,6 +189,8 @@
       if (r.builtin && !haveRR.has(r.id) && !removed.has(r.id)) out.resultRules.push(r);
     }
     backfillBuiltinAbnormalText(out.resultRules, shipped.resultRules);
+    // Un-stick result-rule labels/thresholds frozen at a since-changed shipped default.
+    revertRetiredResultRuleFields(out.resultRules, shipped.resultRules);
     out.version = shipped.version;
     return out;
   };
