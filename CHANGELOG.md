@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.107.0] — 2026-06-16
+
+### Practice letterhead: recall letters and SMS auto-fill the sign-off
+
+Recall letters and SMS (Sentinel per-chip and "Copy all actions", and the Sweep
+batch handout) previously always emitted `[Practice name]` / `[Clinician name]` /
+`[practice name]` placeholders, which had to be hand-edited every time and risked
+going out un-filled.
+
+- **New setting** under Settings → Suite: "Practice letterhead" (practice name +
+  optional clinician sign-off), stored as `suite.letterhead`.
+- The pure `action-packs.js` builders now take an optional `{ letterhead }` and
+  substitute it into every letter/SMS sign-off; Sentinel and Sweep load
+  `suite.letterhead` (Sentinel caches it and refreshes on change) and pass it in.
+- **Safe fallback preserved:** when a field is blank — including whitespace-only —
+  the bracketed placeholder is kept, so a letter never goes out with a real-looking
+  but empty sign-off.
+- Captured in suite backup via `shared/io/suite-io.js` (round-trip + validation).
+
+Tests: extended `test-action-packs.js` (substitution, fallback, blank-guard,
+aggregate + batch threading) and `test-suite-io.js` (letterhead round-trip + validation).
+
 ## [v3.106.0] — 2026-06-16
 
 ### Practice Report: power-user roadmap items
