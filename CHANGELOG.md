@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.105.0] — 2026-06-16
+
+### Monitoring: vaccine invitation letter, cleaner admin tasks, Safety Monitoring section
+
+Three fixes to the Sentinel monitoring action packs and chip grouping:
+
+- **Vaccine chips now generate a direct-to-patient invitation letter.** Previously
+  vaccine action packs offered only an SMS and an admin task — they lacked the
+  formal invite letter that drug-monitoring and QOF chips already provide. The new
+  `letter` uses invitation wording and renders in the existing "Letter" section of
+  the action-pack modal.
+- **Removed the "Recall SMS template available in Sentinel → Actions." line** from
+  every admin task (drug-monitoring, QOF and vaccine). It was redundant noise on
+  the task copy.
+- **New "Safety Monitoring" section** in the monitoring view. The eGFR/HbA1c trend
+  monitors and the hyperkalaemia alert are *not* QOF claim indicators but reused the
+  `qof-indicator` chip shape, so they were rendering under "QOF Indicators". These
+  rules are now tagged `category: "safety-monitoring"` in `rules/qof-rules.json`;
+  the engine passes the category through and the panel groups them in their own
+  section. Evaluation, scoring and chip content are unchanged — display grouping only.
+- **Safety-monitoring chips no longer emit patient-facing recall copy.** Because the
+  trend/alert flags reused the `qof-indicator` shape, an action-needed one (e.g. a
+  raised potassium) could previously generate a patient SMS/letter reading "your
+  review is due — book at your convenience", which is wrong for a same-day clinical
+  signal. These chips now produce a clinician-review task only (no SMS, no letter),
+  via both `buildChipActions` and the aggregate `buildPatientActions` path.
+- **Safety Monitoring section: clearer placement and caption.** The section now sits
+  directly below the alert clusters and above routine drug monitoring (ordered by
+  urgency of action), and carries a one-line caption "Clinical safety flags — not QOF
+  payment items" so moving these out of "QOF Indicators" cannot read as QOF chasing
+  having stopped.
+
+Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal,
+safety-monitoring no-patient-copy) and `test-qof-indicator-filters.js` (category
+passthrough). Full suite green.
+
 ## [v3.104.0] — 2026-06-16
 
 ### Practice Report: the gap-to-8/9 fixes (Practice appraisal)

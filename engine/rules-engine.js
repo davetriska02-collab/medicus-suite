@@ -1297,6 +1297,7 @@
       return [
         {
           type: 'qof-indicator',
+          category: rule.category || null,
           ruleId: rule.id,
           indicatorCode: rule.indicatorCode,
           indicatorName: rule.indicatorName,
@@ -1609,6 +1610,7 @@
     return [
       {
         type: 'qof-indicator',
+        category: rule.category || null,
         ruleId: rule.id,
         indicatorCode: rule.indicatorCode,
         indicatorName: rule.indicatorName,

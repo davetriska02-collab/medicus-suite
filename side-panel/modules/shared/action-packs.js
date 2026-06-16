@@ -183,14 +183,29 @@ export function buildChipActions(chip, patient) {
     // Task line
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re ${word} ${drug} monitoring. ` +
-      `Order set: ${testsDisplay}.${checksNote} ` +
-      `Recall SMS template available in Sentinel → Actions.`;
+      `Order set: ${testsDisplay}.${checksNote}`;
 
     return result;
   }
 
   // ── QOF indicator chips ───────────────────────────────────────────────────
   if (chip.type === 'qof-indicator') {
+    // Safety-monitoring surveillance flags (eGFR/HbA1c trends, electrolyte alerts)
+    // reuse the qof-indicator chip shape but are CLINICIAN-REVIEW items, not patient
+    // recalls. They must NEVER emit patient-facing "come for your review" SMS/letter
+    // copy: a raised potassium or falling eGFR is a clinical action to review now, not
+    // a routine booking the patient arranges at their convenience. Emit a clinician
+    // task only — no sms, no letter.
+    if (chip.category === 'safety-monitoring') {
+      const flag = chip.indicatorName || chip.indicatorCode || 'safety flag';
+      const valuePart = chip.valueText ? ` (${chip.valueText})` : '';
+      return {
+        task:
+          `Clinical review — ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''}: ${flag}${valuePart} flagged. ` +
+          `Clinician to review and action. Not a patient recall.`,
+      };
+    }
+
     const condition = qofConditionDescription(chip);
     const review = qofReviewDescription(chip);
 
@@ -220,8 +235,7 @@ export function buildChipActions(chip, patient) {
 
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re overdue ${review} ` +
-      `(${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}). ` +
-      `Recall SMS template available in Sentinel → Actions.`;
+      `(${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}).`;
 
     return result;
   }
@@ -237,9 +251,30 @@ export function buildChipActions(chip, patient) {
       `Please book an appointment with reception to receive this vaccination. ` +
       `Thank you — [practice name] (no reply)`;
 
+    // Letter body — direct-to-patient vaccination invitation
+    result.letter = [
+      `Re: Vaccination invitation — ${vaccine}`,
+      '',
+      `${greeting.trim().replace(/,$/, '')}`,
+      '',
+      `Our records show that you are eligible for ${vaccine}, and we would like to invite you ` +
+        `to book an appointment to have it.`,
+      '',
+      `Vaccination is an important way to protect your health. Please contact reception to ` +
+        `arrange an appointment at a time convenient for you.`,
+      '',
+      `If you have already had this vaccination elsewhere, please let us know so we can update your records.`,
+      '',
+      `If you have any questions, please contact the surgery.`,
+      '',
+      `Yours sincerely`,
+      `[Clinician name]`,
+      `[Practice name]`,
+    ].join('\n');
+
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re eligibility for ${vaccine}. ` +
-      `Offer vaccination booking. Recall SMS template available in Sentinel → Actions.`;
+      `Offer vaccination booking.`;
 
     return result;
   }
@@ -336,7 +371,9 @@ export function buildPatientActions(chips, patient) {
       const drug = chip.drugName || 'monitored medication';
       const word = statusWord(chip.status);
       smsItems.push(`${drug} (${dueTests.length > 0 ? dueTests.join(', ') : 'monitoring'}, ${word})`);
-    } else if (chip.type === 'qof-indicator') {
+    } else if (chip.type === 'qof-indicator' && chip.category !== 'safety-monitoring') {
+      // Safety-monitoring flags are clinician-review only — never folded into a
+      // patient-facing combined recall SMS (see buildChipActions).
       smsItems.push(qofReviewDescription(chip));
     } else if (chip.type === 'vaccine') {
       smsItems.push(chip.displayName || 'vaccination');

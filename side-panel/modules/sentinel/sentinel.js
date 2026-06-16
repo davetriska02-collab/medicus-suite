@@ -1035,10 +1035,13 @@ function render(payload) {
   const actionCount = chips.filter((c) => STATUS_RANK[c.status] <= 2).length;
   const clearCount = chips.filter((c) => STATUS_RANK[c.status] >= 5).length;
 
-  // Group by type
+  // Group by type. Non-QOF surveillance items (eGFR/HbA1c trends, electrolyte
+  // alerts) carry category: 'safety-monitoring' on the rule — bucket those into
+  // their own "Safety Monitoring" section so they don't read as QOF claim
+  // indicators, even though they reuse the qof-indicator evaluation/chip shape.
   const groups = {};
   visibleChips.forEach((chip) => {
-    const g = chip.type || 'other';
+    const g = chip.category === 'safety-monitoring' ? 'safety-monitoring' : chip.type || 'other';
     if (!groups[g]) groups[g] = [];
     groups[g].push(chip);
   });
@@ -1097,9 +1100,13 @@ function render(payload) {
     </div>`;
 
   const typeOrder = [
+    // Ordered by urgency of action: alert clusters first, then safety
+    // surveillance (act-today signals like a raised potassium), then routine
+    // drug monitoring, vaccinations and QOF housekeeping last.
     'drug-combo',
     'event-count',
     'composite',
+    'safety-monitoring',
     'drug-monitoring',
     'vaccine',
     'qof-indicator',
@@ -1110,11 +1117,19 @@ function render(payload) {
     'drug-combo': 'Drug Combinations',
     'event-count': 'Recurrent Events',
     composite: 'Composite Alerts',
+    'safety-monitoring': 'Safety Monitoring',
     'drug-monitoring': 'Drug Monitoring',
     vaccine: 'Vaccinations',
     'qof-indicator': 'QOF Indicators',
     'qof-process-indicator': 'QOF Process',
     'qof-register': 'Registers',
+  };
+  // Optional one-line caption under a section header. Used to make clear that
+  // Safety Monitoring items are clinical safety flags, not QOF payment items —
+  // so moving them out of "QOF Indicators" can't read as "we've stopped chasing
+  // QOF" (a concern raised across the staff-appraisal personas).
+  const typeCaptionMap = {
+    'safety-monitoring': 'Clinical safety flags — not QOF payment items',
   };
 
   const groupsHtml = typeOrder
@@ -1123,6 +1138,7 @@ function render(payload) {
       (t) => `
       <section class="sent-group${t === 'qof-register' ? ' sent-group-dim' : ''}">
         <div class="sent-group-label">${typeLabelMap[t] || t}</div>
+        ${typeCaptionMap[t] ? `<div class="sent-group-caption">${escHtml(typeCaptionMap[t])}</div>` : ''}
         <div class="sent-chip-list">${groups[t].map(renderChip).join('')}</div>
       </section>`
     )

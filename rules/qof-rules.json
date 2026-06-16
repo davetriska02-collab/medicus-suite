@@ -989,6 +989,7 @@
     {
       "id": "trend-egfr-falling",
       "type": "qof-indicator",
+      "category": "safety-monitoring",
       "enabled": true,
       "indicatorCode": "TREND-EGFR",
       "indicatorName": "Falling eGFR trend",
@@ -1010,6 +1011,7 @@
     {
       "id": "alert-hyperkalaemia",
       "type": "qof-indicator",
+      "category": "safety-monitoring",
       "enabled": true,
       "indicatorCode": "K-HIGH",
       "indicatorName": "Raised potassium (hyperkalaemia)",
@@ -1031,6 +1033,7 @@
     {
       "id": "trend-hba1c-rising",
       "type": "qof-indicator",
+      "category": "safety-monitoring",
       "enabled": true,
       "requiresRegister": "DM",
       "indicatorCode": "TREND-HBA1C",
