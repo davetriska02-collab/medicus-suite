@@ -320,5 +320,26 @@ check(
   'drug-monitoring accepts snomed / sex / ageRange / requiresProblem'
 );
 
+// ── category passthrough: non-QOF surveillance rules surface as Safety Monitoring ──
+console.log('\n--- category: safety-monitoring passes through to the chip ---');
+const safetyChips = engine.evaluateQofIndicatorRule(
+  { type: 'qof-indicator', category: 'safety-monitoring', enabled: true, indicatorCode: 'TEST', check: baseCheck },
+  { medications: [{ name: 'atorvastatin 20mg' }], observations: [], problems: [], patientContext: {}, _registerLookup: {} },
+  NOW
+);
+check(safetyChips.length > 0 && safetyChips[0].category === 'safety-monitoring', 'chip carries category from the rule');
+const plainChips = engine.evaluateQofIndicatorRule(
+  { type: 'qof-indicator', enabled: true, indicatorCode: 'TEST', check: baseCheck },
+  { medications: [{ name: 'atorvastatin 20mg' }], observations: [], problems: [], patientContext: {}, _registerLookup: {} },
+  NOW
+);
+check(plainChips.length > 0 && plainChips[0].category === null, 'chip category defaults to null when the rule has none');
+// The three shipped non-QOF surveillance rules are tagged so the UI groups them apart from QOF.
+const safetyRuleIds = ['trend-egfr-falling', 'trend-hba1c-rising', 'alert-hyperkalaemia'];
+safetyRuleIds.forEach((id) => {
+  const r = qof.rules.find((x) => x.id === id);
+  check(r && r.category === 'safety-monitoring', `${id} is tagged category: safety-monitoring`);
+});
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
