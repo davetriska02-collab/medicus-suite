@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.113.1] — 2026-06-16
+
+### Transactional API onboarding: public JWKS for `private_key_jwt` auth
+
+Groundwork for official Medicus Transactional API access (no runtime/extension
+behaviour change).
+
+- **Added `jwks-public/`** — the public JSON Web Key Set (`.well-known/jwks.json`,
+  RS256) we publish for Medicus to verify our signed JWTs, plus `.nojekyll` so
+  GitHub Pages serves the dotfolder, and a README documenting the auth flow and
+  Pages setup.
+- **Generated an RSA-2048 / RS256 signing key pair.** The **private** key is kept
+  out of the repo entirely; `.gitignore` now blocks `*.pem`, `*.key`,
+  `private-key*`, and `jwks-private/` as a safety guard.
+- JWKS URL (once Pages is enabled on a dedicated `gh-pages` branch):
+  `https://davetriska02-collab.github.io/medicus-suite/.well-known/jwks.json`.
+
 ## [v3.113.0] — 2026-06-16
 
 ### Power-user features (appraisal R4): keyboard tab nav + Condor CSV

@@ -26,3 +26,10 @@ _skill/
 
 # Claude Code agent worktrees (scratch, never commit)
 .claude/worktrees/
+
+# Transactional API signing keys — NEVER commit a private key.
+# The public JWKS lives in jwks-public/; private keys stay out of the repo.
+*.pem
+*.key
+private-key*
+jwks-private/
