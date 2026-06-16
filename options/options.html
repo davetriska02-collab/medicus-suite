@@ -927,6 +927,23 @@
           </div>
 
           <div class="field">
+            <label class="field-label">Practice letterhead (recall letters &amp; SMS)</label>
+            <input type="text" id="letterheadPractice" placeholder="Witley &amp; Milford Surgery" maxlength="120" />
+            <input
+              type="text"
+              id="letterheadClinician"
+              placeholder="Dr D Triska (sign-off name — optional)"
+              maxlength="120"
+              style="margin-top: 6px"
+            />
+            <span class="field-help">
+              Auto-fills the sign-off in Sentinel and Sweep recall letters/SMS. Leave blank to keep the editable
+              <code style="color: var(--text-3)">[Practice name]</code> /
+              <code style="color: var(--text-3)">[Clinician name]</code> placeholders.
+            </span>
+          </div>
+
+          <div class="field">
             <label class="field-label">Guided tour</label>
             <div style="display: flex; align-items: center; gap: 10px">
               <button class="ghost" id="replayTourBtn">Show the tour again</button>

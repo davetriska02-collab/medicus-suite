@@ -85,6 +85,8 @@ window.addEventListener('hashchange', activateSectionFromHash);
 
 const practiceCodeInput = document.getElementById('practiceCode');
 const feedbackEmailInput = document.getElementById('feedbackEmail');
+const letterheadPracticeInput = document.getElementById('letterheadPractice');
+const letterheadClinicianInput = document.getElementById('letterheadClinician');
 const saveSuiteBtn = document.getElementById('saveSuite');
 const suiteSaved = document.getElementById('suiteSaved');
 const codeDetectedRow = document.getElementById('codeDetectedRow');
@@ -108,6 +110,14 @@ const testConnectionResult = document.getElementById('testConnectionResult');
     if (feedbackEmailInput) {
       chrome.storage.local.get(['suite.feedbackEmail'], (res) => {
         feedbackEmailInput.value = res['suite.feedbackEmail'] || '';
+      });
+    }
+    // Load saved practice letterhead (practice name + clinician sign-off)
+    if (letterheadPracticeInput || letterheadClinicianInput) {
+      chrome.storage.local.get(['suite.letterhead'], (res) => {
+        const lh = res['suite.letterhead'] || {};
+        if (letterheadPracticeInput) letterheadPracticeInput.value = lh.practiceName || '';
+        if (letterheadClinicianInput) letterheadClinicianInput.value = lh.clinicianName || '';
       });
     }
     // Try to auto-detect from open Medicus tab
@@ -143,6 +153,10 @@ saveSuiteBtn?.addEventListener('click', async () => {
     'suite.practiceCode': code,
     'submissions.config': { ...existingSubConfig, practiceCode: code },
     'suite.feedbackEmail': (feedbackEmailInput?.value || '').trim(),
+    'suite.letterhead': {
+      practiceName: (letterheadPracticeInput?.value || '').trim(),
+      clinicianName: (letterheadClinicianInput?.value || '').trim(),
+    },
   });
   if (suiteSaved) {
     suiteSaved.classList.add('show');

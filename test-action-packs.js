@@ -221,6 +221,46 @@ async function runTests() {
   check(aggPack && !aggPack.sms, 'buildPatientActions does not produce a patient SMS for a safety-monitoring-only patient');
   check(aggPack && typeof aggPack.task === 'string', 'buildPatientActions still produces the clinician task');
 
+  // ── Letterhead auto-fill: practice/clinician sign-off ───────────────────────
+  console.log('\n--- letterhead auto-fill ---');
+  const lh = { letterhead: { practiceName: 'Witley & Milford Surgery', clinicianName: 'Dr D Triska' } };
+  // Drug chip (has SMS + escalation + letter)
+  const filled = buildChipActions(
+    { type: 'drug-monitoring', status: 'stale', drugName: 'Methotrexate', tests: [{ name: 'FBC', status: 'stale' }] },
+    patient,
+    lh
+  );
+  check(filled.sms.includes('Witley & Milford Surgery'), 'drug SMS uses the configured practice name');
+  check(!filled.sms.includes('[practice name]'), 'drug SMS drops the [practice name] placeholder when set');
+  check(filled.smsEscalation.includes('Witley & Milford Surgery'), 'escalation SMS uses the practice name');
+  check(filled.letter.includes('Dr D Triska'), 'drug letter uses the configured clinician name');
+  check(filled.letter.includes('Witley & Milford Surgery'), 'drug letter uses the practice name');
+  check(!/\[Clinician name\]|\[Practice name\]/.test(filled.letter), 'drug letter drops bracket placeholders when set');
+  // Vaccine letter too
+  const vaxFilled = buildChipActions({ type: 'vaccine', status: 'overdue', displayName: 'RSV vaccine' }, patient, lh);
+  check(vaxFilled.letter.includes('Dr D Triska') && vaxFilled.letter.includes('Witley & Milford Surgery'), 'vaccine letter auto-fills the sign-off');
+  // Fallback: no letterhead → placeholders preserved
+  const unfilled = buildChipActions({ type: 'vaccine', status: 'overdue', displayName: 'RSV vaccine' }, patient);
+  check(unfilled.letter.includes('[Clinician name]') && unfilled.letter.includes('[Practice name]'), 'falls back to placeholders when no letterhead given');
+  check(unfilled.sms.includes('[practice name]'), 'SMS falls back to [practice name] when unset');
+  // Blank/whitespace letterhead → still falls back (no empty sign-off shipped)
+  const blank = buildChipActions({ type: 'vaccine', status: 'overdue', displayName: 'RSV vaccine' }, patient, {
+    letterhead: { practiceName: '   ', clinicianName: '' },
+  });
+  check(blank.letter.includes('[Practice name]'), 'blank practice name falls back to placeholder, never an empty sign-off');
+  // buildPatientActions and buildBatchPack thread the letterhead through
+  const aggFilled = buildPatientActions(
+    [{ type: 'vaccine', status: 'overdue', displayName: 'RSV vaccine' }],
+    patient,
+    lh
+  );
+  check(aggFilled.sms.includes('Witley & Milford Surgery'), 'buildPatientActions threads letterhead into the combined SMS');
+  const batch = buildBatchPack(
+    [{ name: 'Edwards, Margaret', chips: [{ type: 'drug-monitoring', status: 'stale', drugName: 'Methotrexate', tests: [{ name: 'FBC', status: 'stale' }] }] }],
+    lh
+  );
+  check(batch.patients[0].sms.includes('Witley & Milford Surgery'), 'buildBatchPack threads letterhead into batch SMS');
+
   // ── 5. buildPatientActions: deduplication of same blood test ─────────────
   console.log('\n--- buildPatientActions: deduplication ---');
 

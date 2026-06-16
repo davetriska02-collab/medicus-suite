@@ -219,7 +219,7 @@ function showActionPackModal(title, pack) {
 
 // Show a "Copy all actions" modal with the aggregated patient pack.
 function showAllActionsModal(chips, patient) {
-  const pack = buildPatientActions(chips, patient);
+  const pack = buildPatientActions(chips, patient, { letterhead: _letterhead });
   if (!pack) return;
 
   const host = modalHost();
@@ -333,6 +333,7 @@ let _ruleCurrencyFooter = null; // null = not loaded yet
 // Per-rule hide/snooze (sentinel.hiddenRules). Cached at init + refreshed on
 // storage change.
 let _hiddenRules = {};
+let _letterhead = {};
 let _dismissHandler = null;
 let _hiddenStorageListener = null;
 let _actionsHandler = null; // delegated click handler for per-chip Actions buttons
@@ -384,6 +385,14 @@ async function loadHiddenRules() {
   _hiddenRules = r['sentinel.hiddenRules'] || {};
 }
 
+// Practice letterhead ({ practiceName, clinicianName }) used to auto-fill the
+// sign-off in action-pack letters and SMS. Loaded once on init and kept fresh via
+// the storage onChanged listener; passed to buildChipActions/buildPatientActions.
+async function loadLetterhead() {
+  const r = await chrome.storage.local.get('suite.letterhead');
+  _letterhead = r['suite.letterhead'] || {};
+}
+
 // Evidence-panel state: track which chip is open by its data-evidence-key so
 // the 10s poll re-render can restore the panel. _evidenceByKey caches the chip
 // objects from the latest snapshot for lookup on click.
@@ -431,6 +440,7 @@ export async function init(el) {
   loadRuleCurrencyFooter();
 
   await loadHiddenRules();
+  await loadLetterhead();
   // Load brief collapse preference (non-blocking — defaults to expanded).
   chrome.storage.local.get('sentinel.briefCollapsed', (r) => {
     _briefCollapsed = !!r['sentinel.briefCollapsed'];
@@ -496,8 +506,13 @@ export async function init(el) {
 
   // Re-render when hidden rules change (e.g. re-enabled from settings).
   _hiddenStorageListener = (changes, area) => {
-    if (area === 'local' && changes['sentinel.hiddenRules']) {
+    if (area !== 'local') return;
+    if (changes['sentinel.hiddenRules']) {
       _hiddenRules = changes['sentinel.hiddenRules'].newValue || {};
+      refresh();
+    }
+    if (changes['suite.letterhead']) {
+      _letterhead = changes['suite.letterhead'].newValue || {};
       refresh();
     }
   };
@@ -1242,7 +1257,7 @@ function render(payload) {
   actionNeededChips.forEach((chip) => {
     const key = (chip.ruleId || '') + (chip.type === 'drug-monitoring' ? '|' + (chip.drugName || '') : '');
     if (!key) return;
-    const pack = buildChipActions(chip, patient);
+    const pack = buildChipActions(chip, patient, { letterhead: _letterhead });
     if (!pack) return;
     const chipName = chip.drugName || chip.indicatorCode || chip.displayName || chip.ruleName || chip.ruleId || 'chip';
     _chipActionsMap.set(key, { chip, pack, chipName });

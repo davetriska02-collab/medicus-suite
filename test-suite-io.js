@@ -454,6 +454,30 @@ console.log('\n--- applyWithRollback rollback ---');
   const expUnset = await suiteIo.suiteExport();
   assert(expUnset.tabOrder === null, 'suiteExport: unset tabOrder exports as null');
 
+  // ── suite.letterhead round-trip + validation ──────────────────────────────
+  const letterhead = { practiceName: 'Witley & Milford Surgery', clinicianName: 'Dr D Triska' };
+  await suiteIo.suiteImport({ letterhead });
+  assert(
+    JSON.stringify(suiteStore['suite.letterhead']) === JSON.stringify(letterhead),
+    'suiteImport: writes suite.letterhead'
+  );
+  const expLh = await suiteIo.suiteExport();
+  assert(JSON.stringify(expLh.letterhead) === JSON.stringify(letterhead), 'suiteExport: round-trips suite.letterhead');
+  // Reject a non-object letterhead and a non-string field.
+  let lhErr1 = null;
+  try { await suiteIo.suiteImport({ letterhead: 'Witley' }); } catch (e) { lhErr1 = e.message; }
+  assert(lhErr1 && lhErr1.includes('object'), 'suiteImport: rejects non-object letterhead');
+  let lhErr2 = null;
+  try { await suiteIo.suiteImport({ letterhead: { practiceName: 42 } }); } catch (e) { lhErr2 = e.message; }
+  assert(lhErr2 && lhErr2.includes('practiceName'), 'suiteImport: rejects non-string practiceName');
+  assert(
+    JSON.stringify(suiteStore['suite.letterhead']) === JSON.stringify(letterhead),
+    'suiteImport: rejected letterhead leaves prior value untouched'
+  );
+  delete suiteStore['suite.letterhead'];
+  const expLhUnset = await suiteIo.suiteExport();
+  assert(expLhUnset.letterhead === null, 'suiteExport: unset letterhead exports as null');
+
   // ── suite.practiceAcceptedAt round-trip + validation ──────────────────────
   // The single "Accept for practice" flag DOES travel (unlike per-install
   // attestations), so it must round-trip and reject non-ISO values.

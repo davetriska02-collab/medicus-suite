@@ -822,7 +822,9 @@ async function onGenerateBatch() {
   const selectedRows = _lastActionRows.filter((r) => _selectedUuids.has(r.uuid));
   if (selectedRows.length === 0) return;
 
-  const batchPack = buildBatchPack(selectedRows);
+  // Practice letterhead auto-fills the sign-off in the batch recall SMS.
+  const lhr = await chrome.storage.local.get('suite.letterhead');
+  const batchPack = buildBatchPack(selectedRows, { letterhead: lhr['suite.letterhead'] || {} });
   if (!batchPack) return;
 
   // Annotate with meta for the renderer
