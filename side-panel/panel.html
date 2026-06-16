@@ -224,6 +224,22 @@
             </svg>
             <span>Knowledge</span>
           </button>
+          <button class="nav-tab" data-module="record" aria-label="Patient Record (live)">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M19 5v14H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2h12z" />
+              <path d="M9 8h6M9 12h6M9 16h3" />
+            </svg>
+            <span>Record</span>
+          </button>
           <button class="nav-tab" data-module="visualiser" aria-label="Patient Record Visualiser">
             <svg
               width="14"
@@ -416,6 +432,8 @@
     <script src="../shared/chip-renderer.js"></script>
     <script src="../engine/api-client.js"></script>
     <script src="../engine/normalisers.js"></script>
+    <script src="../engine/acb-scores.js"></script>
+    <script src="../engine/stopp-start.js"></script>
     <script src="../engine/ruleset-io.js"></script>
     <script src="../engine/rules-engine.js"></script>
     <script src="../shared/rule-currency.js"></script>

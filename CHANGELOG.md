@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.109.0] — 2026-06-16
+
+### New "Record" tab — a live-first patient summary (PDF deep-dive nested within)
+
+The Patient Record Visualiser is powerful but under-used because it requires
+exporting and loading a record PDF before it shows anything. The new **Record**
+tab removes that wall: open a patient in Medicus and it shows a **live snapshot**
+sourced from the same API the suite already calls — no PDF, no file, no
+drag-and-drop.
+
+- **Live snapshot** of the patient open in Medicus: demographics, coded active
+  problems, current medications (with doses + overdue/review flags), recent
+  results (latest value per test, with above/below-range flags), and
+  deterministic prescribing-safety prompts (anticholinergic burden, STOPP/START)
+  plus the live drug-monitoring and QOF chips the Monitoring engine computes.
+- **Clinical-safety framing is load-bearing, not decoration.** A persistent
+  banner states it is a live snapshot, not a complete record. Allergies,
+  immunisations and consultation history render as explicit **gap-markers**
+  where the data would be — because absence here does NOT mean "none recorded".
+  Every safety score carries an inline caveat that it excludes allergies and uses
+  coded data only. Per-section data-window notes state what each section covers.
+- **The deep view is tiered, not removed.** The full multi-year visualiser
+  (consultation timeline, continuity indices, frailty/comorbidity, letters) opens
+  from the footer button "Open full visualiser", built from an exported record
+  PDF as before.
+- Data path reuses the existing live API client (`engine/api-client.js`
+  `fetchAll`) panel-side; no content-script changes, no new permissions.
+- Available in both the side panel and the pop-out window.
+
 ## [v3.108.0] — 2026-06-16
 
 ### "Select all" for Outstanding Investigation Requests (with safety check)

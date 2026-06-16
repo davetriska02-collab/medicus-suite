@@ -1,0 +1,518 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Record (live) module styles. Built on the suite canon tokens (panel.css):
+   theming (light/dark) and colour-blind remap (--red→orange, --green→blue) are
+   inherited for free — no bespoke per-theme hex. */
+
+.rec-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 12px;
+}
+
+/* head ---------------------------------------------------------------------- */
+.rec-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-deep);
+  padding-bottom: 6px;
+}
+.rec-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rec-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0;
+}
+.rec-refresh {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-3);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
+  cursor: pointer;
+  line-height: 1;
+}
+.rec-refresh:hover {
+  background: var(--bg-hover);
+}
+
+/* source / provenance line — load-bearing, so weighted up from a sub-label */
+.rec-source {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec-source-live {
+  color: var(--green);
+  font-weight: 600;
+}
+.rec-snapshot-word {
+  color: var(--text-4);
+  font-weight: 400;
+  font-style: italic;
+}
+.rec-source-err {
+  color: var(--red);
+  font-weight: 600;
+}
+.rec-source-warn {
+  color: var(--amber);
+  font-weight: 600;
+}
+.rec-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-dim);
+  display: inline-block;
+  flex: none;
+}
+
+/* demographics -------------------------------------------------------------- */
+.rec-demo {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.rec-demo-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.rec-demo-meta {
+  font-size: 12px;
+  opacity: 0.95;
+  margin-top: 2px;
+}
+.rec-demo-nhs,
+.rec-demo-gp {
+  font-size: 11px;
+  opacity: 0.92;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+.rec-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.rec-badge-deceased {
+  background: var(--text-3);
+  color: #fff;
+}
+.rec-badge-test {
+  background: var(--amber);
+  color: #fff;
+}
+
+/* primary safety banner (the one genuine warning) --------------------------- */
+.rec-warn-banner {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-left: 4px solid var(--amber);
+  border-radius: 6px;
+  padding: 8px 10px 8px 32px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+  position: relative;
+}
+.rec-warn-banner::before {
+  content: '⚠';
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  font-size: 14px;
+  color: var(--amber);
+}
+.rec-warn-banner strong {
+  display: block;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.rec-partial {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* gap markers — SOLID caution treatment (a data gap, not a placeholder) ------ */
+.rec-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rec-gap {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--amber-line);
+  border-left: 4px solid var(--amber);
+  border-radius: 6px;
+  padding: 6px 9px 6px 30px;
+  background: var(--amber-dim);
+  position: relative;
+}
+.rec-gap::before {
+  content: '⚠';
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  font-size: 13px;
+  color: var(--amber);
+}
+.rec-gap-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rec-gap-val {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* cards --------------------------------------------------------------------- */
+.rec-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.rec-card-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec-count {
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border-radius: 10px;
+  font-size: 11px;
+  padding: 0 7px;
+  font-weight: 700;
+}
+.rec-window {
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 7px;
+  font-style: italic;
+}
+
+/* score caveat — INFO tier (grey), distinct from the amber warning above ----- */
+.rec-caveat {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 0 0 9px;
+  line-height: 1.4;
+  background: var(--bg-mid);
+  border-left: 3px solid var(--border-hi);
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+.rec-empty {
+  font-size: 12px;
+  color: var(--text-4);
+  list-style: none;
+  padding: 4px 0;
+}
+
+/* lists --------------------------------------------------------------------- */
+.rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* problems */
+.rec-prob {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.rec-prob:last-child {
+  border-bottom: 0;
+}
+.rec-prob-major .rec-prob-name {
+  font-weight: 700;
+}
+.rec-prob-name {
+  color: var(--text-1);
+}
+.rec-prob-date {
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* meds */
+.rec-med {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rec-med:last-child {
+  border-bottom: 0;
+}
+.rec-med-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rec-med-dose {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rec-med-meta {
+  font-size: 10.5px;
+  color: var(--text-4);
+}
+.rec-med-flag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.rec-med-overdue {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.rec-med-review {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+/* results */
+.rec-res {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.rec-res:last-child {
+  border-bottom: 0;
+}
+.rec-res-name {
+  color: var(--text-1);
+}
+.rec-res-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rec-res-date {
+  font-size: 11px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.rec-res-high .rec-res-val {
+  color: var(--red);
+}
+.rec-res-low .rec-res-val {
+  color: var(--accent);
+}
+.rec-res-arrow {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* safety scores ------------------------------------------------------------- */
+.rec-score {
+  border: 1px solid var(--border);
+  border-left-width: 5px;
+  border-radius: 6px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+}
+.rec-score-ok {
+  border-left-color: var(--green);
+}
+.rec-score-mid {
+  border-left-color: var(--amber);
+}
+.rec-score-alert {
+  border-left-color: var(--red);
+}
+.rec-score-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rec-score-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 1;
+}
+.rec-score-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.rec-score-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.rec-score-detail {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.rec-ss-flag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+.rec-ss-stopp {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.rec-ss-start {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+/* footer — sticky so the deep-view launch is always reachable ---------------- */
+.rec-foot {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-deep);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.rec-deep-btn {
+  width: 100%;
+  border: 1px solid var(--accent);
+  background: var(--bg-elev);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.rec-deep-btn:hover {
+  background: var(--accent-dim);
+}
+.rec-deep-sub {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.85;
+  text-transform: none;
+}
+.rec-foot-note {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin: 6px 2px 0;
+  line-height: 1.35;
+}
+
+/* state cards --------------------------------------------------------------- */
+.rec-state {
+  text-align: center;
+  padding: 28px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+.rec-state-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rec-state-msg {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.rec-retry {
+  margin-top: 10px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* skeleton ------------------------------------------------------------------ */
+.rec-skel-head {
+  height: 52px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--bg-mid) 25%, var(--bg-hover) 50%, var(--bg-mid) 75%);
+  background-size: 200% 100%;
+  animation: rec-shimmer 1.2s infinite;
+}
+.rec-skel-row {
+  margin-top: 10px;
+}
+.rec-skel-bar {
+  height: 14px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: linear-gradient(90deg, var(--bg-mid) 25%, var(--bg-hover) 50%, var(--bg-mid) 75%);
+  background-size: 200% 100%;
+  animation: rec-shimmer 1.2s infinite;
+}
+.rec-skel-bar.short {
+  width: 60%;
+}
+@keyframes rec-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rec-skel-head,
+  .rec-skel-bar {
+    animation: none;
+  }
+}
