@@ -2835,6 +2835,15 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.alltabs-hint {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  margin-top: 6px;
+  padding: 6px 6px 2px;
+  border-top: 1px solid var(--border);
+}
 
 .help-popover {
   position: absolute;

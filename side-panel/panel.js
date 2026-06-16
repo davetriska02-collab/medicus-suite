@@ -285,6 +285,7 @@ function buildAllTabsPopoverHTML() {
   return `<div class="alltabs-popover" id="allTabsPopover" role="menu" aria-label="All tabs">
     <div class="alltabs-title">Jump to a tab</div>
     <div class="alltabs-list">${rows}</div>
+    <div class="alltabs-hint">Ctrl+Alt+← / → switches tabs</div>
   </div>`;
 }
 
@@ -343,6 +344,32 @@ function wireAllTabsButton() {
       btn.focus();
     }
   });
+}
+
+// Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
+// the visible in-panel tabs without the mouse. Skipped while typing in a field,
+// and skips Visualiser (it opens a full browser tab, not an in-panel switch).
+function wireTabNavShortcuts() {
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter(
+        (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
+      );
+      if (!tabs.length) return;
+      e.preventDefault();
+      const activeIdx = tabs.findIndex((t) => t.classList.contains('active'));
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      const start = activeIdx === -1 ? 0 : activeIdx;
+      const next = (start + dir + tabs.length) % tabs.length;
+      tabs[next].click();
+    },
+    true
+  );
 }
 
 // ── Nav overflow detection ────────────────────────────────────────────────────
@@ -1613,6 +1640,7 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
 // Wire per-tab help button
 wireHelpButton();
 wireAllTabsButton();
+wireTabNavShortcuts();
 
 // ── Boot — restore last active module ────────────────────────────────────────
 // Read the persisted module name and switch to it, falling back to 'slots' if

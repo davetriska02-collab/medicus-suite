@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.113.0] — 2026-06-16
+
+### Power-user features (appraisal R4): keyboard tab nav + Condor CSV
+
+For the power-user persona who keeps the panel open all day and wants data out
+without the mouse.
+
+- **Keyboard tab navigation.** Ctrl/Cmd+Alt+← / → cycle the visible in-panel
+  tabs without reaching for the mouse. Ignored while typing in a field, and
+  skips the Visualiser tab (which opens a full browser tab rather than switching
+  in-panel). The shortcut is advertised at the foot of the new "All tabs" menu.
+- **Condor CSV export.** Condor previously offered only "Copy figures" (a
+  clipboard dump that can't be scripted or archived). It now has a "↓ CSV"
+  button beside it that downloads the same snapshot figures (PPI, demand,
+  capacity, waiting room, urgent, submissions, with an "as at" time) as a real
+  file, reusing the shared export helper. No data leaves the browser.
+
 ## [v3.112.0] — 2026-06-16
 
 ### "All tabs" menu — every tab reachable by name in one click (G1)

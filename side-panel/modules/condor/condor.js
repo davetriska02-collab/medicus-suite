@@ -2,7 +2,7 @@
 'use strict';
 import { fetchAllStreams } from './condor-data.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
-import { copyText } from '../shared/export-util.js';
+import { copyText, downloadCsv } from '../shared/export-util.js';
 import { buildSnapshotRow, saveSnapshot, localISO } from './report/report-data.js';
 // Card renderers loaded dynamically so module works even before card files land
 
@@ -142,6 +142,26 @@ function buildSnapshot(data) {
   ].join('\n');
 }
 
+// Same figures as buildSnapshot, shaped for a CSV file (power-user finding R4:
+// a clipboard dump can't be scripted/archived — this is a real downloadable file).
+function buildSnapshotCsv(data) {
+  const idx = computeIndex(data);
+  const submissionsTotal = data.submissions?.totals?.all ?? 0;
+  const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const bandText = idx.floored ? `${idx.band} (floored from ${idx.rawBand})` : idx.band;
+  const header = ['Metric', 'Value', 'Note'];
+  const rows = [
+    ['Snapshot as at', now, ''],
+    ['PPI', `${idx.ppi}/100`, bandText],
+    ['Demand (medical + admin)', idx.demandCount, ''],
+    ['Capacity (slots free)', idx.capacityCount, CAPACITY_LABEL[idx.capacityState]],
+    ['Waiting room arrived', idx.arrivedCount, ''],
+    ['Urgent', idx.urgentCount, ''],
+    ['Submissions total today', submissionsTotal, ''],
+  ];
+  return { header, rows };
+}
+
 // Leading component line — so the user reads "Demand 115 · Capacity 50 · Over
 // capacity" with the (floored) band colour BEFORE the green-looking dial, rather
 // than trusting a gauge that under-weights capacity.
@@ -232,6 +252,7 @@ async function poll() {
         <div class="condor-ts">
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
           <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
+          <button class="ghost-btn condor-copy-btn" id="condorCsvBtn" title="Download these figures as a CSV file">↓ CSV</button>
         </div>
         <div class="condor-report-strip">
           <span class="condor-report-label">Practice report</span>
@@ -284,6 +305,12 @@ export async function init(el) {
 
   // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML
   _container.addEventListener('click', async (e) => {
+    const csvBtn = e.target.closest('#condorCsvBtn');
+    if (csvBtn && _lastData) {
+      const { header, rows } = buildSnapshotCsv(_lastData);
+      downloadCsv(`condor-snapshot-${new Date().toISOString().slice(0, 10)}.csv`, header, rows);
+      return;
+    }
     const btn = e.target.closest('#condorCopyBtn');
     if (!btn || !_lastData) return;
     const ok = await copyText(buildSnapshot(_lastData));
