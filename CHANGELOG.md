@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.3] — 2026-06-16
+
+### Capacity: day view sorts available slot types to the top
+
+The day-view "Slot types in preset" breakdown listed every preset slot type in a fixed
+order and painted every zero-count one with an alarming red **FULL** badge — so a preset
+with a few live slot types and many dormant ones rendered as a wall of red, burying the
+ones that actually have availability. A zero count can mean *fully booked* **or** *not
+offered today* (the scheduling API only reports free slots, so the two are
+indistinguishable), making "FULL" actively misleading.
+
+Now the breakdown **sorts slot types with availability to the top** (most free slots
+first), then groups the zero-count ones quietly at the bottom under a **"Not available"**
+subheading — muted, de-emphasised, em-dash count, no red. Added a small empty state for
+when nothing in the preset has availability. Presentation only; no change to the counts
+or capacity maths.
+
 ## [v3.110.2] — 2026-06-16
 
 ### CQC Inspection Readiness: discoverable from Settings

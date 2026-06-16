@@ -347,10 +347,6 @@ html[data-theme='dark'] .cap-status-tight {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
 }
-.cap-type-row.cap-type-full {
-  background: var(--red-dim);
-  border-color: var(--red-line);
-}
 .cap-type-name {
   font-size: 11px;
   color: var(--text-2);
@@ -362,13 +358,40 @@ html[data-theme='dark'] .cap-status-tight {
   color: var(--green);
   font-variant-numeric: tabular-nums;
 }
-.cap-type-full .cap-type-count {
-  color: var(--red);
-  font-size: 10px;
-  letter-spacing: 0.1em;
+
+/* Subheading separating the "not available" group from the live ones */
+.cap-type-subhead {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-5);
+  margin: 8px 0 1px;
+  padding: 0 2px;
 }
-.cap-type-full .cap-type-name {
-  color: var(--text-3);
+
+/* No-availability rows: muted, de-emphasised, never alarming red */
+.cap-type-row.cap-type-none {
+  background: transparent;
+  border-color: var(--border);
+  opacity: 0.65;
+}
+.cap-type-none .cap-type-name {
+  color: var(--text-4);
+}
+.cap-type-none .cap-type-count {
+  color: var(--text-4);
+  font-weight: 500;
+}
+
+/* Shown when nothing in the preset has availability */
+.cap-type-empty {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 6px 9px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
 
 /* Staff rows */

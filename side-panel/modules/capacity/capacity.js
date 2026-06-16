@@ -329,25 +329,39 @@ function renderDayView(preset) {
     `;
   }
 
-  // Per-type breakdown — show all preset slot types, even those at zero
+  // Per-type breakdown — slot types with availability first (most free slots at
+  // the top), then the ones with none grouped quietly at the bottom. A zero
+  // count can mean "fully booked" OR "not offered today" — the API only reports
+  // free slots, so we can't tell them apart; label it neutrally as no availability
+  // rather than the alarming "FULL".
   let breakdown = '';
   if (agg) {
-    const typeRows = preset.slotTypes
-      .map((type) => {
-        const count = agg.byType[type] || 0;
-        const isFull = count === 0;
-        return `
-        <div class="cap-type-row${isFull ? ' cap-type-full' : ''}">
-          <span class="cap-type-name">${escHtml(type)}</span>
-          <span class="cap-type-count">${isFull ? 'FULL' : count}</span>
-        </div>
-      `;
-      })
-      .join('');
+    const rows = preset.slotTypes.map((type) => ({ type, count: agg.byType[type] || 0 }));
+    const available = rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
+    const unavailable = rows.filter((r) => r.count === 0).sort((a, b) => a.type.localeCompare(b.type));
+
+    const availRow = (r) => `
+        <div class="cap-type-row">
+          <span class="cap-type-name">${escHtml(r.type)}</span>
+          <span class="cap-type-count">${r.count}</span>
+        </div>`;
+    const noneRow = (r) => `
+        <div class="cap-type-row cap-type-none">
+          <span class="cap-type-name">${escHtml(r.type)}</span>
+          <span class="cap-type-count">—</span>
+        </div>`;
+
+    const availHtml = available.length
+      ? available.map(availRow).join('')
+      : `<div class="cap-type-empty">No slot types have availability ${isToday ? 'remaining today' : 'on this day'}.</div>`;
+    const noneHtml = unavailable.length
+      ? `<div class="cap-type-subhead">Not available (${unavailable.length})</div>${unavailable.map(noneRow).join('')}`
+      : '';
+
     breakdown = `
       <section class="cap-section">
         <div class="section-label">Slot types in preset</div>
-        <div class="cap-type-list">${typeRows}</div>
+        <div class="cap-type-list">${availHtml}${noneHtml}</div>
       </section>
     `;
   }
