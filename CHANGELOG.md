@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.106.0] — 2026-06-16
+## [v3.107.0] — 2026-06-16
 
 ### Practice letterhead: recall letters and SMS auto-fill the sign-off
 
@@ -23,6 +23,29 @@ going out un-filled.
 
 Tests: extended `test-action-packs.js` (substitution, fallback, blank-guard,
 aggregate + batch threading) and `test-suite-io.js` (letterhead round-trip + validation).
+
+## [v3.106.0] — 2026-06-16
+
+### Practice Report: power-user roadmap items
+
+Lands the three deferred power-user items from the Practice Report appraisals.
+
+- **Sortable per-clinician table.** Click (or keyboard-activate) any column header in
+  the management Activity table to sort by that metric, clinician name, or total; click
+  again to flip direction. A view-only aid — it never changes what data was fetched, and
+  the aggregate-only rule for Staff/ICB is unaffected (those profiles have no per-clinician
+  table to sort).
+- **Demand as a percentage.** The demand by-type breakdown now carries a "% of total"
+  column alongside the count.
+- **Section show/hide toggles.** A "Sections" row in the controls lets you show or hide
+  any section for the current view, overriding the audience profile's defaults (e.g. add
+  the live snapshot to an ICB view). Display-only and cannot expose per-clinician data —
+  `applyProfile` has already stripped it upstream; toggles only change visibility.
+
+All three are threaded through an optional `view` argument to `buildReportHtml`
+(`{ sort, sections }`), so the print/CSV paths and existing callers are unchanged.
+Regression-tested (sort order, section override, the privacy invariant still holds).
+Full suite 75/75; eslint + prettier clean; verified via the harness.
 
 ## [v3.105.0] — 2026-06-16
 

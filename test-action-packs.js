@@ -260,7 +260,6 @@ async function runTests() {
     lh
   );
   check(batch.patients[0].sms.includes('Witley & Milford Surgery'), 'buildBatchPack threads letterhead into batch SMS');
-
   // ── 5. buildPatientActions: deduplication of same blood test ─────────────
   console.log('\n--- buildPatientActions: deduplication ---');
 

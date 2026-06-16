@@ -435,3 +435,51 @@ body {
     margin: 14mm;
   }
 }
+
+/* ── Power-user view controls (roadmap) ───────────────────────────────────── */
+/* Sortable per-clinician table headers. */
+.pr-table th.pr-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.pr-table th.pr-sortable:hover {
+  color: var(--nhs-blue);
+}
+.pr-table th.pr-sortable:focus-visible {
+  outline: 2px solid var(--nhs-blue);
+  outline-offset: -2px;
+}
+/* Section show/hide toggles in the controls bar. */
+.pr-sections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  max-width: 900px;
+  margin: 8px auto 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text2);
+}
+.pr-sections-label {
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pr-sec-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+@media print {
+  .pr-sections {
+    display: none !important;
+  }
+  .pr-table th.pr-sortable {
+    cursor: default;
+  }
+}
