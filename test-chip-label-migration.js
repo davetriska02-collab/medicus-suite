@@ -33,16 +33,11 @@ function check(cond, msg) {
 function extractMigration(file) {
   const src = fs.readFileSync(file, 'utf8');
   const tableMatch = src.match(/const RETIRED_CHIP_LABELS = \{[\s\S]*?\n {2}\};/);
-  const fnMatch = src.match(
-    /const revertRetiredChipLabels = \(chips, shippedChips\) => \{[\s\S]*?\n {2}\};/
-  );
+  const fnMatch = src.match(/const revertRetiredChipLabels = \(chips, shippedChips\) => \{[\s\S]*?\n {2}\};/);
   if (!tableMatch || !fnMatch) return null;
   const sandbox = {};
   vm.runInNewContext(
-    tableMatch[0] +
-      '\n' +
-      fnMatch[0] +
-      '\nthis.RETIRED = RETIRED_CHIP_LABELS;\nthis.revert = revertRetiredChipLabels;',
+    tableMatch[0] + '\n' + fnMatch[0] + '\nthis.RETIRED = RETIRED_CHIP_LABELS;\nthis.revert = revertRetiredChipLabels;',
     sandbox
   );
   return { table: sandbox.RETIRED, revert: sandbox.revert };
@@ -97,7 +92,7 @@ if (content && options) {
   // 1. Behaviour — revert un-sticks a stored OLD label back to the current shipped label.
   {
     const stored = {
-      'queue.resultUrgent': { enabled: true, label: 'Urgent: {name}', kind: 'red', actions: [] }
+      'queue.resultUrgent': { enabled: true, label: 'Urgent: {name}', kind: 'red', actions: [] },
     };
     content.revert(stored, shippedChips);
     check(
@@ -108,13 +103,10 @@ if (content && options) {
   {
     // A genuine user customisation (label they typed) must be left untouched.
     const stored = {
-      'queue.resultUrgent': { enabled: true, label: 'MY OWN LABEL', kind: 'red', actions: [] }
+      'queue.resultUrgent': { enabled: true, label: 'MY OWN LABEL', kind: 'red', actions: [] },
     };
     content.revert(stored, shippedChips);
-    check(
-      stored['queue.resultUrgent'].label === 'MY OWN LABEL',
-      'revert: a genuine custom label is left untouched'
-    );
+    check(stored['queue.resultUrgent'].label === 'MY OWN LABEL', 'revert: a genuine custom label is left untouched');
   }
   {
     // A chip not in the retired table is untouched even if its label looks unusual.
@@ -129,8 +121,8 @@ if (content && options) {
         enabled: false,
         label: 'Urgent: {name} — {rule}',
         kind: 'red',
-        actions: []
-      }
+        actions: [],
+      },
     };
     content.revert(stored, shippedChips);
     check(
@@ -180,7 +172,7 @@ if (contentBF && optionsBF) {
 
   // Every backfill id must be a shipped builtin that actually carries a non-empty abnormalText.
   for (const id of contentBF.ids) {
-    const r = shippedRR.find(x => x.id === id);
+    const r = shippedRR.find((x) => x.id === id);
     check(
       r && r.builtin === true && Array.isArray(r.abnormalText) && r.abnormalText.length > 0,
       `backfill id "${id}" is a shipped builtin with a non-empty abnormalText`
@@ -191,7 +183,7 @@ if (contentBF && optionsBF) {
   {
     const held = [{ id: 'msu-culture', builtin: true, kind: 'text', normalText: ['no growth'] }];
     contentBF.backfill(held, shippedRR);
-    const shippedMsu = shippedRR.find(r => r.id === 'msu-culture');
+    const shippedMsu = shippedRR.find((r) => r.id === 'msu-culture');
     check(
       Array.isArray(held[0].abnormalText) &&
         JSON.stringify(held[0].abnormalText) === JSON.stringify(shippedMsu.abnormalText),
@@ -201,7 +193,7 @@ if (contentBF && optionsBF) {
   // A held builtin with the user's OWN abnormalText is NOT clobbered.
   {
     const held = [
-      { id: 'msu-culture', builtin: true, kind: 'text', normalText: ['no growth'], abnormalText: ['my own flag'] }
+      { id: 'msu-culture', builtin: true, kind: 'text', normalText: ['no growth'], abnormalText: ['my own flag'] },
     ];
     contentBF.backfill(held, shippedRR);
     check(
@@ -225,6 +217,160 @@ if (contentBF && optionsBF) {
       threw = true;
     }
     check(!threw, 'backfill: empty/null held set is a safe no-op');
+  }
+}
+
+// ── Result-rule label/threshold revert migration (lock-step + behaviour) ──────
+// v17 surfaced each numeric trigger in the result-chip label and lowered the Hb critical
+// red 100→80 (CSO-approved). The resultRules merge is append-by-id only, so a held builtin
+// keeps its OLD label/threshold forever. revertRetiredResultRuleFields un-sticks them, but
+// ATOMICALLY per id: it only updates a rule when EVERY listed field still equals a retired
+// value (the user hasn't customised it), so it never clobbers a user edit and never leaves a
+// label that disagrees with the live threshold. This pins lock-step + that behaviour.
+function extractRRFields(file) {
+  const src = fs.readFileSync(file, 'utf8');
+  const tableMatch = src.match(/const RETIRED_RESULTRULE_FIELDS = \{[\s\S]*?\n {2}\};/);
+  const fnMatch = src.match(
+    /const revertRetiredResultRuleFields = \(resultRules, shippedResultRules\) => \{[\s\S]*?\n {2}\};/
+  );
+  if (!tableMatch || !fnMatch) return null;
+  const sandbox = {};
+  vm.runInNewContext(
+    tableMatch[0] +
+      '\n' +
+      fnMatch[0] +
+      '\nthis.table = RETIRED_RESULTRULE_FIELDS;\nthis.revert = revertRetiredResultRuleFields;',
+    sandbox
+  );
+  return { table: sandbox.table, revert: sandbox.revert };
+}
+
+const contentRR = extractRRFields(contentPath);
+const optionsRR = extractRRFields(optionsPath);
+check(!!contentRR, 'RETIRED_RESULTRULE_FIELDS + revertRetiredResultRuleFields extracted from content.js');
+check(!!optionsRR, 'RETIRED_RESULTRULE_FIELDS + revertRetiredResultRuleFields extracted from options.js');
+
+if (contentRR && optionsRR) {
+  // Lock-step: the two tables must be identical.
+  check(
+    JSON.stringify(contentRR.table) === JSON.stringify(optionsRR.table),
+    'content.js and options.js RETIRED_RESULTRULE_FIELDS tables are identical (lock-step)'
+  );
+
+  const shippedRR2 = require(path.join(__dirname, 'defaults.json')).resultRules || [];
+
+  // Every id must be a shipped builtin, and every retired value must be OLD — the CURRENT
+  // shipped value must NOT appear in any retired list (else we'd thrash a live default).
+  for (const id of Object.keys(contentRR.table)) {
+    const r = shippedRR2.find((x) => x.id === id);
+    check(r && r.builtin === true, `RETIRED_RESULTRULE id "${id}" is a shipped builtin`);
+    if (!r) continue;
+    for (const field of Object.keys(contentRR.table[id])) {
+      check(
+        contentRR.table[id][field].indexOf(r[field]) === -1,
+        `current shipped ${field} for "${id}" (${JSON.stringify(r[field])}) is NOT in its retired list`
+      );
+    }
+  }
+
+  // The specific regression: Hb retires the old label AND the old red 100, and is now ≤80.
+  check(
+    (contentRR.table['base-low-haemoglobin'] || {}).red &&
+      contentRR.table['base-low-haemoglobin'].red.indexOf(100) !== -1,
+    'base-low-haemoglobin retires the old red threshold 100'
+  );
+  check(
+    (shippedRR2.find((r) => r.id === 'base-low-haemoglobin') || {}).red === 80,
+    'current shipped base-low-haemoglobin red is 80 (CSO-lowered from 100)'
+  );
+
+  // Behaviour: a held builtin still at the OLD label+red is brought fully up to date.
+  {
+    const held = [
+      {
+        id: 'base-low-haemoglobin',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'below',
+        label: 'Critical low haemoglobin',
+        red: 100,
+        unit: 'g/L',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    const shipped = shippedRR2.find((r) => r.id === 'base-low-haemoglobin');
+    check(
+      held[0].label === shipped.label && held[0].red === 80,
+      'revert: held old Hb rule gets the new numbered label AND red 80'
+    );
+  }
+  // A label-only rule (no red entry) gets its number-bearing label.
+  {
+    const held = [
+      { id: 'base-high-inr', builtin: true, kind: 'threshold', comparator: 'above', label: 'High INR', red: 8 },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].label === shippedRR2.find((r) => r.id === 'base-high-inr').label && held[0].red === 8,
+      'revert: held old INR rule gets the numbered label, red untouched'
+    );
+  }
+  // ATOMIC: a user-customised label means the WHOLE rule is left alone (incl. its red).
+  {
+    const held = [
+      {
+        id: 'base-low-haemoglobin',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'below',
+        label: 'MY OWN HB LABEL',
+        red: 100,
+        unit: 'g/L',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].label === 'MY OWN HB LABEL' && held[0].red === 100,
+      'revert: a user-customised label leaves the entire rule untouched (atomic, no desync)'
+    );
+  }
+  // ATOMIC: old label but a user-customised red → leave alone (don't relabel to a wrong number).
+  {
+    const held = [
+      {
+        id: 'base-low-haemoglobin',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'below',
+        label: 'Critical low haemoglobin',
+        red: 90,
+        unit: 'g/L',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].label === 'Critical low haemoglobin' && held[0].red === 90,
+      'revert: old label but custom red is left untouched (atomic — no label/threshold desync)'
+    );
+  }
+  // A non-builtin sharing the id is not touched.
+  {
+    const held = [
+      { id: 'base-high-inr', builtin: false, kind: 'threshold', comparator: 'above', label: 'High INR', red: 8 },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(held[0].label === 'High INR', 'revert: a non-builtin sharing the id is not touched');
+  }
+  // Empty / null held set is a safe no-op.
+  {
+    let threw = false;
+    try {
+      contentRR.revert([], shippedRR2);
+      contentRR.revert(null, shippedRR2);
+    } catch (e) {
+      threw = true;
+    }
+    check(!threw, 'revert: empty/null held set is a safe no-op');
   }
 }
 
