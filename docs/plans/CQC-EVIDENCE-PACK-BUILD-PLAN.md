@@ -166,3 +166,55 @@ confidence.
 Build **P1 (readiness check, internal)** — it needs no cohort enumeration, is the mode the
 panel wants first, and turns the existing rule-currency/Keeper provenance into a credible
 artefact. Run the **P0 spike** in parallel to decide whether the P2/P3 counts are in reach.
+
+## 10. Panel verdict on the BUILT P1 (synthetic) — v3.108.0
+
+The shipped P1 went back to all four personas (screenshots of the real surface:
+readiness light/dark, export gated + confirmed). **They endorse it** — mean ≈ 7.6, all
+four would use it — and confirmed the two headline wins: **the gated export** (Margaret:
+"the gate alone is worth the feature — I won't accidentally hand an inspector rough work")
+and **coverage honesty before the reassuring numbers** (Eileen: "the ordering is correct,
+limitations not buried"). Scores vs the plan: Margaret 7→**8**, Eileen 8→**8.5**, Janet
+9→**7**, Raj 9→**7** (the two domain experts scrutinise the built detail harder than the
+plan promise — their drops are specific, fixable asks, not regressions).
+
+A tight **P1.1 polish pass** — mostly surfacing data that already exists; no redesign:
+
+- **F1 · "Last reviewed" must be prominent and honestly worded (3 personas — top).** The
+  currency date renders as "updated {date}" in the manifest tiles, but the engine's prose
+  already says "reviewed against current BNF/NICE/MHRA guidance". Make it consistent and
+  promote it: a top-line "**Safety rules last reviewed against BNF/NICE/MHRA: {date}
+  (via The Keeper)**" on both the readiness verdict badge and the export. Eileen's point is
+  the sharp one: *"verified" not "updated"* — the difference between clinically checked and
+  merely edited. The Keeper provenance + `specVersion` already support the honest wording.
+- **F2 · Per-rule-set guidance citation (Raj).** Surface each rule-set's source/version
+  line in the manifest (drug `specVersion` "Sentinel drug rules — June 2026 review" + the
+  BNF/NICE/MHRA `sourceNotes`), so "reviewed against guidance" is evidence, not assertion.
+- **F3 · Make "system, not patient counts" unmissable.** The manifest already labels counts
+  as "N rules"/"N indicators" (Janet's "100 patients" / Eileen's "34 labs" were thumbnail
+  misreads) — but the misread is the signal: add a one-liner that this reports on the
+  monitoring *system in use*, not patient counts (those are P2, gated on the spike).
+- **F4 · Bold the coded-data "floor not ceiling" caveat (Raj/Eileen)** — present but
+  small-print; promote it to a visible callout. And label the vaccine count as
+  *surveillance*, not drug-monitoring, so it doesn't inflate the safety impression (Raj).
+- **F5 · Date the verdict badge; role-label the sign-off (Janet/Margaret)** — "Practice
+  Manager / Responsible GP" on the export sign-off; "as at {date}" on the readiness badge.
+- **F6 · Clarify the baseline/delta affordance (Janet)** — the delta renders only once a
+  baseline exists (working as designed; the test had none). Make "Save as baseline" copy
+  say the next run will show what changed; consider a "no baseline yet" hint.
+
+Deferred to P2+ (correctly out of P1 — no patient data by design): **patient-level
+reconciliation / named lists** (Eileen/Janet — gated on the cohort spike) and
+**chase-attempt history** (Eileen — A4). A visible **red/"not ready" example** would also
+reassure (Janet) — surface once a failing rule-set exists.
+
+**Verdict:** P1 is endorsed and ship-worthy; F1–F5 are a small labelling/prominence pass
+(design-crit-sized) that the domain experts say turns a 7 into a 9. F1 is the one that
+matters most — say *reviewed/verified*, prominently, with the date.
+
+## 8b. Recommended next step
+
+Do the **P1.1 polish pass (F1–F5)** — small labelling/prominence work, F1 first
+(prominent "reviewed/verified against BNF/NICE/MHRA: {date} via The Keeper"). Then the
+**P0 cohort-enumeration spike** decides whether P2 patient-level counts (and the
+reconciliation Janet/Eileen want) are reachable.
