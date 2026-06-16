@@ -218,6 +218,19 @@ function buildCommands() {
     });
   }
 
+  // Edit the numeric alert thresholds (waiting-room minutes + demand counts).
+  // Panel-only — the strips these tune live in the docked panel.
+  if (document.getElementById('wrStrip')) {
+    cmds.push({
+      id: 'alerts:thresholds',
+      label: 'Edit alert thresholds…',
+      group: 'View',
+      keywords: 'alert threshold waiting room minutes demand amber red tune configure level limit',
+      icon: GENERIC_ICONS.settings,
+      run: () => import('../thresholds/thresholds.js').then((m) => m.openThresholds()),
+    });
+  }
+
   // Options sections — deep links straight to the right settings page.
   for (const [sect, label, keywords] of OPTIONS_SECTIONS) {
     cmds.push({

@@ -2585,3 +2585,89 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .suite-tabs-done:hover {
   background: var(--accent-hover);
 }
+
+/* ── Alert-threshold editor (reuses the suite-tabs-* sheet scaffolding) ──────── */
+.thresh-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.thresh-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.thresh-section-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.thresh-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.thresh-enable input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.thresh-fields {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.thresh-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.thresh-field--amber > span:first-child {
+  color: var(--amber);
+}
+.thresh-field--red > span:first-child {
+  color: var(--red);
+}
+.thresh-field input[type='number'] {
+  width: 56px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 6px;
+  text-align: center;
+}
+.thresh-field input[type='number']:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.thresh-unit {
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.thresh-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-decoration: none;
+}
+.thresh-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}

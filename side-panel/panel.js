@@ -723,6 +723,31 @@ let WR_API = null;
 const WR_POLL_MS = 30 * 1000;
 const wrStripEl = document.getElementById('wrStrip');
 
+// Waiting-room alert thresholds (minutes). User-configurable via the alert-threshold
+// editor (suite.waitingRoom.thresholds); defaults match the long-standing fixed
+// values. Cached to avoid a storage read per poll; kept current via onChanged.
+const DEFAULT_WR_THRESHOLDS = { amber: 10, red: 20 };
+let _wrThresholds = { ...DEFAULT_WR_THRESHOLDS };
+
+function _sanitiseWrThresholds(raw) {
+  const d = DEFAULT_WR_THRESHOLDS;
+  if (!raw || typeof raw !== 'object') return { ...d };
+  const amber = Number.isFinite(raw.amber) && raw.amber > 0 ? Math.round(raw.amber) : d.amber;
+  const red = Number.isFinite(raw.red) && raw.red > 0 ? Math.round(raw.red) : d.red;
+  // Red must be at least amber to be meaningful; an inverted pair falls back to defaults.
+  return red >= amber ? { amber, red } : { ...d };
+}
+
+chrome.storage.local.get('suite.waitingRoom.thresholds').then((r) => {
+  _wrThresholds = _sanitiseWrThresholds(r['suite.waitingRoom.thresholds']);
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.waitingRoom.thresholds' in changes) {
+    _wrThresholds = _sanitiseWrThresholds(changes['suite.waitingRoom.thresholds'].newValue);
+    fetchAndRenderStrip(true);
+  }
+});
+
 let wrPoller = null;
 
 async function fetchAndRenderStrip(bypassCache = false) {
@@ -785,7 +810,8 @@ function renderStrip(patients) {
   }
 
   const maxWait = Math.max(...patients.map((p) => p.minutesWaiting ?? 0));
-  const urgency = maxWait >= 20 ? 'red' : maxWait >= 10 ? 'amber' : 'green';
+  const T = _wrThresholds;
+  const urgency = maxWait >= T.red ? 'red' : maxWait >= T.amber ? 'amber' : 'green';
 
   // Build name chips — show up to 3, then "+N more"
   const shown = patients.slice(0, 3);
@@ -794,7 +820,7 @@ function renderStrip(patients) {
     .map((p) => {
       const mins = p.minutesWaiting;
       const cls =
-        mins != null && mins >= 20 ? 'wr-chip-red' : mins != null && mins >= 10 ? 'wr-chip-amber' : 'wr-chip-ok';
+        mins != null && mins >= T.red ? 'wr-chip-red' : mins != null && mins >= T.amber ? 'wr-chip-amber' : 'wr-chip-ok';
       const wait = mins != null ? ` · ${mins}m` : '';
       return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
     })
@@ -826,7 +852,7 @@ function renderStrip(patients) {
     title:
       `Waiting room: ${patients.length} patient${patients.length === 1 ? '' : 's'} arrived` +
       (maxWait > 0 ? `, longest waiting ${maxWait} min` : '') +
-      (urgency === 'red' ? ' (red ≥20 min)' : urgency === 'amber' ? ' (amber ≥10 min)' : ''),
+      (urgency === 'red' ? ` (red ≥${T.red} min)` : urgency === 'amber' ? ` (amber ≥${T.amber} min)` : ''),
   });
 }
 

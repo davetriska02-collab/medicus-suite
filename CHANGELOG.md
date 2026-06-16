@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.98.0] — 2026-06-16
+
+### Editable alert thresholds from the command palette
+
+The roll-up's amber/red lines are now tunable without hunting through Options. A
+new palette command, "Edit alert thresholds…", opens an inline editor for the
+numeric thresholds:
+
+- **Waiting room** — the minutes a patient has waited before the strip goes amber,
+  then red, are now **user-configurable** (previously fixed at 10 / 20). Stored in
+  `suite.waitingRoom.thresholds`, backed up, and applied live.
+- **Demand** — the per-day medical/admin request counts (and their on/off toggle),
+  the same values as Options › Submissions, editable here too.
+- **Triage** uses a rules engine rather than a numeric pair, so the editor links
+  out to its existing Options editor instead of half-reimplementing it.
+
+Edits apply immediately (the strips re-render on the storage change); the editor
+refuses an inverted pair (red must be at least amber). Panel-only, since the
+strips it tunes live in the docked panel.
+
 ## [v3.97.1] — 2026-06-15
 
 ### Gap-to-9 quick wins on the alert roll-up

@@ -17,6 +17,7 @@ const SUITE_KEYS = [
   'suite.hiddenTabs',
   'suite.practiceAcceptedAt',
   'suite.rollup.alwaysExpanded',
+  'suite.waitingRoom.thresholds',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -38,6 +39,8 @@ async function suiteExport() {
     practiceAcceptedAt: r['suite.practiceAcceptedAt'] ?? null,
     // UI pref: keep the alert roll-up pinned open. Boolean; absent == default (false).
     rollupAlwaysExpanded: r['suite.rollup.alwaysExpanded'] ?? null,
+    // Waiting-room alert thresholds in minutes ({ amber, red }); absent == defaults.
+    waitingRoomThresholds: r['suite.waitingRoom.thresholds'] ?? null,
   };
 }
 
@@ -83,6 +86,13 @@ async function suiteImport(data) {
       throw new Error('suite.rollup.alwaysExpanded must be a boolean.');
     }
     toSet['suite.rollup.alwaysExpanded'] = data.rollupAlwaysExpanded;
+  }
+  if (data.waitingRoomThresholds != null) {
+    const w = data.waitingRoomThresholds;
+    if (typeof w !== 'object' || Array.isArray(w) || !Number.isFinite(w.amber) || !Number.isFinite(w.red)) {
+      throw new Error('suite.waitingRoom.thresholds must be an object with numeric amber and red.');
+    }
+    toSet['suite.waitingRoom.thresholds'] = { amber: w.amber, red: w.red };
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
