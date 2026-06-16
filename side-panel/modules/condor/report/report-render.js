@@ -22,8 +22,8 @@ const DEMAND_LABELS = {
 
 const ACTIVITY_LABELS = {
   consultations: 'Consultations',
-  routinePrescriptionRequestTasks: 'Routine Rx',
-  nonRoutinePrescriptionRequestTasks: 'Non-routine Rx',
+  routinePrescriptionRequestTasks: 'Routine prescriptions',
+  nonRoutinePrescriptionRequestTasks: 'Non-routine prescriptions',
   medicationReviews: 'Medication reviews',
   documentTasks: 'Documents',
   investigationReportTasks: 'Results',
@@ -90,6 +90,29 @@ function statTile(label, value, sub = '') {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
+// (3) Leading plain-English period summary — demand vs capacity in one sentence.
+function renderSummary(report) {
+  const requests = report.demand?.summary?.totals?.all;
+  if (requests == null) return '';
+  const days = Array.isArray(report.capacity?.byDay) ? report.capacity.byDay : [];
+  const slots = days.reduce((acc, x) => acc + (x.slots || 0), 0);
+  if (!slots) return '';
+  let verdict;
+  if (requests > slots) {
+    verdict = 'demand was above capacity';
+  } else if (requests < slots * 0.8) {
+    verdict = 'capacity comfortably exceeded demand';
+  } else {
+    verdict = 'demand was broadly in line with capacity';
+  }
+  const label = esc(report.range?.label || 'period');
+  return (
+    `<section class="pr-summary">` +
+    `<p>${label}: ${esc(String(requests))} requests against ${esc(String(slots))} scheduled slots &mdash; ${esc(verdict)}.</p>` +
+    `</section>`
+  );
+}
+
 function renderCover(report) {
   const r = report.range || {};
   return (
@@ -108,27 +131,31 @@ function renderCover(report) {
 function renderCurrentSnapshot(report) {
   const s = report.currentSnapshot;
   if (!s) return '';
+  const stamp = report.generatedAt ? `as at ${fmtTime(report.generatedAt)}` : '';
   const tiles = [];
-  if (typeof s.ppi === 'number') tiles.push(statTile('Pressure index', `${s.ppi}/100`, s.band || ''));
+  // (1) Lead the tile with the BAND WORD so the eye reads "AMBER" first, not "25".
+  if (typeof s.ppi === 'number') tiles.push(statTile('Pressure', s.band || '—', `index ${s.ppi}/100`));
   if (s.demand != null) tiles.push(statTile('Requests today', s.demand));
-  if (s.slotsRemaining != null) tiles.push(statTile('Slots free now', s.slotsRemaining));
-  if (s.waitingArrived != null) tiles.push(statTile('In waiting room', s.waitingArrived));
+  // (2) Per-tile "as at" for point-in-time stale-able figures (R2).
+  if (s.slotsRemaining != null) tiles.push(statTile('Slots free now', s.slotsRemaining, stamp));
+  if (s.waitingArrived != null) tiles.push(statTile('In waiting room', s.waitingArrived, stamp));
   if (s.urgent != null) tiles.push(statTile('Urgent tasks', s.urgent));
   if (!tiles.length) return '';
-  const stamp = report.generatedAt ? `as at ${fmtTime(report.generatedAt)}` : '';
-  // C1: explain the index scale, and why a low index can read AMBER (capacity floor).
-  let key = '';
-  if (typeof s.ppi === 'number') {
-    key = `<p class="pr-note">Pressure index scale: GREEN under 40 · AMBER 40&ndash;70 · RED 70 or over.`;
-    if (s.bandFloored)
-      key += ` Shown as AMBER because the practice is over capacity, even though the weighted index is ${s.ppi}.`;
-    key += `</p>`;
-  }
+  // (1) Prominent floor-reason element when the band is floored above the raw index.
+  const floorReason =
+    s.bandFloored && typeof s.ppi === 'number'
+      ? `<p class="pr-floor-reason">Showing AMBER: the practice is over capacity — the weighted index alone is ${s.ppi}.</p>`
+      : '';
+  // (1) Scale hint kept as secondary pr-note.
+  const scaleHint =
+    typeof s.ppi === 'number'
+      ? `<p class="pr-note">GREEN under 40 &middot; AMBER 40&ndash;70 &middot; RED 70 or over.</p>`
+      : '';
   return (
     `<section class="pr-card pr-card-live"><h2>Current snapshot ${s.band ? bandBadge(s.band) : ''}` +
     `<span class="pr-live-tag">LIVE</span><span class="pr-live-stamp">${esc(stamp)}</span></h2>` +
     `<p class="pr-note">A point-in-time reading taken when this report was generated &mdash; not part of the ${esc(report.range?.label || 'period')} figures below (these signals have no per-day history).</p>` +
-    `<div class="pr-grid pr-grid-4">${tiles.join('')}</div>${key}</section>`
+    `<div class="pr-grid pr-grid-4">${tiles.join('')}</div>${floorReason}${scaleHint}</section>`
   );
 }
 
@@ -147,7 +174,7 @@ function renderDemand(report) {
     `<p class="pr-note">Inbound requests created in the period (medical, admin, results, prescriptions).</p>` +
     `<div class="pr-grid pr-grid-3">${tiles.join('')}</div>` +
     (breakdown
-      ? `<table class="pr-table"><thead><tr><th>By type</th><th class="pr-num">Count</th></tr></thead><tbody>${breakdown}</tbody></table>`
+      ? `<table class="pr-table"><thead><tr><th>Of which, by type</th><th class="pr-num">Count</th></tr></thead><tbody>${breakdown}</tbody></table>`
       : '') +
     `</section>`
   );
@@ -318,12 +345,69 @@ export function buildReportHtml(report) {
     .map((k) => SECTION_BUILDERS[k](report))
     .filter(Boolean)
     .join('');
-  return `<div class="pr-report">${renderCover(report)}${sections}${renderLimitations(report)}</div>`;
+  // (3) Summary banner placed right after cover, before all other sections.
+  const summary = renderSummary(report);
+  return `<div class="pr-report">${renderCover(report)}${summary}${sections}${renderLimitations(report)}</div>`;
 }
 
-// Flat CSV export of the period's headline figures + per-day demand series.
+// Richer multi-section CSV export (R1). Returns:
+//   { suffix: <string>, sections: [ { title, header, rows }, ... ] }
+// Profile contract: the "Activity by clinician" section is emitted ONLY when
+// report.activity.users is a non-empty array (management profile). applyProfile
+// strips users for staff/ICB and sets aggregateOnly, so those profiles never
+// receive per-clinician rows — the privacy rule is enforced by the data shape.
 export function buildReportCsv(report) {
-  const header = ['date', ...DEMAND_KEYS, 'demand_total'];
-  const rows = (report.demand?.byDay || []).map((d) => [d.date, ...DEMAND_KEYS.map((k) => d[k] || 0), d.all]);
-  return { header, rows };
+  // suffix for the filename, e.g. "2026-06-09_2026-06-16"
+  const r = report.range || {};
+  const suffix = [r.start, r.end].filter(Boolean).join('_') || 'report';
+
+  const sections = [];
+
+  // ── Section 1: Demand by day ──────────────────────────────────────────────
+  if (report.demand?.byDay) {
+    sections.push({
+      title: 'Demand by day',
+      header: ['date', ...DEMAND_KEYS, 'demand_total'],
+      rows: (report.demand.byDay || []).map((d) => [d.date, ...DEMAND_KEYS.map((k) => d[k] || 0), d.all]),
+    });
+  }
+
+  // ── Section 2: Activity by clinician (management profile only) ────────────
+  // Only present when applyProfile left users intact (non-empty array) AND
+  // aggregateOnly is not set. Staff/ICB profiles never reach this branch.
+  const a = report.activity;
+  if (a && !a.aggregateOnly && Array.isArray(a.users) && a.users.length) {
+    const t = a.totals || {};
+    const cols = Object.keys(ACTIVITY_LABELS).filter((k) => t[k]);
+    const metricHeaders = cols.map((k) => ACTIVITY_LABELS[k]);
+    sections.push({
+      title: 'Activity by clinician',
+      header: ['clinician', ...metricHeaders, 'total'],
+      rows: a.users.map((u) => [u.name, ...cols.map((k) => (u.metrics && u.metrics[k]) || 0), u.total]),
+    });
+  }
+
+  // ── Section 3: Referrals by priority ─────────────────────────────────────
+  if (report.referrals?.byPriority) {
+    sections.push({
+      title: 'Referrals by priority',
+      header: ['priority', 'count'],
+      rows: Object.entries(report.referrals.byPriority)
+        .filter(([, n]) => n)
+        .map(([k, n]) => [PRIORITY_LABELS[k] || k, n]),
+    });
+  }
+
+  // ── Section 4: Referrals by status ───────────────────────────────────────
+  if (report.referrals?.byStatus) {
+    sections.push({
+      title: 'Referrals by status',
+      header: ['status', 'count'],
+      rows: Object.entries(report.referrals.byStatus)
+        .filter(([, n]) => n)
+        .map(([k, n]) => [k, n]),
+    });
+  }
+
+  return { suffix, sections };
 }

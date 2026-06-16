@@ -346,6 +346,34 @@ body {
   margin-top: 10px;
 }
 
+/* ── Summary banner ───────────────────────────────────────────────────────── */
+/* Leading plain-English one-liner placed between the cover and first card.
+   Uses --nhs-blue accent + tinted --bg so it reads as a calm headline, not an alert. */
+.pr-summary {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--nhs-blue);
+  border-radius: var(--r);
+  padding: 16px 20px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* ── Floor-reason notice ──────────────────────────────────────────────────── */
+/* Displayed under Pressure-index tiles when the band was floored by over-capacity.
+   Amber-tinted, readable, not small grey print — carries a real "why AMBER" message. */
+.pr-floor-reason {
+  background: rgba(180, 83, 9, 0.1);
+  color: var(--amber);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 10px;
+}
+
 /* Designed empty / placeholder state (C3) — a framed panel, not bare grey text. */
 .pr-empty {
   max-width: 480px;
@@ -387,6 +415,16 @@ body {
   .pr-card,
   .pr-cover {
     border: 1px solid #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-summary {
+    border: 1px solid #999;
+    border-left: 4px solid #005eb8;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-floor-reason {
     break-inside: avoid;
     page-break-inside: avoid;
   }

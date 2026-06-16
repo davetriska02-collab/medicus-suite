@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.104.0] — 2026-06-16
+
+### Practice Report: the gap-to-8/9 fixes (Practice appraisal)
+
+Lands the convergent Practice-panel findings
+(`docs/appraisal/PRACTICE-REPORT-gap-to-8-9-2026-06-16.md`).
+
+- **Pressure Index no longer reads as a contradiction.** The current-snapshot tile now
+  shows the band word ("AMBER") as the headline with "index 25/100" as the sub-line, so
+  the eye reads the status first, not a number that looks green. When the band was floored
+  by over-capacity, a prominent amber explanation ("Showing AMBER: the practice is over
+  capacity — the weighted index alone is 25") replaces the old small-grey note. All four
+  personas snagged on the old presentation; this was the single biggest lever.
+- **A plain-English summary now leads the report** — e.g. "Last 7 days: 151 requests
+  against 350 scheduled slots — demand was above capacity" — so the team shares a frame
+  before any number, and it bridges the demand-vs-activity question.
+- **Plain language:** "Routine Rx" / "Non-routine Rx" → "Routine prescriptions" /
+  "Non-routine prescriptions"; the demand breakdown is labelled "Of which, by type" so it
+  reads as a breakdown of the headline total.
+- **Live figures carry their timestamp** — "Slots free now" / "In waiting room" now show
+  "as at HH:MM" on the tile, so a figure read later in the day isn't mistaken for live.
+- **Richer, profile-aware CSV.** Export now includes the per-clinician activity table and
+  the referrals breakdowns, not just demand-by-day — as separate titled sections in one
+  file. The Staff and ICB CSVs emit **no per-clinician section** (the aggregate-only
+  privacy rule now holds in the CSV as well as the HTML, regression-tested).
+
+Roadmap (power-user): sortable per-clinician columns, demand as a percentage.
+
 ## [v3.103.0] — 2026-06-16
 
 ### Referrals: no longer need to "open the report once" (headless discovery)
