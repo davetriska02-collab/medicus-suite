@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.1] — 2026-06-16
+
+### CI: fix the doc-version gate (SOUP + feature-list)
+
+The `check-doc-versions.js` CI gate had been red since the manifest passed 3.98 — two
+docs were stamped behind the product version. Resynced both (the clinical
+CLINICAL-SAFETY-NOTICE / HAZARD-LOG stay KNOWN_STALE pending a CSO review, by design):
+
+- **SOUP.md → product v3.110.0 (doc v1.7).** Verified no vendored library changed since
+  the last sync (PDF.js 4.2.67 + worker, Chart.js 4.4.1, D3.js 7.8.5 still match
+  `vendor-versions.json`); added a "no SOUP changes" version-history row covering the
+  v3.92→v3.110 first-party releases.
+- **feature-list.md → v3.110.0.** Added the new Record module (live patient summary), the
+  two full-tab reports (Practice Report, CQC Inspection Readiness), bumped the module
+  count, and refreshed "Recent additions" through v3.110.
+
+Docs-only; no code change. The Tests workflow's doc-version step now passes
+(`check-doc-versions.js` exit 0).
+
 ## [v3.110.0] — 2026-06-16
 
 ### CQC Inspection Readiness (P1): internal readiness check + gated evidence export
