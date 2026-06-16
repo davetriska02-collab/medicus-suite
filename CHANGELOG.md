@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.108.0] — 2026-06-16
+
+### "Select all" for Outstanding Investigation Requests (with safety check)
+
+On the Review Investigation Report task overview page, the **Outstanding
+Investigation Requests** card lists every prior request still awaiting a result
+as a Quasar checkbox — ticking each by hand is slow and error-prone.
+
+- **New "Select all" button** injected into the card's pre-existing (empty)
+  `.card-button` header slot, styled to the suite's injected-surface tokens so it
+  sits naturally beside the Medicus chrome.
+- **Safety check:** because ticking every request is a bulk, hard-to-undo
+  clinical action, the button always routes through an "Are you sure?" confirm
+  dialog ("This selects all *n* previous outstanding investigations and will
+  clear them") — it never selects silently. The dialog defaults focus to
+  *Cancel*, and Esc / backdrop-click both dismiss without selecting.
+- **Mechanics:** drives each `.q-checkbox` via a native `.click()` with a 30 ms
+  stagger (Vue reactivity is async — a synchronous loop drops most updates).
+  Injection is idempotent and re-attempted by a detail-page-scoped
+  `MutationObserver` so the button survives the Vue 3 + Quasar SPA's re-renders;
+  the observer is torn down on navigation away.
+
 ## [v3.107.0] — 2026-06-16
 
 ### Practice letterhead: recall letters and SMS auto-fill the sign-off

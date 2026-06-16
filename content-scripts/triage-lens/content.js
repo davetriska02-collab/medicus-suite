@@ -2198,7 +2198,164 @@
     restorePosition(hudEl);
     enableDrag(hudEl);
     runMonitoringChip();
+    injectSelectAllButton();
+    setupOutstandingObserver();
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
+  };
+
+  // ============================================================
+  // 2c. "Select All" — Outstanding Investigation Requests
+  // ============================================================
+  // On the Review Investigation Report task overview page, the
+  // "Outstanding Investigation Requests" card lists every prior request still
+  // awaiting a result as a Quasar checkbox. Ticking all of them by hand is slow
+  // and error-prone, so we inject a single "Select All" button into the card's
+  // pre-existing (empty) `.card-button` header slot.
+  //
+  // SAFETY: ticking every request is a bulk, hard-to-undo clinical action — it
+  // matches/clears all outstanding investigations for the patient. The button
+  // therefore always routes through a confirm dialog before firing; it never
+  // selects silently.
+  //
+  // Mechanics mirror the queue-chip rules: the page is a Vue 3 + Quasar SPA that
+  // re-renders and may strip foreign nodes, so injection is idempotent (guarded)
+  // and re-attempted by a scoped MutationObserver while the card is on screen.
+  const OIR_CARD_SEL = '[data-testid="test-outstanding-investigation-requests"]';
+  const OIR_BTN_CLASS = 'ch-select-all-btn';
+
+  // Drive each Quasar checkbox via a native .click() on the .q-checkbox div
+  // (Quasar's handler is bound there; dispatched MouseEvents are unreliable).
+  // Vue reactivity is async, so clicks are STAGGERED — firing them in a tight
+  // synchronous loop causes most state updates to be dropped.
+  const selectAllOutstandingRequests = (btn) => {
+    const card = document.querySelector(OIR_CARD_SEL);
+    if (!card) return;
+    const boxes = [...card.querySelectorAll('.q-checkbox')];
+    if (!boxes.length) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Selecting…'; }
+    let i = 0, clicked = 0;
+    const clickNext = () => {
+      if (i >= boxes.length) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Select all'; }
+        log('select-all complete', { total: boxes.length, clicked });
+        return;
+      }
+      // Quasar tracks checked state on the role element, not the native <input>.
+      if (boxes[i].getAttribute('aria-checked') !== 'true') {
+        boxes[i].click();
+        clicked++;
+      }
+      i++;
+      setTimeout(clickNext, 30);
+    };
+    clickNext();
+  };
+
+  // Modal confirm — appended to <body> so host-page stacking can't clip it.
+  // Defaults focus to Cancel (the safe choice for a bulk action); Esc / backdrop
+  // / Cancel all dismiss without selecting.
+  const confirmSelectAll = (onConfirm) => {
+    if (document.querySelector('.ch-confirm-overlay')) return;
+    const count = document.querySelectorAll(OIR_CARD_SEL + ' .q-checkbox').length;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ch-confirm-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'ch-confirm-title');
+
+    const card = document.createElement('div');
+    card.className = 'ch-confirm-card';
+
+    const title = document.createElement('div');
+    title.className = 'ch-confirm-title';
+    title.id = 'ch-confirm-title';
+    title.textContent = 'Select all outstanding requests?';
+
+    const body = document.createElement('div');
+    body.className = 'ch-confirm-body';
+    body.textContent =
+      'This selects all ' + (count ? count + ' ' : '') +
+      'previous outstanding investigations and will clear them. This cannot be easily undone.';
+
+    const actions = document.createElement('div');
+    actions.className = 'ch-confirm-actions';
+
+    const cancel = document.createElement('button');
+    cancel.className = 'ch-confirm-btn ch-confirm-cancel';
+    cancel.textContent = 'Cancel';
+
+    const confirm = document.createElement('button');
+    confirm.className = 'ch-confirm-btn ch-confirm-go';
+    confirm.textContent = 'Select all';
+
+    actions.append(cancel, confirm);
+    card.append(title, body, actions);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const close = () => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+    cancel.addEventListener('click', close);
+    confirm.addEventListener('click', () => { close(); onConfirm(); });
+
+    // Safe default — keyboard users confirm deliberately, not reflexively.
+    cancel.focus();
+  };
+
+  const injectSelectAllButton = () => {
+    const card = document.querySelector(OIR_CARD_SEL);
+    if (!card) return;
+    // Idempotent — safe to call on every refresh / observer tick.
+    if (card.querySelector('.' + OIR_BTN_CLASS)) return;
+    const slot = card.querySelector('.card-button');
+    if (!slot) return;
+    // No outstanding requests means nothing to select — don't add chrome.
+    if (!card.querySelector('.q-checkbox')) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = OIR_BTN_CLASS;
+    btn.textContent = 'Select all';
+    btn.setAttribute('aria-label', 'Select all outstanding investigation requests');
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      confirmSelectAll(() => selectAllOutstandingRequests(btn));
+    });
+    slot.appendChild(btn);
+    log('select-all button injected');
+  };
+
+  // Scoped observer: while the card is on screen, re-inject the button if the
+  // Vue reconciler strips it. Torn down on navigation away (run() calls
+  // teardownOutstandingObserver for any non-detail page).
+  let outstandingObserver = null;
+  let outstandingRafScheduled = false;
+
+  const setupOutstandingObserver = () => {
+    if (outstandingObserver) return;
+    outstandingObserver = new MutationObserver(() => {
+      if (outstandingRafScheduled) return;
+      outstandingRafScheduled = true;
+      requestAnimationFrame(() => {
+        outstandingRafScheduled = false;
+        injectSelectAllButton();
+      });
+    });
+    outstandingObserver.observe(document.body, { childList: true, subtree: true });
+  };
+
+  const teardownOutstandingObserver = () => {
+    if (outstandingObserver) { outstandingObserver.disconnect(); outstandingObserver = null; }
+    outstandingRafScheduled = false;
   };
 
   // ---- Queue "absence is not a verdict" legend ----
@@ -2255,6 +2412,8 @@
       // If we've navigated away from the queue, release the observer so the
       // next queue visit always rebuilds it against a fresh container.
       if (type !== 'queue') teardownQueueObserver();
+      // The Select-All observer is detail-page-only; release it elsewhere.
+      if (type !== 'detail') teardownOutstandingObserver();
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
       else if (type === 'queue') runQueue();
