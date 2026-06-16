@@ -2567,6 +2567,9 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   color: var(--amber);
   font-weight: 600;
 }
+.suite-tabs-hint.flash.ok {
+  color: var(--green);
+}
 .suite-tabs-done {
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -2670,4 +2673,53 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .thresh-link:hover {
   color: var(--accent-hover);
   text-decoration: underline;
+}
+/* Disabled (alert-off) strip: dim the fields but keep the head + note legible, so
+   a muted strip is never silent AND invisible. */
+.thresh-section--off .thresh-fields,
+.thresh-section--off .thresh-section-foot {
+  opacity: 0.45;
+}
+.thresh-off-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  margin: 0 0 6px;
+}
+.thresh-always {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.thresh-section-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.thresh-default {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.thresh-reset {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 0;
+}
+.thresh-reset:hover {
+  color: var(--accent);
 }

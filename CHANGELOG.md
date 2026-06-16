@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.98.1] — 2026-06-16
+
+### Threshold editor: clearer, safer, and reachable without the palette
+
+Closes the Practice appraisal of the threshold editor:
+
+- **Visible entry point.** The waiting-room threshold is now editable in
+  **Options › Notifications** too, not only behind Ctrl+K — so a clinician who
+  doesn't use the command palette can still reach it.
+- **Honest scope.** The editor states "Saved on this device, applied straight
+  away" and the misleading "your choice is yours alone" line (a copy-paste
+  artefact) is gone — so the setting isn't mistaken for a practice-wide policy.
+- **A disabled strip can't hide.** Turning an alert off greys its row and shows
+  "Off — no alerts for this strip", so a muted strip is never silent and
+  invisible at once.
+- **Clearer model.** The close button now reads "Close" (edits already apply
+  live) with a "Saved" confirmation on each change; the subtitle explains the
+  strips change colour (no pop-up); units carry tooltips ("resets at midnight").
+- **Defaults + reset.** Each row shows its shipped default and a one-click Reset.
+  A gentle nudge appears if a waiting threshold is set so high it would rarely
+  fire. The waiting row is marked "always on" (it has no enable toggle by design).
+
+These are operational (workload) strips, never clinical — so user-tunable
+thresholds and an alert-off toggle are appropriate here.
+
 ## [v3.98.0] — 2026-06-16
 
 ### Editable alert thresholds from the command palette
