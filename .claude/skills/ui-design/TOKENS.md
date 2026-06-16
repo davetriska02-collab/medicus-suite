@@ -77,6 +77,20 @@ Dark values are lightness-raised for legibility on `#0b1424`.
 Canon source: `side-panel/panel.css` `:root` / `html[data-theme="dark"]`.
 Do not use `--cat-*` for status chips, badges, or any clinical-meaning surface.
 
+### User colour swatches (organising palette)
+
+`--swatch-{slate,red,orange,amber,green,teal,blue,purple,pink}` — the fixed
+palette a user picks from to colour-code their own pills/tiles (Slots types,
+Reception pathways, and future organise-mode surfaces). This is purely the
+user's grouping aid, **never a clinical status**: an actual amber/red alert
+always overrides a user swatch (`status overrides custom colour`), and a red
+pill's fill stays red regardless (the canonical `.pill--red` lock). Distinct
+from `--cat-*` (chart series) and from the status triads. Light values are the
+canonical hexes; dark values are lightness-raised for `#0b1424` (mirroring the
+`--cat` lifts). Consume `var(--swatch-*)` — the `.pill-c-*` / `.rcp-tile-c-*`
+classes set `--pill-col` / `--tile-col` from these; never re-declare the hex.
+Canon source: `side-panel/panel.css` `:root` / `html[data-theme="dark"]`.
+
 Colorblind mode (`html[data-colorblind="true"]`) re-points the **whole red
 and green triads** (red→orange `#ea580c`, green→blue `#2563eb` + matching
 dim/line alphas). Components built from triads inherit the swap for free —
@@ -146,7 +160,28 @@ copy buttons, tour/tabs CTAs).
 border: 1px solid var(--<c>-line); border-radius: var(--r-sm);` mono 10px.
 Pair every chip hue with a glyph or label — hue is never the only signal.
 
-**Pill** — chip but `border-radius: var(--r-pill); padding: 2–3px 8–10px`.
+**Pill** (canonical — `.pill` in `panel.css`) — the suite-wide pill,
+generalised from the Slots per-type pills. Anatomy: a coloured **dot**
+(`.pill-dot`, category/severity carrier), a **name** (`.pill-name`, sans, human
+voice, `--text-2`), a **count** (`.pill-count`, mono, tabular, `--text-1`), and an optional
+secondary datum (`.pill-meta`, muted mono `--text-3`, e.g. a worst-case "25m").
+`border-radius: var(--r-pill)`, `padding: 3px 9px 3px 7px`. Colour rides on two
+custom props so an organise mode can set them per pill: `--pill-line` (border +
+dot) and `--pill-fill` (background); defaults `--border` / `--bg-mid`.
+
+- _Categorical mode_ (non-clinical organising): set `--pill-line`/`--pill-fill`
+  from the `--cat-*` ramp — never raw hex, never a status hue. Fully
+  user-configurable.
+- _Clinical RAG mode_ (`.pill--green` / `.pill--amber` / `.pill--red`): dot +
+  border = triad line, fill = triad wash, count = triad ink. **Non-colour
+  severity cue:** red dot is FILLED, amber dot is a HOLLOW ring — so red vs amber
+  survives colourblind by shape, not hue alone.
+- **Safety lock:** `.pill--red` fixes `--pill-fill` to `--red-dim` with
+  `!important`. User colour config may change a red pill's border only, never
+  neutralise its red fill. Alert salience is a safety property — see SKILL.md.
+
+Legacy per-surface pills (`.slot-pill`, `.condor-pill`, strip chips, …) converge
+on this over time; do not mass-rename in one pass.
 
 **Input** — `background: var(--bg-mid); border: 1px solid var(--border);
 border-radius: var(--r-md); color: var(--text-2);` focus:

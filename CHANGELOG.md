@@ -2,6 +2,239 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.98.1] — 2026-06-16
+
+### Threshold editor: clearer, safer, and reachable without the palette
+
+Closes the Practice appraisal of the threshold editor:
+
+- **Visible entry point.** The waiting-room threshold is now editable in
+  **Options › Notifications** too, not only behind Ctrl+K — so a clinician who
+  doesn't use the command palette can still reach it.
+- **Honest scope.** The editor states "Saved on this device, applied straight
+  away" and the misleading "your choice is yours alone" line (a copy-paste
+  artefact) is gone — so the setting isn't mistaken for a practice-wide policy.
+- **A disabled strip can't hide.** Turning an alert off greys its row and shows
+  "Off — no alerts for this strip", so a muted strip is never silent and
+  invisible at once.
+- **Clearer model.** The close button now reads "Close" (edits already apply
+  live) with a "Saved" confirmation on each change; the subtitle explains the
+  strips change colour (no pop-up); units carry tooltips ("resets at midnight").
+- **Defaults + reset.** Each row shows its shipped default and a one-click Reset.
+  A gentle nudge appears if a waiting threshold is set so high it would rarely
+  fire. The waiting row is marked "always on" (it has no enable toggle by design).
+
+These are operational (workload) strips, never clinical — so user-tunable
+thresholds and an alert-off toggle are appropriate here.
+
+## [v3.98.0] — 2026-06-16
+
+### Editable alert thresholds from the command palette
+
+The roll-up's amber/red lines are now tunable without hunting through Options. A
+new palette command, "Edit alert thresholds…", opens an inline editor for the
+numeric thresholds:
+
+- **Waiting room** — the minutes a patient has waited before the strip goes amber,
+  then red, are now **user-configurable** (previously fixed at 10 / 20). Stored in
+  `suite.waitingRoom.thresholds`, backed up, and applied live.
+- **Demand** — the per-day medical/admin request counts (and their on/off toggle),
+  the same values as Options › Submissions, editable here too.
+- **Triage** uses a rules engine rather than a numeric pair, so the editor links
+  out to its existing Options editor instead of half-reimplementing it.
+
+Edits apply immediately (the strips re-render on the storage change); the editor
+refuses an inverted pair (red must be at least amber). Panel-only, since the
+strips it tunes live in the docked panel.
+
+## [v3.97.1] — 2026-06-15
+
+### Gap-to-9 quick wins on the alert roll-up
+
+The third Practice pass asked each persona what they'd need for a 9/10; this
+lands the convergent "make the numbers explain themselves" set plus legibility:
+
+- **Timestamp (manager).** The roll-up bar now carries an "as at HH:MM" stamp so
+  every figure is anchored to a moment that can be quoted.
+- **Threshold context (power user / pharmacist / manager).** The pill hover now
+  names the line each figure crossed — "Demand: 115 … (Medical 70 ≥60, Admin 45
+  ≥40)", "…longest waiting 55 min (red ≥20 min)" — so a number isn't blind trust
+  in a shipped default. (Demand/triage thresholds remain editable in Options.)
+- **Legibility (technophobe partner).** The roll-up counts are a touch larger so
+  they clear the eyesight floor.
+- **Names reconcile (manager / pharmacist).** Waiting-room name chips now wrap to
+  full lines instead of clipping into the "Monitoring" button — if the count says
+  3, all 3 names show.
+- **Clearer toggle (pharmacist).** The expand control reads "Hide" with a tooltip
+  "collapse the detail — the alert stays", so collapsing never reads as silencing
+  the alert.
+
+## [v3.97.0] — 2026-06-15
+
+### Roll-up + Focus polish from the re-appraisal (R1/R2/R5/R6)
+
+The second Practice panel cleared the prior blockers; this closes the remaining asks:
+
+- **Plain-language tooltips on the roll-up pills (R1).** Hovering a pill now
+  explains it in words with units — e.g. "Demand: 115 new requests awaiting review
+  (Medical 70, Admin 45)", "Waiting room: 3 patients arrived, longest waiting
+  55 min" — so the front desk knows what a count means, not just its value.
+- **Severity reads as a word, not only colour (R6).** The roll-up headline now
+  says "2 URGENT" when red and "2 ALERTS" when amber, so the escalation survives
+  colourblind mode at the bar level (the pills already carried a shape cue).
+- **Keep the roll-up expanded (R5).** A new command-palette toggle, "Alerts: keep
+  roll-up expanded", pins the roll-up open and persists across alert-set changes
+  (stored in suite.rollup.alwaysExpanded, included in backups). For power users who
+  want the amber detail on screen permanently rather than clicking Details.
+- **Focus pill contrast (R2).** The on-state "Focus · Esc" pill gained a full
+  accent border and brighter text so it reads clearly on the dark nav.
+
+Demand/triage alert thresholds remain configurable in Options (Submissions /
+Triage); only the waiting-room minutes are fixed.
+
+## [v3.96.5] — 2026-06-15
+
+### Palette drift-guard across Slots, Reception and the tokens
+
+Completes the colour-palette unification. The user-colour swatch list is
+referenced from three places that cannot import one another — the ESM
+`pill-prefs.js` (`SWATCH_KEYS`), the classic `reception-pathway-utils.js`
+(`TILE_COLOUR_KEYS`), and the `--swatch-*` design tokens in `panel.css`. A new
+`test-pill-palette-sync.js` pins all three together so they can't drift, the same
+convert-drift-into-CI-failure approach used for clinical thresholds. Reception's
+organise logic is intentionally left as-is (it is richer than the shared helper —
+alpha sort, id validation, prototype-pollution guard — so merging it would
+regress it); only the shared palette is unified and guarded.
+
+## [v3.96.4] — 2026-06-15
+
+### Shared pill organise-mode helper (extraction)
+
+The Slots pill organise mode (drag-reorder + per-item colour) had its data layer
+inline. Extracted the reusable parts — the colour-key list, prefs validation, and
+the ordering rule — into a shared `pill-prefs.js` module (`SWATCH_KEYS`,
+`sanitisePillPrefs`, `applyPillOrder`) so any categorical-pill surface can adopt
+the same configurable behaviour without re-implementing it. Slots now consumes
+the shared module; behaviour is unchanged (verified: saved order and custom
+colours render identically). Note: Condor and Capacity pills are RAG *status*,
+not categorical, so colour config does not apply there; Reception (which already
+has its own copy) converges onto this helper in a later pass.
+
+## [v3.96.3] — 2026-06-15
+
+### Config foundation: one canonical user-colour palette
+
+Groundwork for carrying the Slots organise mode (drag-reorder + per-item colour)
+across the suite. The user-colour swatches were duplicated as raw hex in two
+places (Slots pills and Reception pathway tiles) and didn't adapt to dark theme.
+They are now canonical `--swatch-*` tokens (slate/red/orange/amber/green/teal/
+blue/purple/pink), defined once with dark-theme legibility lifts, and both
+surfaces consume them. Light is unchanged; dark-mode user colours are now
+legible. Non-clinical by definition — an actual amber/red alert always overrides
+a user swatch, and a red pill's fill stays locked. No behaviour change; this is
+the shared palette the forthcoming inline organise-mode rollout builds on.
+
+## [v3.96.2] — 2026-06-15
+
+### Focus mode is now legible and escapable (design-crit pass)
+
+A three-critic review (art director, code surveyor, fresh-eyes GP) converged on
+one problem: Focus mode's ON state was invisible and its exit unknowable — a
+non-technical user reads the vanished brand and labels as "the panel broke",
+with only a faint accent tint on one ambiguous icon to explain it. Fixed:
+
+- **On-state exit pill.** While Focus mode is on, a "Focus · Esc" pill (the
+  canonical `.pill` in the accent, non-clinical colour — never amber/red, so it
+  can't compete with alert strips) appears where the brand was. It names the
+  mode, shows the shortcut, and is itself clickable to leave.
+- **Clearer toggle.** The button glyph changed from corner-brackets (which read
+  as "fullscreen") to a crosshair that reads as "focus", and is now distinct
+  from the pop-out and settings icons beside it.
+- **Accessibility.** The toggle gains an `aria-label`; its active state keeps the
+  accent tint on hover; and Esc no longer flips Focus mode while you are typing
+  in a field. Panel and pop-out kept in lock-step.
+
+## [v3.96.1] — 2026-06-15
+
+### Roll-up polish: worst wait-time on the pill, separated setup card
+
+Two more Practice-appraisal fixes:
+
+- **Worst wait surfaced (F4).** The collapsed waiting pill now shows the longest
+  single wait alongside the count ("Waiting 3 · 55m"), so a patient creeping
+  toward a breach is visible without expanding — a 12-minute and a 55-minute
+  wait no longer look identical. Added as an optional `.pill-meta` slot on the
+  canonical pill (muted mono secondary datum).
+- **Setup card separated (F7).** The first-run setup card now has breathing room
+  above it, so its EXPAND/DISMISS controls are no longer flush under the alert
+  roll-up's DETAILS toggle (a mis-click hazard the panel flagged).
+
+## [v3.96.0] — 2026-06-15
+
+### Canonical pill, and the alert roll-up adopts it (Atelier foundation pass)
+
+The appointment-type pills on the Slots page — a coloured dot, a name, and a
+count — are the suite's best small component, so they are now the **canonical
+`.pill`** in the design canon (TOKENS.md): a dot (category/severity carrier), a
+name in the human/sans voice, and a count in the machine/mono voice. Colour
+rides on two custom properties (`--pill-line`, `--pill-fill`) so a forthcoming
+organise mode can set them per pill.
+
+The alert roll-up is the first surface to adopt it, which lands two appraisal
+fixes at once:
+
+- **Reconcilable counts (F1).** The collapsed pills now show the actual flagged
+  total — "Demand 115" sums to the expanded "Medical 70 / Admin 45" — instead of
+  a category count that read as "2". The manager can tie the number to the
+  detail.
+- **Colourblind-safe severity (F3).** Severity no longer rides on hue alone: a
+  **red** pill has a filled dot, an **amber** pill a hollow ring dot, so the two
+  tiers are distinguishable by shape under colourblind mode.
+
+Safety: a red pill's fill is locked to the red wash — the planned colour config
+will be able to change a red pill's border only, never neutralise its red fill.
+Other per-surface pills (Slots, Condor, the strips) converge on the canonical
+pill in a later pass; nothing else was restyled here.
+
+## [v3.95.0] — 2026-06-15
+
+### Alert roll-up — one severity bar when alerts pile up
+
+The three demand strips (waiting room, triage, submissions demand) used to stack
+independently below the nav, competing for the same scarce vertical space when more
+than one fired at once. They now collapse into a single **roll-up bar** at the highest
+severity:
+
+- **Appears only when 2+ strips are elevated** (amber/red). One or zero elevated alerts
+  behaves exactly as before — no change in the common case. Green/calm states never count
+  as elevated, so the bar only shows when there's genuinely more than one signal.
+- **Severity-ordered summary:** an icon at max severity, an "N alerts" count, and a pill
+  per elevated channel (Waiting / Triage / Demand) with its own amber/red colour.
+- **Expandable for detail:** click the bar (chevron) to reveal the full original strips
+  — patient names, triage buckets, demand counts. **Red auto-expands**; amber starts
+  collapsed. Your expand/collapse choice sticks until the alert set changes.
+- Each strip's poller is untouched — it still renders its own DOM and simply reports its
+  resulting level to the shared roll-up. Backoff, caching and click-through all unchanged.
+- Plays with **Focus mode**: the roll-up is a signal, so Zen never hides it.
+
+## [v3.94.0] — 2026-06-15
+
+### Focus (Zen) mode — declutter the chrome, keep the signal
+
+A new **focus mode** strips the panel back to the active module for heads-down work
+in the narrow side panel. Toggle it from the new focus button in the nav, with
+**Ctrl/Cmd + .**, or via the command palette ("Focus mode: toggle"). **Esc** exits.
+
+- **What it hides:** the brand, the nav tab labels (tabs collapse to icons, so more
+  fit without scrolling), the overflow fade/arrows, and any *calm/green* demand strips.
+- **What it never hides:** amber and red waiting-room, triage and demand strips. Zen
+  touches chrome and calm decoration only — a clinical signal can never be suppressed
+  by it. This mirrors the Quiet-mode safety boundary (presentation, never signal).
+- **Persistent + synced.** State rides on `suite.display.zen`, so it survives reopen
+  and stays in lock-step between the docked panel and the floating pop-out, applied as
+  `html[data-zen]` by the shared display-prefs applicator.
+- Distinct from **Quiet/clinic mode**, which mutes notifications: Zen is purely visual.
+
 ## [v3.93.1] — 2026-06-15
 
 ### Combo result rules: full authoring parity across all three builders

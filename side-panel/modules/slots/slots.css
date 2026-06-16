@@ -566,31 +566,31 @@ html[data-theme='dark'] .staff-split .split-pm {
   --pill-col: transparent;
 }
 .pill-c-slate {
-  --pill-col: #64748b;
+  --pill-col: var(--swatch-slate);
 }
 .pill-c-red {
-  --pill-col: #dc2626;
+  --pill-col: var(--swatch-red);
 }
 .pill-c-orange {
-  --pill-col: #ea580c;
+  --pill-col: var(--swatch-orange);
 }
 .pill-c-amber {
-  --pill-col: #d97706;
+  --pill-col: var(--swatch-amber);
 }
 .pill-c-green {
-  --pill-col: #16a34a;
+  --pill-col: var(--swatch-green);
 }
 .pill-c-teal {
-  --pill-col: #0d9488;
+  --pill-col: var(--swatch-teal);
 }
 .pill-c-blue {
-  --pill-col: #2563eb;
+  --pill-col: var(--swatch-blue);
 }
 .pill-c-purple {
-  --pill-col: #7c3aed;
+  --pill-col: var(--swatch-purple);
 }
 .pill-c-pink {
-  --pill-col: #db2777;
+  --pill-col: var(--swatch-pink);
 }
 .slot-pill[class*='pill-c-']:not(.pill-c-default) {
   border-color: var(--pill-col);

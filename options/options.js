@@ -2099,6 +2099,67 @@ rmSaveBtn?.addEventListener('click', async () => {
   }
 })();
 
+// ── Waiting-room alert thresholds (visible entry point for suite.waitingRoom.thresholds) ──
+// Mirrors the in-palette editor (side-panel/thresholds). Per-device; the panel
+// applies changes live via its storage listener.
+(async function initWaitingThresholds() {
+  try {
+    const DEFAULT_WR = { amber: 10, red: 20 };
+    const amberEl = document.getElementById('wrAmber');
+    const redEl = document.getElementById('wrRed');
+    const saveBtn = document.getElementById('saveWaitingThresholds');
+    const resetBtn = document.getElementById('resetWaitingThresholds');
+    const saved = document.getElementById('waitingThresholdSaved');
+    const err = document.getElementById('waitingThresholdErr');
+    if (!amberEl || !redEl || !saveBtn) return;
+
+    const stored = await chrome.storage.local.get('suite.waitingRoom.thresholds');
+    const wr = { ...DEFAULT_WR, ...(stored['suite.waitingRoom.thresholds'] || {}) };
+    amberEl.value = wr.amber;
+    redEl.value = wr.red;
+
+    function showSaved() {
+      if (!saved) return;
+      saved.style.display = '';
+      setTimeout(() => {
+        saved.style.display = 'none';
+      }, 2000);
+    }
+    function showErr(msg) {
+      if (!err) return;
+      err.textContent = msg;
+      err.style.display = '';
+      setTimeout(() => {
+        err.style.display = 'none';
+      }, 2600);
+    }
+
+    saveBtn.addEventListener('click', async () => {
+      const amber = Math.round(Number(amberEl.value));
+      const red = Math.round(Number(redEl.value));
+      if (!Number.isFinite(amber) || !Number.isFinite(red) || amber < 1 || red < 1) {
+        showErr('Whole numbers above zero only.');
+        return;
+      }
+      if (red < amber) {
+        showErr('Red must be at least amber.');
+        return;
+      }
+      await chrome.storage.local.set({ 'suite.waitingRoom.thresholds': { amber, red } });
+      showSaved();
+    });
+
+    resetBtn?.addEventListener('click', async () => {
+      amberEl.value = DEFAULT_WR.amber;
+      redEl.value = DEFAULT_WR.red;
+      await chrome.storage.local.set({ 'suite.waitingRoom.thresholds': { ...DEFAULT_WR } });
+      showSaved();
+    });
+  } catch (e) {
+    console.warn('[Waiting thresholds init]', e.message);
+  }
+})();
+
 // ── Manual update check button (v3.0) ─────────────────────────────────────────
 
 (function initManualUpdateCheck() {

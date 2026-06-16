@@ -60,6 +60,13 @@ function buildDisplayPopoverHTML() {
   </div>`;
 }
 
+// Merge the popover's three prefs over the stored object so sibling keys we
+// don't manage here (e.g. zen, written by ZenMode) survive a theme/size change.
+async function persistDisplayPrefs() {
+  const r = await chrome.storage.local.get('suite.display');
+  await chrome.storage.local.set({ 'suite.display': { ...(r['suite.display'] || {}), ...panelDisplayPrefs } });
+}
+
 function renderDisplayPopover() {
   const host = document.getElementById('displayPopoverHost');
   if (!host) return;
@@ -69,13 +76,13 @@ function renderDisplayPopover() {
   host.querySelectorAll('[data-dp-key]').forEach((btn) => {
     btn.addEventListener('click', () => {
       panelDisplayPrefs[btn.dataset.dpKey] = btn.dataset.dpVal;
-      chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+      persistDisplayPrefs();
       renderDisplayPopover();
     });
   });
   host.querySelector('#dpColorblind')?.addEventListener('change', (e) => {
     panelDisplayPrefs.colorblind = e.target.checked;
-    chrome.storage.local.set({ 'suite.display': { ...panelDisplayPrefs } });
+    persistDisplayPrefs();
     renderDisplayPopover();
   });
 
@@ -605,12 +612,141 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+// ── Alert roll-up (groups elevated demand strips into one summary bar) ────────
+// Three strips (#wrStrip, #rmStrip, #subRagStrip) each render independently below
+// the nav. When two or more are in an ELEVATED (amber/red) state they stack and
+// compete for the same scarce vertical space, so a single severity-ordered roll-up
+// bar replaces the stack: one line at max severity with a pill per elevated channel,
+// expandable (chevron) to the full strips for detail. Each strip's own poller is
+// untouched — it still renders its own DOM; it just reports its resulting level here
+// via reportAlert(), and the roll-up reads that shared bus. Red auto-expands.
+//
+// CLINICAL SAFETY: grouping only collapses the *presentation* of strips that are
+// already showing; nothing is hidden that wasn't on screen, and the roll-up itself
+// carries the max severity. Green/calm states are never "elevated", so the roll-up
+// only ever appears when there is genuinely more than one elevated signal.
+const alertRollupEl = document.getElementById('alertRollup');
+const alertStackEl = document.getElementById('alertStack');
+const alertBus = { waiting: null, triage: null, demand: null };
+let _rollupExpanded = null; // null = use default (red→open, amber→closed); else session choice
+
+// Persistent "keep the roll-up expanded" preference (suite.rollup.alwaysExpanded).
+// Power users want the amber detail pinned on screen instead of clicking Details
+// every time the alert set changes; when on, the roll-up renders expanded always.
+// Toggled from the command palette; cached here, kept current via onChanged.
+let _rollupAlwaysExpanded = false;
+chrome.storage.local.get('suite.rollup.alwaysExpanded').then((r) => {
+  _rollupAlwaysExpanded = r['suite.rollup.alwaysExpanded'] === true;
+  renderRollup();
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.rollup.alwaysExpanded' in changes) {
+    _rollupAlwaysExpanded = changes['suite.rollup.alwaysExpanded'].newValue === true;
+    _rollupExpanded = null; // re-derive against the new preference
+    renderRollup();
+  }
+});
+
+const ALERT_CHANNELS = ['waiting', 'triage', 'demand'];
+
+function reportAlert(channel, state) {
+  // state = { level, label, count, meta?, title? } or null when inactive.
+  alertBus[channel] = state;
+  renderRollup();
+}
+
+function renderRollup() {
+  if (!alertRollupEl || !alertStackEl) return;
+  const elevated = ALERT_CHANNELS.map((k) => alertBus[k]).filter(
+    (a) => a && (a.level === 'amber' || a.level === 'red')
+  );
+
+  if (elevated.length < 2) {
+    // Nothing to group — restore the normal stacked strips, roll-up hidden.
+    alertRollupEl.className = 'alert-rollup alert-rollup-hidden';
+    alertRollupEl.innerHTML = '';
+    alertStackEl.style.display = '';
+    _rollupExpanded = null;
+    return;
+  }
+
+  const hasRed = elevated.some((a) => a.level === 'red');
+  const maxLevel = hasRed ? 'red' : 'amber';
+  // Expanded when: the user pinned it open, OR (default) it's red. Amber starts
+  // collapsed unless the session toggle or the persistent pref says otherwise.
+  if (_rollupAlwaysExpanded) _rollupExpanded = true;
+  else if (_rollupExpanded === null) _rollupExpanded = hasRed;
+
+  const pills = elevated
+    .map(
+      (a) =>
+        `<span class="pill pill--${a.level}"${a.title ? ` title="${escStrip(a.title)}"` : ''}><span class="pill-dot"></span><span class="pill-name">${escStrip(
+          a.label
+        )}</span>${a.count != null ? `<span class="pill-count">${a.count}</span>` : ''}${
+          a.meta ? `<span class="pill-meta">${escStrip(a.meta)}</span>` : ''
+        }</span>`
+    )
+    .join('');
+
+  // R6: severity is carried by a WORD, not only colour — red reads "URGENT",
+  // amber "ALERTS" (uppercased by CSS), so escalation survives colourblind mode.
+  const word = maxLevel === 'red' ? 'urgent' : 'alerts';
+  // Timestamp the bar so every figure is anchored to a moment the manager can
+  // quote ("as at 11:02") — a live number with no time is one she won't cite.
+  const stamp = _fmtHHMM(Date.now());
+  alertRollupEl.className = `alert-rollup alert-rollup--${maxLevel}`;
+  alertRollupEl.setAttribute('aria-expanded', String(_rollupExpanded));
+  alertRollupEl.innerHTML = `
+    <span class="alert-rollup-icon">${maxLevel === 'red' ? '🔴' : '⚠'}</span>
+    <span class="alert-rollup-count">${elevated.length} ${word}</span>
+    <span class="alert-rollup-pills">${pills}</span>
+    <span class="alert-rollup-stamp" title="Figures as at ${stamp}">${stamp}</span>
+    <button class="alert-rollup-toggle" title="${
+      _rollupExpanded ? 'Collapse the detail — the alert stays' : 'Show the detail'
+    }">${_rollupExpanded ? 'Hide' : 'Details'}<span class="alert-rollup-chev">${
+      _rollupExpanded ? '▾' : '▸'
+    }</span></button>
+  `;
+  alertStackEl.style.display = _rollupExpanded ? '' : 'none';
+}
+
+// Toggle expand/collapse on click anywhere in the roll-up bar.
+alertRollupEl?.addEventListener('click', () => {
+  _rollupExpanded = !_rollupExpanded;
+  renderRollup();
+});
+
 // ── Waiting Room strip (global — visible on every module) ─────────────────────
 
 let SITE_ID_WR = null;
 let WR_API = null;
 const WR_POLL_MS = 30 * 1000;
 const wrStripEl = document.getElementById('wrStrip');
+
+// Waiting-room alert thresholds (minutes). User-configurable via the alert-threshold
+// editor (suite.waitingRoom.thresholds); defaults match the long-standing fixed
+// values. Cached to avoid a storage read per poll; kept current via onChanged.
+const DEFAULT_WR_THRESHOLDS = { amber: 10, red: 20 };
+let _wrThresholds = { ...DEFAULT_WR_THRESHOLDS };
+
+function _sanitiseWrThresholds(raw) {
+  const d = DEFAULT_WR_THRESHOLDS;
+  if (!raw || typeof raw !== 'object') return { ...d };
+  const amber = Number.isFinite(raw.amber) && raw.amber > 0 ? Math.round(raw.amber) : d.amber;
+  const red = Number.isFinite(raw.red) && raw.red > 0 ? Math.round(raw.red) : d.red;
+  // Red must be at least amber to be meaningful; an inverted pair falls back to defaults.
+  return red >= amber ? { amber, red } : { ...d };
+}
+
+chrome.storage.local.get('suite.waitingRoom.thresholds').then((r) => {
+  _wrThresholds = _sanitiseWrThresholds(r['suite.waitingRoom.thresholds']);
+});
+chrome.storage.onChanged.addListener((changes) => {
+  if ('suite.waitingRoom.thresholds' in changes) {
+    _wrThresholds = _sanitiseWrThresholds(changes['suite.waitingRoom.thresholds'].newValue);
+    fetchAndRenderStrip(true);
+  }
+});
 
 let wrPoller = null;
 
@@ -669,11 +805,13 @@ function renderStrip(patients) {
   if (patients.length === 0) {
     wrStripEl.className = 'wr-strip wr-strip-hidden';
     wrStripEl.innerHTML = '';
+    reportAlert('waiting', null);
     return;
   }
 
   const maxWait = Math.max(...patients.map((p) => p.minutesWaiting ?? 0));
-  const urgency = maxWait >= 20 ? 'red' : maxWait >= 10 ? 'amber' : 'green';
+  const T = _wrThresholds;
+  const urgency = maxWait >= T.red ? 'red' : maxWait >= T.amber ? 'amber' : 'green';
 
   // Build name chips — show up to 3, then "+N more"
   const shown = patients.slice(0, 3);
@@ -682,7 +820,7 @@ function renderStrip(patients) {
     .map((p) => {
       const mins = p.minutesWaiting;
       const cls =
-        mins != null && mins >= 20 ? 'wr-chip-red' : mins != null && mins >= 10 ? 'wr-chip-amber' : 'wr-chip-ok';
+        mins != null && mins >= T.red ? 'wr-chip-red' : mins != null && mins >= T.amber ? 'wr-chip-amber' : 'wr-chip-ok';
       const wait = mins != null ? ` · ${mins}m` : '';
       return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
     })
@@ -700,6 +838,21 @@ function renderStrip(patients) {
   wrStripEl.querySelector('.wr-strip-goto')?.addEventListener('click', () => {
     switchModule('sentinel');
     document.querySelector('[data-module="sentinel"]')?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' });
+  });
+
+  reportAlert('waiting', {
+    level: urgency,
+    label: 'Waiting',
+    count: patients.length,
+    // F4: surface the worst single wait on the collapsed pill so proximity-to-breach
+    // isn't hidden behind DETAILS (a 12m and a 55m wait must not look identical).
+    meta: maxWait > 0 ? maxWait + 'm' : null,
+    // R1 + threshold context: plain-language hover, naming the wait that tripped
+    // the level (amber ≥10 min, red ≥20 min) so the count carries its own line.
+    title:
+      `Waiting room: ${patients.length} patient${patients.length === 1 ? '' : 's'} arrived` +
+      (maxWait > 0 ? `, longest waiting ${maxWait} min` : '') +
+      (urgency === 'red' ? ` (red ≥${T.red} min)` : urgency === 'amber' ? ` (amber ≥${T.amber} min)` : ''),
   });
 }
 
@@ -886,6 +1039,7 @@ async function fetchAndRenderRmStrip() {
   if (!cfg.enabled || !cfg.assigneeId) {
     rmStripEl.className = 'rm-strip rm-strip-hidden';
     rmStripEl.innerHTML = '';
+    reportAlert('triage', null);
     return true;
   }
   // Adjust poll interval if config changed — restart the poller at the new interval
@@ -898,6 +1052,7 @@ async function fetchAndRenderRmStrip() {
   if (!code) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">No practice code</span>`;
+    reportAlert('triage', null);
     return true;
   }
 
@@ -910,6 +1065,7 @@ async function fetchAndRenderRmStrip() {
   } catch (e) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
+    reportAlert('triage', null);
     return false;
   }
 
@@ -968,6 +1124,24 @@ async function applyTriageAlerts(buckets) {
   // Update strip class
   rmStripEl.classList.remove('rm-strip-alerted-amber', 'rm-strip-alerted-red');
   if (maxLevel) rmStripEl.classList.add(`rm-strip-alerted-${maxLevel}`);
+
+  // Feed the alert roll-up: triage counts as elevated only when a threshold is
+  // crossed (calm pill counts aren't an alert). Count = buckets over threshold.
+  // F1: report the total flagged TASK count (sum across over-threshold buckets),
+  // not the bucket count — so the collapsed pill reconciles with the expanded strip.
+  const triageTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
+  reportAlert(
+    'triage',
+    maxLevel
+      ? {
+          level: maxLevel,
+          label: 'Triage',
+          count: triageTasks,
+          // R1: plain-language hover.
+          title: `Triage: ${triageTasks} task${triageTasks === 1 ? '' : 's'} over the alert threshold`,
+        }
+      : null
+  );
 
   // Desktop notifications — once per threshold crossing per session
   const quietNow = (await window.QuietMode?.isQuiet?.()) ?? false;
@@ -1058,11 +1232,15 @@ async function fetchAndRenderSubRagStrip() {
   if (!anyEnabled) {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
+    reportAlert('demand', null);
     return true;
   }
 
   const { code, source } = await window.PracticeCode.resolve();
-  if (!code) return true;
+  if (!code) {
+    reportAlert('demand', null);
+    return true;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const results = await Promise.allSettled(
@@ -1088,7 +1266,11 @@ async function fetchAndRenderSubRagStrip() {
     const { key, label, count } = res.value;
     const level = _subRagLevel(key, count, thresholds);
     if (!level) continue;
-    triggered.push({ label, count, level });
+    // Capture the threshold this category crossed, so the roll-up tooltip can
+    // show the line ("Medical 70 ≥60") — power users / the manager wanted the
+    // number to carry the threshold it tripped, not blind trust in a default.
+    const crossed = thresholds[key] ? thresholds[key][level] : null;
+    triggered.push({ label, count, level, threshold: crossed });
     if (level === 'red' || maxLevel === null) maxLevel = level;
     else if (level === 'amber' && maxLevel !== 'red') maxLevel = level;
   }
@@ -1097,6 +1279,7 @@ async function fetchAndRenderSubRagStrip() {
     subRagStripEl.className = 'sub-rag-strip sub-rag-strip-hidden';
     subRagStripEl.innerHTML = '';
     _subRagPrevLevel = null;
+    reportAlert('demand', null);
     return !anyFailed;
   }
 
@@ -1123,6 +1306,19 @@ async function fetchAndRenderSubRagStrip() {
     <button class="sub-rag-goto" title="Go to Submissions">Submissions →</button>
   `;
   subRagStripEl.querySelector('.sub-rag-goto')?.addEventListener('click', () => switchModule('submissions'));
+  // F1: report total demand TASKS (Medical + Admin sum), not the category count,
+  // so "Demand N" reconciles with the expanded "Medical X / Admin Y" detail.
+  const demandTasks = triggered.reduce((sum, t) => sum + (t.count || 0), 0);
+  reportAlert('demand', {
+    level: maxLevel,
+    label: 'Demand',
+    count: demandTasks,
+    // R1 + threshold context: plain-language hover with the breakdown AND the line
+    // each category crossed (e.g. "Medical 70 ≥60, Admin 45 ≥40").
+    title: `Demand: ${demandTasks} new request${demandTasks === 1 ? '' : 's'} awaiting review (${triggered
+      .map((t) => `${t.label} ${t.count}${t.threshold != null ? ` ≥${t.threshold}` : ''}`)
+      .join(', ')})`,
+  });
   return !anyFailed;
 }
 

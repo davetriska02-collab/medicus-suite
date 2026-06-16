@@ -2,7 +2,7 @@
 
 **Document reference:** MS-CSO-SOUP-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.93.1
+**Product version:** 3.98.1
 **Document version:** 1.6
 **Date issued:** 2026-06-15
 **Author:** Dr Dave Triska, Graysbrook Ltd

@@ -191,6 +191,46 @@ function buildCommands() {
     run: () => window.QuietMode?.clear(),
   });
 
+  // Focus (Zen) mode — visual declutter of the chrome. Distinct from Quiet
+  // mode above, which mutes notifications; Zen hides chrome, never signal.
+  cmds.push({
+    id: 'zen:toggle',
+    label: 'Focus mode: toggle',
+    group: 'View',
+    keywords: 'zen focus declutter hide chrome distraction free minimal full screen',
+    icon: GENERIC_ICONS.window,
+    run: () => window.ZenMode?.toggle(),
+  });
+
+  // Keep the alert roll-up pinned open (persists across alert-set changes).
+  // Panel-only — the floating pop-out has no demand strips / roll-up.
+  if (document.getElementById('alertRollup')) {
+    cmds.push({
+      id: 'alerts:keep-expanded',
+      label: 'Alerts: keep roll-up expanded (toggle)',
+      group: 'View',
+      keywords: 'alert rollup pin expand always open detail demand waiting triage',
+      icon: GENERIC_ICONS.window,
+      run: async () => {
+        const r = await chrome.storage.local.get('suite.rollup.alwaysExpanded');
+        await chrome.storage.local.set({ 'suite.rollup.alwaysExpanded': !(r['suite.rollup.alwaysExpanded'] === true) });
+      },
+    });
+  }
+
+  // Edit the numeric alert thresholds (waiting-room minutes + demand counts).
+  // Panel-only — the strips these tune live in the docked panel.
+  if (document.getElementById('wrStrip')) {
+    cmds.push({
+      id: 'alerts:thresholds',
+      label: 'Edit alert thresholds…',
+      group: 'View',
+      keywords: 'alert threshold waiting room minutes demand amber red tune configure level limit',
+      icon: GENERIC_ICONS.settings,
+      run: () => import('../thresholds/thresholds.js').then((m) => m.openThresholds()),
+    });
+  }
+
   // Options sections — deep links straight to the right settings page.
   for (const [sect, label, keywords] of OPTIONS_SECTIONS) {
     cmds.push({

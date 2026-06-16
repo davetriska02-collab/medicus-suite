@@ -71,6 +71,19 @@
   --cat-4: #7c3aed;
   --cat-5: #64748b;
   --cat-6: #0891b2;
+  /* User colour swatches — the fixed organising palette a user picks from to
+     colour-code pills/tiles (Slots types, Reception pathways, …). NON-clinical:
+     purely for the user's own grouping, never a status. Distinct from --cat-*
+     (chart series) and from the status triads. Canon: TOKENS.md §swatches. */
+  --swatch-slate: #64748b;
+  --swatch-red: #dc2626;
+  --swatch-orange: #ea580c;
+  --swatch-amber: #d97706;
+  --swatch-green: #16a34a;
+  --swatch-teal: #0d9488;
+  --swatch-blue: #2563eb;
+  --swatch-purple: #7c3aed;
+  --swatch-pink: #db2777;
 }
 
 /* Dark theme override */
@@ -114,6 +127,16 @@ html[data-theme='dark'] {
   --cat-4: #a78bfa;
   --cat-5: #93a8c5;
   --cat-6: #38bdf8;
+  /* Lightness-raised for legibility on #0b1424, mirroring the --cat dark lifts. */
+  --swatch-slate: #93a8c5;
+  --swatch-red: #f87171;
+  --swatch-orange: #fb923c;
+  --swatch-amber: #fbbf24;
+  --swatch-green: #4ade80;
+  --swatch-teal: #2dd4bf;
+  --swatch-blue: #5b8fc7;
+  --swatch-purple: #a78bfa;
+  --swatch-pink: #f472b6;
 }
 
 html,
@@ -933,6 +956,195 @@ body {
 /* ── Waiting Room global strip ───────────────────────────────────────────────
    Sits between the nav bar and the module content. Visible on every tab.   */
 
+/* ── Canonical pill (TOKENS.md §Pill) ─────────────────────────────────────────
+   The suite-wide pill, generalised from the Slots per-type pills: a coloured
+   DOT (category/severity carrier — survives colourblind because shape, not only
+   hue), a NAME in the human/sans voice, and a COUNT in the machine/mono tabular
+   voice. Colour rides on two custom props so the (future) organise mode can set
+   them per-pill: --pill-line (border + dot) and --pill-fill (background).
+
+   Two modes, never mixed:
+   • Categorical (.pill, set --pill-line/--pill-fill from --cat-*): non-clinical
+     organising colour, fully user-configurable in the config pass.
+   • Clinical RAG (.pill--green/.pill--amber/.pill--red): severity triad.
+     SAFETY: a red pill's FILL is locked to --red-dim with !important, so the
+     forthcoming colour config can only ever change a red pill's BORDER, never
+     neutralise the red fill. Alert salience is a safety property. */
+.pill {
+  --pill-line: var(--border);
+  --pill-fill: var(--bg-mid);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  background: var(--pill-fill);
+  border: 1px solid var(--pill-line);
+  border-radius: var(--r-pill);
+  max-width: 100%;
+  white-space: nowrap;
+}
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pill-line);
+  flex-shrink: 0;
+}
+.pill-name {
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pill-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+/* Optional secondary datum (e.g. worst wait "25m") — muted, machine voice. */
+.pill-meta {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+/* Clinical RAG variants — dot + border take the triad line, fill takes the wash,
+   count takes the ink. The non-colour severity cue: red = FILLED dot (default),
+   amber = HOLLOW ring dot, so red vs amber is distinguishable by shape alone. */
+.pill--green {
+  --pill-line: var(--green-line);
+  --pill-fill: var(--green-dim);
+}
+.pill--green .pill-dot {
+  background: var(--green);
+}
+.pill--green .pill-count {
+  color: var(--green);
+}
+.pill--amber {
+  --pill-line: var(--amber-line);
+  --pill-fill: var(--amber-dim);
+}
+.pill--amber .pill-dot {
+  background: transparent;
+  border: 1.5px solid var(--amber);
+}
+.pill--amber .pill-count {
+  color: var(--amber);
+}
+.pill--red {
+  --pill-line: var(--red-line);
+  --pill-fill: var(--red-dim) !important; /* red fill is locked — see note above */
+}
+.pill--red .pill-dot {
+  background: var(--red);
+}
+.pill--red .pill-count {
+  color: var(--red);
+}
+
+/* ── Alert roll-up (groups 2+ elevated strips into one bar; see panel.js) ───── */
+.alert-rollup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  min-height: 30px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+}
+.alert-rollup-hidden {
+  display: none;
+}
+.alert-rollup--amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.alert-rollup--red {
+  background: var(--red-dim);
+  border-bottom-color: var(--red-line);
+}
+.alert-rollup-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.alert-rollup-count {
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* "as at HH:MM" — anchors the figures to a moment; muted, machine voice. */
+.alert-rollup-stamp {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.alert-rollup-pills {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Roll-up pills are the canonical .pill in clinical-RAG mode, sized down a touch
+   to sit in the compact bar. Name + count anatomy carries F1 (a count that
+   reconciles to the expanded detail); the dot shape carries F3 (red filled vs
+   amber ring — severity without relying on hue). */
+.alert-rollup-pills .pill {
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+}
+/* Slightly larger than the prior 10px so the counts clear the eyesight floor
+   (the one place the type scale was too tight for the technophobe partner). */
+.alert-rollup-pills .pill-name {
+  font-size: 11px;
+}
+.alert-rollup-pills .pill-count {
+  font-size: 11px;
+}
+.alert-rollup-pills .pill-meta {
+  font-size: 10px;
+}
+.alert-rollup-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  flex-shrink: 0;
+  padding: 0;
+}
+.alert-rollup-chev {
+  font-size: 9px;
+}
+
 .wr-strip {
   display: flex;
   align-items: center;
@@ -944,7 +1156,8 @@ body {
   transition:
     background var(--med) var(--ease),
     border-color var(--med) var(--ease);
-  overflow: hidden;
+  /* overflow visible + min-height so wrapped name chips show in full rather than
+     clipping into the "Monitoring →" button (the count must reconcile to the list). */
   min-height: 28px;
 }
 
@@ -983,11 +1196,10 @@ body {
 
 .wr-strip-chips {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
 }
 
 .wr-chip {
@@ -1153,9 +1365,91 @@ body {
 }
 
 /* Popout button active state */
-#popoutBtn.active {
+#popoutBtn.active,
+#zenBtn.active {
   color: var(--accent);
   background: var(--accent-dim);
+}
+/* Keep the accent tint on hover of an active toggle (don't fall back to the
+   neutral hover wash, which masks the on-state). */
+#popoutBtn.active:hover,
+#zenBtn.active:hover {
+  color: var(--accent-hover);
+  background: var(--accent-dim);
+}
+
+/* On-state "FOCUS · ESC" pill — the visible, clickable answer to "you are in
+   focus mode and here is how to leave". Reuses the canonical .pill in the
+   ACCENT (non-clinical) colour so it never competes with amber/red strips, and
+   sits in the brand slot (which Zen empties). Hidden unless html[data-zen='1'].
+   Clicking it, or Esc, exits. See shared/zen-mode.js. */
+.zen-pill {
+  display: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+  cursor: pointer;
+  /* R2: a full --accent border (not the faint --accent-line) so the on-state
+     pill reads clearly for tired eyes, especially on the dark nav. */
+  --pill-line: var(--accent);
+  --pill-fill: var(--accent-dim);
+}
+html[data-zen='1'] .zen-pill {
+  display: inline-flex;
+}
+.zen-pill .pill-dot {
+  background: var(--accent);
+}
+.zen-pill .pill-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+.zen-pill .pill-meta {
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.zen-pill:hover {
+  --pill-fill: var(--bg-hover);
+  --pill-line: var(--accent);
+}
+
+/* ── Zen (focus) mode ─────────────────────────────────────────────────────────
+   Visual declutter for focused work in the narrow panel: drop the brand, collapse
+   nav tab labels to icons, tighten chrome and hide CALM demand strips so the active
+   module dominates. Toggled via #zenBtn / Ctrl+. / the command palette; applied as
+   html[data-zen="1"] by shared/display-prefs.js, so it persists and syncs panel↔pop-out.
+
+   CLINICAL SAFETY: only chrome and GREEN/calm decoration is hidden. Amber and red
+   waiting-room, triage and demand strips are never matched by these rules, so a
+   clinical signal can never be hidden by Zen. Keep that invariant if you edit this. */
+html[data-zen='1'] .nav-brand {
+  display: none;
+}
+html[data-zen='1'] .nav-tab {
+  padding: 6px 7px;
+  gap: 0;
+}
+html[data-zen='1'] .nav-tab > span:not(.nav-badge) {
+  display: none;
+}
+/* Icon-only tabs usually fit, so retire the overflow fade/arrows for a calm rail. */
+html[data-zen='1'] .suite-nav::after,
+html[data-zen='1'] .suite-nav::before {
+  opacity: 0;
+}
+html[data-zen='1'] .nav-scroll-indicator {
+  display: none;
+}
+/* Hide calm/green strips only — amber and red are deliberately not selected. */
+html[data-zen='1'] #wrStrip.wr-strip-green {
+  display: none;
+}
+html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-red) {
+  display: none;
 }
 
 /* ── Submissions demand strip (global) ──────────────────────── */
@@ -1806,7 +2100,9 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
   padding: 12px 14px 10px;
-  margin-bottom: 2px;
+  /* F7: breathing room above so the card's EXPAND/DISMISS controls are not flush
+     under the alert roll-up's DETAILS toggle (mis-click hazard, Practice crit). */
+  margin: 8px 0 2px;
 }
 
 /* Collapsed strip — shown once the practice code is detected so the full
@@ -2271,6 +2567,9 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   color: var(--amber);
   font-weight: 600;
 }
+.suite-tabs-hint.flash.ok {
+  color: var(--green);
+}
 .suite-tabs-done {
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -2288,4 +2587,139 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 .suite-tabs-done:hover {
   background: var(--accent-hover);
+}
+
+/* ── Alert-threshold editor (reuses the suite-tabs-* sheet scaffolding) ──────── */
+.thresh-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.thresh-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.thresh-section-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.thresh-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.thresh-enable input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.thresh-fields {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.thresh-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.thresh-field--amber > span:first-child {
+  color: var(--amber);
+}
+.thresh-field--red > span:first-child {
+  color: var(--red);
+}
+.thresh-field input[type='number'] {
+  width: 56px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 6px;
+  text-align: center;
+}
+.thresh-field input[type='number']:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.thresh-unit {
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.thresh-link {
+  display: inline-block;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-decoration: none;
+}
+.thresh-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+/* Disabled (alert-off) strip: dim the fields but keep the head + note legible, so
+   a muted strip is never silent AND invisible. */
+.thresh-section--off .thresh-fields,
+.thresh-section--off .thresh-section-foot {
+  opacity: 0.45;
+}
+.thresh-off-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  margin: 0 0 6px;
+}
+.thresh-always {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.thresh-section-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.thresh-default {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.thresh-reset {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 0;
+}
+.thresh-reset:hover {
+  color: var(--accent);
 }

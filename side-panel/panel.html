@@ -13,6 +13,17 @@
           <img class="nav-logo" src="../brand/app-icon.png" alt="" width="16" height="16" />
           <span class="nav-name">Medicus Suite</span>
         </div>
+        <button
+          id="zenPill"
+          class="pill zen-pill"
+          type="button"
+          title="Exit focus mode (Esc)"
+          aria-label="Exit focus mode"
+        >
+          <span class="pill-dot"></span>
+          <span class="pill-name">Focus</span>
+          <span class="pill-meta">Esc</span>
+        </button>
         <div class="nav-tabs">
           <button class="nav-tab" data-module="today" aria-label="Today">
             <svg
@@ -147,7 +158,12 @@
             </svg>
             <span>Referrals</span>
           </button>
-          <button class="nav-tab" data-module="condor" aria-label="Condor — practice pressure dashboard" title="Condor — live practice pressure dashboard">
+          <button
+            class="nav-tab"
+            data-module="condor"
+            aria-label="Condor — practice pressure dashboard"
+            title="Condor — live practice pressure dashboard"
+          >
             <svg
               width="14"
               height="14"
@@ -260,6 +276,30 @@
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </button>
+          <button
+            id="zenBtn"
+            class="icon-btn"
+            title="Focus mode — declutter chrome (Ctrl+.)"
+            aria-label="Focus mode"
+            aria-pressed="false"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="2" x2="12" y2="5" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="5" y2="12" />
+              <line x1="19" y1="12" x2="22" y2="12" />
+              <circle cx="12" cy="12" r="2.5" />
+            </svg>
+          </button>
           <button id="quietPill" class="quiet-pill quiet-pill-hidden" title=""></button>
           <div class="nav-disp-wrap">
             <button id="displayBtn" class="icon-btn" title="Display settings">
@@ -319,9 +359,18 @@
         </div>
       </nav>
 
-      <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
-      <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
-      <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+      <div
+        id="alertRollup"
+        class="alert-rollup alert-rollup-hidden"
+        role="status"
+        aria-live="polite"
+        aria-expanded="false"
+      ></div>
+      <div id="alertStack">
+        <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+      </div>
       <div id="setupHost" aria-live="polite" style="display: none"></div>
       <main class="suite-content" id="suiteContent">
         <!-- Modules load here -->
@@ -329,6 +378,7 @@
     </div>
 
     <script src="../shared/quiet-mode.js"></script>
+    <script src="../shared/zen-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>
     <script src="../shared/request-monitor.js"></script>

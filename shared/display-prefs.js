@@ -11,6 +11,7 @@
     document.documentElement.setAttribute('data-theme',      p.theme      || 'light');
     document.documentElement.setAttribute('data-size',       p.size       || 'medium');
     document.documentElement.setAttribute('data-colorblind', String(!!p.colorblind));
+    document.documentElement.setAttribute('data-zen',        p.zen ? '1' : '0');
   }
 
   if (typeof chrome !== 'undefined' && chrome.storage) {
