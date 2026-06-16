@@ -2,6 +2,70 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.102.0] — 2026-06-16
+
+### Practice Report — design-crit + Practice review fixes
+
+Lands the converged design-crit + The Practice findings on the new Practice Report
+(`docs/appraisal/PRACTICE-REPORT-crit+practice-2026-06-16.md`).
+
+- **Dark mode fixed (blocker).** The dark theme now re-states the brand + RAG tokens, so
+  section headings, the cover title, the controls title and sparklines no longer render
+  at ~1.35:1 (they inherited the light navy). Headings are legible in dark again.
+- **Pressure Index explains itself.** The current-snapshot block now shows the scale
+  ("GREEN under 40 · AMBER 40–70 · RED 70 or over") and, when the band was floored by
+  over-capacity, says so — a low index reading AMBER no longer looks like a bug. (The
+  four-persona convergent ask.)
+- **Live snapshot set apart from the period.** It now renders as a dashed, tinted panel
+  with a LIVE tag and an "as at HH:MM" stamp, and states it is not part of the period
+  figures — so the live "today" count is no longer mistaken for a period total.
+- **By-clinician table labelled and reconcilable.** Activity now shows a per-clinician
+  drill-down split by activity type with an "All clinicians" total row that reconciles to
+  the totals above. A note explains demand (inbound) and activity (done) need not match.
+- **Data notes, not a standing error.** Skipped-section reasons (e.g. referrals needing
+  its report opened once) now read in plain English inside a neutral "Data notes" panel,
+  not amber alert text on every run; the double full-stop is gone.
+- **Designed empty state.** The no-code / first-run state is now a framed card with an
+  "Open options" action instead of bare grey text.
+- **Polish:** uniform stat-tile widths across sections; sparkline wrapper styled; cover
+  meta fields separated; `print-color-adjust: exact` so RAG fills survive PDF export.
+
+Remaining roadmap (power-user): report section toggles, per-day series tables, and a
+multi-section CSV export.
+
+## [v3.101.0] — 2026-06-16
+
+### Practice Report (Condor) — periodised, audience-tuned operational report
+
+A new Practice Report built on Condor's operational data, for a selectable period
+(Today / 7 days / 30 days / custom), rendered as a printable page (Print → PDF) plus
+CSV — modelled on the Patient Record Visualiser's print pattern. Planned in
+`docs/plans/PRACTICE-REPORT-PLAN.md` from 5 codebase + 5 web research agents.
+
+- **Three audience profiles.** *Practice Management* (full detail incl. per-clinician
+  breakdown), *Staff Briefing* (aggregate-only — per-clinician figures are stripped at
+  the data layer so individual productivity can never leak, per Goodhart's-law / morale
+  guidance), and *ICB / System* (practice-level, NHS-correct terminology — e.g. "Urgent
+  suspected cancer (2WW / FDS)"; no live snapshot).
+- **Sections:** cover (period + practice + "as at"), current snapshot (live PPI /
+  waiting / urgent), demand (per-day series + by-type + sparkline), capacity (scheduled
+  slots / sessions), activity (totals; per-clinician for management), referrals
+  (priority/status), and trends from the snapshot store.
+- **Honest by construction.** Only metrics derivable from Medicus are shown; anything
+  that cannot be derived is omitted rather than estimated, with a short limitations
+  footer. Multi-day demand/activity/capacity/referrals come from real date-range
+  endpoints.
+- **Forward-accruing snapshot store.** Condor now writes one `practice.reportSnapshots`
+  row per day (PPI / waiting room / task age — the live-only signals with no source
+  history), pruned to 90 days and backed up via the existing `condor` scope, so trends
+  build over time.
+- **Launchers:** a "Practice report" strip in Condor (Today / 7d / 30d / full) and a
+  Ctrl+K command "Generate practice report…". Opens as a browser tab like the visualiser.
+
+New files: `practice-report.{html,css,js}`, `side-panel/modules/condor/report/{report-data,
+report-profiles,report-render}.js`. Tests: `test-practice-report-data.js` (30),
+`test-practice-report-render.js` (18, incl. the staff aggregate-only safety invariant).
+
 ## [v3.100.0] — 2026-06-16
 
 ### Critical-result chips now show their trigger value on the chip (community item — Nick)
@@ -34,6 +98,7 @@ submitted labels).
 - Bumped `defaults.json` schema `version` 16 → 17 so the migration runs for
   existing installs; refreshed the defaults-config lock; updated
   `test-result-severity.js` for the new Hb threshold.
+
 
 ## [v3.99.0] — 2026-06-16
 

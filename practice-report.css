@@ -1,0 +1,399 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Practice Report — page styles. Mirrors the visualiser's NHS-token print aesthetic. */
+
+:root {
+  --nhs-blue: #005eb8;
+  --nhs-dark: #003087;
+  --card: #ffffff;
+  --bg: #f4f6f9;
+  --text: #1a202c;
+  --text2: #4a5568;
+  --text3: #718096;
+  --border: #d8dee6;
+  --green: #1a7f37;
+  --amber: #b45309;
+  --red: #c1121f;
+  --r: 8px;
+}
+html[data-theme='dark'] {
+  --card: #1a2230;
+  --bg: #0f1620;
+  --text: #e6edf5;
+  --text2: #aab7c6;
+  --text3: #7d8aa0;
+  --border: #2a3647;
+  /* Brand + RAG tokens must be re-stated for dark, or headings/sparklines/badge
+     text inherit the light navy (#003087 → ~1.35:1 on a dark card). */
+  --nhs-blue: #4c9aff;
+  --nhs-dark: #5aa7ff;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.pr-controls {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+}
+.pr-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.pr-controls-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--nhs-blue);
+  margin-right: auto;
+}
+.pr-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.pr-seg button {
+  border: 0;
+  background: var(--card);
+  color: var(--text2);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.pr-seg button.active {
+  background: var(--nhs-blue);
+  color: #fff;
+}
+.pr-custom {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text2);
+}
+.pr-custom input {
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.pr-profile {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text2);
+  font-size: 13px;
+}
+.pr-profile select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.pr-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font: inherit;
+}
+.pr-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pr-btn-primary {
+  background: var(--nhs-blue);
+  color: #fff;
+  border-color: var(--nhs-blue);
+}
+
+/* ── Output ───────────────────────────────────────────────────────────────── */
+.pr-output {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 0 20px;
+}
+.pr-placeholder {
+  text-align: center;
+  color: var(--text3);
+  padding: 60px 20px;
+}
+.pr-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pr-cover {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--nhs-blue);
+  border-radius: var(--r);
+  padding: 18px 20px;
+}
+.pr-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pr-cover h1 {
+  font-size: 22px;
+  margin: 0;
+  color: var(--nhs-dark);
+}
+.pr-profile-tag {
+  background: var(--nhs-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.pr-cover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 10px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.pr-cover-meta span + span {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+.pr-cover-blurb {
+  margin: 10px 0 0;
+  color: var(--text2);
+}
+
+.pr-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 20px;
+}
+/* Live snapshot is visually set apart from the period body (P2) — a point-in-time
+   reading, not a period figure. Tinted panel + a LIVE tag + an "as at" stamp. */
+.pr-card-live {
+  background: linear-gradient(0deg, var(--bg), var(--bg)), var(--card);
+  border-style: dashed;
+}
+.pr-live-tag {
+  background: var(--amber);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.pr-live-stamp {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text3);
+  font-weight: 400;
+}
+.pr-card h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--nhs-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pr-note {
+  color: var(--text3);
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+.pr-note-warn {
+  color: var(--amber);
+}
+.pr-grid {
+  display: grid;
+  gap: 12px;
+}
+/* Uniform tile width across all sections regardless of count (D4). */
+.pr-grid-3,
+.pr-grid-4 {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.pr-stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.pr-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+.pr-stat-label {
+  font-size: 12px;
+  color: var(--text2);
+}
+.pr-stat-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+.pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.pr-table th,
+.pr-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.pr-table .pr-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pr-table .pr-row-total td {
+  border-top: 2px solid var(--border);
+  border-bottom: 0;
+  font-weight: 600;
+}
+.pr-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 20px;
+}
+.pr-badge-green {
+  background: rgba(26, 127, 55, 0.15);
+  color: var(--green);
+}
+.pr-badge-amber {
+  background: rgba(180, 83, 9, 0.15);
+  color: var(--amber);
+}
+.pr-badge-red {
+  background: rgba(193, 18, 31, 0.15);
+  color: var(--red);
+}
+.pr-spark-wrap {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.85;
+}
+.pr-spark {
+  color: var(--nhs-blue);
+  vertical-align: middle;
+}
+.pr-trend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.pr-trend-label {
+  width: 120px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.pr-trend-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pr-foot {
+  margin-top: 4px;
+}
+/* Skipped-section notes live in a neutral boxed panel, not a standing amber alert (C2). */
+.pr-datanotes {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 16px;
+}
+.pr-datanotes h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text3);
+  margin: 0 0 6px;
+}
+.pr-datanotes ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text2);
+  font-size: 12px;
+}
+.pr-foot .pr-note {
+  margin-top: 10px;
+}
+
+/* Designed empty / placeholder state (C3) — a framed panel, not bare grey text. */
+.pr-empty {
+  max-width: 480px;
+  margin: 60px auto;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 32px 28px;
+}
+.pr-empty h2 {
+  margin: 0 0 8px;
+  color: var(--nhs-dark);
+  font-size: 17px;
+}
+.pr-empty p {
+  color: var(--text2);
+  margin: 0 0 16px;
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────── */
+@media print {
+  .pr-controls {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+    /* Keep RAG pill fills + sparklines on paper — dropping them is signal loss (D3). */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .pr-output {
+    margin: 0;
+    max-width: none;
+    padding: 0;
+  }
+  .pr-card,
+  .pr-cover {
+    border: 1px solid #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pr-stat {
+    background: #fff;
+  }
+  @page {
+    margin: 14mm;
+  }
+}
