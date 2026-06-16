@@ -82,6 +82,18 @@ export function renderPpi(data) {
     strokeColor = 'var(--red)';
   }
 
+  // #1 trust fix: never show a GREEN dial while Demand/Capacity reads over limit.
+  // Floor the displayed band to AMBER (the numeric ppi is left unchanged). This
+  // mirrors the band-floor in condor.js computeIndex so the gauge, the headline
+  // strip and the copied figures never contradict one another. This only ever
+  // RAISES a signal, never lowers one.
+  const floored = capacityStretched && colorClass === 'condor-ppi-green';
+  if (floored) {
+    colorClass = 'condor-ppi-amber';
+    colorLabel = 'AMBER';
+    strokeColor = 'var(--amber)';
+  }
+
   const total = Math.PI * 80;
   // Clamp to 98% of arc at maximum so stroke-linecap="round" doesn't overshoot at PPI=100.
   const maxDash = total - 2;
@@ -101,7 +113,7 @@ export function renderPpi(data) {
 
   const capacityNote =
     capacityStretched && ppi < 70
-      ? `<div class="condor-ppi-note">Capacity is ${demandRatio >= 1.5 ? 'over' : 'at'} limit (${queueCount} requests vs ${remaining} slots). The index weights capacity at 20%, so it can stay ${colorLabel.toLowerCase()} — see Demand / Capacity below.</div>`
+      ? `<div class="condor-ppi-note">Capacity is ${demandRatio >= 1.5 ? 'over' : 'at'} limit (${queueCount} requests vs ${remaining} slots). ${floored ? `Shown as AMBER though the weighted index is only ${ppi}` : `The index weights capacity at 20%`} — see Demand / Capacity below.</div>`
       : '';
 
   // R3: make the index transparent. The info button's data-tip explains the

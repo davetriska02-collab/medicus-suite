@@ -9,6 +9,68 @@
   overflow-y: auto;
 }
 
+/* ── Headline component strip ─────────────────────────────────────────────────
+   Leads the panel so the user reads the labelled Demand / Capacity line (and the
+   floored band) before the green-looking gauge. Carries the band colour as a left
+   accent + pill so an over-capacity day can never present as a bare green dial. */
+.condor-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 12px 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--bg-mid);
+  font-family: var(--sans);
+}
+
+.condor-headline-band {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  color: var(--bg-deep);
+}
+
+.condor-headline-figs {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.condor-headline-note {
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+/* Band colours — full-strength fills, kept as a safety signal (see pill comment). */
+.condor-headline-green {
+  border-left-color: var(--green);
+}
+.condor-headline-green .condor-headline-band {
+  background: var(--green);
+}
+.condor-headline-amber {
+  border-left-color: var(--amber);
+}
+.condor-headline-amber .condor-headline-band {
+  background: var(--amber);
+}
+.condor-headline-red {
+  border-left-color: var(--red);
+}
+.condor-headline-red .condor-headline-band {
+  background: var(--red);
+}
+
 .condor-hero {
   width: 100%;
   padding: 12px 12px 0;
@@ -90,6 +152,35 @@
   text-transform: uppercase;
   padding: 24px;
   text-align: center;
+}
+
+/* ── Quiet / unconfigured-optional state ──────────────────────────────────────
+   Optional-but-not-set-up cards (Task inbox not configured, Day Score before
+   17:00) and the "no consults yet" workload state should read as a thin muted
+   strip, not a full-size error or a dead data feed. They are still legible and
+   still actionable (the "Set up now" button keeps working) — just dialled down
+   so they don't compete with live signal. Genuine-failure placeholders are NOT
+   given this class, so their salience is preserved. */
+.condor-card.condor-quiet {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+  padding: 7px 10px;
+  opacity: 0.7;
+}
+
+.condor-placeholder.condor-quiet {
+  padding: 7px 10px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.condor-wl-totals.condor-wl-empty {
+  color: var(--text-4);
+  font-style: italic;
 }
 
 /* ── Typography ───────────────────────────────────────────────────────────── */

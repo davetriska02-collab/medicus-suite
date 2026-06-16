@@ -1231,6 +1231,37 @@
   color: var(--amber);
 }
 
+/* ── Audit headline ───────────────────────────────────────────────────────── */
+/* One calm, factual line at the top of a loaded record: "N meds checked ·
+   M matched a monitoring rule · K overdue · P unmatched · checked HH:MM".
+   Deliberately quiet (neutral, not an alert colour) — it makes a clean screen
+   read as "checked and clear" without competing with the alert chips below. */
+.sent-audit-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin: 8px 0 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  font-size: 11px;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+.sent-audit-counts {
+  font-family: var(--mono);
+}
+.sent-audit-time {
+  flex-shrink: 0;
+  color: var(--text-4);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 /* ── Patient banner row (holds name + verify button) ──────────────────────── */
 .sent-patient-banner-row {
   display: flex;

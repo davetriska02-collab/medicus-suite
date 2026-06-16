@@ -816,6 +816,33 @@ function classifySnapshot(snapshot) {
   return 'data';
 }
 
+// Pure helper: derive the per-patient audit headline counts from the already-
+// computed render values. Reuses the existing fields rather than recomputing —
+// `modules.medications` (extraction count), the drug-monitoring chips, and
+// `unmatchedMeds` — so the headline can never disagree with the sections below it.
+//
+// The point of this headline (pharmacist + nurse finding): on a clean screen a
+// clinician must be able to tell "drug was checked and is in date" from "drug
+// never matched a rule and silently fell through". A bare empty panel reads as
+// the latter; these counts make "verified clear" explicit. It does NOT replace
+// the "no alert is not an all-clear" caveat — it is purely additive.
+//
+// Returns null when there is nothing to summarise (no meds extracted AND no
+// monitoring chips AND no unmatched meds) so the headline simply doesn't render.
+function buildAuditHeadline({ chips, modules, unmatchedMeds }) {
+  const list = Array.isArray(chips) ? chips : [];
+  const monitoringChips = list.filter((c) => c && c.type === 'drug-monitoring');
+  const medsChecked = modules && Number.isFinite(modules.medications) ? modules.medications : null;
+  const matched = monitoringChips.length;
+  // "Overdue" here = monitoring chips at action-needed severity (rank <= 2:
+  // overdue / severely overdue / due soon) — the silent-failure counterpoint.
+  const overdue = monitoringChips.filter((c) => (STATUS_RANK[c.status] ?? 99) <= 2).length;
+  const unmatched = Array.isArray(unmatchedMeds) ? unmatchedMeds.length : 0;
+
+  if (medsChecked === null && matched === 0 && unmatched === 0) return null;
+  return { medsChecked, matched, overdue, unmatched };
+}
+
 let _refreshInFlight = false;
 let _refreshPending = false;
 async function refresh() {
@@ -1104,6 +1131,28 @@ function render(payload) {
   const ts = evaluatedAt
     ? new Date(evaluatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : '';
+
+  // Headline audit count — one calm, factual line at the top of a loaded record
+  // so a clean screen reads as "checked and clear", not "nothing happened to
+  // fire". Reuses the counts already in scope (drug-monitoring chips,
+  // modules.medications, unmatchedMeds) — see buildAuditHeadline. Only rendered
+  // for a genuinely loaded, evaluated patient record; never weakens or precedes
+  // the alert salience below (it sits between the patient banner and the chips,
+  // and the "no alert is not an all-clear" caveat is preserved unchanged).
+  const headline = patient ? buildAuditHeadline({ chips, modules, unmatchedMeds }) : null;
+  const headlineHtml = headline
+    ? `
+    <div class="sent-audit-headline" role="status">
+      <span class="sent-audit-counts">${[
+        headline.medsChecked !== null ? `${headline.medsChecked} med${headline.medsChecked === 1 ? '' : 's'} checked` : '',
+        `${headline.matched} matched a monitoring rule`,
+        `${headline.overdue} overdue`,
+        `${headline.unmatched} unmatched`,
+      ]
+        .filter(Boolean)
+        .join(' · ')}</span>${ts ? `<span class="sent-audit-time">checked ${escHtml(ts)}</span>` : ''}
+    </div>`
+    : '';
   const emptyMsg =
     visibleChips.length === 0
       ? `<div class="sent-empty">${currentFilter === 'action' ? 'No items needing action.' : currentFilter === 'clear' ? 'No items in date.' : 'No chips for this patient.'}</div>`
@@ -1188,7 +1237,15 @@ function render(payload) {
   // every poll tick that brings back the same data. ──
 
   const changed = setDynamic(
-    patientHtml + driftHtml + filterHtml + groupsHtml + emptyMsg + unmatchedHtml + extractionHtml + journalAugmentHtml
+    patientHtml +
+      headlineHtml +
+      driftHtml +
+      filterHtml +
+      groupsHtml +
+      emptyMsg +
+      unmatchedHtml +
+      extractionHtml +
+      journalAugmentHtml
   );
   if (!changed) return;
 

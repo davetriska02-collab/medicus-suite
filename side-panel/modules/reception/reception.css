@@ -223,6 +223,17 @@
   border-color: var(--amber-line);
 }
 
+/* One-time-setup framing note — calm, informational (not an alarm) */
+.rcp-setup-note {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
 /* Pathways-disabled notice */
 .rcp-disabled-note {
   background: var(--amber-dim);

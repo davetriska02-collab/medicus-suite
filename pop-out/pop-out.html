@@ -252,6 +252,32 @@
               <circle cx="12" cy="12" r="2.5" />
             </svg>
           </button>
+          <div class="nav-help-wrap">
+            <button
+              id="helpBtn"
+              class="icon-btn"
+              type="button"
+              title="What is this tab? (plain-English help)"
+              aria-label="Help for the current tab"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </button>
+            <div id="helpPopoverHost"></div>
+          </div>
           <button id="paletteBtn" class="icon-btn" title="Command palette (Ctrl+K)">
             <svg
               width="13"

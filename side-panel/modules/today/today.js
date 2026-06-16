@@ -267,6 +267,8 @@ async function fetchSweep() {
     _sweepData = { lastRun: null };
   }
   renderCard('sweep');
+  // Recent Alerts borrows sweep provenance for its empty state — keep it in sync.
+  renderCard('alerts');
 }
 
 // ── Fetch: Alert log ─────────────────────────────────────────────────────────
@@ -357,9 +359,13 @@ function buildWrBody() {
 function buildRmBody() {
   if (!_rmData) return '<span class="today-loading">Loading…</span>';
   if (!_rmData.configured) {
-    return `<span class="today-optional-tag">Optional</span>
-      <span class="today-muted">Triage monitor not set up.</span>
-      <a class="today-setup-link" href="#" data-action="open-setup">Set up in options →</a>`;
+    // Quiet "optional, not set up" strip — deliberately thin and neutral so it
+    // reads as a dormant feature, not a broken tile or a failure state.
+    return `<div class="today-optional-strip">
+      <span class="today-optional-tag">Optional</span>
+      <span class="today-optional-strip-text">Triage monitor not set up</span>
+      <a class="today-setup-link" href="#" data-action="open-setup">Set up →</a>
+    </div>`;
   }
   if (_rmData.error && !Object.keys(_rmData.buckets).length) {
     return errMsg(_rmData.error);
@@ -483,32 +489,53 @@ function buildSlotsBody() {
   `;
 }
 
-function buildSweepBody() {
-  if (!_sweepData) return '<span class="today-loading">Loading…</span>';
-
-  const { lastRun } = _sweepData;
-
-  if (!lastRun) {
-    return `
-      <span class="today-muted">No sweep run this session.</span>
-      <div class="today-sweep-actions">
-        <button class="today-ghost-btn" data-action="open-sweep">Run the pre-clinic sweep →</button>
-      </div>
-    `;
-  }
-
+// Derive the single provenance summary from sweep.lastRun, or null when no
+// sweep has run this session. Shared by the Sweep card and the Recent Alerts
+// empty state so "ran, all clear" can never be confused with "never ran".
+function sweepProvenance() {
+  const lastRun = _sweepData?.lastRun;
+  if (!lastRun) return null;
   const runAtDate = new Date(lastRun.runAt);
   const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const results = Array.isArray(lastRun.results) ? lastRun.results : [];
   const actionNeeded = results.filter(
     (r) => Array.isArray(r.chips) && r.chips.some((c) => ['overdue', 'not_met', 'alert'].includes(c.status))
   ).length;
-  const selected = Array.isArray(lastRun.selectedUuids) ? lastRun.selectedUuids.length : 0;
+  // Patients actually checked this run (fall back to total when offset absent).
+  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : lastRun.totalCount ?? 0;
+  return { timeStr, actionNeeded, checked, lastRun };
+}
+
+function buildSweepBody() {
+  if (!_sweepData) return '<span class="today-loading">Loading…</span>';
+
+  const prov = sweepProvenance();
+
+  // Not-run state — deliberately neutral and clearly "not done", never an
+  // all-clear. The dashed strip + dimmed glyph reads as "pending", so a
+  // clinician cannot mistake it for a sweep that ran and found nothing.
+  if (!prov) {
+    return `
+      <div class="today-sweep-pending">
+        <span class="today-sweep-pending-dot" aria-hidden="true"></span>
+        <span class="today-sweep-pending-text">Not run yet today</span>
+      </div>
+      <div class="today-sweep-actions">
+        <button class="today-ghost-btn" data-action="open-sweep">Run the pre-clinic sweep →</button>
+      </div>
+    `;
+  }
+
+  const { timeStr, actionNeeded, checked } = prov;
+  const plural = checked === 1 ? 'patient' : 'patients';
+  const alertWord = actionNeeded === 1 ? 'alert' : 'alerts';
+  // Single clear provenance line: when, how many checked, how many alerts.
+  const tone = actionNeeded > 0 ? 'today-sweep-result--action' : 'today-sweep-result--clear';
 
   return `
     <div class="today-sweep-summary">
       <span class="today-sweep-time">Last sweep ${esc(timeStr)}</span>
-      <span class="today-sweep-stats">${actionNeeded} action-needed · ${selected} selected</span>
+      <span class="today-sweep-result ${tone}">${checked} ${plural} checked · ${actionNeeded} ${alertWord}</span>
     </div>
     <div class="today-sweep-actions">
       <button class="today-ghost-btn" data-action="open-sweep">Open Sweep →</button>
@@ -526,6 +553,16 @@ function buildNoCodeMsg() {
 function buildAlertsBody() {
   if (!_alertsData) return '<span class="today-loading">Loading…</span>';
   if (_alertsData.length === 0) {
+    // Back the "no alerts" claim with sweep provenance so a clinician can tell
+    // "ran, all clear" from "nothing has checked yet".
+    const prov = sweepProvenance();
+    if (prov && prov.actionNeeded === 0) {
+      const plural = prov.checked === 1 ? 'patient' : 'patients';
+      return `<span class="today-empty today-empty--green">No alerts — sweep ${esc(prov.timeStr)} checked ${prov.checked} ${plural}, all clear ✓</span>`;
+    }
+    if (!prov) {
+      return '<span class="today-empty">No alerts logged · no sweep run yet today</span>';
+    }
     return '<span class="today-empty today-empty--green">No alerts logged today</span>';
   }
 

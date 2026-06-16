@@ -247,6 +247,9 @@ function onboardingHtml() {
           <div class="mod-title">Welcome</div>
         </div>
       </div>
+      <div class="cap-setup-note">
+        Presets are a one-time practice setup (a permanent staff member configures these once). As a locum there's nothing you need to do.
+      </div>
       <div class="cap-onboard">
         <p>Capacity Forecast tells you which days have enough free appointment capacity for the services you care about.</p>
         <p>To get started, define a preset. A preset is a set of slot types and a daily minimum — for example, "GP Routine" might include GP morning slots, GP afternoon slots, and follow-up slots, with a minimum of 25 per day.</p>

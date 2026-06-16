@@ -509,14 +509,87 @@
   letter-spacing: 0.04em;
 }
 
-.today-sweep-stats {
+/* Single provenance line: how many checked, how many alerts. Tone-coded so
+   "all clear" reads green and "action needed" reads amber — but the words
+   carry the meaning, never hue alone. */
+.today-sweep-result {
   font-family: var(--sans);
   font-size: 11px;
   color: var(--text-3);
 }
 
+.today-sweep-result--clear {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.today-sweep-result--action {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+/* Not-run state — a quiet "pending" strip. The dashed dot + neutral copy make
+   it unmistakably "not done yet", so it can't be read as an all-clear. */
+.today-sweep-pending {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.today-sweep-pending-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px dashed var(--text-4);
+  background: transparent;
+}
+
+.today-sweep-pending-text {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
 .today-sweep-actions {
   margin-top: 4px;
+}
+
+/* ── Optional / not-set-up strip ─────────────────────────────────────────────── */
+
+/* A dormant optional feature: thin, neutral, single-line. Distinct from the red
+   error state and from a real alert — it should fade into the background, not
+   compete for attention mid-dashboard. */
+.today-optional-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.today-optional-strip .today-optional-tag {
+  margin-right: 0;
+  flex-shrink: 0;
+}
+
+.today-optional-strip-text {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* In-strip setup link sits at the trailing edge, low-emphasis. */
+.today-optional-strip .today-setup-link {
+  margin-top: 0;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* ── Recent alerts card ──────────────────────────────────────────────────────── */

@@ -9,7 +9,12 @@ function ApiNs() {
   return typeof window !== 'undefined' ? window.ReferralsApi : null;
 }
 
-const DEFAULT_PRESET = 'last30';
+// Fallback date window when the user has not chosen a range and the API
+// provides no default — month-to-date (1st of the current month → today),
+// which is what a secretary means by "this month's referrals". A rolling
+// last-30-days window opened on a confusing cross-month span (e.g. 18 May
+// → 16 June) that nobody had asked for.
+const DEFAULT_PRESET = 'thisMonth';
 const TOP_N = 15;
 const STALE_MS = 30 * 60 * 1000;
 const DISCOVERY_KEY = 'referrals.discovery';
@@ -363,12 +368,23 @@ function renderDiscoveryPrompt() {
       <svg class="ref-discovery-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <p class="ref-discovery-head">Waiting for the Medicus referrals report</p>
+      <p class="ref-discovery-head">Ready — just open the report once</p>
       <p class="ref-discovery-body">
-        This panel mirrors Medicus. Open <strong>Referrals → Clinical Audit Report</strong>
-        in any Medicus tab and the charts appear here automatically — nothing to set up.
+        Nothing is broken and there is nothing to set up. This panel fills in by itself
+        the first time you open the referrals report in Medicus, then keeps itself up to date.
       </p>
-      <div class="ref-discovery-path">Referrals → Clinical Audit Report</div>
+      <ol class="ref-discovery-steps">
+        <li>Open a Medicus tab.</li>
+        <li>Go to <strong>Referrals → Clinical Audit Report</strong>.</li>
+        <li>Come back here — the charts appear automatically.</li>
+      </ol>
+      <button class="ref-discovery-cta" id="refDiscoveryOpen">
+        Open Referrals → Clinical Audit Report
+      </button>
+      <p class="ref-discovery-note">
+        Your date range and the Priority filters (Routine, Urgent, 2WW) above are ready to
+        use — they will apply as soon as the data lands.
+      </p>
     </div>
   `;
 }
@@ -807,6 +823,8 @@ function wireControls() {
     render();
   });
 
+  container.querySelector('#refDiscoveryOpen')?.addEventListener('click', focusMedicusReferrals);
+
   container.querySelector('#refDiagToggle')?.addEventListener('click', () => {
     state.showDiagnostics = !state.showDiagnostics;
     render();
@@ -882,6 +900,24 @@ function csvCell(val) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Empty-state deep link: bring an already-open Medicus tab to the front (the
+// common case — the secretary has Medicus open) so she can open
+// Referrals → Clinical Audit Report, or open a fresh Medicus tab if none.
+async function focusMedicusReferrals() {
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://*.medicus.health/*' });
+    const tab = tabs.find((t) => t.active) || tabs[0];
+    if (tab?.id != null) {
+      await chrome.tabs.update(tab.id, { active: true });
+      if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    }
+  } catch (_) {
+    // fall through to opening a new tab
+  }
+  chrome.tabs.create({ url: 'https://england.medicus.health/' });
+}
 
 function relativeTime(date) {
   const mins = Math.round((Date.now() - date.getTime()) / 60_000);

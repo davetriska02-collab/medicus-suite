@@ -22,8 +22,11 @@
   --text-1: #0f172a;
   --text-2: #1e3a5f;
   --text-3: #475569;
-  --text-4: #64748b;
-  --text-5: #94a3b8;
+  /* Eyesight floor: --text-4 / --text-5 carry load-bearing micro-labels
+     (setup badges, strip labels, OPTIONAL/RECOMMENDED). Lifted one slate step
+     each for contrast — a tired technophobe reader misread the old pale grey. */
+  --text-4: #556377;
+  --text-5: #6c7c91;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-dim: rgba(37, 99, 235, 0.09);
@@ -97,8 +100,9 @@ html[data-theme='dark'] {
   --text-1: #f1f5f9;
   --text-2: #cfe1ff;
   --text-3: #93a8c5;
-  --text-4: #5d7a9d;
-  --text-5: #3d5070;
+  /* Eyesight floor (dark): lift the two faintest text tokens one step. */
+  --text-4: #7d97b5;
+  --text-5: #5d7a9d;
   --accent: #5b8fc7;
   --accent-hover: #7eaad6;
   --accent-dim: rgba(91, 143, 199, 0.14);
@@ -2722,4 +2726,84 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 .thresh-reset:hover {
   color: var(--accent);
+}
+
+/* ── Legibility floor for load-bearing micro-labels ──────────────────────────
+   Synthetic usability finding: a tired technophobe reader misread the tiny
+   (8–9px) uppercase, widely letter-spaced micro-labels (e.g. "DEMAND" read as
+   "DERRAND", "OPTIONAL" unreadable). The house type scale is right everywhere
+   else; this is the one place it sits below the eyesight floor. We tighten the
+   tracking on JUST these small uppercased labels so the letters stop dissolving
+   into one another. Colour contrast is handled separately via the lifted
+   --text-4 / --text-5 tokens above. Conservative + token-level: no component is
+   restyled, only the tracking on these specific labels. */
+.setup-step-label,
+.setup-step-hint,
+.setup-step-meta,
+.setup-optional-badge,
+.setup-recommended-badge,
+.setup-card-footer,
+.setup-card-progress,
+.setup-link,
+.rm-strip-label,
+.sub-rag-label {
+  letter-spacing: 0.01em;
+}
+
+/* ── Per-tab help popover ────────────────────────────────────────────────────
+   A persistent "?" control in the nav opens a plain-English two-line summary of
+   the CURRENTLY ACTIVE tab: what it is, and what to do first. Reference aid only
+   — not clinical decision support. Modelled on the display popover. */
+.nav-help-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.help-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  width: 250px;
+  max-width: 78vw;
+  z-index: 9999;
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.help-popover-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.help-popover-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.help-popover-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.help-popover-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
 }

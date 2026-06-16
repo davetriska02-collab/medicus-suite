@@ -400,6 +400,10 @@ function renderPathwayPicker(_activeDraft) {
   const enabled = _effective.enabled;
   if (enabled.length === 0) {
     body.innerHTML = `
+      <div class="rcp-setup-note">
+        This is a one-time practice setup. Ask your practice manager to enable
+        pathways. Nothing for you to do here.
+      </div>
       <div class="rcp-disabled-note">
         <strong>Capture pathways are switched off.</strong>
         All pathways ship disabled. A practice administrator can review the
