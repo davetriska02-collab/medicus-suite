@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.98.1
-**Generated:** 2026-06-15 (automated)
+**Version:** v3.110.0
+**Generated:** 2026-06-16
 
 ## What it is
 
@@ -9,8 +9,9 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 12 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, and analytics
+- 13 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, and the live patient record
 - 4 in-page content-script features (on-screen overlays and relays)
+- 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
 - 7 rule types in the alert engine
 - 25 drug-monitoring rules, 61 QOF rules, 21 bundled investigation result rules, and 22 starter alerts in the prescribing-safety library
 
@@ -126,6 +127,16 @@ Practice-owned reference base for referral criteria, contacts, clinical pathways
 - Expandable detail cards; keyword search; category filter
 - Central practice attestation: if the practice administrator has accepted the knowledge notice via a published Practice Profile, individual clinicians see it activate without a per-seat click
 
+### Record (Live patient summary)
+
+A live-first snapshot of the patient currently open in Medicus, sourced from the same API the suite already calls — no PDF export needed.
+
+- Demographics, coded active problems, current medications (with doses and overdue/review flags), recent results (latest value per test, with above/below-range flags)
+- Deterministic prescribing-safety prompts (anticholinergic burden, STOPP/START) plus the live drug-monitoring and QOF chips the Monitoring engine computes
+- Clinical-safety framing is load-bearing: a persistent "live snapshot, not a complete record" banner; allergies, immunisations and consultation history render as explicit gap-markers (absence does not mean "none recorded"); every safety score carries an inline caveat that it excludes allergies and uses coded data only
+- "Open full visualiser" footer link to the full multi-year Patient Record Visualiser (built from an exported record PDF) for the deep view
+- Available in both the side panel and the pop-out window
+
 ## In-page features (content scripts)
 
 **Triage Lens — request queue** (all Medicus pages): overlays the patient request queue with semantic triage chips. Red = same-day or 999; amber = urgent; info = supplementary. 77+ built-in rules across chest pain, sepsis, stroke/TIA, anaphylaxis, obstetric emergencies, mental health crisis, paediatric red flags, 2WW cancer patterns, and common acute presentations. New built-in rules reach existing users automatically; rules deliberately deleted stay deleted.
@@ -164,6 +175,12 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.110.0 (2026-06-16)** — CQC Inspection Readiness: a new page (Ctrl+K → "CQC inspection readiness…") turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Supporting evidence, not proof of compliance; built from shipped rule data only, no patient data
+- **v3.109.0 (2026-06-16)** — Record tab: a live-first patient summary (problems, meds, results, prescribing-safety prompts) with the full visualiser nested behind it
+- **v3.107.0 (2026-06-16)** — Practice letterhead: recall letters and SMS auto-fill the practice/clinician sign-off (blank-guarded to keep the placeholder rather than send an empty sign-off)
+- **v3.100.0–v3.106.0 (2026-06-16)** — Practice Report: a periodised (Today/7d/30d/custom) operational report with three audience profiles (Management with per-clinician drill-down; Staff aggregate-only; ICB GPAD-framed), print→PDF + profile-aware CSV, sortable columns and section toggles; result-rule chips now show their trigger value
+- **v3.99.0 (2026-06-15)** — Referrals now populate headlessly (no need to open the Clinical Audit Report first), with a stale-template self-heal; whole-suite "gap-to-9" UX fixes (glossary tooltips, setup-checklist collapse, self-describing empty states)
+- **v3.96.0–v3.98.0 (2026-06-15)** — Focus mode + alert roll-up with worst-wait headline and plain-English hovers; user-editable alert thresholds from the command palette and Options
 - **v3.92.0 (2026-06-15)** — Result-rule inspector: click a parsed line's name/specimen to build the rule (analyte match + specimen scope, deduped, keyboard-accessible); clearer "Load a recent result" guidance (keep the Medicus results queue open in a separate window)
 - **v3.91.5–v3.91.6 (2026-06-15)** — Security/safety: PDF.js upgraded to 4.2.67 (CVE-2024-4367 fixed); Triage Lens preview now shares the live rule matcher so it can't diverge from what fires on the page, and surfaces invalid patterns instead of swallowing them
 - **v3.91.2 (2026-06-15)** — Security: closed an attribute-injection XSS in the side-panel chip/rule renderers (quote-unsafe HTML-attribute escaping); imported custom-rule id validation tightened; knowledge link scheme-checked at the sink
