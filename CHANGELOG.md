@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.101.0] — 2026-06-16
+
+### Monitoring: vaccine invitation letter, cleaner admin tasks, Safety Monitoring section
+
+Three fixes to the Sentinel monitoring action packs and chip grouping:
+
+- **Vaccine chips now generate a direct-to-patient invitation letter.** Previously
+  vaccine action packs offered only an SMS and an admin task — they lacked the
+  formal invite letter that drug-monitoring and QOF chips already provide. The new
+  `letter` uses invitation wording and renders in the existing "Letter" section of
+  the action-pack modal.
+- **Removed the "Recall SMS template available in Sentinel → Actions." line** from
+  every admin task (drug-monitoring, QOF and vaccine). It was redundant noise on
+  the task copy.
+- **New "Safety Monitoring" section** in the monitoring view. The eGFR/HbA1c trend
+  monitors and the hyperkalaemia alert are *not* QOF claim indicators but reused the
+  `qof-indicator` chip shape, so they were rendering under "QOF Indicators". These
+  rules are now tagged `category: "safety-monitoring"` in `rules/qof-rules.json`;
+  the engine passes the category through and the panel groups them in their own
+  section. Evaluation, scoring and chip content are unchanged — display grouping only.
+
+Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal) and
+`test-qof-indicator-filters.js` (category passthrough). Full suite green.
+
 ## [v3.100.0] — 2026-06-16
 
 ### Critical-result chips now show their trigger value on the chip (community item — Nick)

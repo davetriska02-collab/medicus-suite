@@ -183,8 +183,7 @@ export function buildChipActions(chip, patient) {
     // Task line
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re ${word} ${drug} monitoring. ` +
-      `Order set: ${testsDisplay}.${checksNote} ` +
-      `Recall SMS template available in Sentinel → Actions.`;
+      `Order set: ${testsDisplay}.${checksNote}`;
 
     return result;
   }
@@ -220,8 +219,7 @@ export function buildChipActions(chip, patient) {
 
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re overdue ${review} ` +
-      `(${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}). ` +
-      `Recall SMS template available in Sentinel → Actions.`;
+      `(${chip.indicatorCode || 'QOF'}${chip.indicatorName ? ' — ' + chip.indicatorName : ''}).`;
 
     return result;
   }
@@ -237,9 +235,30 @@ export function buildChipActions(chip, patient) {
       `Please book an appointment with reception to receive this vaccination. ` +
       `Thank you — [practice name] (no reply)`;
 
+    // Letter body — direct-to-patient vaccination invitation
+    result.letter = [
+      `Re: Vaccination invitation — ${vaccine}`,
+      '',
+      `${greeting.trim().replace(/,$/, '')}`,
+      '',
+      `Our records show that you are eligible for ${vaccine}, and we would like to invite you ` +
+        `to book an appointment to have it.`,
+      '',
+      `Vaccination is an important way to protect your health. Please contact reception to ` +
+        `arrange an appointment at a time convenient for you.`,
+      '',
+      `If you have already had this vaccination elsewhere, please let us know so we can update your records.`,
+      '',
+      `If you have any questions, please contact the surgery.`,
+      '',
+      `Yours sincerely`,
+      `[Clinician name]`,
+      `[Practice name]`,
+    ].join('\n');
+
     result.task =
       `Contact ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''} re eligibility for ${vaccine}. ` +
-      `Offer vaccination booking. Recall SMS template available in Sentinel → Actions.`;
+      `Offer vaccination booking.`;
 
     return result;
   }

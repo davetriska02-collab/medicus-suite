@@ -183,6 +183,17 @@ async function runTests() {
   check(!vaxPack.bloodForm, 'vaccine chip has no bloodForm');
   check(typeof vaxPack.task === 'string', 'vaccine task is a string');
   check(/RSV|vaccine|vaccination/i.test(vaxPack.task), 'vaccine task mentions vaccine');
+  // Vaccines now carry a direct-to-patient invitation letter (parity with drug/QOF chips)
+  check(typeof vaxPack.letter === 'string', 'vaccine chip has an invitation letter');
+  check(vaxPack.letter.length > 50, 'vaccine letter has substance (>50 chars)');
+  check(/invit|eligible/i.test(vaxPack.letter), 'vaccine letter uses invitation wording');
+  check(/RSV|vaccine|vaccination/i.test(vaxPack.letter), 'vaccine letter names the vaccine');
+
+  // The "Recall SMS template available in Sentinel → Actions." line was removed
+  // from every admin task line (it was noise — see action-packs.js).
+  check(!/Recall SMS template available/i.test(vaxPack.task), 'vaccine task drops the Sentinel recall-SMS line');
+  check(!/Recall SMS template available/i.test(mtxPack.task), 'drug task drops the Sentinel recall-SMS line');
+  check(!/Recall SMS template available/i.test(dmPack.task), 'QOF task drops the Sentinel recall-SMS line');
 
   // non-actionable vax_due vaccine → null (vax_due not in STATUS_RANK)
   check(buildChipActions(vaxChip, patient) === null, 'vax_due vaccine chip → null (not in STATUS_RANK)');

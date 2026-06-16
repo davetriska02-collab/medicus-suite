@@ -1035,10 +1035,13 @@ function render(payload) {
   const actionCount = chips.filter((c) => STATUS_RANK[c.status] <= 2).length;
   const clearCount = chips.filter((c) => STATUS_RANK[c.status] >= 5).length;
 
-  // Group by type
+  // Group by type. Non-QOF surveillance items (eGFR/HbA1c trends, electrolyte
+  // alerts) carry category: 'safety-monitoring' on the rule — bucket those into
+  // their own "Safety Monitoring" section so they don't read as QOF claim
+  // indicators, even though they reuse the qof-indicator evaluation/chip shape.
   const groups = {};
   visibleChips.forEach((chip) => {
-    const g = chip.type || 'other';
+    const g = chip.category === 'safety-monitoring' ? 'safety-monitoring' : chip.type || 'other';
     if (!groups[g]) groups[g] = [];
     groups[g].push(chip);
   });
@@ -1101,6 +1104,7 @@ function render(payload) {
     'event-count',
     'composite',
     'drug-monitoring',
+    'safety-monitoring',
     'vaccine',
     'qof-indicator',
     'qof-process-indicator',
@@ -1111,6 +1115,7 @@ function render(payload) {
     'event-count': 'Recurrent Events',
     composite: 'Composite Alerts',
     'drug-monitoring': 'Drug Monitoring',
+    'safety-monitoring': 'Safety Monitoring',
     vaccine: 'Vaccinations',
     'qof-indicator': 'QOF Indicators',
     'qof-process-indicator': 'QOF Process',
