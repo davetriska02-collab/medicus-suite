@@ -1271,16 +1271,15 @@ body {
 .rm-strip {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   padding: 6px 15px;
   font-size: 13px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   background: var(--accent-dim);
   border-bottom-color: var(--accent-line);
-  overflow-x: auto;
   min-height: 35px;
-  white-space: nowrap;
 }
 
 .rm-strip-hidden {
