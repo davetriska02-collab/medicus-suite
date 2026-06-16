@@ -151,7 +151,8 @@ const TAB_HELP = {
   record: {
     title: 'Record',
     what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
+    firstStep:
+      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   activity: {
     title: 'Activity',
@@ -256,6 +257,119 @@ function wireHelpButton() {
       btn.focus();
     }
   });
+}
+
+// ── "All tabs" menu ───────────────────────────────────────────────────────────
+// At the 360-420px panel width the tab strip can only show the active tab; the
+// rest scroll off (appraisal G1). This menu lists every visible tab by its full
+// name so any tab is reachable in one click without horizontal scrolling. Built
+// live from the nav DOM on each open, so it reflects current visibility/order.
+
+let allTabsOpen = false;
+let _allTabsCloseHandler = null;
+
+function buildAllTabsPopoverHTML() {
+  const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter((t) => !t.classList.contains('nav-tab-hidden'));
+  const rows = tabs
+    .map((t) => {
+      const mod = t.dataset.module || '';
+      const icon = t.querySelector('svg')?.outerHTML || '';
+      const label = t.querySelector('span:not(.nav-badge)')?.textContent || t.getAttribute('aria-label') || mod;
+      const isActive = t.classList.contains('active');
+      return `<button class="alltabs-item${isActive ? ' active' : ''}" role="menuitem" data-module="${escStrip(mod)}">
+        <span class="alltabs-item-icon" aria-hidden="true">${icon}</span>
+        <span class="alltabs-item-label">${escStrip(label)}</span>
+      </button>`;
+    })
+    .join('');
+  return `<div class="alltabs-popover" id="allTabsPopover" role="menu" aria-label="All tabs">
+    <div class="alltabs-title">Jump to a tab</div>
+    <div class="alltabs-list">${rows}</div>
+    <div class="alltabs-hint">Ctrl+Alt+← / → switches tabs</div>
+  </div>`;
+}
+
+function renderAllTabsPopover() {
+  const host = document.getElementById('allTabsPopoverHost');
+  const btn = document.getElementById('allTabsBtn');
+  if (!host) return;
+  host.innerHTML = allTabsOpen ? buildAllTabsPopoverHTML() : '';
+  btn?.setAttribute('aria-expanded', String(allTabsOpen));
+  btn?.classList.toggle('active', allTabsOpen);
+  if (!allTabsOpen) return;
+
+  // Clicking a row drives the real nav tab (reuses its switch + active logic).
+  host.querySelectorAll('.alltabs-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const mod = item.dataset.module;
+      const tab = document.querySelector(`.nav-tab[data-module="${mod}"]`);
+      allTabsOpen = false;
+      if (_allTabsCloseHandler) {
+        document.removeEventListener('click', _allTabsCloseHandler);
+        _allTabsCloseHandler = null;
+      }
+      renderAllTabsPopover();
+      tab?.click();
+    });
+  });
+
+  if (_allTabsCloseHandler) document.removeEventListener('click', _allTabsCloseHandler);
+  _allTabsCloseHandler = (e) => {
+    if (!e.target.closest('#allTabsPopoverHost') && !e.target.closest('#allTabsBtn')) {
+      allTabsOpen = false;
+      document.removeEventListener('click', _allTabsCloseHandler);
+      _allTabsCloseHandler = null;
+      renderAllTabsPopover();
+    }
+  };
+  document.addEventListener('click', _allTabsCloseHandler);
+}
+
+function wireAllTabsButton() {
+  const btn = document.getElementById('allTabsBtn');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    allTabsOpen = !allTabsOpen;
+    renderAllTabsPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Escape' || e.key === 'Esc') && allTabsOpen) {
+      allTabsOpen = false;
+      if (_allTabsCloseHandler) {
+        document.removeEventListener('click', _allTabsCloseHandler);
+        _allTabsCloseHandler = null;
+      }
+      renderAllTabsPopover();
+      btn.focus();
+    }
+  });
+}
+
+// Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
+// the visible in-panel tabs without the mouse. Skipped while typing in a field,
+// and skips Visualiser (it opens a full browser tab, not an in-panel switch).
+function wireTabNavShortcuts() {
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+      const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter(
+        (t) => !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser'
+      );
+      if (!tabs.length) return;
+      e.preventDefault();
+      const activeIdx = tabs.findIndex((t) => t.classList.contains('active'));
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      const start = activeIdx === -1 ? 0 : activeIdx;
+      const next = (start + dir + tabs.length) % tabs.length;
+      tabs[next].click();
+    },
+    true
+  );
 }
 
 // ── Nav overflow detection ────────────────────────────────────────────────────
@@ -959,7 +1073,11 @@ function renderStrip(patients) {
     .map((p) => {
       const mins = p.minutesWaiting;
       const cls =
-        mins != null && mins >= T.red ? 'wr-chip-red' : mins != null && mins >= T.amber ? 'wr-chip-amber' : 'wr-chip-ok';
+        mins != null && mins >= T.red
+          ? 'wr-chip-red'
+          : mins != null && mins >= T.amber
+            ? 'wr-chip-amber'
+            : 'wr-chip-ok';
       const wait = mins != null ? ` · ${mins}m` : '';
       return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
     })
@@ -1226,7 +1344,7 @@ function renderRmStrip(result, practiceCode, assigneeId) {
         .join(' ');
       const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
       return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
-      <span class="rm-pill-label">${escStrip(b.short)}</span>
+      <span class="rm-pill-label">${escStrip(b.label)}</span>
       <span class="rm-pill-count">${count}</span>
     </span>`;
     })
@@ -1521,6 +1639,8 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
 
 // Wire per-tab help button
 wireHelpButton();
+wireAllTabsButton();
+wireTabNavShortcuts();
 
 // ── Boot — restore last active module ────────────────────────────────────────
 // Read the persisted module name and switch to it, falling back to 'slots' if

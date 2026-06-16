@@ -1175,10 +1175,14 @@ function render(payload) {
     ? `
     <div class="sent-audit-headline" role="status">
       <span class="sent-audit-counts">${[
-        headline.medsChecked !== null ? `${headline.medsChecked} med${headline.medsChecked === 1 ? '' : 's'} checked` : '',
+        headline.medsChecked !== null
+          ? `${headline.medsChecked} med${headline.medsChecked === 1 ? '' : 's'} checked`
+          : '',
         `${headline.matched} matched a monitoring rule`,
         `${headline.overdue} overdue`,
-        `${headline.unmatched} unmatched`,
+        headline.unmatched > 0
+          ? `<button type="button" class="sent-audit-unmatched-link" data-act="show-unmatched" title="Show which medicines have no monitoring rule">${headline.unmatched} unmatched</button>`
+          : `${headline.unmatched} unmatched`,
       ]
         .filter(Boolean)
         .join(' · ')}</span>${ts ? `<span class="sent-audit-time">checked ${escHtml(ts)}</span>` : ''}
@@ -1337,6 +1341,16 @@ function render(payload) {
     const unmatchedEl = container.querySelector('.sent-unmatched-section');
     if (unmatchedEl) unmatchedEl.open = true;
   }
+
+  // "N unmatched" in the audit headline is a live link into the existing
+  // unmatched-meds section below — so the count is never a dead end (nurse +
+  // pharmacist finding). Opens the <details> and scrolls it into view.
+  container.querySelector('.sent-audit-unmatched-link')?.addEventListener('click', () => {
+    const unmatchedEl = container.querySelector('.sent-unmatched-section');
+    if (!unmatchedEl) return;
+    unmatchedEl.open = true;
+    unmatchedEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 // ── Patient Passport ──────────────────────────────────────────────────────────
@@ -2010,7 +2024,7 @@ function renderUnmatchedMedsSection(meds, unmatchedDetailed) {
     <details class="sent-unmatched-section">
       <summary class="sent-unmatched-summary">Meds without a monitoring rule (${meds.length})</summary>
       <div class="sent-unmatched-body">
-        <p class="sent-unmatched-note">Most medicines need no routine monitoring — this list exists to spot brand names that SHOULD have matched a monitoring rule but didn't.${mailtoLink}</p>
+        <p class="sent-unmatched-note">These medicines were read from the record successfully — they simply did not map to a monitoring rule, which for most medicines is correct (they need no routine monitoring). The list exists so you can spot a brand name that SHOULD have matched a rule but didn't.${mailtoLink}</p>
         <ul class="sent-unmatched-list">${items}</ul>
       </div>
     </details>`;

@@ -328,7 +328,7 @@ body {
   padding: 5px 10px;
   background: transparent;
   border: 1px solid transparent; /* reserved so .active never shifts layout */
-  color: var(--text-4);
+  color: var(--text-3);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 500;
@@ -477,7 +477,7 @@ body {
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-3);
   margin-bottom: 3px;
 }
 
@@ -1245,7 +1245,7 @@ body {
   font-family: var(--mono);
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: var(--text-4);
+  color: var(--text-3);
   background: none;
   border: 1px solid var(--border-hi);
   border-radius: var(--r-sm);
@@ -1258,7 +1258,7 @@ body {
 }
 .wr-strip-goto:hover {
   color: var(--text-2);
-  border-color: var(--text-4);
+  border-color: var(--accent);
 }
 .wr-strip-goto:active {
   color: var(--text-1);
@@ -1271,16 +1271,15 @@ body {
 .rm-strip {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   padding: 6px 15px;
   font-size: 13px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   background: var(--accent-dim);
   border-bottom-color: var(--accent-line);
-  overflow-x: auto;
   min-height: 35px;
-  white-space: nowrap;
 }
 
 .rm-strip-hidden {
@@ -2758,6 +2757,92 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   position: relative;
   display: flex;
   align-items: center;
+}
+
+/* "All tabs" menu — lists every tab by full name so any is reachable in one
+   click at the narrow panel width (appraisal G1). Mirrors the help popover. */
+.nav-alltabs-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.alltabs-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 8px;
+  width: 210px;
+  max-width: 78vw;
+  max-height: 72vh;
+  overflow-y: auto;
+  z-index: 9999;
+  box-shadow: var(--shadow-3);
+}
+.alltabs-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 2px 6px 8px;
+}
+.alltabs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.alltabs-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  color: var(--text-2);
+  text-align: left;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.alltabs-item:hover {
+  background: var(--bg-hover);
+}
+.alltabs-item.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+}
+.alltabs-item-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.alltabs-item.active .alltabs-item-icon {
+  color: var(--accent);
+}
+.alltabs-item-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alltabs-hint {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  margin-top: 6px;
+  padding: 6px 6px 2px;
+  border-top: 1px solid var(--border);
 }
 
 .help-popover {
