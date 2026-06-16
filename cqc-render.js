@@ -121,9 +121,10 @@ function renderReadinessBanner(readiness) {
         : overall === 'red'
           ? 'You need to act on the items below now — rule currency is out of date.'
           : 'Readiness could not be rated from the available data.';
+  const asAt = readiness.generatedAt ? ` <span class="cqc-banner-asat">as at ${esc(readiness.generatedAt)}</span>` : '';
   return (
     `<section class="cqc-banner cqc-banner-${esc(String(overall).toLowerCase())}">` +
-    `<div class="cqc-banner-head"><span class="cqc-banner-label">Overall readiness</span>${ragBadge(overall)}</div>` +
+    `<div class="cqc-banner-head"><span class="cqc-banner-label">Overall readiness</span>${ragBadge(overall)}${asAt}</div>` +
     `<p class="cqc-banner-verb">${esc(verb)}</p>` +
     `</section>`
   );
@@ -160,7 +161,7 @@ function renderRulesetTile(label, rs) {
   const subParts = [];
   if (rs.specVersion) subParts.push(`spec ${rs.specVersion}`);
   if (rs.schemaVersion) subParts.push(`schema ${rs.schemaVersion}`);
-  if (rs.lastUpdated) subParts.push(`updated ${rs.lastUpdated}`);
+  if (rs.lastUpdated) subParts.push(`reviewed ${rs.lastUpdated}`);
   const count =
     rs.ruleCount != null
       ? `${rs.ruleCount} rule${rs.ruleCount === 1 ? '' : 's'}`
@@ -190,32 +191,50 @@ function renderCoverageManifest(readiness) {
   const cov = readiness.coverage || {};
   const qof = cov.qof || {};
   const qofSub = [];
-  if (qof.lastUpdated) qofSub.push(`updated ${qof.lastUpdated}`);
+  if (qof.lastUpdated) qofSub.push(`reviewed ${qof.lastUpdated}`);
   if (qof.safetyMonitoringCount != null) qofSub.push(`${qof.safetyMonitoringCount} safety-monitoring`);
 
   const tiles = [
     renderRulesetTile('Drug monitoring', cov.drug),
     qof.indicatorCount != null ? statTile('QOF', `${qof.indicatorCount} indicators`, qofSub.join(' · ')) : '',
-    renderRulesetTile('Vaccines', cov.vaccine),
+    // Labelled "surveillance" so the count is not read as drug-monitoring safety coverage (Raj).
+    renderRulesetTile('Vaccines (surveillance)', cov.vaccine),
     renderRulesetTile('Alerts', cov.alert),
   ]
     .filter(Boolean)
     .join('');
 
-  // A5: coded-data-only + undercount caveat — counts are a floor, not a ceiling.
-  const codedLine = cov.codedDataOnly
-    ? `<p class="cqc-caveat"><strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted.</p>`
+  // F1: prominent, honestly-worded "last reviewed against guidance" line — the panel's
+  // top ask. The date is the drug-rule lastUpdated (its sourceNotes cite BNF/NICE/MHRA);
+  // "reviewed", not "updated" — clinically verified, not merely edited (Eileen).
+  const reviewedDate = cov.drug?.lastUpdated || null;
+  const reviewedLine = reviewedDate
+    ? `<p class="cqc-reviewed"><strong>Safety rules last reviewed against BNF / NICE / MHRA: ${esc(reviewedDate)}</strong>` +
+      (cov.keeperProvenance ? ` — via The Keeper` : '') +
+      `. See each rule set's version below.</p>`
     : '';
-  const undercount = cov.undercountCaveat ? `<p class="cqc-caveat">${esc(cov.undercountCaveat)}</p>` : '';
+
+  // F3: these are RULE/indicator counts (the monitoring system in use), not patient counts.
+  const systemNote =
+    `<p class="cqc-note">These are the rule sets the practice runs — counts are rules and indicators, ` +
+    `<strong>not patient numbers</strong>. Patient-level figures are a later phase.</p>`;
+
+  // A5/F4: coded-data + undercount caveat as one prominent callout — counts are a floor, not a ceiling.
+  const codedLine = cov.codedDataOnly
+    ? `<strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted. `
+    : '';
+  const undercount = cov.undercountCaveat ? esc(cov.undercountCaveat) : '';
+  const callout = codedLine || undercount ? `<p class="cqc-callout" role="note">${codedLine}${undercount}</p>` : '';
   const keeper = cov.keeperProvenance ? `<p class="cqc-note cqc-keeper">${esc(cov.keeperProvenance)}</p>` : '';
 
   return (
     `<section class="cqc-card cqc-card-manifest"><h2>Coverage manifest</h2>` +
+    reviewedLine +
     `<p class="cqc-note">What this readiness check covers — rule sets, versions and dates — so completeness can be judged before any figure is trusted.</p>` +
+    systemNote +
     `<div class="cqc-grid cqc-grid-4">${tiles}</div>` +
     renderMatchedTerms(cov.matchedTerms) +
-    codedLine +
-    undercount +
+    callout +
     keeper +
     `</section>`
   );
@@ -323,7 +342,7 @@ function renderSignoff() {
   return (
     `<section class="cqc-card cqc-signoff"><h2>Sign-off</h2>` +
     `<p class="cqc-note">For the practice to complete before this pack is shared.</p>` +
-    `<div class="cqc-signoff-grid">${field('Prepared by')}${field('Reviewed by')}${field('Date')}</div>` +
+    `<div class="cqc-signoff-grid">${field('Prepared by (Practice Manager)')}${field('Reviewed by (Responsible GP)')}${field('Date')}</div>` +
     `</section>`
   );
 }

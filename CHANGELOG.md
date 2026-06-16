@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.108.1] — 2026-06-16
+
+### CQC Inspection Readiness — P1.1 polish (panel verdict on the build)
+
+Tightens the readiness surface after the Practice panel reviewed the built P1 — mostly
+surfacing data that already existed:
+
+- **"Reviewed", not "updated", and prominent.** The coverage manifest now leads with
+  "Safety rules last reviewed against BNF / NICE / MHRA: {date} — via The Keeper", and the
+  rule-set tiles say "reviewed {date}" — clinically verified, not merely edited (the
+  panel's top ask).
+- **"Counts are rules and indicators, not patient numbers."** An explicit line so the
+  rule-set sizes can't be misread as patient cohorts (patient-level figures are a later phase).
+- **Coded-data caveat promoted to a visible callout** ("counts are a floor, not a ceiling");
+  the vaccine count is labelled "Vaccines (surveillance)" so it doesn't read as
+  drug-monitoring safety coverage.
+- **Verdict dated; sign-off role-labelled.** The readiness banner carries "as at {date}";
+  the export sign-off reads "Prepared by (Practice Manager)" / "Reviewed by (Responsible GP)".
+
+Full suite 76/76; eslint + prettier clean; re-verified via the harness.
+
 ## [v3.108.0] — 2026-06-16
 
 ### CQC Inspection Readiness (P1) — internal readiness check + gated evidence export
