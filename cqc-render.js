@@ -136,8 +136,11 @@ function renderWhatToFix(readiness) {
   const stmts = Array.isArray(readiness.qualityStatements) ? readiness.qualityStatements : [];
   const items = [];
   for (const qs of stmts) {
-    for (const fix of qs.toFix || []) {
-      if (fix) items.push({ area: qs.title || qs.keyQuestion || '', fix });
+    // toFix is a string (or null) from the engine; tolerate an array too. NEVER
+    // iterate a bare string with for..of — that explodes it into one bullet per char.
+    const fixes = Array.isArray(qs.toFix) ? qs.toFix : qs.toFix ? [qs.toFix] : [];
+    for (const fix of fixes) {
+      if (fix) items.push({ area: qs.qualityStatement || qs.title || qs.keyQuestion || '', fix });
     }
   }
   for (const w of readiness.currency?.warnings || []) {
@@ -233,7 +236,7 @@ function renderCoverageManifest(readiness) {
     `<p class="cqc-note">What this readiness check covers — rule sets, versions and dates — so completeness can be judged before any figure is trusted.</p>` +
     systemNote +
     `<div class="cqc-grid cqc-grid-4">${tiles}</div>` +
-    renderMatchedTerms(cov.matchedTerms) +
+    renderMatchedTerms(cov.drug && cov.drug.matchedTerms) +
     callout +
     keeper +
     `</section>`
@@ -259,24 +262,52 @@ function renderItem(item) {
   );
 }
 
+// Per-file rule-currency table (the Well-led statement's actual evidence — dates,
+// age and currency message per rule file). Dropped before; now surfaced.
+function renderCurrencyFiles(files) {
+  const list = Array.isArray(files) ? files : [];
+  if (!list.length) return '';
+  const rows = list
+    .map(
+      (f) =>
+        `<tr><td>${esc(f.id || '')}</td><td>${esc(f.lastUpdated || '—')}</td>` +
+        `<td>${f.ageDays != null ? esc(f.ageDays) + 'd' : '—'}</td><td>${ragBadge(f.level)}</td>` +
+        `<td>${esc(f.message || '')}</td></tr>`
+    )
+    .join('');
+  return (
+    `<table class="cqc-table"><thead><tr><th>Rule file</th><th>Last reviewed</th>` +
+    `<th>Age</th><th>Currency</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>`
+  );
+}
+
 function renderQualityStatement(qs, mode) {
+  // Engine emits `qualityStatement` (title), `summary`, statement-level `provenance`,
+  // optional `metrics`/`currencyFiles`, and a STRING `toFix`. Earlier this read `qs.title`
+  // + `qs.items[]` (neither emitted), so cards showed only the key question + "no items".
+  const title = qs.qualityStatement || qs.title || qs.keyQuestion || '';
+  const subhead = [qs.keyQuestion, title].filter(Boolean).map(esc).join(' · ');
+  const cat = qs.evidenceCategory ? `<span class="cqc-cat-tag">${esc(qs.evidenceCategory)}</span>` : '';
+
+  const summary = qs.summary ? `<p class="cqc-qs-summary">${esc(qs.summary)}</p>` : '';
+  // A1: statement-level provenance as inline prose (the figure's source/as-at).
+  const prov = provenanceLine(qs.provenance);
+  const provHtml = prov ? `<div class="cqc-item-prov">${prov}</div>` : '';
+  // Backward-compatible explicit items[], plus the per-file currency table where present.
   const items = Array.isArray(qs.items) ? qs.items : [];
-  const itemsHtml = items.length
-    ? `<ul class="cqc-item-list">${items.map(renderItem).join('')}</ul>`
-    : `<p class="cqc-note">No evidence items derivable for this statement.</p>`;
+  const itemsHtml = items.length ? `<ul class="cqc-item-list">${items.map(renderItem).join('')}</ul>` : '';
+  const currencyHtml = renderCurrencyFiles(qs.currencyFiles);
 
   const wgll = qs.whatGoodLooksLike
     ? `<div class="cqc-wgll"><h3>What good looks like</h3><p>${esc(qs.whatGoodLooksLike)}</p></div>`
     : '';
 
-  // Export mode drops the internal action list ("what to fix").
+  // Export drops the internal action list. toFix is a string (or array) from the engine.
+  const fixes = Array.isArray(qs.toFix) ? qs.toFix : qs.toFix ? [qs.toFix] : [];
   const toFix =
-    mode !== 'export' && Array.isArray(qs.toFix) && qs.toFix.length
-      ? `<div class="cqc-tofix"><h3>To fix</h3><ul>${qs.toFix.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>`
+    mode !== 'export' && fixes.length
+      ? `<div class="cqc-tofix"><h3>To fix</h3><ul>${fixes.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>`
       : '';
-
-  const cat = qs.evidenceCategory ? `<span class="cqc-cat-tag">${esc(qs.evidenceCategory)}</span>` : '';
-  const subhead = [qs.keyQuestion, qs.title].filter(Boolean).map(esc).join(' · ');
 
   return (
     `<section class="cqc-card cqc-qs" data-key="${esc(qs.key || '')}">` +
@@ -284,7 +315,10 @@ function renderQualityStatement(qs, mode) {
     `<h2>${subhead}</h2>` +
     `<div class="cqc-qs-tags">${cat}${ragBadge(qs.rag)}</div>` +
     `</div>` +
+    summary +
+    provHtml +
     itemsHtml +
+    currencyHtml +
     wgll +
     toFix +
     `</section>`
@@ -423,8 +457,9 @@ export function buildReadinessCsv(readiness) {
     });
   }
 
-  // ── Section 3: Matched drug terms ─────────────────────────────────────────
-  const terms = Array.isArray(cov.matchedTerms) ? cov.matchedTerms.filter((t) => t != null && t !== '') : [];
+  // ── Section 3: Matched drug terms (engine puts these at coverage.drug.matchedTerms)
+  const allTerms = cov.drug && Array.isArray(cov.drug.matchedTerms) ? cov.drug.matchedTerms : [];
+  const terms = allTerms.filter((t) => t != null && t !== '');
   if (terms.length) {
     sections.push({
       title: 'Matched drug terms',

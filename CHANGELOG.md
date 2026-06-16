@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.108.2] — 2026-06-16
+
+### CQC Inspection Readiness — fix engine↔renderer contract bugs (sanity check)
+
+A quick bug sweep of the P1 build caught four field-name mismatches from the parallel
+build (the engine and renderer were written to slightly different contracts), each of
+which silently dropped real content:
+
+- **Statement titles never rendered** — the renderer read `qs.title`, the engine emits
+  `qs.qualityStatement`; cards showed only the key question.
+- **Statement bodies were empty placeholders** — the renderer expected `qs.items[]`, the
+  engine emits `summary` + statement-level `provenance` + `metrics` (+ `currencyFiles`).
+  Every card read "No evidence items derivable", and the inline provenance (A1) and the
+  per-file rule-currency table (the standout evidence) were not shown. Now rendered.
+- **`toFix` (a string) was mishandled** — `for..of` over it would have exploded it into
+  one bullet per character in the aggregate list, and the per-card list was gated on
+  `Array.isArray` so it never showed. Now tolerates string or array.
+- **Matched drug terms (A2) never rendered** — the engine puts them at
+  `coverage.drug.matchedTerms`; the manifest and CSV read top-level `coverage.matchedTerms`.
+  So "eyeball the raw strings for brand completeness" silently showed "No matched terms".
+  Fixed in both the manifest and the CSV export.
+
+New `test-cqc-render.js` feeds the real engine output into the renderer and locks the
+contract (14 assertions). Full suite 77/77; eslint + prettier clean; re-verified via the
+harness — cards now carry titles, summaries, inline provenance, the currency table and the
+full matched-terms list.
+
 ## [v3.108.1] — 2026-06-16
 
 ### CQC Inspection Readiness — P1.1 polish (panel verdict on the build)
