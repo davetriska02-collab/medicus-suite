@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.0] — 2026-06-16
+
+### CQC Inspection Readiness (P1): internal readiness check + gated evidence export
+
+A new page (Ctrl+K -> "CQC inspection readiness...", opens as a tab) that turns the suite's
+monitoring rule-set and its dated currency into CQC evidence for the Safe and Well-led key
+questions — built from shipped rule data only, no patient data and no cohort enumeration.
+Planned and twice panel-reviewed (docs/plans/CQC-EVIDENCE-PACK-BUILD-PLAN.md).
+
+- **Two modes.** Readiness check (internal: RAG + "what to fix") and Evidence export
+  (inspector-facing, gated behind an "I have reviewed these figures" confirm — never
+  produced automatically).
+- **Coverage manifest front-and-centre.** Rule-set versions/dates, the raw matched-drug
+  terms (eyeball for brand completeness), a coded-data-only "floor not ceiling" caveat, the
+  prominent "Safety rules last reviewed against BNF/NICE/MHRA: {date} — via The Keeper", and
+  a per-file rule-currency table as the standout evidence.
+- **Honest by construction.** Inline prose provenance (never tooltips); a persistent
+  "supporting evidence, not proof of compliance" disclaimer; counts labelled as rules and
+  indicators, not patient numbers.
+- Includes the P1.1 panel polish (reviewed-not-updated wording, dated verdict, role-labelled
+  sign-off, vaccine-as-surveillance) and fixes for four engine-to-renderer field-name
+  mismatches caught in a sanity check (statement title, statement bodies/provenance/currency
+  table, string toFix, matched-terms location), locked by test-cqc-render.js.
+
+New files: cqc-readiness.{html,css,js}, cqc-render.js, engine/cqc-evidence.js. Tests:
+test-cqc-evidence.js (42), test-cqc-render.js (14). Full suite 77/77. Cohort-count phases
+(P2+) remain gated on the feasibility spike (docs/plans/CQC-P0-COHORT-SPIKE.md): a true
+read-only population query is not reachable; the enumerate-then-fan-out path needs a live
+discovery capture.
+
 ## [v3.109.0] — 2026-06-16
 
 ### New "Record" tab — a live-first patient summary (PDF deep-dive nested within)

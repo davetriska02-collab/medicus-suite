@@ -1,0 +1,490 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* CQC Inspection Readiness — page styles. Mirrors the Practice Report's
+   NHS-token print aesthetic; styles the cqc-* classes cqc-render.js emits. */
+
+:root {
+  --nhs-blue: #005eb8;
+  --nhs-dark: #003087;
+  --card: #ffffff;
+  --bg: #f4f6f9;
+  --text: #1a202c;
+  --text2: #4a5568;
+  --text3: #718096;
+  --border: #d8dee6;
+  --green: #1a7f37;
+  --amber: #b45309;
+  --red: #c1121f;
+  --na: #6b7280;
+  --r: 8px;
+}
+html[data-theme='dark'] {
+  --card: #1a2230;
+  --bg: #0f1620;
+  --text: #e6edf5;
+  --text2: #aab7c6;
+  --text3: #7d8aa0;
+  --border: #2a3647;
+  /* Brand + RAG tokens MUST be re-stated for dark, or headings/badge text inherit
+     the light navy (#003087 → ~1.35:1 on a dark card). Learned from practice-report.css. */
+  --nhs-blue: #4c9aff;
+  --nhs-dark: #5aa7ff;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --na: #9aa6b8;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.cqc-controls {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+}
+.cqc-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.cqc-controls-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--nhs-blue);
+  margin-right: auto;
+}
+.cqc-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.cqc-seg button {
+  border: 0;
+  background: var(--card);
+  color: var(--text2);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.cqc-seg button.active {
+  background: var(--nhs-blue);
+  color: #fff;
+}
+.cqc-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: var(--r);
+  cursor: pointer;
+  font: inherit;
+}
+.cqc-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cqc-btn-primary {
+  background: var(--nhs-blue);
+  color: #fff;
+  border-color: var(--nhs-blue);
+}
+
+/* Export confirm gate — amber-framed so it reads as a deliberate hold, not chrome. */
+.cqc-gate {
+  max-width: 900px;
+  margin: 10px auto 0;
+  padding: 10px 14px;
+  background: rgba(180, 83, 9, 0.1);
+  border: 1px solid var(--amber);
+  border-radius: var(--r);
+}
+.cqc-gate-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cqc-gate-label input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ── Output ───────────────────────────────────────────────────────────────── */
+.cqc-output {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 0 20px;
+}
+.cqc-placeholder {
+  text-align: center;
+  color: var(--text3);
+  padding: 60px 20px;
+}
+.cqc-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Cover / header */
+.cqc-cover {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--nhs-blue);
+  border-radius: var(--r);
+  padding: 18px 20px;
+}
+.cqc-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cqc-cover h1 {
+  font-size: 22px;
+  margin: 0;
+  color: var(--nhs-dark);
+}
+.cqc-mode-tag {
+  background: var(--nhs-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.cqc-cover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 10px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.cqc-cover-meta span + span {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
+/* ── Persistent disclaimer strip (Req 4) — must be visible on every page,
+   including print. Tinted amber, not small grey print. ───────────────────── */
+.cqc-disclaimer {
+  background: rgba(180, 83, 9, 0.12);
+  border: 1px solid var(--amber);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cqc-disclaimer strong {
+  color: var(--amber);
+}
+
+/* ── Coverage manifest panel (Req 1) ──────────────────────────────────────── */
+.cqc-manifest {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--nhs-blue);
+  border-radius: var(--r);
+  padding: 16px 20px;
+}
+.cqc-manifest h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--nhs-dark);
+}
+.cqc-manifest .cqc-caveat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text2);
+  font-size: 12px;
+  margin: 8px 0;
+}
+/* Raw matched drug-name strings (A2) — monospace so a clinician can eyeball them. */
+.cqc-matched-strings {
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Cards / quality-statement cards ──────────────────────────────────────── */
+.cqc-card,
+.cqc-statement {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 20px;
+}
+.cqc-card h2,
+.cqc-statement h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--nhs-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cqc-statement-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.cqc-statement-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+/* Evidence category tag (Processes / Outcomes). */
+.cqc-cat {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px 9px;
+}
+.cqc-note {
+  color: var(--text3);
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+/* Inline provenance prose (A1) — denominator + as-at + interval on the same line. */
+.cqc-provenance {
+  color: var(--text2);
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ── RAG badges — WORD + colour (never colour alone) ──────────────────────── */
+.cqc-rag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.cqc-rag-green {
+  background: rgba(26, 127, 55, 0.15);
+  color: var(--green);
+}
+.cqc-rag-amber {
+  background: rgba(180, 83, 9, 0.15);
+  color: var(--amber);
+}
+.cqc-rag-red {
+  background: rgba(193, 18, 31, 0.15);
+  color: var(--red);
+}
+.cqc-rag-na {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--na);
+}
+
+/* ── "What to fix" list ───────────────────────────────────────────────────── */
+.cqc-fix {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--r);
+  padding: 16px 20px;
+}
+.cqc-fix h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: var(--nhs-dark);
+}
+.cqc-fix ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.cqc-fix li {
+  margin: 6px 0;
+  color: var(--text);
+}
+
+/* ── Delta / "what changed" ───────────────────────────────────────────────── */
+.cqc-delta {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--nhs-blue);
+  border-radius: var(--r);
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+.cqc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.cqc-table th,
+.cqc-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cqc-table th {
+  color: var(--nhs-dark);
+}
+.cqc-table .cqc-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sign-off block ───────────────────────────────────────────────────────── */
+.cqc-signoff {
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: var(--r);
+  padding: 16px 20px;
+}
+.cqc-signoff h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+  color: var(--nhs-dark);
+}
+.cqc-signoff-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 14px 0 4px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.cqc-signoff-rule {
+  flex: 1;
+  border-bottom: 1px solid var(--text3);
+  min-width: 120px;
+}
+
+/* ── Designed empty / error state — a framed panel, not bare grey text. ────── */
+.cqc-empty {
+  max-width: 520px;
+  margin: 60px auto;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 32px 28px;
+}
+.cqc-empty h2 {
+  margin: 0 0 8px;
+  color: var(--nhs-dark);
+  font-size: 17px;
+}
+.cqc-empty p {
+  color: var(--text2);
+  margin: 0;
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────── */
+@media print {
+  .cqc-controls,
+  .cqc-seg,
+  .cqc-gate {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+    /* Keep RAG pill fills + the disclaimer tint on paper — dropping them is signal loss. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cqc-output {
+    margin: 0;
+    max-width: none;
+    padding: 0;
+  }
+  .cqc-card,
+  .cqc-statement,
+  .cqc-cover,
+  .cqc-manifest,
+  .cqc-fix,
+  .cqc-signoff,
+  .cqc-delta {
+    border: 1px solid #999;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* The disclaimer must stay visible on every printed page (Req 4). */
+  .cqc-disclaimer {
+    border: 1px solid #b45309;
+    border-left: 4px solid #b45309;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  @page {
+    margin: 14mm;
+  }
+}
+
+/* P1.1 polish (panel verdict on the build) */
+.cqc-banner-asat {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text2);
+  margin-left: 8px;
+}
+.cqc-reviewed {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--nhs-blue);
+  background: var(--bg);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+.cqc-callout {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  background: rgba(180, 83, 9, 0.08);
+  color: var(--text);
+  font-size: 13px;
+}
+@media print {
+  .cqc-callout {
+    background: #fff;
+  }
+}

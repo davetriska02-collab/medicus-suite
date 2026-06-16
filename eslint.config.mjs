@@ -52,7 +52,11 @@ export default [
   {
     // practice-report.js — the Practice Report page controller, loaded as
     // <script type="module"> from practice-report.html (root, like the visualiser).
-    files: ['practice-report.js'],
+    // cqc-readiness.js — the CQC Inspection Readiness controller, same pattern.
+    // cqc-render.js — the CQC readiness renderer (root ES module, like report-render).
+    // (engine/cqc-evidence.js is a classic dual-export IIFE like rule-currency.js, so it
+    //  stays on the default 'script' config — not listed here.)
+    files: ['practice-report.js', 'cqc-readiness.js', 'cqc-render.js'],
     languageOptions: { sourceType: 'module' },
   },
   {

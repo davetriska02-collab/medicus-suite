@@ -141,6 +141,16 @@ function buildCommands() {
     run: () => chrome.tabs.create({ url: chrome.runtime.getURL('practice-report.html?preset=7d') }),
   });
 
+  // CQC Inspection Readiness — opens the full readiness page (a browser tab).
+  cmds.push({
+    id: 'open:cqc-readiness',
+    label: 'CQC inspection readiness…',
+    group: 'Open',
+    keywords: 'cqc inspection readiness evidence pack safe well-led compliance audit export pdf',
+    icon: GENERIC_ICONS.doc,
+    run: () => chrome.tabs.create({ url: chrome.runtime.getURL('cqc-readiness.html') }),
+  });
+
   // Display preferences — applied live everywhere via display-prefs.js.
   const display = [
     ['display:light', 'Theme: light', 'day bright', { theme: 'light' }],
