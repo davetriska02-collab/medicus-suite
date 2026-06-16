@@ -113,6 +113,65 @@ whole shape. Do not promise population counts until that's confirmed.
   MHRA/CAS/NPSA **alert-response log** (received → disseminated → actioned, dated) — the
   one clear net-new capability CQC explicitly wants and the suite lacks.
 
+## 8. The Practice panel reaction (synthetic — concept consultation)
+
+Four personas reacted to the concept (no surface to render yet). Synthetic, not user
+research. Scores: **Janet (manager) 7** (→9 if figures reconcile, →2 if one doesn't),
+**Raj (pharmacist) 7.5**, **Eileen (nurse) 6**, **Margaret (partner) 4**.
+
+**They AGREE with the central decision.** All four endorsed the honest bound
+("supporting evidence, not proof; processes + outcomes only") — unprompted, several said
+it is the *only* acceptable framing and the thing that stops them rejecting the idea.
+Several want the disclaimer **on every printed page**, not in a footnote. And the
+**rule-currency / Keeper provenance was the most-wanted element across the board** — the
+one thing they "can't get anywhere else" to answer an inspector's governance question.
+This validates the §3 distinctive-strength call and the P1 (processes + currency first)
+phasing.
+
+**But they reshape it in four ways — adopt these:**
+
+- **R-A · Two modes, internal-first (biggest change).** Margaret (the partner who sits
+  across from the inspector) would NOT hand a numbers printout to CQC — "a grenade" that
+  invites probing of a figure she can't defend. She wants a **pre-inspection readiness /
+  self-audit view for the practice**. Janet/Raj would use it inspector-facing but *only
+  after spot-checking*. **Decision:** lead with an internal "are we inspection-ready?"
+  mode; inspector-facing export is a deliberate, verified, opt-in step — not the default
+  framing.
+- **R-B · Coverage honesty is clinical-safety-critical, front-and-centre (not polish).**
+  Eileen and Raj converge hard on the **silent undercount** — a patient on an unlisted
+  brand, or whose result is a scanned letter not a coded value, vanishes and the pack
+  reads "all green." Eileen: "that is how serious harm happens — not with alarms, with
+  silence." **Decision:** the pack must state, prominently at the top: which drugs/brands
+  it covers, the coded-drug basis of each cohort, that results are from *coded data only*,
+  and the date the drug-matching was last reviewed vs BNF — plus a way to **reconcile the
+  count against the source system**. This dovetails with the existing
+  `test-drug-brand-coverage.js` discipline in CLAUDE.md.
+- **R-C · Per-figure provenance inline + clinical precision.** Janet's gate: every count
+  shows its **denominator definition + "as at" timestamp on the same line** (not a
+  footnote), reproducible so she can spot-check. Raj adds clinical must-fixes: **do NOT
+  bundle "anticoagulants"** (warfarin INR vs DOAC renal/weight monitoring differ); **state
+  the monitoring interval applied per drug + its source** (intervals vary by
+  stability/initiation); **disclose which of the 13 PINCER indicators, which ACB scale,
+  and which STOPP/START version** are implemented (undisclosed partial coverage destroys
+  credibility); treat the figure as a **snapshot** with a fixed as-at (running twice must
+  not differ unexplained).
+- **R-D · Re-prioritise scope.** **Valproate PPP moves from "candidate" to top priority**
+  (Raj: mandatory since 2018, active CQC/NHSE scrutiny — the highest-urgency gap), and add
+  **clozapine (CMAS) monitoring** (fatal-agranulocytosis risk; its omission is itself a
+  clinical gap). **QOF:** narrow or drop from this pack (Raj — a read-only tool shouldn't
+  imply it validates QOF the practice's own system reports). **STOPP/START candidates and
+  demand/capacity:** move to the *internal* view, NOT the inspector-facing pack (Janet — an
+  inspector seeing a deprescribing candidate list may ask "why haven't you actioned every
+  one?"; demand/capacity bloats a Safe/Well-led pack — keep it in the Practice Report).
+- Janet also wants a **"what changed since last run" delta** and a **"what good looks
+  like"** line (the NICE/BNF standard) so a number is interpretable before it's printed.
+
+**Net:** the panel agrees the concept is worth building and that the honest framing is
+right; the refinements make it *safer and more credible*, not bigger. The two clinical-
+safety-critical adoptions (R-A internal-first, R-B coverage honesty) should be treated as
+requirements, not nice-to-haves. All clinical-rule additions (valproate PPP, clozapine,
+interval precision, brand completeness) route through **The Keeper**.
+
 ## 7. Bottom line
 
 Worth building, and it plays to the suite's strengths (Sentinel monitoring + dated
