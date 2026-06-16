@@ -16,7 +16,9 @@
 .ch-queue-chips,
 .ch-q-result,
 .ch-q-mon,
-.ch-action-menu {
+.ch-action-menu,
+.ch-select-all-btn,
+.ch-confirm-overlay {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -545,4 +547,114 @@
   opacity: 0.55;
   font-size: 9px;
   margin-left: 2px;
+}
+
+/* ---- "Select All" — Outstanding Investigation Requests ---- */
+/* Injected into the host card's .card-button header slot. Reads as a quiet,
+   accent-outlined action so it sits beside the Medicus chrome without shouting. */
+.ch-select-all-btn {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.ch-select-all-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ch-select-all-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ch-select-all-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* ---- Confirm dialog (bulk-action safety check) ---- */
+.ch-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  font-family: var(--sans);
+}
+.ch-confirm-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 18px 14px;
+  color: var(--text-1);
+}
+.ch-confirm-card * {
+  box-sizing: border-box;
+}
+.ch-confirm-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 8px;
+}
+.ch-confirm-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin-bottom: 16px;
+}
+.ch-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.ch-confirm-btn {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.ch-confirm-cancel {
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+.ch-confirm-cancel:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
+.ch-confirm-go {
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+.ch-confirm-go:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.ch-confirm-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
