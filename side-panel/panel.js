@@ -259,6 +259,92 @@ function wireHelpButton() {
   });
 }
 
+// ── "All tabs" menu ───────────────────────────────────────────────────────────
+// At the 360-420px panel width the tab strip can only show the active tab; the
+// rest scroll off (appraisal G1). This menu lists every visible tab by its full
+// name so any tab is reachable in one click without horizontal scrolling. Built
+// live from the nav DOM on each open, so it reflects current visibility/order.
+
+let allTabsOpen = false;
+let _allTabsCloseHandler = null;
+
+function buildAllTabsPopoverHTML() {
+  const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter((t) => !t.classList.contains('nav-tab-hidden'));
+  const rows = tabs
+    .map((t) => {
+      const mod = t.dataset.module || '';
+      const icon = t.querySelector('svg')?.outerHTML || '';
+      const label = t.querySelector('span:not(.nav-badge)')?.textContent || t.getAttribute('aria-label') || mod;
+      const isActive = t.classList.contains('active');
+      return `<button class="alltabs-item${isActive ? ' active' : ''}" role="menuitem" data-module="${escStrip(mod)}">
+        <span class="alltabs-item-icon" aria-hidden="true">${icon}</span>
+        <span class="alltabs-item-label">${escStrip(label)}</span>
+      </button>`;
+    })
+    .join('');
+  return `<div class="alltabs-popover" id="allTabsPopover" role="menu" aria-label="All tabs">
+    <div class="alltabs-title">Jump to a tab</div>
+    <div class="alltabs-list">${rows}</div>
+  </div>`;
+}
+
+function renderAllTabsPopover() {
+  const host = document.getElementById('allTabsPopoverHost');
+  const btn = document.getElementById('allTabsBtn');
+  if (!host) return;
+  host.innerHTML = allTabsOpen ? buildAllTabsPopoverHTML() : '';
+  btn?.setAttribute('aria-expanded', String(allTabsOpen));
+  btn?.classList.toggle('active', allTabsOpen);
+  if (!allTabsOpen) return;
+
+  // Clicking a row drives the real nav tab (reuses its switch + active logic).
+  host.querySelectorAll('.alltabs-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const mod = item.dataset.module;
+      const tab = document.querySelector(`.nav-tab[data-module="${mod}"]`);
+      allTabsOpen = false;
+      if (_allTabsCloseHandler) {
+        document.removeEventListener('click', _allTabsCloseHandler);
+        _allTabsCloseHandler = null;
+      }
+      renderAllTabsPopover();
+      tab?.click();
+    });
+  });
+
+  if (_allTabsCloseHandler) document.removeEventListener('click', _allTabsCloseHandler);
+  _allTabsCloseHandler = (e) => {
+    if (!e.target.closest('#allTabsPopoverHost') && !e.target.closest('#allTabsBtn')) {
+      allTabsOpen = false;
+      document.removeEventListener('click', _allTabsCloseHandler);
+      _allTabsCloseHandler = null;
+      renderAllTabsPopover();
+    }
+  };
+  document.addEventListener('click', _allTabsCloseHandler);
+}
+
+function wireAllTabsButton() {
+  const btn = document.getElementById('allTabsBtn');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    allTabsOpen = !allTabsOpen;
+    renderAllTabsPopover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Escape' || e.key === 'Esc') && allTabsOpen) {
+      allTabsOpen = false;
+      if (_allTabsCloseHandler) {
+        document.removeEventListener('click', _allTabsCloseHandler);
+        _allTabsCloseHandler = null;
+      }
+      renderAllTabsPopover();
+      btn.focus();
+    }
+  });
+}
+
 // ── Nav overflow detection ────────────────────────────────────────────────────
 
 const navEl = document.querySelector('.suite-nav');
@@ -1526,6 +1612,7 @@ document.getElementById('displayBtn')?.addEventListener('click', (e) => {
 
 // Wire per-tab help button
 wireHelpButton();
+wireAllTabsButton();
 
 // ── Boot — restore last active module ────────────────────────────────────────
 // Read the persisted module name and switch to it, falling back to 'slots' if

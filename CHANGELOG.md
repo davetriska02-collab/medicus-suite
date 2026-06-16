@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.112.0] — 2026-06-16
+
+### "All tabs" menu — every tab reachable by name in one click (G1)
+
+At the 360-420px panel width the nav tab strip can only show the active tab;
+the other tabs scroll off, and the appraisal found even savvy users could not
+name them from icons alone. Added an **"All tabs" button** to the nav actions
+that opens a menu listing every visible tab by its full name (icon + label),
+with the active tab highlighted — one click jumps to any tab, no horizontal
+scrolling, no need to learn the Ctrl+K palette.
+
+- Built live from the nav DOM on each open, so it always reflects the user's
+  current tab visibility and order.
+- Mirrors the existing help-popover pattern: outside-click and Esc dismiss,
+  `:focus-visible`, tokenised throughout, verified in light and dark.
+- Chosen over a 2-3 row wrapping nav (which would have permanently eaten
+  vertical space) to protect the panel's clinical-data real estate.
+
 ## [v3.111.1] — 2026-06-16
 
 ### Legibility pass (Atelier): load-bearing labels lifted off the faint tier
