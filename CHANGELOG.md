@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.108.0] — 2026-06-16
+
+### CQC Inspection Readiness (P1) — internal readiness check + gated evidence export
+
+A new page (Ctrl+K → "CQC inspection readiness…", opens as a tab like the visualiser)
+that turns the suite's own monitoring rule-set and its dated currency into CQC evidence
+for the **Safe** and **Well-led** key questions — built entirely from shipped rule data,
+no patient data and no cohort enumeration. Planned and twice panel-reviewed in
+`docs/plans/CQC-EVIDENCE-PACK-BUILD-PLAN.md`.
+
+- **Two modes (panel steer R-A).** *Readiness check* (default, internal): RAG-led "are we
+  inspection-ready?" with a "what to fix before CQC" list. *Evidence export* (inspector-
+  facing): the same evidence minus the internal action lists, plus a sign-off block —
+  **gated behind an explicit "I have reviewed these figures" confirm**; Print/PDF and CSV
+  stay disabled and the document is never produced until it is ticked.
+- **Coverage manifest, front-and-centre (R-B/A2/A5).** Every output opens with which drug/
+  QOF/vaccine/alert rules are in use and their dates, the **raw matched-drug terms** (so a
+  clinician can eyeball brand completeness), an explicit **coded-data-only** caveat
+  ("counts are a floor, not a ceiling"), and the Keeper provenance for how the rules are
+  kept current.
+- **Honest by construction.** A persistent "supporting evidence for Safe/Well-led
+  processes & outcomes only — not proof of compliance, not a complete pack" disclaimer on
+  the surface and in the footer. Inline, human-readable provenance on every figure (A1) —
+  denominator + "as at" + source, never a tooltip.
+- **Rule currency = the standout evidence.** Reuses `shared/rule-currency.js` to show each
+  rule-set's age/RAG and last-reviewed message, evidencing a *maintained* safety system.
+- **Anchored delta (A7).** "Save as baseline" stores a snapshot; the next run shows what
+  changed.
+
+New files: `cqc-readiness.{html,css,js}`, `cqc-render.js`, `engine/cqc-evidence.js`. Test:
+`test-cqc-evidence.js` (42 assertions, incl. a no-patient-data check). Full suite 76/76;
+eslint + prettier clean; both modes + dark mode verified via the harness. Cohort-count
+phases (P2+) remain gated on the separate feasibility spike.
+
 ## [v3.106.0] — 2026-06-16
 
 ### Practice Report: power-user roadmap items
