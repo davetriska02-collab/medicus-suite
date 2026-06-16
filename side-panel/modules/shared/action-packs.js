@@ -190,6 +190,22 @@ export function buildChipActions(chip, patient) {
 
   // ── QOF indicator chips ───────────────────────────────────────────────────
   if (chip.type === 'qof-indicator') {
+    // Safety-monitoring surveillance flags (eGFR/HbA1c trends, electrolyte alerts)
+    // reuse the qof-indicator chip shape but are CLINICIAN-REVIEW items, not patient
+    // recalls. They must NEVER emit patient-facing "come for your review" SMS/letter
+    // copy: a raised potassium or falling eGFR is a clinical action to review now, not
+    // a routine booking the patient arranges at their convenience. Emit a clinician
+    // task only — no sms, no letter.
+    if (chip.category === 'safety-monitoring') {
+      const flag = chip.indicatorName || chip.indicatorCode || 'safety flag';
+      const valuePart = chip.valueText ? ` (${chip.valueText})` : '';
+      return {
+        task:
+          `Clinical review — ${patientName}${nhsNo ? ` (NHS ${nhsNo})` : ''}: ${flag}${valuePart} flagged. ` +
+          `Clinician to review and action. Not a patient recall.`,
+      };
+    }
+
     const condition = qofConditionDescription(chip);
     const review = qofReviewDescription(chip);
 
@@ -355,7 +371,9 @@ export function buildPatientActions(chips, patient) {
       const drug = chip.drugName || 'monitored medication';
       const word = statusWord(chip.status);
       smsItems.push(`${drug} (${dueTests.length > 0 ? dueTests.join(', ') : 'monitoring'}, ${word})`);
-    } else if (chip.type === 'qof-indicator') {
+    } else if (chip.type === 'qof-indicator' && chip.category !== 'safety-monitoring') {
+      // Safety-monitoring flags are clinician-review only — never folded into a
+      // patient-facing combined recall SMS (see buildChipActions).
       smsItems.push(qofReviewDescription(chip));
     } else if (chip.type === 'vaccine') {
       smsItems.push(chip.displayName || 'vaccination');

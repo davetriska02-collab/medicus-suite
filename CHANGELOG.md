@@ -22,6 +22,12 @@ Three fixes to the Sentinel monitoring action packs and chip grouping:
   rules are now tagged `category: "safety-monitoring"` in `rules/qof-rules.json`;
   the engine passes the category through and the panel groups them in their own
   section. Evaluation, scoring and chip content are unchanged — display grouping only.
+- **Safety-monitoring chips no longer emit patient-facing recall copy.** Because the
+  trend/alert flags reused the `qof-indicator` shape, an action-needed one (e.g. a
+  raised potassium) could previously generate a patient SMS/letter reading "your
+  review is due — book at your convenience", which is wrong for a same-day clinical
+  signal. These chips now produce a clinician-review task only (no SMS, no letter),
+  via both `buildChipActions` and the aggregate `buildPatientActions` path.
 
 Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal) and
 `test-qof-indicator-filters.js` (category passthrough). Full suite green.
