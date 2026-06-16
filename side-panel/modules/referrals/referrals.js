@@ -45,6 +45,7 @@ let state = {
   lastFetched: null,
   lastAttemptedUrl: null,
   showDiagnostics: false,
+  _staleDiscovery: false,
   activityData: null,
   activityError: null,
   activityLoading: false,
@@ -144,7 +145,50 @@ export async function init(el) {
   }
 
   render();
-  if (state.discoveryUrl || state.configUrl) fetchAndRender();
+  if (state.discoveryUrl || state.configUrl) {
+    fetchAndRender();
+  } else {
+    // Headless discovery: if no captured URL exists yet but we can resolve a
+    // practice code, attempt to derive the data-template URL directly — the user
+    // does not need to open the report page first.  This runs at most once per
+    // init (one-shot, lazy, no poller).  On success the storage.onChanged
+    // listener (below) fires and re-renders automatically.  On failure we fall
+    // through to the existing renderDiscoveryPrompt path, same as today.
+    (async () => {
+      const api = ApiNs();
+      if (!api || !api.ensureReferralsDiscovery) return;
+      let practiceCode = null;
+      try {
+        const resolved = await window.PracticeCode.resolve();
+        practiceCode = resolved && resolved.code ? resolved.code : null;
+      } catch (_) {
+        // PracticeCode not available or not yet resolved — fall through to prompt
+        return;
+      }
+      if (!practiceCode) return;
+
+      // Show a brief "Connecting…" hint without disrupting the skeleton/prompt
+      // decision — just update the subtitle so the user knows work is happening.
+      const subtitleEl = container && container.querySelector('.module-subtitle');
+      if (subtitleEl) subtitleEl.textContent = 'Connecting to referrals…';
+
+      const templateUrl = await api.ensureReferralsDiscovery(practiceCode);
+
+      if (!container) return; // module cleaned up while we were waiting
+
+      if (templateUrl) {
+        // Discovery succeeded — update in-memory state and fetch.
+        // The storage.onChanged listener will also fire (it is idempotent).
+        state.discoveryUrl = templateUrl;
+        fetchAndRender();
+      } else {
+        // Discovery could not derive a valid URL — restore subtitle and let
+        // render() show the existing discovery prompt as the fallback.
+        const subtitleEl2 = container.querySelector('.module-subtitle');
+        if (subtitleEl2) subtitleEl2.textContent = 'Referral audit data from Medicus';
+      }
+    })();
+  }
 
   // Live "X min ago" label — only updates the timestamp node, no full re-render
   stalenessTimer = setInterval(() => {
@@ -253,10 +297,53 @@ async function fetchAndRender() {
       state.aggregated = api.aggregate(result.referrals);
       state.lastFetched = new Date();
       state.error = null;
+      state._staleDiscovery = false;
       if (result.url) state.lastAttemptedUrl = result.url;
     } else {
-      state.error = refResult.reason?.message || String(refResult.reason);
-      if (refResult.reason?.url) state.lastAttemptedUrl = refResult.reason.url;
+      const err = refResult.reason;
+      if (err?.url) state.lastAttemptedUrl = err.url;
+
+      if (api.isStaleTemplateError && api.isStaleTemplateError(err)) {
+        // The stored discovery URL is stale (404 or returned config instead of
+        // data).  Clear it and attempt headless re-discovery before prompting.
+        await chrome.storage.local.remove(DISCOVERY_KEY);
+        state.discoveryUrl = null;
+
+        let reDiscovered = false;
+        try {
+          const resolved = await window.PracticeCode.resolve();
+          const pCode = resolved && resolved.code ? resolved.code : null;
+          if (pCode && api.ensureReferralsDiscovery) {
+            const newUrl = await api.ensureReferralsDiscovery(pCode);
+            if (newUrl) {
+              state.discoveryUrl = newUrl;
+              reDiscovered = true;
+            }
+          }
+        } catch (_) {
+          // Ignore — fall through to the discovery prompt
+        }
+
+        if (reDiscovered) {
+          // Re-discovery succeeded — finish the current call cleanly, then
+          // schedule a fresh fetchAndRender() after the finally block resets
+          // _inFlight (using setTimeout so the guard is definitely clear).
+          state.loading = false;
+          state.loadingProgress = null;
+          state.activityLoading = false;
+          state.error = null;
+          render();
+          setTimeout(fetchAndRender, 0);
+          return; // finally block still runs; _inFlight reset before the timer fires
+        }
+
+        // Re-discovery failed — show the friendly prompt with an explanation.
+        // Deliberately clear error so renderDiscoveryPrompt() is shown, not renderError().
+        state._staleDiscovery = true;
+        state.error = null;
+      } else {
+        state.error = err?.message || String(err);
+      }
     }
 
     if (actResult.status === 'fulfilled') {
@@ -363,12 +450,22 @@ function renderSkeleton() {
 }
 
 function renderDiscoveryPrompt() {
+  const staleNote = state._staleDiscovery
+    ? `<p class="ref-discovery-stale-note">
+        The referrals report location appears to have changed. Opening it once below
+        will reconnect this panel automatically.
+      </p>`
+    : '';
+  const headText = state._staleDiscovery
+    ? 'Reconnect — just open the report once'
+    : 'Ready — just open the report once';
   return `
     <div class="ref-discovery-prompt">
       <svg class="ref-discovery-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <p class="ref-discovery-head">Ready — just open the report once</p>
+      <p class="ref-discovery-head">${escHtml(headText)}</p>
+      ${staleNote}
       <p class="ref-discovery-body">
         Nothing is broken and there is nothing to set up. This panel fills in by itself
         the first time you open the referrals report in Medicus, then keeps itself up to date.
@@ -841,6 +938,7 @@ function wireControls() {
       rawReferrals: null,
       error: null,
       lastAttemptedUrl: null,
+      _staleDiscovery: false,
     });
     render();
   });

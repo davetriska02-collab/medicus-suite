@@ -271,11 +271,31 @@ export async function fetchActivityRange(siteId, startISO, endISO) {
 export async function fetchReferralsRange(siteId, startISO, endISO) {
   const ReferralsApi = typeof window !== 'undefined' ? window.ReferralsApi : null;
   if (!ReferralsApi) return null;
+
+  // Step 1: read the stored template URL from previous discovery.
+  const d = await chrome.storage.local.get('referrals.discovery');
+  let templateUrl = d['referrals.discovery']?.url || null;
+
+  // Step 2: if no stored template, attempt headless discovery now.
+  if (!templateUrl) {
+    templateUrl = await (typeof window !== 'undefined' &&
+    window.ReferralsApi &&
+    window.ReferralsApi.ensureReferralsDiscovery
+      ? window.ReferralsApi.ensureReferralsDiscovery(siteId).catch(() => null)
+      : Promise.resolve(null));
+  }
+
+  // Step 3: if still no template URL, return null (report omits/notes the section).
+  if (!templateUrl) return null;
+
+  const apiFetch = (url, init) =>
+    typeof window !== 'undefined' && window.ApiDiag
+      ? window.ApiDiag.fetch({ module: 'practice-report', url, code: siteId, init })
+      : fetch(url, init);
+
   const referrals = await ReferralsApi.fetchReferrals(siteId, startISO, endISO, {
-    fetch: (url, init) =>
-      typeof window !== 'undefined' && window.ApiDiag
-        ? window.ApiDiag.fetch({ module: 'practice-report', url, code: siteId, init })
-        : fetch(url, init),
+    fetch: apiFetch,
+    templateUrl,
   });
   const rows = Array.isArray(referrals) ? referrals : referrals?.referrals || [];
   return ReferralsApi.aggregate ? ReferralsApi.aggregate(rows) : null;

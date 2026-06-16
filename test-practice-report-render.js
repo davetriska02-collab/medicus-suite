@@ -38,12 +38,41 @@ const path = require('path');
         { date: '2026-06-15', medical: 5, admin: 3, investigation: 0, rxRoutine: 1, rxNonRoutine: 0, all: 9 },
         { date: '2026-06-16', medical: 7, admin: 2, investigation: 1, rxRoutine: 0, rxNonRoutine: 0, all: 10 },
       ],
-      summary: { totals: { all: 19, medical: 12, admin: 5, investigation: 1, rxRoutine: 1, rxNonRoutine: 0 }, dailyMean: 9.5, peak: { date: '2026-06-16', value: 10 }, days: 2 },
+      summary: {
+        totals: { all: 19, medical: 12, admin: 5, investigation: 1, rxRoutine: 1, rxNonRoutine: 0 },
+        dailyMean: 9.5,
+        peak: { date: '2026-06-16', value: 10 },
+        days: 2,
+      },
     },
-    capacity: { byDay: [{ date: '2026-06-15', slots: 40, sessions: 5 }, { date: '2026-06-16', slots: 50, sessions: 6 }] },
-    activity: { totals: { consultations: 120, all: 140 }, users: [{ name: 'Dr Penelope Quirke', total: 80 }, { name: 'Dr Aldous', total: 60 }] },
-    referrals: { byPriority: { Routine: 20, Urgent: 5, TwoWeekWait: 3 }, byStatus: { Completed: 18, Incomplete: 10 }, byClinician: [{ name: 'Dr Penelope Quirke', count: 12 }], total: 28 },
-    currentSnapshot: { date: '2026-06-16', ppi: 67, band: 'AMBER', demand: 151, slotsRemaining: 50, waitingArrived: 4, urgent: 2 },
+    capacity: {
+      byDay: [
+        { date: '2026-06-15', slots: 40, sessions: 5 },
+        { date: '2026-06-16', slots: 50, sessions: 6 },
+      ],
+    },
+    activity: {
+      totals: { consultations: 120, all: 140 },
+      users: [
+        { name: 'Dr Penelope Quirke', total: 80 },
+        { name: 'Dr Aldous', total: 60 },
+      ],
+    },
+    referrals: {
+      byPriority: { Routine: 20, Urgent: 5, TwoWeekWait: 3 },
+      byStatus: { Completed: 18, Incomplete: 10 },
+      byClinician: [{ name: 'Dr Penelope Quirke', count: 12 }],
+      total: 28,
+    },
+    currentSnapshot: {
+      date: '2026-06-16',
+      ppi: 67,
+      band: 'AMBER',
+      demand: 151,
+      slotsRemaining: 50,
+      waitingArrived: 4,
+      urgent: 2,
+    },
     snapshotHistory: [
       { date: '2026-06-14', ppi: 30, demand: 120 },
       { date: '2026-06-15', ppi: 45, demand: 140 },
@@ -86,9 +115,31 @@ const path = require('path');
   check(render.esc('<b>&"x</b>') === '&lt;b&gt;&amp;&quot;x&lt;/b&gt;', 'esc escapes HTML/entities');
   check(render.sparkline([1, 2, 3, 4]).startsWith('<svg'), 'sparkline renders an SVG for >=2 points');
   check(render.sparkline([1]) === '', 'sparkline empty for <2 points');
-  const csv = render.buildReportCsv(applied);
-  check(csv.header[0] === 'date' && csv.header.includes('demand_total'), 'CSV header has date + demand_total');
-  check(csv.rows.length === 2 && csv.rows[0][csv.header.length - 1] === 9, 'CSV rows mirror the per-day demand series');
+  // ── CSV export (multi-section, profile-aware) ───────────────────────────────
+  console.log('\n--- CSV export ---');
+  const mgmtCsv = render.buildReportCsv(profiles.applyProfile(rawReport(), profiles.getProfile('management')));
+  check(Array.isArray(mgmtCsv.sections) && mgmtCsv.sections.length > 0, 'CSV returns a sections array');
+  const demandSec = mgmtCsv.sections.find((s) => /demand/i.test(s.title));
+  check(
+    demandSec && demandSec.header[0] === 'date' && demandSec.header.includes('demand_total'),
+    'CSV has a demand-by-day section with date + demand_total'
+  );
+  check(
+    demandSec.rows.length === 2 && demandSec.rows[0][demandSec.header.length - 1] === 9,
+    'demand rows mirror the per-day series'
+  );
+  const mgmtActivity = mgmtCsv.sections.find((s) => /clinician/i.test(s.title));
+  check(!!mgmtActivity, 'management CSV includes a per-clinician activity section');
+  check(
+    mgmtActivity.rows.some((row) => row.includes(UNIQUE_NAME)),
+    'management CSV per-clinician section names the clinician'
+  );
+  // privacy: staff + icb CSV must contain NO per-clinician section and no clinician name
+  for (const pid of ['staff', 'icb']) {
+    const c = render.buildReportCsv(profiles.applyProfile(rawReport(), profiles.getProfile(pid)));
+    check(!c.sections.some((s) => /clinician/i.test(s.title)), `${pid} CSV has NO per-clinician section`);
+    check(!JSON.stringify(c.sections).includes(UNIQUE_NAME), `${pid} CSV contains no clinician name`);
+  }
 
   // unknown profile id falls back
   check(profiles.getProfile('nope').id === profiles.DEFAULT_PROFILE_ID, 'unknown profile id falls back to default');

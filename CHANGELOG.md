@@ -2,6 +2,62 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.104.0] — 2026-06-16
+
+### Practice Report: the gap-to-8/9 fixes (Practice appraisal)
+
+Lands the convergent Practice-panel findings
+(`docs/appraisal/PRACTICE-REPORT-gap-to-8-9-2026-06-16.md`).
+
+- **Pressure Index no longer reads as a contradiction.** The current-snapshot tile now
+  shows the band word ("AMBER") as the headline with "index 25/100" as the sub-line, so
+  the eye reads the status first, not a number that looks green. When the band was floored
+  by over-capacity, a prominent amber explanation ("Showing AMBER: the practice is over
+  capacity — the weighted index alone is 25") replaces the old small-grey note. All four
+  personas snagged on the old presentation; this was the single biggest lever.
+- **A plain-English summary now leads the report** — e.g. "Last 7 days: 151 requests
+  against 350 scheduled slots — demand was above capacity" — so the team shares a frame
+  before any number, and it bridges the demand-vs-activity question.
+- **Plain language:** "Routine Rx" / "Non-routine Rx" → "Routine prescriptions" /
+  "Non-routine prescriptions"; the demand breakdown is labelled "Of which, by type" so it
+  reads as a breakdown of the headline total.
+- **Live figures carry their timestamp** — "Slots free now" / "In waiting room" now show
+  "as at HH:MM" on the tile, so a figure read later in the day isn't mistaken for live.
+- **Richer, profile-aware CSV.** Export now includes the per-clinician activity table and
+  the referrals breakdowns, not just demand-by-day — as separate titled sections in one
+  file. The Staff and ICB CSVs emit **no per-clinician section** (the aggregate-only
+  privacy rule now holds in the CSV as well as the HTML, regression-tested).
+
+Roadmap (power-user): sortable per-clinician columns, demand as a percentage.
+
+## [v3.103.0] — 2026-06-16
+
+### Referrals: no longer need to "open the report once" (headless discovery)
+
+Referral data is now fetched without first opening the Medicus Clinical Audit Report
+page (plan: `docs/plans/REFERRALS-HEADLESS-DISCOVERY-PLAN.md`).
+
+- **Headless discovery.** A new `ReferralsApi.ensureReferralsDiscovery()` constructs the
+  referrals **config** endpoint from the practice code, fetches it credentialed to
+  validate the deployment, derives and validates the **data** template, and stores it —
+  exactly the URLs the in-page content script used to capture, but with no tab open. URL
+  only is persisted; never patient rows. On any failure it returns null and falls back to
+  the existing in-page discovery + the friendly prompt, so the worst case is no worse than
+  before. The Referrals tab now runs this automatically on load when no template is stored.
+- **Bug fix:** the Practice Report's referrals section never populated — `fetchReferralsRange`
+  called the API without the captured template URL and always threw "No discovered URL".
+  It now uses the stored template (or runs headless discovery), so referrals appear in the
+  report.
+- **Stale-template self-heal.** If a captured URL goes stale (404, or it starts returning
+  the config response), the Referrals module now clears it, attempts one re-discovery, and
+  otherwise shows a calm "reconnect — open the report once" prompt instead of a dead error.
+- The Practice Report's referrals section, when not yet available, now shows a visible
+  "not enabled yet" line rather than vanishing silently.
+
+Honours the repo's "never construct URLs blindly" doctrine by validating every constructed
+URL against the live response before storing it. Tests: `test-referrals-discovery.js` (37,
+incl. PHI-not-persisted guards); full suite 75/75; verified end-to-end via the harness.
+
 ## [v3.102.0] — 2026-06-16
 
 ### Practice Report — design-crit + Practice review fixes

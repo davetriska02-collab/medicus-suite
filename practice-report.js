@@ -9,7 +9,7 @@ import { getProfile, applyProfile } from './side-panel/modules/condor/report/rep
 import { buildReportHtml, buildReportCsv } from './side-panel/modules/condor/report/report-render.js';
 import { fetchAllStreams } from './side-panel/modules/condor/condor-data.js';
 import { computeIndex } from './side-panel/modules/condor/condor.js';
-import { downloadCsv } from './side-panel/modules/shared/export-util.js';
+import { downloadCsv, toCsv } from './side-panel/modules/shared/export-util.js';
 
 const $ = (id) => document.getElementById(id);
 let _preset = '7d';
@@ -107,9 +107,20 @@ function init() {
   $('prPrint').addEventListener('click', () => window.print());
   $('prCsv').addEventListener('click', () => {
     if (!_lastApplied) return;
-    const { header, rows } = buildReportCsv(_lastApplied);
+    const { suffix, sections } = buildReportCsv(_lastApplied);
+    if (!sections || sections.length === 0) return;
     const r = _lastApplied.range || {};
-    downloadCsv(`practice-report-${r.start}_${r.end}.csv`, header, rows);
+    const fileSuffix = suffix || `${r.start}_${r.end}`;
+    const combined = sections.map((s) => `${s.title}\n${toCsv(s.header, s.rows)}`).join('\n');
+    const blob = new Blob([combined], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `practice-report-${fileSuffix}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
 
   // Honour ?preset= and ?profile= from the launcher.
