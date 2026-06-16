@@ -2,87 +2,108 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.108.2] — 2026-06-16
+## [v3.110.0] — 2026-06-16
 
-### CQC Inspection Readiness — fix engine↔renderer contract bugs (sanity check)
+### CQC Inspection Readiness (P1): internal readiness check + gated evidence export
 
-A quick bug sweep of the P1 build caught four field-name mismatches from the parallel
-build (the engine and renderer were written to slightly different contracts), each of
-which silently dropped real content:
+A new page (Ctrl+K -> "CQC inspection readiness...", opens as a tab) that turns the suite's
+monitoring rule-set and its dated currency into CQC evidence for the Safe and Well-led key
+questions — built from shipped rule data only, no patient data and no cohort enumeration.
+Planned and twice panel-reviewed (docs/plans/CQC-EVIDENCE-PACK-BUILD-PLAN.md).
 
-- **Statement titles never rendered** — the renderer read `qs.title`, the engine emits
-  `qs.qualityStatement`; cards showed only the key question.
-- **Statement bodies were empty placeholders** — the renderer expected `qs.items[]`, the
-  engine emits `summary` + statement-level `provenance` + `metrics` (+ `currencyFiles`).
-  Every card read "No evidence items derivable", and the inline provenance (A1) and the
-  per-file rule-currency table (the standout evidence) were not shown. Now rendered.
-- **`toFix` (a string) was mishandled** — `for..of` over it would have exploded it into
-  one bullet per character in the aggregate list, and the per-card list was gated on
-  `Array.isArray` so it never showed. Now tolerates string or array.
-- **Matched drug terms (A2) never rendered** — the engine puts them at
-  `coverage.drug.matchedTerms`; the manifest and CSV read top-level `coverage.matchedTerms`.
-  So "eyeball the raw strings for brand completeness" silently showed "No matched terms".
-  Fixed in both the manifest and the CSV export.
+- **Two modes.** Readiness check (internal: RAG + "what to fix") and Evidence export
+  (inspector-facing, gated behind an "I have reviewed these figures" confirm — never
+  produced automatically).
+- **Coverage manifest front-and-centre.** Rule-set versions/dates, the raw matched-drug
+  terms (eyeball for brand completeness), a coded-data-only "floor not ceiling" caveat, the
+  prominent "Safety rules last reviewed against BNF/NICE/MHRA: {date} — via The Keeper", and
+  a per-file rule-currency table as the standout evidence.
+- **Honest by construction.** Inline prose provenance (never tooltips); a persistent
+  "supporting evidence, not proof of compliance" disclaimer; counts labelled as rules and
+  indicators, not patient numbers.
+- Includes the P1.1 panel polish (reviewed-not-updated wording, dated verdict, role-labelled
+  sign-off, vaccine-as-surveillance) and fixes for four engine-to-renderer field-name
+  mismatches caught in a sanity check (statement title, statement bodies/provenance/currency
+  table, string toFix, matched-terms location), locked by test-cqc-render.js.
 
-New `test-cqc-render.js` feeds the real engine output into the renderer and locks the
-contract (14 assertions). Full suite 77/77; eslint + prettier clean; re-verified via the
-harness — cards now carry titles, summaries, inline provenance, the currency table and the
-full matched-terms list.
+New files: cqc-readiness.{html,css,js}, cqc-render.js, engine/cqc-evidence.js. Tests:
+test-cqc-evidence.js (42), test-cqc-render.js (14). Full suite 77/77. Cohort-count phases
+(P2+) remain gated on the feasibility spike (docs/plans/CQC-P0-COHORT-SPIKE.md): a true
+read-only population query is not reachable; the enumerate-then-fan-out path needs a live
+discovery capture.
 
-## [v3.108.1] — 2026-06-16
+## [v3.109.0] — 2026-06-16
 
-### CQC Inspection Readiness — P1.1 polish (panel verdict on the build)
+### New "Record" tab — a live-first patient summary (PDF deep-dive nested within)
 
-Tightens the readiness surface after the Practice panel reviewed the built P1 — mostly
-surfacing data that already existed:
+The Patient Record Visualiser is powerful but under-used because it requires
+exporting and loading a record PDF before it shows anything. The new **Record**
+tab removes that wall: open a patient in Medicus and it shows a **live snapshot**
+sourced from the same API the suite already calls — no PDF, no file, no
+drag-and-drop.
 
-- **"Reviewed", not "updated", and prominent.** The coverage manifest now leads with
-  "Safety rules last reviewed against BNF / NICE / MHRA: {date} — via The Keeper", and the
-  rule-set tiles say "reviewed {date}" — clinically verified, not merely edited (the
-  panel's top ask).
-- **"Counts are rules and indicators, not patient numbers."** An explicit line so the
-  rule-set sizes can't be misread as patient cohorts (patient-level figures are a later phase).
-- **Coded-data caveat promoted to a visible callout** ("counts are a floor, not a ceiling");
-  the vaccine count is labelled "Vaccines (surveillance)" so it doesn't read as
-  drug-monitoring safety coverage.
-- **Verdict dated; sign-off role-labelled.** The readiness banner carries "as at {date}";
-  the export sign-off reads "Prepared by (Practice Manager)" / "Reviewed by (Responsible GP)".
-
-Full suite 76/76; eslint + prettier clean; re-verified via the harness.
+- **Live snapshot** of the patient open in Medicus: demographics, coded active
+  problems, current medications (with doses + overdue/review flags), recent
+  results (latest value per test, with above/below-range flags), and
+  deterministic prescribing-safety prompts (anticholinergic burden, STOPP/START)
+  plus the live drug-monitoring and QOF chips the Monitoring engine computes.
+- **Clinical-safety framing is load-bearing, not decoration.** A persistent
+  banner states it is a live snapshot, not a complete record. Allergies,
+  immunisations and consultation history render as explicit **gap-markers**
+  where the data would be — because absence here does NOT mean "none recorded".
+  Every safety score carries an inline caveat that it excludes allergies and uses
+  coded data only. Per-section data-window notes state what each section covers.
+- **The deep view is tiered, not removed.** The full multi-year visualiser
+  (consultation timeline, continuity indices, frailty/comorbidity, letters) opens
+  from the footer button "Open full visualiser", built from an exported record
+  PDF as before.
+- Data path reuses the existing live API client (`engine/api-client.js`
+  `fetchAll`) panel-side; no content-script changes, no new permissions.
+- Available in both the side panel and the pop-out window.
 
 ## [v3.108.0] — 2026-06-16
 
-### CQC Inspection Readiness (P1) — internal readiness check + gated evidence export
+### "Select all" for Outstanding Investigation Requests (with safety check)
 
-A new page (Ctrl+K → "CQC inspection readiness…", opens as a tab like the visualiser)
-that turns the suite's own monitoring rule-set and its dated currency into CQC evidence
-for the **Safe** and **Well-led** key questions — built entirely from shipped rule data,
-no patient data and no cohort enumeration. Planned and twice panel-reviewed in
-`docs/plans/CQC-EVIDENCE-PACK-BUILD-PLAN.md`.
+On the Review Investigation Report task overview page, the **Outstanding
+Investigation Requests** card lists every prior request still awaiting a result
+as a Quasar checkbox — ticking each by hand is slow and error-prone.
 
-- **Two modes (panel steer R-A).** *Readiness check* (default, internal): RAG-led "are we
-  inspection-ready?" with a "what to fix before CQC" list. *Evidence export* (inspector-
-  facing): the same evidence minus the internal action lists, plus a sign-off block —
-  **gated behind an explicit "I have reviewed these figures" confirm**; Print/PDF and CSV
-  stay disabled and the document is never produced until it is ticked.
-- **Coverage manifest, front-and-centre (R-B/A2/A5).** Every output opens with which drug/
-  QOF/vaccine/alert rules are in use and their dates, the **raw matched-drug terms** (so a
-  clinician can eyeball brand completeness), an explicit **coded-data-only** caveat
-  ("counts are a floor, not a ceiling"), and the Keeper provenance for how the rules are
-  kept current.
-- **Honest by construction.** A persistent "supporting evidence for Safe/Well-led
-  processes & outcomes only — not proof of compliance, not a complete pack" disclaimer on
-  the surface and in the footer. Inline, human-readable provenance on every figure (A1) —
-  denominator + "as at" + source, never a tooltip.
-- **Rule currency = the standout evidence.** Reuses `shared/rule-currency.js` to show each
-  rule-set's age/RAG and last-reviewed message, evidencing a *maintained* safety system.
-- **Anchored delta (A7).** "Save as baseline" stores a snapshot; the next run shows what
-  changed.
+- **New "Select all" button** injected into the card's pre-existing (empty)
+  `.card-button` header slot, styled to the suite's injected-surface tokens so it
+  sits naturally beside the Medicus chrome.
+- **Safety check:** because ticking every request is a bulk, hard-to-undo
+  clinical action, the button always routes through an "Are you sure?" confirm
+  dialog ("This selects all *n* previous outstanding investigations and will
+  clear them") — it never selects silently. The dialog defaults focus to
+  *Cancel*, and Esc / backdrop-click both dismiss without selecting.
+- **Mechanics:** drives each `.q-checkbox` via a native `.click()` with a 30 ms
+  stagger (Vue reactivity is async — a synchronous loop drops most updates).
+  Injection is idempotent and re-attempted by a detail-page-scoped
+  `MutationObserver` so the button survives the Vue 3 + Quasar SPA's re-renders;
+  the observer is torn down on navigation away.
 
-New files: `cqc-readiness.{html,css,js}`, `cqc-render.js`, `engine/cqc-evidence.js`. Test:
-`test-cqc-evidence.js` (42 assertions, incl. a no-patient-data check). Full suite 76/76;
-eslint + prettier clean; both modes + dark mode verified via the harness. Cohort-count
-phases (P2+) remain gated on the separate feasibility spike.
+## [v3.107.0] — 2026-06-16
+
+### Practice letterhead: recall letters and SMS auto-fill the sign-off
+
+Recall letters and SMS (Sentinel per-chip and "Copy all actions", and the Sweep
+batch handout) previously always emitted `[Practice name]` / `[Clinician name]` /
+`[practice name]` placeholders, which had to be hand-edited every time and risked
+going out un-filled.
+
+- **New setting** under Settings → Suite: "Practice letterhead" (practice name +
+  optional clinician sign-off), stored as `suite.letterhead`.
+- The pure `action-packs.js` builders now take an optional `{ letterhead }` and
+  substitute it into every letter/SMS sign-off; Sentinel and Sweep load
+  `suite.letterhead` (Sentinel caches it and refreshes on change) and pass it in.
+- **Safe fallback preserved:** when a field is blank — including whitespace-only —
+  the bracketed placeholder is kept, so a letter never goes out with a real-looking
+  but empty sign-off.
+- Captured in suite backup via `shared/io/suite-io.js` (round-trip + validation).
+
+Tests: extended `test-action-packs.js` (substitution, fallback, blank-guard,
+aggregate + batch threading) and `test-suite-io.js` (letterhead round-trip + validation).
 
 ## [v3.106.0] — 2026-06-16
 

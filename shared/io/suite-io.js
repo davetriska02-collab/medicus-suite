@@ -18,6 +18,7 @@ const SUITE_KEYS = [
   'suite.practiceAcceptedAt',
   'suite.rollup.alwaysExpanded',
   'suite.waitingRoom.thresholds',
+  'suite.letterhead',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -41,6 +42,9 @@ async function suiteExport() {
     rollupAlwaysExpanded: r['suite.rollup.alwaysExpanded'] ?? null,
     // Waiting-room alert thresholds in minutes ({ amber, red }); absent == defaults.
     waitingRoomThresholds: r['suite.waitingRoom.thresholds'] ?? null,
+    // Practice letterhead ({ practiceName, clinicianName }) auto-filling the
+    // sign-off in Sentinel/Sweep recall letters and SMS; absent == placeholders.
+    letterhead: r['suite.letterhead'] ?? null,
   };
 }
 
@@ -93,6 +97,22 @@ async function suiteImport(data) {
       throw new Error('suite.waitingRoom.thresholds must be an object with numeric amber and red.');
     }
     toSet['suite.waitingRoom.thresholds'] = { amber: w.amber, red: w.red };
+  }
+  if (data.letterhead != null) {
+    const lh = data.letterhead;
+    if (typeof lh !== 'object' || Array.isArray(lh)) {
+      throw new Error('suite.letterhead must be an object.');
+    }
+    if (lh.practiceName != null && typeof lh.practiceName !== 'string') {
+      throw new Error('suite.letterhead.practiceName must be a string.');
+    }
+    if (lh.clinicianName != null && typeof lh.clinicianName !== 'string') {
+      throw new Error('suite.letterhead.clinicianName must be a string.');
+    }
+    toSet['suite.letterhead'] = {
+      practiceName: typeof lh.practiceName === 'string' ? lh.practiceName : '',
+      clinicianName: typeof lh.clinicianName === 'string' ? lh.clinicianName : '',
+    };
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

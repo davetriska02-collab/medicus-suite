@@ -114,9 +114,26 @@ function qofReviewDescription(chip) {
 
 // ── buildChipActions ──────────────────────────────────────────────────────────
 
+// Resolve the practice/clinician sign-off used in letters and SMS. `opts.letterhead`
+// (or `opts` itself) may carry { practiceName, clinicianName } from the suite
+// letterhead setting. When a field is blank we keep the bracketed placeholder so the
+// author can see what to fill — letters never go out with a real-looking but empty
+// sign-off, and a configured practice name auto-fills everywhere it's used.
+function resolveLetterhead(opts) {
+  const lh = (opts && (opts.letterhead || opts)) || {};
+  const practice = typeof lh.practiceName === 'string' ? lh.practiceName.trim() : '';
+  const clinician = typeof lh.clinicianName === 'string' ? lh.clinicianName.trim() : '';
+  return {
+    practiceSms: practice || '[practice name]',
+    practiceLetter: practice || '[Practice name]',
+    clinician: clinician || '[Clinician name]',
+  };
+}
+
 // Returns null when the chip does not need action.
 // Otherwise returns { bloodForm?, sms?, smsEscalation?, letter?, task? }.
-export function buildChipActions(chip, patient) {
+// `opts.letterhead` ({ practiceName, clinicianName }) auto-fills the sign-off.
+export function buildChipActions(chip, patient, opts = {}) {
   if (!chip || !isChipActionNeeded(chip.status)) return null;
 
   const firstName = extractFirstName(patient);
@@ -124,6 +141,7 @@ export function buildChipActions(chip, patient) {
   const nhsNo = patient && patient.nhsNumber ? patient.nhsNumber : null;
   const patientName =
     patient && (patient.displayName || patient.name) ? patient.displayName || patient.name : 'this patient';
+  const { practiceSms, practiceLetter, clinician: clinicianName } = resolveLetterhead(opts);
 
   // ── Drug-monitoring chips ──────────────────────────────────────────────────
   if (chip.type === 'drug-monitoring') {
@@ -151,14 +169,14 @@ export function buildChipActions(chip, patient) {
     result.sms =
       `${greeting}you are due a blood test (${testsDisplay}) because you take ${drug}. ` +
       `This check keeps your treatment safe. Please book with reception this week. ` +
-      `Thank you — [practice name] (no reply)`;
+      `Thank you — ${practiceSms} (no reply)`;
 
     // SMS escalation — consequence-transparent (CQC-aligned)
     result.smsEscalation =
       `${greeting}our records show your ${drug} monitoring blood test (${testsDisplay}) is now ${word}. ` +
       `If we cannot complete this check, your prescriber will be informed and your repeat ` +
       `prescription may be paused for safety. Please book urgently with reception. ` +
-      `— [practice name] (no reply)`;
+      `— ${practiceSms} (no reply)`;
 
     // Letter body
     result.letter = [
@@ -176,8 +194,8 @@ export function buildChipActions(chip, patient) {
       `If you have any questions, please contact the surgery.`,
       '',
       `Yours sincerely`,
-      `[Clinician name]`,
-      `[Practice name]`,
+      `${clinicianName}`,
+      `${practiceLetter}`,
     ].join('\n');
 
     // Task line
@@ -214,7 +232,7 @@ export function buildChipActions(chip, patient) {
     result.sms =
       `${greeting}our records show you are due your ${review} because of your ${condition}. ` +
       `Please book an appointment with reception at your earliest convenience. ` +
-      `Thank you — [practice name] (no reply)`;
+      `Thank you — ${practiceSms} (no reply)`;
 
     result.letter = [
       `Re: Annual review — ${review}`,
@@ -229,8 +247,8 @@ export function buildChipActions(chip, patient) {
       `If you have recently had this review done elsewhere, please let us know so we can update your records.`,
       '',
       `Yours sincerely`,
-      `[Clinician name]`,
-      `[Practice name]`,
+      `${clinicianName}`,
+      `${practiceLetter}`,
     ].join('\n');
 
     result.task =
@@ -249,7 +267,7 @@ export function buildChipActions(chip, patient) {
     result.sms =
       `${greeting}our records show you are eligible for ${vaccine}. ` +
       `Please book an appointment with reception to receive this vaccination. ` +
-      `Thank you — [practice name] (no reply)`;
+      `Thank you — ${practiceSms} (no reply)`;
 
     // Letter body — direct-to-patient vaccination invitation
     result.letter = [
@@ -268,8 +286,8 @@ export function buildChipActions(chip, patient) {
       `If you have any questions, please contact the surgery.`,
       '',
       `Yours sincerely`,
-      `[Clinician name]`,
-      `[Practice name]`,
+      `${clinicianName}`,
+      `${practiceLetter}`,
     ].join('\n');
 
     result.task =
@@ -313,12 +331,12 @@ export function buildChipActions(chip, patient) {
 //
 // Patients with no action-needed chips produce a section with null fields.
 // Order is preserved (caller passes items in their chosen order).
-export function buildBatchPack(items) {
+export function buildBatchPack(items, opts = {}) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   const patients = items.map((item) => {
     const patient = { name: item.name || 'Unknown patient' };
-    const pack = buildPatientActions(item.chips || [], patient);
+    const pack = buildPatientActions(item.chips || [], patient, opts);
     return {
       name: item.name || 'Unknown patient',
       time: item.time || null,
@@ -344,9 +362,10 @@ export function buildBatchPack(items) {
 //   bloodForm  — deduplicated blood form lines (one per distinct set of tests+drug)
 //   sms        — combined recall SMS listing all drugs/reviews
 //   task       — combined task block (one entry per chip)
-export function buildPatientActions(chips, patient) {
+export function buildPatientActions(chips, patient, opts = {}) {
   const actionChips = (chips || []).filter((c) => isChipActionNeeded(c && c.status));
   if (actionChips.length === 0) return null;
+  const { practiceSms } = resolveLetterhead(opts);
 
   const bloodFormLines = [];
   const smsItems = [];
@@ -354,7 +373,7 @@ export function buildPatientActions(chips, patient) {
   const seenBloodFormLines = new Set();
 
   for (const chip of actionChips) {
-    const pack = buildChipActions(chip, patient);
+    const pack = buildChipActions(chip, patient, opts);
     if (!pack) continue;
 
     // Blood form: deduplicate identical lines
@@ -392,9 +411,9 @@ export function buildPatientActions(chips, patient) {
       ? null
       : smsItems.length === 1
         ? // Single item — use full contextual SMS from the individual pack
-          (actionChips.length === 1 ? buildChipActions(actionChips[0], patient)?.sms : null) ||
-          `${greeting}our records show you have the following item(s) needing attention: ${smsItems[0]}. Please contact reception to book. Thank you — [practice name] (no reply)`
-        : `${greeting}our records show you have the following items needing attention: ${smsItems.join('; ')}. Please contact reception to book. Thank you — [practice name] (no reply)`;
+          (actionChips.length === 1 ? buildChipActions(actionChips[0], patient, opts)?.sms : null) ||
+          `${greeting}our records show you have the following item(s) needing attention: ${smsItems[0]}. Please contact reception to book. Thank you — ${practiceSms} (no reply)`
+        : `${greeting}our records show you have the following items needing attention: ${smsItems.join('; ')}. Please contact reception to book. Thank you — ${practiceSms} (no reply)`;
 
   return {
     bloodForm: bloodFormLines.length > 0 ? bloodFormLines.join('\n') : null,

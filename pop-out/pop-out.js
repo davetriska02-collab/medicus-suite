@@ -55,6 +55,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
     css: '../side-panel/modules/knowledge/knowledge.css',
   },
+  record: {
+    js: () => import('../side-panel/modules/record/record.js'),
+    css: '../side-panel/modules/record/record.css',
+  },
 };
 
 // ── Per-tab help registry (mirrors panel.js — keep in sync) ─────────────────────
@@ -110,6 +114,11 @@ const TAB_HELP = {
     title: 'Sweep',
     what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',
     firstStep: 'Run the sweep before clinic, then review each flagged patient in Medicus.',
+  },
+  record: {
+    title: 'Record',
+    what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
+    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   knowledge: {
     title: 'Knowledge',

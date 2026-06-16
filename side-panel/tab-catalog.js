@@ -27,6 +27,11 @@ export const TAB_CATALOG = [
   { id: 'reception', name: 'Reception', blurb: 'Front-desk tools: guided call capture and patient status.' },
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
+  {
+    id: 'record',
+    name: 'Record',
+    blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
+  },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];
@@ -37,7 +42,7 @@ export const ROLE_PRESETS = [
   {
     id: 'gp',
     label: 'GP / clinician',
-    show: ['today', 'sentinel', 'trends', 'sweep', 'slots', 'knowledge', 'visualiser', 'about'],
+    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'visualiser', 'about'],
   },
   {
     id: 'reception',
