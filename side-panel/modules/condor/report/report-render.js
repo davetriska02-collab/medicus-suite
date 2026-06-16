@@ -167,14 +167,17 @@ function renderDemand(report) {
   if (d.summary.peak) tiles.push(statTile('Busiest day', d.summary.peak.value, fmtDate(d.summary.peak.date)));
   const spark = sparkline((d.byDay || []).map((row) => row.all));
   const breakdown = DEMAND_KEYS.filter((k) => t[k])
-    .map((k) => `<tr><td>${esc(DEMAND_LABELS[k] || k)}</td><td class="pr-num">${t[k]}</td></tr>`)
+    .map((k) => {
+      const pct = t.all ? Math.round((t[k] / t.all) * 100) : 0;
+      return `<tr><td>${esc(DEMAND_LABELS[k] || k)}</td><td class="pr-num">${t[k]}</td><td class="pr-num">${pct}%</td></tr>`;
+    })
     .join('');
   return (
     `<section class="pr-card"><h2>Demand <span class="pr-spark-wrap">${spark}</span></h2>` +
     `<p class="pr-note">Inbound requests created in the period (medical, admin, results, prescriptions).</p>` +
     `<div class="pr-grid pr-grid-3">${tiles.join('')}</div>` +
     (breakdown
-      ? `<table class="pr-table"><thead><tr><th>Of which, by type</th><th class="pr-num">Count</th></tr></thead><tbody>${breakdown}</tbody></table>`
+      ? `<table class="pr-table"><thead><tr><th>Of which, by type</th><th class="pr-num">Count</th><th class="pr-num">% of total</th></tr></thead><tbody>${breakdown}</tbody></table>`
       : '') +
     `</section>`
   );
@@ -200,7 +203,7 @@ function renderCapacity(report) {
   );
 }
 
-function renderActivity(report) {
+function renderActivity(report, view = {}) {
   const a = report.activity;
   if (!a || !a.totals) return '';
   const t = a.totals;
@@ -215,13 +218,32 @@ function renderActivity(report) {
 
   let perClinician = '';
   if (!a.aggregateOnly && Array.isArray(a.users) && a.users.length) {
+    // Power-user: sortable per-clinician table. `view.sort = { by, dir }` where `by`
+    // is 'name' | 'total' | a metric key, `dir` is 'asc' | 'desc'. Default order
+    // (no sort) is whatever the API gave (total desc). The total row stays at the foot.
+    const sort = view.sort;
+    let users = a.users;
+    if (sort && sort.by) {
+      const dir = sort.dir === 'asc' ? 1 : -1;
+      const val = (u) =>
+        sort.by === 'name' ? u.name || '' : sort.by === 'total' ? u.total || 0 : (u.metrics && u.metrics[sort.by]) || 0;
+      users = [...users].sort((x, y) => {
+        const xv = val(x);
+        const yv = val(y);
+        return typeof xv === 'string' ? xv.localeCompare(yv) * dir : (xv - yv) * dir;
+      });
+    }
+    const arrow = (key) => (sort && sort.by === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+    const th = (key, label, numeric) =>
+      `<th class="pr-sortable${numeric ? ' pr-num' : ''}" data-sort="${key}" role="button" tabindex="0">${esc(label)}${arrow(key)}</th>`;
     // P1 + drill-down: per-clinician split by activity type, with a reconciling
     // "All clinicians" total row that ties to the tiles above.
     const head =
-      `<tr><th>Clinician</th>` +
-      cols.map((k) => `<th class="pr-num">${esc(ACTIVITY_LABELS[k])}</th>`).join('') +
-      `<th class="pr-num">Total</th></tr>`;
-    const rows = a.users
+      `<tr>${th('name', 'Clinician', false)}` +
+      cols.map((k) => th(k, ACTIVITY_LABELS[k], true)).join('') +
+      th('total', 'Total', true) +
+      `</tr>`;
+    const rows = users
       .map(
         (u) =>
           `<tr><td>${esc(u.name)}</td>` +
@@ -337,12 +359,27 @@ const SECTION_BUILDERS = {
 };
 
 // Build the full report HTML body for a profile-applied report.
-export function buildReportHtml(report) {
-  const enabled = report.sectionsEnabled || {};
-  const order = ['currentSnapshot', 'demand', 'capacity', 'activity', 'referrals', 'trends'];
+// Section keys + labels, in render order — used by the report and by the page's
+// section-toggle control. (Trends only renders when there's snapshot history.)
+export const SECTION_LABELS = {
+  currentSnapshot: 'Current snapshot',
+  demand: 'Demand',
+  capacity: 'Capacity',
+  activity: 'Activity',
+  referrals: 'Referrals',
+  trends: 'Trends',
+};
+
+// `view` (optional) is the power-user view state, not part of the data:
+//   { sort: { by, dir }, sections: { <key>: boolean } }
+// `view.sections` overrides the profile's section visibility for display only — it
+// can never expose per-clinician data, which applyProfile already stripped upstream.
+export function buildReportHtml(report, view = {}) {
+  const enabled = { ...(report.sectionsEnabled || {}), ...(view.sections || {}) };
+  const order = Object.keys(SECTION_LABELS);
   const sections = order
     .filter((k) => enabled[k] !== false)
-    .map((k) => SECTION_BUILDERS[k](report))
+    .map((k) => SECTION_BUILDERS[k](report, view))
     .filter(Boolean)
     .join('');
   // (3) Summary banner placed right after cover, before all other sections.

@@ -141,6 +141,36 @@ const path = require('path');
     check(!JSON.stringify(c.sections).includes(UNIQUE_NAME), `${pid} CSV contains no clinician name`);
   }
 
+  // ── Power-user view: demand %, sortable columns, section toggles ────────────
+  console.log('\n--- view: sort + section toggles ---');
+  const mgmt = profiles.applyProfile(rawReport(), profiles.getProfile('management'));
+  check(render.buildReportHtml(mgmt).includes('% of total'), 'demand breakdown shows a "% of total" column');
+  check(render.buildReportHtml(mgmt).includes('pr-sortable'), 'per-clinician table headers are sortable');
+  const byName = render.buildReportHtml(mgmt, { sort: { by: 'name', dir: 'asc' } });
+  check(
+    byName.indexOf('Dr Aldous') < byName.indexOf('Dr Penelope Quirke'),
+    'sort by name asc orders clinicians alphabetically'
+  );
+  const byTotal = render.buildReportHtml(mgmt, { sort: { by: 'total', dir: 'asc' } });
+  check(
+    byTotal.indexOf('Dr Aldous') < byTotal.indexOf('Dr Penelope Quirke'),
+    'sort by total asc puts the smaller total (Aldous 60) before the larger (Quirke 80)'
+  );
+  check(
+    !render.buildReportHtml(mgmt, { sections: { demand: false } }).includes('Inbound requests created in the period'),
+    'a section toggle can hide the demand section'
+  );
+  const icb2 = profiles.applyProfile(rawReport(), profiles.getProfile('icb'));
+  check(!render.buildReportHtml(icb2).includes('Current snapshot'), 'icb hides the current snapshot by default');
+  check(
+    render.buildReportHtml(icb2, { sections: { currentSnapshot: true } }).includes('Current snapshot'),
+    'a section toggle can re-enable the current snapshot for icb (display only — no per-clinician exposure)'
+  );
+  check(
+    render.SECTION_LABELS && render.SECTION_LABELS.activity === 'Activity',
+    'SECTION_LABELS exported for the toggle UI'
+  );
+
   // unknown profile id falls back
   check(profiles.getProfile('nope').id === profiles.DEFAULT_PROFILE_ID, 'unknown profile id falls back to default');
 
