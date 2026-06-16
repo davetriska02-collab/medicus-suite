@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.100.0] — 2026-06-16
+
+### Practice Report (Condor) — periodised, audience-tuned operational report
+
+A new Practice Report built on Condor's operational data, for a selectable period
+(Today / 7 days / 30 days / custom), rendered as a printable page (Print → PDF) plus
+CSV — modelled on the Patient Record Visualiser's print pattern. Planned in
+`docs/plans/PRACTICE-REPORT-PLAN.md` from 5 codebase + 5 web research agents.
+
+- **Three audience profiles.** *Practice Management* (full detail incl. per-clinician
+  breakdown), *Staff Briefing* (aggregate-only — per-clinician figures are stripped at
+  the data layer so individual productivity can never leak, per Goodhart's-law / morale
+  guidance), and *ICB / System* (practice-level, NHS-correct terminology — e.g. "Urgent
+  suspected cancer (2WW / FDS)"; no live snapshot).
+- **Sections:** cover (period + practice + "as at"), current snapshot (live PPI /
+  waiting / urgent), demand (per-day series + by-type + sparkline), capacity (scheduled
+  slots / sessions), activity (totals; per-clinician for management), referrals
+  (priority/status), and trends from the snapshot store.
+- **Honest by construction.** Only metrics derivable from Medicus are shown; anything
+  that cannot be derived is omitted rather than estimated, with a short limitations
+  footer. Multi-day demand/activity/capacity/referrals come from real date-range
+  endpoints.
+- **Forward-accruing snapshot store.** Condor now writes one `practice.reportSnapshots`
+  row per day (PPI / waiting room / task age — the live-only signals with no source
+  history), pruned to 90 days and backed up via the existing `condor` scope, so trends
+  build over time.
+- **Launchers:** a "Practice report" strip in Condor (Today / 7d / 30d / full) and a
+  Ctrl+K command "Generate practice report…". Opens as a browser tab like the visualiser.
+
+New files: `practice-report.{html,css,js}`, `side-panel/modules/condor/report/{report-data,
+report-profiles,report-render}.js`. Tests: `test-practice-report-data.js` (30),
+`test-practice-report-render.js` (18, incl. the staff aggregate-only safety invariant).
+
 ## [v3.99.0] — 2026-06-16
 
 ### Whole-suite Practice appraisal: the gap-to-9 fixes

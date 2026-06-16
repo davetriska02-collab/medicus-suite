@@ -233,6 +233,13 @@ async function poll() {
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
           <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
         </div>
+        <div class="condor-report-strip">
+          <span class="condor-report-label">Practice report</span>
+          <button class="ghost-btn condor-report-btn" data-preset="today">Today</button>
+          <button class="ghost-btn condor-report-btn" data-preset="7d">7 days</button>
+          <button class="ghost-btn condor-report-btn" data-preset="30d">30 days</button>
+          <button class="ghost-btn condor-report-btn condor-report-full" data-preset="7d">Open full report →</button>
+        </div>
         <div class="condor-grid">
           <div class="condor-col">${waitingDemand}</div>
           <div class="condor-col condor-col-wide">${velocityAge}</div>
@@ -262,6 +269,17 @@ export async function init(el) {
     } else {
       chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
     }
+  });
+
+  // Delegated click for the Practice Report launcher — opens the full report page
+  // (a browser tab, like the visualiser) at the chosen period.
+  _container.addEventListener('click', (e) => {
+    const rb = e.target.closest('.condor-report-btn');
+    if (!rb) return;
+    const preset = rb.dataset.preset || '7d';
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(`practice-report.html?preset=${encodeURIComponent(preset)}`),
+    });
   });
 
   // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML

@@ -131,6 +131,16 @@ function buildCommands() {
     });
   }
 
+  // Practice Report — opens the full report page (a browser tab, like the visualiser).
+  cmds.push({
+    id: 'open:practice-report',
+    label: 'Generate practice report…',
+    group: 'Open',
+    keywords: 'report practice management icb staff condor demand capacity export pdf',
+    icon: GENERIC_ICONS.doc,
+    run: () => chrome.tabs.create({ url: chrome.runtime.getURL('practice-report.html?preset=7d') }),
+  });
+
   // Display preferences — applied live everywhere via display-prefs.js.
   const display = [
     ['display:light', 'Theme: light', 'day bright', { theme: 'light' }],
