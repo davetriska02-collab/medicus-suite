@@ -81,6 +81,12 @@ function activateSectionFromHash() {
 activateSectionFromHash();
 window.addEventListener('hashchange', activateSectionFromHash);
 
+// CQC Inspection Readiness — opens the full readiness page in its own tab (so it
+// prints/exports cleanly), discoverable from the new Settings section.
+document.getElementById('cqcOpenBtn')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('cqc-readiness.html') });
+});
+
 // ── Suite settings (practice code) ────────────────────────────────────────────
 
 const practiceCodeInput = document.getElementById('practiceCode');

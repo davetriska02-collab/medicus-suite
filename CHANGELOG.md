@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.2] — 2026-06-16
+
+### CQC Inspection Readiness: discoverable from Settings
+
+The readiness page was only reachable via the Ctrl+K palette, which was easy to miss. Added
+a **"CQC Readiness" tab in Options** (after Clinical Safety) with a short explanation of
+what it is (and the honest "supporting evidence, not proof" framing) and an **Open CQC
+Inspection Readiness** button that launches the full page in its own tab (so Print/PDF and
+CSV stay clean). Also registered as an Options deep-link so Ctrl+K → "Settings: CQC
+Readiness" works. No behaviour change to the readiness page itself.
+
 ## [v3.110.1] — 2026-06-16
 
 ### CI: fix the doc-version gate (SOUP + feature-list)
