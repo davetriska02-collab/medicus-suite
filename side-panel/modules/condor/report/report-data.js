@@ -179,6 +179,10 @@ export function buildSnapshotRow(live, ppi, today = localISO()) {
   if (ppi && typeof ppi.ppi === 'number') {
     row.ppi = ppi.ppi;
     row.band = ppi.band || null;
+    // Capture the band-floor so the report can explain a low index showing AMBER
+    // (over capacity floors GREEN→AMBER); otherwise "25/100 AMBER" reads as a bug.
+    if (ppi.floored) row.bandFloored = true;
+    if (ppi.overCapacity) row.overCapacity = true;
   }
   if (live?.submissions?.totals) row.demand = live.submissions.totals.all ?? null;
   if (live?.slots) row.slotsRemaining = live.slots.totalRemaining ?? null;

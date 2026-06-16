@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.101.0] — 2026-06-16
+
+### Practice Report — design-crit + Practice review fixes
+
+Lands the converged design-crit + The Practice findings on the new Practice Report
+(`docs/appraisal/PRACTICE-REPORT-crit+practice-2026-06-16.md`).
+
+- **Dark mode fixed (blocker).** The dark theme now re-states the brand + RAG tokens, so
+  section headings, the cover title, the controls title and sparklines no longer render
+  at ~1.35:1 (they inherited the light navy). Headings are legible in dark again.
+- **Pressure Index explains itself.** The current-snapshot block now shows the scale
+  ("GREEN under 40 · AMBER 40–70 · RED 70 or over") and, when the band was floored by
+  over-capacity, says so — a low index reading AMBER no longer looks like a bug. (The
+  four-persona convergent ask.)
+- **Live snapshot set apart from the period.** It now renders as a dashed, tinted panel
+  with a LIVE tag and an "as at HH:MM" stamp, and states it is not part of the period
+  figures — so the live "today" count is no longer mistaken for a period total.
+- **By-clinician table labelled and reconcilable.** Activity now shows a per-clinician
+  drill-down split by activity type with an "All clinicians" total row that reconciles to
+  the totals above. A note explains demand (inbound) and activity (done) need not match.
+- **Data notes, not a standing error.** Skipped-section reasons (e.g. referrals needing
+  its report opened once) now read in plain English inside a neutral "Data notes" panel,
+  not amber alert text on every run; the double full-stop is gone.
+- **Designed empty state.** The no-code / first-run state is now a framed card with an
+  "Open options" action instead of bare grey text.
+- **Polish:** uniform stat-tile widths across sections; sparkline wrapper styled; cover
+  meta fields separated; `print-color-adjust: exact` so RAG fills survive PDF export.
+
+Remaining roadmap (power-user): report section toggles, per-day series tables, and a
+multi-section CSV export.
+
 ## [v3.100.0] — 2026-06-16
 
 ### Practice Report (Condor) — periodised, audience-tuned operational report

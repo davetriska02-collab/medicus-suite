@@ -15,6 +15,20 @@ const $ = (id) => document.getElementById(id);
 let _preset = '7d';
 let _lastApplied = null;
 
+// Designed empty/placeholder state (C3) — a framed panel, optionally with an
+// "Open options" action, rather than bare grey text on a blank page.
+function emptyState(title, message, withOptions = false) {
+  return (
+    `<div class="pr-empty"><h2>${title}</h2><p>${message}</p>` +
+    (withOptions ? `<button class="pr-btn pr-btn-primary" id="prOpenOptions">Open options</button>` : '') +
+    `</div>`
+  );
+}
+function wireOptionsButton() {
+  const b = document.getElementById('prOpenOptions');
+  if (b) b.addEventListener('click', () => chrome.runtime.openOptionsPage && chrome.runtime.openOptionsPage());
+}
+
 async function applyTheme() {
   try {
     const r = await chrome.storage.local.get('suite.display');
@@ -47,8 +61,12 @@ async function generate() {
     /* ignore */
   }
   if (!siteId) {
-    out.innerHTML =
-      '<div class="pr-placeholder">No practice code configured. Open a Medicus tab or set it in the extension options, then try again.</div>';
+    out.innerHTML = emptyState(
+      'No practice code yet',
+      'This report needs your practice code. Open a Medicus tab so it can be detected automatically, or set it in the extension options, then press Generate.',
+      true
+    );
+    wireOptionsButton();
     return;
   }
 
@@ -68,7 +86,7 @@ async function generate() {
   try {
     report = await buildReport({ siteId, range, live, ppi });
   } catch (e) {
-    out.innerHTML = `<div class="pr-placeholder">Could not build the report: ${String(e.message || e)}</div>`;
+    out.innerHTML = emptyState('Could not build the report', String(e.message || e), false);
     return;
   }
 

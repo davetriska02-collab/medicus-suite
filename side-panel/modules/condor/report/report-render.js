@@ -38,7 +38,10 @@ const PRIORITY_LABELS = {
 };
 
 export function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
 }
 
 function fmtDate(iso) {
@@ -63,7 +66,9 @@ export function sparkline(values, { w = 160, h = 28 } = {}) {
   const min = Math.min(...nums, 0);
   const span = max - min || 1;
   const step = w / (nums.length - 1);
-  const pts = nums.map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * (h - 4) - 2).toFixed(1)}`).join(' ');
+  const pts = nums
+    .map((v, i) => `${(i * step).toFixed(1)},${(h - ((v - min) / span) * (h - 4) - 2).toFixed(1)}`)
+    .join(' ');
   return (
     `<svg class="pr-spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">` +
     `<polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${pts}"/></svg>`
@@ -110,10 +115,20 @@ function renderCurrentSnapshot(report) {
   if (s.waitingArrived != null) tiles.push(statTile('In waiting room', s.waitingArrived));
   if (s.urgent != null) tiles.push(statTile('Urgent tasks', s.urgent));
   if (!tiles.length) return '';
+  const stamp = report.generatedAt ? `as at ${fmtTime(report.generatedAt)}` : '';
+  // C1: explain the index scale, and why a low index can read AMBER (capacity floor).
+  let key = '';
+  if (typeof s.ppi === 'number') {
+    key = `<p class="pr-note">Pressure index scale: GREEN under 40 · AMBER 40&ndash;70 · RED 70 or over.`;
+    if (s.bandFloored)
+      key += ` Shown as AMBER because the practice is over capacity, even though the weighted index is ${s.ppi}.`;
+    key += `</p>`;
+  }
   return (
-    `<section class="pr-card"><h2>Current snapshot ${s.band ? bandBadge(s.band) : ''}</h2>` +
-    `<p class="pr-note">A live reading taken when this report was generated (these signals have no per-day history).</p>` +
-    `<div class="pr-grid pr-grid-4">${tiles.join('')}</div></section>`
+    `<section class="pr-card pr-card-live"><h2>Current snapshot ${s.band ? bandBadge(s.band) : ''}` +
+    `<span class="pr-live-tag">LIVE</span><span class="pr-live-stamp">${esc(stamp)}</span></h2>` +
+    `<p class="pr-note">A point-in-time reading taken when this report was generated &mdash; not part of the ${esc(report.range?.label || 'period')} figures below (these signals have no per-day history).</p>` +
+    `<div class="pr-grid pr-grid-4">${tiles.join('')}</div>${key}</section>`
   );
 }
 
@@ -121,18 +136,19 @@ function renderDemand(report) {
   const d = report.demand;
   if (!d || !d.summary) return '';
   const t = d.summary.totals;
-  const tiles = [
-    statTile('Total requests', t.all),
-    statTile('Daily average', d.summary.dailyMean),
-  ];
+  const tiles = [statTile('Total requests', t.all), statTile('Daily average', d.summary.dailyMean)];
   if (d.summary.peak) tiles.push(statTile('Busiest day', d.summary.peak.value, fmtDate(d.summary.peak.date)));
   const spark = sparkline((d.byDay || []).map((row) => row.all));
-  const breakdown = DEMAND_KEYS.filter((k) => t[k]).map((k) => `<tr><td>${esc(DEMAND_LABELS[k] || k)}</td><td class="pr-num">${t[k]}</td></tr>`).join('');
+  const breakdown = DEMAND_KEYS.filter((k) => t[k])
+    .map((k) => `<tr><td>${esc(DEMAND_LABELS[k] || k)}</td><td class="pr-num">${t[k]}</td></tr>`)
+    .join('');
   return (
     `<section class="pr-card"><h2>Demand <span class="pr-spark-wrap">${spark}</span></h2>` +
     `<p class="pr-note">Inbound requests created in the period (medical, admin, results, prescriptions).</p>` +
     `<div class="pr-grid pr-grid-3">${tiles.join('')}</div>` +
-    (breakdown ? `<table class="pr-table"><thead><tr><th>By type</th><th class="pr-num">Count</th></tr></thead><tbody>${breakdown}</tbody></table>` : '') +
+    (breakdown
+      ? `<table class="pr-table"><thead><tr><th>By type</th><th class="pr-num">Count</th></tr></thead><tbody>${breakdown}</tbody></table>`
+      : '') +
     `</section>`
   );
 }
@@ -161,21 +177,43 @@ function renderActivity(report) {
   const a = report.activity;
   if (!a || !a.totals) return '';
   const t = a.totals;
-  const totalTiles = Object.keys(ACTIVITY_LABELS)
-    .filter((k) => t[k])
-    .map((k) => statTile(ACTIVITY_LABELS[k], t[k]))
-    .join('');
+  // Metric columns present in the data (drives both the tiles and the table columns).
+  const cols = Object.keys(ACTIVITY_LABELS).filter((k) => t[k]);
+  const totalTiles = cols.map((k) => statTile(ACTIVITY_LABELS[k], t[k])).join('');
+
+  // P3: demand (inbound) and activity (work done) are different measures.
+  const demandNote = report.demand
+    ? `<p class="pr-note">Demand (inbound requests) and activity (work done) are different measures and need not match.</p>`
+    : '';
+
   let perClinician = '';
   if (!a.aggregateOnly && Array.isArray(a.users) && a.users.length) {
+    // P1 + drill-down: per-clinician split by activity type, with a reconciling
+    // "All clinicians" total row that ties to the tiles above.
+    const head =
+      `<tr><th>Clinician</th>` +
+      cols.map((k) => `<th class="pr-num">${esc(ACTIVITY_LABELS[k])}</th>`).join('') +
+      `<th class="pr-num">Total</th></tr>`;
     const rows = a.users
-      .map((u) => `<tr><td>${esc(u.name)}</td><td class="pr-num">${u.total}</td></tr>`)
+      .map(
+        (u) =>
+          `<tr><td>${esc(u.name)}</td>` +
+          cols.map((k) => `<td class="pr-num">${(u.metrics && u.metrics[k]) || 0}</td>`).join('') +
+          `<td class="pr-num"><strong>${u.total}</strong></td></tr>`
+      )
       .join('');
-    perClinician = `<table class="pr-table"><thead><tr><th>By clinician</th><th class="pr-num">Total</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const totalRow =
+      `<tr class="pr-row-total"><td>All clinicians</td>` +
+      cols.map((k) => `<td class="pr-num">${t[k]}</td>`).join('') +
+      `<td class="pr-num"><strong>${t.all}</strong></td></tr>`;
+    perClinician =
+      `<table class="pr-table"><thead>${head}</thead><tbody>${rows}${totalRow}</tbody></table>` +
+      `<p class="pr-note">Each clinician's row sums to their total; the foot row reconciles to the totals above.</p>`;
   } else if (a.aggregateOnly) {
     perClinician = `<p class="pr-note">Shown for the whole practice. Per-clinician figures are deliberately omitted from this report.</p>`;
   }
   return (
-    `<section class="pr-card"><h2>Activity (work done)</h2>` +
+    `<section class="pr-card"><h2>Activity (work done)</h2>${demandNote}` +
     `<div class="pr-grid pr-grid-3">${totalTiles || statTile('Total', t.all || 0)}</div>${perClinician}</section>`
   );
 }
@@ -196,8 +234,12 @@ function renderReferrals(report) {
   return (
     `<section class="pr-card"><h2>Referrals</h2>` +
     `<div class="pr-grid pr-grid-3">${statTile('Total referrals', r.total ?? 0)}</div>` +
-    (prio ? `<table class="pr-table"><thead><tr><th>By priority</th><th class="pr-num">Count</th></tr></thead><tbody>${prio}</tbody></table>` : '') +
-    (status ? `<table class="pr-table"><thead><tr><th>By status</th><th class="pr-num">Count</th></tr></thead><tbody>${status}</tbody></table>` : '') +
+    (prio
+      ? `<table class="pr-table"><thead><tr><th>By priority</th><th class="pr-num">Count</th></tr></thead><tbody>${prio}</tbody></table>`
+      : '') +
+    (status
+      ? `<table class="pr-table"><thead><tr><th>By status</th><th class="pr-num">Count</th></tr></thead><tbody>${status}</tbody></table>`
+      : '') +
     `</section>`
   );
 }
@@ -210,10 +252,14 @@ function renderTrends(report) {
   const parts = [];
   if (ppiSeries.length >= 2) {
     const cmp = comparePct(ppiSeries[ppiSeries.length - 1], ppiSeries[0]);
-    parts.push(`<div class="pr-trend"><span class="pr-trend-label">Pressure index</span>${sparkline(ppiSeries)}<span class="pr-trend-delta">${cmp.pct == null ? '' : `${cmp.pct > 0 ? '+' : ''}${cmp.pct}%`}</span></div>`);
+    parts.push(
+      `<div class="pr-trend"><span class="pr-trend-label">Pressure index</span>${sparkline(ppiSeries)}<span class="pr-trend-delta">${cmp.pct == null ? '' : `${cmp.pct > 0 ? '+' : ''}${cmp.pct}%`}</span></div>`
+    );
   }
   if (demandSeries.length >= 2) {
-    parts.push(`<div class="pr-trend"><span class="pr-trend-label">Daily demand</span>${sparkline(demandSeries)}</div>`);
+    parts.push(
+      `<div class="pr-trend"><span class="pr-trend-label">Daily demand</span>${sparkline(demandSeries)}</div>`
+    );
   }
   if (!parts.length) return '';
   return (
@@ -222,12 +268,24 @@ function renderTrends(report) {
   );
 }
 
+// Map an internal error string to a plain-English, reader-facing note. Known
+// expected conditions (e.g. referrals needs its report opened once) read as a
+// neutral "not available" line; anything else is surfaced verbatim but calmly.
+function humaniseError(err) {
+  const e = String(err || '');
+  if (/referrals/i.test(e) && /discovered URL|navigate to Referrals/i.test(e)) {
+    return 'Referrals: not available yet. Open the Referrals tab (Clinical Audit Report) once to enable it; the figures above are unaffected.';
+  }
+  return e.replace(/\.+$/, '');
+}
+
 function renderLimitations(report) {
-  const errs = (report.errors || []).length
-    ? `<p class="pr-note pr-note-warn">Some data could not be loaded: ${esc(report.errors.join('; '))}.</p>`
+  const notes = (report.errors || []).map(humaniseError).filter(Boolean);
+  const dataNotes = notes.length
+    ? `<div class="pr-datanotes"><h3>Data notes</h3><ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`
     : '';
   return (
-    `<footer class="pr-foot">${errs}` +
+    `<footer class="pr-foot">${dataNotes}` +
     `<p class="pr-note">This report covers only data available from Medicus for the selected period. Metrics that cannot be derived from the source (e.g. call-waiting times, registered list size) are not shown rather than estimated. Verify against the source record before relying on any figure.</p>` +
     `</footer>`
   );

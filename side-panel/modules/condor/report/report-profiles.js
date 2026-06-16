@@ -20,7 +20,8 @@ export const PROFILES = {
     id: 'management',
     name: 'Practice Management',
     audience: 'management',
-    blurb: 'Operational detail for the partnership — demand, capacity, activity and backlog, with per-clinician breakdown. Every figure carries its source period.',
+    blurb:
+      'Operational detail for the partnership — demand, capacity, activity and backlog, with per-clinician breakdown. Every figure carries its source period.',
     perClinician: true,
     sections: {
       currentSnapshot: true,
@@ -35,7 +36,8 @@ export const PROFILES = {
     id: 'staff',
     name: 'Staff Briefing',
     audience: 'staff',
-    blurb: 'How busy we were and what we got through, as a team. Workload is shown for the practice as a whole — not by individual clinician.',
+    blurb:
+      'How busy we were and what we got through, as a team. Workload is shown for the practice as a whole — not by individual clinician.',
     perClinician: false,
     sections: {
       currentSnapshot: true,
@@ -50,7 +52,8 @@ export const PROFILES = {
     id: 'icb',
     name: 'ICB / System',
     audience: 'icb',
-    blurb: 'Access, demand and capacity in standard NHS terms. Practice-level figures only; metrics that cannot be derived from the source are omitted rather than estimated.',
+    blurb:
+      'Access, demand and capacity in standard NHS terms. Practice-level figures only; metrics that cannot be derived from the source are omitted rather than estimated.',
     perClinician: false,
     sections: {
       currentSnapshot: false, // ICB cares about the period, not "right now"
