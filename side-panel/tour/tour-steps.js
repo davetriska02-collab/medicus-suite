@@ -25,7 +25,7 @@
 
 'use strict';
 
-export const TOUR_VERSION = 4;
+export const TOUR_VERSION = 5;
 
 export const TOUR_STEPS = [
   {
@@ -145,6 +145,14 @@ export const TOUR_STEPS = [
     target: ['#settingsBtn'],
     title: 'Settings and backups',
     body: 'Practice code, per-module options, and full-suite backup and restore live in the settings page.',
+  },
+  {
+    id: 'record',
+    addedIn: 5,
+    module: 'record',
+    target: ['.rec-root'],
+    title: 'Record — the open patient, live',
+    body: 'A live snapshot of the patient open in Medicus — problems, medicines, results and safety prompts, no PDF needed. Incomplete by design (no allergies); read the gap-markers and verify the record. The full visualiser opens from the footer.',
   },
   {
     id: 'finish',

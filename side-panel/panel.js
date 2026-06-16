@@ -118,6 +118,7 @@ const MODULES = {
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
   about: null,
 };
 
@@ -146,6 +147,11 @@ const TAB_HELP = {
     title: 'Monitoring',
     what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus.',
     firstStep: 'Open a patient in Medicus, then check the reminders here against the record.',
+  },
+  record: {
+    title: 'Record',
+    what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
+    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   activity: {
     title: 'Activity',
