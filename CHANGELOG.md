@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.113.2] — 2026-06-16
+
+### Transactional API token service (Cloudflare Worker scaffold)
+
+The backend that holds the private signing key and mints access tokens — kept
+out of the extension bundle entirely.
+
+- **Added `backend/token-service/`** — a Cloudflare Worker that signs a
+  client-assertion JWT (RS256) and exchanges it for a Medicus access token
+  (`client_credentials` + `private_key_jwt`), caching the token until just
+  before expiry. `/token` is guarded by a `CALLER_TOKEN` shared secret.
+- Medicus-specific values (`CLIENT_ID`, `TOKEN_ENDPOINT`, `TOKEN_AUDIENCE`,
+  `SCOPE`) are left as `wrangler.toml` vars to fill from the API docs; the
+  private key and caller secret are Worker secrets, never committed.
+- **Release zip** now excludes `backend/` and `jwks-public/` so neither ships
+  inside the extension. `.gitignore` blocks `.dev.vars` and `.wrangler/`.
+
 ## [v3.113.1] — 2026-06-16
 
 ### Transactional API onboarding: public JWKS for `private_key_jwt` auth

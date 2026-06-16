@@ -1,0 +1,13 @@
+{
+  "name": "medicus-suite-token-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker that mints Medicus Transactional API access tokens (private_key_jwt). Holds the private signing key; never shipped in the extension.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3"
+  }
+}

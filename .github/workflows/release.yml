@@ -66,6 +66,8 @@ jobs:
             --exclude='.prettierrc.json' \
             --exclude='.prettierignore' \
             --exclude='.githooks/' \
+            --exclude='backend/' \
+            --exclude='jwks-public/' \
             --exclude='brand/generate-icons.mjs' \
             ./ _build/medicus-suite-v${{ steps.version.outputs.version }}/
           cd _build

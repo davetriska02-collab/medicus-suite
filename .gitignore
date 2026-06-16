@@ -33,3 +33,7 @@ _skill/
 *.key
 private-key*
 jwks-private/
+
+# Cloudflare Worker local secrets / state — never commit
+.dev.vars
+.wrangler/

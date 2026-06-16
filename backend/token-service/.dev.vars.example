@@ -1,0 +1,9 @@
+# Copy to `.dev.vars` for local `wrangler dev`. NEVER commit the real .dev.vars.
+# In production these are set as Worker secrets, not here (see README).
+
+# The shared secret a trusted caller must present (Authorization: Bearer <CALLER_TOKEN>).
+CALLER_TOKEN="generate-a-long-random-string"
+
+# The RSA private key (PKCS#8 PEM), multi-line. For local dev only — the real
+# key lives in `wrangler secret put PRIVATE_KEY_PEM` in production.
+PRIVATE_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"

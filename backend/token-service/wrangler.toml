@@ -1,0 +1,12 @@
+name = "medicus-suite-token-service"
+main = "src/worker.js"
+compatibility_date = "2026-06-16"
+
+# Non-secret config — fill these in from the Medicus Transactional API docs.
+# (Secrets — PRIVATE_KEY_PEM, CALLER_TOKEN — are NOT set here; see README.)
+[vars]
+KEY_ID = "XUW9g0qhRxlusHkcmUr2OLUBxySYgkCvsGFbPQNVpJg"   # kid of the published JWKS key
+CLIENT_ID = "TODO-from-medicus"                           # the client id Medicus assigns us
+TOKEN_ENDPOINT = "TODO-from-medicus"                      # OAuth token URL
+TOKEN_AUDIENCE = "TODO-from-medicus"                      # required `aud` for the assertion
+SCOPE = ""                                                # optional space-separated scopes
