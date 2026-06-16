@@ -1,0 +1,53 @@
+<!doctype html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Practice Report — Medicus Suite</title>
+    <link rel="stylesheet" href="practice-report.css" />
+  </head>
+  <body>
+    <!-- Controls (hidden when printing) -->
+    <div class="pr-controls" id="prControls">
+      <div class="pr-controls-row">
+        <span class="pr-controls-title">Practice Report</span>
+        <div class="pr-seg" id="prPeriod" role="group" aria-label="Report period">
+          <button data-preset="today">Today</button>
+          <button data-preset="7d" class="active">7 days</button>
+          <button data-preset="30d">30 days</button>
+          <button data-preset="custom">Custom</button>
+        </div>
+        <span class="pr-custom" id="prCustom" hidden>
+          <input type="date" id="prStart" aria-label="Start date" />
+          <span>to</span>
+          <input type="date" id="prEnd" aria-label="End date" />
+        </span>
+        <label class="pr-profile">
+          Audience
+          <select id="prProfile" aria-label="Report audience">
+            <option value="management">Practice Management</option>
+            <option value="staff">Staff Briefing</option>
+            <option value="icb">ICB / System</option>
+          </select>
+        </label>
+        <button class="pr-btn pr-btn-primary" id="prGenerate">Generate</button>
+        <button class="pr-btn" id="prPrint" disabled>Print / PDF</button>
+        <button class="pr-btn" id="prCsv" disabled>Download CSV</button>
+      </div>
+    </div>
+
+    <main id="prOutput" class="pr-output">
+      <div class="pr-empty">
+        <h2>Practice Report</h2>
+        <p>Choose a period and audience above, then press <strong>Generate</strong>.</p>
+      </div>
+    </main>
+
+    <!-- Shared IIFE APIs the data layer delegates to (attach to window). -->
+    <script src="shared/api-diag.js"></script>
+    <script src="shared/activity-api.js"></script>
+    <script src="shared/referrals-api.js"></script>
+    <script type="module" src="practice-report.js"></script>
+  </body>
+</html>

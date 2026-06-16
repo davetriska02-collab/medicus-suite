@@ -3,12 +3,26 @@
 import { fetchAllStreams } from './condor-data.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { copyText } from '../shared/export-util.js';
+import { buildSnapshotRow, saveSnapshot, localISO } from './report/report-data.js';
 // Card renderers loaded dynamically so module works even before card files land
 
 let _container = null;
 let _pollTimer = null;
 let _stopFresh = null;
 let _lastData = null;
+let _snapshotDate = null; // guards the once-a-day Practice Report snapshot write
+
+// Capture one Practice Report snapshot per calendar day. The live-only metrics
+// (PPI / waiting room / task age) have no per-day history at the source, so this
+// forward-accruing store is how the report builds their trends over time.
+// saveSnapshot also de-dupes by date; the in-session guard avoids redundant writes
+// on every 15s poll.
+async function captureDailySnapshot(data) {
+  const today = localISO();
+  if (_snapshotDate === today) return;
+  _snapshotDate = today;
+  await saveSnapshot(buildSnapshotRow(data, computeIndex(data), today));
+}
 
 function esc(s) {
   return String(s ?? '')
@@ -219,6 +233,13 @@ async function poll() {
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
           <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
         </div>
+        <div class="condor-report-strip">
+          <span class="condor-report-label">Practice report</span>
+          <button class="ghost-btn condor-report-btn" data-preset="today">Today</button>
+          <button class="ghost-btn condor-report-btn" data-preset="7d">7 days</button>
+          <button class="ghost-btn condor-report-btn" data-preset="30d">30 days</button>
+          <button class="ghost-btn condor-report-btn condor-report-full" data-preset="7d">Open full report →</button>
+        </div>
         <div class="condor-grid">
           <div class="condor-col">${waitingDemand}</div>
           <div class="condor-col condor-col-wide">${velocityAge}</div>
@@ -228,6 +249,7 @@ async function poll() {
       </div>
     `;
     cards.saveDayScore(data).catch(() => {});
+    captureDailySnapshot(data).catch(() => {});
   } catch (e) {
     if (_container) {
       _container.innerHTML = `<div class="condor-placeholder">Failed to load: ${esc(e.message || e)}</div>`;
@@ -247,6 +269,17 @@ export async function init(el) {
     } else {
       chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-suite') });
     }
+  });
+
+  // Delegated click for the Practice Report launcher — opens the full report page
+  // (a browser tab, like the visualiser) at the chosen period.
+  _container.addEventListener('click', (e) => {
+    const rb = e.target.closest('.condor-report-btn');
+    if (!rb) return;
+    const preset = rb.dataset.preset || '7d';
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(`practice-report.html?preset=${encodeURIComponent(preset)}`),
+    });
   });
 
   // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML

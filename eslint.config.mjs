@@ -50,6 +50,12 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
+    // practice-report.js — the Practice Report page controller, loaded as
+    // <script type="module"> from practice-report.html (root, like the visualiser).
+    files: ['practice-report.js'],
+    languageOptions: { sourceType: 'module' },
+  },
+  {
     files: ['test-*.js', 'scripts/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },

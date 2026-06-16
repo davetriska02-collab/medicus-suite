@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.101.0] — 2026-06-16
+## [v3.105.0] — 2026-06-16
 
 ### Monitoring: vaccine invitation letter, cleaner admin tasks, Safety Monitoring section
 
@@ -34,8 +34,129 @@ Three fixes to the Sentinel monitoring action packs and chip grouping:
   payment items" so moving these out of "QOF Indicators" cannot read as QOF chasing
   having stopped.
 
-Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal) and
-`test-qof-indicator-filters.js` (category passthrough). Full suite green.
+Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal,
+safety-monitoring no-patient-copy) and `test-qof-indicator-filters.js` (category
+passthrough). Full suite green.
+
+## [v3.104.0] — 2026-06-16
+
+### Practice Report: the gap-to-8/9 fixes (Practice appraisal)
+
+Lands the convergent Practice-panel findings
+(`docs/appraisal/PRACTICE-REPORT-gap-to-8-9-2026-06-16.md`).
+
+- **Pressure Index no longer reads as a contradiction.** The current-snapshot tile now
+  shows the band word ("AMBER") as the headline with "index 25/100" as the sub-line, so
+  the eye reads the status first, not a number that looks green. When the band was floored
+  by over-capacity, a prominent amber explanation ("Showing AMBER: the practice is over
+  capacity — the weighted index alone is 25") replaces the old small-grey note. All four
+  personas snagged on the old presentation; this was the single biggest lever.
+- **A plain-English summary now leads the report** — e.g. "Last 7 days: 151 requests
+  against 350 scheduled slots — demand was above capacity" — so the team shares a frame
+  before any number, and it bridges the demand-vs-activity question.
+- **Plain language:** "Routine Rx" / "Non-routine Rx" → "Routine prescriptions" /
+  "Non-routine prescriptions"; the demand breakdown is labelled "Of which, by type" so it
+  reads as a breakdown of the headline total.
+- **Live figures carry their timestamp** — "Slots free now" / "In waiting room" now show
+  "as at HH:MM" on the tile, so a figure read later in the day isn't mistaken for live.
+- **Richer, profile-aware CSV.** Export now includes the per-clinician activity table and
+  the referrals breakdowns, not just demand-by-day — as separate titled sections in one
+  file. The Staff and ICB CSVs emit **no per-clinician section** (the aggregate-only
+  privacy rule now holds in the CSV as well as the HTML, regression-tested).
+
+Roadmap (power-user): sortable per-clinician columns, demand as a percentage.
+
+## [v3.103.0] — 2026-06-16
+
+### Referrals: no longer need to "open the report once" (headless discovery)
+
+Referral data is now fetched without first opening the Medicus Clinical Audit Report
+page (plan: `docs/plans/REFERRALS-HEADLESS-DISCOVERY-PLAN.md`).
+
+- **Headless discovery.** A new `ReferralsApi.ensureReferralsDiscovery()` constructs the
+  referrals **config** endpoint from the practice code, fetches it credentialed to
+  validate the deployment, derives and validates the **data** template, and stores it —
+  exactly the URLs the in-page content script used to capture, but with no tab open. URL
+  only is persisted; never patient rows. On any failure it returns null and falls back to
+  the existing in-page discovery + the friendly prompt, so the worst case is no worse than
+  before. The Referrals tab now runs this automatically on load when no template is stored.
+- **Bug fix:** the Practice Report's referrals section never populated — `fetchReferralsRange`
+  called the API without the captured template URL and always threw "No discovered URL".
+  It now uses the stored template (or runs headless discovery), so referrals appear in the
+  report.
+- **Stale-template self-heal.** If a captured URL goes stale (404, or it starts returning
+  the config response), the Referrals module now clears it, attempts one re-discovery, and
+  otherwise shows a calm "reconnect — open the report once" prompt instead of a dead error.
+- The Practice Report's referrals section, when not yet available, now shows a visible
+  "not enabled yet" line rather than vanishing silently.
+
+Honours the repo's "never construct URLs blindly" doctrine by validating every constructed
+URL against the live response before storing it. Tests: `test-referrals-discovery.js` (37,
+incl. PHI-not-persisted guards); full suite 75/75; verified end-to-end via the harness.
+
+## [v3.102.0] — 2026-06-16
+
+### Practice Report — design-crit + Practice review fixes
+
+Lands the converged design-crit + The Practice findings on the new Practice Report
+(`docs/appraisal/PRACTICE-REPORT-crit+practice-2026-06-16.md`).
+
+- **Dark mode fixed (blocker).** The dark theme now re-states the brand + RAG tokens, so
+  section headings, the cover title, the controls title and sparklines no longer render
+  at ~1.35:1 (they inherited the light navy). Headings are legible in dark again.
+- **Pressure Index explains itself.** The current-snapshot block now shows the scale
+  ("GREEN under 40 · AMBER 40–70 · RED 70 or over") and, when the band was floored by
+  over-capacity, says so — a low index reading AMBER no longer looks like a bug. (The
+  four-persona convergent ask.)
+- **Live snapshot set apart from the period.** It now renders as a dashed, tinted panel
+  with a LIVE tag and an "as at HH:MM" stamp, and states it is not part of the period
+  figures — so the live "today" count is no longer mistaken for a period total.
+- **By-clinician table labelled and reconcilable.** Activity now shows a per-clinician
+  drill-down split by activity type with an "All clinicians" total row that reconciles to
+  the totals above. A note explains demand (inbound) and activity (done) need not match.
+- **Data notes, not a standing error.** Skipped-section reasons (e.g. referrals needing
+  its report opened once) now read in plain English inside a neutral "Data notes" panel,
+  not amber alert text on every run; the double full-stop is gone.
+- **Designed empty state.** The no-code / first-run state is now a framed card with an
+  "Open options" action instead of bare grey text.
+- **Polish:** uniform stat-tile widths across sections; sparkline wrapper styled; cover
+  meta fields separated; `print-color-adjust: exact` so RAG fills survive PDF export.
+
+Remaining roadmap (power-user): report section toggles, per-day series tables, and a
+multi-section CSV export.
+
+## [v3.101.0] — 2026-06-16
+
+### Practice Report (Condor) — periodised, audience-tuned operational report
+
+A new Practice Report built on Condor's operational data, for a selectable period
+(Today / 7 days / 30 days / custom), rendered as a printable page (Print → PDF) plus
+CSV — modelled on the Patient Record Visualiser's print pattern. Planned in
+`docs/plans/PRACTICE-REPORT-PLAN.md` from 5 codebase + 5 web research agents.
+
+- **Three audience profiles.** *Practice Management* (full detail incl. per-clinician
+  breakdown), *Staff Briefing* (aggregate-only — per-clinician figures are stripped at
+  the data layer so individual productivity can never leak, per Goodhart's-law / morale
+  guidance), and *ICB / System* (practice-level, NHS-correct terminology — e.g. "Urgent
+  suspected cancer (2WW / FDS)"; no live snapshot).
+- **Sections:** cover (period + practice + "as at"), current snapshot (live PPI /
+  waiting / urgent), demand (per-day series + by-type + sparkline), capacity (scheduled
+  slots / sessions), activity (totals; per-clinician for management), referrals
+  (priority/status), and trends from the snapshot store.
+- **Honest by construction.** Only metrics derivable from Medicus are shown; anything
+  that cannot be derived is omitted rather than estimated, with a short limitations
+  footer. Multi-day demand/activity/capacity/referrals come from real date-range
+  endpoints.
+- **Forward-accruing snapshot store.** Condor now writes one `practice.reportSnapshots`
+  row per day (PPI / waiting room / task age — the live-only signals with no source
+  history), pruned to 90 days and backed up via the existing `condor` scope, so trends
+  build over time.
+- **Launchers:** a "Practice report" strip in Condor (Today / 7d / 30d / full) and a
+  Ctrl+K command "Generate practice report…". Opens as a browser tab like the visualiser.
+
+New files: `practice-report.{html,css,js}`, `side-panel/modules/condor/report/{report-data,
+report-profiles,report-render}.js`. Tests: `test-practice-report-data.js` (30),
+`test-practice-report-render.js` (18, incl. the staff aggregate-only safety invariant).
 
 ## [v3.100.0] — 2026-06-16
 
@@ -69,6 +190,7 @@ submitted labels).
 - Bumped `defaults.json` schema `version` 16 → 17 so the migration runs for
   existing installs; refreshed the defaults-config lock; updated
   `test-result-severity.js` for the new Hb threshold.
+
 
 ## [v3.99.0] — 2026-06-16
 
