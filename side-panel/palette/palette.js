@@ -83,6 +83,7 @@ const OPTIONS_SECTIONS = [
   ['reception', 'Reception', 'pathways'],
   ['knowledge', 'Knowledge', 'reference'],
   ['safety', 'Clinical Safety', 'hazard disclaimer'],
+  ['cqc', 'CQC Readiness', 'cqc inspection evidence pack safe well-led compliance audit'],
   ['backup', 'Backup & Restore', 'export import suite backup'],
   ['debug', 'Debug', 'api diagnostics log'],
 ];

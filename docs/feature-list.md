@@ -175,6 +175,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.110.2 (2026-06-16)** — CQC Inspection Readiness is now a discoverable **Settings tab** (Options → CQC Readiness) with a launch button, not only the Ctrl+K command
 - **v3.110.0 (2026-06-16)** — CQC Inspection Readiness: a new page (Ctrl+K → "CQC inspection readiness…") turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Supporting evidence, not proof of compliance; built from shipped rule data only, no patient data
 - **v3.109.0 (2026-06-16)** — Record tab: a live-first patient summary (problems, meds, results, prescribing-safety prompts) with the full visualiser nested behind it
 - **v3.107.0 (2026-06-16)** — Practice letterhead: recall letters and SMS auto-fill the practice/clinician sign-off (blank-guarded to keep the placeholder rather than send an empty sign-off)
