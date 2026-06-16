@@ -425,13 +425,18 @@ function buildDemandBody() {
   const medVal = medical != null ? medical : '—';
   const admVal = admin != null ? admin : '—';
 
-  // Decision J: threshold chip when level fires
-  const medFlag = medLevel
-    ? `<span class="today-demand-flag today-demand-flag--${medLevel}">over threshold</span>`
-    : '';
-  const admFlag = admLevel
-    ? `<span class="today-demand-flag today-demand-flag--${admLevel}">over threshold</span>`
-    : '';
+  // Decision J: threshold chip when level fires. U2: name the threshold value
+  // crossed ("over 60") rather than the opaque "over threshold", so the badge
+  // is self-explanatory and not just a permanent-looking red alarm.
+  function flag(key, lvl) {
+    if (!lvl) return '';
+    const t = { ...DEFAULT_SUB_THRESHOLDS[key], ...(thresholds[key] || {}) };
+    const limit = lvl === 'red' ? t.red : t.amber;
+    const label = limit ? `over ${limit}` : 'over threshold';
+    return `<span class="today-demand-flag today-demand-flag--${lvl}">${label}</span>`;
+  }
+  const medFlag = flag('medical', medLevel);
+  const admFlag = flag('admin', admLevel);
 
   const errLine = error ? errMsgInline(error) : '';
 

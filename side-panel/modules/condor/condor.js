@@ -227,6 +227,11 @@ async function poll() {
     const footer = demoteOptionalCards(`${cards.renderDayScore(data)}${cards.renderActivity(data)}`);
     _container.innerHTML = `
       <div class="condor-wrap">
+        <div class="condor-header">
+          <div class="mod-eyebrow">Operations Dashboard</div>
+          <h2 class="mod-title">Condor</h2>
+          <div class="mod-subtitle">Live practice pressure — demand vs capacity, task age and submission velocity.</div>
+        </div>
         ${headline}
         <div class="condor-hero">${cards.renderPpi(data)}</div>
         <div class="condor-ts">

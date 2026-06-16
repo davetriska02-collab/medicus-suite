@@ -1205,7 +1205,12 @@ function render(payload) {
     : '';
 
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
-  const _unmatchedWasOpen = container.querySelector('.sent-unmatched-section')?.open ?? false;
+  // R2 (clinical salience): default the "meds without a monitoring rule" list to
+  // OPEN so a possible silent false-negative is visible without a click — the two
+  // people who most need it (nurse, pharmacist) missed it while it was collapsed.
+  // `?? true` only applies on first appearance (no prior element); a user who
+  // collapses it keeps it collapsed across the 10s re-render poll.
+  const _unmatchedWasOpen = container.querySelector('.sent-unmatched-section')?.open ?? true;
 
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
@@ -1332,10 +1337,11 @@ function render(payload) {
     _openEvidenceKey = null;
   }
 
-  // Restore the unmatched-meds <details> open state across re-renders.
-  if (_unmatchedWasOpen) {
+  // Restore the unmatched-meds <details> open state across re-renders (defaults
+  // to open on first appearance — see R2 note above; respects a manual collapse).
+  {
     const unmatchedEl = container.querySelector('.sent-unmatched-section');
-    if (unmatchedEl) unmatchedEl.open = true;
+    if (unmatchedEl) unmatchedEl.open = _unmatchedWasOpen;
   }
 }
 
@@ -1779,7 +1785,6 @@ function scaffoldHtml() {
           <div class="mod-title">Monitoring</div>
         </div>
         <div class="sent-header-meta">
-          <span class="module-ver">v0.5.1</span>
           <button class="sent-tool-btn" id="sentRefreshBtn" title="Refresh now (the panel also refreshes itself every 10 seconds)" aria-label="Refresh">${toolIcon(TOOL_ICONS.refresh)}</button>
         </div>
       </div>

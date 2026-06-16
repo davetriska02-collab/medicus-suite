@@ -6,7 +6,7 @@ import { createModuleLoader } from './module-loader.js';
 import { DEFAULT_SUB_THRESHOLDS, ragLevel } from './modules/submissions/submissions-core.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
-import { sanitiseHiddenTabs } from './tab-catalog.js';
+import { sanitiseHiddenTabs, TAB_CATALOG } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 
 const content = document.getElementById('suiteContent');
@@ -326,6 +326,17 @@ document.addEventListener('suite:slots:count', (e) => {
 const loadedCss = new Set();
 
 // ── Navigation ────────────────────────────────────────────────────────────────
+
+// U1: give every nav tab a hover tooltip from its catalog blurb, so opaque
+// proper-noun names (Condor, Sweep, Sentinel→Monitoring) say what they are
+// without opening them. Only set where the markup doesn't already carry a title.
+{
+  const blurbById = new Map(TAB_CATALOG.map((t) => [t.id, t.blurb]));
+  document.querySelectorAll('.nav-tab').forEach((tab) => {
+    const blurb = blurbById.get(tab.dataset.module);
+    if (blurb && !tab.getAttribute('title')) tab.setAttribute('title', blurb);
+  });
+}
 
 document.querySelectorAll('.nav-tab').forEach((tab) => {
   tab.addEventListener('click', () => {

@@ -5,7 +5,7 @@
 import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
 import { initPalette } from '../side-panel/palette/palette.js';
-import { sanitiseHiddenTabs } from '../side-panel/tab-catalog.js';
+import { sanitiseHiddenTabs, TAB_CATALOG } from '../side-panel/tab-catalog.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -222,6 +222,15 @@ document.addEventListener('suite:slots:count', (e) => {
 const loadedCss = new Set();
 
 // ── Navigation ────────────────────────────────────────────────────────────────
+
+// U1: hover tooltip from each tab's catalog blurb (mirrors panel.js).
+{
+  const blurbById = new Map(TAB_CATALOG.map((t) => [t.id, t.blurb]));
+  document.querySelectorAll('.nav-tab').forEach((tab) => {
+    const blurb = blurbById.get(tab.dataset.module);
+    if (blurb && !tab.getAttribute('title')) tab.setAttribute('title', blurb);
+  });
+}
 
 document.querySelectorAll('.nav-tab').forEach((tab) => {
   tab.addEventListener('click', () => {

@@ -373,7 +373,6 @@ function render() {
       <div class="module-header">
         <div class="module-title-row">
           <h2 class="module-title">Referrals</h2>
-          <span class="module-ver">v1.0</span>
         </div>
         <div class="module-subtitle">Referral audit data from Medicus</div>
       </div>

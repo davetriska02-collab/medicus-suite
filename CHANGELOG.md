@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.4] — 2026-06-16
+
+### Usability quick-wins from the whole-suite appraisal
+
+Acting on the synthetic-panel appraisal (`docs/appraisal/PRACTICE-suite-2026-06-16.md`),
+a batch of small, high-leverage UX fixes — no clinical-rule or data-logic changes:
+
+- **Demand "over threshold" now names the number.** The Today demand card showed an
+  opaque red "over threshold" badge with no indication of *what* the threshold was;
+  three personas read it as a permanent alarm. It now reads "over 60" / "over 30" (the
+  actual amber/red limit crossed), so the badge is self-explanatory. (U2)
+- **Monitoring: "meds without a monitoring rule" defaults to open.** The list of
+  medicines that matched no monitoring rule — a possible silent false-negative — was
+  collapsed by default, and the two clinicians who most need it (nurse, pharmacist)
+  missed it entirely in the appraisal. It now starts expanded when the count is > 0; a
+  user who collapses it keeps it collapsed across the 10-second refresh. Clinical
+  salience increased, never decreased. (R2)
+- **Condor now has a header.** The operations dashboard jumped straight into the gauge
+  with no title or description; new users couldn't tell what "Condor" was. Added an
+  "Operations Dashboard / Condor / Live practice pressure…" header. (U1)
+- **Nav tabs carry a hover tooltip** from their catalog blurb (panel + pop-out), so
+  opaque names (Condor, Sweep) say what they are without opening them. (U1)
+- **Removed the version chips** (`v0.5.1` on Monitoring, `v1.0` on Referrals) that read
+  as "still in testing" on everyday clinical/data screens. (G2)
+
 ## [v3.110.3] — 2026-06-16
 
 ### Capacity: day view sorts available slot types to the top

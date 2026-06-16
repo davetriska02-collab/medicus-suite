@@ -9,6 +9,12 @@
   overflow-y: auto;
 }
 
+/* Module header — names the tab and what it is (U1: "Condor" alone told new
+   users nothing). Sits above the headline strip. */
+.condor-header {
+  margin-bottom: 10px;
+}
+
 /* ── Headline component strip ─────────────────────────────────────────────────
    Leads the panel so the user reads the labelled Demand / Capacity line (and the
    floored band) before the green-looking gauge. Carries the band colour as a left
