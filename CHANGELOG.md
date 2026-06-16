@@ -28,6 +28,11 @@ Three fixes to the Sentinel monitoring action packs and chip grouping:
   review is due — book at your convenience", which is wrong for a same-day clinical
   signal. These chips now produce a clinician-review task only (no SMS, no letter),
   via both `buildChipActions` and the aggregate `buildPatientActions` path.
+- **Safety Monitoring section: clearer placement and caption.** The section now sits
+  directly below the alert clusters and above routine drug monitoring (ordered by
+  urgency of action), and carries a one-line caption "Clinical safety flags — not QOF
+  payment items" so moving these out of "QOF Indicators" cannot read as QOF chasing
+  having stopped.
 
 Tests: extended `test-action-packs.js` (vaccine letter, recall-line removal) and
 `test-qof-indicator-filters.js` (category passthrough). Full suite green.

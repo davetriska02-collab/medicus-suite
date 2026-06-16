@@ -1100,11 +1100,14 @@ function render(payload) {
     </div>`;
 
   const typeOrder = [
+    // Ordered by urgency of action: alert clusters first, then safety
+    // surveillance (act-today signals like a raised potassium), then routine
+    // drug monitoring, vaccinations and QOF housekeeping last.
     'drug-combo',
     'event-count',
     'composite',
-    'drug-monitoring',
     'safety-monitoring',
+    'drug-monitoring',
     'vaccine',
     'qof-indicator',
     'qof-process-indicator',
@@ -1114,12 +1117,19 @@ function render(payload) {
     'drug-combo': 'Drug Combinations',
     'event-count': 'Recurrent Events',
     composite: 'Composite Alerts',
-    'drug-monitoring': 'Drug Monitoring',
     'safety-monitoring': 'Safety Monitoring',
+    'drug-monitoring': 'Drug Monitoring',
     vaccine: 'Vaccinations',
     'qof-indicator': 'QOF Indicators',
     'qof-process-indicator': 'QOF Process',
     'qof-register': 'Registers',
+  };
+  // Optional one-line caption under a section header. Used to make clear that
+  // Safety Monitoring items are clinical safety flags, not QOF payment items —
+  // so moving them out of "QOF Indicators" can't read as "we've stopped chasing
+  // QOF" (a concern raised across the staff-appraisal personas).
+  const typeCaptionMap = {
+    'safety-monitoring': 'Clinical safety flags — not QOF payment items',
   };
 
   const groupsHtml = typeOrder
@@ -1128,6 +1138,7 @@ function render(payload) {
       (t) => `
       <section class="sent-group${t === 'qof-register' ? ' sent-group-dim' : ''}">
         <div class="sent-group-label">${typeLabelMap[t] || t}</div>
+        ${typeCaptionMap[t] ? `<div class="sent-group-caption">${escHtml(typeCaptionMap[t])}</div>` : ''}
         <div class="sent-chip-list">${groups[t].map(renderChip).join('')}</div>
       </section>`
     )
