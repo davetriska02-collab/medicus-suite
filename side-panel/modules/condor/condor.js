@@ -3,12 +3,26 @@
 import { fetchAllStreams } from './condor-data.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { copyText } from '../shared/export-util.js';
+import { buildSnapshotRow, saveSnapshot, localISO } from './report/report-data.js';
 // Card renderers loaded dynamically so module works even before card files land
 
 let _container = null;
 let _pollTimer = null;
 let _stopFresh = null;
 let _lastData = null;
+let _snapshotDate = null; // guards the once-a-day Practice Report snapshot write
+
+// Capture one Practice Report snapshot per calendar day. The live-only metrics
+// (PPI / waiting room / task age) have no per-day history at the source, so this
+// forward-accruing store is how the report builds their trends over time.
+// saveSnapshot also de-dupes by date; the in-session guard avoids redundant writes
+// on every 15s poll.
+async function captureDailySnapshot(data) {
+  const today = localISO();
+  if (_snapshotDate === today) return;
+  _snapshotDate = today;
+  await saveSnapshot(buildSnapshotRow(data, computeIndex(data), today));
+}
 
 function esc(s) {
   return String(s ?? '')
@@ -228,6 +242,7 @@ async function poll() {
       </div>
     `;
     cards.saveDayScore(data).catch(() => {});
+    captureDailySnapshot(data).catch(() => {});
   } catch (e) {
     if (_container) {
       _container.innerHTML = `<div class="condor-placeholder">Failed to load: ${esc(e.message || e)}</div>`;
