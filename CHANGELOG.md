@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.99.0] — 2026-06-16
+
+### Whole-suite Practice appraisal: the gap-to-9 fixes
+
+Lands the convergent findings from the whole-suite Practice appraisal
+(`docs/appraisal/PRACTICE-whole-suite-gap-to-9-2026-06-16.md`). The theme:
+composite and "all-clear" states must explain their own provenance and never
+contradict themselves, and the eyesight/discoverability floor must hold.
+
+- **Condor: the headline no longer contradicts itself (the #1 fix).** The
+  Practice Pressure gauge could show "GREEN · 25/100" on the same screen as
+  "Over capacity (115 requests vs 50 slots)" because capacity is only 20% of the
+  weighted index. Now, whenever demand is over the slot limit, the displayed band
+  is **floored to at least AMBER** — on the gauge dial, its label, the new
+  lead-with-the-numbers headline strip ("Demand 115 · Capacity 50 · Over
+  capacity"), and the COPY FIGURES output. The numeric index is unchanged; this
+  only ever raises a signal, never lowers one. (`condor.js` `computeIndex`,
+  `cards/ppi.js`.)
+- **Condor: defensible figures.** COPY FIGURES now carries a hard "as at HH:MM"
+  stamp and explicit Demand / Capacity lines; the unconfigured Task-Inbox and
+  Day-Score cards are demoted to quiet strips; the clinician-workload zero state
+  reads "No consults logged yet today" instead of a bare "0".
+- **Today: sweep provenance is unambiguous.** A sweep that has run shows "Last
+  sweep HH:MM · N patients checked · 0 alerts"; when none has run, the card reads
+  a distinct "Not run yet today" and Recent Alerts no longer shows a green
+  all-clear without a sweep behind it. The "Triage Load" unconfigured card is
+  demoted to a thin optional strip.
+- **Sentinel: explicit all-clear audit.** A loaded patient panel now shows a
+  headline count — "N meds checked · M matched a monitoring rule · K overdue · P
+  unmatched · checked HH:MM" — derived from the same arrays the sections below
+  render, so a clean screen reads as "verified clear", not "nothing fired". No
+  drug rules or matching logic changed.
+- **Referrals: clearer cold state + sensible default.** The waiting-for-report
+  empty state is reworded as reassuring and self-populating with a working
+  deep-link; the default window is now month-to-date.
+- **Cold-state framing for non-power roles.** Reception (pathways disabled) and
+  Capacity (no preset) now carry a calm "this is a one-time practice setup —
+  nothing for you to do" banner above the existing gate, which is unchanged.
+- **Legibility + discoverability floor.** Lifted the two faintest text tokens a
+  step and reduced letter-spacing on small uppercase micro-labels (fixes the
+  "DEMAND" misread). Added a persistent keyboard-reachable "?" per-tab help
+  popover (two lines: what this tab is / what to do first) to the panel and
+  pop-out, and expanded "QOF" inline in the Monitoring help.
+
+Report-only appraisal items deferred to roadmap: user-editable composite
+weightings and a Condor history CSV (both need new daily-snapshot storage).
+
 ## [v3.98.1] — 2026-06-16
 
 ### Threshold editor: clearer, safer, and reachable without the palette

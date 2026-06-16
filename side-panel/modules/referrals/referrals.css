@@ -428,22 +428,85 @@
 
 .ref-discovery-body {
   font-size: 12px;
-  color: var(--text-4);
+  color: var(--text-3);
   line-height: 1.6;
   margin: 0;
-  max-width: 240px;
+  max-width: 260px;
 }
 
-.ref-discovery-path {
-  margin-top: 4px;
+.ref-discovery-steps {
+  margin: 2px 0 4px 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: ref-step;
+  text-align: left;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ref-discovery-steps li {
+  counter-increment: ref-step;
+  position: relative;
+  padding-left: 26px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.ref-discovery-steps li::before {
+  content: counter(ref-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--text-4);
-  background: var(--bg-mid);
-  border: 1px solid var(--border);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ref-discovery-cta {
+  margin-top: 6px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  padding: 9px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   border-radius: var(--r-md);
-  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.ref-discovery-cta:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+.ref-discovery-cta:active {
+  opacity: 0.8;
+}
+
+.ref-discovery-note {
+  margin: 6px 0 0 0;
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.5;
+  max-width: 260px;
 }
 
 /* ── States ───────────────────────────────────────────────────────────────── */

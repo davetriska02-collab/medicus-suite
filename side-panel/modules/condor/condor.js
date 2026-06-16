@@ -42,7 +42,18 @@ async function loadCards() {
   };
 }
 
-function buildSnapshot(data) {
+// Single source of truth for the Practice Pressure Index, its band, and the
+// demand-vs-capacity reconciliation. Both the headline strip and the copied
+// snapshot read from this so the panel can never contradict itself.
+//
+// Band-floor (the fix the synthetic GP-practice panel flagged): the raw index
+// weights capacity at only 20% (and 0% when no capacity preset is set), so the
+// gauge could read "GREEN · 25/100" on the same screen as "Over capacity (115
+// requests vs 50 slots)". When demand meets or exceeds the available slots, the
+// *displayed* band is floored to at least AMBER. The numeric ppi is left as-is —
+// only the band (and therefore colour + label) is raised. This only ever RAISES
+// a signal, never lowers one, so no alert salience is lost.
+export function computeIndex(data) {
   const arrivedCount = data.waitingRoom?.arrivedCount ?? 0;
   const medical = data.submissions?.totals?.medical ?? 0;
   const admin = data.submissions?.totals?.admin ?? 0;
@@ -50,7 +61,6 @@ function buildSnapshot(data) {
   const urgentCount = data.requestMonitor?.urgentCount ?? 0;
   const remaining = data.slots?.totalRemaining ?? 0;
   const minimum = data.capacityPreset?.minimum ?? 0;
-  const submissionsTotal = data.submissions?.totals?.all ?? 0;
 
   const scoreA = Math.min((arrivedCount / 10) * 100, 100);
   const scoreB = Math.min((queueCount / 40) * 100, 100);
@@ -61,18 +71,132 @@ function buildSnapshot(data) {
     scoreD = Math.min((deficit / minimum) * 100, 100);
   }
   const ppi = Math.round(scoreA * 0.3 + scoreB * 0.25 + scoreC * 0.25 + scoreD * 0.2);
-  const band = ppi < 40 ? 'GREEN' : ppi < 70 ? 'AMBER' : 'RED';
 
+  // Capacity-deficit signal — mirrors demand-gap.js exactly (requests vs slots).
+  // "over limit" = demand has met or passed the free slots; "over" (vs "at") at
+  // the 1.5× point matches the card's "Over capacity"/"At capacity" split.
+  let capacityState; // 'none' | 'at' | 'over'
+  if (remaining === 0 && queueCount > 0) {
+    capacityState = 'over'; // no slots left with demand still arriving
+  } else if (remaining > 0) {
+    const ratio = queueCount / remaining;
+    capacityState = ratio >= 1.5 ? 'over' : ratio >= 1.0 ? 'at' : 'none';
+  } else {
+    capacityState = 'none';
+  }
+  const overCapacity = capacityState !== 'none';
+
+  const rawBand = ppi < 40 ? 'GREEN' : ppi < 70 ? 'AMBER' : 'RED';
+  // Floor to at least AMBER when over the capacity limit — never GREEN.
+  const band = overCapacity && rawBand === 'GREEN' ? 'AMBER' : rawBand;
+  const floored = band !== rawBand;
+
+  return {
+    ppi,
+    band,
+    rawBand,
+    floored,
+    demandCount: queueCount,
+    capacityCount: remaining,
+    capacityState,
+    overCapacity,
+    arrivedCount,
+    urgentCount,
+    minimum,
+  };
+}
+
+const CAPACITY_LABEL = { none: 'Within capacity', at: 'At capacity', over: 'Over capacity' };
+
+function buildSnapshot(data) {
+  const idx = computeIndex(data);
+  const submissionsTotal = data.submissions?.totals?.all ?? 0;
+
+  // Hard "as at HH:MM" timestamp so figures pasted into a partners' meeting are
+  // defensible — the reader can always see exactly when the snapshot was taken.
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const bandText = idx.floored ? `${idx.band} (floored from ${idx.rawBand})` : idx.band;
   return [
-    `Condor snapshot — ${now}`,
-    `PPI\t${ppi}/100 (${band})`,
-    `Waiting room arrived\t${arrivedCount}`,
-    `Request queue (medical + admin)\t${queueCount}`,
-    `Urgent\t${urgentCount}`,
-    `Slots remaining\t${remaining}`,
+    `Condor snapshot — as at ${now}`,
+    `PPI\t${idx.ppi}/100 (${bandText})`,
+    `Demand (medical + admin)\t${idx.demandCount}`,
+    `Capacity (slots free)\t${idx.capacityCount}\t${CAPACITY_LABEL[idx.capacityState]}`,
+    `Waiting room arrived\t${idx.arrivedCount}`,
+    `Urgent\t${idx.urgentCount}`,
     `Submissions total today\t${submissionsTotal}`,
   ].join('\n');
+}
+
+// Leading component line — so the user reads "Demand 115 · Capacity 50 · Over
+// capacity" with the (floored) band colour BEFORE the green-looking dial, rather
+// than trusting a gauge that under-weights capacity.
+function buildHeadlineStrip(data) {
+  const idx = computeIndex(data);
+  const cls =
+    idx.band === 'RED'
+      ? 'condor-headline-red'
+      : idx.band === 'AMBER'
+        ? 'condor-headline-amber'
+        : 'condor-headline-green';
+  const capLabel = CAPACITY_LABEL[idx.capacityState];
+  const flooredNote = idx.floored
+    ? ` <span class="condor-headline-note">— band raised to ${esc(idx.band)} by capacity</span>`
+    : '';
+  return (
+    `<div class="condor-headline ${cls}">` +
+    `<span class="condor-headline-band">${esc(idx.band)}</span>` +
+    `<span class="condor-headline-figs">Demand ${esc(idx.demandCount)} · Capacity ${esc(idx.capacityCount)} · ${esc(capLabel)}</span>` +
+    flooredNote +
+    `</div>`
+  );
+}
+
+// An unconfigured/optional or empty-but-not-broken card should read as a quiet
+// strip, not a full-size error or a dead data feed. Cards we can't edit return a
+// `.condor-placeholder` element (or a bare-zero workload). We detect those known
+// states by their text and add `condor-quiet` so the CSS collapses them to a thin
+// muted line. This NEVER touches alert/error placeholders (auth failures etc.).
+const QUIET_PATTERNS = [
+  /not configured/i, // task inbox / request monitor not set up
+  /enable .* in settings/i,
+  /score available after/i, // day score before 17:00
+];
+function demoteOptionalCards(html) {
+  // Quieten optional placeholders by their reassuring "set this up" wording,
+  // leaving genuine-failure placeholders ("unavailable", "Failed to load",
+  // "check Medicus sign-in") at full size so they keep their salience.
+  let out = html.replace(/<div class="condor-card condor-placeholder">([\s\S]*?)<\/div>/g, (m, inner) => {
+    if (QUIET_PATTERNS.some((re) => re.test(inner))) {
+      return `<div class="condor-card condor-placeholder condor-quiet">${inner}</div>`;
+    }
+    return m;
+  });
+  // Day Score before 17:00 is a normal optional state ("Score available after
+  // 17:00"), not a placeholder card — quieten its outer card too.
+  if (/condor-ds-pending/.test(out)) {
+    out = out.replace(/<div class="condor-card condor-ds">/, '<div class="condor-card condor-ds condor-quiet">');
+  }
+  return out;
+}
+
+// The workload card shows bare "total 0 · consults 0" both when no consults have
+// happened yet today and when nothing is loading — which reads as a dead feed.
+// Make the zero state self-explaining (and quiet) without editing the card file.
+function clarifyWorkload(html, data) {
+  const act = data.activity;
+  if (!act) return html; // unavailable placeholder handled by demoteOptionalCards
+  const totalAll = act.totals?.all ?? 0;
+  const noRows = !Array.isArray(act.rows) || act.rows.length === 0;
+  if (totalAll !== 0 && !noRows) return html; // real data — leave alone
+  // Replace the bare "Practice total: 0 · Consults: 0" line with a clear,
+  // quiet "no consults yet today" reading and mark the card quiet.
+  return html
+    .replace(/<div class="condor-card condor-wl">/, '<div class="condor-card condor-wl condor-quiet">')
+    .replace(
+      /<div class="condor-wl-totals">[\s\S]*?<\/div>/,
+      '<div class="condor-wl-totals condor-wl-empty">No consults logged yet today.</div>'
+    );
 }
 
 async function poll() {
@@ -82,19 +206,25 @@ async function poll() {
     _lastData = data;
     const cards = await loadCards();
     if (!_container) return;
+    const headline = buildHeadlineStrip(data);
+    const waitingDemand = demoteOptionalCards(`${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}`);
+    const velocityAge = demoteOptionalCards(`${cards.renderVelocity(data)}${cards.renderTaskAge(data)}`);
+    const workload = clarifyWorkload(demoteOptionalCards(cards.renderWorkload(data)), data);
+    const footer = demoteOptionalCards(`${cards.renderDayScore(data)}${cards.renderActivity(data)}`);
     _container.innerHTML = `
       <div class="condor-wrap">
+        ${headline}
         <div class="condor-hero">${cards.renderPpi(data)}</div>
         <div class="condor-ts">
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
           <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
         </div>
         <div class="condor-grid">
-          <div class="condor-col">${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}</div>
-          <div class="condor-col condor-col-wide">${cards.renderVelocity(data)}${cards.renderTaskAge(data)}</div>
-          <div class="condor-col">${cards.renderWorkload(data)}</div>
+          <div class="condor-col">${waitingDemand}</div>
+          <div class="condor-col condor-col-wide">${velocityAge}</div>
+          <div class="condor-col">${workload}</div>
         </div>
-        <div class="condor-footer">${cards.renderDayScore(data)}${cards.renderActivity(data)}</div>
+        <div class="condor-footer">${footer}</div>
       </div>
     `;
     cards.saveDayScore(data).catch(() => {});

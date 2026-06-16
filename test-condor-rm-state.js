@@ -63,6 +63,61 @@ const path = require('path');
   r = buildRequestMonitorFromState({ lastPoll: now, error: null, buckets: { medNew: { count: 0, items: [] } } });
   check(!r.unavailable && r.totalCount === 0, 'polled empty inbox → clean zero, not unavailable');
 
+  // ── PPI band-floor (UX fix) ──────────────────────────────────────────────────
+  // The raw index weights capacity at only 20%, so a quiet morning with a low PPI
+  // could read GREEN while demand has already passed available slots. The displayed
+  // band must floor to AMBER (never GREEN) whenever demand >= capacity — only ever
+  // raising a signal, never lowering one.
+  console.log('\n--- PPI band-floor ---');
+  const condorPath = new URL(
+    'side-panel/modules/condor/condor.js',
+    `file://${path.resolve(__dirname)}/`
+  ).href;
+  const { computeIndex } = await import(condorPath);
+
+  // Low pressure but demand (115) far over free slots (50): raw GREEN, floored AMBER.
+  let idx = computeIndex({
+    submissions: { totals: { medical: 100, admin: 15, all: 115 } },
+    slots: { totalRemaining: 50 },
+    waitingRoom: { arrivedCount: 0 },
+    requestMonitor: null,
+    capacityPreset: null,
+  });
+  check(idx.rawBand === 'GREEN', 'raw band is GREEN on a quiet-index, over-capacity day');
+  check(idx.band === 'AMBER', 'displayed band floored to AMBER — never GREEN — when over capacity');
+  check(idx.floored === true && idx.overCapacity === true, 'floored + overCapacity flags set');
+  check(idx.demandCount === 115 && idx.capacityCount === 50, 'demand/capacity counts surfaced for headline');
+
+  // No slots left with demand still arriving is also over-capacity.
+  idx = computeIndex({
+    submissions: { totals: { medical: 3, admin: 0, all: 3 } },
+    slots: { totalRemaining: 0 },
+    waitingRoom: { arrivedCount: 0 },
+    requestMonitor: null,
+    capacityPreset: null,
+  });
+  check(idx.band !== 'GREEN', 'zero free slots with open demand never reads GREEN');
+
+  // Genuinely quiet day with spare capacity stays GREEN — the floor must not over-fire.
+  idx = computeIndex({
+    submissions: { totals: { medical: 5, admin: 2, all: 7 } },
+    slots: { totalRemaining: 40 },
+    waitingRoom: { arrivedCount: 0 },
+    requestMonitor: null,
+    capacityPreset: null,
+  });
+  check(idx.band === 'GREEN' && idx.floored === false, 'spare-capacity quiet day stays GREEN (no false floor)');
+
+  // Numeric PPI is never altered by the floor — only the band is raised.
+  idx = computeIndex({
+    submissions: { totals: { medical: 100, admin: 15, all: 115 } },
+    slots: { totalRemaining: 50 },
+    waitingRoom: { arrivedCount: 0 },
+    requestMonitor: null,
+    capacityPreset: null,
+  });
+  check(idx.ppi < 40, 'numeric ppi left as-is (still under 40) — only the band is floored');
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })().catch(e => {
