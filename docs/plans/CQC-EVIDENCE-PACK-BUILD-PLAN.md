@@ -113,6 +113,54 @@ export without the review-confirm step.
   Keeper with its own regression tests.
 - Version bump + CHANGELOG when built; harness-verify the surface in both modes.
 
+## 9. Panel re-review (synthetic) — they now agree
+
+The revised plan went back to the same four personas. **All moved up and endorsed the
+direction:** Margaret **4→7**, Eileen **6→8**, Janet **7→9**, Raj **7.5→9** (mean ≈5.9 →
+≈8.25). The two-mode / internal-first split and the front-and-centre coverage honesty were
+singled out as the changes that turned it around ("the difference between a tool and a
+trap"). A focused set of second-pass asks — fold these into the build (most are wording/
+placement tightening, not new scope):
+
+- **A1 · Provenance must be INLINE prose, not a tooltip/modal/appendix (Janet + Raj,
+  convergent — the gating item for both).** For every count: the denominator, the "as at"
+  time, AND the monitoring **interval applied + its source** must be readable on the same
+  line/screen with **no interaction**, in human prose ("Patients on the active list with a
+  coded lithium prescription in the last 6 months, as at 09:14 on 3 Jun 2026 — 14"), never
+  a code string or filter expression. Strengthen Req 2/3 wording to forbid tooltip-only.
+- **A2 · Show the raw matched-drug strings (Eileen).** The coverage manifest must include
+  the actual coded drug-name strings the tool matched (sample or full), so a clinician can
+  eyeball completeness ("I don't see the slow-release formulation"). Add to Req 1.
+- **A3 · Surface The Keeper's review cadence + trigger, owner-facing (Margaret — her
+  remaining gap).** The readiness view must state HOW a rule is flagged "needs review vs
+  current guidance" (calendar? MHRA/NICE publication? manual cycle?) and the last review
+  date, so the partner can answer "when was this last checked?" with a real *process*, not
+  "the system flagged it." Frame rule-currency as the practice's maintenance process.
+- **A4 · Chase-attempt history on overdue lists (Eileen).** Distinguish "overdue WITH
+  documented chase" from "overdue, no contact attempt" — clinically very different. Likely
+  hard (attempts may live in free text/tasks); if so the plan must **say so honestly**
+  rather than imply the overdue list alone is sufficient. The suite already *generates*
+  recall letters/SMS (action-packs + v3.107 letterhead) — tracking attempts is the new bit.
+  P2/P3, with the honesty caveat.
+- **A5 · ACB / coded-data systematic-undercount caveat (Raj).** State in-output that ACB
+  (and monitoring counts generally) under-count because PRN/OTC use and secondary-care-
+  initiated meds/results not coded on the GP record are invisible — treat counts as a
+  floor, not a ceiling. Extends the coded-data caveat (Req 1).
+- **A6 · PINCER fidelity, not just coverage (Raj).** Disclose not only WHICH PINCER
+  indicators are implemented but whether each coded definition is validated against the
+  original PINCER definition or is a reasonable approximation. Add to Req 3.
+- **A7 · Delta vs explicitly-anchored saved runs (Janet).** The "what changed since last
+  run" delta must compare two runs the user deliberately saved/anchored, not whatever a
+  background run last produced.
+- **A8 · Governance decisions, not just product (Raj).** (i) If the P0 cohort spike finds
+  coded data too inconsistent for reliable enumeration, the drop-vs-caveated-ship call is a
+  **clinician sign-off**, not a product one. (ii) **Clozapine/CMAS** must have a committed
+  trigger/date in P4, not be deferred indefinitely (sentinel-event category).
+
+None of these change the architecture or the honest framing; they tighten placement,
+disclosure and governance. A1 and A3 are the two that gate the highest scorers' full
+confidence.
+
 ## 8. Recommended first step
 
 Build **P1 (readiness check, internal)** — it needs no cohort enumeration, is the mode the
