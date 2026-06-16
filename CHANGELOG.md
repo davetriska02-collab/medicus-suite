@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.111.0] — 2026-06-16
+
+### Usability: legibility and plain-language fixes from The Practice appraisal
+
+Acting on the synthetic whole-suite usability appraisal
+(`docs/appraisal/PRACTICE-whole-suite-ui-theming-2026-06-16.md`). These are
+display/copy changes only — no clinical-rule, threshold or scope changes.
+
+- **Triage strip now reads in plain words.** The persistent top strip showed
+  only the two-letter bucket codes (`NM / MR / NA / AR`), which four personas
+  across the tech-literacy gradient could not decode on sight. It now shows the
+  full labels (New med / Med reply / New admin / Admin reply) — the data was
+  already present, the strip just chose the short form. (U1)
+- **"N unmatched" in the Sentinel audit headline is now a link**, not a dead-end
+  number. Clicking it opens and scrolls to the existing "Meds without a
+  monitoring rule" section. That section's note now states plainly that the
+  medicines **were read from the record successfully** and simply did not map to
+  a rule — closing the nurse/pharmacist worry that "unmatched" might mean a
+  silent extraction failure. (U2)
+- **Demand meter now shows its scale.** The headroom bars on Today carried their
+  threshold only in an invisible aria-label; they now print a small caption
+  ("busy at N · limit N") so the bar has a visible denominator. (U3)
+- **Submissions subtitle disambiguated.** "Live count of inbound work" read to a
+  practice manager as outbound QOF submissions; it now says "Inbound request
+  volume — counts work received, not items submitted". (R1)
+- **Reception intro copy in plainer language.** "Capture a structured history" →
+  "Ask the caller a set of standard questions"; the red-flag note now explains
+  that a YES means stop and follow the on-screen action "which tells you exactly
+  who to contact", rather than the unexplained "escalate straight away". The
+  per-pathway escalation action text itself is unchanged (clinical content). (G2)
+
 ## [v3.110.2] — 2026-06-16
 
 ### CQC Inspection Readiness: discoverable from Settings

@@ -493,6 +493,18 @@
   opacity: 0.6;
 }
 
+/* Scale caption under the meter so the bar isn't a scaleless mystery: names
+   the amber ("busy at") and red ("limit") thresholds the fill is measured
+   against. The count above the bar is the value; this is the denominator. */
+.today-demand-meter-cap {
+  display: flex;
+  justify-content: space-between;
+  margin: -4px 0 6px;
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Sweep ───────────────────────────────────────────────────────────────────── */
 
 .today-sweep-summary {

@@ -186,7 +186,7 @@ export async function init(el) {
     <div class="rcp-module">
       <div class="rcp-head">
         <h2 class="rcp-title">Reception</h2>
-        <span class="rcp-subtitle">Capture a structured history — a clinician always reviews and decides.</span>
+        <span class="rcp-subtitle">Ask the caller a set of standard questions — a clinician always reviews and decides.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
       <div class="rcp-card" id="rcpCaptureCard"><div class="rcp-card-title">Guided capture</div><div class="rcp-card-body" id="rcpCaptureBody"></div></div>
@@ -473,7 +473,7 @@ function renderPathwayPicker(_activeDraft) {
 
   const note = _organising
     ? `<div class="rcp-fineprint">${alpha ? 'Switch to &ldquo;Manual&rdquo; to drag tiles into your own order. ' : 'Drag tiles to reorder. '}Tap the dot to colour-label a tile. Colours and order organise your tiles only &mdash; they are not a clinical flag.</div>`
-    : `<div class="rcp-picker-note">Pick the problem that best matches what the caller describes. Red-flag questions come first — any YES means escalate straight away.</div>`;
+    : `<div class="rcp-picker-note">Pick the problem that best matches what the caller describes. Red-flag (safety) questions come first — if the caller answers YES to any, stop and follow the on-screen action, which tells you exactly who to contact.</div>`;
 
   body.innerHTML = `${toolbar}${note}<div class="rcp-pathway-grid${_organising ? ' rcp-organising' : ''}">${tiles}</div>`;
 

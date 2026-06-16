@@ -151,7 +151,8 @@ const TAB_HELP = {
   record: {
     title: 'Record',
     what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
+    firstStep:
+      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   activity: {
     title: 'Activity',
@@ -959,7 +960,11 @@ function renderStrip(patients) {
     .map((p) => {
       const mins = p.minutesWaiting;
       const cls =
-        mins != null && mins >= T.red ? 'wr-chip-red' : mins != null && mins >= T.amber ? 'wr-chip-amber' : 'wr-chip-ok';
+        mins != null && mins >= T.red
+          ? 'wr-chip-red'
+          : mins != null && mins >= T.amber
+            ? 'wr-chip-amber'
+            : 'wr-chip-ok';
       const wait = mins != null ? ` · ${mins}m` : '';
       return `<span class="wr-chip ${cls}">${escStrip(p.name)}${wait}</span>`;
     })
@@ -1226,7 +1231,7 @@ function renderRmStrip(result, practiceCode, assigneeId) {
         .join(' ');
       const clickUrl = window.RequestMonitor.buildClickUrl(practiceCode, b.taskType, b.status, assigneeId);
       return `<span class="${cls}" data-rm-url="${escStrip(clickUrl)}" title="${escStrip(b.label)}">
-      <span class="rm-pill-label">${escStrip(b.short)}</span>
+      <span class="rm-pill-label">${escStrip(b.label)}</span>
       <span class="rm-pill-count">${count}</span>
     </span>`;
     })
