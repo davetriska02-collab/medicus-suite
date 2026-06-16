@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.103.0] — 2026-06-16
+
+### Referrals: no longer need to "open the report once" (headless discovery)
+
+Referral data is now fetched without first opening the Medicus Clinical Audit Report
+page (plan: `docs/plans/REFERRALS-HEADLESS-DISCOVERY-PLAN.md`).
+
+- **Headless discovery.** A new `ReferralsApi.ensureReferralsDiscovery()` constructs the
+  referrals **config** endpoint from the practice code, fetches it credentialed to
+  validate the deployment, derives and validates the **data** template, and stores it —
+  exactly the URLs the in-page content script used to capture, but with no tab open. URL
+  only is persisted; never patient rows. On any failure it returns null and falls back to
+  the existing in-page discovery + the friendly prompt, so the worst case is no worse than
+  before. The Referrals tab now runs this automatically on load when no template is stored.
+- **Bug fix:** the Practice Report's referrals section never populated — `fetchReferralsRange`
+  called the API without the captured template URL and always threw "No discovered URL".
+  It now uses the stored template (or runs headless discovery), so referrals appear in the
+  report.
+- **Stale-template self-heal.** If a captured URL goes stale (404, or it starts returning
+  the config response), the Referrals module now clears it, attempts one re-discovery, and
+  otherwise shows a calm "reconnect — open the report once" prompt instead of a dead error.
+- The Practice Report's referrals section, when not yet available, now shows a visible
+  "not enabled yet" line rather than vanishing silently.
+
+Honours the repo's "never construct URLs blindly" doctrine by validating every constructed
+URL against the live response before storing it. Tests: `test-referrals-discovery.js` (37,
+incl. PHI-not-persisted guards); full suite 75/75; verified end-to-end via the harness.
+
 ## [v3.102.0] — 2026-06-16
 
 ### Practice Report — design-crit + Practice review fixes

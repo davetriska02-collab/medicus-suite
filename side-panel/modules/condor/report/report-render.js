@@ -220,7 +220,16 @@ function renderActivity(report) {
 
 function renderReferrals(report) {
   const r = report.referrals;
-  if (!r || !r.byPriority) return '';
+
+  // Section is enabled (we are called) but no data yet — show a calm enable-prompt.
+  if (!r || !r.byPriority) {
+    return (
+      `<section class="pr-card"><h2>Referrals</h2>` +
+      `<p class="pr-note">Not enabled yet. Open the Medicus Referrals &rarr; Clinical Audit Report once to include referral figures in this report.</p>` +
+      `</section>`
+    );
+  }
+
   const prio = Object.entries(r.byPriority)
     .filter(([, n]) => n)
     .map(([k, n]) => `<tr><td>${esc(PRIORITY_LABELS[k] || k)}</td><td class="pr-num">${n}</td></tr>`)
