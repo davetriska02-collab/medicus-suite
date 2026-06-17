@@ -5,13 +5,29 @@
       "file": "docs/CLINICAL-SAFETY-NOTICE.md",
       "last_cso_review_version": "3.64.0",
       "last_cso_review_date": "2026-06-13",
-      "notes": "CSN v3.8. Last full CSO clinical-hazard review at 3.64.0 (Dr Dave Triska, 2026-06-13). Pending review must fold in v3.91.2 attribute-injection-XSS remediation, PDF.js 4.x upgrade, and all intervening clinical-chip changes since 3.64."
+      "incremental_reviews": [
+        {
+          "version": "3.114.0",
+          "date": "2026-06-17",
+          "scope": "Clinical-matching changes only (single ACB scorer, STOPP NSAID/aspirin term parity, completeness + contract-test CI). Keeper-prepared; CSO sign-off by merge.",
+          "doc_version": "3.9"
+        }
+      ],
+      "notes": "Last FULL CSO clinical-hazard re-baseline at 3.64.0 (Dr Dave Triska, 2026-06-13). last_cso_review_version is deliberately left at 3.64.0 so the doc-version gate keeps surfacing the outstanding backlog. A full review must still fold in the v3.91.2 attribute-injection-XSS remediation, the PDF.js 4.x upgrade, and all intervening clinical-chip changes from 3.65 to 3.113. The v3.114.0 clinical-matching changes were reviewed and documented incrementally on 2026-06-17 (see HAZARD-LOG H-031 / H-006 / H-016 and CSN limitation 13)."
     },
     {
       "file": "docs/HAZARD-LOG.md",
       "last_cso_review_version": "3.64.0",
       "last_cso_review_date": "2026-06-13",
-      "notes": "Hazard Log v3.9 (incl. H-027..029). Last full CSO clinical-hazard review at 3.64.0 (Dr Dave Triska, 2026-06-13). Pending review must assess hazards introduced since 3.64 and cover the XSS and PDF.js vectors."
+      "incremental_reviews": [
+        {
+          "version": "3.114.0",
+          "date": "2026-06-17",
+          "scope": "Added H-031 (cross-surface clinical-score divergence, closed by the single ACB scorer); updated H-016 and H-006 controls for the STOPP term parity, single scorer, completeness CI and producer->consumer contract tests. Full Keeper currency sweep of all 6 rule domains run; no rule-file change applied (WebFetch 403 — source pages unverifiable; findings WebSearch-corroborated only).",
+          "doc_version": "3.10"
+        }
+      ],
+      "notes": "Hazard Log v3.10. Last FULL CSO clinical-hazard re-baseline at 3.64.0 (Dr Dave Triska, 2026-06-13). last_cso_review_version deliberately left at 3.64.0 so the gate keeps flagging the backlog. A full review must still assess hazards introduced from 3.65 to 3.113 and cover the XSS and PDF.js vectors. The v3.114.0 clinical-matching delta was reviewed and hazard-assessed incrementally on 2026-06-17 (H-031 + H-006/H-016 control updates)."
     },
     {
       "file": "docs/SOUP.md",

@@ -59,6 +59,17 @@ the Clinical Event Ledger, was deliberately deferred).
   shared constant in the Reception and Sweep tabs (with a fallback so a safety
   caveat can never silently drop).
 
+**Clinical-safety governance (Keeper + CSO pass, 2026-06-17):** a combined Keeper
+currency sweep of all six rule domains plus a CSO hazard review of the clinical-matching
+changes. No rule file changed (external source pages were unreachable this run — WebFetch
+403 — so per the verification discipline nothing unverified was applied; four candidates
+are held for CSO verification, incl. a possible RSV 80+ expansion). Hazard log gains H-031
+(cross-surface clinical-score divergence, closed by the single ACB scorer) with updated
+H-006/H-016 controls; CLINICAL-SAFETY-NOTICE and the CSO-review ledger record the
+incremental v3.114.0 review. The full hazard re-baseline for v3.65–v3.113 remains
+outstanding and is still surfaced by the doc-version gate. See
+`docs/keeper/KEEPER-CSO-pass-2026-06-17.md`.
+
 **Supporting hardening (Wave A):** CQC badge CSS coverage + render assertions;
 Practice-report data fixes (honoured hidden-types filter, labelled capacity
 threshold, prior-period comparison); doc-version gate now reads a CSO-review ledger
