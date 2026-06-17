@@ -23,7 +23,7 @@
     }
   }
 
-  const { buildReadiness, diffReadiness } = require('./engine/cqc-evidence.js');
+  const { buildReadiness, buildReconciliation, diffReadiness } = require('./engine/cqc-evidence.js');
   const RuleCurrency = require('./shared/rule-currency.js');
 
   // ── Fixture rule files (real field names, trimmed) ──────────────────────────
@@ -38,17 +38,33 @@
       {
         type: 'drug-monitoring',
         id: 'methotrexate-maintenance',
+        drugClass: 'DMARD',
         drug: { match: ['Methotrexate', 'maxtrex', 'metoject', 'methotrexate'] }, // dup + case variant
+        tests: [
+          { name: 'FBC', intervalDays: 84 },
+          { name: 'U&E', intervalDays: 84 },
+          { name: 'LFT', intervalDays: 84 },
+        ],
       },
       {
         type: 'drug-monitoring',
         id: 'lithium-maintenance',
+        drugClass: 'Mood stabiliser',
         drug: { match: ['lithium', 'priadel', 'camcolit'] },
+        tests: [
+          { name: 'Lithium level', intervalDays: 90 },
+          { name: 'U&E', intervalDays: 180 },
+        ],
       },
       {
         type: 'drug-monitoring',
         id: 'amiodarone-maintenance',
+        drugClass: 'Antiarrhythmic',
         drug: { match: ['amiodarone', 'cordarone'] },
+        tests: [
+          { name: 'TFT', intervalDays: 180 },
+          { name: 'LFT', intervalDays: 180 },
+        ],
       },
       // a non-monitoring rule should NOT be counted as a monitoring rule
       { type: 'other-thing', id: 'noise', drug: { match: ['ignored-but-still-a-term'] } },
@@ -108,11 +124,11 @@
   // de-duped (case-insensitive): "Methotrexate"/"methotrexate" collapse to one
   const lower = mt.map((s) => s.toLowerCase());
   check(new Set(lower).size === lower.length, 'matchedTerms de-duped (case-insensitive)');
+  check(JSON.stringify(lower) === JSON.stringify([...lower].sort((a, b) => a.localeCompare(b))), 'matchedTerms sorted');
   check(
-    JSON.stringify(lower) === JSON.stringify([...lower].sort((a, b) => a.localeCompare(b))),
-    'matchedTerms sorted'
+    !mt.includes('ignored-but-still-a-term'),
+    'matched terms come ONLY from drug-monitoring rules (non-monitoring rule excluded)'
   );
-  check(!mt.includes('ignored-but-still-a-term'), 'matched terms come ONLY from drug-monitoring rules (non-monitoring rule excluded)');
 
   check(r.coverage.drug.ruleCount === 3, 'drug ruleCount counts only drug-monitoring rules (3)');
   check(r.coverage.drug.lastUpdated === '2026-06-14', 'drug lastUpdated carried');
@@ -127,8 +143,14 @@
   check(r.coverage.alert.ruleCount === 3, 'alert ruleCount = 3');
 
   check(r.coverage.codedDataOnly === true, 'codedDataOnly flag true');
-  check(typeof r.coverage.undercountCaveat === 'string' && /floor, not a ceiling/.test(r.coverage.undercountCaveat), 'undercountCaveat present (A5)');
-  check(typeof r.coverage.keeperProvenance === 'string' && r.coverage.keeperProvenance.length > 0, 'keeperProvenance non-empty (A3)');
+  check(
+    typeof r.coverage.undercountCaveat === 'string' && /floor, not a ceiling/.test(r.coverage.undercountCaveat),
+    'undercountCaveat present (A5)'
+  );
+  check(
+    typeof r.coverage.keeperProvenance === 'string' && r.coverage.keeperProvenance.length > 0,
+    'keeperProvenance non-empty (A3)'
+  );
 
   // Currency passthrough
   check(r.currency.overall === currency.overall, 'currency.overall passed through');
@@ -140,18 +162,36 @@
   const meds = qs.find((s) => s.qualityStatement === 'Safe and effective medicines management');
   const gov = qs.find((s) => s.qualityStatement === 'Governance: safety rules kept current');
   const transp = qs.find((s) => s.qualityStatement === 'Medicines coverage transparency');
-  check(meds && meds.keyQuestion === 'Safe' && meds.evidenceCategory === 'Processes', 'medicines-mgmt statement: Safe / Processes');
-  check(gov && gov.keyQuestion === 'Well-led' && gov.evidenceCategory === 'Processes', 'governance statement: Well-led / Processes');
-  check(transp && transp.keyQuestion === 'Safe' && transp.evidenceCategory === 'Processes', 'coverage-transparency statement: Safe / Processes');
+  check(
+    meds && meds.keyQuestion === 'Safe' && meds.evidenceCategory === 'Processes',
+    'medicines-mgmt statement: Safe / Processes'
+  );
+  check(
+    gov && gov.keyQuestion === 'Well-led' && gov.evidenceCategory === 'Processes',
+    'governance statement: Well-led / Processes'
+  );
+  check(
+    transp && transp.keyQuestion === 'Safe' && transp.evidenceCategory === 'Processes',
+    'coverage-transparency statement: Safe / Processes'
+  );
 
   // RAG derives from currency
-  check(meds.rag === (currency.files.find((f) => f.id === 'drug') || {}).level, 'medicines RAG derives from drug currency level');
+  check(
+    meds.rag === (currency.files.find((f) => f.id === 'drug') || {}).level,
+    'medicines RAG derives from drug currency level'
+  );
   check(gov.rag === currency.overall, 'governance RAG = currency.overall');
   check(transp.rag === 'green', 'coverage-transparency RAG green when matchedTerms present');
 
   // Provenance fields on each statement
-  check(qs.every((s) => s.provenance && s.provenance.asAt && s.provenance.source), 'every statement carries provenance{asAt,source}');
-  check(meds.provenance.source.includes('rules/drug-rules.json') && meds.provenance.source.includes('specVersion'), 'medicines provenance.source names file + specVersion');
+  check(
+    qs.every((s) => s.provenance && s.provenance.asAt && s.provenance.source),
+    'every statement carries provenance{asAt,source}'
+  );
+  check(
+    meds.provenance.source.includes('rules/drug-rules.json') && meds.provenance.source.includes('specVersion'),
+    'medicines provenance.source names file + specVersion'
+  );
 
   // No anchor → delta null
   check(r.delta === null, 'no anchor → delta null');
@@ -163,9 +203,14 @@
     todayISO
   );
   const rStale = buildReadiness({ drug }, { todayISO, currency: staleCurrency, anchor: null });
-  const medsStale = rStale.qualityStatements.find((s) => s.qualityStatement === 'Safe and effective medicines management');
+  const medsStale = rStale.qualityStatements.find(
+    (s) => s.qualityStatement === 'Safe and effective medicines management'
+  );
   check(medsStale.rag === 'amber' || medsStale.rag === 'red', 'stale drug rules → medicines RAG amber/red');
-  check(typeof medsStale.toFix === 'string' && /Keeper/.test(medsStale.toFix), 'stale drug rules → toFix mentions The Keeper');
+  check(
+    typeof medsStale.toFix === 'string' && /Keeper/.test(medsStale.toFix),
+    'stale drug rules → toFix mentions The Keeper'
+  );
 
   // ── diffReadiness ───────────────────────────────────────────────────────────
   console.log('\n--- diffReadiness ---');
@@ -198,12 +243,135 @@
   console.log('\n--- privacy: system metadata only ---');
   const blob = JSON.stringify(r).toLowerCase();
   // Fields that would indicate patient data leaked in
-  const forbidden = ['nhsnumber', 'nhs number', 'dateofbirth', 'date of birth', 'patientname', 'firstname', 'surname', 'patientid'];
-  check(forbidden.every((k) => !blob.includes(k)), 'no patient-identifiable field names in output');
+  const forbidden = [
+    'nhsnumber',
+    'nhs number',
+    'dateofbirth',
+    'date of birth',
+    'patientname',
+    'firstname',
+    'surname',
+    'patientid',
+  ];
+  check(
+    forbidden.every((k) => !blob.includes(k)),
+    'no patient-identifiable field names in output'
+  );
   // No 10-digit NHS-number-like token
   check(!/\b\d{10}\b/.test(JSON.stringify(r)), 'no NHS-number-shaped token in output');
   // No cohort/patient counts implied — coverage carries codedDataOnly + caveat, not patient totals
   check(r.coverage.codedDataOnly === true, 'output explicitly coded-data-only (no cohort enumeration in P1)');
+
+  // ── buildReconciliation ─────────────────────────────────────────────────────
+  console.log('\n--- buildReconciliation ---');
+
+  // Produce a reconciliation directly from the fixture drug file.
+  const recon = buildReconciliation(drug);
+
+  check(recon && typeof recon === 'object', 'buildReconciliation returns an object');
+  check(Array.isArray(recon.entries), 'reconciliation has entries array');
+  check(typeof recon.caveat === 'string' && recon.caveat.length > 0, 'reconciliation carries coded-data caveat');
+  check(/coded/i.test(recon.caveat), 'caveat mentions coded data');
+  check(/floor/i.test(recon.caveat) || /ceiling/i.test(recon.caveat), 'caveat mentions floor/ceiling');
+
+  // One entry per enabled drug-monitoring rule (3 in fixture: methotrexate, lithium, amiodarone).
+  check(recon.entries.length === 3, 'one reconciliation entry per enabled drug-monitoring rule (3 in fixture)');
+
+  // No entry for the noise rule (type 'other-thing').
+  check(
+    recon.entries.every((e) => e.ruleId !== 'noise'),
+    'non-drug-monitoring rules produce no reconciliation entry'
+  );
+
+  // Each entry must carry a non-empty definition string and NO numeric count field.
+  check(
+    recon.entries.every((e) => typeof e.definition === 'string' && e.definition.length > 0),
+    'every entry carries a non-empty definition string'
+  );
+  check(
+    recon.entries.every((e) => !('count' in e) && !('patientCount' in e) && !('cohortSize' in e)),
+    'no numeric count field on any reconciliation entry (honesty invariant)'
+  );
+
+  // Check that each entry has required fields.
+  check(
+    recon.entries.every((e) => e.ruleId && e.drugName && Array.isArray(e.matchTerms) && e.matchTerms.length > 0),
+    'every entry has ruleId, drugName and matchTerms'
+  );
+
+  // Definition references the drug name and a test name.
+  const mtkEntry = recon.entries.find((e) => e.ruleId === 'methotrexate-maintenance');
+  check(mtkEntry != null, 'methotrexate-maintenance entry present');
+  check(mtkEntry && /methotrexate/i.test(mtkEntry.definition), 'methotrexate definition names the drug');
+  check(
+    mtkEntry && /FBC|LFT|U&E/i.test(mtkEntry.definition),
+    'methotrexate definition names at least one required test'
+  );
+  check(mtkEntry && /coded/i.test(mtkEntry.definition), 'definition carries the coded-data qualifier');
+
+  // Definition contains an interval (derived from the rule's own intervalDays).
+  check(
+    mtkEntry && /week|month|year|day/i.test(mtkEntry.definition),
+    'methotrexate definition carries a time interval'
+  );
+
+  // matchTerms carries the full drug.match list from the rule.
+  check(
+    mtkEntry &&
+      mtkEntry.matchTerms.some((t) => /methotrexate/i.test(t)) &&
+      mtkEntry.matchTerms.some((t) => /maxtrex/i.test(t)),
+    'methotrexate entry matchTerms includes both generic and brand'
+  );
+
+  // buildReconciliation on null/empty input is safe (no throw).
+  const reconNull = buildReconciliation(null);
+  check(Array.isArray(reconNull.entries) && reconNull.entries.length === 0, 'null drug file → empty entries (safe)');
+
+  const reconEmpty = buildReconciliation({ rules: [] });
+  check(Array.isArray(reconEmpty.entries) && reconEmpty.entries.length === 0, 'empty rules → empty entries (safe)');
+
+  // A disabled rule must not appear in reconciliation.
+  const disabledDrug = {
+    rules: [
+      {
+        type: 'drug-monitoring',
+        enabled: false,
+        id: 'disabled-rule',
+        drug: { match: ['foo'] },
+        tests: [{ name: 'FBC', intervalDays: 84 }],
+      },
+      {
+        type: 'drug-monitoring',
+        enabled: true,
+        id: 'active-rule',
+        drug: { match: ['bar'] },
+        tests: [{ name: 'LFT', intervalDays: 84 }],
+      },
+    ],
+  };
+  const reconDisabled = buildReconciliation(disabledDrug);
+  check(
+    reconDisabled.entries.length === 1 && reconDisabled.entries[0].ruleId === 'active-rule',
+    'disabled rules are excluded from reconciliation'
+  );
+
+  // ── reconciliation carried on buildReadiness output ─────────────────────────
+  console.log('\n--- reconciliation on buildReadiness output ---');
+  check(r.reconciliation && typeof r.reconciliation === 'object', 'readiness object carries reconciliation');
+  check(
+    Array.isArray(r.reconciliation.entries) && r.reconciliation.entries.length > 0,
+    'readiness.reconciliation.entries non-empty'
+  );
+  check(
+    typeof r.reconciliation.caveat === 'string' && r.reconciliation.caveat.length > 0,
+    'readiness.reconciliation.caveat present'
+  );
+
+  // Honesty: reconciliation entries must never carry a count field.
+  check(
+    r.reconciliation.entries.every((e) => !('count' in e) && !('patientCount' in e)),
+    'readiness.reconciliation entries carry no fabricated patient count (honesty invariant)'
+  );
 
   console.log(`\n${passed} passed, ${failed} failed`);
 })().catch((e) => {

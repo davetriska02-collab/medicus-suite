@@ -31,7 +31,11 @@
   // These mirror the terms in HIGH_RISK_DRUGS (visualiser-core.js) where the
   // loading model does not allow direct reuse. Comments reference the source.
 
-  // NSAIDs — from HIGH_RISK_DRUGS id:'nsaid_long' + common UK brands
+  // Full UK NSAID generic set (BNF 10.1.1 / MHRA NSAID class), kept in parity
+  // with the content.js NSAIDS regex and alert-library.json. Substring,
+  // case-insensitive (hasDrug). A missing generic is a SILENT STOPP miss
+  // (patient on it + eGFR<50 never flags), so the list must stay complete —
+  // guarded by test-term-coverage.js / term-coverage-snapshot.json.
   const NSAID_TERMS = [
     'ibuprofen',
     'naproxen',
@@ -39,12 +43,33 @@
     'celecoxib',
     'etoricoxib',
     'meloxicam',
+    'piroxicam',
+    'tenoxicam',
+    'indometacin', // UK spelling (BNF/dm+d)
+    'indomethacin', // US/legacy spelling — not a substring of 'indometacin'
+    'sulindac',
+    'ketoprofen',
+    'dexketoprofen',
+    'tiaprofenic',
+    'mefenamic',
+    'tolfenamic',
+    'fenoprofen',
+    'aceclofenac',
+    'nabumetone',
+    'etodolac',
+    'flurbiprofen',
     // Common UK brand names that may appear in med lists without generic name:
     'brufen', // ibuprofen
     'nurofen', // ibuprofen (OTC brand; may appear on acute prescription)
     'voltarol', // diclofenac
     'arcoxia', // etoricoxib
     'mobic', // meloxicam
+    'feldene', // piroxicam
+    'ponstan', // mefenamic acid
+    'froben', // flurbiprofen
+    'relifex', // nabumetone
+    'surgam', // tiaprofenic acid
+    'lodine', // etodolac
   ];
 
   // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
@@ -82,7 +107,19 @@
   // We match 'aspirin' broadly but exclude compound names that contain aspirin
   // as a component word in a safe context — however, per CLAUDE.md, we keep
   // exclusions minimal. A simple prefix check for low-dose forms:
-  const ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible'];
+  // Low-dose forms (dm+d generic names + word-order variant) and the UK 75mg
+  // branded preparations (Nu-seals, Caprin, Micropirin) — a record may show only
+  // the brand, which would otherwise silently miss the primary-prevention check.
+  const ASPIRIN_TERMS = [
+    'aspirin 75',
+    'aspirin 300',
+    'aspirin tablet',
+    'aspirin dispersible',
+    'aspirin gastro', // "aspirin gastro-resistant 75mg tablets" word-order variant
+    'nu-seals', // AZ aspirin 75mg
+    'caprin', // Pinewood aspirin 75mg (enteric-coated)
+    'micropirin', // M&A Pharmachem aspirin 75mg
+  ];
 
   // Long-acting sulfonylureas (glibenclamide, glimepiride)
   const LONG_SU_TERMS = ['glibenclamide', 'glimepiride'];

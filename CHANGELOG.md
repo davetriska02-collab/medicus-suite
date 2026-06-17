@@ -2,6 +2,80 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.114.0] — 2026-06-17
+
+### Council-of-Daves roadmap (steps 1, 3, 4, 5) — clinical-matching integrity, contract tests, honest figures, provenance canon
+
+A whole-suite hardening pass converging the five-Dave council's roadmap (step 2,
+the Clinical Event Ledger, was deliberately deferred).
+
+**Step 3 — kill the silent missing alert (canonical clinical-term lists):**
+
+- **Single ACB scorer.** The in-queue Anticholinergic Cognitive Burden score is
+  now computed by the one canonical scorer (`engine/acb-scores.js`,
+  `window.ACBScores.computeACB`) instead of a separate hardcoded table in the
+  content script that had drifted. Strong anticholinergics — olanzapine,
+  quetiapine, clozapine, chlorpromazine, clomipramine, doxepin, diphenhydramine,
+  procyclidine, trihexyphenidyl — previously scored **0 in the queue HUD but 3 in
+  the record/engine view**; they now score identically everywhere. The queue also
+  switches to per-drug additive ACB (the correct clinical model; the old table
+  summed once per class). Added dosulepin/dothiepin (score-3 TCA) to the engine.
+- **STOPP term parity.** `engine/stopp-start.js` NSAID list brought up to the full
+  UK generic set + major brands (piroxicam, tenoxicam, indometacin/indomethacin,
+  sulindac, ketoprofen, dexketoprofen, tiaprofenic, mefenamic, tolfenamic,
+  fenoprofen, aceclofenac, nabumetone, etodolac, flurbiprofen, plus Feldene/
+  Ponstan/Froben/Relifex/Surgam/Lodine). Low-dose aspirin now also matches the
+  gastro-resistant word-order variant and the UK 75mg brands (Nu-seals, Caprin,
+  Micropirin). Each was a previously **silent** STOPP miss.
+- **Completeness CI.** `test-term-coverage.js` + `rules/term-coverage-snapshot.json`
+  guard these hand-maintained class-term lists; the formerly-stranded terms are now
+  locked into `mustMatchAll`, and the resolved ACB divergences are kept as
+  regression sentinels. New silent drift fails CI.
+
+**Step 1 — producer→consumer contract-test layer:**
+
+- `test-chip-contract.js` drives the real engine producers into the real renderers
+  for every chip type (drug-monitoring, QOF indicator, drug-combo, event-count,
+  composite, vaccine, evidence panel) plus the result-triage path against the
+  shipped chip labels, asserting each renderer reads exactly the fields the engine
+  emits. The CQC engine↔renderer field-drift class of bug now fails CI.
+
+**Step 4 — Record "Copy summary":**
+
+- The Record tab can copy a plain-text summary of the on-screen snapshot, with a
+  provenance header and an explicit "live snapshot, not a complete record — verify
+  before acting" caveat and gap-markers. No fabrication: fields that can't be
+  derived are omitted, never invented.
+
+**Step 5 — honest operational figures + provenance canon:**
+
+- **CQC reconciliation.** The CQC evidence pack now lists the monitoring cohorts to
+  run in Medicus with a blank "your count: ____" column rather than implying the
+  extension can enumerate the whole population (which, read-only, it cannot).
+- **Provenance canon.** New `shared/provenance.js` centralises the safety caveats
+  ("no alert ≠ monitoring complete", "live snapshot, not a complete record",
+  "supporting evidence, not proof") and a no-fabrication provenance/as-at
+  formatter; the triplicated "no alert ≠ all clear" literal is replaced by the
+  shared constant in the Reception and Sweep tabs (with a fallback so a safety
+  caveat can never silently drop).
+
+**Clinical-safety governance (Keeper + CSO pass, 2026-06-17):** a combined Keeper
+currency sweep of all six rule domains plus a CSO hazard review of the clinical-matching
+changes. No rule file changed (external source pages were unreachable this run — WebFetch
+403 — so per the verification discipline nothing unverified was applied; four candidates
+are held for CSO verification, incl. a possible RSV 80+ expansion). Hazard log gains H-031
+(cross-surface clinical-score divergence, closed by the single ACB scorer) with updated
+H-006/H-016 controls; CLINICAL-SAFETY-NOTICE and the CSO-review ledger record the
+incremental v3.114.0 review. The full hazard re-baseline for v3.65–v3.113 remains
+outstanding and is still surfaced by the doc-version gate. See
+`docs/keeper/KEEPER-CSO-pass-2026-06-17.md`.
+
+**Supporting hardening (Wave A):** CQC badge CSS coverage + render assertions;
+Practice-report data fixes (honoured hidden-types filter, labelled capacity
+threshold, prior-period comparison); doc-version gate now reads a CSO-review ledger
+and reports how many minor releases each safety doc is behind; suite backup
+envelopes carry a synchronous integrity hash (legacy backups still import).
+
 ## [v3.113.1] — 2026-06-16
 
 ### Repo tooling: Virtual Dave agent + CI doc-gate resync

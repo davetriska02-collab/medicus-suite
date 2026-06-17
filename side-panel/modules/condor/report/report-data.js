@@ -240,15 +240,37 @@ export async function fetchDemandRange(siteId, startISO, endISO, { fetchImpl = f
 
 // Capacity (scheduled slots) per day across the range. Counts ALL slots scheduled
 // that day (filterPastTimes:false) — historical "remaining" is not meaningful.
+//
+// `hiddenTypes` mirrors the live Condor view: appointment types the user has unticked
+// (stored under `slots.hiddenTypes`) are EXCLUDED so the report capacity reconciles
+// with the dashboard. aggregateSlots uses an allowedTypes WHITELIST so we cannot pass
+// hiddenTypes directly — instead we aggregate all types then subtract the hidden ones
+// from the total, matching condor-data.js's `if (hiddenTypes.has(type)) return` pattern.
 export async function fetchCapacityRange(siteId, startISO, endISO, { hiddenTypes = null } = {}) {
   const dates = iterateDates(startISO, endISO);
   const raw = await fetchManyDates(siteId, dates, { concurrency: 5 });
-  const allowed = hiddenTypes ? null : null; // hidden-type filtering handled by caller if needed
+  // Build a Set for O(1) membership checks. null/empty → no exclusions.
+  const hiddenSet = hiddenTypes && hiddenTypes.length ? new Set(hiddenTypes) : null;
   const byDay = dates.map((date) => {
     const dayRaw = raw[date];
     if (!dayRaw || dayRaw.error) return { date, slots: null, sessions: null, error: dayRaw?.error || 'no data' };
-    const agg = aggregateSlots(dayRaw, { allowedTypes: allowed, filterPastTimes: false });
-    return { date, slots: agg.total, sessions: agg.sessionsCount, byType: agg.byType };
+    // Aggregate all types first (allowedTypes=null → include everything).
+    const agg = aggregateSlots(dayRaw, { allowedTypes: null, filterPastTimes: false });
+    // Then subtract hidden types from the total to match the live Condor view.
+    let filteredTotal = agg.total;
+    const filteredByType = {};
+    if (hiddenSet) {
+      for (const [type, count] of Object.entries(agg.byType || {})) {
+        if (hiddenSet.has(type)) {
+          filteredTotal -= count;
+        } else {
+          filteredByType[type] = count;
+        }
+      }
+    } else {
+      Object.assign(filteredByType, agg.byType);
+    }
+    return { date, slots: filteredTotal, sessions: agg.sessionsCount, byType: filteredByType };
   });
   return { byDay };
 }
@@ -307,9 +329,20 @@ export async function fetchReferralsRange(siteId, startISO, endISO) {
 export async function buildReport({ siteId, range, live = null, ppi = null } = {}) {
   if (!siteId) throw new Error('No practice code configured');
   const errors = [];
+
+  // Read slots.hiddenTypes so the report capacity honours the same exclusions as
+  // the live Condor dashboard — prevents silent divergence between the two views.
+  let hiddenTypes = null;
+  try {
+    const stored = await chrome.storage.local.get('slots.hiddenTypes');
+    hiddenTypes = stored['slots.hiddenTypes'] || null;
+  } catch {
+    // Non-fatal: if storage is unavailable, proceed without filtering.
+  }
+
   const [demandRes, capacityRes, activityRes, referralsRes, snapshots] = await Promise.allSettled([
     fetchDemandRange(siteId, range.start, range.end),
-    fetchCapacityRange(siteId, range.start, range.end),
+    fetchCapacityRange(siteId, range.start, range.end, { hiddenTypes }),
     fetchActivityRange(siteId, range.start, range.end),
     fetchReferralsRange(siteId, range.start, range.end),
     loadSnapshots(),
@@ -327,6 +360,26 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
   const allSnapshots = snapshots.status === 'fulfilled' ? snapshots.value : [];
   const rangeSnapshots = allSnapshots.filter((s) => s.date >= range.start && s.date <= range.end);
 
+  // Prior-period comparison: fetch the equal-length window immediately before this
+  // range so the report can show an honest like-for-like delta.
+  // Labelled explicitly in the output so the renderer can surface the exact window.
+  const prev = previousRange(range.start, range.end);
+  const [prevDemandRes, prevCapacityRes] = await Promise.allSettled([
+    fetchDemandRange(siteId, prev.start, prev.end),
+    fetchCapacityRange(siteId, prev.start, prev.end, { hiddenTypes }),
+  ]);
+
+  let priorDemand = null;
+  if (prevDemandRes.status === 'fulfilled') {
+    const pd = prevDemandRes.value;
+    if (pd?.byDay) priorDemand = { byDay: pd.byDay, summary: summariseSeries(pd.byDay) };
+  }
+
+  let priorCapacity = null;
+  if (prevCapacityRes.status === 'fulfilled') {
+    priorCapacity = prevCapacityRes.value;
+  }
+
   return {
     siteId,
     range,
@@ -337,6 +390,11 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
     referrals: pick(referralsRes, 'referrals'),
     currentSnapshot: live ? buildSnapshotRow(live, ppi) : null,
     snapshotHistory: rangeSnapshots,
+    // Prior period: the equal-length window immediately before this range.
+    // `priorRange` carries the explicit ISO dates so the renderer can label them.
+    priorRange: prev,
+    priorDemand,
+    priorCapacity,
     errors,
   };
 }

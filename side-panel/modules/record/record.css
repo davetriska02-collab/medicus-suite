@@ -23,6 +23,40 @@
   align-items: center;
   justify-content: space-between;
 }
+/* button cluster in the title row: Copy summary + Refresh */
+.rec-title-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Copy summary button */
+.rec-copy-btn {
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  border-radius: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.rec-copy-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.rec-copy-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.rec-copy-btn--ok {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green);
+}
 .rec-title {
   font-size: 15px;
   font-weight: 700;

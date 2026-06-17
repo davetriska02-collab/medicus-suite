@@ -24,6 +24,14 @@
 
 import { summariseActionChips, evaluateRedFlags, buildCaptureText, pharmacyFirstHint } from './reception-core.js';
 
+// Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
+// loaded as a classic script in panel.html / pop-out.html). Fall back to the
+// canonical literal if the global is somehow absent — a clinical-safety caveat
+// must never silently drop.
+const NO_ALERT_CAVEAT =
+  (typeof window !== 'undefined' && window.Provenance && window.Provenance.CAVEATS.NO_ALERT_NOT_ALL_CLEAR) ||
+  'No alert ≠ monitoring complete.';
+
 let container = null;
 let _bundledDoc = null; // reception-pathways.json document
 let _config = {}; // reception.config
@@ -364,7 +372,7 @@ function renderPatientCard() {
       <div class="rcp-pill-detail" id="rcpPillDetail">
         ${rows || '<div class="rcp-muted">No action-needed alerts in the current data.</div>'}
         ${filteredNote}
-        <div class="rcp-fineprint">No alert ≠ everything is up to date — the Monitoring tab has the full picture.</div>
+        <div class="rcp-fineprint">${NO_ALERT_CAVEAT} The Monitoring tab has the full picture.</div>
         <button class="rcp-link-btn" id="rcpGotoSentinel">Open Monitoring <span aria-hidden="true">→</span></button>
       </div>`;
   }

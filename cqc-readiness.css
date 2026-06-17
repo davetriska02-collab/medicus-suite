@@ -291,6 +291,9 @@ body {
 }
 
 /* ── RAG badges — WORD + colour (never colour alone) ──────────────────────── */
+/* .cqc-rag* is kept for reference but is NOT emitted by cqc-render.js (which
+   emits .cqc-badge / .cqc-badge-{green,amber,red,na} instead). Do not remove
+   without first verifying no other template references these classes. */
 .cqc-rag {
   font-size: 12px;
   font-weight: 700;
@@ -311,6 +314,33 @@ body {
   color: var(--red);
 }
 .cqc-rag-na {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--na);
+}
+
+/* ── cqc-badge* — the classes cqc-render.js ragBadge() actually emits.
+   Mirrors the .cqc-rag* visual treatment exactly (same pill shape, same
+   colours, same dark-mode tokens). ──────────────────────────────────────── */
+.cqc-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.cqc-badge-green {
+  background: rgba(26, 127, 55, 0.15);
+  color: var(--green);
+}
+.cqc-badge-amber {
+  background: rgba(180, 83, 9, 0.15);
+  color: var(--amber);
+}
+.cqc-badge-red {
+  background: rgba(193, 18, 31, 0.15);
+  color: var(--red);
+}
+.cqc-badge-na {
   background: rgba(107, 114, 128, 0.15);
   color: var(--na);
 }

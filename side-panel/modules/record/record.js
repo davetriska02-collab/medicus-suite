@@ -2,6 +2,12 @@
 //
 // Record (live) — the live-first Patient Record summary tab.
 //
+// buildRecordSummaryText — exported pure function that converts the same data
+// object render() uses into a provenance-stamped plain-text block for clipboard
+// copy. DISPLAY-COPY ONLY: transcribes what is already on screen; no inference,
+// no "impression", no clinical interpretation. The caveat is baked into the
+// copied text so it can never be mistaken for the record itself.
+//
 // WHAT IT IS
 // ----------
 // A snapshot view of the patient currently open in Medicus, sourced LIVE from
@@ -34,6 +40,8 @@
 //   → SentinelApiClient.fetchAll → SentinelNormalisers.normaliseAll
 //   → ACBScores.computeACB / StoppStart.computeStoppStart
 //   live monitoring/QOF chips → getSentinelSnapshot.chips
+
+import { copyText } from '../shared/export-util.js';
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
@@ -81,6 +89,7 @@ export function cleanup() {
   }
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
   _onRuntimeMsg = _onTabChange = _onDelegatedClick = null;
+  _lastModel = _lastChips = _lastStamp = null;
   container = null;
 }
 
@@ -92,7 +101,10 @@ function shell() {
       <div class="rec-head">
         <div class="rec-title-row">
           <h2 class="rec-title">Patient record</h2>
-          <button type="button" class="rec-refresh" id="recRefresh" title="Refresh from Medicus" aria-label="Refresh">⟳</button>
+          <div class="rec-title-btns">
+            <button type="button" class="rec-copy-btn" id="recCopySummary" disabled title="Copy plain-text summary of what is shown on screen" aria-label="Copy summary">Copy summary</button>
+            <button type="button" class="rec-refresh" id="recRefresh" title="Refresh from Medicus" aria-label="Refresh">⟳</button>
+          </div>
         </div>
         <div class="rec-source" id="recSource" aria-live="polite"></div>
       </div>
@@ -111,6 +123,12 @@ function shell() {
 // delegated listener lives on the persistent root).
 let _onDelegatedClick = null;
 
+// Last successfully rendered model — populated by render(), consumed by the
+// Copy summary button.  Intentionally module-local; never written to storage.
+let _lastModel = null;
+let _lastChips = null;
+let _lastStamp = null;
+
 function wireStaticControls() {
   container.querySelector('#recRefresh')?.addEventListener('click', () => load(true));
   container.querySelector('#recOpenDeep')?.addEventListener('click', () => {
@@ -120,6 +138,27 @@ function wireStaticControls() {
       /* no-op */
     }
   });
+
+  // Copy summary — button lives in the shell (not re-rendered), so a direct
+  // listener is fine.  Button is disabled until render() populates _lastModel.
+  const copyBtn = container.querySelector('#recCopySummary');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      if (!_lastModel) return;
+      const text = buildRecordSummaryText(_lastModel, _lastChips, _lastStamp);
+      const ok = await copyText(text);
+      if (ok) {
+        const prev = copyBtn.textContent;
+        copyBtn.textContent = 'Copied';
+        copyBtn.classList.add('rec-copy-btn--ok');
+        setTimeout(() => {
+          copyBtn.textContent = prev;
+          copyBtn.classList.remove('rec-copy-btn--ok');
+        }, 2000);
+      }
+    });
+  }
+
   // Retry button lives inside the re-rendered body, so delegate from the root
   // (listener survives setBody innerHTML replacement).
   _onDelegatedClick = (e) => {
@@ -258,6 +297,13 @@ function render(data, chips, errs) {
     'rec-source-live'
   );
 
+  // Store model so the Copy summary button can build the text on demand.
+  _lastModel = data;
+  _lastChips = chips;
+  _lastStamp = stamp;
+  const copyBtn = container?.querySelector('#recCopySummary');
+  if (copyBtn) copyBtn.disabled = false;
+
   const partial = Object.keys(errs).length
     ? `<div class="rec-partial">⚠ Some sections didn’t load (${esc(Object.keys(errs).join(', '))}). Showing what was returned.</div>`
     : '';
@@ -277,6 +323,185 @@ function render(data, chips, errs) {
      ${safetyCard(meds, problems, obs, pc, chips)}
      ${resultsCard(obs)}`
   );
+}
+
+// ── Copy summary — plain-text builder ────────────────────────────────────────
+//
+// DISPLAY-COPY ONLY.  Transcribes exactly what render() puts on screen.
+// No inference, no summarising, no "impression" section.  Provenance header
+// and the caveat are baked in so the pasted block can never be mistaken for
+// the record.
+//
+// Exported so test-record-summary.js can call it directly without a browser.
+//
+// Parameters match what render() already has:
+//   model  — normaliseAll output (data)
+//   chips  — live chip array (may be null)
+//   stamp  — "HH:MM" string already computed by render() (so the test can
+//             inject a fixed value and the copied text matches what was shown)
+export function buildRecordSummaryText(model, chips, stamp) {
+  const pc = (model && model.patientContext) || {};
+  const meds = (model && model.medications) || [];
+  const problems = (model && model.problems) || [];
+  const past = (model && model.pastProblems) || [];
+  const obs = (model && model.observations) || [];
+
+  const lines = [];
+
+  // ── Provenance header ──────────────────────────────────────────────────────
+  const atStamp = stamp || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  lines.push(`Patient record summary — as at ${atStamp}`);
+  lines.push('');
+
+  // ── Demographics ───────────────────────────────────────────────────────────
+  lines.push('PATIENT');
+  const name = pc.patientName || 'Unknown patient';
+  const demoBits = [name];
+  if (pc.ageYears != null) demoBits.push(`${pc.ageYears}y`);
+  if (pc.sex) demoBits.push(pc.sex);
+  if (pc.dob) demoBits.push(`DOB ${pc.dob}`);
+  lines.push(demoBits.join(' · '));
+  if (pc.nhsNumber) {
+    const nhs = String(pc.nhsNumber).replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+    lines.push(`NHS ${nhs}`);
+  }
+  if (pc.namedGP) lines.push(`Named GP: ${pc.namedGP}`);
+  if (pc.isDeceased) lines.push('[DECEASED]');
+  if (pc.testPatient) lines.push('[TEST PATIENT]');
+  lines.push('');
+
+  // ── Gap markers — absence must be explicit in the copy ────────────────────
+  lines.push('NOT SHOWN IN THIS SUMMARY (verify in Medicus):');
+  lines.push('  Allergies & adverse reactions — not shown — verify in Medicus before prescribing');
+  lines.push('  Immunisations — not shown — verify in Medicus');
+  lines.push('  Consultation history — not shown — use full visualiser for the timeline');
+  lines.push('');
+
+  // ── Active problems ────────────────────────────────────────────────────────
+  lines.push(`ACTIVE PROBLEMS (${problems.length})`);
+  if (problems.length) {
+    problems.forEach((p) => {
+      const date = p.codedDate ? `  [${_fmtDatePlain(p.codedDate)}]` : '';
+      const major = p.significance && /major/i.test(p.significance) ? ' *' : '';
+      lines.push(`  ${p.label || ''}${major}${date}`);
+    });
+  } else {
+    lines.push('  No active problems returned.');
+  }
+  if (past.length) lines.push(`  (${past.length} past/inactive problem${past.length === 1 ? '' : 's'} not shown)`);
+  lines.push('');
+
+  // ── Current medications ────────────────────────────────────────────────────
+  lines.push(`CURRENT MEDICATIONS (${meds.length})`);
+  if (meds.length) {
+    meds.forEach((m) => {
+      const flags = [];
+      if (m.isOverDue) flags.push('[OVERDUE]');
+      if (m.isReviewOverDue) flags.push('[REVIEW DUE]');
+      let line = `  ${m.name || ''}`;
+      if (flags.length) line += ` ${flags.join(' ')}`;
+      lines.push(line);
+      if (m.dosage) lines.push(`    ${m.dosage}`);
+    });
+  } else {
+    lines.push('  No current medications returned.');
+  }
+  lines.push('');
+
+  // ── Prescribing safety ─────────────────────────────────────────────────────
+  // Transcribe score values only — the same values shown by safetyCard().
+  // No additional interpretation beyond what is on screen.
+  const drugObjs = meds.map((m) => ({ label: m.name }));
+  const probObjs = problems.map((p) => ({ name: p.label }));
+  const egfr = _latestEgfrPlain(obs);
+
+  lines.push('PRESCRIBING SAFETY (coded data only; excludes allergies — see caveat)');
+
+  // ACB
+  let acb = null;
+  try {
+    acb = typeof window !== 'undefined' && window.ACBScores ? window.ACBScores.computeACB(drugObjs) : null;
+  } catch (_) {
+    acb = null;
+  }
+  if (acb) {
+    const tag = acb.alert ? 'High (>=3)' : acb.total > 0 ? 'Some burden' : 'None';
+    lines.push(`  Anticholinergic burden (ACB): ${acb.total} — ${tag}`);
+    if (acb.perDrug && acb.perDrug.length) {
+      lines.push(`    Contributing: ${acb.perDrug.map((d) => `${d.name} (${d.score})`).join(', ')}`);
+    }
+  }
+
+  // STOPP/START
+  let ss = null;
+  try {
+    ss =
+      typeof window !== 'undefined' && window.StoppStart
+        ? window.StoppStart.computeStoppStart({
+            drugs: drugObjs,
+            problems: probObjs,
+            ageYears: pc.ageYears != null ? Number(pc.ageYears) : null,
+            egfr,
+          })
+        : null;
+  } catch (_) {
+    ss = null;
+  }
+  if (Array.isArray(ss)) {
+    lines.push(`  STOPP/START prompts: ${ss.length}`);
+    ss.forEach((f) => {
+      lines.push(`    ${f.kind ? f.kind.toUpperCase() : 'FLAG'}: ${f.criterion || ''}`);
+    });
+    if (!ss.length) lines.push('    No deterministic prescribing prompts on the coded data available');
+  }
+
+  // Live monitoring chips
+  const monitorChips = (chips || []).filter(
+    (c) => c.type === 'drug-monitoring' || c.type === 'qof-indicator' || c.type === 'qof-register'
+  );
+  if (monitorChips.length) {
+    const overdue = monitorChips.filter((c) => /overdue|due|missing|not_/i.test(JSON.stringify(c)));
+    lines.push(
+      `  Live monitoring & QOF: ${overdue.length ? `${overdue.length} need attention` : 'all up to date'} (${monitorChips.length} checked)`
+    );
+  }
+
+  lines.push('');
+
+  // ── Recent results ─────────────────────────────────────────────────────────
+  const named = obs.filter((o) => o.name && o.rawValue != null && o.rawValue !== '');
+  const top = named.slice(0, 14);
+  lines.push(`RECENT RESULTS (${named.length})`);
+  if (top.length) {
+    top.forEach((o) => {
+      const flag = o.isAbove ? ' [HIGH]' : o.isBelow ? ' [LOW]' : '';
+      const date = o.date ? `  [${_fmtDatePlain(o.date)}]` : '';
+      lines.push(`  ${o.name}: ${o.value}${flag}${date}`);
+    });
+  } else {
+    lines.push('  No recent results returned.');
+  }
+  lines.push('');
+
+  // ── Caveat — verbatim, load-bearing ───────────────────────────────────────
+  lines.push('Live snapshot, not a complete record. Verify against the patient record before acting.');
+
+  return lines.join('\n');
+}
+
+// Plain-text date formatter (no HTML, used by buildRecordSummaryText).
+function _fmtDatePlain(d) {
+  const t = Date.parse(d);
+  if (!Number.isFinite(t)) return String(d);
+  return new Date(t).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
+// eGFR extraction for the plain-text path (mirrors latestEgfr without closure).
+function _latestEgfrPlain(obs) {
+  const e = (obs || []).find((o) => /e?gfr/i.test(o.name || ''));
+  if (!e) return null;
+  const n = parseFloat(String(e.rawValue));
+  return Number.isFinite(n) ? n : null;
 }
 
 function demographicsCard(pc) {

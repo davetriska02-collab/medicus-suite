@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.64.0  
-**Document version:** 3.8  
-**Date issued:** 2026-06-13  
+**Product version:** 3.64.0 (last full review baseline; incremental clinical-matching review appended for v3.114.0 on 2026-06-17 — see limitation 13 and `docs/HAZARD-LOG.md` H-031)  
+**Document version:** 3.9  
+**Date issued:** 2026-06-17  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 6159481)  
 **Status:** Live — must be read before installation or use  
@@ -95,7 +95,7 @@ The author asserts, on a good-faith reading of MHRA guidance on Software as a Me
 - The Reception guided capture pathways (v3.38.0) present a fixed question set to non-clinical staff and produce a structured complaint description as a plain-text Medicus entry. The software makes no triage decision; all pathways ship disabled and require practice CSO/GP review before enablement.
 - The Knowledge module (v3.42.0) stores and displays practice-owned reference entries. It is explicitly reference material, not clinical decision support.
 - The Triage Lens red-flag engine expansion (v3.46.0) adds pattern-matching rules for additional clinical presentations; these are deterministic text-pattern detections that function as a supplementary aide-mémoire, not a clinical triage system.
-- The SMR tab in the Patient Record Visualiser (v3.51.0) computes an ACB score (an arithmetic sum of per-drug anticholinergic burden scores from the Boustani scale) and applies a subset of STOPP/START v3 criteria as prompts to review against the source record. Neither the ACB score nor the STOPP/START flags are clinical decisions; both are supplementary to the clinician's own prescribing assessment and to Medicus's own prescribing-safety systems. The STOPP/START criteria implemented are a starter subset; absence of a flag does not guarantee prescribing safety.
+- The SMR tab in the Patient Record Visualiser (v3.51.0) computes an ACB score (an arithmetic sum of per-drug anticholinergic burden scores from the Boustani scale) and applies a subset of STOPP/START v3 criteria as prompts to review against the source record. Neither the ACB score nor the STOPP/START flags are clinical decisions; both are supplementary to the clinician's own prescribing assessment and to Medicus's own prescribing-safety systems. The STOPP/START criteria implemented are a starter subset; absence of a flag does not guarantee prescribing safety. **(v3.114.0)** The anticholinergic-burden score is now computed by a single canonical scorer (`engine/acb-scores.js`) shared by both the live in-queue Triage Lens HUD and the record/Visualiser views, so the same patient receives the same ACB score on every surface (this closes a prior divergence in which the in-queue chip under-scored several strong anticholinergics — see `HAZARD-LOG.md` H-031); the STOPP NSAID and low-dose-aspirin name lists were brought to full UK class/brand parity; and both the ACB and STOPP class-term lists and the engine→chip rendering are now regression-guarded in CI (`test-term-coverage.js`, `test-chip-contract.js`). These remain supplementary review prompts, not clinical decisions, and absence of a flag still does not guarantee prescribing safety.
 - The per-patient evaluation audit trail ("Why?" panel, v3.47.0) and the exportable evaluation log are diagnostic transparency tools; they record the rule engine's reasoning for display to the user and do not constitute a clinical assessment or a patient record.
 - The Today tab (v3.60.0) is an arithmetic aggregation of the same administrative feeds already displayed by other modules (waiting room, triage counts, demand counts, slot availability); it performs no per-patient clinical evaluation beyond re-displaying the existing Sweep summary, and makes no clinical decisions.
 - The guided tour, setup checklist, command palette, and view-state continuity (v3.57.0–v3.60.0) are user-interface chrome; they read no clinical data and produce no clinical output.

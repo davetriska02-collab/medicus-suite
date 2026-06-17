@@ -2,9 +2,9 @@
 
 **Document reference:** MS-CSO-SOUP-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.113.0
+**Product version:** 3.114.0
 **Document version:** 1.8
-**Date issued:** 2026-06-16
+**Date issued:** 2026-06-17
 **Author:** Dr Dave Triska, Graysbrook Ltd
 **Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP
 **Status:** Live — reviewed at each minor or major release, and whenever a vendored library is upgraded

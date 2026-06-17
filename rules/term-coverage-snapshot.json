@@ -1,0 +1,188 @@
+{
+  "_meta": {
+    "purpose": "Pinned offline regression baseline for class-term / brand-list completeness.",
+    "complementsTest": "test-term-coverage.js",
+    "complementsExisting": "test-drug-brand-coverage.js guards rules/drug-rules.json drug.match via real drugMatchesRule(); this file guards the hand-maintained JS term tables in engine/stopp-start.js, engine/acb-scores.js, and content-scripts/triage-lens/content.js — the other hand that has no guard and has already drifted.",
+    "updatePolicy": "Add rows here when you extend a term list in product code (Wave C canonicalisation). Never remove rows — they are regression sentinels. Each class has a source comment field documenting provenance.",
+    "lastAuditedAt": "2026-06-17",
+    "auditedAgainstVersion": "3.113.x"
+  },
+
+  "classes": {
+    "stopp_nsaid": {
+      "_source": "UK BNF 10.1.1 / MHRA NSAID class / PINCER rules (alert-library.json). As of Wave C (3.114), engine/stopp-start.js NSAID_TERMS is brought to parity with the content.js NSAIDS regex / alert-library: the full UK generic set + major brands. The previously-stranded generics (piroxicam, aceclofenac, nabumetone, mefenamic acid) are now covered and locked into mustMatchAll.",
+      "_matchMechanism": "computeStoppStart() hasDrug() — case-insensitive substring of drug.label",
+      "_file": "engine/stopp-start.js NSAID_TERMS",
+      "mustMatchAll": [
+        { "term": "ibuprofen 400mg tablets", "note": "core generic — present in NSAID_TERMS" },
+        { "term": "naproxen 250mg tablets", "note": "core generic — present in NSAID_TERMS" },
+        { "term": "diclofenac sodium 50mg tablets", "note": "core generic — present in NSAID_TERMS" },
+        { "term": "celecoxib 200mg capsules", "note": "COX-2 — present in NSAID_TERMS" },
+        { "term": "etoricoxib 90mg tablets", "note": "COX-2 — present in NSAID_TERMS" },
+        { "term": "meloxicam 7.5mg tablets", "note": "present in NSAID_TERMS" },
+        { "term": "piroxicam 20mg capsules", "note": "Wave C: added to NSAID_TERMS (was a silent gap)" },
+        { "term": "aceclofenac 100mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "nabumetone 500mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "mefenamic acid 500mg capsules", "note": "Wave C: added to NSAID_TERMS (matches 'mefenamic')" },
+        { "term": "tenoxicam 20mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "indometacin 25mg capsules", "note": "Wave C: UK spelling in NSAID_TERMS" },
+        { "term": "indomethacin 25mg capsules", "note": "Wave C: US/legacy spelling also in NSAID_TERMS" },
+        { "term": "sulindac 200mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "ketoprofen 100mg capsules", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "dexketoprofen 25mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "tiaprofenic acid 300mg tablets", "note": "Wave C: matches 'tiaprofenic'" },
+        { "term": "etodolac 600mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "flurbiprofen 100mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "Brufen 400mg tablets", "note": "UK ibuprofen brand — present in NSAID_TERMS" },
+        { "term": "Voltarol 50mg tablets", "note": "UK diclofenac brand — present in NSAID_TERMS" },
+        { "term": "Arcoxia 90mg tablets", "note": "UK etoricoxib brand — present in NSAID_TERMS" },
+        { "term": "Mobic 7.5mg tablets", "note": "UK meloxicam brand — present in NSAID_TERMS" },
+        { "term": "Feldene 20mg capsules", "note": "Wave C: UK piroxicam brand" },
+        { "term": "Ponstan 500mg capsules", "note": "Wave C: UK mefenamic-acid brand" }
+      ],
+      "knownGaps": []
+    },
+
+    "stopp_aspirin_lowdose": {
+      "_source": "BNF 2.9 (antiplatelet drugs). UK low-dose aspirin forms: generic dm+d names, Nu-seals (AstraZeneca), Caprin (Pinewood), Micropirin (M&A Pharmachem). The aspirin STOPP check (stopp_aspirin_primary_prev) requires matching low-dose antiplatelet forms without catching analgesic doses. As of Wave C (3.114) ASPIRIN_TERMS adds the gastro-resistant word-order variant and the three UK 75mg brands; the previous known gaps are now locked into mustMatchAll.",
+      "_matchMechanism": "computeStoppStart() hasDrug() — case-insensitive substring of drug.label against ASPIRIN_TERMS",
+      "_file": "engine/stopp-start.js ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible', 'aspirin gastro', 'nu-seals', 'caprin', 'micropirin']",
+      "mustMatchAll": [
+        { "term": "aspirin 75mg tablets", "note": "standard dm+d name — matches via 'aspirin 75'" },
+        { "term": "Aspirin 75mg Dispersible Tablets", "note": "matches via 'aspirin dispersible' (case-insensitive)" },
+        { "term": "aspirin 300mg tablets", "note": "matches via 'aspirin 300'" },
+        {
+          "term": "aspirin gastro-resistant 75mg tablets",
+          "note": "Wave C: matches via 'aspirin gastro' (word-order variant)"
+        },
+        { "term": "Nu-seals 75mg tablets", "note": "Wave C: UK AZ aspirin 75mg brand — matches via 'nu-seals'" },
+        { "term": "Caprin 75mg tablets", "note": "Wave C: Pinewood aspirin 75mg brand — matches via 'caprin'" },
+        {
+          "term": "Micropirin 75mg gastro-resistant tablets",
+          "note": "Wave C: M&A aspirin 75mg brand — matches via 'micropirin'"
+        }
+      ],
+      "knownGaps": []
+    },
+
+    "acb_scores_score3": {
+      "_source": "Boustani ACB scale (ACBcalc.com). Score 3 = strong/definite anticholinergic. Source file: engine/acb-scores.js ACB_TABLE entries with score:3.",
+      "_matchMechanism": "computeACB() — case-insensitive substring, longest-match-wins",
+      "_file": "engine/acb-scores.js",
+      "mustMatchAll": [
+        { "term": "amitriptyline 10mg tablets", "expectedScore": 3, "note": "TCA — score 3" },
+        { "term": "nortriptyline 10mg capsules", "expectedScore": 3, "note": "TCA — score 3" },
+        { "term": "imipramine 10mg tablets", "expectedScore": 3, "note": "TCA — score 3" },
+        { "term": "clomipramine 10mg capsules", "expectedScore": 3, "note": "TCA — score 3" },
+        { "term": "doxepin 25mg capsules", "expectedScore": 3, "note": "TCA — score 3" },
+        { "term": "paroxetine 20mg tablets", "expectedScore": 3, "note": "SSRI with high ACB — score 3" },
+        { "term": "oxybutynin 5mg tablets", "expectedScore": 3, "note": "bladder antimuscarinic — score 3" },
+        { "term": "Lyrinel XL 5mg tablets", "expectedScore": 3, "note": "oxybutynin brand" },
+        { "term": "Ditropan 5mg tablets", "expectedScore": 3, "note": "oxybutynin brand" },
+        { "term": "tolterodine 2mg tablets", "expectedScore": 3, "note": "bladder antimuscarinic — score 3" },
+        { "term": "Detrusitol 2mg tablets", "expectedScore": 3, "note": "tolterodine brand" },
+        { "term": "solifenacin 5mg tablets", "expectedScore": 3, "note": "bladder antimuscarinic — score 3" },
+        { "term": "Vesicare 5mg tablets", "expectedScore": 3, "note": "solifenacin brand" },
+        { "term": "fesoterodine 4mg tablets", "expectedScore": 3, "note": "bladder antimuscarinic — score 3" },
+        { "term": "Toviaz 4mg tablets", "expectedScore": 3, "note": "fesoterodine brand" },
+        { "term": "hyoscine butylbromide 10mg tablets", "expectedScore": 3, "note": "antimuscarinic — score 3" },
+        { "term": "chlorphenamine maleate 4mg tablets", "expectedScore": 3, "note": "1st-gen antihistamine — score 3" },
+        {
+          "term": "promethazine hydrochloride 25mg tablets",
+          "expectedScore": 3,
+          "note": "1st-gen antihistamine — score 3"
+        },
+        { "term": "hydroxyzine 25mg tablets", "expectedScore": 3, "note": "1st-gen antihistamine — score 3" },
+        { "term": "diphenhydramine 25mg capsules", "expectedScore": 3, "note": "1st-gen antihistamine — score 3" },
+        {
+          "term": "cyclizine 50mg tablets",
+          "expectedScore": 3,
+          "note": "1st-gen antihistamine — score 3 in acb-scores.js"
+        },
+        { "term": "olanzapine 5mg tablets", "expectedScore": 3, "note": "antipsychotic — score 3" },
+        { "term": "quetiapine 25mg tablets", "expectedScore": 3, "note": "antipsychotic — score 3" },
+        { "term": "clozapine 100mg tablets", "expectedScore": 3, "note": "antipsychotic — score 3" },
+        { "term": "chlorpromazine 25mg tablets", "expectedScore": 3, "note": "antipsychotic — score 3" },
+        { "term": "procyclidine 5mg tablets", "expectedScore": 3, "note": "antiparkinson — score 3" },
+        {
+          "term": "orphenadrine 100mg tablets",
+          "expectedScore": 3,
+          "note": "antiparkinson — score 3 in acb-scores.js"
+        },
+        { "term": "trihexyphenidyl 2mg tablets", "expectedScore": 3, "note": "antiparkinson — score 3" },
+        { "term": "prochlorperazine 5mg tablets", "expectedScore": 3, "note": "antiemetic — score 3 in acb-scores.js" }
+      ]
+    },
+
+    "acb_scores_score2": {
+      "_source": "Boustani ACB scale. Score 2 = moderate anticholinergic. Smaller set on the Boustani list.",
+      "_file": "engine/acb-scores.js",
+      "mustMatchAll": [
+        { "term": "amoxapine 50mg tablets", "expectedScore": 2, "note": "dibenzoxazepine TCA — score 2 (medrev-005)" }
+      ]
+    },
+
+    "content_js_anticholinergic": {
+      "_source": "content-scripts/triage-lens/content.js in-queue ACB scoring. As of Wave C (3.114) content.js NO LONGER carries a separate hardcoded ANTICHOLINERGIC table — it delegates to the SINGLE canonical scorer window.ACBScores.computeACB (engine/acb-scores.js), now loaded ahead of content.js in the manifest content_scripts list. The queue HUD and the record/engine view therefore score identically by construction; the divergences below are RESOLVED and kept only as regression sentinels.",
+      "_matchMechanism": "content.js calls window.ACBScores.computeACB(allMeds) — same engine, same SORTED_TABLE, per-drug additive sum.",
+      "_file": "content-scripts/triage-lens/content.js (no ANTICHOLINERGIC constant) → engine/acb-scores.js",
+      "resolvedByDelegation": true,
+      "delegationAssertions": {
+        "contentJsMustNotDefineTable": "const ANTICHOLINERGIC = [",
+        "contentJsMustReference": "ACBScores"
+      },
+      "resolvedDivergences": [
+        {
+          "term": "dosulepin",
+          "wasContentJs": 3,
+          "wasAcbScoresJs": "MISSING",
+          "nowEngineScore": 3,
+          "note": "dosulepin added to acb-scores.js so the (now sole) engine path scores it 3; previously it scored 3 only in the queue and 0 in the record."
+        },
+        {
+          "term": "trospium",
+          "wasContentJs": 3,
+          "wasAcbScoresJs": 1,
+          "nowEngineScore": 1,
+          "note": "single scorer now returns 1 everywhere (quaternary, limited CNS penetration — the defensible value)."
+        },
+        {
+          "term": "orphenadrine",
+          "wasContentJs": 2,
+          "wasAcbScoresJs": 3,
+          "nowEngineScore": 3,
+          "note": "no longer under-scored in the queue."
+        },
+        { "term": "cyclizine", "wasContentJs": 2, "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "prochlorperazine", "wasContentJs": 2, "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        {
+          "term": "loperamide",
+          "wasContentJs": 2,
+          "wasAcbScoresJs": 1,
+          "nowEngineScore": 1,
+          "note": "no longer over-scored in the queue."
+        },
+        { "term": "ranitidine", "wasContentJs": 2, "wasAcbScoresJs": 1, "nowEngineScore": 1 },
+        {
+          "term": "clomipramine",
+          "wasContentJs": "MISSING",
+          "wasAcbScoresJs": 3,
+          "nowEngineScore": 3,
+          "note": "now detected in the queue."
+        },
+        { "term": "doxepin", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "diphenhydramine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "olanzapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "quetiapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "clozapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "chlorpromazine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "procyclidine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "trihexyphenidyl", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 }
+      ],
+      "_droppedFromContentJs": {
+        "note": "content.js previously scored these as anticholinergic; they are NOT on the Boustani/ACBcalc scale in engine/acb-scores.js and were dropped as likely false positives when the queue switched to the single scorer. (codeine/furosemide/prednisolone were ALSO scored by content.js but ARE on the engine's score-1 list, so they continue to score 1 — not dropped.) Recorded for audit so a future change that re-adds the dropped terms is a deliberate, reviewed act.",
+        "terms": ["amantadine", "cimetidine", "tramadol", "metformin"]
+      }
+    }
+  }
+}

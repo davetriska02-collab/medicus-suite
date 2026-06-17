@@ -1173,18 +1173,13 @@
   const ANTICOAGS = [/warfarin/i, /apixaban/i, /rivaroxaban/i, /edoxaban/i, /dabigatran/i];
   const ANTIPLATELETS = [/aspirin/i, /clopidogrel/i, /ticagrelor/i, /prasugrel/i, /dipyridamole/i];
 
-  const ANTICHOLINERGIC = [
-    { match: /amitriptyline|nortriptyline|dosulepin|imipramine/i, score: 3 },
-    { match: /oxybutynin|tolterodine|solifenacin|trospium|fesoterodine/i, score: 3 },
-    { match: /chlorphenamine|promethazine|hydroxyzine/i, score: 3 },
-    { match: /amantadine|orphenadrine/i, score: 2 },
-    { match: /loperamide/i, score: 2 },
-    { match: /paroxetine/i, score: 3 },
-    { match: /cyclizine|prochlorperazine/i, score: 2 },
-    { match: /codeine|tramadol/i, score: 1 },
-    { match: /furosemide|metformin|prednisolone/i, score: 1 },
-    { match: /ranitidine|cimetidine/i, score: 2 }
-  ];
+  // Anticholinergic burden is scored by the SINGLE canonical scorer
+  // engine/acb-scores.js (window.ACBScores, loaded ahead of this script in the
+  // manifest content_scripts list). This used to be a separate hardcoded table
+  // here that had drifted from the engine — strong anticholinergics (olanzapine,
+  // quetiapine, clozapine, chlorpromazine, clomipramine, doxepin, diphenhydramine,
+  // procyclidine, trihexyphenidyl) were missing, so a patient on one scored 0 in
+  // the queue HUD but 3 in the record/engine view. One scorer now, no drift.
 
   // STOPP/START-style deterministic prescribing-safety flags. Pure function over
   // a list of medication name strings + patient age; returns tile/chip items.
@@ -1369,14 +1364,15 @@
       sig.meds.items.push({ severity: lvl, text: 'AF without anticoagulation', detail: onAntiplatelet ? 'Antiplatelet only — verify CHA₂DS₂-VASc rationale' : 'No DOAC/warfarin found in repeats' });
     }
 
-    // Anticholinergic burden
-    let acbScore = 0;
-    const acbHits = [];
-    ANTICHOLINERGIC.forEach(a => {
-      const hit = allMeds.find(m => a.match.test(m));
-      if (hit) { acbScore += a.score; acbHits.push(`${hit.split(' ')[0]} (+${a.score})`); }
-    });
+    // Anticholinergic burden — delegated to the canonical scorer (per-drug
+    // additive sum, the clinically correct model; the old inline table summed
+    // once per class, undercounting two drugs in the same class).
+    const acb = (window.ACBScores && typeof window.ACBScores.computeACB === 'function')
+      ? window.ACBScores.computeACB(allMeds)
+      : { total: 0, perDrug: [] };
+    const acbScore = acb.total;
     if (acbScore >= TH('anticholinergicAmber')) {
+      const acbHits = acb.perDrug.map(p => `${p.name.split(' ')[0]} (+${p.score})`);
       sig.meds.level = bumpLevel(sig.meds.level, 'amber');
       sig.meds.items.push({ severity: 'amber', text: `Anticholinergic burden ≥${acbScore}`, detail: acbHits.join(', ') });
     }
