@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.115.2] — 2026-06-17
+
+### Fixed — Result-triage queue chips no longer push the patient name out of view
+
+On the Investigation Results queue, the injected result-triage chips (`.ch-q-result`)
+are **prepended** into the narrow patient-name cell (prepend is mandatory — appended
+nodes get reconciled away by Medicus's Vue/AG-Grid renderer). Because they sit *before*
+the name, a stack of chips (a result chip plus age/decoration and text-rule chips, or a
+single long builtin-rule label such as *"…(red ≥6.5 mmol/L)"*) could consume the cell and
+leave the patient name unreadable. The inline container was only soft-capped at 60% of the
+cell and could wrap, so several chips stacked vertically into the name row.
+
+- **Hard-bound the inline chip container** (`.ch-q-result-inline` / `.ch-q-mon-inline`) to
+  a fixed fraction of the cell and forced it to a **single line** (`flex-wrap: nowrap`), so
+  no combination of chips can crowd or wrap over the patient name.
+- **Per-chip ellipsis + width cap** so a single long label truncates instead of running the
+  row wide. The **full label remains on hover** (each chip already carries a `title`), and
+  the severity **colour is never hidden** — only surplus label text is clipped. A shortened
+  chip therefore never implies an all-clear; it only takes less width.
+
+**Deliberately NOT changed (safety):** the direction word ("high"/"low") was *not* stripped
+from any chip. The generic abnormal chip already carries no direction word; where a
+direction word does appear it is inside a builtin **rule** label, and a rule chip only
+renders when *our* rule **raised** severity above the lab's own flag — so that "high" is our
+escalation signal, not a duplicate of Medicus's H/L flag, and removing it would hide which
+party flagged the result. Chip labels remain fully user-editable in the Result Rules editor
+(the "Label (shown on the chip)" field) for anyone who wants them shorter still.
+
 ## [v3.115.1] — 2026-06-17
 
 ### Fixed — Result rules shown in two settings views no longer drift out of sync

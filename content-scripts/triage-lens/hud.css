@@ -130,13 +130,21 @@
   gap: 4px;
   vertical-align: middle;
 }
-/* Flat-queue fallback: chips appended into the narrow patient-name cell AFTER
-   the name. Cap their width so the patient name is never pushed out of view;
-   the full chip text stays available on hover (title attribute). */
+/* Flat-queue fallback: chips PREPENDED into the narrow patient-name cell, BEFORE
+   the name (prepend is mandatory — see content.js; appended nodes get reconciled
+   away by Medicus's Vue renderer). Because they sit before the name they must be
+   hard-bounded or they push the name out of view entirely. Cap the container to a
+   small fixed fraction of the cell and keep it to a SINGLE line (nowrap) so no
+   stack of chips can ever crowd or wrap over the name. The full chip text stays
+   available on hover via each chip's title attribute, and the severity COLOUR is
+   never hidden — only surplus label text is ellipsised. (Clinician-UX fix: a
+   shortened chip must never imply an all-clear, so we truncate text, never drop
+   the chip or its colour.) */
 .ch-q-result-inline,
 .ch-q-mon-inline {
-  margin-left: 6px;
-  max-width: 60%;
+  margin-right: 6px;
+  flex-wrap: nowrap;
+  max-width: 45%;
   overflow: hidden;
 }
 .ch-q-result-inline .ch-chip,
@@ -146,7 +154,10 @@
   border-radius: var(--r-pill);
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  white-space: nowrap;
+  /* A single long label (e.g. a builtin rule "…(red ≥6.5 mmol/L)") can't run the
+     row wide: cap it and ellipsise. Full text remains on hover (title). */
+  max-width: 18ch;
 }
 
 /* ---- HUD panel ---- */
