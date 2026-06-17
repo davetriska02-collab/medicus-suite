@@ -381,6 +381,87 @@ function renderSignoff() {
   );
 }
 
+// ── Reconciliation hook (both modes) ────────────────────────────────────────────
+//
+// Renders the "run these in Medicus to get the numbers" section: a table of drug →
+// cohort definition → a blank "your count: ____" column for the practice to fill.
+//
+// Honest framing invariants (clinical-safety requirement):
+//   - Section heading makes explicit this is the definition, not a count.
+//   - A prominent notice states the suite cannot enumerate patients read-only.
+//   - The coded-data caveat is repeated (A5) — counts from Medicus search are also
+//     coded-data-only; the suite's caveat applies to any figure the practice records.
+//   - There is NO numeric patient count anywhere in this section.
+
+function renderReconciliation(readiness) {
+  const recon = readiness.reconciliation;
+  if (!recon || !Array.isArray(recon.entries) || !recon.entries.length) return '';
+
+  const entries = recon.entries;
+
+  // Prominent honest-framing callout — the whole point of this section.
+  const honestFraming =
+    `<div class="cqc-recon-notice" role="note">` +
+    `<strong>The suite supplies the definition — your Medicus search supplies the number.</strong> ` +
+    `The Medicus Suite cannot enumerate patients read-only (a true population query is not ` +
+    `reachable via the API available to this extension — see spike CQC-P0-COHORT-SPIKE). ` +
+    `Run each query below in Medicus's own search or QOF reporting tool, enter the count ` +
+    `you get, and attach this page to your evidence pack.` +
+    `</div>`;
+
+  const caveat = recon.caveat
+    ? `<p class="cqc-callout" role="note"><strong>Coded data only.</strong> ${esc(recon.caveat)}</p>`
+    : '';
+
+  // One row per drug-monitoring rule.
+  const rows = entries
+    .map(
+      (e) =>
+        `<tr>` +
+        `<td class="cqc-recon-drug"><strong>${esc(e.drugName)}</strong>` +
+        (e.drugClass ? `<br><span class="cqc-recon-class">${esc(e.drugClass)}</span>` : '') +
+        `</td>` +
+        `<td class="cqc-recon-defn">${esc(e.definition)}</td>` +
+        `<td class="cqc-recon-terms"><span class="cqc-recon-terms-label">Coded terms:</span> ` +
+        `${e.matchTerms.map((t) => `<span class="cqc-term">${esc(t)}</span>`).join(' ')}</td>` +
+        `<td class="cqc-recon-count"><span class="cqc-recon-blank">your count: ____</span></td>` +
+        `</tr>`
+    )
+    .join('');
+
+  const table =
+    `<table class="cqc-table cqc-recon-table">` +
+    `<thead><tr>` +
+    `<th>Drug / class</th>` +
+    `<th>Cohort definition (run this in Medicus)</th>` +
+    `<th>Coded terms covered</th>` +
+    `<th>Your count</th>` +
+    `</tr></thead>` +
+    `<tbody>${rows}</tbody>` +
+    `</table>`;
+
+  return (
+    `<section class="cqc-card cqc-card-recon">` +
+    `<h2>Reconciliation — run these in Medicus to get the numbers</h2>` +
+    `<p class="cqc-note">` +
+    `For each high-risk monitored drug the suite covers, the table below gives a reproducible ` +
+    `cohort definition. Run it in Medicus's own search or QOF tool, note the count in the ` +
+    `"Your count" column, and use the completed table as supporting evidence for your CQC pack. ` +
+    `The suite provides the rigour (the definition + coverage caveat); your validated clinical ` +
+    `system provides the number.` +
+    `</p>` +
+    honestFraming +
+    caveat +
+    table +
+    `<p class="cqc-note cqc-recon-foot">` +
+    `Definitions are derived deterministically from the suite's active drug-monitoring rules. ` +
+    `If a rule is disabled in Options it will not appear here. The "coded terms" column lists ` +
+    `every drug name the rule matches — check it for gaps (e.g. a missing slow-release brand).` +
+    `</p>` +
+    `</section>`
+  );
+}
+
 // ── Top-level HTML builder ──────────────────────────────────────────────────────
 
 export function buildReadinessHtml(readiness, { mode = 'readiness' } = {}) {
@@ -401,6 +482,10 @@ export function buildReadinessHtml(readiness, { mode = 'readiness' } = {}) {
   }
 
   parts.push(renderQualityStatements(r, mode));
+  // Reconciliation section: always present in both modes.
+  // In readiness mode it aids internal audit prep; in export mode it becomes the
+  // printable "run these searches, fill in the count" page of the evidence pack.
+  parts.push(renderReconciliation(r));
   parts.push(renderDelta(r));
 
   if (isExport) parts.push(renderSignoff());

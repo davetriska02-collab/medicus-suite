@@ -34,7 +34,19 @@ const path = require('path');
       schemaVersion: 2,
       specVersion: 'Sentinel drug rules - June 2026 review',
       sourceNotes: 'BNF/NICE/MHRA; brand-completeness pass (The Keeper) 2026-06-04.',
-      rules: [{ type: 'drug-monitoring', drug: { match: ['methotrexate', 'maxtrex'] } }],
+      rules: [
+        {
+          type: 'drug-monitoring',
+          id: 'methotrexate-maintenance',
+          drugClass: 'DMARD',
+          drug: { match: ['methotrexate', 'maxtrex'] },
+          tests: [
+            { name: 'FBC', intervalDays: 84 },
+            { name: 'U&E', intervalDays: 84 },
+            { name: 'LFT', intervalDays: 84 },
+          ],
+        },
+      ],
     },
     qof: { lastUpdated: '2026-06-10', rules: [{ type: 'qof-indicator', category: 'safety-monitoring' }] },
     vaccine: { lastUpdated: '2026-06-01', rules: [{ type: 'vaccine' }] },
@@ -98,6 +110,41 @@ const path = require('path');
   const requiredBadgeClasses = ['cqc-badge', 'cqc-badge-green', 'cqc-badge-amber', 'cqc-badge-red', 'cqc-badge-na'];
   for (const cls of requiredBadgeClasses) {
     check(cssClasses.has(cls), `CSS defines .${cls} (used by ragBadge() in cqc-render.js)`);
+  }
+
+  console.log('\n--- reconciliation section ---');
+  // The readiness fixture has a drug rule with methotrexate → the reconciliation section
+  // must appear with the honest framing and no fabricated patient count.
+  check(/Reconciliation/i.test(html), 'reconciliation section heading present');
+  check(/run these in Medicus/i.test(html), 'reconciliation section carries "run these in Medicus" framing');
+  check(
+    /suite supplies the definition/i.test(html) || /suite cannot enumerate/i.test(html),
+    'reconciliation carries explicit "suite cannot enumerate" or "suite supplies the definition" honesty statement'
+  );
+  check(
+    /your count.*____/i.test(html),
+    'reconciliation table has blank "your count: ____" column for practice to fill'
+  );
+  // Critical: no fabricated patient number — must not contain a digit that looks like a count
+  // adjacent to "patients" or "count" (a bare "your count: ____" blank is fine).
+  check(!/your count:\s*\d+/.test(html), 'reconciliation section does NOT contain a fabricated numeric patient count');
+  check(/Coded data only/i.test(html), 'reconciliation section repeats coded-data-only caveat (A5)');
+  check(/methotrexate/i.test(html), 'reconciliation table lists methotrexate (from fixture drug rule)');
+  // Interval derived from the rule must appear.
+  check(/week|month|year/i.test(html), 'reconciliation table shows a derived monitoring interval');
+
+  // Export mode also renders the reconciliation section.
+  check(/Reconciliation/i.test(exportHtml), 'reconciliation section present in export mode');
+  check(/your count.*____/i.test(exportHtml), 'reconciliation "your count" blank present in export mode');
+
+  // The reconciliation section must NOT appear to emit a numeric cohort count.
+  // Parse out the reconciliation card and verify there is no "<digit>+ patients" pattern.
+  const reconMatch = html.match(/<section[^>]*cqc-card-recon[^>]*>([\s\S]*?)<\/section>/);
+  check(reconMatch != null, 'reconciliation section can be isolated from HTML');
+  if (reconMatch) {
+    const reconHtml = reconMatch[1];
+    // Strip the "your count: ____" blank (it has no digit), then check no N patients pattern.
+    check(!/\b\d+\s+patient/i.test(reconHtml), 'reconciliation card contains no "N patients" fabricated count');
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
