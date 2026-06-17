@@ -719,6 +719,19 @@ details summary {
   border: 1px solid var(--border);
 }
 
+/* Hint shown only when editing a BUILT-IN result rule: makes it obvious the chip
+   label is renamable and that the rename persists across suite updates. */
+.tl-rr-label-hint {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+}
+
 /* Direction glyph (↑/↓) so a high/low pair is distinguishable at a glance. */
 .tl-rr-dir {
   display: inline-block;

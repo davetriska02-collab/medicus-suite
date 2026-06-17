@@ -2,6 +2,103 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.116.0] — 2026-06-17
+
+### Added — Built-in result-chip flags are now obviously editable (and the rename sticks)
+
+Clinicians can already rename **any** result-rule chip label in the Result Rules editor —
+including built-in rules — and the rename persists across suite updates. That capability
+was undiscoverable, so this surfaces it: when you open a **built-in** result rule for
+editing, a hint under the Label field now states explicitly that you can rename/shorten
+the flag (e.g. strip a redundant *"high"*) and that your edit is kept and will not be
+reverted by a suite update.
+
+- The persistence guarantee is structural, not new: `mergeShippedDefaults` appends
+  built-in result rules **by id only**, so once a user holds an edited built-in it is never
+  re-pushed; and `revertRetiredResultRuleFields` only un-sticks a built-in label while it
+  still **exactly** equals a retired shipped default (the atomic-per-id guard). The moment a
+  clinician types their own label, the whole rule is left untouched — user override wins.
+- Added a regression test (`test-chip-label-migration.js`) pinning that an arbitrary
+  clinician-renamed built-in label survives the shipped-defaults merge, not just the
+  specific strings already in the retired table.
+
+**Scope note — deliberately bounded.** This covers **result-rule** chip labels, which is
+what the request was about. Age/decoration (`.ch-queue-chips`) and drug-monitoring
+(`.ch-q-mon`) chip labels are **not** user-editable yet — those are generated, not
+rule-label-driven, so making them editable is a larger change recommended as a separate
+scoped follow-up rather than bundled here.
+
+### Not done (intentionally, on clinical-safety grounds) — bulk-trimming "high" from shipped labels
+
+The request also asked to consider removing a redundant *"high"* from shipped built-in
+labels. After investigation this was **held**, not done, because:
+
+- There is **no standalone `/ high` direction token** in our chip output. The visible
+  "high"/"low" lives **inside a built-in rule's clinical name** (e.g. *"Critical high
+  potassium"*), and that name only renders when our rule **escalated severity above the
+  lab's own flag** — so it is our attributable escalation signal, not a duplicate of
+  Medicus's H/L flag.
+- Many candidate analytes are **bidirectional** — potassium, sodium, calcium can be
+  critically high *or* low (we ship both rules). Trimming to *"Critical potassium"* would
+  lose hyper/hypo and is clinically ambiguous.
+- For the unidirectional ones (eGFR, Hb, INR, platelets, neutrophils, magnesium), the
+  direction word is part of the **canonical clinical phrase**, not redundant decoration;
+  shaving it yields no safety benefit and risks looking like a value was dropped.
+
+The editable-flags feature above is the correct lever: a clinician who wants "high" gone
+renames that one label themselves, and it sticks. No `defaults.json` content was changed,
+so there is no config-version bump for this release.
+
+## [v3.115.2] — 2026-06-17
+
+### Fixed — Result-triage queue chips no longer push the patient name out of view
+
+On the Investigation Results queue, the injected result-triage chips (`.ch-q-result`)
+are **prepended** into the narrow patient-name cell (prepend is mandatory — appended
+nodes get reconciled away by Medicus's Vue/AG-Grid renderer). Because they sit *before*
+the name, a stack of chips (a result chip plus age/decoration and text-rule chips, or a
+single long builtin-rule label such as *"…(red ≥6.5 mmol/L)"*) could consume the cell and
+leave the patient name unreadable. The inline container was only soft-capped at 60% of the
+cell and could wrap, so several chips stacked vertically into the name row.
+
+- **Hard-bound the inline chip container** (`.ch-q-result-inline` / `.ch-q-mon-inline`) to
+  a fixed fraction of the cell and forced it to a **single line** (`flex-wrap: nowrap`), so
+  no combination of chips can crowd or wrap over the patient name.
+- **Per-chip ellipsis + width cap** so a single long label truncates instead of running the
+  row wide. The **full label remains on hover** (each chip already carries a `title`), and
+  the severity **colour is never hidden** — only surplus label text is clipped. A shortened
+  chip therefore never implies an all-clear; it only takes less width.
+
+**Deliberately NOT changed (safety):** the direction word ("high"/"low") was *not* stripped
+from any chip. The generic abnormal chip already carries no direction word; where a
+direction word does appear it is inside a builtin **rule** label, and a rule chip only
+renders when *our* rule **raised** severity above the lab's own flag — so that "high" is our
+escalation signal, not a duplicate of Medicus's H/L flag, and removing it would hide which
+party flagged the result. Chip labels remain fully user-editable in the Result Rules editor
+(the "Label (shown on the chip)" field) for anyone who wants them shorter still.
+
+## [v3.115.1] — 2026-06-17
+
+### Fixed — Result rules shown in two settings views no longer drift out of sync
+
+The Suite Settings page embeds the Triage Lens options page **twice**: once as the
+"Triage Lens" section and once as the dedicated "Result Rules" section. Both rendered the
+same `CONFIG.resultRules` from one storage key, but each iframe loaded the config into
+memory **once** and wrote the whole object back on save, with nothing watching
+`triagelens.config` for changes from the sibling view. Result: a result rule edited (or a
+rule's Enabled checkbox toggled) in one view stayed stale in the other, and the next save
+in the stale view silently overwrote the first edit — so an "enabled" rule could revert to
+disabled/unreviewed and never fire.
+
+- **Removed the duplicate editing surface:** the embedded "Triage Lens" section now hides
+  its Result rules tab (via a new `#triageLens` deep-link hash), so result rules are edited
+  in exactly one place — the dedicated "Result Rules" section. Opening the Triage Lens
+  options page standalone is unchanged and still shows every tab.
+- **Added cross-view sync:** every open instance of the options page now re-reads
+  `triagelens.config` on `chrome.storage.onChanged` and refreshes its rule lists, so saves
+  merge instead of clobber. In-progress, not-yet-saved typing in threshold/preference forms
+  and the open rule editor is deliberately left untouched.
+
 ## [v3.115.0] — 2026-06-17
 
 ### Keeper rule updates (CSO-approved) + full clinical-safety re-baseline
