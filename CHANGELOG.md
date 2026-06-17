@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.110.3] — 2026-06-16
+
+### Repo tooling: Virtual Dave agent
+
+Added `.claude/agents/virtual-dave.md` — a project Claude Code agent that is a digital
+twin of Dr Dave Triska (GP partner / CSO / builder) for in-repo design, safety and
+clinician-UX critique ("what would Dave think"). Dev tooling only: `.claude/` is excluded
+from the release zip, so this does not ship to end users and there is no product/code
+change. The agent is grounded — it reads the actual code before giving a verdict.
+
 ## [v3.110.2] — 2026-06-16
 
 ### CQC Inspection Readiness: discoverable from Settings
