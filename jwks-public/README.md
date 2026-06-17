@@ -59,3 +59,10 @@ curl -s https://davetriska02-collab.github.io/medicus-suite/.well-known/jwks.jso
 To rotate: generate a new key pair, **add** the new public JWK to the `keys` array
 (keep the old one until all in-flight tokens expire), deploy, switch signing to the new
 `kid`, then remove the old key on the next deploy.
+
+To regenerate this `jwks.json` from a private key (reads public params only, never the
+secret):
+
+```bash
+node scripts/pem-to-jwks.mjs path/to/private-key.pem
+```

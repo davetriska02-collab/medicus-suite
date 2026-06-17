@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.113.3] — 2026-06-16
+
+### `pem-to-jwks` helper for safe key generation
+
+- **Added `scripts/pem-to-jwks.mjs`** — turns a private signing key into the
+  public `jwks-public/.well-known/jwks.json` and prints the `kid`. Reads only the
+  public half of the key; never prints, copies, or writes the private key. Lets a
+  fresh key be generated locally and only its public part committed.
+
 ## [v3.113.2] — 2026-06-16
 
 ### Transactional API token service (Cloudflare Worker scaffold)
