@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.115.1] — 2026-06-17
+
+### Fixed — Result rules shown in two settings views no longer drift out of sync
+
+The Suite Settings page embeds the Triage Lens options page **twice**: once as the
+"Triage Lens" section and once as the dedicated "Result Rules" section. Both rendered the
+same `CONFIG.resultRules` from one storage key, but each iframe loaded the config into
+memory **once** and wrote the whole object back on save, with nothing watching
+`triagelens.config` for changes from the sibling view. Result: a result rule edited (or a
+rule's Enabled checkbox toggled) in one view stayed stale in the other, and the next save
+in the stale view silently overwrote the first edit — so an "enabled" rule could revert to
+disabled/unreviewed and never fire.
+
+- **Removed the duplicate editing surface:** the embedded "Triage Lens" section now hides
+  its Result rules tab (via a new `#triageLens` deep-link hash), so result rules are edited
+  in exactly one place — the dedicated "Result Rules" section. Opening the Triage Lens
+  options page standalone is unchanged and still shows every tab.
+- **Added cross-view sync:** every open instance of the options page now re-reads
+  `triagelens.config` on `chrome.storage.onChanged` and refreshes its rule lists, so saves
+  merge instead of clobber. In-progress, not-yet-saved typing in threshold/preference forms
+  and the open rule editor is deliberately left untouched.
+
 ## [v3.115.0] — 2026-06-17
 
 ### Keeper rule updates (CSO-approved) + full clinical-safety re-baseline

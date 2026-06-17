@@ -228,7 +228,36 @@
       activateTab('resultRules');
       const tabs = $('#tlTabs');
       if (tabs) tabs.style.display = 'none';
+    } else if (location.hash === '#triageLens') {
+      // Embedded as the Suite Settings "Triage Lens" section. Result rules have
+      // their OWN dedicated "Result Rules" section there (iframe above), so the
+      // Result rules tab here is a duplicate editing surface for the same
+      // CONFIG.resultRules — two views that were drifting out of sync (and could
+      // silently clobber each other on save). Hide the tab here so result rules
+      // live in exactly one place; standalone use of this page keeps all tabs.
+      const rrTab = $('#tlTabs .tl-tab[data-tab="resultRules"]');
+      if (rrTab) rrTab.style.display = 'none';
+      activateTab('rules');
     }
+    // Keep every open instance of this page (the two Suite-Settings iframes plus
+    // any standalone tab) in sync. Each instance loads CONFIG into memory once and
+    // writes the WHOLE object back on save, so without this a rule edited in one
+    // view stays stale in the other — and the next save there overwrites the first
+    // edit. Re-reading CONFIG on every storage change makes saves merge instead of
+    // clobber, and refreshes the list views. We deliberately do NOT re-populate the
+    // threshold/preference forms or the open editor, to avoid wiping in-progress,
+    // not-yet-saved typing in this instance.
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      const change = changes['triagelens.config'] || changes['config'];
+      if (!change || !change.newValue) return;
+      CONFIG = change.newValue;
+      if (!Array.isArray(CONFIG.rules)) CONFIG.rules = [];
+      if (!Array.isArray(CONFIG.resultRules)) CONFIG.resultRules = [];
+      renderRules();
+      renderResultRules();
+      renderSystemChips();
+    });
   };
 
   // ============================================================
