@@ -2,14 +2,12 @@
 // Run with: node test-term-coverage.js
 //
 // CI-runnable, OFFLINE, deterministic guard for the hand-maintained term tables
-// in engine/stopp-start.js, engine/acb-scores.js, and the ANTICHOLINERGIC
-// constant in content-scripts/triage-lens/content.js.
+// in engine/stopp-start.js and engine/acb-scores.js.
 //
 // Complements test-drug-brand-coverage.js (which guards rules/drug-rules.json
 // drug.match via the real drugMatchesRule()). This test guards the OTHER
-// hand-maintained class-term lists that have no existing guard and have already
-// drifted — see rules/term-coverage-snapshot.json for the pinned baseline and
-// the documented divergences.
+// hand-maintained class-term lists — see rules/term-coverage-snapshot.json for
+// the pinned baseline.
 //
 // Design:
 //   1. ACB engine coverage — every score-3/score-2 drug expected by the
@@ -17,18 +15,17 @@
 //      the real computeACB(). EXIT 1 on any failure.
 //   2. STOPP NSAID coverage — every NSAID in the snapshot fires stopp_nsaid_ckd
 //      via the real computeStoppStart(). EXIT 1 on any failure.
-//   3. STOPP aspirin coverage — known-good forms fire stopp_aspirin_primary_prev;
-//      known-gap brand forms (Nu-seals, Caprin, word-order variant) do NOT fire
-//      today — each gap is printed as a KNOWN-GAP warning but does NOT cause
-//      exit(1). This makes the gap VISIBLE in CI without blocking the build until
-//      Wave C canonicalisation fixes it.
-//   4. Cross-file agreement — content.js ANTICHOLINERGIC vs engine/acb-scores.js:
-//      every divergence documented in the snapshot is verified against the live
-//      source. Any NEW divergence not in the snapshot causes EXIT 1 so silent
-//      drift can't ship.
+//   3/4. STOPP aspirin coverage — every low-dose form/brand in the snapshot
+//      fires stopp_aspirin_primary_prev. (Any residual knownGaps still print as
+//      a KNOWN-GAP warning without failing the build; Wave C emptied them.)
+//   5. ACB single-scorer delegation — content.js must NOT carry its own ACB
+//      table and MUST call the canonical engine (window.ACBScores.computeACB).
+//   6. Resolved divergences — every drug that used to differ between the queue
+//      HUD and the engine/record view is now scored identically by the ONE
+//      scorer; the deliberately-dropped non-Boustani terms score 0.
 //
 // Updating this test:
-//   When you extend a term list in product code (Wave C), add the new term to
+//   When you extend a term list in product code, add the new term to
 //   rules/term-coverage-snapshot.json mustMatchAll (or remove a knownGap entry
 //   once fixed). This test will then verify it.
 
@@ -38,69 +35,16 @@ const path = require('path');
 const fs = require('fs');
 
 // ── Load engines ──────────────────────────────────────────────────────────────
-const { computeACB, ACB_TABLE } = require(path.join(__dirname, 'engine', 'acb-scores.js'));
+const { computeACB } = require(path.join(__dirname, 'engine', 'acb-scores.js'));
 const { computeStoppStart } = require(path.join(__dirname, 'engine', 'stopp-start.js'));
 
 // ── Load snapshot ─────────────────────────────────────────────────────────────
 const snapshot = JSON.parse(fs.readFileSync(path.join(__dirname, 'rules', 'term-coverage-snapshot.json'), 'utf8'));
 
-// ── Parse content.js ANTICHOLINERGIC table ────────────────────────────────────
-// content.js is not an ES module and not a Node CJS module — it's an IIFE browser
-// script. We parse the ANTICHOLINERGIC constant from source rather than executing
-// the whole file (which would fail in Node without DOM/chrome globals).
-function parseContentJsAnticholinergicTable() {
-  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
-  // Extract the block between "const ANTICHOLINERGIC = [" and the matching "];"
-  // The table is a flat array of { match: /regex/i, score: N } objects
-  const startMarker = 'const ANTICHOLINERGIC = [';
-  const startIdx = src.indexOf(startMarker);
-  if (startIdx === -1) throw new Error('content.js: cannot find ANTICHOLINERGIC constant');
-
-  // Find the closing "];" — walk forward tracking bracket depth
-  let depth = 0;
-  let endIdx = -1;
-  for (let i = startIdx + startMarker.length - 1; i < src.length; i++) {
-    if (src[i] === '[') depth++;
-    else if (src[i] === ']') {
-      depth--;
-      if (depth === 0) {
-        endIdx = i;
-        break;
-      }
-    }
-  }
-  if (endIdx === -1) throw new Error('content.js: cannot find end of ANTICHOLINERGIC array');
-
-  const block = src.slice(startIdx + startMarker.length, endIdx);
-
-  // Parse each entry: { match: /terms.../i, score: N }
-  // Regex pattern: match: /pattern/i, score: digits
-  const entryRe = /\{\s*match:\s*\/(.*?)\/i\s*,\s*score:\s*(\d+)\s*\}/g;
-  const entries = [];
-  let m;
-  while ((m = entryRe.exec(block)) !== null) {
-    const pattern = m[1];
-    const score = parseInt(m[2], 10);
-    // The pattern is a regex alternation like: amitriptyline|nortriptyline|dosulepin|imipramine
-    const terms = pattern.split('|').map((t) => t.trim());
-    entries.push({ terms, score, rawPattern: pattern });
-  }
-  return entries;
-}
-
-// Build a flat map: term -> score from content.js ANTICHOLINERGIC
-function buildContentJsMap(entries) {
-  const map = {};
-  entries.forEach((e) => e.terms.forEach((t) => (map[t.toLowerCase()] = e.score)));
-  return map;
-}
-
-// Build a flat map: term -> score from acb-scores.js ACB_TABLE
-function buildAcbScoresMap() {
-  const map = {};
-  ACB_TABLE.forEach((e) => (map[e.term.toLowerCase()] = e.score));
-  return map;
-}
+// As of Wave C (3.114) content.js no longer carries its own ANTICHOLINERGIC
+// table — it delegates to the single canonical scorer engine/acb-scores.js.
+// §5/§6 below assert that delegation and that the one scorer covers every drug
+// that used to differ between the queue HUD and the record/engine view.
 
 // ── Test harness ──────────────────────────────────────────────────────────────
 let passed = 0;
@@ -208,131 +152,47 @@ snapshot.classes.stopp_aspirin_lowdose.knownGaps.forEach(({ term, clinicalRisk, 
   knownGap(fired, `"${term}" does NOT fire stopp_aspirin_primary_prev (gap)`, detail);
 });
 
-// ── SECTION 5: content.js ANTICHOLINERGIC — structural presence ───────────────
+// ── SECTION 5: content.js ACB scoring delegates to the single engine ──────────
 console.log('\n═══════════════════════════════════════════════════════════════');
-console.log('§5  content-scripts/triage-lens/content.js ANTICHOLINERGIC');
-console.log('    Checking that expected terms are detectable in the table');
+console.log('§5  content-scripts/triage-lens/content.js — ACB single-scorer delegation');
+console.log('    content.js must NOT carry its own ACB table; it must call the');
+console.log('    canonical engine (window.ACBScores.computeACB).');
 console.log('═══════════════════════════════════════════════════════════════');
 
-let contentJsEntries;
-let contentJsMap;
-try {
-  contentJsEntries = parseContentJsAnticholinergicTable();
-  contentJsMap = buildContentJsMap(contentJsEntries);
-  console.log(`  Parsed ${contentJsEntries.length} regex groups, ${Object.keys(contentJsMap).length} distinct terms`);
-} catch (err) {
-  console.error(`  FAIL Could not parse content.js ANTICHOLINERGIC table: ${err.message}`);
-  failed++;
-  contentJsMap = {};
-}
+const contentJsSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
+const del = snapshot.classes.content_js_anticholinergic.delegationAssertions;
+check(
+  !contentJsSrc.includes(del.contentJsMustNotDefineTable),
+  `content.js no longer defines a separate ACB table ("${del.contentJsMustNotDefineTable}")`
+);
+check(
+  contentJsSrc.includes(del.contentJsMustReference),
+  `content.js references the canonical scorer ("${del.contentJsMustReference}")`
+);
 
-const contentExpected = snapshot.classes.content_js_anticholinergic.mustMatchAll;
-contentExpected.forEach(({ term, expectedScore, note }) => {
-  const lc = term.toLowerCase();
-  // Check if any entry in contentJsMap is a substring of the term (or term is a substring of an entry)
-  // content.js uses /regex/i against the drug name string — so if 'amitriptyline' is in the pattern
-  // it will match 'amitriptyline 10mg tablets'
-  const matchedEntry = Object.entries(contentJsMap).find(([t]) => lc.includes(t));
-  if (matchedEntry) {
-    const [matchedTerm, actualScore] = matchedEntry;
-    check(
-      actualScore === expectedScore,
-      `content.js: "${term}" matched via "${matchedTerm}" score=${actualScore} (expected ${expectedScore})${note ? ' [' + note + ']' : ''}`
-    );
-  } else {
-    check(false, `content.js: "${term}" not matched by any ANTICHOLINERGIC entry${note ? ' [' + note + ']' : ''}`);
-  }
-});
-
-// ── SECTION 6: Cross-file agreement — documented divergences ──────────────────
+// ── SECTION 6: every formerly-divergent drug is now scored by the ONE scorer ───
 console.log('\n═══════════════════════════════════════════════════════════════');
-console.log('§6  Cross-file agreement: content.js ANTICHOLINERGIC vs engine/acb-scores.js');
-console.log('    Each divergence below is DOCUMENTED in the snapshot.');
-console.log('    NEW undocumented divergences cause EXIT 1.');
+console.log('§6  Resolved divergences — the single scorer covers every drug that');
+console.log('    used to differ between the queue HUD and the engine/record view.');
 console.log('═══════════════════════════════════════════════════════════════');
 
-const acbScoresMap = buildAcbScoresMap();
-
-// Build the set of documented divergences from the snapshot
-const documentedDivergenceTerms = new Set(
-  (snapshot.classes.content_js_anticholinergic.knownDivergences || []).map((d) => d.term.toLowerCase())
-);
-
-// Find all terms in content.js that diverge from acb-scores.js
-// Divergence = same term present in both but different score, OR present in one only
-const allContentTerms = Object.keys(contentJsMap);
-const allAcbTerms = Object.keys(acbScoresMap);
-
-let undocumentedDivergences = 0;
-
-console.log('\n  Verifying documented divergences match live source:');
-(snapshot.classes.content_js_anticholinergic.knownDivergences || []).forEach(
-  ({ term, contentJsScore, acbScoresJs, clinicalRisk, note }) => {
-    const lc = term.toLowerCase();
-    const contentScore = contentJsMap[lc]; // undefined if missing
-    const acbScore = acbScoresMap[lc]; // undefined if missing
-
-    const contentExpected =
-      contentJsScore === 'MISSING' || contentJsScore === 'MISSING via ANTICHOLINERGIC' ? undefined : contentJsScore;
-    const acbExpected =
-      typeof acbScoresJs === 'number' ? acbScoresJs : acbScoresJs === 'MISSING' ? undefined : undefined;
-
-    // Check content.js side
-    const contentMatch = contentScore === contentExpected;
-    // Check acb-scores.js side
-    const acbMatch = acbScore === acbExpected;
-
-    if (contentMatch && acbMatch) {
-      const label = clinicalRisk ? ` [CLINICAL RISK: ${clinicalRisk}]` : note ? ` [${note}]` : '';
-      console.log(`  DIVERGENCE-CONFIRMED  ${term}${label}`);
-    } else {
-      // The divergence has changed — either fixed or drifted further
-      console.warn(
-        `  DIVERGENCE-CHANGED  ${term}: ` +
-          `content.js=${contentScore ?? 'MISSING'} (snapshot expected ${contentExpected ?? 'MISSING'}), ` +
-          `acb-scores.js=${acbScore ?? 'MISSING'} (snapshot expected ${acbExpected ?? 'MISSING'}). ` +
-          `Update rules/term-coverage-snapshot.json.`
-      );
-      // If the scores now agree (divergence fixed) that's good — not a fail
-      // If they've drifted further in a different way — that's a fail
-      if (contentScore !== acbScore || (contentScore === undefined && acbScore === undefined)) {
-        // Still divergent but differently than documented — warn but don't fail
-        // (it may have been partially fixed)
-      }
-    }
-  }
-);
-
-// Check for NEW undocumented divergences (not in snapshot)
-console.log('\n  Scanning for NEW undocumented divergences:');
-const allTermsUnion = new Set([...allContentTerms, ...allAcbTerms]);
-allTermsUnion.forEach((term) => {
-  const contentScore = contentJsMap[term];
-  const acbScore = acbScoresMap[term];
-  const diverges =
-    contentScore !== acbScore &&
-    (contentScore !== undefined || acbScore !== undefined) &&
-    !(contentScore === undefined && acbScore !== undefined && acbScore === 1); // acb-only score-1 entries are expected extras, not divergences we guard here
-
-  if (diverges && !documentedDivergenceTerms.has(term)) {
-    // Check if this is an acb-scores-only term (present in acb but not content.js)
-    // Those are not divergences we care about here — content.js not having a score-1 entry is fine
-    const isAcbOnly = contentScore === undefined && acbScore !== undefined;
-    if (!isAcbOnly) {
-      console.error(
-        `  FAIL NEW-UNDOCUMENTED-DIVERGENCE  "${term}": content.js=${contentScore ?? 'MISSING'}, acb-scores.js=${acbScore ?? 'MISSING'}. ` +
-          `Add to knownDivergences in rules/term-coverage-snapshot.json.`
-      );
-      failed++;
-      undocumentedDivergences++;
-    }
-  }
+(snapshot.classes.content_js_anticholinergic.resolvedDivergences || []).forEach(({ term, nowEngineScore, note }) => {
+  const r = computeACB([term]);
+  const actual = r.perDrug.length > 0 ? r.perDrug[0].score : 0;
+  check(
+    actual === nowEngineScore,
+    `computeACB("${term}")=${actual} (single scorer, expected ${nowEngineScore})${note ? ' [' + note + ']' : ''}`
+  );
 });
 
-if (undocumentedDivergences === 0) {
-  console.log('  OK   No new undocumented divergences found.');
-  passed++;
-}
+// Drugs content.js used to score but that are NOT on the Boustani/ACBcalc scale:
+// the single scorer must return 0 for them (deliberate drop, recorded for audit).
+const dropped = snapshot.classes.content_js_anticholinergic._droppedFromContentJs;
+(dropped ? dropped.terms : []).forEach((term) => {
+  const r = computeACB([term + ' 10mg tablets']);
+  const actual = r.perDrug.length > 0 ? r.perDrug[0].score : 0;
+  check(actual === 0, `dropped non-Boustani term "${term}" scores 0 in the single scorer`);
+});
 
 // ── SECTION 7: Snapshot integrity — no term appears in mustMatchAll AND knownGaps ─
 console.log('\n═══════════════════════════════════════════════════════════════');

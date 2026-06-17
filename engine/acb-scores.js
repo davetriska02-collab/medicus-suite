@@ -33,6 +33,8 @@
     { term: 'imipramine', score: 3 },
     { term: 'clomipramine', score: 3 },
     { term: 'doxepin', score: 3 },
+    { term: 'dosulepin', score: 3, note: 'TCA (= dothiepin); Boustani score 3' },
+    { term: 'dothiepin', score: 3, note: 'older UK name for dosulepin' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
     { term: 'amoxapine', score: 2 },

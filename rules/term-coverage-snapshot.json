@@ -10,7 +10,7 @@
 
   "classes": {
     "stopp_nsaid": {
-      "_source": "UK BNF 10.1.1 / MHRA NSAID class / PINCER rules (alert-library.json). The alert-library has the most complete list (22 generics); stopp-start.js covers only 6 generics + 5 brands — the remainder are genuine gaps that Wave C will fill.",
+      "_source": "UK BNF 10.1.1 / MHRA NSAID class / PINCER rules (alert-library.json). As of Wave C (3.114), engine/stopp-start.js NSAID_TERMS is brought to parity with the content.js NSAIDS regex / alert-library: the full UK generic set + major brands. The previously-stranded generics (piroxicam, aceclofenac, nabumetone, mefenamic acid) are now covered and locked into mustMatchAll.",
       "_matchMechanism": "computeStoppStart() hasDrug() — case-insensitive substring of drug.label",
       "_file": "engine/stopp-start.js NSAID_TERMS",
       "mustMatchAll": [
@@ -20,76 +20,49 @@
         { "term": "celecoxib 200mg capsules", "note": "COX-2 — present in NSAID_TERMS" },
         { "term": "etoricoxib 90mg tablets", "note": "COX-2 — present in NSAID_TERMS" },
         { "term": "meloxicam 7.5mg tablets", "note": "present in NSAID_TERMS" },
+        { "term": "piroxicam 20mg capsules", "note": "Wave C: added to NSAID_TERMS (was a silent gap)" },
+        { "term": "aceclofenac 100mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "nabumetone 500mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "mefenamic acid 500mg capsules", "note": "Wave C: added to NSAID_TERMS (matches 'mefenamic')" },
+        { "term": "tenoxicam 20mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "indometacin 25mg capsules", "note": "Wave C: UK spelling in NSAID_TERMS" },
+        { "term": "indomethacin 25mg capsules", "note": "Wave C: US/legacy spelling also in NSAID_TERMS" },
+        { "term": "sulindac 200mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "ketoprofen 100mg capsules", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "dexketoprofen 25mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "tiaprofenic acid 300mg tablets", "note": "Wave C: matches 'tiaprofenic'" },
+        { "term": "etodolac 600mg tablets", "note": "Wave C: added to NSAID_TERMS" },
+        { "term": "flurbiprofen 100mg tablets", "note": "Wave C: added to NSAID_TERMS" },
         { "term": "Brufen 400mg tablets", "note": "UK ibuprofen brand — present in NSAID_TERMS" },
         { "term": "Voltarol 50mg tablets", "note": "UK diclofenac brand — present in NSAID_TERMS" },
         { "term": "Arcoxia 90mg tablets", "note": "UK etoricoxib brand — present in NSAID_TERMS" },
-        { "term": "Mobic 7.5mg tablets", "note": "UK meloxicam brand — present in NSAID_TERMS" }
+        { "term": "Mobic 7.5mg tablets", "note": "UK meloxicam brand — present in NSAID_TERMS" },
+        { "term": "Feldene 20mg capsules", "note": "Wave C: UK piroxicam brand" },
+        { "term": "Ponstan 500mg capsules", "note": "Wave C: UK mefenamic-acid brand" }
       ],
-      "knownGaps": [
-        {
-          "term": "piroxicam 20mg capsules",
-          "missingFrom": "engine/stopp-start.js NSAID_TERMS",
-          "presentIn": "alert-library.json, content-scripts/triage-lens/content.js",
-          "clinicalRisk": "A patient on piroxicam+eGFR<50 silently misses STOPP NSAID_CKD flag"
-        },
-        {
-          "term": "aceclofenac 100mg tablets",
-          "missingFrom": "engine/stopp-start.js NSAID_TERMS",
-          "presentIn": "alert-library.json, content-scripts/triage-lens/content.js",
-          "clinicalRisk": "Silent miss"
-        },
-        {
-          "term": "nabumetone 500mg tablets",
-          "missingFrom": "engine/stopp-start.js NSAID_TERMS",
-          "presentIn": "alert-library.json, content-scripts/triage-lens/content.js",
-          "clinicalRisk": "Silent miss"
-        },
-        {
-          "term": "mefenamic acid 500mg capsules",
-          "missingFrom": "engine/stopp-start.js NSAID_TERMS",
-          "presentIn": "alert-library.json, content-scripts/triage-lens/content.js (tiaprofenic/mefenamic)",
-          "clinicalRisk": "Silent miss"
-        },
-        {
-          "term": "Nu-seals 75mg tablets",
-          "missingFrom": "engine/stopp-start.js NSAID_TERMS",
-          "note": "This is an aspirin brand — listed here to flag confusion; it is NOT an NSAID"
-        }
-      ]
+      "knownGaps": []
     },
 
     "stopp_aspirin_lowdose": {
-      "_source": "BNF 2.9 (antiplatelet drugs). UK low-dose aspirin forms: generic dm+d names, Nu-seals (AstraZeneca), Caprin (Pinewood), Micropirin (M&A Pharmachem). The aspirin STOPP check (stopp_aspirin_primary_prev) requires matching low-dose antiplatelet forms without catching analgesic doses.",
+      "_source": "BNF 2.9 (antiplatelet drugs). UK low-dose aspirin forms: generic dm+d names, Nu-seals (AstraZeneca), Caprin (Pinewood), Micropirin (M&A Pharmachem). The aspirin STOPP check (stopp_aspirin_primary_prev) requires matching low-dose antiplatelet forms without catching analgesic doses. As of Wave C (3.114) ASPIRIN_TERMS adds the gastro-resistant word-order variant and the three UK 75mg brands; the previous known gaps are now locked into mustMatchAll.",
       "_matchMechanism": "computeStoppStart() hasDrug() — case-insensitive substring of drug.label against ASPIRIN_TERMS",
-      "_file": "engine/stopp-start.js ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible']",
+      "_file": "engine/stopp-start.js ASPIRIN_TERMS = ['aspirin 75', 'aspirin 300', 'aspirin tablet', 'aspirin dispersible', 'aspirin gastro', 'nu-seals', 'caprin', 'micropirin']",
       "mustMatchAll": [
         { "term": "aspirin 75mg tablets", "note": "standard dm+d name — matches via 'aspirin 75'" },
         { "term": "Aspirin 75mg Dispersible Tablets", "note": "matches via 'aspirin dispersible' (case-insensitive)" },
-        { "term": "aspirin 300mg tablets", "note": "matches via 'aspirin 300'" }
-      ],
-      "knownGaps": [
-        {
-          "term": "Nu-seals 75mg tablets",
-          "missingFrom": "engine/stopp-start.js ASPIRIN_TERMS",
-          "presentIn": "nowhere in the suite — brand not covered by any aspirin term list except content.js ANTIPLATELET broad /aspirin/i regex",
-          "clinicalRisk": "A patient whose repeat prescription shows 'Nu-seals 75mg tablets' silently misses the STOPP primary-prevention aspirin check. Nu-seals is the most common UK branded aspirin 75mg preparation (AstraZeneca; NHS prescriptions persist).",
-          "status": "KNOWN-GAP — documented here so Wave C term canonicalisation fixes it; this test assertion is a soft-check that PRINTS the gap but does not cause exit(1)"
-        },
-        {
-          "term": "Caprin 75mg tablets",
-          "missingFrom": "engine/stopp-start.js ASPIRIN_TERMS",
-          "presentIn": "nowhere in aspirin term lists",
-          "clinicalRisk": "Silent miss on Caprin (Pinewood Healthcare UK aspirin 75mg brand)",
-          "status": "KNOWN-GAP"
-        },
+        { "term": "aspirin 300mg tablets", "note": "matches via 'aspirin 300'" },
         {
           "term": "aspirin gastro-resistant 75mg tablets",
-          "missingFrom": "engine/stopp-start.js ASPIRIN_TERMS",
-          "note": "Word-order variant of the dm+d name — 'gastro-resistant' comes before '75mg'. Does NOT contain the substring 'aspirin 75' so hasDrug() returns false.",
-          "clinicalRisk": "Medicus may render the dm+d name with word order 'aspirin gastro-resistant Xmg' — such a patient silently misses the STOPP check.",
-          "status": "KNOWN-GAP"
+          "note": "Wave C: matches via 'aspirin gastro' (word-order variant)"
+        },
+        { "term": "Nu-seals 75mg tablets", "note": "Wave C: UK AZ aspirin 75mg brand — matches via 'nu-seals'" },
+        { "term": "Caprin 75mg tablets", "note": "Wave C: Pinewood aspirin 75mg brand — matches via 'caprin'" },
+        {
+          "term": "Micropirin 75mg gastro-resistant tablets",
+          "note": "Wave C: M&A aspirin 75mg brand — matches via 'micropirin'"
         }
-      ]
+      ],
+      "knownGaps": []
     },
 
     "acb_scores_score3": {
@@ -150,125 +123,66 @@
     },
 
     "content_js_anticholinergic": {
-      "_source": "content-scripts/triage-lens/content.js ANTICHOLINERGIC table (~line 1176). This is the SEPARATE, HARDCODED table used for in-queue ACB scoring — it does NOT import engine/acb-scores.js. Divergences from acb-scores.js are documented in knownDivergences below.",
-      "_matchMechanism": "content.js evaluates each drug against ANTICHOLINERGIC[].match (RegExp) and sums .score",
-      "_file": "content-scripts/triage-lens/content.js ANTICHOLINERGIC constant",
-      "_divergenceWarning": "This table and engine/acb-scores.js cover the SAME clinical concept (ACB burden) but are maintained independently and have already drifted. The cross-file agreement assertion in test-term-coverage.js documents every divergence.",
-      "mustMatchAll": [
-        { "term": "amitriptyline", "expectedScore": 3, "note": "TCA — present in both files" },
-        { "term": "nortriptyline", "expectedScore": 3, "note": "TCA — present in both files" },
+      "_source": "content-scripts/triage-lens/content.js in-queue ACB scoring. As of Wave C (3.114) content.js NO LONGER carries a separate hardcoded ANTICHOLINERGIC table — it delegates to the SINGLE canonical scorer window.ACBScores.computeACB (engine/acb-scores.js), now loaded ahead of content.js in the manifest content_scripts list. The queue HUD and the record/engine view therefore score identically by construction; the divergences below are RESOLVED and kept only as regression sentinels.",
+      "_matchMechanism": "content.js calls window.ACBScores.computeACB(allMeds) — same engine, same SORTED_TABLE, per-drug additive sum.",
+      "_file": "content-scripts/triage-lens/content.js (no ANTICHOLINERGIC constant) → engine/acb-scores.js",
+      "resolvedByDelegation": true,
+      "delegationAssertions": {
+        "contentJsMustNotDefineTable": "const ANTICHOLINERGIC = [",
+        "contentJsMustReference": "ACBScores"
+      },
+      "resolvedDivergences": [
         {
           "term": "dosulepin",
-          "expectedScore": 3,
-          "note": "TCA (dothiepin) — in content.js ONLY; missing from acb-scores.js"
-        },
-        { "term": "imipramine", "expectedScore": 3, "note": "TCA — present in both files" },
-        { "term": "paroxetine", "expectedScore": 3, "note": "SSRI — present in both files" },
-        { "term": "oxybutynin", "expectedScore": 3, "note": "bladder AM — present in both files" },
-        { "term": "tolterodine", "expectedScore": 3, "note": "bladder AM — present in both files" },
-        { "term": "solifenacin", "expectedScore": 3, "note": "bladder AM — present in both files" },
-        { "term": "fesoterodine", "expectedScore": 3, "note": "bladder AM — present in both files" },
-        { "term": "chlorphenamine", "expectedScore": 3, "note": "1st-gen AH — present in both files" },
-        { "term": "promethazine", "expectedScore": 3, "note": "1st-gen AH — present in both files" },
-        { "term": "hydroxyzine", "expectedScore": 3, "note": "1st-gen AH — present in both files" }
-      ],
-      "knownDivergences": [
-        {
-          "term": "dosulepin",
-          "contentJsScore": 3,
-          "acbScoresJs": "MISSING — dosulepin not in acb-scores.js ACB_TABLE at all",
-          "clinicalRisk": "A patient on dosulepin scores ACB 3 in the queue HUD but 0 in the engine/record view"
+          "wasContentJs": 3,
+          "wasAcbScoresJs": "MISSING",
+          "nowEngineScore": 3,
+          "note": "dosulepin added to acb-scores.js so the (now sole) engine path scores it 3; previously it scored 3 only in the queue and 0 in the record."
         },
         {
           "term": "trospium",
-          "contentJsScore": 3,
-          "acbScoresJs": 1,
-          "note": "content.js scores trospium as 3 (same group as oxybutynin); acb-scores.js assigns 1 (quaternary — limited CNS penetration). Clinically the acb-scores.js rationale is defensible but inconsistent with content.js."
+          "wasContentJs": 3,
+          "wasAcbScoresJs": 1,
+          "nowEngineScore": 1,
+          "note": "single scorer now returns 1 everywhere (quaternary, limited CNS penetration — the defensible value)."
         },
-        { "term": "orphenadrine", "contentJsScore": 2, "acbScoresJs": 3, "clinicalRisk": "Under-scoring in queue HUD" },
-        { "term": "cyclizine", "contentJsScore": 2, "acbScoresJs": 3, "clinicalRisk": "Under-scoring in queue HUD" },
         {
-          "term": "prochlorperazine",
-          "contentJsScore": 2,
-          "acbScoresJs": 3,
-          "clinicalRisk": "Under-scoring in queue HUD"
+          "term": "orphenadrine",
+          "wasContentJs": 2,
+          "wasAcbScoresJs": 3,
+          "nowEngineScore": 3,
+          "note": "no longer under-scored in the queue."
         },
+        { "term": "cyclizine", "wasContentJs": 2, "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "prochlorperazine", "wasContentJs": 2, "wasAcbScoresJs": 3, "nowEngineScore": 3 },
         {
           "term": "loperamide",
-          "contentJsScore": 2,
-          "acbScoresJs": 1,
-          "note": "Over-scoring in queue HUD; loperamide peripheral action, limited CNS penetration"
+          "wasContentJs": 2,
+          "wasAcbScoresJs": 1,
+          "nowEngineScore": 1,
+          "note": "no longer over-scored in the queue."
         },
-        { "term": "ranitidine", "contentJsScore": 2, "acbScoresJs": 1, "note": "Over-scoring in queue HUD" },
-        {
-          "term": "amantadine",
-          "contentJsScore": 2,
-          "acbScoresJs": "MISSING",
-          "note": "In content.js only; amantadine has anticholinergic properties"
-        },
-        {
-          "term": "cimetidine",
-          "contentJsScore": 2,
-          "acbScoresJs": "MISSING",
-          "note": "In content.js only; H2-blocker with some CNS ACB effect"
-        },
-        {
-          "term": "tramadol",
-          "contentJsScore": 1,
-          "acbScoresJs": "MISSING",
-          "note": "In content.js only; weak evidence for anticholinergic activity"
-        },
-        {
-          "term": "metformin",
-          "contentJsScore": 1,
-          "acbScoresJs": "MISSING",
-          "note": "In content.js only; metformin has no recognised anticholinergic activity — likely a false positive in content.js"
-        },
+        { "term": "ranitidine", "wasContentJs": 2, "wasAcbScoresJs": 1, "nowEngineScore": 1 },
         {
           "term": "clomipramine",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "clomipramine not detected by content.js ACB HUD — patient on clomipramine scores 0 in queue"
+          "wasContentJs": "MISSING",
+          "wasAcbScoresJs": 3,
+          "nowEngineScore": 3,
+          "note": "now detected in the queue."
         },
-        {
-          "term": "doxepin",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "doxepin not detected by content.js — silent miss"
-        },
-        {
-          "term": "diphenhydramine",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "diphenhydramine (in OTC sleep aids, allergy products) not detected by content.js"
-        },
-        {
-          "term": "olanzapine",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "olanzapine not in content.js ANTICHOLINERGIC table — patient on olanzapine scores 0 in queue HUD"
-        },
-        {
-          "term": "quetiapine",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "quetiapine not in content.js — silent miss in queue ACB chip"
-        },
-        {
-          "term": "clozapine",
-          "contentJsScore": "MISSING via ANTICHOLINERGIC",
-          "acbScoresJs": 3,
-          "note": "clozapine IS in content.js HIGH_RISK_DRUGS (monitoring) but NOT in ANTICHOLINERGIC (scoring)"
-        },
-        {
-          "term": "chlorpromazine",
-          "contentJsScore": "MISSING",
-          "acbScoresJs": 3,
-          "clinicalRisk": "Silent miss in queue ACB HUD"
-        },
-        { "term": "procyclidine", "contentJsScore": "MISSING", "acbScoresJs": 3, "clinicalRisk": "Silent miss" },
-        { "term": "trihexyphenidyl", "contentJsScore": "MISSING", "acbScoresJs": 3, "clinicalRisk": "Silent miss" }
-      ]
+        { "term": "doxepin", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "diphenhydramine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "olanzapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "quetiapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "clozapine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "chlorpromazine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "procyclidine", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 },
+        { "term": "trihexyphenidyl", "wasContentJs": "MISSING", "wasAcbScoresJs": 3, "nowEngineScore": 3 }
+      ],
+      "_droppedFromContentJs": {
+        "note": "content.js previously scored these as anticholinergic; they are NOT on the Boustani/ACBcalc scale in engine/acb-scores.js and were dropped as likely false positives when the queue switched to the single scorer. (codeine/furosemide/prednisolone were ALSO scored by content.js but ARE on the engine's score-1 list, so they continue to score 1 — not dropped.) Recorded for audit so a future change that re-adds the dropped terms is a deliberate, reviewed act.",
+        "terms": ["amantadine", "cimetidine", "tramadol", "metformin"]
+      }
     }
   }
 }

@@ -36,6 +36,7 @@
         "engine/ruleset-io.js",
         "engine/rules-engine.js",
         "engine/result-severity.js",
+        "engine/acb-scores.js",
         "engine/data-fetcher.js",
         "shared/extraction-health.js",
         "shared/chip-renderer.js",

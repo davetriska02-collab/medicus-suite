@@ -45,6 +45,14 @@ import {
 } from './sweep-core.js';
 import { buildBatchPack } from '../shared/action-packs.js';
 
+// Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
+// loaded as a classic script in panel.html / pop-out.html). Fall back to the
+// canonical literal if the global is somehow absent — a clinical-safety caveat
+// must never silently drop.
+const NO_ALERT_CAVEAT =
+  (typeof window !== 'undefined' && window.Provenance && window.Provenance.CAVEATS.NO_ALERT_NOT_ALL_CLEAR) ||
+  'No alert ≠ monitoring complete.';
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = MAX_SWEEP_PATIENTS; // patients evaluated per batch (40)
@@ -1045,7 +1053,7 @@ export async function init(el) {
           Checks the selected day's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Pick a day and tick one or more clinicians, or leave All.
         </div>
         <div class="sweep-disclaimer-top">
-          <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. No alert &#8800; monitoring complete &mdash; results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.
+          <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. ${NO_ALERT_CAVEAT} Results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.
         </div>
       </div>
 
