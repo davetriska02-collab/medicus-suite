@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.113.1] — 2026-06-16
+
+### Repo tooling: Virtual Dave agent + CI doc-gate resync
+
+- Added `.claude/agents/virtual-dave.md` — a project Claude Code agent, a digital twin of
+  Dr Dave Triska (GP partner / CSO / indie builder) for in-repo architecture, safety and
+  clinician-UX critique ("what would Dave think"). It reads the actual code before any
+  verdict. **Dev tooling only** — `.claude/` is excluded from the release zip, so no
+  product/code change ships.
+- Resynced the doc-version gate after the manifest advanced onto the 3.113 line:
+  **SOUP.md → product 3.113.0 (doc v1.8)** with vendored libraries re-verified unchanged,
+  and **feature-list.md → v3.113.0**. CLINICAL-SAFETY-NOTICE / HAZARD-LOG remain
+  KNOWN_STALE by design (pending CSO review).
+
 ## [v3.113.0] — 2026-06-16
 
 ### Power-user features (appraisal R4): keyboard tab nav + Condor CSV
