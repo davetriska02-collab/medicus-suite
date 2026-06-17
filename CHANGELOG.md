@@ -2,15 +2,108 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.110.3] — 2026-06-16
+## [v3.113.1] — 2026-06-16
 
-### Repo tooling: Virtual Dave agent
+### Repo tooling: Virtual Dave agent + CI doc-gate resync
 
-Added `.claude/agents/virtual-dave.md` — a project Claude Code agent that is a digital
-twin of Dr Dave Triska (GP partner / CSO / builder) for in-repo design, safety and
-clinician-UX critique ("what would Dave think"). Dev tooling only: `.claude/` is excluded
-from the release zip, so this does not ship to end users and there is no product/code
-change. The agent is grounded — it reads the actual code before giving a verdict.
+- Added `.claude/agents/virtual-dave.md` — a project Claude Code agent, a digital twin of
+  Dr Dave Triska (GP partner / CSO / indie builder) for in-repo architecture, safety and
+  clinician-UX critique ("what would Dave think"). It reads the actual code before any
+  verdict. **Dev tooling only** — `.claude/` is excluded from the release zip, so no
+  product/code change ships.
+- Resynced the doc-version gate after the manifest advanced onto the 3.113 line:
+  **SOUP.md → product 3.113.0 (doc v1.8)** with vendored libraries re-verified unchanged,
+  and **feature-list.md → v3.113.0**. CLINICAL-SAFETY-NOTICE / HAZARD-LOG remain
+  KNOWN_STALE by design (pending CSO review).
+
+## [v3.113.0] — 2026-06-16
+
+### Power-user features (appraisal R4): keyboard tab nav + Condor CSV
+
+For the power-user persona who keeps the panel open all day and wants data out
+without the mouse.
+
+- **Keyboard tab navigation.** Ctrl/Cmd+Alt+← / → cycle the visible in-panel
+  tabs without reaching for the mouse. Ignored while typing in a field, and
+  skips the Visualiser tab (which opens a full browser tab rather than switching
+  in-panel). The shortcut is advertised at the foot of the new "All tabs" menu.
+- **Condor CSV export.** Condor previously offered only "Copy figures" (a
+  clipboard dump that can't be scripted or archived). It now has a "↓ CSV"
+  button beside it that downloads the same snapshot figures (PPI, demand,
+  capacity, waiting room, urgent, submissions, with an "as at" time) as a real
+  file, reusing the shared export helper. No data leaves the browser.
+
+## [v3.112.0] — 2026-06-16
+
+### "All tabs" menu — every tab reachable by name in one click (G1)
+
+At the 360-420px panel width the nav tab strip can only show the active tab;
+the other tabs scroll off, and the appraisal found even savvy users could not
+name them from icons alone. Added an **"All tabs" button** to the nav actions
+that opens a menu listing every visible tab by its full name (icon + label),
+with the active tab highlighted — one click jumps to any tab, no horizontal
+scrolling, no need to learn the Ctrl+K palette.
+
+- Built live from the nav DOM on each open, so it always reflects the user's
+  current tab visibility and order.
+- Mirrors the existing help-popover pattern: outside-click and Esc dismiss,
+  `:focus-visible`, tokenised throughout, verified in light and dark.
+- Chosen over a 2-3 row wrapping nav (which would have permanently eaten
+  vertical space) to protect the panel's clinical-data real estate.
+
+## [v3.111.1] — 2026-06-16
+
+### Legibility pass (Atelier): load-bearing labels lifted off the faint tier
+
+Acting on finding G3 of the whole-suite appraisal — letter-spaced small-caps
+labels in the faintest slate tier strain tired eyes, and the technophobe floor
+misread them. The dual-voice mono small-caps "machine voice" is retained (it is
+the suite's brand); only the *contrast tier* moved, per the design doctrine's
+own floor that a muted tier must never be the only carrier of meaning. Token
+values are unchanged — these are class-level tier choices.
+
+- Module eyebrows (`.mod-eyebrow`), inactive nav-tab labels, and the Today card
+  section labels ("WAITING ROOM", "DEMAND TODAY", …) move from `--text-4` to
+  `--text-3` — a clear contrast lift while staying a muted label tier. (G3)
+- The Trends "Default NICE/QOF thresholds — verify any personalised target in
+  Medicus" caveat is now a tinted note box (accent wash + left accent border)
+  instead of faint grey text floating under the chart, so it is not missed. (G3)
+- The waiting-room strip "Monitoring →" link is lifted to `--text-3` and gains an
+  accent hover border so it reads as navigation, not an alert. (G1, partial)
+
+Verified rendered in light and dark themes. CSS only; no clinical-rule,
+threshold, token-canon or alert-salience changes.
+
+## [v3.111.0] — 2026-06-16
+
+### Usability: legibility and plain-language fixes from The Practice appraisal
+
+Acting on the synthetic whole-suite usability appraisal
+(`docs/appraisal/PRACTICE-whole-suite-ui-theming-2026-06-16.md`). These are
+display/copy changes only — no clinical-rule, threshold or scope changes.
+
+- **Triage strip now reads in plain words.** The persistent top strip showed
+  only the two-letter bucket codes (`NM / MR / NA / AR`), which four personas
+  across the tech-literacy gradient could not decode on sight. It now shows the
+  full labels (New med / Med reply / New admin / Admin reply) — the data was
+  already present, the strip just chose the short form. (U1)
+- **"N unmatched" in the Sentinel audit headline is now a link**, not a dead-end
+  number. Clicking it opens and scrolls to the existing "Meds without a
+  monitoring rule" section. That section's note now states plainly that the
+  medicines **were read from the record successfully** and simply did not map to
+  a rule — closing the nurse/pharmacist worry that "unmatched" might mean a
+  silent extraction failure. (U2)
+- **Demand meter now shows its scale.** The headroom bars on Today carried their
+  threshold only in an invisible aria-label; they now print a small caption
+  ("busy at N · limit N") so the bar has a visible denominator. (U3)
+- **Submissions subtitle disambiguated.** "Live count of inbound work" read to a
+  practice manager as outbound QOF submissions; it now says "Inbound request
+  volume — counts work received, not items submitted". (R1)
+- **Reception intro copy in plainer language.** "Capture a structured history" →
+  "Ask the caller a set of standard questions"; the red-flag note now explains
+  that a YES means stop and follow the on-screen action "which tells you exactly
+  who to contact", rather than the unexplained "escalate straight away". The
+  per-pathway escalation action text itself is unchanged (clinical content). (G2)
 
 ## [v3.110.2] — 2026-06-16
 

@@ -446,10 +446,12 @@ function buildDemandBody() {
     const pct = Math.min(100, Math.round((val / t.red) * 100));
     const amberPct = Math.max(0, Math.min(100, Math.round(((t.amber || 0) / t.red) * 100)));
     const lvl = val >= t.red ? 'red' : t.amber && val >= t.amber ? 'amber' : 'ok';
+    const amberCap = t.amber && t.amber > 0 ? `<span>busy at ${t.amber}</span>` : '<span></span>';
     return `<div class="today-demand-meter" role="img" aria-label="${val} of ${t.red} red threshold">
       <div class="today-demand-meter-fill today-demand-meter-fill--${lvl}" style="width:${pct}%"></div>
       <span class="today-demand-meter-tick" style="left:${amberPct}%"></span>
-    </div>`;
+    </div>
+    <div class="today-demand-meter-cap">${amberCap}<span>limit ${t.red}</span></div>`;
   }
 
   // Decision J: count leads, label after, chip at end
@@ -502,7 +504,7 @@ function sweepProvenance() {
     (r) => Array.isArray(r.chips) && r.chips.some((c) => ['overdue', 'not_met', 'alert'].includes(c.status))
   ).length;
   // Patients actually checked this run (fall back to total when offset absent).
-  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : lastRun.totalCount ?? 0;
+  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
   return { timeStr, actionNeeded, checked, lastRun };
 }
 

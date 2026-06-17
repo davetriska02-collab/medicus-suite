@@ -150,7 +150,7 @@ function renderShell() {
         <div>
           <div class="mod-eyebrow">Submissions Tracker</div>
           <h1 class="mod-title" id="subTitle">Today</h1>
-          <div class="mod-subtitle" id="subSubtitle">Live count of inbound work</div>
+          <div class="mod-subtitle" id="subSubtitle">Inbound request volume — counts work received, not items submitted</div>
         </div>
         <div class="header-right">
           <button id="subCsvBtn" class="ghost-btn hidden">&#x2193; CSV</button>
@@ -445,7 +445,10 @@ function updateTitles() {
   if (!t || !s) return;
   if (state.mode === 'today') {
     t.textContent = state.primaryDate === todayISO() ? 'Today' : formatDate(state.primaryDate);
-    s.textContent = state.primaryDate === todayISO() ? 'Live count of inbound work' : 'Submissions through that day';
+    s.textContent =
+      state.primaryDate === todayISO()
+        ? 'Inbound request volume — counts work received, not items submitted'
+        : 'Inbound request volume through that day';
   } else if (state.mode === 'compare') {
     t.textContent = 'Day vs day';
     s.textContent = `${formatDateShort(state.primaryDate)} vs ${formatDateShort(state.compareDate)}`;
