@@ -90,27 +90,70 @@ function statTile(label, value, sub = '') {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-// (3) Leading plain-English period summary — demand vs capacity in one sentence.
+// Threshold for the "comfortably below capacity" verdict in renderSummary.
+// Demand must be below this fraction of scheduled slots to qualify.
+// Surfaced in the rendered text so the verdict is interpretable.
+const CAPACITY_COMFORT_THRESHOLD = 0.8;
+
+// (3) Leading plain-English period summary — demand vs capacity in one sentence,
+// plus an honest like-for-like prior-period delta when prior data is available.
 function renderSummary(report) {
   const requests = report.demand?.summary?.totals?.all;
   if (requests == null) return '';
   const days = Array.isArray(report.capacity?.byDay) ? report.capacity.byDay : [];
   const slots = days.reduce((acc, x) => acc + (x.slots || 0), 0);
   if (!slots) return '';
+
+  // Verdict uses a named threshold so the reader can see what "comfortably" means.
+  const thresholdPct = Math.round(CAPACITY_COMFORT_THRESHOLD * 100);
   let verdict;
   if (requests > slots) {
     verdict = 'demand was above capacity';
-  } else if (requests < slots * 0.8) {
-    verdict = 'capacity comfortably exceeded demand';
+  } else if (requests < slots * CAPACITY_COMFORT_THRESHOLD) {
+    verdict = `demand was within ${thresholdPct}% of capacity (comfortably below)`;
   } else {
     verdict = 'demand was broadly in line with capacity';
   }
+
   const label = esc(report.range?.label || 'period');
-  return (
+  let html =
     `<section class="pr-summary">` +
-    `<p>${label}: ${esc(String(requests))} requests against ${esc(String(slots))} scheduled slots &mdash; ${esc(verdict)}.</p>` +
-    `</section>`
-  );
+    `<p>${label}: ${esc(String(requests))} requests against ${esc(String(slots))} scheduled slots &mdash; ${esc(verdict)}.</p>`;
+
+  // Prior-period comparison — only rendered when both demand and prior-demand exist
+  // and the prior window can be labelled explicitly. Guard every field.
+  const priorDemandTotal = report.priorDemand?.summary?.totals?.all;
+  if (priorDemandTotal != null && report.priorRange?.start && report.priorRange?.end) {
+    const cmp = comparePct(requests, priorDemandTotal);
+    const priorLabel = `${fmtDate(report.priorRange.start)}&ndash;${fmtDate(report.priorRange.end)}`;
+    let deltaText;
+    if (cmp.pct === null) {
+      deltaText = `up from 0 (prior period ${priorLabel} had no demand recorded)`;
+    } else if (cmp.direction === 'flat') {
+      deltaText = `unchanged vs prior period (${priorLabel}: ${esc(String(priorDemandTotal))} requests)`;
+    } else {
+      const sign = cmp.pct > 0 ? '+' : '';
+      deltaText = `${sign}${cmp.pct}% vs prior period (${priorLabel}: ${esc(String(priorDemandTotal))} requests)`;
+    }
+
+    // Capacity comparison for prior period — separately labelled.
+    const priorCapDays = Array.isArray(report.priorCapacity?.byDay) ? report.priorCapacity.byDay : [];
+    const priorSlots = priorCapDays.reduce((acc, x) => acc + (x.slots || 0), 0);
+    const capCmp = priorSlots ? comparePct(slots, priorSlots) : null;
+    let capDeltaText = '';
+    if (capCmp) {
+      const sign = capCmp.pct != null && capCmp.pct > 0 ? '+' : '';
+      capDeltaText =
+        capCmp.pct == null
+          ? ` Capacity up from 0 (prior period had no slots recorded).`
+          : ` Capacity ${sign}${capCmp.pct}% vs prior period (${esc(String(priorSlots))} slots).`;
+    }
+
+    html += `<p class="pr-note">Demand: ${esc(deltaText)}.${capDeltaText}</p>`;
+  }
+
+  html += `</section>`;
+  return html;
 }
 
 function renderCover(report) {

@@ -30,6 +30,60 @@ const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
 const EXTENSION_VERSION = '2.5.0';
 
+// ── Payload integrity digest ──────────────────────────────────────────────────
+//
+// IMPORTANT: this is an INTEGRITY CHECK, not a cryptographic signature.
+// It proves the file was not truncated or accidentally corrupted in transit
+// (e.g. by a partial download, a text-editor re-encoding, or filesystem
+// truncation). It does NOT prove the file came from a trusted author — a
+// malicious actor who can modify the file can trivially recompute the hash.
+// For authenticity / tamper-proof provenance you would need an asymmetric
+// signature; that is deliberately out of scope here.
+//
+// Algorithm: a synchronous 53-bit hash (cyrb53) over the deterministic JSON
+// serialisation of { scope, modules }. Synchronous so wrap() stays sync and
+// callers don't need to be async. Output is a zero-padded 14-character hex
+// string (e.g. "002a3f1e8b7c04").
+//
+// cyrb53 by bryc (CC0 / public domain):
+//   https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.mjs
+function _cyrb53(str, seed) {
+  seed = seed === undefined ? 0 : seed;
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  // Combine into a 53-bit value represented as two 32-bit halves, then hex.
+  const lo = (h1 >>> 0).toString(16).padStart(8, '0');
+  const hi = ((h2 >>> 0) & 0x1fffff).toString(16).padStart(6, '0');
+  return hi + lo; // 14 hex chars
+}
+
+// The string that is hashed is a deterministic JSON serialisation of the
+// payload fields that matter: scope + modules (sorted by key).  exportedAt
+// and extensionVersion are intentionally excluded so that re-stamping the
+// export date on an otherwise identical backup does not invalidate the hash.
+function _payloadCanonical(scope, modulesData) {
+  // Sort module keys for determinism (Object.keys order is insertion-order,
+  // which can differ between JS engines / import paths).
+  const sortedModules = {};
+  Object.keys(modulesData || {})
+    .sort()
+    .forEach((k) => {
+      sortedModules[k] = (modulesData || {})[k];
+    });
+  return JSON.stringify({ scope, modules: sortedModules });
+}
+
+function _computePayloadHash(scope, modulesData) {
+  return _cyrb53(_payloadCanonical(scope, modulesData));
+}
+
 const VALID_SCOPES = [
   'suite',
   'sentinel',
@@ -49,33 +103,49 @@ const VALID_SCOPES = [
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
+// Stamps a payloadIntegrity field: a deterministic content digest that lets
+// unwrap() detect accidental truncation or corruption. See the note above —
+// this is an integrity check, not a cryptographic signature.
 function wrap(scope, modulesData, extensionVersion) {
   if (!VALID_SCOPES.includes(scope)) {
     throw new Error(`Unknown scope "${scope}". Valid: ${VALID_SCOPES.join(', ')}.`);
   }
+  const mods = modulesData || {};
   return {
     format: FORMAT,
     formatVersion: FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     extensionVersion: extensionVersion || EXTENSION_VERSION,
     scope,
-    modules: modulesData || {},
+    modules: mods,
+    // Integrity check — detects accidental corruption / truncation.
+    // NOT a cryptographic signature; does not prove authorship.
+    payloadIntegrity: _computePayloadHash(scope, mods),
   };
 }
 
+// Integrity check result codes surfaced in the return value.
+const INTEGRITY_OK = 'ok'; // hash present and matches
+const INTEGRITY_LEGACY = 'legacy'; // no hash in envelope (old backup) — not checked
+const INTEGRITY_FAILED = 'failed'; // hash present but does not match payload
+
 // Validate and unwrap an envelope.
-// Returns { valid, errors, warnings, envelope } where envelope is the parsed object.
+// Returns { valid, errors, warnings, envelope, integrity } where:
+//   integrity is one of INTEGRITY_OK | INTEGRITY_LEGACY | INTEGRITY_FAILED.
+// An INTEGRITY_FAILED result is surfaced as an error (blocks import).
+// An INTEGRITY_LEGACY result is surfaced as a warning (imports with notice).
 function unwrap(raw, expectedScope) {
   const errors = [];
   const warnings = [];
+  let integrity = INTEGRITY_LEGACY;
 
   if (!raw || typeof raw !== 'object') {
-    return { valid: false, errors: ['Envelope is not an object.'], warnings, envelope: null };
+    return { valid: false, errors: ['Envelope is not an object.'], warnings, envelope: null, integrity };
   }
 
   if (raw.format !== FORMAT) {
     errors.push(`Unrecognised format "${raw.format}". Expected "${FORMAT}".`);
-    return { valid: false, errors, warnings, envelope: null };
+    return { valid: false, errors, warnings, envelope: null, integrity };
   }
 
   if (typeof raw.formatVersion !== 'number') {
@@ -98,11 +168,42 @@ function unwrap(raw, expectedScope) {
     errors.push('modules must be a plain object.');
   }
 
+  // ── Integrity check ───────────────────────────────────────────────────────
+  // payloadIntegrity is a deterministic content digest introduced in formatVersion 1
+  // (backfilled). Old backups without the field are treated as legacy — not an error,
+  // just a warning. New backups with a mismatched hash are rejected.
+  if (raw.payloadIntegrity == null) {
+    // Legacy backup — no hash was written. Warn but do not block.
+    integrity = INTEGRITY_LEGACY;
+    warnings.push(
+      'Integrity: NOT CHECKED — this backup predates integrity checks (legacy backup). ' +
+        'Import will proceed but file authenticity cannot be verified.'
+    );
+  } else {
+    // Hash present — verify it (only if scope and modules are structurally valid).
+    const scopeOk = VALID_SCOPES.includes(raw.scope);
+    const modsOk = raw.modules && typeof raw.modules === 'object' && !Array.isArray(raw.modules);
+    if (scopeOk && modsOk) {
+      const expected = _computePayloadHash(raw.scope, raw.modules);
+      if (raw.payloadIntegrity === expected) {
+        integrity = INTEGRITY_OK;
+      } else {
+        integrity = INTEGRITY_FAILED;
+        errors.push(
+          'Integrity: FAILED — the file appears to have been corrupted or modified after export. ' +
+            'Do not import this backup.'
+        );
+      }
+    }
+    // If scope/modules are invalid, errors are already pushed above; integrity stays LEGACY.
+  }
+
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     envelope: errors.length === 0 ? raw : null,
+    integrity,
   };
 }
 
@@ -118,6 +219,23 @@ function previewEnvelope(envelope) {
   lines.push(`Scope: ${envelope.scope}`);
   lines.push(`Exported: ${envelope.exportedAt ? new Date(envelope.exportedAt).toLocaleString() : 'unknown'}`);
   if (envelope.extensionVersion) lines.push(`Backup created with extension version: ${envelope.extensionVersion}`);
+
+  // Surface the integrity status prominently so the user sees it before deciding
+  // whether to import. Note: "integrity" means corruption/truncation detection,
+  // NOT cryptographic authorship proof.
+  if (envelope.payloadIntegrity == null) {
+    lines.push('Integrity: NOT CHECKED (legacy backup — no hash present)');
+  } else {
+    // Re-verify here so the preview always reflects the live envelope state.
+    const scopeOk = VALID_SCOPES.includes(envelope.scope);
+    const modsOk = envelope.modules && typeof envelope.modules === 'object' && !Array.isArray(envelope.modules);
+    if (scopeOk && modsOk && _computePayloadHash(envelope.scope, envelope.modules) === envelope.payloadIntegrity) {
+      const dateStr = envelope.exportedAt ? new Date(envelope.exportedAt).toLocaleString() : 'unknown';
+      lines.push(`Integrity: OK (v${envelope.extensionVersion || '?'}, ${dateStr})`);
+    } else {
+      lines.push('Integrity: FAILED — file may be corrupted, do not import');
+    }
+  }
 
   const mods = envelope.modules || {};
   const isSuite = envelope.scope === 'suite';
@@ -339,6 +457,9 @@ const api = {
   FORMAT_VERSION,
   EXTENSION_VERSION,
   VALID_SCOPES,
+  INTEGRITY_OK,
+  INTEGRITY_LEGACY,
+  INTEGRITY_FAILED,
   wrap,
   unwrap,
   previewEnvelope,

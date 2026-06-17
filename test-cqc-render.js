@@ -85,5 +85,20 @@ const path = require('path');
   check(!exportHtml.includes('To fix'), 'export drops the internal "to fix" lists');
   check(/Supporting evidence, not proof/i.test(exportHtml), 'disclaimer present in export mode');
 
+  console.log('\n--- CSS class coverage (renderer → stylesheet) ---');
+  // Guard: every class ragBadge() emits must be defined in cqc-readiness.css.
+  // Prevents a renderer change from silently introducing unstyled "white rectangle" pills.
+  const fs = require('fs');
+  const cssText = fs.readFileSync(path.resolve(__dirname, 'cqc-readiness.css'), 'utf8');
+  // Extract all class names defined in the CSS (lines starting with a dot selector).
+  const cssClasses = new Set();
+  for (const m of cssText.matchAll(/^\.(cqc-[\w-]+)/gm)) {
+    cssClasses.add(m[1]);
+  }
+  const requiredBadgeClasses = ['cqc-badge', 'cqc-badge-green', 'cqc-badge-amber', 'cqc-badge-red', 'cqc-badge-na'];
+  for (const cls of requiredBadgeClasses) {
+    check(cssClasses.has(cls), `CSS defines .${cls} (used by ragBadge() in cqc-render.js)`);
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
 })();

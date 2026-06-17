@@ -174,5 +174,101 @@ const path = require('path');
   // unknown profile id falls back
   check(profiles.getProfile('nope').id === profiles.DEFAULT_PROFILE_ID, 'unknown profile id falls back to default');
 
+  // ── Issue 2: named capacity threshold in verdict ────────────────────────────
+  console.log('\n--- demand-vs-capacity verdict threshold ---');
+  {
+    // Demand well below 80% of slots → "within 80% of capacity" must appear in the text.
+    const lowDemand = profiles.applyProfile(
+      Object.assign(rawReport(), {
+        demand: {
+          byDay: rawReport().demand.byDay,
+          summary: {
+            totals: { all: 10, medical: 10, admin: 0, investigation: 0, rxRoutine: 0, rxNonRoutine: 0 },
+            dailyMean: 5,
+            peak: null,
+            days: 2,
+          },
+        },
+        capacity: {
+          byDay: [
+            { date: '2026-06-15', slots: 100, sessions: 10 },
+            { date: '2026-06-16', slots: 100, sessions: 10 },
+          ],
+        },
+      }),
+      profiles.getProfile('management')
+    );
+    const lowHtml = render.buildReportHtml(lowDemand);
+    check(lowHtml.includes('80%'), 'demand comfortably below capacity verdict surfaces the 80% threshold');
+    check(lowHtml.includes('within 80%'), 'verdict text reads "within 80%"');
+  }
+  {
+    // Demand above capacity → verdict says "above capacity", no threshold mentioned.
+    const highDemand = profiles.applyProfile(
+      Object.assign(rawReport(), {
+        demand: {
+          byDay: rawReport().demand.byDay,
+          summary: {
+            totals: { all: 300, medical: 300, admin: 0, investigation: 0, rxRoutine: 0, rxNonRoutine: 0 },
+            dailyMean: 150,
+            peak: null,
+            days: 2,
+          },
+        },
+        capacity: {
+          byDay: [
+            { date: '2026-06-15', slots: 100, sessions: 10 },
+            { date: '2026-06-16', slots: 100, sessions: 10 },
+          ],
+        },
+      }),
+      profiles.getProfile('management')
+    );
+    const highHtml = render.buildReportHtml(highDemand);
+    check(highHtml.includes('above capacity'), 'demand above capacity renders correct verdict');
+  }
+
+  // ── Enhancement 3: prior-period comparison ──────────────────────────────────
+  console.log('\n--- prior-period comparison ---');
+  {
+    const withPrior = profiles.applyProfile(
+      Object.assign(rawReport(), {
+        priorRange: { start: '2026-06-03', end: '2026-06-09', days: 7 },
+        priorDemand: {
+          byDay: [],
+          summary: {
+            totals: { all: 15, medical: 10, admin: 5, investigation: 0, rxRoutine: 0, rxNonRoutine: 0 },
+            dailyMean: 7.5,
+            peak: null,
+            days: 7,
+          },
+        },
+        priorCapacity: {
+          byDay: [
+            { date: '2026-06-03', slots: 35, sessions: 4 },
+            { date: '2026-06-04', slots: 40, sessions: 5 },
+          ],
+        },
+      }),
+      profiles.getProfile('management')
+    );
+    const priorHtml = render.buildReportHtml(withPrior);
+    // Prior window dates must appear explicitly so the comparison is labelled.
+    check(
+      priorHtml.includes('03/06/2026') || priorHtml.includes('2026-06-03'),
+      'prior period start date is labelled in the report'
+    );
+    check(
+      priorHtml.includes('09/06/2026') || priorHtml.includes('2026-06-09'),
+      'prior period end date is labelled in the report'
+    );
+    // Delta direction: rawReport demand=19, prior=15 → +27% up.
+    check(priorHtml.includes('+27%') || priorHtml.includes('27%'), 'prior-period demand delta percentage is shown');
+    // No prior data → no comparison rendered (guard nulls).
+    const noPrior = profiles.applyProfile(rawReport(), profiles.getProfile('management'));
+    const noPriorHtml = render.buildReportHtml(noPrior);
+    check(!noPriorHtml.includes('prior period'), 'no prior-period line when priorDemand is absent');
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
 })();

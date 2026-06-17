@@ -54,6 +54,11 @@ console.log('\n--- Suite Envelope ---');
   assert(env.scope === 'suite', 'wrap: scope is suite');
   assert(typeof env.exportedAt === 'string', 'wrap: exportedAt is a string');
   assert(env.modules?.sentinel?.customRules !== undefined, 'wrap: sentinel module present');
+  // Integrity field must be present and be a non-empty string.
+  assert(
+    typeof env.payloadIntegrity === 'string' && env.payloadIntegrity.length > 0,
+    'wrap: payloadIntegrity field is stamped'
+  );
 }
 
 {
@@ -72,10 +77,81 @@ console.log('\n--- Suite Envelope ---');
   assert(errors.length === 0, 'unwrap: no errors on valid envelope');
 }
 
+// ── Integrity: round-trip ─────────────────────────────────────────────────────
+{
+  const env = suiteEnv.wrap('suite', { sentinel: { customRules: [{ id: 'c1' }] }, capacity: { presets: [] } });
+  assert(
+    typeof env.payloadIntegrity === 'string' && env.payloadIntegrity.length > 0,
+    'integrity round-trip: wrap stamps payloadIntegrity'
+  );
+  const { valid, errors, warnings, integrity } = suiteEnv.unwrap(env);
+  assert(valid, 'integrity round-trip: unwrap passes on untampered envelope');
+  assert(errors.length === 0, 'integrity round-trip: no errors on untampered envelope');
+  assert(integrity === suiteEnv.INTEGRITY_OK, 'integrity round-trip: integrity result is INTEGRITY_OK');
+  // Preview must show "Integrity: OK"
+  const lines = suiteEnv.previewEnvelope(env);
+  assert(
+    lines.some((l) => l.startsWith('Integrity: OK')),
+    'integrity round-trip: previewEnvelope shows "Integrity: OK"'
+  );
+}
+
+// ── Integrity: tamper detection ───────────────────────────────────────────────
+{
+  const env = suiteEnv.wrap('capacity', { capacity: { presets: [{ id: 'p1', name: 'GP' }] } });
+  // Simulate post-export mutation of the payload (e.g. rule injection).
+  const tampered = JSON.parse(JSON.stringify(env));
+  tampered.modules.capacity.presets[0].name = 'INJECTED';
+  const { valid, errors, integrity } = suiteEnv.unwrap(tampered);
+  assert(!valid, 'integrity tamper: unwrap rejects tampered envelope');
+  assert(integrity === suiteEnv.INTEGRITY_FAILED, 'integrity tamper: integrity result is INTEGRITY_FAILED');
+  assert(
+    errors.some((e) => e.includes('FAILED') || e.includes('corrupted')),
+    'integrity tamper: error message mentions corruption'
+  );
+  // Preview must show "Integrity: FAILED"
+  const lines = suiteEnv.previewEnvelope(tampered);
+  assert(
+    lines.some((l) => l.startsWith('Integrity: FAILED')),
+    'integrity tamper: previewEnvelope shows "Integrity: FAILED"'
+  );
+}
+
+// ── Integrity: legacy backup (no hash) ───────────────────────────────────────
+{
+  // Build a valid legacy-style envelope without payloadIntegrity.
+  const legacy = {
+    format: 'medicus-suite-backup',
+    formatVersion: 1,
+    exportedAt: '2025-01-01T00:00:00.000Z',
+    extensionVersion: '2.0.0',
+    scope: 'suite',
+    modules: { sentinel: { customRules: [] } },
+    // payloadIntegrity deliberately absent
+  };
+  const { valid, errors, warnings, integrity } = suiteEnv.unwrap(legacy);
+  assert(valid, 'integrity legacy: legacy envelope without hash is still valid (not a hard fail)');
+  assert(errors.length === 0, 'integrity legacy: no errors on legacy envelope');
+  assert(integrity === suiteEnv.INTEGRITY_LEGACY, 'integrity legacy: integrity result is INTEGRITY_LEGACY');
+  assert(
+    warnings.some((w) => w.includes('NOT CHECKED') || w.includes('legacy')),
+    'integrity legacy: warning mentions not-checked / legacy'
+  );
+  // Preview must show "Integrity: NOT CHECKED"
+  const lines = suiteEnv.previewEnvelope(legacy);
+  assert(
+    lines.some((l) => l.includes('NOT CHECKED')),
+    'integrity legacy: previewEnvelope shows "Integrity: NOT CHECKED"'
+  );
+}
+
 {
   const { valid, errors } = suiteEnv.unwrap({ format: 'wrong', formatVersion: 1, scope: 'suite', modules: {} });
   assert(!valid, 'unwrap: rejects wrong format');
-  assert(errors.some(e => e.includes('wrong')), 'unwrap: error mentions bad format');
+  assert(
+    errors.some((e) => e.includes('wrong')),
+    'unwrap: error mentions bad format'
+  );
 }
 
 {
@@ -84,13 +160,23 @@ console.log('\n--- Suite Envelope ---');
 }
 
 {
-  const { valid, errors } = suiteEnv.unwrap({ format: 'medicus-suite-backup', formatVersion: 1, scope: 'bogus', modules: {} });
+  const { valid, errors } = suiteEnv.unwrap({
+    format: 'medicus-suite-backup',
+    formatVersion: 1,
+    scope: 'bogus',
+    modules: {},
+  });
   assert(!valid, 'unwrap: rejects unknown scope');
 }
 
 {
-  const { valid, warnings } = suiteEnv.unwrap({ format: 'medicus-suite-backup', formatVersion: 99, scope: 'suite', modules: {} });
-  assert(!valid || warnings.some(w => w.includes('newer')), 'unwrap: warns on future formatVersion');
+  const { valid, warnings } = suiteEnv.unwrap({
+    format: 'medicus-suite-backup',
+    formatVersion: 99,
+    scope: 'suite',
+    modules: {},
+  });
+  assert(!valid || warnings.some((w) => w.includes('newer')), 'unwrap: warns on future formatVersion');
 }
 
 {
@@ -106,14 +192,25 @@ console.log('\n--- Suite Envelope ---');
 }
 
 {
-  const lines = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', {
-    sentinel: { customRules: [{ id: 'c1' }, { id: 'c2' }], rules: { r1: {} } },
-    capacity: { presets: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] },
-    suite: { practiceCode: '560b6c' },
-  }));
-  assert(lines.some(l => l.includes('2 custom')), 'previewEnvelope: custom rule count');
-  assert(lines.some(l => l.includes('3 preset')), 'previewEnvelope: preset count');
-  assert(lines.some(l => l.includes('560b6c')), 'previewEnvelope: practice code');
+  const lines = suiteEnv.previewEnvelope(
+    suiteEnv.wrap('suite', {
+      sentinel: { customRules: [{ id: 'c1' }, { id: 'c2' }], rules: { r1: {} } },
+      capacity: { presets: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] },
+      suite: { practiceCode: '560b6c' },
+    })
+  );
+  assert(
+    lines.some((l) => l.includes('2 custom')),
+    'previewEnvelope: custom rule count'
+  );
+  assert(
+    lines.some((l) => l.includes('3 preset')),
+    'previewEnvelope: preset count'
+  );
+  assert(
+    lines.some((l) => l.includes('560b6c')),
+    'previewEnvelope: practice code'
+  );
 }
 
 {
@@ -131,21 +228,86 @@ const { validateCustomRule, generateCustomRuleId, defaultDueSoonDays } = sentine
 
 {
   assertThrows(() => validateCustomRule(null), 'not an object', 'validateCustomRule: rejects null');
-  assertThrows(() => validateCustomRule({ type: 'drug-monitoring', drug: { match: ['x'] }, tests: [] }), 'id is required', 'validateCustomRule: rejects missing id');
-  assertThrows(() => validateCustomRule({ id: 'custom-x', type: 'drug-monitoring', drug: { match: ['x'] }, tests: [] }), 'non-empty', 'validateCustomRule: rejects empty tests');
-  assertThrows(() => validateCustomRule({ id: 'wrong-id', type: 'drug-monitoring', drug: { match: ['x'] }, tests: [{ name: 't', match: ['t'], intervalDays: 84 }] }), 'custom-', 'validateCustomRule: rejects non-custom- id prefix');
-  assertThrows(() => validateCustomRule({ id: 'custom-x', type: 'qof-indicator', drug: { match: ['x'] }, tests: [{ name: 't', match: ['t'], intervalDays: 84 }] }), 'indicatorCode', 'validateCustomRule: qof-indicator type now dispatched to QOF validator');
-  assertThrows(() => validateCustomRule({ id: 'custom-x', type: 'drug-monitoring', drug: { match: [] }, tests: [{ name: 't', match: ['t'], intervalDays: 84 }] }), 'non-empty', 'validateCustomRule: rejects empty drug.match');
-  assertThrows(() => validateCustomRule({ id: 'custom-x', type: 'drug-monitoring', drug: { match: ['x'] }, tests: [{ name: 't', match: ['t'], intervalDays: -1 }] }), 'intervalDays', 'validateCustomRule: rejects negative intervalDays');
-  assertThrows(() => validateCustomRule({ id: 'custom-x', type: 'drug-monitoring', drug: { match: ['x'] }, tests: [{ name: 't', match: ['t'], intervalDays: 9999 }] }), 'intervalDays', 'validateCustomRule: rejects intervalDays > 3650');
+  assertThrows(
+    () => validateCustomRule({ type: 'drug-monitoring', drug: { match: ['x'] }, tests: [] }),
+    'id is required',
+    'validateCustomRule: rejects missing id'
+  );
+  assertThrows(
+    () => validateCustomRule({ id: 'custom-x', type: 'drug-monitoring', drug: { match: ['x'] }, tests: [] }),
+    'non-empty',
+    'validateCustomRule: rejects empty tests'
+  );
+  assertThrows(
+    () =>
+      validateCustomRule({
+        id: 'wrong-id',
+        type: 'drug-monitoring',
+        drug: { match: ['x'] },
+        tests: [{ name: 't', match: ['t'], intervalDays: 84 }],
+      }),
+    'custom-',
+    'validateCustomRule: rejects non-custom- id prefix'
+  );
+  assertThrows(
+    () =>
+      validateCustomRule({
+        id: 'custom-x',
+        type: 'qof-indicator',
+        drug: { match: ['x'] },
+        tests: [{ name: 't', match: ['t'], intervalDays: 84 }],
+      }),
+    'indicatorCode',
+    'validateCustomRule: qof-indicator type now dispatched to QOF validator'
+  );
+  assertThrows(
+    () =>
+      validateCustomRule({
+        id: 'custom-x',
+        type: 'drug-monitoring',
+        drug: { match: [] },
+        tests: [{ name: 't', match: ['t'], intervalDays: 84 }],
+      }),
+    'non-empty',
+    'validateCustomRule: rejects empty drug.match'
+  );
+  assertThrows(
+    () =>
+      validateCustomRule({
+        id: 'custom-x',
+        type: 'drug-monitoring',
+        drug: { match: ['x'] },
+        tests: [{ name: 't', match: ['t'], intervalDays: -1 }],
+      }),
+    'intervalDays',
+    'validateCustomRule: rejects negative intervalDays'
+  );
+  assertThrows(
+    () =>
+      validateCustomRule({
+        id: 'custom-x',
+        type: 'drug-monitoring',
+        drug: { match: ['x'] },
+        tests: [{ name: 't', match: ['t'], intervalDays: 9999 }],
+      }),
+    'intervalDays',
+    'validateCustomRule: rejects intervalDays > 3650'
+  );
 }
 
 {
   // Valid rule should not throw
   let threw = false;
   try {
-    validateCustomRule({ id: 'custom-leflunomide-123', type: 'drug-monitoring', drug: { match: ['leflunomide'] }, tests: [{ name: 'FBC', match: ['fbc'], intervalDays: 84, dueSoonDays: 28 }] });
-  } catch { threw = true; }
+    validateCustomRule({
+      id: 'custom-leflunomide-123',
+      type: 'drug-monitoring',
+      drug: { match: ['leflunomide'] },
+      tests: [{ name: 'FBC', match: ['fbc'], intervalDays: 84, dueSoonDays: 28 }],
+    });
+  } catch {
+    threw = true;
+  }
   assert(!threw, 'validateCustomRule: accepts valid rule');
 }
 
@@ -153,14 +315,20 @@ const { validateCustomRule, generateCustomRuleId, defaultDueSoonDays } = sentine
   const id = generateCustomRuleId('leflunomide');
   assert(id.startsWith('custom-leflunomide-'), 'generateCustomRuleId: prefix and slug');
   const id2 = generateCustomRuleId('');
-  assert(id2.startsWith('custom-drug-') || id2.startsWith('custom-rule-'), 'generateCustomRuleId: fallback for empty name');
+  assert(
+    id2.startsWith('custom-drug-') || id2.startsWith('custom-rule-'),
+    'generateCustomRuleId: fallback for empty name'
+  );
 }
 
 {
   assert(defaultDueSoonDays(84) === 28, 'defaultDueSoonDays: 12 weeks -> 28 days');
   assert(defaultDueSoonDays(365) === 28, 'defaultDueSoonDays: 1 year -> 28 days');
   assert(defaultDueSoonDays(42) <= 30, 'defaultDueSoonDays: shorter interval capped at 30');
-  assert(defaultDueSoonDays(42) === Math.min(Math.round(42 / 6), 30), 'defaultDueSoonDays: correct formula for shorter interval');
+  assert(
+    defaultDueSoonDays(42) === Math.min(Math.round(42 / 6), 30),
+    'defaultDueSoonDays: correct formula for shorter interval'
+  );
 }
 
 // ── Capacity IO validation ────────────────────────────────────────────────────
@@ -172,8 +340,12 @@ console.log('\n--- Capacity IO validation ---');
   const { capacityImport } = capacityIo;
 
   async function tryCapImport(data) {
-    try { await capacityImport(data); return null; }
-    catch (e) { return e.message; }
+    try {
+      await capacityImport(data);
+      return null;
+    } catch (e) {
+      return e.message;
+    }
   }
 
   async function run() {
@@ -190,7 +362,10 @@ console.log('\n--- Capacity IO validation ---');
     assert(err4?.includes('viewMode'), 'capacityImport: rejects invalid viewMode');
   }
 
-  run().catch(e => { console.error('capacity io run failed:', e.message); failed++; });
+  run().catch((e) => {
+    console.error('capacity io run failed:', e.message);
+    failed++;
+  });
 }
 
 // ── Triage IO ─────────────────────────────────────────────────────────────────
@@ -202,8 +377,12 @@ console.log('\n--- Triage IO validation ---');
 
   async function run() {
     async function tryTriageImport(data) {
-      try { await triageImport(data); return null; }
-      catch (e) { return e.message; }
+      try {
+        await triageImport(data);
+        return null;
+      } catch (e) {
+        return e.message;
+      }
     }
 
     const err1 = await tryTriageImport(null);
@@ -216,7 +395,10 @@ console.log('\n--- Triage IO validation ---');
     assert(err3?.includes('object'), 'triageImport: rejects array as config');
   }
 
-  run().catch(e => { console.error('triage io run failed:', e.message); failed++; });
+  run().catch((e) => {
+    console.error('triage io run failed:', e.message);
+    failed++;
+  });
 }
 
 // ── Triage Lens migration logic (unit test without chrome.storage) ─────────────
@@ -238,15 +420,21 @@ console.log('\n--- Triage Lens migration logic ---');
     return result;
   }
 
-  const state1 = simulateMigration({ 'config': { version: '0.5', rules: [] } });
+  const state1 = simulateMigration({ config: { version: '0.5', rules: [] } });
   assert(state1['triagelens.config']?.version === '0.5', 'migration: copies config to triagelens.config');
   assert(state1['config'] === undefined, 'migration: removes legacy config key (no practiceCode)');
 
-  const state2 = simulateMigration({ 'triagelens.config': { version: '0.5' }, 'config': { version: 'old' } });
-  assert(state2['triagelens.config']?.version === '0.5', 'migration: idempotent — does not overwrite existing triagelens.config');
+  const state2 = simulateMigration({ 'triagelens.config': { version: '0.5' }, config: { version: 'old' } });
+  assert(
+    state2['triagelens.config']?.version === '0.5',
+    'migration: idempotent — does not overwrite existing triagelens.config'
+  );
 
-  const state3 = simulateMigration({ 'config': { practiceCode: '560b6c' } });
-  assert(state3['triagelens.config'] === undefined, 'migration: does not migrate submissions config (has practiceCode, no version/rules)');
+  const state3 = simulateMigration({ config: { practiceCode: '560b6c' } });
+  assert(
+    state3['triagelens.config'] === undefined,
+    'migration: does not migrate submissions config (has practiceCode, no version/rules)'
+  );
   assert(state3['config']?.practiceCode === '560b6c', 'migration: leaves submissions config untouched');
 
   const state4 = simulateMigration({});
@@ -270,15 +458,21 @@ console.log('\n--- applyWithRollback rollback ---');
             if (keys === null || keys === undefined) {
               return { ..._store };
             }
-            const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
             const out = {};
-            ks.forEach(k => { if (k in _store) out[k] = _store[k]; });
+            ks.forEach((k) => {
+              if (k in _store) out[k] = _store[k];
+            });
             return out;
           },
-          async set(obj) { Object.assign(_store, obj); },
+          async set(obj) {
+            Object.assign(_store, obj);
+          },
           async remove(keys) {
             const ks = Array.isArray(keys) ? keys : [keys];
-            ks.forEach(k => { delete _store[k]; });
+            ks.forEach((k) => {
+              delete _store[k];
+            });
           },
         },
       },
@@ -295,10 +489,15 @@ console.log('\n--- applyWithRollback rollback ---');
         if (keys === null || keys === undefined) return { ..._store };
         return origGet(keys);
       };
-      loc.set = async (obj) => { Object.assign(_store, obj); return origSet(obj); };
+      loc.set = async (obj) => {
+        Object.assign(_store, obj);
+        return origSet(obj);
+      };
       loc.remove = async (keys) => {
         const ks = Array.isArray(keys) ? keys : [keys];
-        ks.forEach(k => { delete _store[k]; });
+        ks.forEach((k) => {
+          delete _store[k];
+        });
       };
     }
   }
@@ -312,8 +511,12 @@ console.log('\n--- applyWithRollback rollback ---');
   let errorMsg = '';
   try {
     await suiteEnv.applyWithRollback([
-      async () => { await chrome.storage.local.set({ 'test.written-by-task1': 'temporary' }); },
-      async () => { throw new Error('deliberate-failure'); },
+      async () => {
+        await chrome.storage.local.set({ 'test.written-by-task1': 'temporary' });
+      },
+      async () => {
+        throw new Error('deliberate-failure');
+      },
     ]);
   } catch (e) {
     threw = true;
@@ -321,8 +524,14 @@ console.log('\n--- applyWithRollback rollback ---');
   }
 
   assert(threw, 'applyWithRollback: throws when a task fails');
-  assert(errorMsg.includes('deliberate-failure'), `applyWithRollback: error includes original message (got: "${errorMsg}")`);
-  assert(errorMsg.includes('no changes were applied'), `applyWithRollback: error states no changes were applied (got: "${errorMsg}")`);
+  assert(
+    errorMsg.includes('deliberate-failure'),
+    `applyWithRollback: error includes original message (got: "${errorMsg}")`
+  );
+  assert(
+    errorMsg.includes('no changes were applied'),
+    `applyWithRollback: error states no changes were applied (got: "${errorMsg}")`
+  );
 
   const after = await chrome.storage.local.get(null);
   assert(!('test.written-by-task1' in after), 'applyWithRollback: new key written by task1 is removed after rollback');
@@ -331,11 +540,16 @@ console.log('\n--- applyWithRollback rollback ---');
   // Verify that a successful run does NOT roll back.
   let successWrote = false;
   await suiteEnv.applyWithRollback([
-    async () => { await chrome.storage.local.set({ 'test.success-key': 'written' }); successWrote = true; },
+    async () => {
+      await chrome.storage.local.set({ 'test.success-key': 'written' });
+      successWrote = true;
+    },
   ]);
   const afterSuccess = await chrome.storage.local.get(null);
-  assert(successWrote && afterSuccess['test.success-key'] === 'written',
-    'applyWithRollback: successful tasks are NOT rolled back');
+  assert(
+    successWrote && afterSuccess['test.success-key'] === 'written',
+    'applyWithRollback: successful tasks are NOT rolled back'
+  );
 
   // Tidy up test keys.
   await chrome.storage.local.remove(['test.existing', 'test.success-key']);
@@ -346,7 +560,9 @@ console.log('\n--- applyWithRollback rollback ---');
 
   console.log('\n--- submissions-io: practiceCode ownership ---');
 
-  const _resetStore = () => { for (const k of Object.keys(chrome.storage.local._store || {})) delete (chrome.storage.local._store || {})[k]; };
+  const _resetStore = () => {
+    for (const k of Object.keys(chrome.storage.local._store || {})) delete (chrome.storage.local._store || {})[k];
+  };
 
   // Use a simple in-memory store for this section
   const subStore = {};
@@ -357,12 +573,16 @@ console.log('\n--- applyWithRollback rollback ---');
     storage: {
       local: {
         async get(keys) {
-          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
+          const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
           const out = {};
-          ks.forEach(k => { if (k in subStore) out[k] = subStore[k]; });
+          ks.forEach((k) => {
+            if (k in subStore) out[k] = subStore[k];
+          });
           return out;
         },
-        async set(obj) { Object.assign(subStore, obj); },
+        async set(obj) {
+          Object.assign(subStore, obj);
+        },
       },
     },
   };
@@ -376,29 +596,37 @@ console.log('\n--- applyWithRollback rollback ---');
   subStore['suite.practiceCode'] = 'a1b2c3';
 
   const subExp = await subIo.submissionsExport();
-  assert(!Object.prototype.hasOwnProperty.call(subExp, 'practiceCode'),
-    'submissions export does NOT contain practiceCode (owned by suite-io)');
-  assert(Object.prototype.hasOwnProperty.call(subExp, 'config'),
-    'submissions export still contains config');
-  assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'),
-    'submissions export still contains thresholds');
+  assert(
+    !Object.prototype.hasOwnProperty.call(subExp, 'practiceCode'),
+    'submissions export does NOT contain practiceCode (owned by suite-io)'
+  );
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'config'), 'submissions export still contains config');
+  assert(Object.prototype.hasOwnProperty.call(subExp, 'thresholds'), 'submissions export still contains thresholds');
 
   // Legacy import: a payload WITH practiceCode (e.g. old standalone backup) is still applied
   const subStoreLegacy = {};
   global.chrome = {
-    storage: { local: {
-      async get(keys) {
-        const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
-        const out = {};
-        ks.forEach(k => { if (k in subStoreLegacy) out[k] = subStoreLegacy[k]; });
-        return out;
+    storage: {
+      local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+          const out = {};
+          ks.forEach((k) => {
+            if (k in subStoreLegacy) out[k] = subStoreLegacy[k];
+          });
+          return out;
+        },
+        async set(obj) {
+          Object.assign(subStoreLegacy, obj);
+        },
       },
-      async set(obj) { Object.assign(subStoreLegacy, obj); },
-    }},
+    },
   };
   await subIo.submissionsImport({ practiceCode: 'legacy1' });
-  assert(subStoreLegacy['suite.practiceCode'] === 'legacy1',
-    'submissionsImport: legacy payload with practiceCode still applied');
+  assert(
+    subStoreLegacy['suite.practiceCode'] === 'legacy1',
+    'submissionsImport: legacy payload with practiceCode still applied'
+  );
 
   global.chrome = origChrome;
 
@@ -411,43 +639,61 @@ console.log('\n--- applyWithRollback rollback ---');
   const suiteStore = {};
   const savedChrome = global.chrome;
   global.chrome = {
-    storage: { local: {
-      async get(keys) {
-        const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
-        const out = {};
-        ks.forEach(k => { if (k in suiteStore) out[k] = suiteStore[k]; });
-        return out;
+    storage: {
+      local: {
+        async get(keys) {
+          const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+          const out = {};
+          ks.forEach((k) => {
+            if (k in suiteStore) out[k] = suiteStore[k];
+          });
+          return out;
+        },
+        async set(obj) {
+          Object.assign(suiteStore, obj);
+        },
       },
-      async set(obj) { Object.assign(suiteStore, obj); },
-    }},
+    },
   };
 
   // Round-trip: import a tab order, then export it back unchanged.
   const order = ['referrals', 'sweep', 'slots'];
   await suiteIo.suiteImport({ tabOrder: order });
-  assert(JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order),
-    'suiteImport: writes suite.tabOrder');
+  assert(JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order), 'suiteImport: writes suite.tabOrder');
   const exp = await suiteIo.suiteExport();
-  assert(JSON.stringify(exp.tabOrder) === JSON.stringify(order),
-    'suiteExport: round-trips suite.tabOrder');
+  assert(JSON.stringify(exp.tabOrder) === JSON.stringify(order), 'suiteExport: round-trips suite.tabOrder');
 
   // Reject: non-array tabOrder.
   let rejErr1 = null;
-  try { await suiteIo.suiteImport({ tabOrder: 'slots' }); } catch (e) { rejErr1 = e.message; }
+  try {
+    await suiteIo.suiteImport({ tabOrder: 'slots' });
+  } catch (e) {
+    rejErr1 = e.message;
+  }
   assert(rejErr1 && rejErr1.includes('array'), 'suiteImport: rejects non-array tabOrder');
 
   // Reject: array containing a non-string / bad-shaped id.
   let rejErr2 = null;
-  try { await suiteIo.suiteImport({ tabOrder: ['slots', 42] }); } catch (e) { rejErr2 = e.message; }
+  try {
+    await suiteIo.suiteImport({ tabOrder: ['slots', 42] });
+  } catch (e) {
+    rejErr2 = e.message;
+  }
   assert(rejErr2 && rejErr2.includes('tab-id'), 'suiteImport: rejects array with non-string id');
 
   let rejErr3 = null;
-  try { await suiteIo.suiteImport({ tabOrder: ['slots', 'has space'] }); } catch (e) { rejErr3 = e.message; }
+  try {
+    await suiteIo.suiteImport({ tabOrder: ['slots', 'has space'] });
+  } catch (e) {
+    rejErr3 = e.message;
+  }
   assert(rejErr3 && rejErr3.includes('tab-id'), 'suiteImport: rejects malformed id string');
 
   // A rejected import must not have mutated the stored value.
-  assert(JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order),
-    'suiteImport: rejected payload leaves prior tabOrder untouched');
+  assert(
+    JSON.stringify(suiteStore['suite.tabOrder']) === JSON.stringify(order),
+    'suiteImport: rejected payload leaves prior tabOrder untouched'
+  );
 
   // Unset tabOrder exports as null (round-trip omission is tolerated).
   delete suiteStore['suite.tabOrder'];
@@ -465,10 +711,18 @@ console.log('\n--- applyWithRollback rollback ---');
   assert(JSON.stringify(expLh.letterhead) === JSON.stringify(letterhead), 'suiteExport: round-trips suite.letterhead');
   // Reject a non-object letterhead and a non-string field.
   let lhErr1 = null;
-  try { await suiteIo.suiteImport({ letterhead: 'Witley' }); } catch (e) { lhErr1 = e.message; }
+  try {
+    await suiteIo.suiteImport({ letterhead: 'Witley' });
+  } catch (e) {
+    lhErr1 = e.message;
+  }
   assert(lhErr1 && lhErr1.includes('object'), 'suiteImport: rejects non-object letterhead');
   let lhErr2 = null;
-  try { await suiteIo.suiteImport({ letterhead: { practiceName: 42 } }); } catch (e) { lhErr2 = e.message; }
+  try {
+    await suiteIo.suiteImport({ letterhead: { practiceName: 42 } });
+  } catch (e) {
+    lhErr2 = e.message;
+  }
   assert(lhErr2 && lhErr2.includes('practiceName'), 'suiteImport: rejects non-string practiceName');
   assert(
     JSON.stringify(suiteStore['suite.letterhead']) === JSON.stringify(letterhead),
@@ -485,14 +739,27 @@ console.log('\n--- applyWithRollback rollback ---');
   await suiteIo.suiteImport({ practiceAcceptedAt: acceptedAt });
   assert(suiteStore['suite.practiceAcceptedAt'] === acceptedAt, 'suiteImport: writes suite.practiceAcceptedAt');
   const expAcc = await suiteIo.suiteExport();
-  assert(expAcc.practiceAcceptedAt === acceptedAt, 'suiteExport: round-trips suite.practiceAcceptedAt (travels in backup)');
+  assert(
+    expAcc.practiceAcceptedAt === acceptedAt,
+    'suiteExport: round-trips suite.practiceAcceptedAt (travels in backup)'
+  );
   let accErr = null;
-  try { await suiteIo.suiteImport({ practiceAcceptedAt: 'not-a-date' }); } catch (e) { accErr = e.message; }
+  try {
+    await suiteIo.suiteImport({ practiceAcceptedAt: 'not-a-date' });
+  } catch (e) {
+    accErr = e.message;
+  }
   assert(accErr && accErr.includes('ISO datetime'), 'suiteImport: rejects non-ISO practiceAcceptedAt');
-  assert(suiteStore['suite.practiceAcceptedAt'] === acceptedAt, 'suiteImport: rejected practiceAcceptedAt leaves prior value untouched');
+  assert(
+    suiteStore['suite.practiceAcceptedAt'] === acceptedAt,
+    'suiteImport: rejected practiceAcceptedAt leaves prior value untouched'
+  );
   // Preview warns loudly when a backup carries the acceptance.
   const accLines = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { practiceAcceptedAt: acceptedAt } }));
-  assert(accLines.some((l) => l.includes('practice acceptance') || l.includes('switches ON')), 'previewEnvelope: warns when practice acceptance is carried');
+  assert(
+    accLines.some((l) => l.includes('practice acceptance') || l.includes('switches ON')),
+    'previewEnvelope: warns when practice acceptance is carried'
+  );
 
   global.chrome = savedChrome;
 
@@ -505,15 +772,29 @@ console.log('\n--- applyWithRollback rollback ---');
   {
     const sentImport = sentinelIo.sentinelImport;
     const validRule = {
-      id: 'custom-b12-ferritin-1', type: 'qof-indicator', enabled: true, label: 'B12/ferritin',
-      indicatorCode: 'LOCAL-B12', indicatorName: 'B12/ferritin',
+      id: 'custom-b12-ferritin-1',
+      type: 'qof-indicator',
+      enabled: true,
+      label: 'B12/ferritin',
+      indicatorCode: 'LOCAL-B12',
+      indicatorName: 'B12/ferritin',
       check: { kind: 'observation-alert', observation: ['b12', 'ferritin'], comparator: 'below', amber: 200, red: 100 },
     };
-    const invalidRule = { id: 'custom-legacy-1', type: 'drug-monitoring', enabled: true, drug: { match: ['x'] }, tests: [] };
+    const invalidRule = {
+      id: 'custom-legacy-1',
+      type: 'drug-monitoring',
+      enabled: true,
+      drug: { match: ['x'] },
+      tests: [],
+    };
 
     // Strict (default): the bad rule rejects the whole import.
     let strictThrew = false;
-    try { await sentImport({ customRules: [invalidRule, validRule] }); } catch (e) { strictThrew = true; }
+    try {
+      await sentImport({ customRules: [invalidRule, validRule] });
+    } catch (e) {
+      strictThrew = true;
+    }
     assert(strictThrew, 'sentinelImport: strict mode throws on an invalid custom rule (default)');
 
     // Resilient: valid rule imports, invalid rule reported, restore not aborted.
@@ -521,11 +802,17 @@ console.log('\n--- applyWithRollback rollback ---');
     await chrome.storage.local.remove('sentinel.customRules');
     const res = await sentImport({ customRules: [invalidRule, validRule] }, { skipInvalidCustomRules: true });
     const stored = (await chrome.storage.local.get('sentinel.customRules'))['sentinel.customRules'] || [];
-    assert(stored.length === 1 && stored[0].id === 'custom-b12-ferritin-1',
-      'sentinelImport: resilient mode imports the valid custom rule despite an invalid sibling');
-    assert(res && Array.isArray(res.rejectedCustomRules) && res.rejectedCustomRules.length === 1
-      && res.rejectedCustomRules[0].id === 'custom-legacy-1',
-      'sentinelImport: resilient mode reports the rejected custom rule');
+    assert(
+      stored.length === 1 && stored[0].id === 'custom-b12-ferritin-1',
+      'sentinelImport: resilient mode imports the valid custom rule despite an invalid sibling'
+    );
+    assert(
+      res &&
+        Array.isArray(res.rejectedCustomRules) &&
+        res.rejectedCustomRules.length === 1 &&
+        res.rejectedCustomRules[0].id === 'custom-legacy-1',
+      'sentinelImport: resilient mode reports the rejected custom rule'
+    );
 
     // Round-trip: export → wrap → unwrap → resilient import keeps the valid rule.
     await chrome.storage.local.set({ 'sentinel.customRules': [invalidRule, validRule] });
@@ -535,9 +822,14 @@ console.log('\n--- applyWithRollback rollback ---');
     await chrome.storage.local.remove('sentinel.customRules');
     const res2 = await sentImport(parsed.modules.sentinel, { skipInvalidCustomRules: true });
     const stored2 = (await chrome.storage.local.get('sentinel.customRules'))['sentinel.customRules'] || [];
-    assert(stored2.some((r) => r.id === 'custom-b12-ferritin-1'),
-      'suite round-trip: valid custom rule survives export/import even with an invalid sibling');
-    assert(res2.rejectedCustomRules.length === 1, 'suite round-trip: invalid sibling is reported, not silently dropped');
+    assert(
+      stored2.some((r) => r.id === 'custom-b12-ferritin-1'),
+      'suite round-trip: valid custom rule survives export/import even with an invalid sibling'
+    );
+    assert(
+      res2.rejectedCustomRules.length === 1,
+      'suite round-trip: invalid sibling is reported, not silently dropped'
+    );
 
     await chrome.storage.local.remove('sentinel.customRules');
   }
@@ -552,39 +844,57 @@ console.log('\n--- applyWithRollback rollback ---');
     const refStore = {};
     const savedChrome2 = global.chrome;
     global.chrome = {
-      storage: { local: {
-        async get(keys) {
-          const ks = Array.isArray(keys) ? keys : (typeof keys === 'string' ? [keys] : Object.keys(keys || {}));
-          const out = {};
-          ks.forEach(k => { if (k in refStore) out[k] = refStore[k]; });
-          return out;
+      storage: {
+        local: {
+          async get(keys) {
+            const ks = Array.isArray(keys) ? keys : typeof keys === 'string' ? [keys] : Object.keys(keys || {});
+            const out = {};
+            ks.forEach((k) => {
+              if (k in refStore) out[k] = refStore[k];
+            });
+            return out;
+          },
+          async set(obj) {
+            Object.assign(refStore, obj);
+          },
         },
-        async set(obj) { Object.assign(refStore, obj); },
-      }},
+      },
     };
 
     // Seed both keys.
-    refStore['referrals.discovery'] = { url: 'https://api.example.com/referrals', discoveredAt: '2026-01-01T00:00:00.000Z' };
-    refStore['referrals.config']    = { url: 'https://api.example.com/config', discoveredAt: '2026-01-01T00:00:00.000Z', data: { priorityOptions: [], statusOptions: [] } };
+    refStore['referrals.discovery'] = {
+      url: 'https://api.example.com/referrals',
+      discoveredAt: '2026-01-01T00:00:00.000Z',
+    };
+    refStore['referrals.config'] = {
+      url: 'https://api.example.com/config',
+      discoveredAt: '2026-01-01T00:00:00.000Z',
+      data: { priorityOptions: [], statusOptions: [] },
+    };
 
     // (a) Export must not include discovery.
     const exported = await referralsIo.referralsExport();
-    assert(!Object.prototype.hasOwnProperty.call(exported, 'discovery') || exported.discovery == null,
-      'referralsExport: does NOT include discovery key (audit M1)');
-    assert(Object.prototype.hasOwnProperty.call(exported, 'config'),
-      'referralsExport: DOES include config key');
+    assert(
+      !Object.prototype.hasOwnProperty.call(exported, 'discovery') || exported.discovery == null,
+      'referralsExport: does NOT include discovery key (audit M1)'
+    );
+    assert(Object.prototype.hasOwnProperty.call(exported, 'config'), 'referralsExport: DOES include config key');
 
     // (b) Import with both keys must only write config; discovery must not be touched.
     delete refStore['referrals.discovery'];
     delete refStore['referrals.config'];
     await referralsIo.referralsImport({
       discovery: { url: 'https://api.example.com/referrals', discoveredAt: '2026-01-01T00:00:00.000Z' },
-      config:    { url: 'https://api.example.com/config', data: { priorityOptions: [], statusOptions: [] } },
+      config: { url: 'https://api.example.com/config', data: { priorityOptions: [], statusOptions: [] } },
     });
-    assert(!Object.prototype.hasOwnProperty.call(refStore, 'referrals.discovery'),
-      'referralsImport: does NOT write referrals.discovery (audit M1)');
-    assert(Object.prototype.hasOwnProperty.call(refStore, 'referrals.config'),
-      'referralsImport: DOES write referrals.config');
+    assert(
+      !Object.prototype.hasOwnProperty.call(refStore, 'referrals.discovery'),
+      'referralsImport: does NOT write referrals.discovery (audit M1)'
+    );
+    assert(
+      Object.prototype.hasOwnProperty.call(refStore, 'referrals.config'),
+      'referralsImport: DOES write referrals.config'
+    );
 
     global.chrome = savedChrome2;
   }

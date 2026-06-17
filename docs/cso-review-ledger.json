@@ -1,0 +1,29 @@
+{
+  "_comment": "Machine-readable record of the manifest version and date at which each clinical safety document was last formally reviewed and signed off by the Clinical Safety Officer (CSO). Update this file — not check-doc-versions.js — whenever a CSO review is completed. The check script reads these entries to compute 'minor releases behind' and escalate accordingly.",
+  "docs": [
+    {
+      "file": "docs/CLINICAL-SAFETY-NOTICE.md",
+      "last_cso_review_version": "3.64.0",
+      "last_cso_review_date": "2026-06-13",
+      "notes": "CSN v3.8. Last full CSO clinical-hazard review at 3.64.0 (Dr Dave Triska, 2026-06-13). Pending review must fold in v3.91.2 attribute-injection-XSS remediation, PDF.js 4.x upgrade, and all intervening clinical-chip changes since 3.64."
+    },
+    {
+      "file": "docs/HAZARD-LOG.md",
+      "last_cso_review_version": "3.64.0",
+      "last_cso_review_date": "2026-06-13",
+      "notes": "Hazard Log v3.9 (incl. H-027..029). Last full CSO clinical-hazard review at 3.64.0 (Dr Dave Triska, 2026-06-13). Pending review must assess hazards introduced since 3.64 and cover the XSS and PDF.js vectors."
+    },
+    {
+      "file": "docs/SOUP.md",
+      "last_cso_review_version": "3.113.0",
+      "last_cso_review_date": "2026-06-16",
+      "notes": "SOUP v1.8. Reviewed and reissued at 3.113.0 on 2026-06-16."
+    },
+    {
+      "file": "docs/feature-list.md",
+      "last_cso_review_version": "3.113.0",
+      "last_cso_review_date": "2026-06-16",
+      "notes": "Feature list regenerated at 3.113.0 on 2026-06-16."
+    }
+  ]
+}
