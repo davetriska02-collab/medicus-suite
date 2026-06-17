@@ -10,6 +10,18 @@
 # change. CI runs ESLint repo-wide; it does not run prettier --check repo-wide
 # (it would fail closed on the legacy files), so formatting is gated here at the
 # new-file boundary only.
+
+# Patient-data guard FIRST (CLAUDE.md: nothing from uploads/, data/sars/ or
+# output/ may ever be committed). Deterministic, fails fast, applies to every
+# contributor regardless of how the commit was made.
+phi=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(uploads/|data/sars/|output/)')
+if [ -n "$phi" ]; then
+  echo "BLOCKED: patient-data paths must never be committed:"
+  echo "$phi"
+  echo "Unstage them (git restore --staged <path>) before committing."
+  exit 1
+fi
+
 eslint_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' | grep -v '^vendor/')
 [ -n "$eslint_files" ] && { npx --no-install eslint $eslint_files || exit 1; }
 

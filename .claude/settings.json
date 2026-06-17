@@ -1,0 +1,16 @@
+{
+  "_comment": "Project agent-harness settings. See .claude/README.md for the conventions we follow (and where we deliberately diverge from the 0xCodez checklist). The PreToolUse hook below is deterministic enforcement of two CLAUDE.md safety rules; judgement stays with the model for everything else.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
