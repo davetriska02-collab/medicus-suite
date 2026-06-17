@@ -1,6 +1,6 @@
 {
-  "lastUpdated": "2026-06-14",
-  "specVersion": "JCVI/UKHSA 2026/27 season",
+  "lastUpdated": "2026-06-17",
+  "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403)",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
     {
@@ -10,13 +10,14 @@
       "vaccine": "flu",
       "displayName": "Flu vaccine",
       "season": { "startMonth": 9, "startDay": 1, "endMonth": 3, "endDay": 31 },
-      "source": "JCVI/UKHSA Green Book Chapter 19 (Influenza). JCVI statement on the 2026/27 influenza programme confirmed NO eligible-cohort changes from 2025/26 — eligible groups, age bands and risk groups carried forward unchanged.",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers, care home residents not detected. BMI reading may be out of date.",
+      "source": "JCVI/UKHSA Green Book Chapter 19 (Influenza). 2026/27 programme carries forward the 2025/26 eligible groups, age bands and risk groups; a people-experiencing-homelessness cohort is added from 1 Oct 2026 (CSO-approved 2026-06-17; confirm against the flu letter).",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Status inferred from coded records only — vaccination given elsewhere may not appear. Asthma sub-criterion requires inhaled/systemic steroids or prior hospital admission (proxy via medication check). Carers and care home residents are not detected. Homelessness is rarely coded in GP records, so the homelessness cohort flags only patients with an explicit code — not the broader population; operational outreach remains the primary route. BMI reading may be out of date.",
       "eligibility": {
         "anyOf": [
           { "kind": "age", "ageMin": 65, "label": "Age 65+" },
           { "kind": "age", "ageMin": 2, "ageMax": 17, "label": "Child (2–17 years)" },
           { "kind": "problem", "match": ["pregnan"], "sex": "F", "label": "Pregnancy" },
+          { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "label": "Experiencing homelessness" },
           { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
           { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
@@ -57,13 +58,13 @@
       "type": "vaccine",
       "enabled": true,
       "vaccine": "pneumococcal",
-      "displayName": "Pneumococcal vaccine (PPV23)",
+      "displayName": "Pneumococcal vaccine (PCV20)",
       "schedule": "once",
-      "source": "UKHSA Green Book Chapter 25 (Pneumococcal) — single PPV23 dose at age 65+; no routine revaccination",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65. Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded.",
+      "source": "UKHSA Green Book Chapter 25 (Pneumococcal) — single dose at age 65+; the routine adult vaccine changed from PPV23 to PCV20 (Apexxnar) in early 2026 (CSO-approved 2026-06-17; confirm against the change-of-vaccine letter). No routine revaccination.",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: One-off dose from age 65 (routine vaccine is now PCV20; a previously-recorded PPV23 dose still counts as given). Status inferred from coded records only — vaccination given elsewhere (or pre-registration) may not appear. Revaccination every 5 years applies ONLY to asplenia/splenic dysfunction/CKD and is NOT encoded here — check manually for those patients. At-risk under-65 cohort (Green Book ch 25 risk groups) intentionally not encoded. Rule id retained as 'vax-pneumo-ppv23' so existing user snoozes/overrides are preserved.",
       "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 65, "label": "Age 65+" } ] },
       "statusTerms": {
-        "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pneumococcal immunisation"],
+        "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pcv20", "20-valent pneumococcal", "apexxnar", "prevenar 20", "pneumococcal conjugate vaccin", "pneumococcal immunisation"],
         "declined": ["pneumococcal vaccination declined", "pneumococcal vaccine declined", "pneumococcal immunisation declined", "pneumococcal vaccination not given"]
       }
     },
@@ -94,9 +95,12 @@
       "vaccine": "rsv",
       "displayName": "RSV vaccine",
       "schedule": "once",
-      "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice June 2023 — routine offer at 75 with catch-up for 75–79, programme from 1 Sept 2024; single dose",
-      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. The 80+ cohort is not eligible (initial-year transition offer ended 31 Aug 2025). RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note.",
-      "eligibility": { "anyOf": [ { "kind": "age", "ageMin": 75, "ageMax": 79, "label": "Age 75–79" } ] },
+      "source": "UKHSA Green Book Chapter 27a (RSV) / JCVI advice — routine offer from age 75; eligibility expanded from 1 April 2026 to all adults aged 80+ and adult care-home residents (CSO-approved 2026-06-17; confirm against the JCVI/NHSE expansion letter).",
+      "notes": "DOUBLE-CHECK ELIGIBILITY: Single dose, no booster currently recommended. Eligibility expanded 1 April 2026 to remove the upper age bound (now age 75+) and to include adult care-home residents — applied on CSO direction; verify against the JCVI/NHSE letter as this run could not page-verify the source. RSV-in-pregnancy pathway (from 28 weeks) is intentionally NOT encoded — see pertussis omission note.",
+      "eligibility": { "anyOf": [
+        { "kind": "age", "ageMin": 75, "label": "Age 75+" },
+        { "kind": "problem", "match": ["care home resident", "nursing home resident", "residential care"], "label": "Care-home resident (adult)" }
+      ] },
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy"],
         "declined": ["rsv vaccination declined", "rsv vaccine declined", "respiratory syncytial virus vaccination declined", "rsv vaccination not given"]

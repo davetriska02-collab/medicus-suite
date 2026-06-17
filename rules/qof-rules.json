@@ -911,7 +911,7 @@
         "groups": [
           {
             "name": "RAAS",
-            "match": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "sacubitril", "entresto"]
+            "match": ["ramipril", "lisinopril", "perindopril", "enalapril", "captopril", "trandolapril", "fosinopril", "losartan", "candesartan", "valsartan", "irbesartan", "telmisartan", "olmesartan", "azilsartan", "sacubitril", "entresto"]
           },
           {
             "name": "Beta-blocker",
@@ -930,7 +930,7 @@
       "thresholds": { "lower": 20, "upper": 50 },
       "points": 12,
       "source": "QOF 26/27 HF009 (NICE IND317, NG106 Sep 2025 update)",
-      "notes": "NEW 26/27 indicator. Replaces HF003 and HF006. Requires concurrent prescription from all 4 drug classes in HFrEF. Clinician must verify: contraindication and intolerance exclusions are NOT detectable from coded records; a patient shown as not_met may have documented reasons for omitting one or more pillars."
+      "notes": "NEW 26/27 indicator. Replaces HF003 and HF006. Requires concurrent prescription from all 4 drug classes in HFrEF. Clinician must verify: contraindication and intolerance exclusions are NOT detectable from coded records; a patient shown as not_met may have documented reasons for omitting one or more pillars. 2026-06-17 (The Keeper, CSO-approved): RAAS pillar brought to parity with the file's ACE/ARB list — added fosinopril, olmesartan and azilsartan, so a HFrEF patient whose sole RAAS agent is one of those no longer silently fails the RAAS pillar."
     },
 
     {

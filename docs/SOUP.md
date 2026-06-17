@@ -2,8 +2,8 @@
 
 **Document reference:** MS-CSO-SOUP-001
 **Software product:** Medicus Suite (Chrome extension)
-**Product version:** 3.114.0
-**Document version:** 1.8
+**Product version:** 3.115.0
+**Document version:** 1.9
 **Date issued:** 2026-06-17
 **Author:** Dr Dave Triska, Graysbrook Ltd
 **Clinical Safety Officer:** Dr Dave Triska (GMC 6159481), registered GP
@@ -79,3 +79,4 @@ When any item above is added, upgraded or removed:
 | 2026-06-16 | 1.8     | DT     | Synchronised to Medicus Suite v3.113.0. **No SOUP changes.** The v3.110→v3.113 releases (whole-suite UI/theming + legibility fixes, All-tabs nav menu, keyboard tab navigation, Condor CSV export, and the CQC-readiness Settings tab) introduced no new vendored libraries — all first-party. §3 re-verified against `vendor-versions.json`: PDF.js 4.2.67 (+ worker), Chart.js 4.4.1, D3.js 7.8.5 — unchanged. |
 | 2026-06-16 | 1.7     | DT     | Synchronised to Medicus Suite v3.110.0. **No SOUP changes.** The v3.92→v3.110 releases (Practice Report + audience profiles, headless referrals discovery, CQC Inspection Readiness, the live Record tab, recall letterhead, focus mode / alert roll-up / editable thresholds, and result-chip trigger labels) introduced no new vendored libraries and no new shipped dependencies — all first-party. §3 re-verified against `vendor-versions.json`: PDF.js 4.2.67 (+ worker), Chart.js 4.4.1, D3.js 7.8.5 — unchanged; CVE-2024-4367 disposition (patched) unchanged. devDependencies (§4) unchanged. |
 | 2026-06-15 | 1.6     | DT     | Reissued at v3.92.1 (audit follow-up branch, staged as v3.91.5, merged onto v3.92.0). **PDF.js (+ worker) upgraded 3.11.174 → 4.2.67**, the upstream release that fixes **CVE-2024-4367** — NF6 is now closed (previously deferred). §3 rows 1–2 updated: anomaly disposition changed from "Mitigated" to "Patched" (the `isEvalSupported: false` control is retained as defence-in-depth). 4.x ships ESM-only, so it is loaded via an inline `<script type="module">` shim in `visualiser-core.html` that re-exposes `window.pdfjsLib`; `vendor-versions.json` and SHA-256 checksums updated; `verify-vendor.js` passes. ⚠️ A manual visualiser render smoke-test is still outstanding before the next release tag (CHANGELOG v3.91.5). Chart.js 4.4.1 and D3.js 7.8.5 re-verified against `vendor-versions.json` — unchanged. devDependencies (§4) unchanged.                                                                                                                                                                            |
+| 2026-06-17 | 1.9     | DT     | Synchronised to Medicus Suite v3.115.0 as part of the full CSO hazard re-baseline (v3.64.0 → v3.115.0; see `docs/HAZARD-LOG.md` v3.11). **No SOUP changes.** The v3.114.0 release ("Copy summary" on the Record tab, backup integrity hash, single ACB scorer, completeness/contract CI) and the v3.115.0 release introduced no new vendored libraries and no new shipped dependencies — all first-party. §3 re-verified against `vendor-versions.json`: **PDF.js 4.2.67 (+ worker)** (CVE-2024-4367 resolved/patched — disposition unchanged), **Chart.js 4.4.1**, **D3.js 7.8.5** — all unchanged. devDependencies (§4) unchanged. |

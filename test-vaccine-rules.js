@@ -237,16 +237,29 @@ console.log('\n--- RSV eligibility ---');
   assert(chips[0].status === 'vax_due', 'RSV: age 75 no event → vax_due');
 }
 
-// Age 79 → chip (within 75-79)
+// Age 79 → chip (75+)
 {
   const chips = engine.evaluateVaccineRule(rsvRule, baseData(79), NOW);
   assert(chips.length === 1, 'RSV: age 79 → chip');
 }
 
-// Age 80 → no chip
+// Age 80 → chip (eligibility expanded to 75+ from 1 April 2026 — upper bound removed)
 {
   const chips = engine.evaluateVaccineRule(rsvRule, baseData(80), NOW);
-  assert(chips.length === 0, 'RSV: age 80 → no chip');
+  assert(chips.length === 1, 'RSV: age 80 → chip (75+ expansion, 2026)');
+}
+
+// Age 90 → chip (no upper bound)
+{
+  const chips = engine.evaluateVaccineRule(rsvRule, baseData(90), NOW);
+  assert(chips.length === 1, 'RSV: age 90 → chip (no upper bound)');
+}
+
+// Care-home resident under 75 → chip (care-home cohort added 2026)
+{
+  const data = { ...baseData(68), problems: [{ label: 'Care home resident', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: care-home resident (age 68) → chip');
 }
 
 // ── Schema: source and notes required on new rules ───────────────────────────
