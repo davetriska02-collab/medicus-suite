@@ -102,6 +102,26 @@ console.log('\n--- HF009: four-pillar medication-all-of ---');
   assert(chips[0].status === 'achieved', 'HF009: Entresto satisfies RAAS group → achieved');
 }
 
+// Fosinopril satisfies RAAS group (Keeper 2026-06-17: ACE/ARB parity addition)
+{
+  const meds = [
+    med('fosinopril 10mg'),
+    med('carvedilol 6.25mg'),
+    med('spironolactone 25mg'),
+    med('dapagliflozin 10mg'),
+  ];
+  const chips = engine.evaluateQofIndicatorRule(hf009, hfRefData(meds), NOW);
+  assert(chips.length === 1, 'HF009: chip produced with fosinopril');
+  assert(chips[0].status === 'achieved', 'HF009: fosinopril satisfies RAAS group → achieved');
+}
+
+// Olmesartan satisfies RAAS group (Keeper 2026-06-17: ARB parity addition)
+{
+  const meds = [med('olmesartan 20mg'), med('bisoprolol 2.5mg'), med('spironolactone 25mg'), med('empagliflozin 10mg')];
+  const chips = engine.evaluateQofIndicatorRule(hf009, hfRefData(meds), NOW);
+  assert(chips[0].status === 'achieved', 'HF009: olmesartan satisfies RAAS group → achieved');
+}
+
 // Missing SGLT2i → not_met, valueText contains 'missing: SGLT2i'
 {
   const meds = [med('ramipril 5mg'), med('bisoprolol 2.5mg'), med('spironolactone 25mg')];

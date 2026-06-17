@@ -3,37 +3,37 @@
   "docs": [
     {
       "file": "docs/CLINICAL-SAFETY-NOTICE.md",
-      "last_cso_review_version": "3.64.0",
-      "last_cso_review_date": "2026-06-13",
+      "last_cso_review_version": "3.115.0",
+      "last_cso_review_date": "2026-06-17",
       "incremental_reviews": [
         {
           "version": "3.114.0",
           "date": "2026-06-17",
-          "scope": "Clinical-matching changes only (single ACB scorer, STOPP NSAID/aspirin term parity, completeness + contract-test CI). Keeper-prepared; CSO sign-off by merge.",
+          "scope": "Clinical-matching changes only (single ACB scorer, STOPP NSAID/aspirin term parity, completeness + contract-test CI).",
           "doc_version": "3.9"
         }
       ],
-      "notes": "Last FULL CSO clinical-hazard re-baseline at 3.64.0 (Dr Dave Triska, 2026-06-13). last_cso_review_version is deliberately left at 3.64.0 so the doc-version gate keeps surfacing the outstanding backlog. A full review must still fold in the v3.91.2 attribute-injection-XSS remediation, the PDF.js 4.x upgrade, and all intervening clinical-chip changes from 3.65 to 3.113. The v3.114.0 clinical-matching changes were reviewed and documented incrementally on 2026-06-17 (see HAZARD-LOG H-031 / H-006 / H-016 and CSN limitation 13)."
+      "notes": "CSN v3.10. FULL CSO clinical-hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17, signed off by merge): the 3.64->3.113 backlog was closed — §2 intended-purpose updated for the Record tab, Practice Report/Condor, CQC Inspection Readiness, result-rule expansions and chrome/attestation additions; known-limitations 36 (Record snapshot/gap-markers), 37 (CQC supporting-evidence-not-proof) and 38 (Select-all) added; the v3.91.2 attribute-injection-XSS remediation and PDF.js 4.x upgrade are covered via HAZARD-LOG. Prior baseline was 3.64.0 (2026-06-13)."
     },
     {
       "file": "docs/HAZARD-LOG.md",
-      "last_cso_review_version": "3.64.0",
-      "last_cso_review_date": "2026-06-13",
+      "last_cso_review_version": "3.115.0",
+      "last_cso_review_date": "2026-06-17",
       "incremental_reviews": [
         {
           "version": "3.114.0",
           "date": "2026-06-17",
-          "scope": "Added H-031 (cross-surface clinical-score divergence, closed by the single ACB scorer); updated H-016 and H-006 controls for the STOPP term parity, single scorer, completeness CI and producer->consumer contract tests. Full Keeper currency sweep of all 6 rule domains run; no rule-file change applied (WebFetch 403 — source pages unverifiable; findings WebSearch-corroborated only).",
+          "scope": "Added H-031 (cross-surface clinical-score divergence, closed by the single ACB scorer); updated H-016/H-006 controls.",
           "doc_version": "3.10"
         }
       ],
-      "notes": "Hazard Log v3.10. Last FULL CSO clinical-hazard re-baseline at 3.64.0 (Dr Dave Triska, 2026-06-13). last_cso_review_version deliberately left at 3.64.0 so the gate keeps flagging the backlog. A full review must still assess hazards introduced from 3.65 to 3.113 and cover the XSS and PDF.js vectors. The v3.114.0 clinical-matching delta was reviewed and hazard-assessed incrementally on 2026-06-17 (H-031 + H-006/H-016 control updates)."
+      "notes": "Hazard Log v3.11. FULL CSO hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17, signed off by merge): the 3.64->3.113 backlog was closed — new hazards H-032 (Record snapshot misread as complete record), H-033 (CQC pack misread as compliance proof/coverage), H-034 (Select-all bulk action); control updates to H-002/H-006/H-007/H-009/H-016/H-022/H-023/H-024/H-028/H-030, including the v3.91.2 attribute-injection-XSS remediation (H-009), the PDF.js 4.x / CVE-2024-4367 upgrade (SOUP), and the v3.100.0 critical-low-Hb 100->80 g/L threshold change (H-030). Prior baseline was 3.64.0 (2026-06-13)."
     },
     {
       "file": "docs/SOUP.md",
-      "last_cso_review_version": "3.113.0",
-      "last_cso_review_date": "2026-06-16",
-      "notes": "SOUP v1.8. Reviewed and reissued at 3.113.0 on 2026-06-16."
+      "last_cso_review_version": "3.115.0",
+      "last_cso_review_date": "2026-06-17",
+      "notes": "SOUP v1.9. Reissued at 3.115.0 on 2026-06-17: PDF.js 4.2.67 (CVE-2024-4367 patched), Chart.js 4.4.1 and D3.js 7.8.5 all confirmed unchanged."
     },
     {
       "file": "docs/feature-list.md",

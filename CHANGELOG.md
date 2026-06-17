@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.115.0] — 2026-06-17
+
+### Keeper rule updates (CSO-approved) + full clinical-safety re-baseline
+
+**Rule updates** (held from the 2026-06-17 Keeper run, now CSO-approved and embedded;
+sources to be confirmed against the official letters — applied without page-verification
+as external sources were unreachable that run):
+
+- **RSV vaccine** (`vax-rsv`): eligibility expanded to **age 75+** (upper bound removed)
+  and **adult care-home residents**, reflecting the 1 April 2026 programme expansion. The
+  rule previously stopped at 79 and silently missed all eligible 80+ patients.
+- **Flu vaccine** (`vax-flu`): added a **people-experiencing-homelessness** cohort
+  (problem-coded; flags only patients with an explicit code — operational outreach remains
+  the primary route).
+- **Pneumococcal** (`vax-pneumo-ppv23`): relabelled to **PCV20** (Apexxnar) for the routine
+  65+ programme (changed early 2026); a recorded PPV23 dose still counts as given. Rule id
+  retained so existing user snoozes/overrides are preserved.
+- **QOF HF009** four-pillar RAAS class: added **fosinopril, olmesartan and azilsartan**
+  (parity with the file's existing ACE/ARB list) so a HFrEF patient whose sole RAAS agent
+  is one of those no longer silently fails the RAAS pillar. Regression-locked in
+  `test-hf009-four-pillar.js`; RSV/care-home coverage added to `test-vaccine-rules.js`.
+
+**Full clinical-safety re-baseline (v3.64.0 → v3.115.0):** `HAZARD-LOG.md` and
+`CLINICAL-SAFETY-NOTICE.md` were re-baselined to cover everything added since the last full
+review — the Record tab live summary, Practice Report, CQC Inspection Readiness, the result-
+rule/combo expansions, Focus mode, alert roll-up, editable operational thresholds, letterhead
+auto-fill and the Select-all helper. New hazards **H-032** (Record snapshot misread as a
+complete record), **H-033** (CQC evidence pack misread as compliance proof / population
+coverage) and **H-034** (Select-all bulk-selects the wrong outstanding investigations);
+controls updated on H-002/H-016 (contract + completeness CI), H-030 (the v3.100.0 critical-
+low-Hb 100→80 g/L threshold change), H-009 (the v3.91.2 attribute-injection-XSS remediation),
+and others. `SOUP.md` records the PDF.js 3.11.174 → 4.2.67 upgrade (CVE-2024-4367). The
+CSO-review ledger is re-pinned to 3.115.0, clearing the doc-version-gate backlog.
+
 ## [v3.114.0] — 2026-06-17
 
 ### Council-of-Daves roadmap (steps 1, 3, 4, 5) — clinical-matching integrity, contract tests, honest figures, provenance canon
