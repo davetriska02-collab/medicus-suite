@@ -507,6 +507,15 @@
               <span>Label <small>(shown on the chip, max ~60 chars)</small></span>
               <input type="text" id="rrLabel" maxlength="60" />
             </label>
+            <p
+              class="tl-rr-label-hint"
+              id="rrLabelBuiltinHint"
+              style="display: none"
+              title="Your renamed label is stored against this built-in rule and survives suite updates. The rule's analyte match and thresholds are unchanged."
+            >
+              You can rename this built-in flag — e.g. shorten it. Your edit is kept and
+              won't be reverted by a suite update.
+            </p>
 
             <label class="tl-field tl-field-inline">
               <input type="checkbox" id="rrEnabled" />

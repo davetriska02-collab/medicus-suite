@@ -2482,6 +2482,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrEditTitle').textContent = rule.builtin
       ? 'Edit built-in result rule: ' + rule.label
       : 'Edit result rule: ' + rule.label;
+    // Built-in chip labels ARE user-editable and the edit persists across suite updates
+    // (mergeShippedDefaults appends builtins by id only, and revertRetiredResultRuleFields
+    // reverts a builtin's label ONLY while it still exactly equals a retired shipped
+    // default — i.e. the user hasn't customised it). Surface that affordance explicitly so
+    // a clinician knows they can rename/shorten a flag (e.g. strip a redundant "high").
+    const builtinHint = $('#rrLabelBuiltinHint');
+    if (builtinHint) builtinHint.style.display = rule.builtin ? '' : 'none';
     $('#rrLabel').value = rrEditingDraft.label || '';
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
     $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');

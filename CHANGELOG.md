@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.116.0] — 2026-06-17
+
+### Added — Built-in result-chip flags are now obviously editable (and the rename sticks)
+
+Clinicians can already rename **any** result-rule chip label in the Result Rules editor —
+including built-in rules — and the rename persists across suite updates. That capability
+was undiscoverable, so this surfaces it: when you open a **built-in** result rule for
+editing, a hint under the Label field now states explicitly that you can rename/shorten
+the flag (e.g. strip a redundant *"high"*) and that your edit is kept and will not be
+reverted by a suite update.
+
+- The persistence guarantee is structural, not new: `mergeShippedDefaults` appends
+  built-in result rules **by id only**, so once a user holds an edited built-in it is never
+  re-pushed; and `revertRetiredResultRuleFields` only un-sticks a built-in label while it
+  still **exactly** equals a retired shipped default (the atomic-per-id guard). The moment a
+  clinician types their own label, the whole rule is left untouched — user override wins.
+- Added a regression test (`test-chip-label-migration.js`) pinning that an arbitrary
+  clinician-renamed built-in label survives the shipped-defaults merge, not just the
+  specific strings already in the retired table.
+
+**Scope note — deliberately bounded.** This covers **result-rule** chip labels, which is
+what the request was about. Age/decoration (`.ch-queue-chips`) and drug-monitoring
+(`.ch-q-mon`) chip labels are **not** user-editable yet — those are generated, not
+rule-label-driven, so making them editable is a larger change recommended as a separate
+scoped follow-up rather than bundled here.
+
+### Not done (intentionally, on clinical-safety grounds) — bulk-trimming "high" from shipped labels
+
+The request also asked to consider removing a redundant *"high"* from shipped built-in
+labels. After investigation this was **held**, not done, because:
+
+- There is **no standalone `/ high` direction token** in our chip output. The visible
+  "high"/"low" lives **inside a built-in rule's clinical name** (e.g. *"Critical high
+  potassium"*), and that name only renders when our rule **escalated severity above the
+  lab's own flag** — so it is our attributable escalation signal, not a duplicate of
+  Medicus's H/L flag.
+- Many candidate analytes are **bidirectional** — potassium, sodium, calcium can be
+  critically high *or* low (we ship both rules). Trimming to *"Critical potassium"* would
+  lose hyper/hypo and is clinically ambiguous.
+- For the unidirectional ones (eGFR, Hb, INR, platelets, neutrophils, magnesium), the
+  direction word is part of the **canonical clinical phrase**, not redundant decoration;
+  shaving it yields no safety benefit and risks looking like a value was dropped.
+
+The editable-flags feature above is the correct lever: a clinician who wants "high" gone
+renames that one label themselves, and it sticks. No `defaults.json` content was changed,
+so there is no config-version bump for this release.
+
 ## [v3.115.2] — 2026-06-17
 
 ### Fixed — Result-triage queue chips no longer push the patient name out of view

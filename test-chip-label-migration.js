@@ -361,6 +361,30 @@ if (contentRR && optionsRR) {
     contentRR.revert(held, shippedRR2);
     check(held[0].label === 'High INR', 'revert: a non-builtin sharing the id is not touched');
   }
+  // EDITABLE-FLAGS CONTRACT (Nick's request): a clinician who renames a built-in chip
+  // label — e.g. strips a redundant "high" — must keep that rename across suite updates.
+  // The label they typed is NOT a retired default, so revert leaves the whole rule alone
+  // even though the rule is otherwise still at shipped thresholds. Pins that the
+  // user-override-wins guarantee holds for an arbitrary custom label, not just the
+  // specific strings already in the retired table.
+  {
+    const held = [
+      {
+        id: 'base-high-potassium',
+        builtin: true,
+        kind: 'threshold',
+        comparator: 'above',
+        label: 'Critical K+ (≥6.5)',
+        red: 6.5,
+        unit: 'mmol/L',
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].label === 'Critical K+ (≥6.5)',
+      'editable flags: a clinician-renamed built-in label survives the shipped-defaults merge'
+    );
+  }
   // Empty / null held set is a safe no-op.
   {
     let threw = false;
