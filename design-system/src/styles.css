@@ -1,0 +1,83 @@
+/* Component styles for the Medicus DS atoms. Consumes the token canon
+   (tokens.css) — every colour/radius/timing is a var(--*), never a raw value,
+   so dark and colorblind modes come for free. */
+
+/* ── Status chip (RAG severity tag) ─────────────────────────────────────── */
+.mds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.mds-chip__icon {
+  display: inline-flex;
+  align-items: center;
+}
+.mds-chip--red {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+.mds-chip--amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+.mds-chip--green {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+}
+.mds-chip--info {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.mds-chip--violet {
+  background: var(--violet-dim);
+  color: var(--violet);
+  border-color: var(--violet-line);
+}
+
+/* ── Navigation tab (suite-nav pill) ────────────────────────────────────── */
+.mds-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid transparent; /* reserved so --active never shifts layout */
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--r-md);
+  white-space: nowrap;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.mds-nav-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.mds-nav-tab--active {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+}
+.mds-nav-tab__icon {
+  display: inline-flex;
+  align-items: center;
+}

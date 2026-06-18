@@ -1,0 +1,9 @@
+{
+  "pkg": "@medicus/design-system",
+  "globalName": "MedicusDS",
+  "shape": "package",
+  "buildCmd": "npm --prefix design-system run build",
+  "cssEntry": "dist/bundle.css",
+  "runtimeFontPrefixes": ["JetBrains"],
+  "readmeHeader": ".design-sync/conventions.md"
+}
