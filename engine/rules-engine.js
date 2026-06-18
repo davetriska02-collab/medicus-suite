@@ -1153,6 +1153,337 @@
   }
 
   // QOF indicator rule evaluator
+  // === QOF INDICATOR CHECK EVALUATORS ===
+  // One evaluator per check.kind for the "achievement" check kinds that share
+  // evaluateQofIndicatorRule's chip-build tail. Each is a behaviour-preserving
+  // extraction of what used to be one branch of a single ~250-line if/else-if
+  // chain: it starts from the no_data defaults, returns { status, valueText,
+  // dateText, days }, and may populate `evidenceCtx` by reference (exactly as
+  // the inline branches did). observation-alert is NOT here — it is a
+  // clinical-safety threshold alert that returns its own chip and is handled as
+  // an early return inside evaluateQofIndicatorRule.
+  function evalQofCheckObservationThreshold(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    const obs = findLatestObservation(data.observations, { match: check.observation });
+    // Reject unparseable dates: NaN < _qofStart is false so an invalid date
+    // would bypass the window check and surface a spurious 'achieved'/'not_met'.
+    if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
+      evidenceCtx.matchedObs = {
+        name: obs.name || (check.observation || [])[0] || '',
+        value: obs.value,
+        date: obs.date,
+      };
+      days = daysBetween(obs.date, now);
+      dateText = obs.date;
+      // Boundary check: by default bundled QOF indicators apply the 1 Apr – 31 Mar
+      // QOF year floor. Custom indicators can opt out by setting
+      // useQofYearFloor: false on the rule, in which case the rolling
+      // check.withinDays window is used instead.
+      const _obsDate = new Date(obs.date);
+      const _qofStart = qofYearStart(now);
+      const _useFloor = rule.useQofYearFloor !== false;
+      const _withinDays = check.withinDays || 365;
+      const _rollingCutoff = new Date(now);
+      _rollingCutoff.setDate(_rollingCutoff.getDate() - _withinDays);
+      const _outOfWindow = _useFloor ? _obsDate < _qofStart : _obsDate < _rollingCutoff;
+      if (_outOfWindow) {
+        status = 'overdue';
+      } else if (check.thresholdSystolic && check.thresholdDiastolic) {
+        const bp = parseBp(obs.value);
+        if (bp) {
+          valueText = `${bp.systolic}/${bp.diastolic}`;
+          if (bp.systolic <= check.thresholdSystolic && bp.diastolic <= check.thresholdDiastolic) {
+            status = 'achieved';
+          } else {
+            status = 'not_met';
+          }
+        } else {
+          status = 'no_data';
+        }
+      } else if (check.threshold != null && check.operator) {
+        const v = parseNumeric(obs.value);
+        if (v != null) {
+          valueText = check.unit ? `${v} ${check.unit}` : String(v);
+          const op = check.operator;
+          if (op === '<=' && v <= check.threshold) status = 'achieved';
+          else if (op === '<' && v < check.threshold) status = 'achieved';
+          else if (op === '>=' && v >= check.threshold) status = 'achieved';
+          else if (op === '>' && v > check.threshold) status = 'achieved';
+          else status = 'not_met';
+        }
+      }
+    }
+    return { status, valueText, dateText, days };
+  }
+
+  function evalQofCheckMedicationPresent(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    const matchTerms = check.medicationMatch || [];
+    const excludeTerms = check.medicationExclude || [];
+    const foundMed = (data.medications || []).find((m) => {
+      const norm = normaliseDrugString(m.name);
+      if (excludeTerms.some((t) => norm.includes(normaliseDrugString(t)))) return false;
+      return matchTerms.some((t) => norm.includes(normaliseDrugString(t)));
+    });
+    if (foundMed) evidenceCtx.matchedMed = foundMed.name;
+    status = foundMed ? 'achieved' : 'not_met';
+    return { status, valueText, dateText, days };
+  }
+
+  function evalQofCheckObservationRecent(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    const obs = findLatestObservation(data.observations, { match: check.observation });
+    // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
+    // would produce 'overdue' (conservative but misleading — treat as no data).
+    if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
+      evidenceCtx.matchedObs = {
+        name: obs.name || (check.observation || [])[0] || '',
+        value: obs.value,
+        date: obs.date,
+      };
+      days = daysBetween(obs.date, now);
+      dateText = obs.date;
+      // Capture the recorded value so the chip can show e.g. "Weight: 87 kg ·
+      // 12 Mar 2025" instead of just the date. observation-threshold sets
+      // this already; observation-recent was the gap that left in-date
+      // chips (HRT review, smoking status, etc.) value-less.
+      if (obs.value != null) valueText = String(obs.value).trim();
+      // Boundary check — supports useQofYearFloor opt-out (see threshold case above)
+      const _obsDate2 = new Date(obs.date);
+      const _qofStart2 = qofYearStart(now);
+      const _useFloor2 = rule.useQofYearFloor !== false;
+      const _withinDays2 = check.withinDays || 365;
+      const _rollingCutoff2 = new Date(now);
+      _rollingCutoff2.setDate(_rollingCutoff2.getDate() - _withinDays2);
+      const _inWindow = _useFloor2 ? _obsDate2 >= _qofStart2 : _obsDate2 >= _rollingCutoff2;
+      if (_inWindow) status = 'achieved';
+      else status = 'overdue';
+    }
+    return { status, valueText, dateText, days };
+  }
+
+  function evalQofCheckObservationBundle(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    // observation-bundle: checks that EACH observation group (array of name aliases)
+    // has a matching result within the QOF window. Used by DM037 to verify all 8
+    // care processes were recorded this QOF year.
+    const bundleGroups = check.observations || [];
+    const _useFloorB = rule.useQofYearFloor !== false;
+    const _withinDaysB = check.withinDays || 365;
+    const _qofStartB = qofYearStart(now);
+    const _rollingCutoffB = new Date(now);
+    _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
+    const bundleResults = bundleGroups.map((aliases) => {
+      const obs = findLatestObservation(data.observations, { match: aliases });
+      if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
+      const obsDate = new Date(obs.date);
+      const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
+      return { aliases, obs, inWindow };
+    });
+    const metCount = bundleResults.filter((r) => r.inWindow).length;
+    const totalCount = bundleResults.length;
+    if (check.requireAll) {
+      if (metCount === totalCount) {
+        status = 'achieved';
+      } else if (metCount === 0) {
+        status = 'no_data';
+      } else {
+        status = 'not_met';
+      }
+    } else {
+      status = metCount > 0 ? 'achieved' : 'no_data';
+    }
+    valueText = `${metCount}/${totalCount} care processes`;
+    // Most recent observation date across all matched groups
+    const latestBundleDate =
+      bundleResults
+        .filter((r) => r.obs && r.obs.date)
+        .map((r) => r.obs.date)
+        .sort()
+        .pop() || null;
+    dateText = latestBundleDate;
+    if (latestBundleDate) days = daysBetween(latestBundleDate, now);
+    evidenceCtx.bundleResults = bundleResults;
+    return { status, valueText, dateText, days };
+  }
+
+  function evalQofCheckMedicationAllOf(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    // medication-all-of: each group in check.groups must be satisfied by at
+    // least one current medication. Used by HF009 four-pillar therapy check.
+    // Clinical-safety rationale: a populated med list with ZERO pillar matches
+    // is 'not_met'; an EMPTY medication array more likely means extraction
+    // failure so we return 'no_data' rather than a false 'not_met'.
+    const groups = check.groups || [];
+    const meds = data.medications || [];
+    const groupResults = groups.map((g) => {
+      const found = meds.find((m) => {
+        const norm = normaliseDrugString(m.name);
+        if ((g.exclude || []).some((t) => norm.includes(normaliseDrugString(t)))) return false;
+        return (g.match || []).some((t) => norm.includes(normaliseDrugString(t)));
+      });
+      return { name: g.name, med: found ? found.name : null };
+    });
+    const metCount = groupResults.filter((r) => r.med).length;
+    if (metCount === groups.length && groups.length > 0) status = 'achieved';
+    else if (meds.length === 0) status = 'no_data';
+    else status = 'not_met';
+    valueText =
+      `${metCount}/${groups.length} classes` +
+      (metCount < groups.length
+        ? ` (missing: ${groupResults
+            .filter((r) => !r.med)
+            .map((r) => r.name)
+            .join(', ')})`
+        : '');
+    evidenceCtx.allOfResults = groupResults;
+    return { status, valueText, dateText, days };
+  }
+
+  function evalQofCheckObservationTrend(check, rule, data, now, evidenceCtx) {
+    let status = 'no_data';
+    let valueText = null;
+    let dateText = null;
+    let days = null;
+    // Find matching investigation history entries; multiple substrings may match
+    // distinct test types (e.g. "PSA" matches both "PSA" and "PSA free/total ratio").
+    // Pick the entry with the most data points so the trend uses the richest series.
+    // BP-style "120/80" values are not supported in trend mode — they parse to NaN
+    // in observationHistory and get filtered below.
+    const normStr = (s) => String(s || '').toLowerCase();
+    const matchTerms = check.observation || [];
+    const candidates = (data.observationHistory || []).filter((entry) => {
+      const name = normStr(entry.name);
+      return matchTerms.some((m) => name.includes(normStr(m)));
+    });
+    const historyEntry =
+      candidates.length === 0
+        ? null
+        : candidates.reduce((a, b) => ((b.history?.length || 0) > (a.history?.length || 0) ? b : a));
+
+    if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
+      // Filter history to within check.withinMonths of now
+      const withinMs = (check.withinMonths || 24) * 30.4375 * 24 * 60 * 60 * 1000;
+      const nowMs = new Date(now).getTime();
+      const cutoffMs = nowMs - withinMs;
+      const inWindow = historyEntry.history.filter((pt) => {
+        const d = new Date(pt.date || '');
+        if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return false;
+        // isFinite excludes NaN AND Infinity; protects subsequent arithmetic
+        return isFinite(pt.value);
+      });
+
+      if (inWindow.length < (check.minPoints || 2)) {
+        // Not enough data points in the window for a meaningful trend.
+        status = 'no_data';
+        valueText = `${inWindow.length} point${inWindow.length !== 1 ? 's' : ''} in window (need ${check.minPoints || 2})`;
+        // Still surface the readings we DID find so the evidence panel shows the
+        // provenance (what values exist) rather than a bare "insufficient data".
+        // Prefer in-window readings; if none, fall back to the most recent few
+        // from the full history so the clinician can see the actual values.
+        const provenance = (inWindow.length ? inWindow : historyEntry.history.slice(0, 6)).filter((pt) =>
+          isFinite(pt.value)
+        );
+        if (provenance.length) {
+          // history is newest-first; reverse to oldest→newest for display.
+          const ordered = provenance.slice().reverse();
+          const pNewest = ordered[ordered.length - 1].value;
+          const pOldest = ordered[0].value;
+          const pSpan = Math.round(
+            (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) / (30.4375 * 24 * 60 * 60 * 1000)
+          );
+          evidenceCtx.trendSeries = {
+            testName: historyEntry.name,
+            unit: historyEntry.unit || '',
+            points: ordered.map((p) => ({ date: p.date, value: p.value })),
+            delta: ordered.length >= 2 ? pNewest - pOldest : null,
+            direction: check.direction || 'rising',
+            minDelta: check.minDelta != null ? check.minDelta : 0,
+            spanMonths: ordered.length >= 2 ? pSpan : null,
+            fires: false,
+            insufficient: true,
+          };
+        }
+      } else {
+        // History is sorted newest-first; first entry is most recent, last is oldest.
+        // Trend direction: compare oldest value to newest value overall.
+        // Using first-vs-last comparison (not regression) — simpler and less noisy
+        // for the kind of sparse GP data seen in Medicus (3–6 points typical).
+        const newest = inWindow[0].value; // most recent reading
+        const oldest = inWindow[inWindow.length - 1].value; // earliest reading
+        const delta = newest - oldest; // positive = rising
+        // minDelta default 0 means "any movement in the named direction fires".
+        // The strict-inequality check on delta below prevents a flat line
+        // (delta exactly 0) from firing as either rising or falling.
+        const minDelta = check.minDelta != null ? check.minDelta : 0;
+        const spanMonths = Math.round(
+          (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /
+            (30.4375 * 24 * 60 * 60 * 1000)
+        );
+        const direction = check.direction || 'rising';
+        // Trend fires only when delta moves strictly in the named direction AND meets minDelta.
+        // Strict inequality on delta prevents a flat line firing as either direction.
+        const trendFires =
+          direction === 'rising'
+            ? delta > 0 && delta >= minDelta
+            : direction === 'falling'
+              ? delta < 0 && delta <= -minDelta
+              : false;
+
+        const unit = historyEntry.unit ? ` ${historyEntry.unit}` : '';
+        const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
+        valueText = `${oldest.toFixed(1)} → ${newest.toFixed(1)}${unit} (${deltaStr}, ${inWindow.length} pts, ${spanMonths} mo)`;
+        dateText = inWindow[0].date;
+
+        evidenceCtx.trendSeries = {
+          testName: historyEntry.name,
+          unit: historyEntry.unit || '',
+          points: inWindow
+            .slice()
+            .reverse()
+            .map((p) => ({ date: p.date, value: p.value })),
+          delta,
+          direction,
+          minDelta,
+          spanMonths,
+          fires: trendFires,
+        };
+
+        status = trendFires ? 'not_met' : 'achieved';
+      }
+    }
+    // status remains 'no_data' when no history entry found or history array is empty
+    return { status, valueText, dateText, days };
+  }
+
+  // Dispatch table: check.kind → evaluator. observation-alert is intentionally
+  // absent (handled as an early return in evaluateQofIndicatorRule). An unknown
+  // kind has no entry, so the parent keeps the no_data defaults — exactly as the
+  // old if/else-if chain did when no branch matched.
+  const QOF_CHECK_EVALUATORS = {
+    'observation-threshold': evalQofCheckObservationThreshold,
+    'medication-present': evalQofCheckMedicationPresent,
+    'observation-recent': evalQofCheckObservationRecent,
+    'observation-bundle': evalQofCheckObservationBundle,
+    'medication-all-of': evalQofCheckMedicationAllOf,
+    'observation-trend': evalQofCheckObservationTrend,
+  };
+
   function evaluateQofIndicatorRule(rule, data, now) {
     const traceEntry = _traceBase(data, rule);
     // evidenceCtx accumulates the matched data the evaluator consults so the
@@ -1318,273 +1649,16 @@
       ];
     }
 
-    if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
-      // Reject unparseable dates: NaN < _qofStart is false so an invalid date
-      // would bypass the window check and surface a spurious 'achieved'/'not_met'.
-      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
-        evidenceCtx.matchedObs = {
-          name: obs.name || (check.observation || [])[0] || '',
-          value: obs.value,
-          date: obs.date,
-        };
-        days = daysBetween(obs.date, now);
-        dateText = obs.date;
-        // Boundary check: by default bundled QOF indicators apply the 1 Apr – 31 Mar
-        // QOF year floor. Custom indicators can opt out by setting
-        // useQofYearFloor: false on the rule, in which case the rolling
-        // check.withinDays window is used instead.
-        const _obsDate = new Date(obs.date);
-        const _qofStart = qofYearStart(now);
-        const _useFloor = rule.useQofYearFloor !== false;
-        const _withinDays = check.withinDays || 365;
-        const _rollingCutoff = new Date(now);
-        _rollingCutoff.setDate(_rollingCutoff.getDate() - _withinDays);
-        const _outOfWindow = _useFloor ? _obsDate < _qofStart : _obsDate < _rollingCutoff;
-        if (_outOfWindow) {
-          status = 'overdue';
-        } else if (check.thresholdSystolic && check.thresholdDiastolic) {
-          const bp = parseBp(obs.value);
-          if (bp) {
-            valueText = `${bp.systolic}/${bp.diastolic}`;
-            if (bp.systolic <= check.thresholdSystolic && bp.diastolic <= check.thresholdDiastolic) {
-              status = 'achieved';
-            } else {
-              status = 'not_met';
-            }
-          } else {
-            status = 'no_data';
-          }
-        } else if (check.threshold != null && check.operator) {
-          const v = parseNumeric(obs.value);
-          if (v != null) {
-            valueText = check.unit ? `${v} ${check.unit}` : String(v);
-            const op = check.operator;
-            if (op === '<=' && v <= check.threshold) status = 'achieved';
-            else if (op === '<' && v < check.threshold) status = 'achieved';
-            else if (op === '>=' && v >= check.threshold) status = 'achieved';
-            else if (op === '>' && v > check.threshold) status = 'achieved';
-            else status = 'not_met';
-          }
-        }
-      }
-    } else if (check.kind === 'medication-present') {
-      const matchTerms = check.medicationMatch || [];
-      const excludeTerms = check.medicationExclude || [];
-      const foundMed = (data.medications || []).find((m) => {
-        const norm = normaliseDrugString(m.name);
-        if (excludeTerms.some((t) => norm.includes(normaliseDrugString(t)))) return false;
-        return matchTerms.some((t) => norm.includes(normaliseDrugString(t)));
-      });
-      if (foundMed) evidenceCtx.matchedMed = foundMed.name;
-      status = foundMed ? 'achieved' : 'not_met';
-    } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation });
-      // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
-      // would produce 'overdue' (conservative but misleading — treat as no data).
-      if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
-        evidenceCtx.matchedObs = {
-          name: obs.name || (check.observation || [])[0] || '',
-          value: obs.value,
-          date: obs.date,
-        };
-        days = daysBetween(obs.date, now);
-        dateText = obs.date;
-        // Capture the recorded value so the chip can show e.g. "Weight: 87 kg ·
-        // 12 Mar 2025" instead of just the date. observation-threshold sets
-        // this already; observation-recent was the gap that left in-date
-        // chips (HRT review, smoking status, etc.) value-less.
-        if (obs.value != null) valueText = String(obs.value).trim();
-        // Boundary check — supports useQofYearFloor opt-out (see threshold case above)
-        const _obsDate2 = new Date(obs.date);
-        const _qofStart2 = qofYearStart(now);
-        const _useFloor2 = rule.useQofYearFloor !== false;
-        const _withinDays2 = check.withinDays || 365;
-        const _rollingCutoff2 = new Date(now);
-        _rollingCutoff2.setDate(_rollingCutoff2.getDate() - _withinDays2);
-        const _inWindow = _useFloor2 ? _obsDate2 >= _qofStart2 : _obsDate2 >= _rollingCutoff2;
-        if (_inWindow) status = 'achieved';
-        else status = 'overdue';
-      }
-    } else if (check.kind === 'observation-bundle') {
-      // observation-bundle: checks that EACH observation group (array of name aliases)
-      // has a matching result within the QOF window. Used by DM037 to verify all 8
-      // care processes were recorded this QOF year.
-      const bundleGroups = check.observations || [];
-      const _useFloorB = rule.useQofYearFloor !== false;
-      const _withinDaysB = check.withinDays || 365;
-      const _qofStartB = qofYearStart(now);
-      const _rollingCutoffB = new Date(now);
-      _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
-      const bundleResults = bundleGroups.map((aliases) => {
-        const obs = findLatestObservation(data.observations, { match: aliases });
-        if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
-        const obsDate = new Date(obs.date);
-        const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
-        return { aliases, obs, inWindow };
-      });
-      const metCount = bundleResults.filter((r) => r.inWindow).length;
-      const totalCount = bundleResults.length;
-      if (check.requireAll) {
-        if (metCount === totalCount) {
-          status = 'achieved';
-        } else if (metCount === 0) {
-          status = 'no_data';
-        } else {
-          status = 'not_met';
-        }
-      } else {
-        status = metCount > 0 ? 'achieved' : 'no_data';
-      }
-      valueText = `${metCount}/${totalCount} care processes`;
-      // Most recent observation date across all matched groups
-      const latestBundleDate =
-        bundleResults
-          .filter((r) => r.obs && r.obs.date)
-          .map((r) => r.obs.date)
-          .sort()
-          .pop() || null;
-      dateText = latestBundleDate;
-      if (latestBundleDate) days = daysBetween(latestBundleDate, now);
-      evidenceCtx.bundleResults = bundleResults;
-    } else if (check.kind === 'medication-all-of') {
-      // medication-all-of: each group in check.groups must be satisfied by at
-      // least one current medication. Used by HF009 four-pillar therapy check.
-      // Clinical-safety rationale: a populated med list with ZERO pillar matches
-      // is 'not_met'; an EMPTY medication array more likely means extraction
-      // failure so we return 'no_data' rather than a false 'not_met'.
-      const groups = check.groups || [];
-      const meds = data.medications || [];
-      const groupResults = groups.map((g) => {
-        const found = meds.find((m) => {
-          const norm = normaliseDrugString(m.name);
-          if ((g.exclude || []).some((t) => norm.includes(normaliseDrugString(t)))) return false;
-          return (g.match || []).some((t) => norm.includes(normaliseDrugString(t)));
-        });
-        return { name: g.name, med: found ? found.name : null };
-      });
-      const metCount = groupResults.filter((r) => r.med).length;
-      if (metCount === groups.length && groups.length > 0) status = 'achieved';
-      else if (meds.length === 0) status = 'no_data';
-      else status = 'not_met';
-      valueText =
-        `${metCount}/${groups.length} classes` +
-        (metCount < groups.length
-          ? ` (missing: ${groupResults
-              .filter((r) => !r.med)
-              .map((r) => r.name)
-              .join(', ')})`
-          : '');
-      evidenceCtx.allOfResults = groupResults;
-    } else if (check.kind === 'observation-trend') {
-      // Find matching investigation history entries; multiple substrings may match
-      // distinct test types (e.g. "PSA" matches both "PSA" and "PSA free/total ratio").
-      // Pick the entry with the most data points so the trend uses the richest series.
-      // BP-style "120/80" values are not supported in trend mode — they parse to NaN
-      // in observationHistory and get filtered below.
-      const normStr = (s) => String(s || '').toLowerCase();
-      const matchTerms = check.observation || [];
-      const candidates = (data.observationHistory || []).filter((entry) => {
-        const name = normStr(entry.name);
-        return matchTerms.some((m) => name.includes(normStr(m)));
-      });
-      const historyEntry =
-        candidates.length === 0
-          ? null
-          : candidates.reduce((a, b) => ((b.history?.length || 0) > (a.history?.length || 0) ? b : a));
-
-      if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
-        // Filter history to within check.withinMonths of now
-        const withinMs = (check.withinMonths || 24) * 30.4375 * 24 * 60 * 60 * 1000;
-        const nowMs = new Date(now).getTime();
-        const cutoffMs = nowMs - withinMs;
-        const inWindow = historyEntry.history.filter((pt) => {
-          const d = new Date(pt.date || '');
-          if (isNaN(d.getTime()) || d.getTime() < cutoffMs) return false;
-          // isFinite excludes NaN AND Infinity; protects subsequent arithmetic
-          return isFinite(pt.value);
-        });
-
-        if (inWindow.length < (check.minPoints || 2)) {
-          // Not enough data points in the window for a meaningful trend.
-          status = 'no_data';
-          valueText = `${inWindow.length} point${inWindow.length !== 1 ? 's' : ''} in window (need ${check.minPoints || 2})`;
-          // Still surface the readings we DID find so the evidence panel shows the
-          // provenance (what values exist) rather than a bare "insufficient data".
-          // Prefer in-window readings; if none, fall back to the most recent few
-          // from the full history so the clinician can see the actual values.
-          const provenance = (inWindow.length ? inWindow : historyEntry.history.slice(0, 6)).filter((pt) =>
-            isFinite(pt.value)
-          );
-          if (provenance.length) {
-            // history is newest-first; reverse to oldest→newest for display.
-            const ordered = provenance.slice().reverse();
-            const pNewest = ordered[ordered.length - 1].value;
-            const pOldest = ordered[0].value;
-            const pSpan = Math.round(
-              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) / (30.4375 * 24 * 60 * 60 * 1000)
-            );
-            evidenceCtx.trendSeries = {
-              testName: historyEntry.name,
-              unit: historyEntry.unit || '',
-              points: ordered.map((p) => ({ date: p.date, value: p.value })),
-              delta: ordered.length >= 2 ? pNewest - pOldest : null,
-              direction: check.direction || 'rising',
-              minDelta: check.minDelta != null ? check.minDelta : 0,
-              spanMonths: ordered.length >= 2 ? pSpan : null,
-              fires: false,
-              insufficient: true,
-            };
-          }
-        } else {
-          // History is sorted newest-first; first entry is most recent, last is oldest.
-          // Trend direction: compare oldest value to newest value overall.
-          // Using first-vs-last comparison (not regression) — simpler and less noisy
-          // for the kind of sparse GP data seen in Medicus (3–6 points typical).
-          const newest = inWindow[0].value; // most recent reading
-          const oldest = inWindow[inWindow.length - 1].value; // earliest reading
-          const delta = newest - oldest; // positive = rising
-          // minDelta default 0 means "any movement in the named direction fires".
-          // The strict-inequality check on delta below prevents a flat line
-          // (delta exactly 0) from firing as either rising or falling.
-          const minDelta = check.minDelta != null ? check.minDelta : 0;
-          const spanMonths = Math.round(
-            (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /
-              (30.4375 * 24 * 60 * 60 * 1000)
-          );
-          const direction = check.direction || 'rising';
-          // Trend fires only when delta moves strictly in the named direction AND meets minDelta.
-          // Strict inequality on delta prevents a flat line firing as either direction.
-          const trendFires =
-            direction === 'rising'
-              ? delta > 0 && delta >= minDelta
-              : direction === 'falling'
-                ? delta < 0 && delta <= -minDelta
-                : false;
-
-          const unit = historyEntry.unit ? ` ${historyEntry.unit}` : '';
-          const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
-          valueText = `${oldest.toFixed(1)} → ${newest.toFixed(1)}${unit} (${deltaStr}, ${inWindow.length} pts, ${spanMonths} mo)`;
-          dateText = inWindow[0].date;
-
-          evidenceCtx.trendSeries = {
-            testName: historyEntry.name,
-            unit: historyEntry.unit || '',
-            points: inWindow
-              .slice()
-              .reverse()
-              .map((p) => ({ date: p.date, value: p.value })),
-            delta,
-            direction,
-            minDelta,
-            spanMonths,
-            fires: trendFires,
-          };
-
-          status = trendFires ? 'not_met' : 'achieved';
-        }
-      }
-      // status remains 'no_data' when no history entry found or history array is empty
+    // Dispatch to the per-kind evaluator. observation-alert returned above; an
+    // unknown kind has no evaluator and keeps the no_data defaults (matching the
+    // old chain's fall-through).
+    const _evaluator = QOF_CHECK_EVALUATORS[check.kind];
+    if (_evaluator) {
+      const _r = _evaluator(check, rule, data, now, evidenceCtx);
+      status = _r.status;
+      valueText = _r.valueText;
+      dateText = _r.dateText;
+      days = _r.days;
     }
 
     if (traceEntry) {

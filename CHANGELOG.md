@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.2] — 2026-06-18
+
+### Engine refactor (behaviour-preserving) + audit hardening
+
+Repo-audit follow-up. The two shipped-code changes below are behaviour-preserving;
+no clinical rule semantics, thresholds, or chip output changed.
+
+- **`evaluateQofIndicatorRule` decomposed into a dispatch table.** The engine's
+  largest function carried a ~250-line `if/else-if` chain handling six QOF/
+  indicator check kinds (observation-threshold/recent/bundle/trend, medication-
+  present/all-of) inline. Each branch is now a named per-kind evaluator
+  (`evalQofCheck*`) selected via a `QOF_CHECK_EVALUATORS` dispatch table; the
+  preconditions (register/age/sex/problem), the `observation-alert` clinical-
+  safety early return, and the shared chip-build tail are unchanged. Every
+  comment (the date-guards and `useQofYearFloor` opt-outs in particular) moved
+  verbatim. Proven identical by a new golden-snapshot test (35 fixtures across
+  every kind and outcome) plus the full suite — the output is byte-for-byte
+  unchanged. **A CSO HAZARD-LOG note for this CDS-code refactor is to be added
+  at the next clinical-safety baseline.**
+- **Sentinel: rule re-evaluation failures are no longer swallowed.** The
+  storage-change handler that re-evaluates after a rule edit discarded a
+  rejected promise via `.catch(() => {})`, leaving stale on-screen chips with no
+  signal; it now logs a `[Sentinel]` warning. Failure path only.
+
+Also added (non-shipped): regression guards `test-status-rank-coverage.js`,
+`test-data-fetcher.js`, `test-queue-chip-injection-invariant.js`,
+`test-qof-indicator-golden.js`; fixed the repo-wide ESLint CI gate
+(design-system Node globals) and the doc-version gate (feature-list ledger
+alignment); excluded the design-system POC from the release zip; refreshed the
+README release example.
+
 ## [v3.117.1] — 2026-06-18
 
 ### Weekly bug bash (#114) — silent PHI-persistence & mis-prioritised-result fixes
