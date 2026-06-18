@@ -159,6 +159,35 @@
      row wide: cap it and ellipsise. Full text remains on hover (title). */
   max-width: 18ch;
 }
+/* "Chips under the name" (flat-queue): when our chips land in the patient-name
+   cell, stack them on their OWN line UNDER the name instead of sitting before it
+   and eating horizontal width. We still PREPEND (firstChild) so Medicus's Vue
+   reconciler doesn't strip them — CSS column ORDER, not DOM order, puts them
+   below: the cell becomes a column and our chip line is ordered after the name
+   (a bare-text name becomes an anonymous flex item at order 0). Scoped via :has()
+   so the cell is only restyled when one of our chips is actually present.
+   NOTE: this restyles a Medicus-owned AG-Grid cell — verify on the LIVE grid
+   (CLAUDE.md "capture first"). If a fixed row-height clips the second line, this
+   block is self-contained and can be reverted on its own. */
+[col-id='patientName']:has(> .ch-q-result-inline),
+[col-id='patientName']:has(> .ch-q-mon-inline),
+[col-id='patientName']:has(> .ch-queue-chips) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  row-gap: 1px;
+}
+[col-id='patientName'] > .ch-queue-chips {
+  order: 2;
+}
+[col-id='patientName'] > .ch-q-result-inline,
+[col-id='patientName'] > .ch-q-mon-inline {
+  /* On its own line the chip block no longer needs the 45% width cap. */
+  order: 3;
+  max-width: 100%;
+  margin-right: 0;
+}
 
 /* ---- HUD panel ---- */
 #medicus-clinical-hud {

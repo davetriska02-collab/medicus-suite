@@ -126,7 +126,7 @@ if (content && options) {
     };
     content.revert(stored, shippedChips);
     check(
-      stored['queue.resultRuleUrgent'].label === '{name} — {rule}' &&
+      stored['queue.resultRuleUrgent'].label === '{label}' &&
         stored['queue.resultRuleUrgent'].enabled === false,
       'revert: label fixed while the user’s enabled:false customisation is preserved'
     );

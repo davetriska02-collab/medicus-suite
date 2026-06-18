@@ -92,6 +92,51 @@ if (selectResultChips) {
     misChips.some((c) => c.id === 'queue.resultMisprioritised'),
     'misprioritised: includes queue.resultMisprioritised'
   );
+
+  // Rule-chip label de-duplication (vars.label): the Medicus queue already shows
+  // the analyte name, so a rule label that repeats it must not double up.
+  const ruleChipLabel = (sev, id) => {
+    const c = selectResultChips(sev).find((x) => x.id === id);
+    return c ? c.vars.label : undefined;
+  };
+  const mkRuleSev = (name, ruleLabel) => ({
+    level: 'red',
+    urgentCount: 1,
+    abnormalCount: 1,
+    top: { name, value: '1', unit: '', ruleLabel },
+    misprioritised: false,
+    unmatched: false,
+  });
+  check(
+    ruleChipLabel(mkRuleSev('B12', 'B12 low'), 'queue.resultRuleUrgent') === 'B12 low',
+    "dedup: analyte at start — 'B12' + 'B12 low' -> 'B12 low'"
+  );
+  check(
+    ruleChipLabel(mkRuleSev('B12', 'Low B12'), 'queue.resultRuleUrgent') === 'Low B12',
+    "dedup: analyte at end — 'B12' + 'Low B12' -> 'Low B12'"
+  );
+  check(
+    ruleChipLabel(mkRuleSev('Ferritin', 'low'), 'queue.resultRuleUrgent') === 'Ferritin — low',
+    "dedup: no overlap — 'Ferritin' + 'low' -> 'Ferritin — low'"
+  );
+  check(
+    ruleChipLabel(mkRuleSev('Ferritin', 'Ferritin borderline'), 'queue.resultRuleUrgent') ===
+      'Ferritin borderline',
+    "dedup: exact-prefix — 'Ferritin' + 'Ferritin borderline' -> 'Ferritin borderline'"
+  );
+  // amber path uses the same composer
+  const amberRuleSev = {
+    level: 'amber',
+    urgentCount: 0,
+    abnormalCount: 2,
+    top: { name: 'B12', value: '1', unit: '', ruleLabel: 'B12 low' },
+    misprioritised: false,
+    unmatched: false,
+  };
+  check(
+    ruleChipLabel(amberRuleSev, 'queue.resultRuleAbnormal') === 'B12 low',
+    "dedup: amber rule chip also de-duplicates -> 'B12 low'"
+  );
   check(
     misChips.find((c) => c.id === 'queue.resultMisprioritised')?.meta === true,
     'misprioritised: meta flag is true'

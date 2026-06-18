@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 18,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3829,13 +3829,13 @@
     },
     "queue.resultRuleUrgent": {
       "enabled": true,
-      "label": "{name} — {rule}",
+      "label": "{label}",
       "kind": "red",
       "actions": []
     },
     "queue.resultRuleAbnormal": {
       "enabled": true,
-      "label": "{name} — {rule}",
+      "label": "{label}",
       "kind": "amber",
       "actions": []
     },

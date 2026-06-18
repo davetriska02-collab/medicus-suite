@@ -94,7 +94,8 @@
   // Kept in lock-step with the same table in content-scripts/triage-lens/content.js.
   const RETIRED_CHIP_LABELS = {
     'queue.resultUrgent': ['Urgent: {name}'],
-    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}'],
+    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}', '{name} — {rule}'],
+    'queue.resultRuleAbnormal': ['{name} — {rule}'],
   };
   const revertRetiredChipLabels = (chips, shippedChips) => {
     if (!chips || !shippedChips) return;
