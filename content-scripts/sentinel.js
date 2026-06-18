@@ -120,7 +120,12 @@
       if (CONFIG.autoRefresh !== false) {
         loadRules()
           .then((rules) => evaluateAndPublish(rules))
-          .catch(() => {});
+          .catch((e) =>
+            console.warn(
+              '[Sentinel] rule re-evaluation after an edit failed; on-screen chips may be stale until navigation:',
+              e && e.message
+            )
+          );
       }
     }
     if (!changes['sentinel.config']) return;

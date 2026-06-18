@@ -37,9 +37,9 @@
     },
     {
       "file": "docs/feature-list.md",
-      "last_cso_review_version": "3.113.0",
-      "last_cso_review_date": "2026-06-16",
-      "notes": "Feature list regenerated at 3.113.0 on 2026-06-16."
+      "last_cso_review_version": "3.115.0",
+      "last_cso_review_date": "2026-06-17",
+      "notes": "Feature list at v3.115.0; ledger aligned to the doc header (the list was regenerated alongside the 3.115.0 CSO baseline). Bookkeeping desync corrected — was recorded as 3.113.0 while the doc read 3.115.0."
     }
   ]
 }
