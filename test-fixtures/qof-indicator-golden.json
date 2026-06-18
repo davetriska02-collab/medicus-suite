@@ -1,0 +1,1421 @@
+{
+  "alert: red": [
+    {
+      "category": null,
+      "check": {
+        "amber": 5.5,
+        "comparator": "above",
+        "kind": "observation-alert",
+        "observation": [
+          "potassium"
+        ],
+        "red": 6,
+        "withinDays": 365
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [],
+        "summary": "Potassium — alert"
+      },
+      "indicatorCode": "K",
+      "indicatorName": "Potassium",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "alert-k",
+      "source": null,
+      "status": "alert",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "6.5"
+    }
+  ],
+  "alert: amber": [
+    {
+      "category": null,
+      "check": {
+        "amber": 5.5,
+        "comparator": "above",
+        "kind": "observation-alert",
+        "observation": [
+          "potassium"
+        ],
+        "red": 6,
+        "withinDays": 365
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [],
+        "summary": "Potassium — caution"
+      },
+      "indicatorCode": "K",
+      "indicatorName": "Potassium",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "alert-k",
+      "source": null,
+      "status": "caution",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "5.7"
+    }
+  ],
+  "alert: safe → no chip": [],
+  "alert: stale → no chip": [],
+  "alert: bad date → no chip": [],
+  "alert: missing obs → no chip": [],
+  "threshold: achieved": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "50 mmol/mol"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — in date"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "50 mmol/mol"
+    }
+  ],
+  "threshold: not_met": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "70 mmol/mol"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — not met"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "70 mmol/mol"
+    }
+  ],
+  "threshold: overdue (out of window)": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-02-01",
+      "days": 137,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-02-01",
+            "detail": "137d ago",
+            "label": "Observation",
+            "value": "50"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — overdue"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "overdue",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "threshold: no_data (unparseable value)": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "pending"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — no data"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "no_data",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "threshold: BP achieved": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "blood pressure"
+        ],
+        "thresholdDiastolic": 90,
+        "thresholdSystolic": 140
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "130/80"
+          },
+          {
+            "label": "Threshold",
+            "value": "≤ 140/90"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — in date"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-bp",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "130/80"
+    }
+  ],
+  "threshold: BP not_met": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "blood pressure"
+        ],
+        "thresholdDiastolic": 90,
+        "thresholdSystolic": 140
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "150/95"
+          },
+          {
+            "label": "Threshold",
+            "value": "≤ 140/90"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — not met"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-bp",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "150/95"
+    }
+  ],
+  "med-present: achieved": [
+    {
+      "category": null,
+      "check": {
+        "kind": "medication-present",
+        "medicationExclude": [],
+        "medicationMatch": [
+          "ramipril"
+        ]
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "we looked for: ramipril",
+            "label": "Medication",
+            "value": "Ramipril 5mg capsules"
+          }
+        ],
+        "summary": "ACEi — in date"
+      },
+      "indicatorCode": "M",
+      "indicatorName": "ACEi",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "med-acei",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "med-present: not_met": [
+    {
+      "category": null,
+      "check": {
+        "kind": "medication-present",
+        "medicationExclude": [],
+        "medicationMatch": [
+          "ramipril"
+        ]
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "we looked for: ramipril",
+            "label": "Medication",
+            "value": "not prescribed"
+          }
+        ],
+        "summary": "ACEi — not met"
+      },
+      "indicatorCode": "M",
+      "indicatorName": "ACEi",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "med-acei",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "med-present: excluded": [
+    {
+      "category": null,
+      "check": {
+        "kind": "medication-present",
+        "medicationExclude": [
+          "ramipril"
+        ],
+        "medicationMatch": [
+          "ramipril"
+        ]
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "we looked for: ramipril",
+            "label": "Medication",
+            "value": "not prescribed"
+          }
+        ],
+        "summary": "ACEi — not met"
+      },
+      "indicatorCode": "M",
+      "indicatorName": "ACEi",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "med-acei",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "recent: achieved": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "smoking"
+        ]
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "Non-smoker"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "Smoking status — in date"
+      },
+      "indicatorCode": "SMOK",
+      "indicatorName": "Smoking status",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "rec-smoking",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "Non-smoker"
+    }
+  ],
+  "recent: overdue": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "smoking"
+        ]
+      },
+      "dateText": "2026-02-01",
+      "days": 137,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-02-01",
+            "detail": "137d ago",
+            "label": "Observation",
+            "value": "Non-smoker"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "Smoking status — overdue"
+      },
+      "indicatorCode": "SMOK",
+      "indicatorName": "Smoking status",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "rec-smoking",
+      "source": null,
+      "status": "overdue",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "Non-smoker"
+    }
+  ],
+  "recent: no_data": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "smoking"
+        ]
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "we looked for: smoking",
+            "label": "Observation",
+            "value": "not found in record"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "Smoking status — no data"
+      },
+      "indicatorCode": "SMOK",
+      "indicatorName": "Smoking status",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "rec-smoking",
+      "source": null,
+      "status": "no_data",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": null
+    }
+  ],
+  "bundle: all met": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-bundle",
+        "observations": [
+          [
+            "hba1c"
+          ],
+          [
+            "blood pressure"
+          ],
+          [
+            "cholesterol"
+          ]
+        ],
+        "requireAll": true
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "label": "hba1c",
+            "value": "50"
+          },
+          {
+            "date": "2026-05-01",
+            "label": "blood pressure",
+            "value": "130/80"
+          },
+          {
+            "date": "2026-05-01",
+            "label": "cholesterol",
+            "value": "4.2"
+          }
+        ],
+        "summary": "Care processes — in date"
+      },
+      "indicatorCode": "DM037",
+      "indicatorName": "Care processes",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "bundle-dm",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "3/3 care processes"
+    }
+  ],
+  "bundle: partial → not_met": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-bundle",
+        "observations": [
+          [
+            "hba1c"
+          ],
+          [
+            "blood pressure"
+          ],
+          [
+            "cholesterol"
+          ]
+        ],
+        "requireAll": true
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "label": "hba1c",
+            "value": "50"
+          },
+          {
+            "date": "2026-05-01",
+            "label": "blood pressure",
+            "value": "130/80"
+          },
+          {
+            "date": null,
+            "label": "cholesterol",
+            "value": "not in window"
+          }
+        ],
+        "summary": "Care processes — not met"
+      },
+      "indicatorCode": "DM037",
+      "indicatorName": "Care processes",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "bundle-dm",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "2/3 care processes"
+    }
+  ],
+  "bundle: none → no_data": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-bundle",
+        "observations": [
+          [
+            "hba1c"
+          ],
+          [
+            "blood pressure"
+          ],
+          [
+            "cholesterol"
+          ]
+        ],
+        "requireAll": true
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "date": null,
+            "label": "hba1c",
+            "value": "not in window"
+          },
+          {
+            "date": null,
+            "label": "blood pressure",
+            "value": "not in window"
+          },
+          {
+            "date": null,
+            "label": "cholesterol",
+            "value": "not in window"
+          }
+        ],
+        "summary": "Care processes — no data"
+      },
+      "indicatorCode": "DM037",
+      "indicatorName": "Care processes",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "bundle-dm",
+      "source": null,
+      "status": "no_data",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "0/3 care processes"
+    }
+  ],
+  "bundle: not requireAll, some → achieved": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-bundle",
+        "observations": [
+          [
+            "hba1c"
+          ],
+          [
+            "blood pressure"
+          ],
+          [
+            "cholesterol"
+          ]
+        ],
+        "requireAll": false
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "label": "hba1c",
+            "value": "50"
+          },
+          {
+            "date": null,
+            "label": "blood pressure",
+            "value": "not in window"
+          },
+          {
+            "date": null,
+            "label": "cholesterol",
+            "value": "not in window"
+          }
+        ],
+        "summary": "Care processes — in date"
+      },
+      "indicatorCode": "DM037",
+      "indicatorName": "Care processes",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "bundle-dm",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "1/3 care processes"
+    }
+  ],
+  "all-of: all → achieved": [
+    {
+      "category": null,
+      "check": {
+        "groups": [
+          {
+            "match": [
+              "ramipril",
+              "losartan"
+            ],
+            "name": "ACEi/ARB"
+          },
+          {
+            "match": [
+              "bisoprolol"
+            ],
+            "name": "Beta-blocker"
+          },
+          {
+            "match": [
+              "spironolactone"
+            ],
+            "name": "MRA"
+          }
+        ],
+        "kind": "medication-all-of"
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": null,
+            "label": "ACEi/ARB",
+            "value": "Ramipril 5mg"
+          },
+          {
+            "detail": null,
+            "label": "Beta-blocker",
+            "value": "Bisoprolol 5mg"
+          },
+          {
+            "detail": null,
+            "label": "MRA",
+            "value": "Spironolactone 25mg"
+          }
+        ],
+        "summary": "Four pillars — in date"
+      },
+      "indicatorCode": "HF009",
+      "indicatorName": "Four pillars",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "hf-pillars",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "3/3 classes"
+    }
+  ],
+  "all-of: partial → not_met": [
+    {
+      "category": null,
+      "check": {
+        "groups": [
+          {
+            "match": [
+              "ramipril",
+              "losartan"
+            ],
+            "name": "ACEi/ARB"
+          },
+          {
+            "match": [
+              "bisoprolol"
+            ],
+            "name": "Beta-blocker"
+          },
+          {
+            "match": [
+              "spironolactone"
+            ],
+            "name": "MRA"
+          }
+        ],
+        "kind": "medication-all-of"
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": null,
+            "label": "ACEi/ARB",
+            "value": "Ramipril 5mg"
+          },
+          {
+            "detail": null,
+            "label": "Beta-blocker",
+            "value": "Bisoprolol 5mg"
+          },
+          {
+            "detail": "no matching medication found",
+            "label": "MRA",
+            "value": "not prescribed"
+          }
+        ],
+        "summary": "Four pillars — not met"
+      },
+      "indicatorCode": "HF009",
+      "indicatorName": "Four pillars",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "hf-pillars",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "2/3 classes (missing: MRA)"
+    }
+  ],
+  "all-of: empty meds → no_data": [
+    {
+      "category": null,
+      "check": {
+        "groups": [
+          {
+            "match": [
+              "ramipril",
+              "losartan"
+            ],
+            "name": "ACEi/ARB"
+          },
+          {
+            "match": [
+              "bisoprolol"
+            ],
+            "name": "Beta-blocker"
+          },
+          {
+            "match": [
+              "spironolactone"
+            ],
+            "name": "MRA"
+          }
+        ],
+        "kind": "medication-all-of"
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "no matching medication found",
+            "label": "ACEi/ARB",
+            "value": "not prescribed"
+          },
+          {
+            "detail": "no matching medication found",
+            "label": "Beta-blocker",
+            "value": "not prescribed"
+          },
+          {
+            "detail": "no matching medication found",
+            "label": "MRA",
+            "value": "not prescribed"
+          }
+        ],
+        "summary": "Four pillars — no data"
+      },
+      "indicatorCode": "HF009",
+      "indicatorName": "Four pillars",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "hf-pillars",
+      "source": null,
+      "status": "no_data",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "0/3 classes (missing: ACEi/ARB, Beta-blocker, MRA)"
+    }
+  ],
+  "trend: rising fires → not_met": [
+    {
+      "category": null,
+      "check": {
+        "direction": "rising",
+        "kind": "observation-trend",
+        "minDelta": 0,
+        "minPoints": 2,
+        "observation": [
+          "creatinine"
+        ],
+        "withinMonths": 24
+      },
+      "dateText": "2026-06-01",
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "umol/L",
+            "label": "Test",
+            "value": "Creatinine"
+          },
+          {
+            "label": "Direction",
+            "value": "rising (Δ +30.0 umol/L, min 0)"
+          },
+          {
+            "label": "Span",
+            "value": "2 months · 3 points"
+          },
+          {
+            "date": "2026-04-01",
+            "label": "Point 1",
+            "value": "90.0 umol/L"
+          },
+          {
+            "date": "2026-05-01",
+            "label": "Point 2",
+            "value": "100.0 umol/L"
+          },
+          {
+            "date": "2026-06-01",
+            "label": "Point 3",
+            "value": "120.0 umol/L"
+          }
+        ],
+        "series": {
+          "delta": 30,
+          "direction": "rising",
+          "fires": true,
+          "minDelta": 0,
+          "points": [
+            {
+              "date": "2026-04-01",
+              "value": 90
+            },
+            {
+              "date": "2026-05-01",
+              "value": 100
+            },
+            {
+              "date": "2026-06-01",
+              "value": 120
+            }
+          ],
+          "spanMonths": 2,
+          "testName": "Creatinine",
+          "unit": "umol/L"
+        },
+        "summary": "Creatinine trend — not met"
+      },
+      "indicatorCode": "CREAT",
+      "indicatorName": "Creatinine trend",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "trend-creat",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "90.0 → 120.0 umol/L (+30.0, 3 pts, 2 mo)"
+    }
+  ],
+  "trend: falling (rising rule) → achieved": [
+    {
+      "category": null,
+      "check": {
+        "direction": "rising",
+        "kind": "observation-trend",
+        "minDelta": 0,
+        "minPoints": 2,
+        "observation": [
+          "creatinine"
+        ],
+        "withinMonths": 24
+      },
+      "dateText": "2026-06-01",
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "umol/L",
+            "label": "Test",
+            "value": "Creatinine"
+          },
+          {
+            "label": "Direction",
+            "value": "rising (Δ -30.0 umol/L, min 0)"
+          },
+          {
+            "label": "Span",
+            "value": "2 months · 3 points"
+          },
+          {
+            "date": "2026-04-01",
+            "label": "Point 1",
+            "value": "120.0 umol/L"
+          },
+          {
+            "date": "2026-05-01",
+            "label": "Point 2",
+            "value": "100.0 umol/L"
+          },
+          {
+            "date": "2026-06-01",
+            "label": "Point 3",
+            "value": "90.0 umol/L"
+          }
+        ],
+        "series": {
+          "delta": -30,
+          "direction": "rising",
+          "fires": false,
+          "minDelta": 0,
+          "points": [
+            {
+              "date": "2026-04-01",
+              "value": 120
+            },
+            {
+              "date": "2026-05-01",
+              "value": 100
+            },
+            {
+              "date": "2026-06-01",
+              "value": 90
+            }
+          ],
+          "spanMonths": 2,
+          "testName": "Creatinine",
+          "unit": "umol/L"
+        },
+        "summary": "Creatinine trend — in date"
+      },
+      "indicatorCode": "CREAT",
+      "indicatorName": "Creatinine trend",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "trend-creat",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "120.0 → 90.0 umol/L (-30.0, 3 pts, 2 mo)"
+    }
+  ],
+  "trend: insufficient points → no_data": [
+    {
+      "category": null,
+      "check": {
+        "direction": "rising",
+        "kind": "observation-trend",
+        "minDelta": 0,
+        "minPoints": 2,
+        "observation": [
+          "creatinine"
+        ],
+        "withinMonths": 24
+      },
+      "dateText": null,
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "umol/L",
+            "label": "Test",
+            "value": "Creatinine"
+          },
+          {
+            "label": "Trend",
+            "value": "not enough readings in window — showing 1 found (need 2)"
+          },
+          {
+            "date": "2026-06-01",
+            "label": "Point 1",
+            "value": "120.0 umol/L"
+          }
+        ],
+        "series": {
+          "delta": null,
+          "direction": "rising",
+          "fires": false,
+          "insufficient": true,
+          "minDelta": 0,
+          "points": [
+            {
+              "date": "2026-06-01",
+              "value": 120
+            }
+          ],
+          "spanMonths": null,
+          "testName": "Creatinine",
+          "unit": "umol/L"
+        },
+        "summary": "Creatinine trend — no data"
+      },
+      "indicatorCode": "CREAT",
+      "indicatorName": "Creatinine trend",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "trend-creat",
+      "source": null,
+      "status": "no_data",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "1 point in window (need 2)"
+    }
+  ],
+  "trend: falling rule fires → not_met": [
+    {
+      "category": null,
+      "check": {
+        "direction": "falling",
+        "kind": "observation-trend",
+        "minDelta": 0,
+        "minPoints": 2,
+        "observation": [
+          "egfr"
+        ],
+        "withinMonths": 24
+      },
+      "dateText": "2026-06-01",
+      "days": null,
+      "evidence": {
+        "facts": [
+          {
+            "detail": "ml/min",
+            "label": "Test",
+            "value": "eGFR"
+          },
+          {
+            "label": "Direction",
+            "value": "falling (Δ -30.0 ml/min, min 0)"
+          },
+          {
+            "label": "Span",
+            "value": "2 months · 2 points"
+          },
+          {
+            "date": "2026-04-01",
+            "label": "Point 1",
+            "value": "80.0 ml/min"
+          },
+          {
+            "date": "2026-06-01",
+            "label": "Point 2",
+            "value": "50.0 ml/min"
+          }
+        ],
+        "series": {
+          "delta": -30,
+          "direction": "falling",
+          "fires": true,
+          "minDelta": 0,
+          "points": [
+            {
+              "date": "2026-04-01",
+              "value": 80
+            },
+            {
+              "date": "2026-06-01",
+              "value": 50
+            }
+          ],
+          "spanMonths": 2,
+          "testName": "eGFR",
+          "unit": "ml/min"
+        },
+        "summary": "Creatinine trend — not met"
+      },
+      "indicatorCode": "CREAT",
+      "indicatorName": "Creatinine trend",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "trend-creat",
+      "source": null,
+      "status": "not_met",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "80.0 → 50.0 ml/min (-30.0, 2 pts, 2 mo)"
+    }
+  ],
+  "precondition: not on required register → suppressed": [],
+  "precondition: on register → evaluates": [],
+  "precondition: null age fail-open (still evaluates)": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "50 mmol/mol"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — in date"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "50 mmol/mol"
+    }
+  ],
+  "precondition: sex mismatch → suppressed": [
+    {
+      "category": null,
+      "check": {
+        "kind": "observation-threshold",
+        "observation": [
+          "hba1c"
+        ],
+        "operator": "<=",
+        "threshold": 58,
+        "unit": "mmol/mol"
+      },
+      "dateText": "2026-05-01",
+      "days": 48,
+      "evidence": {
+        "facts": [
+          {
+            "date": "2026-05-01",
+            "detail": "48d ago",
+            "label": "Observation",
+            "value": "50 mmol/mol"
+          },
+          {
+            "label": "Threshold",
+            "value": "<= 58 mmol/mol"
+          },
+          {
+            "label": "Window",
+            "value": "QOF year floor (1 Apr)"
+          }
+        ],
+        "summary": "HbA1c — in date"
+      },
+      "indicatorCode": "DM",
+      "indicatorName": "HbA1c",
+      "notes": null,
+      "points": null,
+      "qofYear": "2026/27",
+      "qofYearStart": "2026-04-01",
+      "requiresRegister": null,
+      "ruleId": "thr-hba1c",
+      "source": null,
+      "status": "achieved",
+      "thresholds": null,
+      "type": "qof-indicator",
+      "valueText": "50 mmol/mol"
+    }
+  ],
+  "precondition: requiresProblem unmet → suppressed": [],
+  "precondition: excludeIfProblem hit → suppressed": []
+}
