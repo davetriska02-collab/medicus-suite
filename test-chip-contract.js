@@ -607,9 +607,12 @@ if (selectResultChips) {
   if (ruleUrgentChip) {
     const rendered = substitute(shippedLabels['queue.resultRuleUrgent'], ruleUrgentChip.vars);
     check(!/\{\w+\}/.test(rendered), 'queue.resultRuleUrgent fully substitutes (no leftover {placeholder})');
+    // De-dup contract: the rule label "Critical high potassium" already names the
+    // analyte "Potassium", so the chip shows the rule label alone — NOT the doubled
+    // "Potassium — Critical high potassium".
     check(
-      rendered.includes('Critical high potassium') && rendered.includes('Potassium'),
-      'queue.resultRuleUrgent renders BOTH vars.name and vars.rule'
+      rendered === 'Critical high potassium',
+      'queue.resultRuleUrgent de-duplicates the analyte prefix (renders the rule label alone when it already names the analyte)'
     );
   }
 }

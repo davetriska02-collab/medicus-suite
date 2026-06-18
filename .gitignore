@@ -26,3 +26,15 @@ _skill/
 
 # Claude Code agent worktrees (scratch, never commit)
 .claude/worktrees/
+
+# design-sync (Claude Design) — transient build artifacts & deps; durable
+# inputs (design-system/ src, .design-sync/{config.json,conventions.md,previews})
+# ARE committed.
+.ds-sync/
+ds-bundle/
+/_screenshots/
+design-system/node_modules/
+design-system/dist/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

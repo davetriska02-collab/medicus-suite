@@ -1,0 +1,32 @@
+{
+  "name": "@medicus/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React mirror of the Medicus Suite house style (token canon + core atoms) for Claude Design. Not the shipped extension — a design-time component library built on the same tokens.",
+  "type": "module",
+  "module": "./dist/index.es.js",
+  "main": "./dist/index.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "node build.mjs && tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3"
+  }
+}

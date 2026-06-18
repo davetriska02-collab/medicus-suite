@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.0] — 2026-06-18
+
+### Results queue chips — de-duplicated rule labels + (new) stack under the name
+
+Two changes to the investigation-results queue chips, both addressing the same
+clinician feedback (the chip reads `{analyte} — {rule}`, which crowds the patient
+name and double-prints the analyte).
+
+- **Label de-duplication.** A result-rule chip used to always render
+  `{analyte name} — {rule label}`. Since the Medicus queue already shows the
+  analyte first, a rule the clinician named "B12 low" became **"B12 — B12 low"**.
+  Now the chip de-duplicates: if the rule label already names the analyte (as a
+  whole token, at the start or end), the chip shows the **rule label alone**
+  ("B12 low", "Critical high potassium"); a bare label still gets the prefix
+  ("Ferritin — low"). This lets a clinician name rules naturally without
+  duplication and without resorting to globally-unique bare labels ("low1",
+  "low2") — result-rule labels are free-form (rules are keyed by id, never label).
+  Implemented as render-time logic in `selectResultChips`; the two shipped
+  templates (`queue.resultRuleUrgent`, `queue.resultRuleAbnormal`) become `{label}`,
+  with the old `{name} — {rule}` value added to `RETIRED_CHIP_LABELS` (content.js +
+  options.js, lock-step) and `defaults.json` version bumped 17→18 so the change
+  reaches existing installs.
+- **Chips under the name (flat-queue).** When chips land in the patient-name cell
+  (the cramped flat-queue case), they now stack on their **own line under the
+  name** instead of sitting before it and eating horizontal width — done by making
+  the cell a CSS column and ordering the (still-prepended) chip line after the
+  name, scoped via `:has()` so the cell is only restyled when our chip is present.
+  **Note:** this restyles a Medicus-owned AG-Grid cell and needs a live-grid smoke
+  test (row-height clipping); the CSS block is self-contained and reversible.
+
 ## [v3.116.0] — 2026-06-17
 
 ### Added — Built-in result-chip flags are now obviously editable (and the rename sticks)

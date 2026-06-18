@@ -1,0 +1,92 @@
+/* Medicus Suite token canon — mirror of side-panel/panel.css :root.
+   Light is the default; dark applies under [data-theme="dark"]; colorblind mode
+   re-points the whole red and green triads. Values are the authoritative canon
+   (see TOKENS.md). Fonts use web-safe fallbacks so previews need no font ship. */
+
+:root {
+  /* Surfaces & text — slate family, tinted, never pure gray */
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --bg-hover: #e2eaf5;
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --text-4: #64748b;
+  --text-5: #94a3b8;
+
+  /* Accent & status triads — ink / wash / line */
+  --accent: #2563eb;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  --accent-hover: #1d4ed8;
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --green-line: rgba(22, 163, 74, 0.3);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
+  --violet: #7c3aed;
+  --violet-dim: rgba(124, 58, 237, 0.09);
+  --violet-line: rgba(124, 58, 237, 0.3);
+
+  /* Shape, motion */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
+
+  /* Typography — web-safe fallbacks for the canon families */
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+html[data-theme='dark'] {
+  --bg-deep: #050a14;
+  --bg-mid: #0b1424;
+  --bg-elev: #131e34;
+  --bg-hover: #1a2a44;
+  --border: #1c2e4e;
+  --border-hi: #2a4060;
+  --text-1: #f1f5f9;
+  --text-2: #cfe1ff;
+  --text-3: #93a8c5;
+  --text-4: #5d7a9d;
+  --text-5: #3d5070;
+
+  --accent: #5b8fc7;
+  --accent-dim: rgba(91, 143, 199, 0.14);
+  --accent-line: rgba(91, 143, 199, 0.35);
+  --accent-hover: #7eaad6;
+  --green: #4ade80;
+  --green-dim: rgba(74, 222, 128, 0.12);
+  --green-line: rgba(74, 222, 128, 0.32);
+  --amber: #fbbf24;
+  --amber-dim: rgba(251, 191, 36, 0.16);
+  --amber-line: rgba(251, 191, 36, 0.32);
+  --red: #f87171;
+  --red-dim: rgba(248, 113, 113, 0.17);
+  --red-line: rgba(248, 113, 113, 0.34);
+  --violet: #a78bfa;
+  --violet-dim: rgba(167, 139, 250, 0.14);
+  --violet-line: rgba(167, 139, 250, 0.35);
+}
+
+/* Colorblind mode re-points the whole red and green triads (red→orange,
+   green→blue). Components built from triads inherit the swap for free. */
+html[data-colorblind='true'] {
+  --red: #ea580c;
+  --red-dim: rgba(234, 88, 12, 0.1);
+  --red-line: rgba(234, 88, 12, 0.32);
+  --green: #2563eb;
+  --green-dim: rgba(37, 99, 235, 0.09);
+  --green-line: rgba(37, 99, 235, 0.3);
+}
