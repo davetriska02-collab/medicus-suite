@@ -2,13 +2,16 @@
 // Run with: node test-status-rank-coverage.js
 //
 // Guards a LATENT, high-blast-radius failure mode in the rules engine.
-// Chip sort order (engine/rules-engine.js) reads `STATUS_RANK[status] ?? 99`
+// Chip sort order (engine/rules-engine.js) reads `STATUS_RANK[status] ?? 0`
 // at the two consumer sites (worst-of among a rule's tests, and the final
-// cross-chip sort). An unknown status therefore defaults to rank 99 — the
-// *least* urgent slot — so a status the code can emit but that nobody added to
-// STATUS_RANK would sort a genuine red alert to the BOTTOM of the chip list,
-// where a clinician scrolls past it in a short appointment. There is no error;
-// the alert just hides. (This is the v3.69.0-class silent-miss pattern.)
+// cross-chip sort). As of v3.117.3 an unknown status defaults to rank 0 (most
+// urgent / top) — a fail-SAFE default that surfaces an un-ranked status rather
+// than burying it. But the right fix is for there to be NO un-ranked status at
+// all: this test asserts every status the engine can emit IS in STATUS_RANK, so
+// the `?? 0` fallback stays unreachable for known statuses (chip output and sort
+// order unchanged) and a newly-added-but-unranked status fails CI here instead.
+// (Before v3.117.3 the default was `?? 99` = bottom of the list — the
+// v3.69.0-class silent-miss pattern; the guard + fail-safe default close it.)
 //
 // Every status string the engine can EMIT must therefore be a key in
 // STATUS_RANK. This test converts "a dev adds a new status months from now and
@@ -68,7 +71,7 @@ const NON_STATUS_LITERALS = new Set(['given']); // evt.type === 'given' on line 
 // ── 1. Every intended emittable status has a rank ──────────────────────────
 console.log('\n--- Every emittable status is ranked ---');
 for (const s of EMITTABLE_STATUSES) {
-  check(rankKeys.has(s), `STATUS_RANK has a rank for '${s}' (else it sorts to 99 = least urgent)`);
+  check(rankKeys.has(s), `STATUS_RANK has a rank for '${s}' (else it hits the fail-safe ?? 0 default)`);
 }
 
 // ── 2. STATUS_RANK has no dead/extra keys ──────────────────────────────────

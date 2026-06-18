@@ -623,8 +623,13 @@
       }
 
       const worstStatus = testEvaluations.reduce((worst, te) => {
-        const rankCurrent = STATUS_RANK[te.status] ?? 99;
-        const rankWorst = STATUS_RANK[worst] ?? 99;
+        // Fail-safe default: an UNRANKED status sorts as rank 0 (most urgent), so an
+        // engine bug that emits a status missing from STATUS_RANK surfaces the chip
+        // rather than burying it. test-status-rank-coverage.js guarantees every
+        // status the engine actually emits IS ranked, so this default is unreachable
+        // for known statuses (chip output unchanged); it is pure defence-in-depth.
+        const rankCurrent = STATUS_RANK[te.status] ?? 0;
+        const rankWorst = STATUS_RANK[worst] ?? 0;
         return rankCurrent < rankWorst ? te.status : worst;
       }, 'in_date');
 
@@ -1846,8 +1851,12 @@
 
     // Sort: worst status first; then by type to keep drug-monitoring grouped
     chips.sort((a, b) => {
-      const sa = STATUS_RANK[a.status] ?? 99;
-      const sb = STATUS_RANK[b.status] ?? 99;
+      // Fail-safe default: an UNRANKED status sorts as rank 0 (top), so a status
+      // missing from STATUS_RANK surfaces rather than sinking to the bottom of the
+      // list where a clinician would scroll past it. Unreachable for known statuses
+      // (test-status-rank-coverage.js guards that), so chip ordering is unchanged.
+      const sa = STATUS_RANK[a.status] ?? 0;
+      const sb = STATUS_RANK[b.status] ?? 0;
       if (sa !== sb) return sa - sb;
       return (a.type || '').localeCompare(b.type || '');
     });

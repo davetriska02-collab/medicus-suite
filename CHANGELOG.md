@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.3] — 2026-06-18
+
+### Fail-safe chip-sort default + design-system POC quarantine
+
+- **Chip urgency sort now fails safe (engine).** `STATUS_RANK[status]` defaulted
+  an un-ranked status to rank 99 — the bottom of the chip list — so a status the
+  engine could emit but that was missing from the rank table would sink a genuine
+  alert below where a clinician looks. The default is now rank 0 (top/most
+  urgent). Because `test-status-rank-coverage.js` (added in v3.117.2 work)
+  asserts every emittable status is ranked, this fallback is unreachable for
+  known statuses: the ordering of every currently-emitted chip is unchanged
+  (golden snapshot byte-identical, full suite green). Recorded in HAZARD-LOG
+  H-002 control (t). This is a deliberate fail-safe direction change, not a
+  cosmetic one.
+- **`design-system/` marked as a non-shipped POC.** Added `design-system/README.md`
+  documenting that the proof-of-concept package is excluded from the release zip
+  and not loaded by the extension — so it can't be mistaken for product code or
+  treated as SOUP. (Release exclusion + lint scoping landed in v3.117.1–.2.)
+
 ## [v3.117.2] — 2026-06-18
 
 ### Engine refactor (behaviour-preserving) + audit hardening
