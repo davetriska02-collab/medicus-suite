@@ -45,16 +45,16 @@ This repo has a GitHub Actions workflow that builds and publishes a release
 automatically when you push a version tag. To cut a new release:
 
 ```bash
-# Bump the version in manifest.json
+# Bump the version in manifest.json (current series is v3.x)
 # Then commit and tag
 git add manifest.json
-git commit -m "Release v1.3.2"
-git tag v1.3.2
+git commit -m "Release v3.118.0"
+git tag v3.118.0
 git push && git push --tags
 ```
 
 The workflow at `.github/workflows/release.yml` packs the repo into
-`medicus-suite-v1.3.2.zip` (excluding tests and dev files), creates a
+`medicus-suite-v3.118.0.zip` (excluding tests and dev files), creates a
 GitHub release with that tag, and attaches the zip. Within 24 hours every
 installed extension's update banner will surface the new version.
 

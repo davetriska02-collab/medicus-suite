@@ -64,8 +64,10 @@ export default [
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
   {
-    // Node ESM tooling scripts (e.g. brand/generate-icons.mjs)
-    files: ['brand/**/*.mjs'],
+    // Node ESM tooling scripts (e.g. brand/generate-icons.mjs, design-system/build.mjs).
+    // These run under Node and use console/process etc. — give them Node globals so the
+    // repo-wide `eslint .` CI gate does not fail closed on `no-undef`.
+    files: ['brand/**/*.mjs', 'design-system/**/*.mjs'],
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
 ];
