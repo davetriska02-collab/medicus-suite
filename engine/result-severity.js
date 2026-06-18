@@ -582,7 +582,7 @@
       // is a clinician-authored pattern escalation, not the lab marking the result urgent;
       // treating it as a mis-prioritised lab-urgent result would be a category error and would
       // create false "wrongly routed" flags on every fired red combo.
-      const misprioritised = urgentCount > 0 && !/high|urgent|immediate/i.test(priorityDisplay);
+      const misprioritised = urgentCount > 0 && !/\b(high|urgent|immediate)\b/i.test(priorityDisplay);
 
       return {
         level,

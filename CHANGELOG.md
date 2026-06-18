@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.1] — 2026-06-18
+
+### Weekly bug bash (#114) — silent PHI-persistence & mis-prioritised-result fixes
+
+Implements the seven verified findings from bug-bash issue #114.
+
+- **PHI-at-rest: unawaited transient-key removals now awaited/guarded.** The
+  consume-on-read removals of the transient PHI keys (`sweep.handout`,
+  `sentinel.passport`) in the print-tab `render()` paths, and the 60 s
+  best-effort backstops for `sweep.handout`, `sweep.batchPack` and
+  `sentinel.passport`, previously discarded a rejected `remove()` promise — so a
+  failed clear left patient data in `chrome.storage.local` with no handler. The
+  `render()` removals are now `await`ed with a `.catch()`, and each backstop
+  `setTimeout` callback is now `async` and awaits the removal with a `.catch()`.
+- **Mis-prioritised result detection: word-boundary the priority match.**
+  `engine/result-severity.js` keyed `misprioritised` on
+  `/high|urgent|immediate/i.test(priorityDisplay)`, which matched substrings — a
+  priority display like `"ROUTINE (HIGH DETAIL)"` suppressed the flag, so a
+  red-severity result in a routine-priority task was silently missed. Now uses
+  `/\b(high|urgent|immediate)\b/i`.
+- **`options/options.js`: escape `e.message` in the endpoint-probe results.** The
+  caught `fetch()` error message was interpolated into `results.innerHTML`
+  without `escHtml()`, inconsistent with the rest of the file. Now escaped.
+
 ## [v3.117.0] — 2026-06-18
 
 ### Results queue chips — de-duplicated rule labels + (new) stack under the name

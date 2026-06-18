@@ -1582,7 +1582,7 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
       const colour = r.ok ? '#4ade80' : '#f87171';
       line = `<div style="color:${colour}"><strong>${p.name}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${p.url}</span></div>`;
     } catch (e) {
-      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${e.message}</div>`;
+      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${escHtml(e.message)}</div>`;
     }
     results.innerHTML += line;
   }

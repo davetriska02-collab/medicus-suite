@@ -136,7 +136,7 @@ async function render() {
   // Consume-on-read: remove the transient key now that the DOM is rendered.
   // The Print button works on the already-rendered DOM; a page refresh will
   // show the empty state — that is intentional (privacy over convenience).
-  chrome.storage.local.remove('sentinel.passport');
+  await chrome.storage.local.remove('sentinel.passport').catch(() => {});
 }
 
 document.getElementById('printBtn').addEventListener('click', () => window.print());
