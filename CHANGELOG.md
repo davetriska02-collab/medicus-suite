@@ -2,6 +2,81 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.122.0] — 2026-06-19
+
+### Outstanding Investigation Requests — make it yours (customisation pass)
+
+The resulted-elsewhere matcher was zero-config. This pass opens it up, behind a new
+**Outstanding requests** tab in Triage Lens settings, while keeping every clinical-safety
+invariant load-bearing (results found elsewhere are still NEVER auto-ticked; the bulk
+tick-off keeps its irreversible-write confirm gate). Settings live in `triagelens.config`,
+so they back up and ride the practice-profile "triage" module automatically — a practice
+admin can publish a baseline and individual clinicians keep their personal overrides.
+
+**User-editable test dictionary.** The matcher's panel definitions (`TEST_DEFS`) used to be
+hard-coded — the exact reason FSH/LH were missed (v3.121.1). A practice can now, without a
+code change:
+- **add a new custom test** (e.g. Vitamin D, HbA1c) with its own request/report/analyte terms;
+- **extend a built-in** with a local lab's synonym (e.g. "Renal Screen" → U&E) — append-only,
+  so a built-in's coverage can only grow;
+- **disable a built-in** (fail-safe: its requests simply stay outstanding, never wrongly cleared).
+Safety is enforced in the engine merge, not the editor: user terms are only ever appended,
+and a user entry can never flip a built-in panel to `singleAnalyte` (which would lower the
+auto-tick threshold).
+
+**Safety/comfort knobs.**
+- **Advisory-only mode** — turn off the one-click bulk tick-off entirely; keep the inline
+  flags but let the suite never initiate a write to Medicus.
+- **Confidence floor: strict** — only a lab-assigned panel/group name counts as confident;
+  nothing auto-ticks on an inferred analyte signature.
+- **Look-back ceiling** — only treat a record result as satisfying a request if it was filed
+  within N months of it (a result years later is a different episode).
+
+**Display.**
+- **Show value on flag** — surface the matched result inline (e.g. `↩ completed 16 Jun 2026 · 18 ug/L LOW · in record`).
+- **Relative dates** — "3 months ago" instead of an absolute date, if preferred.
+
+**Governance.** A local **audit trail** records every bulk tick-off (timestamp, count, the
+matched results) for review in the settings tab; it is machine-local and deliberately not
+backed up (`triagelens.oir.auditLog`, allowlisted).
+
+Engine: `matchOutstanding` / `enrichWithHistory` / `reportCoverage` now accept
+`opts.testDefs` / `confidenceFloor` / `lookbackMonths`; new exported `mergeTestDefs`,
+`validateTestDef`, `addMonths`. `defaults.json` v18 → v19 (new flat `oir*` prefs + empty
+`oirTests`). Matcher tests 49 → 76 assertions; full suite green.
+
+## [v3.121.1] — 2026-06-19
+
+### OIR matcher — recognise the reproductive / sex-hormone profile
+
+Live feedback: on a real card, **Follicle Stimulating Hormone** stayed `⏳ outstanding`
+while every other request was correctly flagged "in record". Root cause was the
+matcher's test dictionary (`TEST_DEFS` in `engine/outstanding-match.js`): FSH and LH
+were not listed, so the request name resolved to no key, was treated as "not
+recognised", and was therefore invisible to both report-matching and
+resulted-elsewhere detection. (A missing test is fail-safe — it stays outstanding,
+never wrongly cleared — but it also never gets the helpful flag.)
+
+Added the common reproductive / sex-hormone tests as single-analyte definitions, with
+both UK and US spellings since labs vary:
+
+- **FSH** (Follicle Stimulating Hormone)
+- **LH** (Luteinising / Luteinizing Hormone)
+- **Oestradiol** (Estradiol)
+- **Prolactin**
+- **Testosterone**
+
+Added as a family rather than just the two Nick flagged, since these are co-requested
+on a fertility / amenorrhoea / menopause work-up and would otherwise be the next gap.
+`test-outstanding-match.js` gains section 9 (11 new assertions): every request resolves
+to a key, US spellings resolve, an FSH report ticks only the FSH request, and an
+FSH result found in observation history surfaces as `resulted_elsewhere` (never
+auto-ticked). 60 matcher assertions, 106 suite tests pass.
+
+> This is exactly the hard-coded-dictionary gap the planned **user-editable test
+> dictionary** removes — a practice could add its local lab's panel names without a
+> code change. Shipping FSH/LH in the built-in set now; the editor is the durable fix.
+
 ## [v3.121.0] — 2026-06-19
 
 ### Outstanding Investigation Requests — per-row flags + one gated bulk tick-off

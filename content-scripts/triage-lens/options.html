@@ -18,6 +18,7 @@
         <button class="tl-tab" data-tab="systemChips">Baseline chips</button>
         <button class="tl-tab" data-tab="thresholds">Thresholds</button>
         <button class="tl-tab" data-tab="resultRules">Result rules</button>
+        <button class="tl-tab" data-tab="oir">Outstanding requests</button>
         <button class="tl-tab" data-tab="prefs">Preferences</button>
         <button class="tl-tab" data-tab="preview">Live preview</button>
         <button class="tl-tab" data-tab="backup">Backup &amp; restore</button>
@@ -513,8 +514,8 @@
               style="display: none"
               title="Your renamed label is stored against this built-in rule and survives suite updates. The rule's analyte match and thresholds are unchanged."
             >
-              You can rename this built-in flag — e.g. shorten it. Your edit is kept and
-              won't be reverted by a suite update.
+              You can rename this built-in flag — e.g. shorten it. Your edit is kept and won't be reverted by a suite
+              update.
             </p>
 
             <label class="tl-field tl-field-inline">
@@ -749,6 +750,141 @@
         </div>
       </section>
 
+      <!-- ============================ OUTSTANDING REQUESTS TAB ============================ -->
+      <section class="tl-pane" id="paneOir">
+        <h3>Behaviour</h3>
+        <!-- Section a: toggles/selects using data-pref, scoped to #paneOir -->
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirEnabled" />
+          <span>Enable resulted-elsewhere detection on Outstanding Investigation Requests</span>
+        </label>
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirBulkTickOff" />
+          <span
+            >Offer the one-click bulk tick-off button
+            <small
+              class="tl-help"
+              style="
+                display: inline;
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                font-size: 11px;
+                color: var(--text-4);
+              "
+              >Off = advisory flags only; the suite never initiates a write to Medicus.</small
+            ></span
+          >
+        </label>
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirShowValueOnBadge" />
+          <span>Show the matched result value on the inline flag <small>(e.g. '18 ug/L LOW')</small></span>
+        </label>
+        <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirAuditLog" />
+          <span>Keep a local audit trail of bulk tick-offs</span>
+        </label>
+        <label class="tl-field">
+          <span>Confidence floor</span>
+          <select data-pref="oirConfidenceFloor">
+            <option value="default">Default (analyte signature)</option>
+            <option value="strict">Strict (require lab panel/group name)</option>
+          </select>
+          <small
+            >Strict never auto-ticks on inferred analytes — only when the lab's own panel/group name matches.</small
+          >
+        </label>
+        <label class="tl-field">
+          <span>Lookback window</span>
+          <select data-pref="oirLookbackMonths" data-pref-type="number">
+            <option value="0">No limit</option>
+            <option value="6">6 months</option>
+            <option value="12">12 months</option>
+            <option value="24">24 months</option>
+            <option value="36">36 months</option>
+          </select>
+          <small
+            >Only treat a record result as satisfying a request if it was filed within this many months of the
+            request.</small
+          >
+        </label>
+        <label class="tl-field">
+          <span>Date format</span>
+          <select data-pref="oirDateFormat">
+            <option value="absolute">Absolute (12 Mar 2026)</option>
+            <option value="relative">Relative (3 months ago)</option>
+          </select>
+        </label>
+        <div class="tl-edit-footer">
+          <button class="tl-btn tl-btn-primary" id="btnSaveOir">Save settings</button>
+        </div>
+
+        <h3>Test dictionary</h3>
+        <div class="tl-help" id="oirBuiltinSummary">Loading built-in tests…</div>
+        <div class="tl-rule-list" id="oirTestList"></div>
+        <div class="tl-empty" id="oirTestListEmpty" style="display: none">No custom tests configured.</div>
+
+        <h3 style="margin-top: 18px">Add / edit test</h3>
+        <div
+          id="oirTestForm"
+          style="
+            background: var(--bg-mid);
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+          "
+        >
+          <label class="tl-field">
+            <span>Mode</span>
+            <select id="oirFormMode">
+              <option value="new">New custom test</option>
+              <option value="extend">Extend a built-in</option>
+              <option value="disable">Disable a built-in</option>
+            </select>
+          </label>
+          <label class="tl-field" id="oirFormBuiltinRow" style="display: none">
+            <span>Built-in test to extend/disable</span>
+            <select id="oirFormBuiltinKey"></select>
+          </label>
+          <label class="tl-field" id="oirFormLabelRow">
+            <span>Label <small>(display name)</small></span>
+            <input type="text" id="oirFormLabel" maxlength="80" placeholder="e.g. Renal Screen" />
+          </label>
+          <label class="tl-field" id="oirFormReqRow">
+            <span>Request terms <small>(one per line — matched against the card request name)</small></span>
+            <textarea id="oirFormReq" rows="3" placeholder="renal screen&#10;urea and electrolytes"></textarea>
+          </label>
+          <label class="tl-field" id="oirFormRepRow">
+            <span>Report terms <small>(one per line — matched against the lab panel/group title)</small></span>
+            <textarea id="oirFormRep" rows="3" placeholder="renal screen"></textarea>
+          </label>
+          <label class="tl-field" id="oirFormAnalytesRow">
+            <span>Analyte terms <small>(one per line — distinctive analyte names for this panel)</small></span>
+            <textarea id="oirFormAnalytes" rows="3" placeholder="sodium&#10;potassium&#10;urea"></textarea>
+          </label>
+          <label class="tl-field tl-field-inline" id="oirFormSingleRow">
+            <input type="checkbox" id="oirFormSingle" />
+            <span>Single-analyte test <small>(one result IS the panel — 1 analyte hit is confident)</small></span>
+          </label>
+          <input type="hidden" id="oirFormEditKey" />
+          <div style="display: flex; gap: 8px; align-items: center">
+            <button class="tl-btn tl-btn-primary" id="btnSaveOirTest">Save test</button>
+            <button class="tl-btn" id="btnCancelOirTest" style="display: none">Cancel edit</button>
+            <span id="oirFormStatus" style="font-size: 12px; color: var(--green)"></span>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 24px">Audit trail</h3>
+        <div id="oirAuditList"></div>
+        <div style="margin-top: 10px">
+          <button class="tl-btn tl-btn-danger" id="btnClearOirAudit">Clear audit log</button>
+        </div>
+      </section>
+
       <!-- ============================ ABOUT TAB ============================ -->
       <section class="tl-pane" id="paneAbout">
         <h2>About Triage Lens</h2>
@@ -796,6 +932,7 @@
 
     <script src="../../engine/normalisers.js"></script>
     <script src="../../engine/result-rules.js"></script>
+    <script src="../../engine/outstanding-match.js"></script>
     <script src="rule-match.js"></script>
     <script src="options.js"></script>
   </body>

@@ -249,6 +249,15 @@ const ALLOWLIST = new Set([
   // Rolling runtime alert log — session-local, not user config. Restoring a stale
   // log onto a new machine would show misleading historical alerts:
   'suite.alertLog',
+
+  // OIR bulk tick-off audit trail — machine-local governance record (ring buffer,
+  // last 200) of which outstanding requests were ticked off as resulted-elsewhere,
+  // when, and by which matched result. PHI-bearing (patient values + uuid) and
+  // session/machine-local by design; restoring it onto another machine would
+  // import a misleading historical trail, so it is deliberately not backed up.
+  // Mirrors the suite.alertLog rationale. The OIR *config* (oirTests + oir prefs)
+  // IS backed up — it rides triagelens.config via triage-io:
+  'triagelens.oir.auditLog',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
