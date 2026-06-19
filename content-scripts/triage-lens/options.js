@@ -235,15 +235,24 @@
       activateTab('resultRules');
       const tabs = $('#tlTabs');
       if (tabs) tabs.style.display = 'none';
+    } else if (location.hash === '#oir') {
+      // Embedded as the Suite Settings "Outstanding Requests" section. Same
+      // dedicated-page treatment as #resultRules: open straight onto the OIR
+      // tab and hide the sibling tab bar so it reads as its own page.
+      activateTab('oir');
+      const tabs = $('#tlTabs');
+      if (tabs) tabs.style.display = 'none';
     } else if (location.hash === '#triageLens') {
-      // Embedded as the Suite Settings "Triage Lens" section. Result rules have
-      // their OWN dedicated "Result Rules" section there (iframe above), so the
-      // Result rules tab here is a duplicate editing surface for the same
-      // CONFIG.resultRules — two views that were drifting out of sync (and could
-      // silently clobber each other on save). Hide the tab here so result rules
-      // live in exactly one place; standalone use of this page keeps all tabs.
+      // Embedded as the Suite Settings "Triage Lens" section. Result rules and
+      // outstanding requests have their OWN dedicated Suite-Settings sections
+      // (iframes above), so their tabs here are duplicate editing surfaces for
+      // the same CONFIG — two views that drift out of sync and can silently
+      // clobber each other on save. Hide them here so each lives in exactly one
+      // place; standalone use of this page keeps all tabs.
       const rrTab = $('#tlTabs .tl-tab[data-tab="resultRules"]');
       if (rrTab) rrTab.style.display = 'none';
+      const oirTab = $('#tlTabs .tl-tab[data-tab="oir"]');
+      if (oirTab) oirTab.style.display = 'none';
       activateTab('rules');
     }
     // Keep every open instance of this page (the two Suite-Settings iframes plus
