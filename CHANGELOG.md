@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.1] — 2026-06-19
+
+### Removed "Select All" button from Outstanding Investigation Requests
+
+Removed the injected "Select All" button and confirm dialog from the Review Investigation Report detail page. Also removes the associated scoped MutationObserver and all related CSS.
+
 ## [v3.117.0] — 2026-06-18
 
 ### Results queue chips — de-duplicated rule labels + (new) stack under the name
