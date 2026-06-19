@@ -17,6 +17,8 @@
 .ch-q-result,
 .ch-q-mon,
 .ch-oir-flag,
+.ch-oir-tickoff,
+.ch-oir-reviewed-btn,
 .ch-action-menu {
   /* Surfaces */
   --bg-deep: #f8fafc;
@@ -260,6 +262,48 @@
 .ch-oir-tickoff:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+/* item 8: elsewhere badge is clickable — underline signals the link affordance.
+   cursor is also set inline in content.js (belt-and-braces). */
+.ch-oir-clickable {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* item 9: outstanding row that the clinician has locally marked as reviewed —
+   muted teal tint distinct from plain outstanding (neutral slate) and from
+   resulted (green) to make the reviewed state immediately scannable. */
+.ch-oir-flag.ch-oir-reviewed {
+  color: var(--green);
+  background: var(--bg-mid);
+  border: 1px solid var(--green-line);
+  opacity: 0.75;
+}
+
+/* item 9: "Mark reviewed" button — mirrors .ch-oir-tickoff sizing/shape but uses
+   a quieter neutral fill so it doesn't compete with the accent "Tick off" button. */
+.ch-oir-reviewed-btn {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+}
+.ch-oir-reviewed-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+  border-color: var(--text-3);
 }
 
 /* ---- HUD panel ---- */

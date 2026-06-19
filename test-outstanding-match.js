@@ -269,6 +269,97 @@ const lftEnriched = M.enrichWithHistory(lftVerdicts, obsHistoryLftGroup);
 check(lftEnriched[0].status === 'resulted_elsewhere', 'LFT found via group name → resulted_elsewhere');
 check(lftEnriched[0].confidence === 'confident', 'group-name "Liver function" match is always confident');
 
+// ── 8g. New enriched fields — matchedAnalytes / matchedValue / matchedUnit / matchedObsName / matchedAbnormal ──
+console.log('enrichWithHistory — enriched fields:');
+
+// 8g-i. FBC confident case: matchedAnalytes populated, matchedValue/matchedUnit/matchedObsName truthy.
+// Haemoglobin has isBelow: true in the fixture → matchedAbnormal should be 'low'.
+// Platelet count has isAbove: false, isBelow: false → matchedAbnormal would be null.
+// Both have the same date (2026-05-01) so bestPoint is whichever is encountered last with an equal-or-later date;
+// strictly-greater date wins, so first one to arrive stays until superseded.
+// We assert the observable contract: matchedValue/matchedUnit are truthy, matchedAnalytes is non-empty.
+const fbcEnriched8g = M.enrichWithHistory(
+  M.matchOutstanding([{ name: 'Full Blood Count', requestedDate: '2026-02-04' }], lipidReport),
+  obsHistoryFbc
+);
+check(
+  Array.isArray(fbcEnriched8g[0].matchedAnalytes) && fbcEnriched8g[0].matchedAnalytes.length > 0,
+  '8g-i matchedAnalytes is a non-empty array for FBC confident case'
+);
+check(fbcEnriched8g[0].matchedAnalytes.includes('Haemoglobin'), '8g-i matchedAnalytes includes Haemoglobin');
+check(fbcEnriched8g[0].matchedAnalytes.includes('Platelet count'), '8g-i matchedAnalytes includes Platelet count');
+check(!!fbcEnriched8g[0].matchedValue, '8g-i matchedValue is truthy');
+check(!!fbcEnriched8g[0].matchedUnit, '8g-i matchedUnit is truthy');
+check(!!fbcEnriched8g[0].matchedObsName, '8g-i matchedObsName is truthy');
+// Haemoglobin isBelow:true → if Haemoglobin is the bestPoint, matchedAbnormal === 'low'.
+// Platelet count isAbove:false,isBelow:false → matchedAbnormal === null.
+// Both same date; first encountered (Haemoglobin) is set as bestPoint but Platelet (same date, NOT strictly greater) leaves it unchanged.
+// So Haemoglobin remains bestPoint → matchedAbnormal === 'low'.
+check(fbcEnriched8g[0].matchedAbnormal === 'low', '8g-i matchedAbnormal is low (Haemoglobin isBelow:true)');
+
+// 8g-ii. Tentative TSH case: reason now names the analyte and includes 'check'.
+check(/tsh/i.test(tftEnriched[0].reason), '8g-ii tentative TSH reason contains analyte name TSH');
+check(/check/i.test(tftEnriched[0].reason), '8g-ii tentative TSH reason contains the word check');
+check(
+  tftEnriched[0].reason !== 'possibly resulted elsewhere — confirm before clearing',
+  '8g-ii tentative TSH reason is specific, not the old generic string'
+);
+
+// 8g-iii. matchedValue reflects the MOST RECENT point when an obs has multiple history entries.
+const obsHistoryMultiDate = [
+  {
+    name: 'TSH',
+    group: null,
+    unit: 'mIU/L',
+    history: [
+      { date: '2026-03-01', value: 1.2, rawValue: '1.2', isAbove: false, isBelow: false },
+      { date: '2026-05-15', value: 0.8, rawValue: '0.8', isAbove: false, isBelow: false },
+      { date: '2026-04-10', value: 2.1, rawValue: '2.1', isAbove: false, isBelow: false },
+    ],
+  },
+];
+const tftVerdictsMulti = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-02-04' }], lipidReport);
+const tftEnrichedMulti = M.enrichWithHistory(tftVerdictsMulti, obsHistoryMultiDate);
+check(tftEnrichedMulti[0].status === 'resulted_elsewhere', '8g-iii multi-date TSH obs → resulted_elsewhere');
+check(
+  tftEnrichedMulti[0].matchedValue === '0.8',
+  `8g-iii matchedValue is from the most recent point (2026-05-15 → 0.8, got ${tftEnrichedMulti[0].matchedValue})`
+);
+
+// 8g-iv. matchedAbnormal for isAbove:true → 'high'.
+const obsHistoryHighAlt = [
+  {
+    name: 'ALT',
+    group: null,
+    unit: 'U/L',
+    history: [{ date: '2026-05-01', value: 95, rawValue: '95', isAbove: true, isBelow: false }],
+  },
+];
+const lftVerdictsHigh = M.matchOutstanding([{ name: 'Liver Function Test', requestedDate: '2026-02-04' }], lipidReport);
+const lftEnrichedHigh = M.enrichWithHistory(lftVerdictsHigh, obsHistoryHighAlt);
+check(lftEnrichedHigh[0].matchedAbnormal === 'high', '8g-iv matchedAbnormal is high when isAbove:true');
+
+// 8g-v. matchedAbnormal null when isAbove:false and isBelow:false.
+const obsHistoryNormalFerritin = [
+  {
+    name: 'Ferritin',
+    group: 'Haematinics',
+    unit: 'ug/L',
+    history: [{ date: '2026-03-15', value: 45, rawValue: '45', isAbove: false, isBelow: false }],
+  },
+];
+const ferritinVerdictsNorm = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-02-04' }], lipidReport);
+const ferritinEnrichedNorm = M.enrichWithHistory(ferritinVerdictsNorm, obsHistoryNormalFerritin);
+check(ferritinEnrichedNorm[0].matchedAbnormal === null, '8g-v matchedAbnormal is null when result is normal');
+
+// 8g-vi. Unmatched obs → matchedAnalytes is empty array.
+// Use a request with no observation history match.
+const emptyEnriched = M.enrichWithHistory(
+  M.matchOutstanding([{ name: 'Full Blood Count', requestedDate: '2026-02-04' }], lipidReport),
+  [] // empty history
+);
+check(emptyEnriched[0].status === 'outstanding', '8g-vi empty history leaves status outstanding');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

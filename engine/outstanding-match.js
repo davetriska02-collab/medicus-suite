@@ -300,6 +300,13 @@
       let groupMatchDate = null; // most recent date from a group-name-matched obs
       const analyteTermDates = new Map(); // norm(term) → mostRecentDate
 
+      // New tracking for enriched fields.
+      const matchedAnalyteNames = []; // first-seen order, de-duplicated via Set
+      const seenAnalyteNames = new Set();
+      // bestPoint: the single most-recent matched history entry across all matched obs.
+      // Shape: { date, rawValue, unit, name, isAbove, isBelow }
+      let bestPoint = null;
+
       observationHistory.forEach((obs) => {
         if (!obs) return;
         const nameText = norm(obs.name || '');
@@ -332,6 +339,32 @@
           const prev = analyteTermDates.get(nt) || null;
           if (!prev || String(latestDate) > String(prev)) analyteTermDates.set(nt, latestDate);
         }
+
+        // Collect matched display name (de-duplicated, first-seen order).
+        const displayName = obs.name || '';
+        if (displayName && !seenAnalyteNames.has(displayName)) {
+          seenAnalyteNames.add(displayName);
+          matchedAnalyteNames.push(displayName);
+        }
+
+        // Track the single most-recent matched history point across all matched obs.
+        // Find the relevant entry with the latest date for this obs.
+        const latestPoint = relevant.reduce(
+          (best, h) => (!best || String(h.date) > String(best.date) ? h : best),
+          null
+        );
+        if (latestPoint) {
+          if (!bestPoint || String(latestPoint.date) > String(bestPoint.date)) {
+            bestPoint = {
+              date: latestPoint.date,
+              rawValue: latestPoint.rawValue != null ? String(latestPoint.rawValue) : null,
+              unit: obs.unit != null ? String(obs.unit) : null,
+              name: obs.name || null,
+              isAbove: !!latestPoint.isAbove,
+              isBelow: !!latestPoint.isBelow,
+            };
+          }
+        }
       });
 
       const hasGroupMatch = groupMatchDate !== null;
@@ -348,15 +381,31 @@
         if (!elsewhereDate || String(d) > String(elsewhereDate)) elsewhereDate = d;
       });
 
+      // Derive the new enriched fields from bestPoint.
+      const matchedValue = bestPoint ? bestPoint.rawValue : null;
+      const matchedUnit = bestPoint ? bestPoint.unit : null;
+      const matchedObsName = bestPoint ? bestPoint.name : null;
+      const matchedAbnormal = bestPoint ? (bestPoint.isAbove ? 'high' : bestPoint.isBelow ? 'low' : null) : null;
+
+      const tentativeReason =
+        matchedAnalyteNames.length > 0
+          ? `possibly resulted elsewhere — ${matchedAnalyteNames.length} analyte(s) matched (${matchedAnalyteNames.join(', ')}); check ${def.label} in patient history before clearing`
+          : `possibly resulted elsewhere — confirm before clearing`;
+
       return {
         ...v,
         status: 'resulted_elsewhere',
         confidence: confident ? 'confident' : 'tentative',
         elsewhereDate,
         autoTick: false,
+        matchedAnalytes: matchedAnalyteNames,
+        matchedValue,
+        matchedUnit,
+        matchedObsName,
+        matchedAbnormal,
         reason: confident
           ? `resulted elsewhere${elsewhereDate ? ` (most recent: ${elsewhereDate})` : ''}`
-          : 'possibly resulted elsewhere — confirm before clearing',
+          : tentativeReason,
       };
     });
   }
