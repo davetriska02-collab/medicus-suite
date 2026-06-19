@@ -2195,7 +2195,172 @@
     restorePosition(hudEl);
     enableDrag(hudEl);
     runMonitoringChip();
+    runOutstandingMatch();
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
+  };
+
+  // ============================================================
+  // 2c. Outstanding Investigation Requests — smart match
+  // ============================================================
+  // Dr Grundy's alternative to Medicus's blunt "Match all": instead of clearing
+  // EVERY outstanding request, decide PER request whether THIS report satisfies
+  // it (same test/panel AND request predates the sample-taken date) and:
+  //   - annotate every row inline — ✓ resulted (this report covers it) vs
+  //     ⏳ still outstanding (so a buried coeliac/HFE/CCP screen is visible, not
+  //     silently cleared);
+  //   - auto-tick ONLY the confident, predating matches (autoTick === true), once
+  //     per task. Tentative / unrecognised / post-dating rows are never ticked.
+  // All matching logic lives in engine/outstanding-match.js (pure + unit-tested);
+  // this adapter only reads the card + report and applies the verdict.
+  //
+  // SPA durability: the card is a Quasar re-rendering component, so annotations
+  // are idempotent and re-applied by a scoped observer (mirrors the removed
+  // select-all injector). Auto-tick fires once per taskUuid — if the clinician
+  // unticks a row we must not re-tick it.
+  const OIR_CARD_SEL = '[data-testid="test-outstanding-investigation-requests"]';
+  // taskUuid → normalised report (in-memory, page-scoped). Avoids re-fetching the
+  // report on every observer tick.
+  const _oirReportCache = new Map();
+  // taskUuids we've already auto-ticked once — never re-tick (respects manual unticks).
+  const _oirAutoTicked = new Set();
+  let _oirObserver = null;
+  let _oirRaf = false;
+
+  // Read the outstanding-request rows from the card. Each Quasar checkbox carries
+  // aria-labelledby → the label element holding "{Test} (Dr X • DD Mon YYYY, HH:MM)".
+  // Returns [{ box, label }] in DOM order (index is the stable request id).
+  const readOutstandingRows = (card) => {
+    const rows = [];
+    card.querySelectorAll('.q-checkbox').forEach((box) => {
+      let label = '';
+      const id = box.getAttribute('aria-labelledby');
+      if (id) {
+        // aria-labelledby may list several ids; concatenate their text.
+        id.split(/\s+/).forEach((one) => {
+          const el = one && document.getElementById(one);
+          if (el) label += (label ? ' ' : '') + el.textContent;
+        });
+      }
+      if (!label) label = box.textContent || '';
+      rows.push({ box, label: label.replace(/\s+/g, ' ').trim() });
+    });
+    return rows;
+  };
+
+  // Inject (idempotently) the verdict badge into a row, after its label.
+  const annotateOutstandingRow = (box, verdict) => {
+    // The badge is appended to the checkbox's row container so it sits beside the
+    // label without disturbing Quasar's own layout. De-duped by class.
+    const host = box.closest('.q-checkbox') || box;
+    const parent = host.parentElement || host;
+    let badge = parent.querySelector(':scope > .ch-oir-flag');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'ch-oir-flag';
+      parent.appendChild(badge);
+    }
+    const resulted = verdict.status === 'resulted';
+    const tentative = resulted && verdict.confidence === 'tentative';
+    badge.classList.toggle('ch-oir-resulted', resulted && !tentative);
+    badge.classList.toggle('ch-oir-tentative', tentative);
+    badge.classList.toggle('ch-oir-outstanding', !resulted);
+    badge.textContent = resulted ? (tentative ? '✓? resulted?' : '✓ resulted') : '⏳ outstanding';
+    badge.title = verdict.reason || '';
+  };
+
+  // Staggered Quasar tick of the confident rows (Vue reactivity is async — a tight
+  // loop drops most updates). Mirrors the proven mechanism from the old select-all.
+  const tickRows = (boxes) => {
+    let i = 0;
+    const next = () => {
+      if (i >= boxes.length) return;
+      const b = boxes[i++];
+      if (b && b.getAttribute('aria-checked') !== 'true') b.click();
+      setTimeout(next, 30);
+    };
+    next();
+  };
+
+  // Apply the engine verdict to the live card: annotate every row, and (once per
+  // task) auto-tick the confident predating rows.
+  const applyOutstandingMatch = (card, report, taskUuid) => {
+    const OutstandingMatch = window.SentinelOutstandingMatch;
+    if (!OutstandingMatch || !card || !card.isConnected) return;
+    const rows = readOutstandingRows(card);
+    if (!rows.length) return;
+    const requests = rows.map((r, idx) => ({ id: idx, ...OutstandingMatch.parseRequestLabel(r.label) }));
+    const verdicts = OutstandingMatch.matchOutstanding(requests, report);
+    verdicts.forEach((v, idx) => {
+      if (rows[idx]) annotateOutstandingRow(rows[idx].box, v);
+    });
+    // Auto-tick once per task — confident + predating rows only.
+    if (taskUuid && !_oirAutoTicked.has(taskUuid)) {
+      _oirAutoTicked.add(taskUuid);
+      const toTick = verdicts.filter((v) => v.autoTick && rows[v.id]).map((v) => rows[v.id].box);
+      if (toTick.length) {
+        log('OIR auto-tick', { count: toTick.length });
+        tickRows(toTick);
+      }
+    }
+  };
+
+  // Entry point — fetch the report for this task (cached), then apply the match.
+  const runOutstandingMatch = () => {
+    const API = window.SentinelApiClient;
+    const NORM = window.SentinelNormalisers;
+    if (!API || !NORM || !window.SentinelOutstandingMatch) return;
+    const card = document.querySelector(OIR_CARD_SEL);
+    if (!card) {
+      teardownOutstandingObserver();
+      return;
+    }
+    setupOutstandingObserver();
+    const ctx = API.detectMedicusContext(location.href);
+    if (!ctx || !ctx.taskUuid || !ctx.taskTypeSlug) return;
+    const taskUuid = ctx.taskUuid;
+    const cached = _oirReportCache.get(taskUuid);
+    if (cached) {
+      applyOutstandingMatch(card, cached, taskUuid);
+      return;
+    }
+    const overviewURL = `/tasks/data/${ctx.taskTypeSlug}/overview/${taskUuid}`;
+    API.fetchInvestigationReport(ctx.apiBase, overviewURL)
+      .then((raw) => {
+        const report = NORM.normaliseInvestigationReport(raw);
+        _oirReportCache.set(taskUuid, report);
+        // Re-find the card (the DOM may have re-rendered while we fetched).
+        const liveCard = document.querySelector(OIR_CARD_SEL);
+        if (liveCard) applyOutstandingMatch(liveCard, report, taskUuid);
+      })
+      .catch((e) => log('OIR match: fetchInvestigationReport threw', e.message));
+  };
+
+  // Scoped observer: re-apply annotations when Quasar re-renders the card. Annotation
+  // is idempotent; auto-tick is guarded by _oirAutoTicked so it never re-fires.
+  const setupOutstandingObserver = () => {
+    if (_oirObserver) return;
+    _oirObserver = new MutationObserver(() => {
+      if (_oirRaf) return;
+      _oirRaf = true;
+      requestAnimationFrame(() => {
+        _oirRaf = false;
+        const API = window.SentinelApiClient;
+        if (!API) return;
+        const card = document.querySelector(OIR_CARD_SEL);
+        const ctx = API.detectMedicusContext(location.href);
+        const report = ctx && ctx.taskUuid ? _oirReportCache.get(ctx.taskUuid) : null;
+        if (card && report) applyOutstandingMatch(card, report, ctx.taskUuid);
+      });
+    });
+    _oirObserver.observe(document.body, { childList: true, subtree: true });
+  };
+
+  const teardownOutstandingObserver = () => {
+    if (_oirObserver) {
+      _oirObserver.disconnect();
+      _oirObserver = null;
+    }
+    _oirRaf = false;
   };
 
   // ---- Queue "absence is not a verdict" legend ----
@@ -2252,6 +2417,8 @@
       // If we've navigated away from the queue, release the observer so the
       // next queue visit always rebuilds it against a fresh container.
       if (type !== 'queue') teardownQueueObserver();
+      // The outstanding-match observer is detail-page-only; release it elsewhere.
+      if (type !== 'detail') teardownOutstandingObserver();
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
       else if (type === 'queue') runQueue();
