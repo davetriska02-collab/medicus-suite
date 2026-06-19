@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.117.2] — 2026-06-19
+
+### Results queue stacked chips — bare-flag "High"/"Low" suppression + label width fix
+
+Two polish fixes for the stacked chip view in the investigation results queue:
+
+- **Bare-flag review chip suppression.** When a more informative severity chip is already
+  present (rule-named analyte or count), a `queue.resultReviewRule` chip whose label is
+  just a bare flag word ("High", "Low", "H", "L") is suppressed. This covers the case
+  where a custom text rule matches Medicus's internal result flag — the flag word adds no
+  signal when the severity chip already names the analyte or rule. The chip is kept when
+  it's the only signal (some information > none).
+
+- **Chip label truncation fix.** In the stacked view (chips stacked under the patient
+  name), the per-chip `max-width: 18ch` inline cap was still active, truncating long
+  Triage Lens rule labels. Added a context-scoped CSS override so chips on their own
+  stacked line use `max-width: 100%`. Also changed `justify-content: center` to
+  `justify-content: flex-start` in the stacked column layout so the patient name always
+  aligns to the top.
+
+## [v3.117.1] — 2026-06-19
+
+### Removed "Select All" button from Outstanding Investigation Requests
+
+Removed the injected "Select All" button and confirm dialog from the Review Investigation Report detail page. Also removes the associated scoped MutationObserver and all related CSS.
+
 ## [v3.117.0] — 2026-06-18
 
 ### Results queue chips — de-duplicated rule labels + (new) stack under the name
