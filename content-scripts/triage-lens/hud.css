@@ -173,7 +173,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   row-gap: 1px;
 }
 [col-id='patientName'] > .ch-queue-chips {
@@ -185,6 +185,11 @@
   order: 3;
   max-width: 100%;
   margin-right: 0;
+}
+[col-id='patientName'] > .ch-q-result-inline .ch-chip,
+[col-id='patientName'] > .ch-q-mon-inline .ch-chip {
+  /* On their own line chips get full cell width — lift the inline 18ch cap. */
+  max-width: 100%;
 }
 
 /* ---- HUD panel ---- */

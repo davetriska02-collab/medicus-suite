@@ -2741,6 +2741,17 @@
     // Meta/process chips (outline, not filled) — last
     if (sev.misprioritised) chips.push({ id: 'queue.resultMisprioritised', vars: {}, meta: true });
     if (sev.unmatched) chips.push({ id: 'queue.resultUnmatched', vars: {}, meta: true });
+    // When a more informative severity chip is already present, suppress bare-flag review
+    // chips (e.g. a custom rule matching Medicus's internal "High" flag result). A review
+    // chip labelled just "High" / "Low" / "H" adds no signal when the severity chip already
+    // names the analyte or rule. Keep it when it's the only chip (some signal > none).
+    if (chips.length > 1) {
+      const BARE_FLAG = /^(high|low|h|l)$/i;
+      return chips.filter((c) => {
+        if (c.id !== 'queue.resultReviewRule') return true;
+        return !BARE_FLAG.test((c.vars && c.vars.rule || '').trim());
+      });
+    }
     return chips;
   }
 
