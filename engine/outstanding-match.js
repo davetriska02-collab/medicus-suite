@@ -177,6 +177,54 @@
       rep: ['bone profile'],
       analytes: ['phosphate', 'adjusted calcium', 'corrected calcium'],
     },
+    // Reproductive / sex-hormone profile — each is its own single-analyte test
+    // (one result IS the test). These are commonly co-requested on a fertility /
+    // amenorrhoea / menopause work-up, so they are added as a family: a request
+    // not in this list resolves to no key and stays outstanding (fail-safe), but
+    // it is then invisible to resulted-elsewhere detection — which is the gap
+    // Nick hit on FSH/LH (the request name was never recognised). UK and US
+    // spellings are both listed (luteinising/luteinizing, oestradiol/estradiol)
+    // because labs vary.
+    {
+      key: 'fsh',
+      label: 'Follicle stimulating hormone',
+      req: ['follicle stimulating hormone', 'fsh'],
+      rep: ['fsh', 'follicle stimulating hormone'],
+      analytes: ['fsh', 'follicle stimulating hormone'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'lh',
+      label: 'Luteinising hormone',
+      req: ['luteinising hormone', 'luteinizing hormone', 'lh'],
+      rep: ['lh', 'luteinising hormone', 'luteinizing hormone'],
+      analytes: ['lh', 'luteinising hormone', 'luteinizing hormone'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'oestradiol',
+      label: 'Oestradiol',
+      req: ['oestradiol', 'estradiol'],
+      rep: ['oestradiol', 'estradiol'],
+      analytes: ['oestradiol', 'estradiol'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'prolactin',
+      label: 'Prolactin',
+      req: ['prolactin'],
+      rep: ['prolactin'],
+      analytes: ['prolactin'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'testosterone',
+      label: 'Testosterone',
+      req: ['testosterone'],
+      rep: ['testosterone'],
+      analytes: ['testosterone'],
+      singleAnalyte: true,
+    },
     {
       key: 'radiology_knee',
       label: 'Knee X-ray',

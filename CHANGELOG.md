@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.121.1] — 2026-06-19
+
+### OIR matcher — recognise the reproductive / sex-hormone profile
+
+Live feedback: on a real card, **Follicle Stimulating Hormone** stayed `⏳ outstanding`
+while every other request was correctly flagged "in record". Root cause was the
+matcher's test dictionary (`TEST_DEFS` in `engine/outstanding-match.js`): FSH and LH
+were not listed, so the request name resolved to no key, was treated as "not
+recognised", and was therefore invisible to both report-matching and
+resulted-elsewhere detection. (A missing test is fail-safe — it stays outstanding,
+never wrongly cleared — but it also never gets the helpful flag.)
+
+Added the common reproductive / sex-hormone tests as single-analyte definitions, with
+both UK and US spellings since labs vary:
+
+- **FSH** (Follicle Stimulating Hormone)
+- **LH** (Luteinising / Luteinizing Hormone)
+- **Oestradiol** (Estradiol)
+- **Prolactin**
+- **Testosterone**
+
+Added as a family rather than just the two Nick flagged, since these are co-requested
+on a fertility / amenorrhoea / menopause work-up and would otherwise be the next gap.
+`test-outstanding-match.js` gains section 9 (11 new assertions): every request resolves
+to a key, US spellings resolve, an FSH report ticks only the FSH request, and an
+FSH result found in observation history surfaces as `resulted_elsewhere` (never
+auto-ticked). 60 matcher assertions, 106 suite tests pass.
+
+> This is exactly the hard-coded-dictionary gap the planned **user-editable test
+> dictionary** removes — a practice could add its local lab's panel names without a
+> code change. Shipping FSH/LH in the built-in set now; the editor is the durable fix.
+
 ## [v3.121.0] — 2026-06-19
 
 ### Outstanding Investigation Requests — per-row flags + one gated bulk tick-off

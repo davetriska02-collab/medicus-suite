@@ -360,6 +360,67 @@ const emptyEnriched = M.enrichWithHistory(
 );
 check(emptyEnriched[0].status === 'outstanding', '8g-vi empty history leaves status outstanding');
 
+// ── 9. Reproductive / sex-hormone profile (FSH/LH gap Nick flagged) ───────────
+console.log('sex-hormone tests:');
+const HORMONE_LABELS = [
+  'Follicle Stimulating Hormone (Dr Nicholas Grundy • 17 Apr 2026, 12:06)',
+  'Luteinising Hormone (Dr Nicholas Grundy • 17 Apr 2026, 12:06)',
+  'Oestradiol (Dr Nicholas Grundy • 17 Apr 2026, 12:06)',
+  'Prolactin (Dr Nicholas Grundy • 17 Apr 2026, 12:06)',
+  'Testosterone (Dr Nicholas Grundy • 17 Apr 2026, 12:06)',
+];
+// 9a. Every request now resolves to a key (the bug was key === null → unrecognised).
+const hormoneKeys = HORMONE_LABELS.map((l) => M.resolveDef(M.parseRequestLabel(l).name, ['req']));
+check(
+  hormoneKeys.every((d) => d && d.key),
+  `all sex-hormone requests resolve to a key (${hormoneKeys.map((d) => (d ? d.key : 'null')).join(',')})`
+);
+check(hormoneKeys[0].key === 'fsh', 'Follicle Stimulating Hormone → fsh');
+check(hormoneKeys[1].key === 'lh', 'Luteinising Hormone → lh');
+
+// 9b. US spelling resolves too (luteinizing / estradiol).
+check(M.resolveDef('Luteinizing Hormone', ['req']) && M.resolveDef('Luteinizing Hormone', ['req']).key === 'lh', 'US spelling Luteinizing → lh');
+check(M.resolveDef('Estradiol', ['req']) && M.resolveDef('Estradiol', ['req']).key === 'oestradiol', 'US spelling Estradiol → oestradiol');
+
+// 9c. Single-analyte report ticks its own request and nothing else.
+const fshReport = {
+  title: 'Follicle Stimulating Hormone',
+  results: [{ name: 'FSH', specimen: 'Follicle Stimulating Hormone', date: '2026-04-20' }],
+};
+const fshOut = M.matchOutstanding(HORMONE_LABELS, fshReport);
+check(
+  fshOut[0].status === 'resulted' && fshOut[0].autoTick === true && fshOut[0].confidence === 'confident',
+  `FSH report auto-ticks the FSH request only (${fshOut[0].status}/${fshOut[0].autoTick})`
+);
+check(
+  fshOut.slice(1).every((r) => r.status === 'outstanding'),
+  'an FSH report does NOT clear LH / oestradiol / prolactin / testosterone'
+);
+
+// 9d. LH analyte (the abbreviation as it appears on a report) is recognised confidently.
+const lhReport = { results: [{ name: 'LH', specimen: '', date: '2026-04-20' }] };
+const lhOut = M.matchOutstanding([HORMONE_LABELS[1]], lhReport);
+check(lhOut[0].status === 'resulted' && lhOut[0].autoTick === true, 'lone "LH" analyte resolves the LH request confidently');
+
+// 9e. Resulted-elsewhere now works for FSH (the originally-flagged failure):
+// an LH report leaves FSH outstanding, but history enrichment finds it in record.
+const lhOnlyOut = M.matchOutstanding(HORMONE_LABELS, lhReport);
+check(lhOnlyOut[0].status === 'outstanding', 'FSH request stays outstanding under an LH-only report');
+const fshHistory = [
+  {
+    name: 'Follicle stimulating hormone',
+    group: 'Endocrinology',
+    unit: 'U/L',
+    history: [{ date: '2026-06-16', value: 6.2, rawValue: '6.2', isAbove: false, isBelow: false }],
+  },
+];
+const fshEnriched = M.enrichWithHistory(lhOnlyOut, fshHistory);
+check(
+  fshEnriched[0].status === 'resulted_elsewhere' && fshEnriched[0].autoTick === false,
+  'FSH found in observation history → resulted_elsewhere (never auto-ticked)'
+);
+check(fshEnriched[0].elsewhereDate === '2026-06-16', 'FSH elsewhere date surfaced (2026-06-16)');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
