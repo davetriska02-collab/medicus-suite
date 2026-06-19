@@ -192,6 +192,10 @@
     backfillBuiltinAbnormalText(out.resultRules, shipped.resultRules);
     // Un-stick result-rule labels/thresholds frozen at a since-changed shipped default.
     revertRetiredResultRuleFields(out.resultRules, shipped.resultRules);
+    // OIR user test dictionary: a purely user/practice-authored array (built-in
+    // tests live in engine TEST_DEFS, not here). Arrays aren't shallow-merged, so
+    // carry it through explicitly or migration would drop the user's customs.
+    out.oirTests = Array.isArray(cfg.oirTests) ? [...cfg.oirTests] : [...(shipped.oirTests || [])];
     out.version = shipped.version;
     return out;
   };
@@ -217,11 +221,13 @@
     setupResultRulesPane();
     setupResultEditPane();
     setupResultLlmPane();
+    setupOirPane();
     renderRules();
     renderSystemChips();
     renderResultRules();
     populateThresholds();
     populatePrefs();
+    populateOir();
     // Deep-link: when this page is embedded as the Suite Settings "Result Rules"
     // section (iframe src ".../options.html#resultRules"), open straight onto the
     // Result rules tab and hide the sibling tab bar so it reads as a dedicated page.
@@ -309,6 +315,7 @@
       about: 'paneAbout',
       resultRules: 'paneResultRules',
       resultEdit: 'paneResultEdit',
+      oir: 'paneOir',
     };
     $$('.tl-pane').forEach((p) => p.classList.remove('tl-pane-active'));
     const id = map[name];
@@ -992,6 +999,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         renderRules();
         populateThresholds();
         populatePrefs();
+        populateOir();
         $('#rawJson').value = JSON.stringify(parsed, null, 2);
       } catch (e) {
         flash('Import failed: ' + e.message, 'err');
@@ -1009,6 +1017,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       renderRules();
       populateThresholds();
       populatePrefs();
+      populateOir();
       $('#rawJson').value = JSON.stringify(fresh, null, 2);
     });
 
@@ -1020,6 +1029,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       renderRules();
       populateThresholds();
       populatePrefs();
+      populateOir();
       flash('Reloaded');
     });
     $('#btnSaveJson').addEventListener('click', async () => {
@@ -1030,6 +1040,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         renderRules();
         populateThresholds();
         populatePrefs();
+        populateOir();
         flash('Saved JSON');
       } catch (e) {
         flash('Invalid JSON: ' + e.message, 'err');
@@ -2824,6 +2835,370 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         statusEl.textContent = '';
       });
     }
+  };
+
+  // ============================================================
+  // OUTSTANDING REQUESTS TAB
+  // ============================================================
+  const setupOirPane = () => {
+    // Save behaviour settings
+    $('#btnSaveOir').addEventListener('click', async () => {
+      if (!CONFIG.prefs) CONFIG.prefs = {};
+      $$('#paneOir [data-pref]').forEach((inp) => {
+        const key = inp.dataset.pref;
+        const isNumber = inp.dataset.prefType === 'number';
+        if (inp.type === 'checkbox') CONFIG.prefs[key] = inp.checked;
+        else if (inp.type === 'number') CONFIG.prefs[key] = Number(inp.value);
+        else if (isNumber) CONFIG.prefs[key] = Number(inp.value);
+        else CONFIG.prefs[key] = inp.value;
+      });
+      await saveConfig(CONFIG);
+      flash('OIR settings saved');
+    });
+
+    // Built-in summary
+    const summaryEl = $('#oirBuiltinSummary');
+    if (summaryEl) {
+      const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : null;
+      if (defs && defs.length) {
+        summaryEl.textContent =
+          'Built-in tests (always active unless disabled below): ' +
+          defs.map((d) => d.label).join(', ') +
+          '. Use the form below to extend a built-in (add extra synonym terms for your lab) or disable one entirely.';
+      } else {
+        summaryEl.textContent = 'Built-in test definitions not available in this context.';
+      }
+    }
+
+    // Mode picker visibility
+    const modeEl = $('#oirFormMode');
+    const builtinRow = $('#oirFormBuiltinRow');
+    const labelRow = $('#oirFormLabelRow');
+    const reqRow = $('#oirFormReqRow');
+    const repRow = $('#oirFormRepRow');
+    const analytesRow = $('#oirFormAnalytesRow');
+    const singleRow = $('#oirFormSingleRow');
+
+    const applyModeVisibility = (mode) => {
+      const isNew = mode === 'new';
+      const isDisable = mode === 'disable';
+      if (builtinRow) builtinRow.style.display = isNew ? 'none' : '';
+      if (labelRow) labelRow.style.display = isDisable ? 'none' : '';
+      if (reqRow) reqRow.style.display = isDisable ? 'none' : '';
+      if (repRow) repRow.style.display = isDisable ? 'none' : '';
+      if (analytesRow) analytesRow.style.display = isDisable ? 'none' : '';
+      if (singleRow) singleRow.style.display = isNew && !isDisable ? '' : 'none';
+    };
+    applyModeVisibility(modeEl ? modeEl.value : 'new');
+    if (modeEl) {
+      modeEl.addEventListener('change', () => applyModeVisibility(modeEl.value));
+    }
+
+    // Populate built-in dropdown
+    const builtinKeyEl = $('#oirFormBuiltinKey');
+    const populateBuiltinDropdown = () => {
+      if (!builtinKeyEl) return;
+      builtinKeyEl.innerHTML = '';
+      const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
+      for (const d of defs || []) {
+        const opt = document.createElement('option');
+        opt.value = escAttr(d.key);
+        opt.textContent = d.label + ' (' + d.key + ')';
+        builtinKeyEl.appendChild(opt);
+      }
+    };
+    populateBuiltinDropdown();
+
+    // Cancel edit
+    const cancelBtn = $('#btnCancelOirTest');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        resetOirForm();
+      });
+    }
+
+    // Save test
+    $('#btnSaveOirTest').addEventListener('click', async () => {
+      const mode = modeEl ? modeEl.value : 'new';
+      const editKey = $('#oirFormEditKey') ? $('#oirFormEditKey').value : '';
+      const statusEl = $('#oirFormStatus');
+
+      const splitTerms = (val) =>
+        String(val || '')
+          .split(/[\n,]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+      let entry;
+      if (mode === 'disable') {
+        const key = builtinKeyEl ? builtinKeyEl.value : '';
+        if (!key) {
+          if (statusEl) statusEl.textContent = 'Select a built-in test to disable.';
+          return;
+        }
+        entry = { key, disabled: true, label: '', req: [], rep: [], analytes: [], singleAnalyte: false };
+      } else if (mode === 'extend') {
+        const key = builtinKeyEl ? builtinKeyEl.value : '';
+        if (!key) {
+          if (statusEl) statusEl.textContent = 'Select a built-in test to extend.';
+          return;
+        }
+        const label = $('#oirFormLabel') ? $('#oirFormLabel').value.trim() : '';
+        const req = splitTerms($('#oirFormReq') ? $('#oirFormReq').value : '');
+        const rep = splitTerms($('#oirFormRep') ? $('#oirFormRep').value : '');
+        const analytes = splitTerms($('#oirFormAnalytes') ? $('#oirFormAnalytes').value : '');
+        entry = { key, disabled: false, label, req, rep, analytes, singleAnalyte: false };
+      } else {
+        // new
+        const labelVal = $('#oirFormLabel') ? $('#oirFormLabel').value.trim() : '';
+        if (!labelVal) {
+          if (statusEl) statusEl.textContent = 'Label is required.';
+          return;
+        }
+        const req = splitTerms($('#oirFormReq') ? $('#oirFormReq').value : '');
+        if (!req.length) {
+          if (statusEl) statusEl.textContent = 'At least one request term is required for a new custom test.';
+          return;
+        }
+        const rep = splitTerms($('#oirFormRep') ? $('#oirFormRep').value : '');
+        const analytes = splitTerms($('#oirFormAnalytes') ? $('#oirFormAnalytes').value : '');
+        const singleAnalyte = $('#oirFormSingle') ? $('#oirFormSingle').checked : false;
+        // Derive key from label if not editing an existing entry
+        const key =
+          editKey ||
+          labelVal
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_|_$/g, '');
+        entry = { key, disabled: false, label: labelVal, req, rep, analytes, singleAnalyte };
+      }
+
+      if (!Array.isArray(CONFIG.oirTests)) CONFIG.oirTests = [];
+      const existingIdx = editKey
+        ? CONFIG.oirTests.findIndex((t) => t.key === editKey)
+        : CONFIG.oirTests.findIndex((t) => t.key === entry.key);
+      if (existingIdx >= 0) {
+        CONFIG.oirTests[existingIdx] = entry;
+      } else {
+        CONFIG.oirTests.push(entry);
+      }
+      await saveConfig(CONFIG);
+      flash('Test saved');
+      resetOirForm();
+      renderOirTests();
+    });
+
+    // Clear audit
+    const clearAuditBtn = $('#btnClearOirAudit');
+    if (clearAuditBtn) {
+      clearAuditBtn.addEventListener('click', async () => {
+        if (!confirm('Clear the entire OIR audit log? This cannot be undone.')) return;
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          await chrome.storage.local.remove('triagelens.oir.auditLog');
+        }
+        renderOirAudit();
+        flash('Audit log cleared');
+      });
+    }
+
+    renderOirTests();
+    renderOirAudit();
+  };
+
+  const resetOirForm = () => {
+    const modeEl = $('#oirFormMode');
+    if (modeEl) modeEl.value = 'new';
+    const editKeyEl = $('#oirFormEditKey');
+    if (editKeyEl) editKeyEl.value = '';
+    const labelEl = $('#oirFormLabel');
+    if (labelEl) labelEl.value = '';
+    const reqEl = $('#oirFormReq');
+    if (reqEl) reqEl.value = '';
+    const repEl = $('#oirFormRep');
+    if (repEl) repEl.value = '';
+    const analytesEl = $('#oirFormAnalytes');
+    if (analytesEl) analytesEl.value = '';
+    const singleEl = $('#oirFormSingle');
+    if (singleEl) singleEl.checked = false;
+    const statusEl = $('#oirFormStatus');
+    if (statusEl) statusEl.textContent = '';
+    const cancelBtn = $('#btnCancelOirTest');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    // Re-apply mode visibility
+    const builtinRow = $('#oirFormBuiltinRow');
+    if (builtinRow) builtinRow.style.display = 'none';
+    const singleRow = $('#oirFormSingleRow');
+    if (singleRow) singleRow.style.display = '';
+    const labelRow = $('#oirFormLabelRow');
+    if (labelRow) labelRow.style.display = '';
+    const reqRow = $('#oirFormReqRow');
+    if (reqRow) reqRow.style.display = '';
+    const repRow = $('#oirFormRepRow');
+    if (repRow) repRow.style.display = '';
+    const analytesRow = $('#oirFormAnalytesRow');
+    if (analytesRow) analytesRow.style.display = '';
+  };
+
+  const renderOirTests = () => {
+    const container = $('#oirTestList');
+    const emptyEl = $('#oirTestListEmpty');
+    if (!container) return;
+    container.innerHTML = '';
+    const tests = Array.isArray(CONFIG.oirTests) ? CONFIG.oirTests : [];
+    if (!tests.length) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+    const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
+    for (const t of tests) {
+      const isBuiltinKey = (defs || []).some((d) => d.key === t.key);
+      let typeLabel;
+      if (t.disabled) {
+        typeLabel = 'Disable built-in';
+      } else if (isBuiltinKey) {
+        typeLabel = 'Extend built-in';
+      } else {
+        typeLabel = 'Custom test';
+      }
+      const termSummary = t.disabled
+        ? 'Built-in disabled — requests for this test will stay outstanding.'
+        : [
+            t.req && t.req.length ? 'req: ' + t.req.slice(0, 3).join(', ') : '',
+            t.rep && t.rep.length ? 'rep: ' + t.rep.slice(0, 2).join(', ') : '',
+            t.analytes && t.analytes.length ? 'analytes: ' + t.analytes.slice(0, 3).join(', ') : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+      const row = document.createElement('div');
+      row.className = 'tl-rule-row' + (t.disabled ? ' tl-rule-disabled' : '');
+      row.innerHTML =
+        '<span></span>' +
+        '<span class="tl-rule-kind tl-rule-kind-' +
+        (t.disabled ? 'amber' : 'info') +
+        '">' +
+        escHtml(typeLabel) +
+        '</span>' +
+        '<span>' +
+        '<span class="tl-rule-label">' +
+        escHtml(t.key) +
+        (t.label ? ' — ' + escHtml(t.label) : '') +
+        '</span>' +
+        '<span class="tl-rule-meta"> · ' +
+        escHtml(termSummary) +
+        '</span>' +
+        '</span>' +
+        '<span></span>' +
+        '<span></span>' +
+        '<span class="tl-rule-actions">' +
+        '<button class="tl-btn" data-act="edit">Edit</button>' +
+        '<button class="tl-btn tl-btn-danger" data-act="del">×</button>' +
+        '</span>';
+      row.querySelector('[data-act="edit"]').addEventListener('click', () => {
+        // Populate form for editing
+        const modeEl = $('#oirFormMode');
+        const isBuiltin = (defs || []).some((d) => d.key === t.key);
+        if (modeEl) {
+          if (t.disabled) modeEl.value = 'disable';
+          else if (isBuiltin) modeEl.value = 'extend';
+          else modeEl.value = 'new';
+          modeEl.dispatchEvent(new Event('change'));
+        }
+        const builtinKeyEl = $('#oirFormBuiltinKey');
+        if (builtinKeyEl && (t.disabled || isBuiltin)) builtinKeyEl.value = t.key;
+        const labelEl = $('#oirFormLabel');
+        if (labelEl) labelEl.value = t.label || '';
+        const reqEl = $('#oirFormReq');
+        if (reqEl) reqEl.value = (t.req || []).join('\n');
+        const repEl = $('#oirFormRep');
+        if (repEl) repEl.value = (t.rep || []).join('\n');
+        const analytesEl = $('#oirFormAnalytes');
+        if (analytesEl) analytesEl.value = (t.analytes || []).join('\n');
+        const singleEl = $('#oirFormSingle');
+        if (singleEl) singleEl.checked = !!t.singleAnalyte;
+        const editKeyEl = $('#oirFormEditKey');
+        if (editKeyEl) editKeyEl.value = t.key;
+        const cancelBtn = $('#btnCancelOirTest');
+        if (cancelBtn) cancelBtn.style.display = '';
+        const statusEl = $('#oirFormStatus');
+        if (statusEl) statusEl.textContent = '';
+        // Scroll form into view
+        const formEl = $('#oirTestForm');
+        if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      row.querySelector('[data-act="del"]').addEventListener('click', async () => {
+        if (!confirm('Remove this test entry?')) return;
+        CONFIG.oirTests = CONFIG.oirTests.filter((x) => x.key !== t.key);
+        await saveConfig(CONFIG);
+        flash('Removed');
+        renderOirTests();
+      });
+      container.appendChild(row);
+    }
+  };
+
+  const renderOirAudit = () => {
+    const container = $('#oirAuditList');
+    if (!container) return;
+    container.innerHTML = '';
+    if (typeof chrome === 'undefined' || !chrome.storage) {
+      container.innerHTML = '<div class="tl-empty">chrome.storage not available.</div>';
+      return;
+    }
+    chrome.storage.local.get('triagelens.oir.auditLog', (r) => {
+      const log = r['triagelens.oir.auditLog'];
+      if (!Array.isArray(log) || !log.length) {
+        container.innerHTML =
+          '<div class="tl-empty" style="padding:14px 0;font-style:italic;color:var(--text-4)">No tick-offs recorded yet.</div>';
+        return;
+      }
+      const list = document.createElement('div');
+      list.className = 'tl-rule-list';
+      const shown = log.slice(0, 20);
+      for (const entry of shown) {
+        const row = document.createElement('div');
+        row.style.cssText =
+          'padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:12px;align-items:baseline;';
+        const ts = entry.ts ? new Date(entry.ts).toLocaleString() : 'Unknown time';
+        const count =
+          typeof entry.count === 'number' ? entry.count : Array.isArray(entry.items) ? entry.items.length : '?';
+        const names = Array.isArray(entry.items)
+          ? entry.items
+              .map((it) => escHtml(it.name || it.key || ''))
+              .filter(Boolean)
+              .join(', ')
+          : '';
+        row.innerHTML =
+          '<span style="color:var(--text-4);white-space:nowrap;font-size:11px;">' +
+          escHtml(ts) +
+          '</span>' +
+          '<span>' +
+          escHtml(String(count)) +
+          ' ticked off' +
+          (names ? ': ' + names : '') +
+          '</span>';
+        list.appendChild(row);
+      }
+      if (log.length > 20) {
+        const more = document.createElement('div');
+        more.style.cssText = 'padding:6px 14px;font-size:11px;color:var(--text-4);font-style:italic;';
+        more.textContent = '… and ' + (log.length - 20) + ' older entries (clear to reset).';
+        list.appendChild(more);
+      }
+      container.appendChild(list);
+    });
+  };
+
+  const populateOir = () => {
+    $$('#paneOir [data-pref]').forEach((inp) => {
+      const key = inp.dataset.pref;
+      const isNumber = inp.dataset.prefType === 'number';
+      const val = CONFIG.prefs && CONFIG.prefs[key] != null ? CONFIG.prefs[key] : null;
+      if (val == null) return;
+      if (inp.type === 'checkbox') inp.checked = !!val;
+      else if (isNumber) inp.value = String(val);
+      else inp.value = val;
+    });
   };
 
   // ============================================================
