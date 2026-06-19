@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.122.1] — 2026-06-19
+
+### Surface the Outstanding Requests settings in Suite Settings
+
+v3.122.0 added the **Outstanding requests** editor as a tab in the Triage Lens options page,
+but the suite's main Settings page never embedded it — so the test dictionary editor, the
+behaviour toggles and the audit trail were unreachable for anyone who only opens Settings
+(i.e. everyone). This adds a dedicated **Outstanding Requests** section to Suite Settings
+that deep-links into that editor (`#oir`), mirroring the existing **Result Rules** section:
+the embedded view opens straight onto the OIR tab with the sibling tab bar hidden so it reads
+as its own page. To avoid two editing surfaces for the same `CONFIG`, the OIR tab is hidden
+from the embedded **Triage Lens** view (same treatment Result rules already had).
+
 ## [v3.122.0] — 2026-06-19
 
 ### Outstanding Investigation Requests — make it yours (customisation pass)

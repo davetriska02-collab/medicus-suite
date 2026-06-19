@@ -479,7 +479,9 @@
         flex-direction: column;
         gap: 4px;
         opacity: 0.55;
-        transition: opacity 0.12s ease, border-color 0.12s ease;
+        transition:
+          opacity 0.12s ease,
+          border-color 0.12s ease;
       }
       .opt-tabs-card.on {
         opacity: 1;
@@ -816,6 +818,7 @@
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="triage">Triage Lens</button>
         <button class="nav-item" data-section="result-rules">Result Rules</button>
+        <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
@@ -1282,8 +1285,8 @@
             and pop-out.
           </p>
           <p class="section-desc" style="color: var(--text-3)">
-            This is <strong>your</strong> choice and is stored only on this machine — a practice-deployed shared
-            profile never changes which tabs you see.
+            This is <strong>your</strong> choice and is stored only on this machine — a practice-deployed shared profile
+            never changes which tabs you see.
           </p>
 
           <div class="field">
@@ -1447,14 +1450,31 @@
         <section class="opt-section" id="sect-result-rules">
           <h1>Result Rules <span class="module-badge">investigation results</span></h1>
           <p class="section-desc">
-            Analyte-threshold and culture/text rules that escalate the Investigation Results
-            queue chips. Imported rules arrive <strong>disabled</strong> — review each before enabling.
+            Analyte-threshold and culture/text rules that escalate the Investigation Results queue chips. Imported rules
+            arrive <strong>disabled</strong> — review each before enabling.
           </p>
           <div class="iframe-section">
             <iframe
               id="resultRulesFrame"
               src="../content-scripts/triage-lens/options.html#resultRules"
               title="Result rules settings"
+            ></iframe>
+          </div>
+        </section>
+
+        <!-- Outstanding Requests section — deep-links into the Triage Lens OIR editor -->
+        <section class="opt-section" id="sect-oir">
+          <h1>Outstanding Requests <span class="module-badge">resulted-elsewhere</span></h1>
+          <p class="section-desc">
+            Behaviour of the Outstanding Investigation Requests card matcher, the user test dictionary (add or extend
+            tests the matcher recognises), and the bulk tick-off audit trail. Custom test definitions are the
+            responsibility of the practice &mdash; review them clinically before relying on a match.
+          </p>
+          <div class="iframe-section">
+            <iframe
+              id="oirFrame"
+              src="../content-scripts/triage-lens/options.html#oir"
+              title="Outstanding requests settings"
             ></iframe>
           </div>
         </section>
@@ -1755,11 +1775,7 @@
             <button class="primary" id="practiceAcceptBtn" disabled style="font-size: 12px; padding: 6px 14px">
               Accept for this practice
             </button>
-            <button
-              class="ghost"
-              id="practiceWithdrawBtn"
-              style="display: none; font-size: 12px; padding: 6px 14px"
-            >
+            <button class="ghost" id="practiceWithdrawBtn" style="display: none; font-size: 12px; padding: 6px 14px">
               Withdraw acceptance
             </button>
           </div>
@@ -1969,9 +1985,9 @@
                   Central attestations
                 </div>
                 <div style="font-size: 11px; color: var(--text-3); margin-bottom: 8px; line-height: 1.5">
-                  Your acceptance of the reception disclaimer / alert library / knowledge notice will satisfy
-                  these for managed users on this profile, so they don't each have to accept them locally. A
-                  greyed-out gate just means it isn't accepted on this machine yet &mdash; use
+                  Your acceptance of the reception disclaimer / alert library / knowledge notice will satisfy these for
+                  managed users on this profile, so they don't each have to accept them locally. A greyed-out gate just
+                  means it isn't accepted on this machine yet &mdash; use
                   <strong>Accept all for this practice</strong> below to accept and unlock all three at once.
                 </div>
                 <div id="ppAttestationRows" style="display: flex; flex-direction: column; gap: 4px; font-size: 11px">
@@ -1979,7 +1995,10 @@
                 </div>
                 <!-- Inline accept (so you don't have to leave this screen). Shown only
                      when the practice hasn't accepted yet. -->
-                <div id="ppAcceptInline" style="display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px">
+                <div
+                  id="ppAcceptInline"
+                  style="display: none; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px"
+                >
                   <label style="display: flex; gap: 6px; align-items: flex-start; cursor: pointer; margin-bottom: 6px">
                     <input type="checkbox" id="ppAcceptTick" style="margin-top: 2px; flex-shrink: 0" />
                     <span style="font-size: 11px; color: var(--text-3)"
