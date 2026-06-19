@@ -1,5 +1,5 @@
 {
-  "version": 18,
+  "version": 19,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3614,8 +3614,16 @@
     "showFootStats": true,
     "showRequestSnippet": true,
     "snippetMaxChars": 240,
-    "showBuiltInTiles": true
+    "showBuiltInTiles": true,
+    "oirEnabled": true,
+    "oirBulkTickOff": true,
+    "oirConfidenceFloor": "default",
+    "oirLookbackMonths": 0,
+    "oirShowValueOnBadge": false,
+    "oirDateFormat": "absolute",
+    "oirAuditLog": true
   },
+  "oirTests": [],
   "systemChips": {
     "queue.child": {
       "enabled": true,

@@ -238,17 +238,109 @@
 
   // Resolve a free-text name to a canonical key via a set of term lists.
   // `fields` selects which term arrays to consult, in order. First def with any
-  // matching term wins. Returns the def or null.
-  function resolveDef(name, fields) {
+  // matching term wins. Returns the def or null. `defs` defaults to the built-in
+  // TEST_DEFS but may be a merged set (built-ins + user/practice dictionary).
+  function resolveDef(name, fields, defs) {
+    const list = Array.isArray(defs) ? defs : TEST_DEFS;
     const text = norm(name);
     if (!text) return null;
-    for (const def of TEST_DEFS) {
+    for (const def of list) {
       for (const field of fields) {
         const terms = def[field];
         if (Array.isArray(terms) && terms.some((t) => hasTerm(text, t))) return def;
       }
     }
     return null;
+  }
+
+  // ── User / practice test-dictionary support ──────────────────────────────────
+  // The built-in TEST_DEFS above is the canonical, safety-reviewed baseline that
+  // ships with the extension. A practice can extend it (without a code change)
+  // with a user dictionary of: NEW custom tests, extra synonym terms for an
+  // existing built-in (e.g. a local lab's name for U&E), or a DISABLE flag that
+  // removes a built-in test (which is fail-safe — an unrecognised request simply
+  // stays outstanding, never wrongly cleared).
+  //
+  // Safety rules baked into the merge, NOT left to the editor:
+  //   - User terms are only ever APPENDED to a built-in's req/rep/analytes — a
+  //     built-in term can never be removed, so coverage can only grow.
+  //   - `singleAnalyte` is NOT flipped on a built-in by a user entry (setting it
+  //     true would lower the auto-tick threshold to a single shared analyte —
+  //     a way to wrongly auto-clear a multi-analyte panel). New custom tests may
+  //     set their own singleAnalyte since the author defines the whole test.
+  function validateTestDef(d) {
+    if (!d || typeof d !== 'object') return null;
+    const key = typeof d.key === 'string' ? d.key.trim() : '';
+    if (!key) return null;
+    const arr = (x) =>
+      Array.isArray(x) ? x.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()) : [];
+    return {
+      key,
+      label: typeof d.label === 'string' && d.label.trim() ? d.label.trim() : key,
+      req: arr(d.req),
+      rep: arr(d.rep),
+      analytes: arr(d.analytes),
+      singleAnalyte: !!d.singleAnalyte,
+      disabled: !!d.disabled,
+    };
+  }
+
+  // Merge a user dictionary onto the built-in defs, returning a fresh array.
+  // builtins defaults to TEST_DEFS. userDefs is the raw config array.
+  function mergeTestDefs(builtins, userDefs) {
+    const base = Array.isArray(builtins) ? builtins : TEST_DEFS;
+    const out = base.map((d) => ({
+      ...d,
+      req: [...(d.req || [])],
+      rep: [...(d.rep || [])],
+      analytes: [...(d.analytes || [])],
+    }));
+    const byKey = new Map(out.map((d) => [d.key, d]));
+    const disabledKeys = new Set();
+    const addUnique = (target, src) => src.forEach((t) => { if (!target.includes(t)) target.push(t); });
+    (Array.isArray(userDefs) ? userDefs : []).forEach((raw) => {
+      const ud = validateTestDef(raw);
+      if (!ud) return;
+      if (ud.disabled) {
+        disabledKeys.add(ud.key);
+        return; // a disable entry carries no terms
+      }
+      const existing = byKey.get(ud.key);
+      if (existing) {
+        addUnique(existing.req, ud.req);
+        addUnique(existing.rep, ud.rep);
+        addUnique(existing.analytes, ud.analytes);
+        // singleAnalyte deliberately NOT copied onto a built-in (see note above).
+      } else {
+        const nd = {
+          key: ud.key,
+          label: ud.label,
+          req: ud.req,
+          rep: ud.rep,
+          analytes: ud.analytes,
+          singleAnalyte: ud.singleAnalyte,
+          custom: true,
+        };
+        out.push(nd);
+        byKey.set(ud.key, nd);
+      }
+    });
+    return out.filter((d) => !disabledKeys.has(d.key));
+  }
+
+  // Add `n` whole months to an ISO date, clamping the day to the target month's
+  // length (31 Jan + 1mo → 28/29 Feb). Returns ISO "YYYY-MM-DD" or null.
+  function addMonths(iso, n) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));
+    if (!m) return null;
+    let y = +m[1];
+    let mo = +m[2] - 1 + (Number(n) || 0);
+    let d = +m[3];
+    y += Math.floor(mo / 12);
+    mo = ((mo % 12) + 12) % 12;
+    const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+    if (d > last) d = last;
+    return `${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
 
   // Day-granularity "request was made on or before the sample was taken".
@@ -274,7 +366,13 @@
   // group title at all (confirmed by capture), which is exactly why the analyte
   // signature exists — auto-tick must not depend on a title that isn't there.
   // Also returns the report's representative sample date (latest result date).
-  function reportCoverage(report) {
+  function reportCoverage(report, opts) {
+    const options = opts || {};
+    const defs = Array.isArray(options.testDefs) ? options.testDefs : TEST_DEFS;
+    // 'strict' confidence floor: only a panel-title / specimen-group name match
+    // (the lab's own label) is confident; a distinctive-analyte signature alone is
+    // demoted to tentative, so nothing auto-ticks on inferred analytes.
+    const strict = options.confidenceFloor === 'strict';
     const confident = new Set();
     const tentative = new Set();
     let sampleDate = null;
@@ -288,7 +386,7 @@
         if (r && r.specimen) titles.push(r.specimen);
       });
       titles.forEach((tt) => {
-        const def = resolveDef(tt, ['rep']);
+        const def = resolveDef(tt, ['rep'], defs);
         if (def) confident.add(def.key);
       });
 
@@ -299,7 +397,7 @@
       results.forEach((r) => {
         if (!r || !r.name) return;
         const text = norm(r.name);
-        TEST_DEFS.forEach((def) => {
+        defs.forEach((def) => {
           if (!Array.isArray(def.analytes)) return;
           def.analytes.forEach((term) => {
             if (hasTerm(text, term)) {
@@ -312,7 +410,11 @@
       });
       termsByKey.forEach((set, key) => {
         if (confident.has(key)) return;
-        const def = TEST_DEFS.find((d) => d.key === key);
+        if (strict) {
+          tentative.add(key);
+          return;
+        }
+        const def = defs.find((d) => d.key === key);
         const min = def && def.singleAnalyte ? 1 : 2;
         if (set.size >= min) confident.add(key);
         else tentative.add(key);
@@ -338,12 +440,21 @@
   //
   // observationHistory: array of { name, group, unit, history: [{date, …}] }
   //   (normaliseObservationHistory output).
-  function enrichWithHistory(verdicts, observationHistory) {
+  function enrichWithHistory(verdicts, observationHistory, opts) {
     if (!Array.isArray(observationHistory) || !observationHistory.length) return verdicts;
+    const options = opts || {};
+    const defs = Array.isArray(options.testDefs) ? options.testDefs : TEST_DEFS;
+    // 'strict' floor: only a lab-assigned GROUP-name match is confident; an
+    // analyte-name match alone is demoted to tentative.
+    const strict = options.confidenceFloor === 'strict';
+    // lookbackMonths > 0 caps how long after the request a result may be filed and
+    // still count as satisfying it (a result years later is a different episode).
+    const lookbackMonths = Number(options.lookbackMonths) || 0;
     return verdicts.map((v) => {
       if (v.status !== 'outstanding' || !v.key) return v;
-      const def = TEST_DEFS.find((d) => d.key === v.key);
+      const def = defs.find((d) => d.key === v.key);
       if (!def) return v;
+      const ceiling = lookbackMonths > 0 && v.requestedDate ? addMonths(v.requestedDate, lookbackMonths) : null;
 
       let groupMatchDate = null; // most recent date from a group-name-matched obs
       const analyteTermDates = new Map(); // norm(term) → mostRecentDate
@@ -369,11 +480,14 @@
 
         if (!groupHit && !analyteTerm) return;
 
-        // Collect history entries that are ON OR AFTER the request date.
+        // Collect history entries that are ON OR AFTER the request date (and, when
+        // a look-back ceiling is set, not LATER than request + lookbackMonths).
         // If no request date, every entry qualifies (informational).
         const relevant = (obs.history || []).filter((h) => {
           if (!h || !h.date) return false;
-          return !v.requestedDate || predatesOrSame(v.requestedDate, h.date);
+          if (v.requestedDate && !predatesOrSame(v.requestedDate, h.date)) return false;
+          if (ceiling && String(h.date).slice(0, 10) > ceiling) return false;
+          return true;
         });
         if (!relevant.length) return;
 
@@ -421,7 +535,7 @@
 
       const min = def.singleAnalyte ? 1 : 2;
       const confidentByAnalyte = analyteCount >= min;
-      const confident = hasGroupMatch || confidentByAnalyte;
+      const confident = strict ? hasGroupMatch : hasGroupMatch || confidentByAnalyte;
 
       // Most recent date across all matched signals.
       let elsewhereDate = groupMatchDate;
@@ -471,7 +585,8 @@
   //   autoTick   — true only for confident + predating matches
   function matchOutstanding(requests, report, opts) {
     const options = opts || {};
-    const cov = reportCoverage(report);
+    const defs = Array.isArray(options.testDefs) ? options.testDefs : TEST_DEFS;
+    const cov = reportCoverage(report, options);
     const sampleDate = options.sampleDate || cov.sampleDate || null;
     const list = Array.isArray(requests) ? requests : [];
 
@@ -481,7 +596,7 @@
           ? { name: entry.name, requestedDate: entry.requestedDate, id: entry.id }
           : parseRequestLabel(entry);
       const id = req.id != null ? req.id : i;
-      const def = resolveDef(req.name, ['req']);
+      const def = resolveDef(req.name, ['req'], defs);
       const key = def ? def.key : null;
 
       const base = {
@@ -529,6 +644,9 @@
     parseRequestLabel,
     reportCoverage,
     resolveDef,
+    mergeTestDefs,
+    validateTestDef,
+    addMonths,
     norm,
     TEST_DEFS,
   };

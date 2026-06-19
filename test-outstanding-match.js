@@ -421,6 +421,83 @@ check(
 );
 check(fshEnriched[0].elsewhereDate === '2026-06-16', 'FSH elsewhere date surfaced (2026-06-16)');
 
+// ── 10. User test dictionary (mergeTestDefs + opts.testDefs) ──────────────────
+console.log('user test dictionary:');
+
+// 10a. A brand-new custom test is recognised once merged in.
+const customDefs = M.mergeTestDefs(M.TEST_DEFS, [
+  { key: 'vitd', label: 'Vitamin D', req: ['vitamin d', '25-oh vit d'], rep: ['vitamin d'], analytes: ['vitamin d', '25 hydroxyvitamin d'], singleAnalyte: true },
+]);
+check(M.resolveDef('Vitamin D Level', ['req']) === null, '10a built-in defs do NOT know Vitamin D (baseline)');
+check(
+  M.resolveDef('Vitamin D Level', ['req'], customDefs) && M.resolveDef('Vitamin D Level', ['req'], customDefs).key === 'vitd',
+  '10a merged defs DO resolve a custom Vitamin D test'
+);
+const vitdReport = { title: 'Vitamin D', results: [{ name: '25 hydroxyvitamin D', specimen: 'Vitamin D', date: '2026-05-01' }] };
+const vitdOut = M.matchOutstanding(['Vitamin D (Dr X • 01 Apr 2026, 09:00)'], vitdReport, { testDefs: customDefs });
+check(vitdOut[0].status === 'resulted' && vitdOut[0].autoTick === true, '10a custom test auto-ticks via opts.testDefs');
+
+// 10b. Extending a built-in with a local lab synonym (append-only).
+const extDefs = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'ue', req: ['euc', 'renal screen'] }]);
+const ueDef = extDefs.find((d) => d.key === 'ue');
+check(ueDef.req.includes('euc') && ueDef.req.includes('electrolyte'), '10b extension APPENDS the synonym, keeps built-in terms');
+check(
+  M.resolveDef('EUC Profile', ['req'], extDefs) && M.resolveDef('EUC Profile', ['req'], extDefs).key === 'ue',
+  '10b local synonym "EUC" now resolves to U&E'
+);
+
+// 10c. Disabling a built-in makes it unrecognised (fail-safe → stays outstanding).
+const noPsa = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'psa', disabled: true }]);
+check(!noPsa.some((d) => d.key === 'psa'), '10c disabled built-in is removed from the def set');
+check(M.resolveDef('Prostate Specific Antigen (PSA)', ['req'], noPsa) === null, '10c disabled PSA no longer resolves');
+
+// 10d. Safety: a user entry can NOT flip a built-in to singleAnalyte (would lower
+// the auto-tick threshold). lft stays a 2-analyte panel.
+const tamper = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'lft', singleAnalyte: true }]);
+check(tamper.find((d) => d.key === 'lft').singleAnalyte !== true, '10d user cannot flip a built-in panel to singleAnalyte');
+
+// 10e. Invalid entries (no key) are ignored.
+const safeMerge = M.mergeTestDefs(M.TEST_DEFS, [{ label: 'no key here' }, null, 'garbage']);
+check(safeMerge.length === M.TEST_DEFS.length, '10e invalid dictionary entries are dropped');
+
+// ── 11. Confidence floor (strict) + look-back ceiling ─────────────────────────
+console.log('confidence floor + look-back:');
+
+// 11a. In default mode an analyte signature auto-ticks; in strict it must not.
+const tftReport = {
+  results: [
+    { name: 'TSH', specimen: '', date: '2026-05-01' },
+    { name: 'Free T4', specimen: '', date: '2026-05-01' },
+  ],
+};
+const tftDefault = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftReport);
+check(tftDefault[0].status === 'resulted' && tftDefault[0].autoTick === true, '11a default: 2-analyte TFT signature auto-ticks');
+const tftStrict = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftReport, { confidenceFloor: 'strict' });
+check(tftStrict[0].autoTick === false && tftStrict[0].confidence === 'tentative', '11a strict: analyte signature is demoted, no auto-tick');
+
+// 11b. strict still trusts a specimen-group title.
+const tftTitled = { results: [{ name: 'TSH', specimen: 'Thyroid Function', date: '2026-05-01' }] };
+const tftStrictTitled = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftTitled, { confidenceFloor: 'strict' });
+check(tftStrictTitled[0].autoTick === true, '11b strict: a specimen-group title is still confident');
+
+// 11c. addMonths clamps correctly.
+check(M.addMonths('2026-01-31', 1) === '2026-02-28', '11c addMonths clamps 31 Jan + 1mo → 28 Feb');
+check(M.addMonths('2026-06-09', 12) === '2027-06-09', '11c addMonths adds a year');
+
+// 11d. look-back ceiling drops a too-late "elsewhere" result.
+const ferritinReq = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-01-01' }], lipidReport);
+const lateFerritin = [
+  { name: 'Ferritin', group: 'Haematinics', unit: 'ug/L', history: [{ date: '2026-11-01', value: 30, rawValue: '30', isAbove: false, isBelow: false }] },
+];
+const noCeiling = M.enrichWithHistory(ferritinReq, lateFerritin);
+check(noCeiling[0].status === 'resulted_elsewhere', '11d no ceiling: late ferritin still matches');
+const withCeiling = M.enrichWithHistory(
+  M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-01-01' }], lipidReport),
+  lateFerritin,
+  { lookbackMonths: 3 }
+);
+check(withCeiling[0].status === 'outstanding', '11d 3-month ceiling: a result 10 months later is excluded');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
