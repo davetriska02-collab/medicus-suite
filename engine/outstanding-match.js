@@ -273,6 +273,143 @@
     return { confident, tentative, sampleDate };
   }
 
+  // ── Enrich verdicts with patient history ─────────────────────────────────────
+  // For requests still `outstanding` after matchOutstanding() — i.e. NOT covered
+  // by the current report — check whether they appear in the patient's full
+  // observation history (from normaliseObservationHistory). If found with a
+  // result dated on/after the request date, the request is likely "resulted
+  // elsewhere" (a previous episode, a different stack, a different report
+  // never matched to this request).
+  //
+  // These are NEVER auto-ticked — they need clinician confirmation. The adapter
+  // renders a "↩ elsewhere" badge + a manual "Tick off" button.
+  //
+  // Confidence uses the same analyte-signature rules as reportCoverage, PLUS a
+  // group-name match (obs.group matching a panel's `rep`/`req` terms) which is
+  // treated as confident (the laboratory assigned the group name; it is reliable).
+  //
+  // observationHistory: array of { name, group, unit, history: [{date, …}] }
+  //   (normaliseObservationHistory output).
+  function enrichWithHistory(verdicts, observationHistory) {
+    if (!Array.isArray(observationHistory) || !observationHistory.length) return verdicts;
+    return verdicts.map((v) => {
+      if (v.status !== 'outstanding' || !v.key) return v;
+      const def = TEST_DEFS.find((d) => d.key === v.key);
+      if (!def) return v;
+
+      let groupMatchDate = null; // most recent date from a group-name-matched obs
+      const analyteTermDates = new Map(); // norm(term) → mostRecentDate
+
+      // New tracking for enriched fields.
+      const matchedAnalyteNames = []; // first-seen order, de-duplicated via Set
+      const seenAnalyteNames = new Set();
+      // bestPoint: the single most-recent matched history entry across all matched obs.
+      // Shape: { date, rawValue, unit, name, isAbove, isBelow }
+      let bestPoint = null;
+
+      observationHistory.forEach((obs) => {
+        if (!obs) return;
+        const nameText = norm(obs.name || '');
+        const groupText = norm(obs.group || '');
+
+        // Group-name match: obs.group matches any panel rep or req phrase.
+        const groupHit =
+          (groupText && def.rep.some((t) => hasTerm(groupText, t))) ||
+          (groupText && def.req.some((t) => hasTerm(groupText, t)));
+        // Analyte match: obs.name matches any distinctive analyte term.
+        const analyteTerm = def.analytes.find((t) => hasTerm(nameText, t));
+
+        if (!groupHit && !analyteTerm) return;
+
+        // Collect history entries that are ON OR AFTER the request date.
+        // If no request date, every entry qualifies (informational).
+        const relevant = (obs.history || []).filter((h) => {
+          if (!h || !h.date) return false;
+          return !v.requestedDate || predatesOrSame(v.requestedDate, h.date);
+        });
+        if (!relevant.length) return;
+
+        const latestDate = relevant.reduce((best, h) => (!best || String(h.date) > String(best) ? h.date : best), null);
+
+        if (groupHit) {
+          if (!groupMatchDate || String(latestDate) > String(groupMatchDate)) groupMatchDate = latestDate;
+        }
+        if (analyteTerm) {
+          const nt = norm(analyteTerm);
+          const prev = analyteTermDates.get(nt) || null;
+          if (!prev || String(latestDate) > String(prev)) analyteTermDates.set(nt, latestDate);
+        }
+
+        // Collect matched display name (de-duplicated, first-seen order).
+        const displayName = obs.name || '';
+        if (displayName && !seenAnalyteNames.has(displayName)) {
+          seenAnalyteNames.add(displayName);
+          matchedAnalyteNames.push(displayName);
+        }
+
+        // Track the single most-recent matched history point across all matched obs.
+        // Find the relevant entry with the latest date for this obs.
+        const latestPoint = relevant.reduce(
+          (best, h) => (!best || String(h.date) > String(best.date) ? h : best),
+          null
+        );
+        if (latestPoint) {
+          if (!bestPoint || String(latestPoint.date) > String(bestPoint.date)) {
+            bestPoint = {
+              date: latestPoint.date,
+              rawValue: latestPoint.rawValue != null ? String(latestPoint.rawValue) : null,
+              unit: obs.unit != null ? String(obs.unit) : null,
+              name: obs.name || null,
+              isAbove: !!latestPoint.isAbove,
+              isBelow: !!latestPoint.isBelow,
+            };
+          }
+        }
+      });
+
+      const hasGroupMatch = groupMatchDate !== null;
+      const analyteCount = analyteTermDates.size;
+      if (!hasGroupMatch && analyteCount === 0) return v; // nothing found
+
+      const min = def.singleAnalyte ? 1 : 2;
+      const confidentByAnalyte = analyteCount >= min;
+      const confident = hasGroupMatch || confidentByAnalyte;
+
+      // Most recent date across all matched signals.
+      let elsewhereDate = groupMatchDate;
+      analyteTermDates.forEach((d) => {
+        if (!elsewhereDate || String(d) > String(elsewhereDate)) elsewhereDate = d;
+      });
+
+      // Derive the new enriched fields from bestPoint.
+      const matchedValue = bestPoint ? bestPoint.rawValue : null;
+      const matchedUnit = bestPoint ? bestPoint.unit : null;
+      const matchedObsName = bestPoint ? bestPoint.name : null;
+      const matchedAbnormal = bestPoint ? (bestPoint.isAbove ? 'high' : bestPoint.isBelow ? 'low' : null) : null;
+
+      const tentativeReason =
+        matchedAnalyteNames.length > 0
+          ? `possibly resulted elsewhere — ${matchedAnalyteNames.length} analyte(s) matched (${matchedAnalyteNames.join(', ')}); check ${def.label} in patient history before clearing`
+          : `possibly resulted elsewhere — confirm before clearing`;
+
+      return {
+        ...v,
+        status: 'resulted_elsewhere',
+        confidence: confident ? 'confident' : 'tentative',
+        elsewhereDate,
+        autoTick: false,
+        matchedAnalytes: matchedAnalyteNames,
+        matchedValue,
+        matchedUnit,
+        matchedObsName,
+        matchedAbnormal,
+        reason: confident
+          ? `resulted elsewhere${elsewhereDate ? ` (most recent: ${elsewhereDate})` : ''}`
+          : tentativeReason,
+      };
+    });
+  }
+
   // ── Main entry point ──────────────────────────────────────────────────────────
   // requests: array of { id?, name, requestedDate } (already parsed from the card,
   //           or raw label strings — strings are parsed via parseRequestLabel).
@@ -340,6 +477,7 @@
   // ── Module export (dual-mode: Node require OR browser global) ─────────────────
   const api = {
     matchOutstanding,
+    enrichWithHistory,
     parseRequestLabel,
     reportCoverage,
     resolveDef,
