@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.121.0] — 2026-06-19
+
+### Outstanding Investigation Requests — per-row flags + one gated bulk tick-off
+
+Reworks the v3.119.0/v3.120.0 "resulted elsewhere" surface after live feedback on
+the real Medicus card. Two problems were visible on the page:
+
+- **Placement bug (now fixed):** every row's badge was appended to the *shared*
+  list container and de-duped card-wide, so only one badge element ever existed.
+  Each row overwrote it in turn, leaving a single mystery badge collapsed at the
+  bottom of the card (showing the last row's verdict) instead of one flag per row.
+  Badges are now anchored to **each row's own label element** and de-duped by row
+  index, so every applicable row is flagged in place.
+
+- **Per-row "Tick off" replaced by one bulk action.** Instead of a per-row button,
+  the card now shows a single **"Tick off N results found in record"** bar under
+  the list. Its confirm dialog **enumerates every result** (test, completion date,
+  value, and any shared-request note) so the clinician reviews the full list once,
+  then confirms. Only **confident** finds are eligible for the one-click action;
+  tentative finds are flagged inline and ticked manually if verified. The hard
+  "writes to Medicus server-side, cannot be undone from here" gate is retained.
+
+- **Clearer wording** to match the clinician's framing: results found in the record
+  but not in this report read **"↩ completed DD Mon YYYY · in record"** (confident)
+  or **"↩? possible result DD Mon YYYY · in record"** (tentative); report-covered
+  rows keep **"✓ resulted (this report)"**.
+
+- **Removed the per-row "Mark reviewed" affordance** (and its
+  `triagelens.oir.reviewed` storage) introduced in v3.120.0, to keep the card
+  clean. To restore it, revert the v3.120.0 item-9 block in `content.js` and
+  re-add the storage allowlist entry.
+
 ## [v3.120.0] — 2026-06-19
 
 ### Outstanding Investigation Requests — "resulted elsewhere" UX pass

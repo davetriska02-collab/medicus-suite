@@ -249,15 +249,6 @@ const ALLOWLIST = new Set([
   // Rolling runtime alert log — session-local, not user config. Restoring a stale
   // log onto a new machine would show misleading historical alerts:
   'suite.alertLog',
-
-  // Per-task "Mark reviewed" flags for outstanding investigation requests — a
-  // local annotation that an outstanding request has been seen/chased. Keyed by
-  // Medicus taskUuid (machine/session-local, no PHI beyond a request label);
-  // deliberately not backed up — it is workflow state tied to a live task, not
-  // user config. Mirrors the triagelens.config (content-script) precedent of
-  // content-script keys living outside the suite-backup IO. See
-  // content-scripts/triage-lens/content.js (OIR section 2c):
-  'triagelens.oir.reviewed',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
