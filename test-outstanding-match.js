@@ -187,6 +187,88 @@ const noDate = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-01-0
 });
 check(noDate[0].autoTick === false, 'no sample date → not auto-ticked');
 
+// ── 8. enrichWithHistory: detect requests resulted elsewhere ──────────────────
+console.log('enrichWithHistory:');
+
+const obsHistoryFbc = [
+  {
+    name: 'Haemoglobin',
+    group: 'Haematology',
+    unit: 'g/L',
+    history: [{ date: '2026-05-01', value: 120, rawValue: '120', isAbove: false, isBelow: true }],
+  },
+  {
+    name: 'Platelet count',
+    group: 'Haematology',
+    unit: 'x10^9/L',
+    history: [{ date: '2026-05-01', value: 250, rawValue: '250', isAbove: false, isBelow: false }],
+  },
+];
+const obsHistoryFerritin = [
+  {
+    name: 'Ferritin',
+    group: 'Haematinics',
+    unit: 'ug/L',
+    history: [{ date: '2026-03-15', value: 45, rawValue: '45', isAbove: false, isBelow: false }],
+  },
+];
+
+// 8a. FBC request not covered by lipid report — but found in observation history
+const fbcVerdicts = M.matchOutstanding([{ name: 'Full Blood Count', requestedDate: '2026-02-04' }], lipidReport);
+const fbcEnriched = M.enrichWithHistory(fbcVerdicts, obsHistoryFbc);
+check(fbcEnriched[0].status === 'resulted_elsewhere', 'FBC found in history → resulted_elsewhere');
+check(fbcEnriched[0].confidence === 'confident', 'FBC history match confident (2 analytes: haemoglobin + platelet)');
+check(fbcEnriched[0].autoTick === false, 'resulted_elsewhere is NEVER auto-ticked');
+check(fbcEnriched[0].elsewhereDate === '2026-05-01', 'FBC elsewhere date is most recent history date');
+
+// 8b. Ferritin is singleAnalyte → 1 analyte hit = confident
+const ferritinVerdicts = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-02-04' }], lipidReport);
+const ferritinEnriched = M.enrichWithHistory(ferritinVerdicts, obsHistoryFerritin);
+check(ferritinEnriched[0].status === 'resulted_elsewhere', 'ferritin in history → resulted_elsewhere');
+check(ferritinEnriched[0].confidence === 'confident', 'singleAnalyte ferritin: 1 hit is confident');
+
+// 8c. Date guard: history entry predates the request → NOT resulted_elsewhere
+const lateRequest = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-04-01' }], lipidReport);
+const lateEnriched = M.enrichWithHistory(lateRequest, obsHistoryFerritin); // history 2026-03-15 < 2026-04-01
+check(lateEnriched[0].status === 'outstanding', 'history result predating the request leaves it outstanding');
+
+// 8d. Already resulted from current report → enrichWithHistory leaves it unchanged
+const alreadyResulted = M.matchOutstanding(CARD_LABELS, lipidReport);
+const alreadyEnriched = M.enrichWithHistory(alreadyResulted, obsHistoryFbc);
+check(alreadyEnriched[0].status === 'resulted', 'already-resulted row not reclassified by enrichWithHistory');
+check(
+  alreadyEnriched.slice(1).filter((r) => r.status === 'resulted_elsewhere' && r.key !== 'fbc').length === 0,
+  'FBC history only enriches FBC row — no other panel accidentally matched'
+);
+
+// 8e. Single analyte for multi-analyte panel without group match → tentative
+const obsHistoryTshOnly = [
+  {
+    name: 'TSH',
+    group: null, // no group — cannot use group-name shortcut
+    unit: 'mIU/L',
+    history: [{ date: '2026-04-01', value: 1.5, rawValue: '1.5', isAbove: false, isBelow: false }],
+  },
+];
+const tftVerdicts = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-02-04' }], lipidReport);
+const tftEnriched = M.enrichWithHistory(tftVerdicts, obsHistoryTshOnly);
+check(tftEnriched[0].status === 'resulted_elsewhere', 'lone TSH in history → resulted_elsewhere (tentative)');
+check(tftEnriched[0].confidence === 'tentative', 'single TSH for multi-analyte TFT panel is tentative');
+
+// 8f. Group-name match → confident even with a single analyte
+const obsHistoryLftGroup = [
+  {
+    name: 'ALT',
+    group: 'Liver function',
+    unit: 'U/L',
+    history: [{ date: '2026-05-20', value: 30, rawValue: '30', isAbove: false, isBelow: false }],
+  },
+];
+const lftVerdicts = M.matchOutstanding([{ name: 'Liver Function Test', requestedDate: '2026-02-04' }], lipidReport);
+const lftEnriched = M.enrichWithHistory(lftVerdicts, obsHistoryLftGroup);
+check(lftEnriched[0].status === 'resulted_elsewhere', 'LFT found via group name → resulted_elsewhere');
+check(lftEnriched[0].confidence === 'confident', 'group-name "Liver function" match is always confident');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

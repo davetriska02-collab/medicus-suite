@@ -220,10 +220,46 @@
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
 }
+/* Resulted ELSEWHERE in the record (not by this report): blue/accent, never
+   auto-ticked — clinician confirms via the adjacent "Tick off" button. */
+.ch-oir-flag.ch-oir-elsewhere {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+.ch-oir-flag.ch-oir-elsewhere-tentative {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px dashed var(--accent-line);
+}
 .ch-oir-flag.ch-oir-outstanding {
   color: var(--text-3);
   background: var(--bg-mid);
   border: 1px solid var(--border);
+}
+
+/* Manual "Tick off" button on a resulted-elsewhere row. Clicking it opens a
+   confirmation gate (content.js confirmTickOff) before clearing the request —
+   it is the clinician's explicit decision, never automatic. */
+.ch-oir-tickoff {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+.ch-oir-tickoff:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 /* ---- HUD panel ---- */

@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.119.0] — 2026-06-19
+
+### Outstanding Investigation Requests — detect requests resulted *elsewhere*
+
+Builds on v3.118.0's smart matching. The current report only ever covers one
+test/panel, so everything else on the Outstanding Investigation Requests card
+stayed flagged `⏳ outstanding` — even when that test had *already been resulted*
+elsewhere in the patient's record (a previous episode, a different report that
+was never matched to the request). This surfaces those, so the clinician can
+clear them deliberately rather than chasing tests that are already back.
+
+- **New engine pass `enrichWithHistory(verdicts, observationHistory)`** (pure,
+  unit-tested): for each request still `outstanding` after report matching, it
+  checks the patient's full observation history (`normaliseObservationHistory`)
+  for a matching result dated **on or after the request date**. A hit reclassifies
+  the row to a new status `resulted_elsewhere`. Confidence reuses the same
+  signature rules — a lab **group-name** match (e.g. obs group "Liver function")
+  or an analyte **signature** (≥2 distinctive analytes, or 1 for single-analyte
+  tests like ferritin/PSA/FIT) is `confident`; a lone analyte of a multi-analyte
+  panel is `tentative`. A history result that **predates** the request is ignored
+  (it can't be the answer to a later request).
+
+- **Never auto-ticked.** Unlike the current report's confident matches,
+  `resulted_elsewhere` rows are surfaced only — `autoTick` is always `false`.
+  The card renders an **↩ resulted elsewhere** badge (blue) and a **"Tick off"**
+  button.
+
+- **Safety gate on the manual tick.** Clicking "Tick off" opens a confirmation
+  dialog naming the test and the most-recent result date, making clear that
+  clearing the request is the clinician's decision and removes it from the
+  outstanding list. Nothing is cleared without that explicit confirm — the
+  button only ticks after **OK**, and removes itself once actioned.
+
+- **Card adapter (`content.js`)**: fetches the patient's observation history
+  (`resolveTaskToPatient` → `fetchAll` → `normaliseAll`) alongside the report,
+  caches it per task, and re-applies on every Quasar re-render. History fetch is
+  best-effort — failure leaves the v3.118.0 report-only behaviour intact.
+
 ## [v3.118.0] — 2026-06-19
 
 ### Smart matching for Outstanding Investigation Requests (advisory + auto-tick)
