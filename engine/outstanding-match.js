@@ -46,12 +46,14 @@
 
   // Whole-token phrase test: does `term` appear in `text` on word boundaries?
   // Avoids "alt" matching inside "salt" etc. `+`/`&` are treated as their own
-  // tokens so "u&e" and "creatinine + electrolyte" match cleanly.
+  // tokens so "u&e" and "creatinine + electrolyte" match cleanly. A trailing-"s"
+  // plural is tolerated (term "triglyceride" matches token "triglycerides",
+  // "platelet" → "platelets") — analyte names appear in both singular and plural.
   function hasTerm(text, term) {
     const t = norm(term);
     if (!t) return false;
     const hay = ' ' + text + ' ';
-    return hay.indexOf(' ' + t + ' ') !== -1;
+    return hay.indexOf(' ' + t + ' ') !== -1 || hay.indexOf(' ' + t + 's ') !== -1;
   }
 
   // ── Card request-label parser ─────────────────────────────────────────────────
@@ -143,6 +145,7 @@
       req: ['prostate specific antigen', 'psa'],
       rep: ['psa', 'prostate specific antigen'],
       analytes: ['psa', 'prostate specific antigen'],
+      singleAnalyte: true, // one PSA result IS the panel — 1 hit is confident
     },
     {
       key: 'tft',
@@ -157,6 +160,7 @@
       req: ['faecal immunochemical', 'fit'],
       rep: ['fit', 'faecal immunochemical', 'faecal haemoglobin'],
       analytes: ['faecal haemoglobin', 'f hb'],
+      singleAnalyte: true,
     },
     {
       key: 'ferritin',
@@ -164,6 +168,7 @@
       req: ['ferritin'],
       rep: ['ferritin'],
       analytes: ['ferritin'],
+      singleAnalyte: true,
     },
     {
       key: 'bone',
@@ -209,19 +214,28 @@
   // ── Report coverage ───────────────────────────────────────────────────────────
   // From a normaliseInvestigationReport()-shaped report, derive the set of
   // canonical keys it covers, tagged by confidence:
-  //   confident — a panel title / specimen-group name matched `rep`
-  //   tentative — only a distinctive analyte name matched `analytes`
+  //   confident — auto-tick-eligible, reached EITHER by a panel title /
+  //               specimen-group name matching `rep`, OR by a distinctive-analyte
+  //               SIGNATURE (enough distinct `analytes` of one panel present that
+  //               the report unambiguously IS that panel).
+  //   tentative — a single distinctive analyte of a multi-analyte panel — could be
+  //               an isolated test, so surfaced for the clinician, never auto-ticked.
+  // The signature threshold is 1 for single-analyte tests (ferritin / PSA / FIT —
+  // the lone result IS the panel) and 2 otherwise, so no stray shared analyte can
+  // auto-clear a multi-analyte panel. Real Medicus reports may carry no specimen
+  // group title at all (confirmed by capture), which is exactly why the analyte
+  // signature exists — auto-tick must not depend on a title that isn't there.
   // Also returns the report's representative sample date (latest result date).
   function reportCoverage(report) {
     const confident = new Set();
     const tentative = new Set();
     let sampleDate = null;
     if (report && typeof report === 'object') {
-      // Panel title (if the adapter supplies one) + every specimen group name →
-      // confident coverage.
+      const results = Array.isArray(report.results) ? report.results : [];
+
+      // (1) Panel title (if the adapter supplies one) + every specimen group name.
       const titles = [];
       if (report.title) titles.push(report.title);
-      const results = Array.isArray(report.results) ? report.results : [];
       results.forEach((r) => {
         if (r && r.specimen) titles.push(r.specimen);
       });
@@ -229,13 +243,31 @@
         const def = resolveDef(tt, ['rep']);
         if (def) confident.add(def.key);
       });
-      // Distinctive analyte names → tentative coverage (only if not already confident).
+
+      // (2) Distinctive-analyte signature: count DISTINCT analyte terms matched
+      // per panel (so "Total cholesterol" + "HDL cholesterol" both matching
+      // 'cholesterol' counts once — only genuinely different analytes accumulate).
+      const termsByKey = new Map(); // canonical key → Set(matched analyte terms)
       results.forEach((r) => {
         if (!r || !r.name) return;
-        const def = resolveDef(r.name, ['analytes']);
-        if (def && !confident.has(def.key)) tentative.add(def.key);
-        // Track latest sample date across results.
+        const text = norm(r.name);
+        TEST_DEFS.forEach((def) => {
+          if (!Array.isArray(def.analytes)) return;
+          def.analytes.forEach((term) => {
+            if (hasTerm(text, term)) {
+              if (!termsByKey.has(def.key)) termsByKey.set(def.key, new Set());
+              termsByKey.get(def.key).add(norm(term));
+            }
+          });
+        });
         if (r.date && (!sampleDate || String(r.date) > String(sampleDate))) sampleDate = r.date;
+      });
+      termsByKey.forEach((set, key) => {
+        if (confident.has(key)) return;
+        const def = TEST_DEFS.find((d) => d.key === key);
+        const min = def && def.singleAnalyte ? 1 : 2;
+        if (set.size >= min) confident.add(key);
+        else tentative.add(key);
       });
     }
     return { confident, tentative, sampleDate };

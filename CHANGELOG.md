@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.118.0] — 2026-06-19
+
+### Smart matching for Outstanding Investigation Requests (advisory + auto-tick)
+
+On a Review Investigation Report task, Medicus's native "Match all" button is
+blunt — it matches the report to **every** outstanding request, clearing them
+all, so a coeliac screen / HFE gene / CCP antibody buried in the list is silently
+cleared even when this report says nothing about it (Dr Grundy's longstanding
+ask). This adds a smarter, per-request decision instead.
+
+- **New engine `engine/outstanding-match.js`** (pure, unit-tested): for each
+  outstanding request it decides `resulted` vs `outstanding` — a request is only
+  `resulted` when this report covers the **same test/panel** AND the request was
+  made **on or before the sample-taken date** ("find all requests for that test
+  where the request predates the sample taken time/date"). Matching is
+  high-precision and fail-safe: a panel title/specimen-group match, or a
+  distinctive-analyte **signature** (≥2 analytes of one panel, or 1 for
+  single-analyte tests like ferritin/PSA/FIT) → **confident**; a lone distinctive
+  analyte → **tentative**; anything unrecognised, post-dating, or missing a date
+  stays `outstanding`. A false "resulted" would auto-clear a genuinely
+  outstanding test, so the matcher errs toward leaving things outstanding.
+
+- **Card adapter (`content.js` `runOutstandingMatch`)**: reads each request row
+  (via `aria-labelledby`), fetches + normalises the report for the task, then
+  annotates every row inline — **✓ resulted** / **✓? resulted?** (tentative) /
+  **⏳ outstanding** — so what's genuinely still outstanding is visible at a
+  glance. It then **auto-ticks only the confident, predating rows, once per task**
+  (a manual untick is never re-ticked). Tentative/unrecognised/post-dating rows
+  are never auto-ticked. Annotations are re-applied by a scoped observer across
+  the card's Quasar re-renders.
+
+- Verdict-badge styles added to `hud.css`; `engine/outstanding-match.js`
+  registered in `manifest.json` content scripts. Regression-guarded by
+  `test-outstanding-match.js` (21 assertions over the real captured card +
+  report data).
+
 ## [v3.117.2] — 2026-06-19
 
 ### Results queue stacked chips — bare-flag "High"/"Low" suppression + label width fix

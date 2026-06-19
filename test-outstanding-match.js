@@ -120,8 +120,10 @@ check(
   'a request the report does not cover is left outstanding, never ticked'
 );
 
-// ── 6. Tentative match: distinctive analyte but no panel title → no auto-tick ──
-console.log('tentative (analyte-only) match:');
+// ── 6. Analyte-signature: multi-analyte report with NO specimen title ─────────
+// Real Medicus reports may carry no specimen-group title (confirmed by capture),
+// so a multi-analyte signature must reach `confident` on its own.
+console.log('analyte-signature (no specimen title):');
 const ueAnalyteReport = {
   // No specimen group / title — only raw analyte names.
   results: [
@@ -136,8 +138,45 @@ const ueOut = M.matchOutstanding(
 );
 check(ueOut[0].status === 'resulted', 'U&E request resolved via distinctive analytes');
 check(
-  ueOut[0].confidence === 'tentative' && ueOut[0].autoTick === false,
-  'analyte-only match is tentative and NOT auto-ticked (clinician confirms)'
+  ueOut[0].confidence === 'confident' && ueOut[0].autoTick === true,
+  '3-analyte U&E signature is confident + auto-ticks even without a panel title'
+);
+
+// ── 6b. Real captured lipid report (analytes only, no specimen, sample 18 Jun) ─
+console.log('real captured lipid report:');
+const realLipidReport = {
+  results: [
+    { name: 'Total cholesterol', specimen: null, date: '2026-06-18' },
+    { name: 'HDL cholesterol', specimen: null, date: '2026-06-18' },
+    { name: 'Triglycerides', specimen: null, date: '2026-06-18' },
+    { name: 'Serum cholesterol/HDL ratio', specimen: null, date: '2026-06-18' },
+    { name: 'LDL cholesterol', specimen: null, date: '2026-06-18' },
+    { name: 'Se non HDL cholesterol level', specimen: null, date: '2026-06-18' },
+  ],
+};
+const realLipidOut = M.matchOutstanding(CARD_LABELS, realLipidReport);
+const realLipidRow = realLipidOut[0]; // "Full Lipid Profile (… 09 Jun 2026)"
+check(
+  realLipidRow.status === 'resulted' && realLipidRow.confidence === 'confident' && realLipidRow.autoTick === true,
+  'captured lipid panel auto-ticks the 09 Jun lipid request (sample 18 Jun)'
+);
+check(
+  realLipidOut.slice(1).every((r) => r.status === 'outstanding'),
+  'no other request is touched by the lipid report'
+);
+
+// ── 6c. Genuine tentative: a single distinctive analyte of a multi-analyte panel
+console.log('single-analyte tentative:');
+const loneCreatinine = {
+  results: [{ name: 'Creatinine', specimen: null, date: '2026-03-01' }],
+};
+const loneOut = M.matchOutstanding(
+  [{ name: 'Creatinine + Electrolyte Profile, Blood', requestedDate: '2026-02-04' }],
+  loneCreatinine
+);
+check(
+  loneOut[0].status === 'resulted' && loneOut[0].confidence === 'tentative' && loneOut[0].autoTick === false,
+  'a lone creatinine is tentative for U&E — surfaced, never auto-ticked'
 );
 
 // ── 7. Fail-safe: missing sample date never clears ────────────────────────────

@@ -16,6 +16,7 @@
 .ch-queue-chips,
 .ch-q-result,
 .ch-q-mon,
+.ch-oir-flag,
 .ch-action-menu {
   /* Surfaces */
   --bg-deep: #f8fafc;
@@ -190,6 +191,39 @@
 [col-id='patientName'] > .ch-q-mon-inline .ch-chip {
   /* On their own line chips get full cell width — lift the inline 18ch cap. */
   max-width: 100%;
+}
+
+/* ---- Outstanding Investigation Requests — verdict badges ---- */
+/* Injected after each request row's label on the Review Investigation Report
+   detail page (content.js runOutstandingMatch). Read-only annotation: green =
+   this report covers it (auto-tickable), amber = tentative match, slate =
+   genuinely still outstanding. Inline-block, small, never wraps the row. */
+.ch-oir-flag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ch-oir-flag.ch-oir-resulted {
+  color: var(--green);
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+}
+.ch-oir-flag.ch-oir-tentative {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+.ch-oir-flag.ch-oir-outstanding {
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
 }
 
 /* ---- HUD panel ---- */
@@ -591,5 +625,3 @@
   font-size: 9px;
   margin-left: 2px;
 }
-
-
