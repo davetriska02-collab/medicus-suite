@@ -2230,10 +2230,6 @@
   // taskUuid → patientUuid (resolved once by fetchOutstandingHistory, used by
   // annotateOutstandingRow to make elsewhere badges clickable — item 8).
   const _oirPatientCache = new Map();
-  // taskUuid → Set of normalised request labels that the clinician has locally
-  // marked "reviewed". Backed by chrome.storage.local key 'triagelens.oir.reviewed'.
-  // Loaded lazily on first runOutstandingMatch for each task — item 9.
-  const _oirReviewed = new Map();
   let _oirObserver = null;
   let _oirRaf = false;
 
@@ -2254,16 +2250,20 @@
     const rows = [];
     card.querySelectorAll('.q-checkbox').forEach((box) => {
       let label = '';
+      let labelEl = null; // last resolved label element — the per-row badge anchor
       const id = box.getAttribute('aria-labelledby');
       if (id) {
         // aria-labelledby may list several ids; concatenate their text.
         id.split(/\s+/).forEach((one) => {
           const el = one && document.getElementById(one);
-          if (el) label += (label ? ' ' : '') + el.textContent;
+          if (el) {
+            label += (label ? ' ' : '') + el.textContent;
+            labelEl = el;
+          }
         });
       }
       if (!label) label = box.textContent || '';
-      rows.push({ box, label: label.replace(/\s+/g, ' ').trim() });
+      rows.push({ box, label: label.replace(/\s+/g, ' ').trim(), labelEl });
     });
     return rows;
   };
@@ -2282,107 +2282,94 @@
   };
 
   // SAFETY GATE: clearing an outstanding investigation is a clinical action with
-  // real consequences (a chase-up disappears from the worklist). For the manual
-  // “resulted elsewhere” rows we NEVER auto-tick — the clinician clicks “Tick off”
-  // and must confirm. Returns true if the clinician confirmed.
-  const confirmTickOff = (verdict) => {
-    // item 2: source label
-    const sourceLine = `Source: the patient's observation history (Medicus lab record).`;
-    // item 6: result value line (replaces the old plain date line when matchedValue present)
-    let resultLine = '';
-    if (verdict.matchedValue) {
-      const obsName = verdict.matchedObsName || verdict.name;
-      const unitPart = verdict.matchedUnit ? ` ${verdict.matchedUnit}` : '';
-      const abnormalPart = verdict.matchedAbnormal ? ` (${verdict.matchedAbnormal.toUpperCase()})` : '';
-      const datePart = verdict.elsewhereDate ? ` on ${fmtOirDate(verdict.elsewhereDate)}` : '';
-      resultLine = `\nMost recent result: ${obsName} ${verdict.matchedValue}${unitPart}${abnormalPart}${datePart}.`;
-    } else if (verdict.elsewhereDate) {
-      // No matchedValue — keep the original plain date line to avoid losing context.
-      resultLine = `\nMost recent result on record: ${fmtOirDate(verdict.elsewhereDate)}.`;
-    }
-    // item 7: shared-result note
-    const sharedLine =
-      verdict.sharedCount > 0
-        ? `\nNote: this result also satisfies ${verdict.sharedCount} other outstanding request(s) for this test on the card.`
-        : '';
+  // real consequences (a chase-up disappears from the worklist). Results found
+  // ELSEWHERE in the record (not in this report) are NEVER auto-ticked — the
+  // clinician reviews the full enumerated list and confirms once, via this bulk
+  // dialog. Returns true if confirmed.
+  const confirmBulkTickOff = (verdicts) => {
+    const lines = verdicts.map((v) => {
+      const date = v.elsewhereDate ? fmtOirDate(v.elsewhereDate) : 'date unknown';
+      let val = '';
+      if (v.matchedValue) {
+        const unit = v.matchedUnit ? ` ${v.matchedUnit}` : '';
+        const ab = v.matchedAbnormal ? ` ${v.matchedAbnormal.toUpperCase()}` : '';
+        val = ` — ${v.matchedObsName || v.name} ${v.matchedValue}${unit}${ab}`;
+      }
+      const shared =
+        v.sharedCount > 0
+          ? ` (also satisfies ${v.sharedCount} other request${v.sharedCount > 1 ? 's' : ''})`
+          : '';
+      return ` • ${v.name} — completed ${date}${val}${shared}`;
+    });
+    const n = verdicts.length;
     const msg =
-      `Tick off this outstanding request as resulted?\n\n` +
-      `“${verdict.name}”\n\n` +
-      `This report does NOT cover this test, but a matching result was found ` +
-      `elsewhere in the patient's record.${resultLine}\n` +
-      `${sourceLine}${sharedLine}\n\n` +
-      // item 4: explicit write-through / irreversibility statement
-      `Ticking off writes to Medicus — it marks the request actioned on the task ` +
-      `and removes it from the outstanding list server-side. This cannot be undone ` +
-      `from here. This is your clinical decision — confirm only if you are satisfied ` +
-      `the result has been seen and acted on.\n\n` +
-      `OK = tick off    Cancel = leave outstanding`;
+      `Tick off ${n} request${n > 1 ? 's' : ''} found in the patient's record?\n\n` +
+      `These are NOT covered by this report, but matching results were found ` +
+      `elsewhere in the record:\n\n` +
+      lines.join('\n') +
+      `\n\nSource: the patient's observation history (Medicus lab record).\n\n` +
+      `Ticking off writes to Medicus server-side and removes ${n > 1 ? 'these' : 'this'} ` +
+      `from the outstanding list. This cannot be undone from here. Confirm only if you ` +
+      `are satisfied each result has been seen and acted on.\n\n` +
+      `OK = tick ${n > 1 ? 'them all' : 'it'} off    Cancel = leave outstanding`;
     return confirm(msg);
   };
 
-  // Inject (idempotently) the verdict badge — and, for "resulted elsewhere" rows,
-  // a manual "Tick off" button behind a confirmation gate — into a row.
-  // taskUuid and reviewedSet are threaded from applyOutstandingMatch for item 9.
-  // patientUuid (may be undefined) is threaded from applyOutstandingMatch for item 8.
-  const annotateOutstandingRow = (rowMeta, verdict, taskUuid, reviewedSet, patientUuid) => {
+  // Inject (idempotently) the per-row verdict badge, anchored to THAT row's own
+  // label element so every row is flagged in place.
+  // (Earlier the badge was appended to the shared list container and de-duped
+  // card-wide, so only ONE badge ever existed — it collapsed to the bottom of the
+  // card showing the last row's verdict. Anchoring per row + keying the de-dupe by
+  // row index fixes that: each row gets its own inline flag.)
+  // patientUuid (may be undefined) makes resulted-elsewhere badges clickable.
+  const annotateOutstandingRow = (rowMeta, verdict, patientUuid) => {
     const box = rowMeta.box;
-    // Badge + button are appended to the checkbox's row container so they sit
-    // beside the label without disturbing Quasar's own layout. De-duped by class.
-    const host = box.closest('.q-checkbox') || box;
-    const parent = host.parentElement || host;
-    let badge = parent.querySelector(':scope > .ch-oir-flag');
+    // Per-row anchor: insert the badge right after the row's own label element.
+    const anchor = rowMeta.labelEl || box.closest('.q-checkbox') || box;
+    const scope = anchor.parentElement || anchor;
+    const rowKey = String(verdict.id != null ? verdict.id : '');
+    let badge = scope.querySelector(`:scope > .ch-oir-flag[data-oir-row="${rowKey}"]`);
     if (!badge) {
       badge = document.createElement('span');
       badge.className = 'ch-oir-flag';
-      parent.appendChild(badge);
+      badge.dataset.oirRow = rowKey;
+      anchor.insertAdjacentElement('afterend', badge);
     }
+
     const status = verdict.status;
     const resulted = status === 'resulted';
     const elsewhere = status === 'resulted_elsewhere';
     const outstanding = !resulted && !elsewhere;
     const tentative = (resulted || elsewhere) && verdict.confidence === 'tentative';
-
-    // item 9: check reviewed state for outstanding rows
-    const normLabel = (rowMeta.label || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    const isReviewed = outstanding && reviewedSet && reviewedSet.has(normLabel);
+    const date = verdict.elsewhereDate ? fmtOirDate(verdict.elsewhereDate) : '';
 
     badge.classList.toggle('ch-oir-resulted', resulted && !tentative);
     badge.classList.toggle('ch-oir-tentative', resulted && tentative);
     badge.classList.toggle('ch-oir-elsewhere', elsewhere && !tentative);
     badge.classList.toggle('ch-oir-elsewhere-tentative', elsewhere && tentative);
     badge.classList.toggle('ch-oir-outstanding', outstanding);
-    // item 9: reviewed class for muted treatment
-    badge.classList.toggle('ch-oir-reviewed', isReviewed);
 
-    // items 1, 3, G2 — badge text with formatted dates
     let badgeText;
     if (resulted) {
       badgeText = tentative ? '✓? resulted? (this report)' : '✓ resulted (this report)';
     } else if (elsewhere) {
       if (tentative) {
-        badgeText = verdict.elsewhereDate
-          ? `↩? elsewhere? · ${fmtOirDate(verdict.elsewhereDate)}`
-          : '↩? elsewhere?';
+        badgeText = date ? `↩? possible result ${date} · in record` : '↩? possible result · in record';
       } else {
-        badgeText = verdict.elsewhereDate
-          ? `↩ elsewhere · Result: ${fmtOirDate(verdict.elsewhereDate)}`
-          : '↩ resulted elsewhere';
+        badgeText = date ? `↩ completed ${date} · in record` : '↩ found in record';
       }
     } else {
-      // item 9: reviewed state badge text
-      badgeText = isReviewed ? '⏳ outstanding · reviewed ✓' : '⏳ outstanding';
+      badgeText = '⏳ outstanding';
     }
     badge.textContent = badgeText;
     badge.title = verdict.reason || '';
 
-    // item 8: clickable elsewhere badge → open patient care record.
-    // There is no per-observation deep link in the API data; opening the patient's
-    // care record is the best achievable target.
+    // Clickable elsewhere badge → open patient care record (no per-observation
+    // deep link exists in the API, so the care record is the closest target).
     if (elsewhere && patientUuid) {
       badge.style.cursor = 'pointer';
       badge.classList.add('ch-oir-clickable');
       badge.title = (verdict.reason ? verdict.reason + ' — ' : '') + 'click to open patient record';
-      // Guard with dataset flag so we don't stack listeners on re-annotation.
       if (!badge.dataset.oirLinked) {
         badge.dataset.oirLinked = '1';
         badge.addEventListener('click', (e) => {
@@ -2395,97 +2382,51 @@
       badge.style.cursor = '';
       badge.classList.remove('ch-oir-clickable');
     }
-
-    // Manual "Tick off" button — ONLY for resulted-elsewhere rows, and only while
-    // the row is still unticked. Removed for every other status (idempotent).
-    let btn = parent.querySelector(':scope > .ch-oir-tickoff');
-    const stillUnticked = box.getAttribute('aria-checked') !== 'true';
-    if (elsewhere && stillUnticked) {
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ch-oir-tickoff';
-        btn.textContent = 'Tick off';
-        // Captured per-element via dataset so the latest verdict is used on click.
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          let v;
-          try {
-            v = JSON.parse(btn.dataset.verdict || '{}');
-          } catch (_e) {
-            v = { name: rowMeta.label };
-          }
-          if (box.getAttribute('aria-checked') === 'true') return; // already ticked
-          if (confirmTickOff(v)) {
-            log('OIR manual tick-off', { name: v.name });
-            tickRows([box]);
-            btn.remove(); // gone once actioned; re-annotation won't re-add (ticked)
-          }
-        });
-        parent.appendChild(btn);
-      }
-      // items 6, 7 — expanded dataset for richer confirm dialog
-      btn.dataset.verdict = JSON.stringify({
-        name: verdict.name,
-        elsewhereDate: verdict.elsewhereDate || null,
-        confidence: verdict.confidence || null,
-        matchedValue: verdict.matchedValue || null,
-        matchedUnit: verdict.matchedUnit || null,
-        matchedObsName: verdict.matchedObsName || null,
-        matchedAbnormal: verdict.matchedAbnormal || null,
-        sharedCount: verdict.sharedCount || 0,
-      });
-      btn.title = verdict.reason || '';
-    } else if (btn) {
-      btn.remove();
-    }
-
-    // item 9: "Mark reviewed" button for outstanding (non-reviewed) rows.
-    // Purely local annotation — does NOT tick the Quasar box or write to Medicus.
-    let reviewBtn = parent.querySelector(':scope > .ch-oir-reviewed-btn');
-    if (outstanding && !isReviewed) {
-      if (!reviewBtn) {
-        reviewBtn = document.createElement('button');
-        reviewBtn.type = 'button';
-        reviewBtn.className = 'ch-oir-reviewed-btn';
-        reviewBtn.textContent = 'Mark reviewed';
-        reviewBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!taskUuid) return;
-          // Add to in-memory set
-          let rSet = _oirReviewed.get(taskUuid);
-          if (!rSet) {
-            rSet = new Set();
-            _oirReviewed.set(taskUuid, rSet);
-          }
-          rSet.add(normLabel);
-          // Persist to chrome.storage.local — merge so other tasks are not clobbered
-          if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-            chrome.storage.local.get('triagelens.oir.reviewed').then((r) => {
-              const stored = (r && r['triagelens.oir.reviewed']) || {};
-              if (!stored[taskUuid]) stored[taskUuid] = [];
-              if (!stored[taskUuid].includes(normLabel)) stored[taskUuid].push(normLabel);
-              chrome.storage.local.set({ 'triagelens.oir.reviewed': stored }).catch(() => {});
-            }).catch(() => {});
-          }
-          // Update badge text and remove button inline (idempotent — observer will re-confirm)
-          badge.textContent = '⏳ outstanding · reviewed ✓';
-          badge.classList.add('ch-oir-reviewed');
-          reviewBtn.remove();
-        });
-        parent.appendChild(reviewBtn);
-      }
-    } else if (reviewBtn) {
-      reviewBtn.remove();
-    }
   };
 
-  // Apply the engine verdict to the live card: annotate every row, auto-tick the
-  // confident report-covered rows (once per task), and surface resulted-elsewhere
-  // rows with a manual tick-off button. `history` (may be null) enables the
-  // resulted-elsewhere enrichment.
+  // The bulk "Tick off results found in record" action bar — one gated button that
+  // ticks every CONFIDENT resulted-elsewhere row at once, after the clinician
+  // reviews the full enumerated list in confirmBulkTickOff. Tentative finds are
+  // flagged inline only (never bulk-ticked — verify and tick manually). Idempotent:
+  // reuses the existing bar, removes it when nothing is pending.
+  const updateBulkBar = (card, foundVerdicts, rows) => {
+    let bar = card.querySelector('.ch-oir-bulk');
+    const pending = foundVerdicts.filter((v) => {
+      const box = rows[v.id] && rows[v.id].box;
+      return box && box.getAttribute('aria-checked') !== 'true';
+    });
+    if (!pending.length) {
+      if (bar) bar.remove();
+      return;
+    }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'ch-oir-bulk';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ch-oir-bulk-btn';
+      bar.appendChild(b);
+      card.appendChild(bar);
+    }
+    const btn = bar.querySelector('.ch-oir-bulk-btn');
+    const n = pending.length;
+    btn.textContent = `Tick off ${n} result${n > 1 ? 's' : ''} found in record`;
+    // onclick (not addEventListener) so re-application never stacks handlers.
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirmBulkTickOff(pending)) {
+        log('OIR bulk tick-off', { count: pending.length });
+        tickRows(pending.map((v) => rows[v.id].box));
+        bar.remove();
+      }
+    };
+  };
+
+  // Apply the engine verdict to the live card: annotate every row inline, auto-tick
+  // the confident report-covered rows (once per task), and surface results found
+  // elsewhere in the record via inline flags + the gated bulk tick-off bar.
+  // `history` (may be null) enables the resulted-elsewhere enrichment.
   const applyOutstandingMatch = (card, report, taskUuid, history) => {
     const OutstandingMatch = window.SentinelOutstandingMatch;
     if (!OutstandingMatch || !card || !card.isConnected) return;
@@ -2497,8 +2438,8 @@
       verdicts = OutstandingMatch.enrichWithHistory(verdicts, history);
     }
 
-    // item 7: compute sharedCount — for each resulted_elsewhere verdict, count
-    // how many OTHER resulted_elsewhere verdicts share the same key AND elsewhereDate.
+    // sharedCount — for each resulted_elsewhere verdict, count how many OTHER
+    // resulted_elsewhere verdicts share the same key AND elsewhereDate.
     const elsewhereVerdicts = verdicts.filter((v) => v.status === 'resulted_elsewhere');
     const sharedCountMap = new Map(); // "key|elsewhereDate" → count
     elsewhereVerdicts.forEach((v) => {
@@ -2510,18 +2451,14 @@
       v.sharedCount = (sharedCountMap.get(k) || 1) - 1; // subtract self
     });
 
-    // item 8: resolve patientUuid for badge click-through (from cache populated in fetchOutstandingHistory)
     const patientUuid = taskUuid ? _oirPatientCache.get(taskUuid) : undefined;
 
-    // item 9: resolved set of reviewed normalised labels for this task
-    const reviewedSet = taskUuid ? _oirReviewed.get(taskUuid) : undefined;
-
     verdicts.forEach((v, idx) => {
-      if (rows[idx]) annotateOutstandingRow(rows[idx], v, taskUuid, reviewedSet, patientUuid);
+      if (rows[idx]) annotateOutstandingRow(rows[idx], v, patientUuid);
     });
+
     // Auto-tick once per task — confident + predating, report-covered rows only.
-    // Resulted-elsewhere rows are NEVER auto-ticked (autoTick === false): they
-    // require the manual confirm gate.
+    // Resulted-elsewhere rows are NEVER auto-ticked (autoTick === false).
     if (taskUuid && !_oirAutoTicked.has(taskUuid)) {
       _oirAutoTicked.add(taskUuid);
       const toTick = verdicts.filter((v) => v.autoTick && rows[v.id]).map((v) => rows[v.id].box);
@@ -2530,6 +2467,13 @@
         tickRows(toTick);
       }
     }
+
+    // Bulk bar: only CONFIDENT results found elsewhere are eligible for one-click
+    // tick-off; tentative finds stay inline-only and are ticked manually if verified.
+    const foundConfident = verdicts.filter(
+      (v) => v.status === 'resulted_elsewhere' && v.confidence === 'confident' && rows[v.id]
+    );
+    updateBulkBar(card, foundConfident, rows);
   };
 
   // Fetch the patient's full observation history for this task (cached), so
@@ -2569,8 +2513,7 @@
   };
 
   // Entry point — fetch the report for this task (cached) + patient history, then
-  // apply the match. item 9: also loads reviewed labels from chrome.storage on
-  // first visit to each task.
+  // apply the match.
   const runOutstandingMatch = () => {
     const API = window.SentinelApiClient;
     const NORM = window.SentinelNormalisers;
@@ -2584,27 +2527,6 @@
     const ctx = API.detectMedicusContext(location.href);
     if (!ctx || !ctx.taskUuid || !ctx.taskTypeSlug) return;
     const taskUuid = ctx.taskUuid;
-
-    // item 9: load reviewed labels from storage the first time we see this task.
-    // Mirror the chrome.storage guard from loadConfig (~line 479).
-    if (!_oirReviewed.has(taskUuid)) {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get('triagelens.oir.reviewed').then((r) => {
-          const stored = (r && r['triagelens.oir.reviewed']) || {};
-          const labels = Array.isArray(stored[taskUuid]) ? stored[taskUuid] : [];
-          _oirReviewed.set(taskUuid, new Set(labels));
-          // Re-apply now that the reviewed set is loaded.
-          const liveCard = document.querySelector(OIR_CARD_SEL);
-          const rep = _oirReportCache.get(taskUuid);
-          if (liveCard && rep) applyOutstandingMatch(liveCard, rep, taskUuid, _oirHistoryCache.get(taskUuid));
-        }).catch(() => {
-          _oirReviewed.set(taskUuid, new Set());
-        });
-      } else {
-        // No chrome.storage (e.g. demo mode) — use empty set.
-        _oirReviewed.set(taskUuid, new Set());
-      }
-    }
 
     const cached = _oirReportCache.get(taskUuid);
     if (cached) {
