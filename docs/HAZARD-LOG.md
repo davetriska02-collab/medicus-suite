@@ -813,6 +813,22 @@ Reports of suspected hazardous behaviour must be sent to the CSO at **dave@grays
 
 If an incident meeting the threshold of a patient safety incident is identified, it must be managed under the practice's own significant event analysis (SEA) process and reported to the CSO in parallel.
 
+## 7a. Deferred clinical capabilities (built but intentionally not wired)
+
+These are capabilities that exist in the engine but are deliberately NOT applied to any
+shipped clinical rule until a stated safety precondition is met. They are recorded here so
+the gap is explicit and auditable rather than tacit.
+
+### D-001 — DOAC renal-banded monitoring DEFERRED (2026-06-20)
+
+The `intervalByBand` engine capability now exists, but DOAC must band on **CrCl
+(Cockcroft-Gault), NOT eGFR** (MHRA/SPS — eGFR over-estimates clearance and under-monitors
+low-weight elderly). Prerequisites before wiring: reliable structured + dated **WEIGHT**
+extraction (currently absent) and numeric+unit-validated serum **CREATININE** (currently
+free-text). A wrong CrCl that lands in the `>=60` band would **SUPPRESS** needed monitoring
+with false authority — more dangerous than no CrCl. Wire only when all Cockcroft-Gault
+inputs are trustworthy and freshness-gated.
+
 ## 8. Version history
 
 | Date       | Version | Author | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
