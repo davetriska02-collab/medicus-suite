@@ -2,6 +2,93 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.124.0] — 2026-06-20
+
+### Sentinel clinical-content expansion via The Keeper (Phase 2 — CSO change-proposal)
+
+Phase-2 of the multi-agent rules-engine review, run through The Keeper (scan → verify →
+conservative apply). Every change is sourced and was independently verified; clinical content
+is a **CSO change-proposal**, not auto-merged. Full report:
+`the-keeper-report-2026-06-20.md`. Source note: BNF/SPS/MHRA/emc/FSRH/ACBcalc primary pages
+returned HTTP 403 this run, so changes are corroborated across multiple NHS ICB / regulatory
+secondary sources and flagged "pending primary-source confirmation".
+
+- **Three drug–drug-interaction alerts** added to `rules/alert-library.json` (alert-library
+  `version` 1.2 → 1.3):
+  - `pincer-mtx-trimethoprim` (🔴 red) — methotrexate + trimethoprim/co-trimoxazole, severe/fatal
+    bone-marrow suppression (a named never-event). Relies on the Phase-1 combo-normaliser fix so
+    the hyphenated `co-trimoxazole` matches.
+  - `alert-xoi-thiopurine-myelosuppression` (🔴 red) — allopurinol/febuxostat +
+    azathioprine/mercaptopurine, life-threatening myelosuppression. Brand terms
+    (`zyloric`/`adenuric`/`xaluprine`) listed explicitly so brand-only records still fire.
+  - `mhra-acei-arb-ksparing-hyperkalaemia` (🟠 amber) — ACEi/ARB + potassium-sparing diuretic.
+    Deliberately amber, not red: spironolactone + ACEi is guideline-endorsed four-pillar heart-
+    failure therapy, so a red would misfire across the HF register.
+- **ACB scale** (`engine/acb-scores.js`): four verified score-2 additions — carbamazepine,
+  oxcarbazepine, amantadine, pethidine (these also feed STOPP anticholinergic-elderly). Five
+  candidates were **killed in verification**: cyclobenzaprine/loxapine (not UK primary-care),
+  cimetidine/baclofen (score conflict 1-vs-2), and levomepromazine (actually score 3, not 2 —
+  adding it at 2 would have *under*-scored it). `amantadine` removed from the term-coverage
+  snapshot's "deliberately dropped (scores 0)" audit list, as it is now genuinely on the scale.
+- **DOAC monitoring notes** corrected in `rules/drug-rules.json` to specify **CrCl
+  (Cockcroft-Gault), not eGFR** (eGFR overestimates clearance and raises bleeding risk), with the
+  renal/age-banded cadence documented. The 365-day default is unchanged — value-banded intervals
+  need an engine extension (flagged).
+- **Contraception monitoring** added to `rules/drug-rules.json`: `dmpa-injectable` (enabled —
+  Depo-Provera/Sayana Press, 2-yearly BP+weight, FSRH). `chc-combined-hormonal` is shipped
+  **disabled** pending engine work: the `hrt-systemic` rule matches the bare term `estradiol`,
+  a substring of `ethinylestradiol`, so an enabled CHC rule would double-fire the HRT rule —
+  enabling needs engine-level drug-class disambiguation.
+- Regression tests extended: `test-alert-library-coverage.js` (3 new combos + firing checks),
+  `test-acb-scores.js` (4 drugs + collision guards), `test-drug-brand-coverage.js` (DMPA).
+
+## [v3.123.0] — 2026-06-20
+
+### Sentinel rules engine — safety, provenance & efficiency hardening (Phase 1)
+
+Outcome of a multi-agent review of the investigations & safety-monitoring rules engine.
+Six low-risk, no-clinical-sign-off-needed changes; clinical-content expansion (drug–drug
+interaction checks, ACB score-2 tier, renal-adjusted DOAC intervals, contraception) is
+deliberately deferred to a Keeper run with primary-source verification + CSO review.
+
+- **Drug-combo matching silent-miss fixed.** `evaluateDrugComboRule` used a bare
+  `.toLowerCase()` while single-drug matching folds `-`/`_` to spaces via
+  `normaliseDrugString`. The two paths disagreed on any hyphen-vs-space mismatch, so a
+  hyphenated interaction drug (`co-trimoxazole`, `co-amilofruse`, …) could match its
+  single-drug monitoring rule but **silently never fire a drug-combo interaction alert**.
+  Both paths now share one normaliser. New `test-drug-combo-agreement.js` pins single ≡
+  combo matching (incl. the hyphen↔space cases that fail pre-fix). This is the hard gate
+  for any future interaction rules.
+- **alert-library.json clinical content is now content-tested.** New
+  `test-alert-library-coverage.js` pins type, severity, monitoring intervals, drug-set
+  membership and the safety-critical demographic gates for all 23 entries (13 PINCER, MHRA
+  valproate/isotretinoin PPP, NICE lithium, QTc, recurrent-UTI/falls, rising-PSA), and
+  fires the highest-stakes combos through the real engine. Previously these had schema +
+  currency-date checks only — a severity downgrade or interval change would have passed
+  every test.
+- **Unit-safety guard on threshold/alert assertions.** Before asserting a "high"/"low"
+  fact, the observation's unit is checked against the rule's expected unit; a recognised,
+  genuinely-different unit (e.g. potassium mmol/L vs an eGFR mL/min value) now abstains
+  instead of asserting a wrong-direction alert. Fail-open: an absent/unknown unit still
+  fires, so a real alert is never suppressed by a unit we don't recognise.
+- **STATUS_RANK drift fixed and pinned.** `sentinel-core.js` was missing the `vax_*`
+  keys the engine emits, so a due vaccine ranked 99 (un-prioritised) on the panel and its
+  "Offer to book" instruction was dead code. Added the keys (parity with the sweep surface)
+  and added `test-status-rank-sync.js` pinning the engine and sentinel-core rank tables to
+  deep-equality so future drift fails CI.
+- **Sentinel now consumes the shared provenance caveat canon.** The primary monitoring
+  surface previously re-hand-wrote its caveats; it now uses `shared/provenance.js`. The
+  green "checked & clear" audit headline carries the canonical *live-snapshot, verify
+  before acting* caveat, and the empty/all-clear states carry *no alert ≠ monitoring
+  complete* — closing the over-claim on the highest-confidence (in-date) surfaces.
+- **Record-pipeline evaluation memo (`engine/eval-cache.js`).** The record HUD re-ran the
+  full `evaluatePatient` (O(rules × observations)) on every render. It now memoises the
+  evaluation keyed on a content hash of the **freshly-fetched** data — so the redundant
+  re-evaluation is skipped when nothing changed, but the fetch stays fresh and the hash is
+  self-invalidating (any changed med/observation/problem/rule/day busts it). The memo can
+  never serve a stale all-clear; `test-eval-cache.js` proves the invalidation, not just the
+  hit-rate.
+
 ## [v3.122.1] — 2026-06-19
 
 ### Surface the Outstanding Requests settings in Suite Settings

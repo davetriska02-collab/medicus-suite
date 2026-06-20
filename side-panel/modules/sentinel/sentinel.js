@@ -10,6 +10,19 @@ import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
 import { startTour } from '../../tour/tour.js';
 
+// Canonical clinical-safety caveats (shared/provenance.js, loaded as a classic
+// script in panel.html / pop-out.html). Sentinel is the primary monitoring
+// surface, so it now consumes the SAME wording every other surface uses instead
+// of re-hand-writing it — the whole reason the canon exists. Fall back to the
+// canonical literal if the global is somehow absent: a clinical-safety caveat
+// must never silently drop.
+const NO_ALERT_CAVEAT =
+  (typeof window !== 'undefined' && window.Provenance && window.Provenance.CAVEATS.NO_ALERT_NOT_ALL_CLEAR) ||
+  'No alert ≠ monitoring complete.';
+const LIVE_SNAPSHOT_CAVEAT =
+  (typeof window !== 'undefined' && window.Provenance && window.Provenance.CAVEATS.LIVE_SNAPSHOT_NOT_COMPLETE) ||
+  'Live snapshot, not a complete record. Verify against the patient record before acting.';
+
 const STATUS_COLOUR = {
   overdue: 'red',
   not_met: 'red',
@@ -1186,11 +1199,21 @@ function render(payload) {
       ]
         .filter(Boolean)
         .join(' · ')}</span>${ts ? `<span class="sent-audit-time">checked ${escHtml(ts)}</span>` : ''}
+      <span class="sent-audit-caveat" title="${escAttr(LIVE_SNAPSHOT_CAVEAT)}">${escHtml(LIVE_SNAPSHOT_CAVEAT)}</span>
     </div>`
     : '';
+  // Empty / all-clear states must never read as assurance. Carry the canonical
+  // "no alert ≠ monitoring complete" caveat on the clear states so a clean screen
+  // is not mistaken for a complete monitoring check (the green over-claim gap).
   const emptyMsg =
     visibleChips.length === 0
-      ? `<div class="sent-empty">${currentFilter === 'action' ? 'No items needing action.' : currentFilter === 'clear' ? 'No items in date.' : 'No chips for this patient.'}</div>`
+      ? `<div class="sent-empty">${
+          currentFilter === 'action'
+            ? 'No items needing action.'
+            : currentFilter === 'clear'
+              ? 'No items in date.'
+              : 'No chips for this patient.'
+        }<span class="sent-empty-caveat">${escHtml(NO_ALERT_CAVEAT)}</span></div>`
       : '';
 
   // Per-module extraction breakdown (informational, H-005 transparency). Shows

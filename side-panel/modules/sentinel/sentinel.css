@@ -582,6 +582,15 @@
   text-align: center;
   padding: 20px 0;
 }
+/* Canonical "no alert ≠ monitoring complete" caveat on the clear/empty states —
+   a clean screen must never read as assurance. Subtle, below the main line. */
+.sent-empty-caveat {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-4);
+  letter-spacing: 0.02em;
+}
 
 /* J: Idle state — canon empty-state design */
 .sent-idle-state {
@@ -1292,6 +1301,15 @@
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+/* Live-snapshot caveat on the audit headline — the green "checked & clear" line
+   is the highest over-claim risk, so it carries the canonical "verify before
+   acting" framing. Full-width below the counts, deliberately quiet. */
+.sent-audit-caveat {
+  flex-basis: 100%;
+  color: var(--text-4);
+  font-size: 10px;
+  letter-spacing: 0.02em;
 }
 
 /* ── Patient banner row (holds name + verify button) ──────────────────────── */

@@ -162,10 +162,10 @@ async function runTests() {
     displayName: 'RSV vaccine',
   };
 
-  // vax_due is NOT in STATUS_RANK so isChipActionNeeded returns false for it.
-  // The spec says "vaccine chips produce offer SMS" — let's test with a status
-  // that IS action-needed for Sentinel (overdue / due_soon / caution / alert / not_met / stale).
-  // Vaccine chips can carry 'overdue' status when the vaccination interval has passed.
+  // vax_due ranks 1 (severe-amber) in STATUS_RANK — kept in lock-step with the
+  // engine via test-status-rank-sync.js — so isChipActionNeeded('vax_due') is true
+  // and a due vaccine produces its offer/booking pack (parity with the sweep
+  // surface). 'overdue' is also action-needed; both are exercised below.
   const vaxChipActionable = {
     type: 'vaccine',
     ruleId: 'rsv-65plus',
@@ -195,8 +195,13 @@ async function runTests() {
   check(!/Recall SMS template available/i.test(mtxPack.task), 'drug task drops the Sentinel recall-SMS line');
   check(!/Recall SMS template available/i.test(dmPack.task), 'QOF task drops the Sentinel recall-SMS line');
 
-  // non-actionable vax_due vaccine → null (vax_due not in STATUS_RANK)
-  check(buildChipActions(vaxChip, patient) === null, 'vax_due vaccine chip → null (not in STATUS_RANK)');
+  // vax_due is action-needed (rank 1) → a due vaccine produces a non-null pack,
+  // consistent with the 'overdue' case above. (Previously vax_due was missing
+  // from sentinel-core's STATUS_RANK and wrongly returned null — the drift that
+  // test-status-rank-sync.js now guards.)
+  const vaxDuePack = buildChipActions(vaxChip, patient);
+  check(vaxDuePack !== null, 'vax_due vaccine chip → non-null pack (action-needed)');
+  check(vaxDuePack && /RSV|vaccine|eligible|book/i.test(vaxDuePack.sms), 'vax_due vaccine sms offers booking');
 
   // ── Safety-monitoring chips: clinician-review task ONLY, never patient copy ──
   console.log('\n--- safety-monitoring chip (no patient-facing recall copy) ---');

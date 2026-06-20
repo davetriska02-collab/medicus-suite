@@ -139,7 +139,8 @@ const EXPECTED = {
     'Equasym XL 20mg', 'Focusim 5mg', 'Meflynate XL 10mg', 'Metyrol 10mg'
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
-  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg']
+  'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
+  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection']
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {
@@ -164,7 +165,8 @@ const MUST_NOT = [
   // local vaginal oestrogens are excluded (no systemic effect)
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],
-  ['hrt-systemic', 'Estring 7.5mcg vaginal ring']
+  ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
+  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');

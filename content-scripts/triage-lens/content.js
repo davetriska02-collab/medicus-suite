@@ -1591,6 +1591,12 @@
   // re-render can re-paint the chip from cache (it lives outside the base
   // template and would otherwise be wiped) without waiting for a refetch.
   let _lastMonitoring = null; // { token, result|null }
+  // Evaluation memo for the record HUD (engine/eval-cache.js). Skips re-running
+  // engine.evaluatePatient when freshly-fetched data is byte-identical to the
+  // last run; self-invalidating via the input hash, so never a stale all-clear.
+  const _monEvalCache =
+    (typeof window !== 'undefined' && window.SentinelEvalCache && window.SentinelEvalCache.createEvalCache())
+    || { get() { return undefined; }, set(t, h, v) { return v; }, invalidate() {} };
   // Dynamic action lists for system chips whose actions are built at runtime
   // (keyed by the 'system:<id>' ruleId so findRuleById can resolve them).
   const _dynamicSysActions = {};
@@ -1642,23 +1648,33 @@
     if (!data || data.error) return null;
     // No usable data → no chip (never a false all-clear).
     if (!Array.isArray(data.medications) || data.medications.length === 0) return null;
+    const now = new Date().toISOString();
+    const evalOpts = {
+      now,
+      problems: data.problems || [],
+      patientContext: data.patientContext || null,
+      observationHistory: data.observationHistory || []
+    };
+    // Memoise the EVALUATION (not the fetch). data was just fetched fresh above,
+    // so hashing it and reusing the last result when nothing changed skips the
+    // O(rules × observations) re-evaluation on every render WITHOUT any risk of a
+    // stale all-clear — a changed result/med/problem yields a different hash and
+    // forces a real re-evaluation. See engine/eval-cache.js.
     let chips;
+    const cache = (typeof window !== 'undefined' && window.SentinelEvalCache) || null;
+    let inputHash = null;
+    if (cache) {
+      inputHash = cache.computeInputHash(data.medications, data.observations, { ...evalOpts, rules });
+      const cached = _monEvalCache.get(monitoringToken(), inputHash);
+      if (cached !== undefined) return selectMonitoringDue(cached);
+    }
     try {
-      chips = engine.evaluatePatient(
-        data.medications || [],
-        data.observations || [],
-        rules,
-        {
-          now: new Date().toISOString(),
-          problems: data.problems || [],
-          patientContext: data.patientContext || null,
-          observationHistory: data.observationHistory || []
-        }
-      );
+      chips = engine.evaluatePatient(data.medications || [], data.observations || [], rules, evalOpts);
     } catch (e) {
       log('monitoring evaluatePatient failed', e);
       return null;
     }
+    if (cache && inputHash != null) _monEvalCache.set(monitoringToken(), inputHash, chips);
     return selectMonitoringDue(chips);
   };
 
@@ -1682,6 +1698,7 @@
     // result and any retained note before doing anything else.
     if (_lastMonitoring && _lastMonitoring.token !== token) {
       _lastMonitoring = null;
+      _monEvalCache.invalidate(); // drop all memoised evals on patient/page change
       clearMonitoringDynActions();
     }
     // Re-paint instantly from cache for the same patient — the HUD was just

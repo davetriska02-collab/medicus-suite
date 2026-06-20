@@ -20,6 +20,12 @@ import { isBloodTest, groupInstructionsByAction } from '../shared/chip-instructi
 
 // Status severity rank. 0=red, 1=severe-amber, 2=amber, 3-5=neutral/green.
 // Used here for action-needed filtering AND exported for sentinel.js rendering.
+//
+// MUST stay in lock-step with STATUS_RANK in engine/rules-engine.js — the engine
+// emits the statuses, this table ranks/filters them. A key present there but
+// missing here falls through to `?? 99` and ranks differently across surfaces
+// (e.g. a vaccine chip ranked 1 by the engine but 99 here). test-status-rank-sync.js
+// pins the two tables to deep-equality so any future drift fails CI.
 export const STATUS_RANK = {
   overdue: 0,
   not_met: 0,
@@ -32,6 +38,9 @@ export const STATUS_RANK = {
   recently_initiated: 4,
   achieved: 5,
   in_date: 5,
+  vax_given: 5,
+  vax_declined: 3,
+  vax_due: 1,
 };
 
 // Returns true if this chip status counts as action-needed (rank 0–2).

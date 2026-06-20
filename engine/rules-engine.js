@@ -186,6 +186,61 @@
     return m ? parseFloat(m[0]) : null;
   }
 
+  // === UNIT SAFETY GUARD ===
+  // Before asserting a "high"/"low" fact from an observation's numeric value, we
+  // check the observation's unit does not CONFLICT with the unit the rule expects.
+  // parseNumeric grabs the first number regardless of unit, so without this a rule
+  // thresholding potassium (mmol/L) could land on an eGFR value (mL/min) and assert
+  // a confidently-wrong alert — a wrong-direction patient-safety miss.
+  //
+  // Deliberately conservative / fail-OPEN: a conflict is reported ONLY when BOTH
+  // units are recognised AND canonicalise to DIFFERENT forms. An absent, blank, or
+  // unrecognised unit on either side is treated as "can't tell" → no conflict → the
+  // alert still fires. Suppressing a real alert because of a unit we simply don't
+  // know would itself be the silent-miss failure we guard against everywhere else.
+  const UNIT_CANON = {
+    'mmol/l': 'mmol/l',
+    'mmol/mol': 'mmol/mol',
+    'umol/l': 'umol/l',
+    'µmol/l': 'umol/l',
+    'micromol/l': 'umol/l',
+    'mcmol/l': 'umol/l',
+    'g/l': 'g/l',
+    'g/dl': 'g/dl',
+    'ng/ml': 'ng/ml',
+    'mcg/l': 'ng/ml',
+    'ug/l': 'ng/ml',
+    'µg/l': 'ng/ml',
+    'pmol/l': 'pmol/l',
+    'nmol/l': 'nmol/l',
+    'iu/l': 'iu/l',
+    'u/l': 'iu/l',
+    'units/l': 'iu/l',
+    'ml/min': 'ml/min',
+    'ml/min/1.73m2': 'ml/min',
+    'mmhg': 'mmhg',
+    '10*9/l': '10*9/l',
+    'x10^9/l': '10*9/l',
+    '10^9/l': '10*9/l',
+    '%': '%',
+  };
+  function canonUnit(u) {
+    if (u == null) return null;
+    const k = String(u)
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/²/g, '2')
+      .replace(/³/g, '3')
+      .replace(/\.$/, '');
+    return UNIT_CANON[k] || null; // unknown unit → null → "can't tell" → fail open
+  }
+  function unitsConflict(expectedUnit, actualUnit) {
+    const e = canonUnit(expectedUnit);
+    const a = canonUnit(actualUnit);
+    if (!e || !a) return false; // either side unknown/absent → fail open (fire)
+    return e !== a;
+  }
+
   // === HRT PROGESTOGEN CONTEXT ===
   // For oestrogen-triggered HRT chips, annotate with whether the patient has
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
@@ -860,7 +915,14 @@
     }
 
     const meds = data.medications || [];
-    const norm = (s) => String(s || '').toLowerCase();
+    // Use the SAME normalisation as single-drug matching (drugMatchesRule →
+    // normaliseDrugString): fold '-'/'_' to spaces and collapse whitespace.
+    // A bare .toLowerCase() here was a latent silent miss — a hyphenated drug
+    // (e.g. "co-trimoxazole", "co-amilofruse") matched a single-drug rule but
+    // NOT a drug-combo set, so an interaction alert could silently never fire
+    // while its single-drug sibling did. Keeping one normaliser makes the two
+    // paths agree (guarded by test-drug-combo-agreement.js).
+    const norm = normaliseDrugString;
 
     // Problem filters (shared helper applies negation-aware substring matching:
     // "no heart failure" / "family history of HF" no longer satisfy requiresProblem)
@@ -1258,6 +1320,13 @@
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
       }
+      // Unit safety: if the matched observation's unit conflicts with the unit
+      // this rule expects, the value is not comparable — do not assert an alert.
+      // (Fail-open: only a recognised, genuinely-different unit suppresses.)
+      if (unitsConflict(check.unit, obs.unit)) {
+        if (traceEntry) traceEntry.skipReason = 'unit-mismatch';
+        return [];
+      }
       const _withinDays = check.withinDays || 365;
       const _cutoff = new Date(now);
       _cutoff.setDate(_cutoff.getDate() - _withinDays);
@@ -1356,7 +1425,9 @@
             status = 'no_data';
           }
         } else if (check.threshold != null && check.operator) {
-          const v = parseNumeric(obs.value);
+          // Unit safety: a conflicting unit makes the value incomparable — treat
+          // as no_data rather than asserting a spurious achieved/not_met.
+          const v = unitsConflict(check.unit, obs.unit) ? null : parseNumeric(obs.value);
           if (v != null) {
             valueText = check.unit ? `${v} ${check.unit}` : String(v);
             const op = check.operator;

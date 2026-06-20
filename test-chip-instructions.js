@@ -311,8 +311,10 @@ async function runTests() {
     'sentinel: BP prefix NOT in sentinel QOF table → fallback "Book a review appointment"'
   );
 
-  // vaccine — sentinel returns null for vax_due because STATUS_RANK doesn't include it
-  // (sentinel focuses on monitoring/QOF chips; vaccine chips are rendered separately).
+  // vaccine — vax_due ranks 1 (action-needed) in sentinel-core's STATUS_RANK
+  // (pinned to the engine by test-status-rank-sync.js), so sentinel produces the
+  // SAME "Offer to book: ..." instruction as the sweep surface. Previously vax_due
+  // was missing from the rank table and this wrongly returned null — the drift fix.
   let sciVax =
     sentinelChipInstruction &&
     sentinelChipInstruction({
@@ -321,8 +323,8 @@ async function runTests() {
       displayName: 'RSV',
     });
   check(
-    sciVax === null,
-    'sentinel: vaccine with status=vax_due → null (vax_due not in STATUS_RANK, fails isChipActionNeeded)'
+    sciVax && sciVax.action === 'Offer to book: RSV',
+    'sentinel: vaccine with status=vax_due → "Offer to book: RSV" (parity with sweep)'
   );
 
   // unknown type → flag (sentinel has no "the")
