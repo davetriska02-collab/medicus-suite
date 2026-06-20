@@ -124,6 +124,12 @@
       req: ['electrolyte', 'u&e', 'urea electrolyte', 'creatinine + electrolyte'],
       rep: ['u&e', 'urea and electrolytes', 'electrolyte', 'renal profile'],
       analytes: ['sodium', 'potassium', 'urea', 'egfr', 'creatinine'],
+      // A URINE electrolytes panel (urine sodium/potassium/urea/creatinine, or a
+      // "Urine electrolytes" specimen group) shares every U&E analyte and the word
+      // "electrolyte", so it was matching — and, with auto-tick on, could wrongly
+      // clear a genuinely-outstanding BLOOD U&E. The blood panel never carries the
+      // word "urine"/"urinary", so excluding it is safe. (Reported false positive.)
+      exclude: ['urine', 'urinary'],
     },
     {
       key: 'fbc',
@@ -236,6 +242,15 @@
     },
   ];
 
+  // Does any of `def.exclude` appear (whole-token) in already-normalised `text`?
+  // An exclude hit DISQUALIFIES the def for that text — used to stop a different
+  // specimen (e.g. URINE electrolytes) matching a blood panel that shares its
+  // analyte names. Shrinks coverage, so it only ever makes the matcher MORE
+  // cautious (fail-safe: a disqualified request stays outstanding, never cleared).
+  function isExcluded(text, def) {
+    return Array.isArray(def.exclude) && def.exclude.some((t) => hasTerm(text, t));
+  }
+
   // Resolve a free-text name to a canonical key via a set of term lists.
   // `fields` selects which term arrays to consult, in order. First def with any
   // matching term wins. Returns the def or null. `defs` defaults to the built-in
@@ -245,6 +260,7 @@
     const text = norm(name);
     if (!text) return null;
     for (const def of list) {
+      if (isExcluded(text, def)) continue;
       for (const field of fields) {
         const terms = def[field];
         if (Array.isArray(terms) && terms.some((t) => hasTerm(text, t))) return def;
@@ -297,7 +313,10 @@
     }));
     const byKey = new Map(out.map((d) => [d.key, d]));
     const disabledKeys = new Set();
-    const addUnique = (target, src) => src.forEach((t) => { if (!target.includes(t)) target.push(t); });
+    const addUnique = (target, src) =>
+      src.forEach((t) => {
+        if (!target.includes(t)) target.push(t);
+      });
     (Array.isArray(userDefs) ? userDefs : []).forEach((raw) => {
       const ud = validateTestDef(raw);
       if (!ud) return;
@@ -399,6 +418,7 @@
         const text = norm(r.name);
         defs.forEach((def) => {
           if (!Array.isArray(def.analytes)) return;
+          if (isExcluded(text, def)) return; // e.g. "urine sodium" must not feed the blood U&E signature
           def.analytes.forEach((term) => {
             if (hasTerm(text, term)) {
               if (!termsByKey.has(def.key)) termsByKey.set(def.key, new Set());
@@ -471,12 +491,15 @@
         const nameText = norm(obs.name || '');
         const groupText = norm(obs.group || '');
 
-        // Group-name match: obs.group matches any panel rep or req phrase.
+        // Group-name match: obs.group matches any panel rep or req phrase (unless
+        // the group name is excluded for this panel, e.g. a urine specimen group).
         const groupHit =
-          (groupText && def.rep.some((t) => hasTerm(groupText, t))) ||
-          (groupText && def.req.some((t) => hasTerm(groupText, t)));
-        // Analyte match: obs.name matches any distinctive analyte term.
-        const analyteTerm = def.analytes.find((t) => hasTerm(nameText, t));
+          !isExcluded(groupText, def) &&
+          ((groupText && def.rep.some((t) => hasTerm(groupText, t))) ||
+            (groupText && def.req.some((t) => hasTerm(groupText, t))));
+        // Analyte match: obs.name matches any distinctive analyte term (unless the
+        // obs name is excluded for this panel, e.g. "urine sodium" vs blood U&E).
+        const analyteTerm = isExcluded(nameText, def) ? undefined : def.analytes.find((t) => hasTerm(nameText, t));
 
         if (!groupHit && !analyteTerm) return;
 

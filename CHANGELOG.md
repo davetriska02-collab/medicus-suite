@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.125.0] — 2026-06-20
+
+### Fix: urine electrolytes no longer matches a blood U&E request
+
+Reported false positive: a **urine electrolytes** report (urine
+sodium/potassium/urea/creatinine, or a "Urine electrolytes" specimen group) was
+matching outstanding **blood U&E** requests on the Outstanding Investigation
+Requests card — because it shares every U&E analyte name and the word
+"electrolyte". With auto-tick on, that could wrongly clear a genuinely-outstanding
+blood U&E (a patient-safety risk this feature exists to prevent).
+
+`engine/outstanding-match.js` gains a generic, fail-safe `exclude` mechanism on a
+test definition: an exclude-term hit disqualifies that panel for the text in hand
+(it only ever makes the matcher *more* cautious — a disqualified request stays
+outstanding, never cleared). The built-in U&E def now carries
+`exclude: ['urine', 'urinary']`; a blood U&E never contains those words, so the
+legitimate match is untouched. Applied across `resolveDef`, the report
+analyte-signature, and the patient-history enrichment. New regression tests in
+`test-outstanding-match.js` cover both the urine-vs-blood false positive and the
+genuine blood-U&E happy path.
+
+### New shipped result rules (from Dr Grundy's result-matching set)
+
+Twelve practice-authored result-interpretation rules are promoted to shipped
+built-ins so every install gets them (defaults `version` 19 → 20):
+
+- **Text (review-unless-normal):** Ultrasound, Histology, H. pylori, STI NAAT
+  (chlamydia/gonorrhoea), Stool MC&S, Vaginal thrush (genital swab), Wound swab,
+  Ear swab, EBV serology.
+- **Threshold:** FIB-4 elevated (amber ≥1.3, red ≥2.67), Low ferritin
+  (amber <60, red <15 µg/L), Low B12 (amber <180, red <110 ng/L).
+
+Each was validated against `engine/result-rules.js` and given a stable `base-*`
+id + `builtin: true` so the resultRules migration actually propagates it. Derived
+defaults copies regenerated and the config-lock refreshed.
+
+> **Not shipped (left for clinical review):** the contributor's *LDL ≥2 → red*
+> rule (cohort/secondary-prevention specific — too noisy as a global default), the
+> *DEXA* rule (uses inverted normalText/label semantics), and the *Throat – strep*
+> and *sterile pyuria* rules (already covered by existing built-ins
+> `base-throat-swab` / `base-urine-sterile-pyuria`).
+
 ## [v3.124.0] — 2026-06-20
 
 ### Sentinel clinical-content expansion via The Keeper (Phase 2 — CSO change-proposal)
@@ -88,6 +130,26 @@ deliberately deferred to a Keeper run with primary-source verification + CSO rev
   self-invalidating (any changed med/observation/problem/rule/day busts it). The memo can
   never serve a stale all-clear; `test-eval-cache.js` proves the invalidation, not just the
   hit-rate.
+## [v3.122.2] — 2026-06-20
+
+### Fix: long OIR test names pushed the Edit/× buttons off the panel
+
+Reported by a user: in the **Outstanding Requests** test-dictionary editor, an
+auto-generated custom-test row with a long, unbreakable key (e.g.
+`hum_papill_vir_dna_dtctn_assay`) or a long term summary stretched the row's text
+column past the panel edge, shoving the **Edit** and **×** action buttons out of
+view and out of reach.
+
+Two layout fixes in `content-scripts/triage-lens/options.css` /
+`content-scripts/triage-lens/options.js`:
+
+- `.tl-rule-row > *` now gets `min-width: 0` and the label/meta wrap with
+  `overflow-wrap: anywhere`, so an unbreakable token wraps instead of forcing the
+  flexible text track wider than the panel (the default grid `min-width: auto` was
+  the root cause).
+- OIR rows now use a dedicated compact 4-column grid (`.tl-rule-row-oir`) instead of
+  the shared 6-column rules grid, dropping the two empty "patterns/actions count"
+  columns whose reserved width compounded the overflow on a narrow panel.
 
 ## [v3.122.1] — 2026-06-19
 

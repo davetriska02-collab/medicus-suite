@@ -1,5 +1,5 @@
 {
-  "version": 19,
+  "version": 20,
   "rules": [
     {
       "id": "mh-crisis",
@@ -80,7 +80,7 @@
         {
           "type": "note",
           "label": "Safeguarding check",
-          "text": "Always consider:\n\u2022 Children / dependents in household \u2192 safeguarding referral threshold\n\u2022 Mental Capacity Assessment\n\u2022 Document risk assessment in full\n\u2022 Crisis team contact readily available\n\u2022 Clear follow-up plan with named clinician"
+          "text": "Always consider:\n• Children / dependents in household → safeguarding referral threshold\n• Mental Capacity Assessment\n• Document risk assessment in full\n• Crisis team contact readily available\n• Clear follow-up plan with named clinician"
         }
       ]
     },
@@ -177,7 +177,7 @@
         {
           "type": "note",
           "label": "Documentation",
-          "text": "Safeguarding considerations:\n\u2022 Notify practice safeguarding lead\n\u2022 MARAC / DASH risk assessment if DV suspected\n\u2022 Code in record (Safeguarding adult / child concern)\n\u2022 Document concerns verbatim\n\u2022 Information sharing per local policy\n\u2022 Children in household \u2014 separate referral if at risk"
+          "text": "Safeguarding considerations:\n• Notify practice safeguarding lead\n• MARAC / DASH risk assessment if DV suspected\n• Code in record (Safeguarding adult / child concern)\n• Document concerns verbatim\n• Information sharing per local policy\n• Children in household — separate referral if at risk"
         }
       ]
     },
@@ -277,12 +277,12 @@
         {
           "type": "note",
           "label": "Acute pathway",
-          "text": "If acute / ongoing pain \u2192 999.\n\nIf resolved:\n\u2022 Onset, duration, character, radiation, exertion-related?\n\u2022 Cardiac risk factors: age, smoker, FH, DM, lipids, BP, prior CVD\n\u2022 Associated: SOB, sweating, N&V, syncope\n\u2022 Differential: ACS, PE, dissection, pericarditis, GORD, MSK, anxiety\n\nThresholds:\n\u2022 HEART score for risk stratification\n\u2022 Same-day clinical assessment if any concerning features"
+          "text": "If acute / ongoing pain → 999.\n\nIf resolved:\n• Onset, duration, character, radiation, exertion-related?\n• Cardiac risk factors: age, smoker, FH, DM, lipids, BP, prior CVD\n• Associated: SOB, sweating, N&V, syncope\n• Differential: ACS, PE, dissection, pericarditis, GORD, MSK, anxiety\n\nThresholds:\n• HEART score for risk stratification\n• Same-day clinical assessment if any concerning features"
         },
         {
           "type": "snippet",
           "label": "HEART score template",
-          "text": "HEART score:\n- History (suspicious 0/1/2):\n- ECG (normal / non-spec / abnormal 0/1/2):\n- Age (<45 / 45-64 / >65 = 0/1/2):\n- Risk factors (count: 0 / 1-2 / 3+ or known CVD = 0/1/2):\n- Troponin (norm / 1-3x / >3x ULN = 0/1/2):\n\nTotal: __\n0-3 = low risk \u00b7 4-6 = moderate \u00b7 7-10 = high"
+          "text": "HEART score:\n- History (suspicious 0/1/2):\n- ECG (normal / non-spec / abnormal 0/1/2):\n- Age (<45 / 45-64 / >65 = 0/1/2):\n- Risk factors (count: 0 / 1-2 / 3+ or known CVD = 0/1/2):\n- Troponin (norm / 1-3x / >3x ULN = 0/1/2):\n\nTotal: __\n0-3 = low risk · 4-6 = moderate · 7-10 = high"
         }
       ]
     },
@@ -351,7 +351,7 @@
         {
           "type": "note",
           "label": "Emergency MRI",
-          "text": "Suspected cauda equina = same-day emergency MRI.\n\nRed flags (any):\n\u2022 Bilateral sciatica\n\u2022 Saddle anaesthesia / paraesthesia\n\u2022 Bladder dysfunction (retention / overflow)\n\u2022 Bowel incontinence / loss of anal tone\n\u2022 Sexual dysfunction\n\nAction:\n\u2022 Discuss with on-call neurosurgery / spinal team\n\u2022 Direct ED referral if no urgent MRI access\n\u2022 Document neuro exam including PR if appropriate"
+          "text": "Suspected cauda equina = same-day emergency MRI.\n\nRed flags (any):\n• Bilateral sciatica\n• Saddle anaesthesia / paraesthesia\n• Bladder dysfunction (retention / overflow)\n• Bowel incontinence / loss of anal tone\n• Sexual dysfunction\n\nAction:\n• Discuss with on-call neurosurgery / spinal team\n• Direct ED referral if no urgent MRI access\n• Document neuro exam including PR if appropriate"
         }
       ]
     },
@@ -423,7 +423,7 @@
         {
           "type": "note",
           "label": "SAH pathway",
-          "text": "Thunderclap headache \u2192 consider SAH.\n\n\u2022 Maximum intensity within seconds-minutes\n\u2022 Same-day CT head (CT >95% sensitive within 6h)\n\u2022 If CT negative & onset <6h, may exclude\n\u2022 If onset >6h or symptoms ongoing, LP at 12h\n\nOther differentials: cervical artery dissection, RCVS, pituitary apoplexy, venous sinus thrombosis.\n\nAction: same-day ED referral."
+          "text": "Thunderclap headache → consider SAH.\n\n• Maximum intensity within seconds-minutes\n• Same-day CT head (CT >95% sensitive within 6h)\n• If CT negative & onset <6h, may exclude\n• If onset >6h or symptoms ongoing, LP at 12h\n\nOther differentials: cervical artery dissection, RCVS, pituitary apoplexy, venous sinus thrombosis.\n\nAction: same-day ED referral."
         }
       ]
     },
@@ -494,12 +494,12 @@
         {
           "type": "note",
           "label": "Acute pathway",
-          "text": "Suspected upper / lower GI bleed.\n\n\u2022 Haemodynamics: HR, BP, lying/standing\n\u2022 Anticoagulants / antiplatelets / NSAIDs\n\u2022 Liver disease / known varices\n\u2022 Glasgow-Blatchford for upper GI bleed\n\nAction:\n\u2022 Acute / unstable \u2192 999\n\u2022 Stable + suspicious \u2192 same-day medical admission\n\u2022 Painless rectal bleeding > 50y \u2192 2WW colorectal"
+          "text": "Suspected upper / lower GI bleed.\n\n• Haemodynamics: HR, BP, lying/standing\n• Anticoagulants / antiplatelets / NSAIDs\n• Liver disease / known varices\n• Glasgow-Blatchford for upper GI bleed\n\nAction:\n• Acute / unstable → 999\n• Stable + suspicious → same-day medical admission\n• Painless rectal bleeding > 50y → 2WW colorectal"
         },
         {
           "type": "snippet",
           "label": "Glasgow-Blatchford template",
-          "text": "Glasgow-Blatchford:\n- Urea (mmol/L):\n- Hb (g/L):\n- Systolic BP:\n- Pulse \u2265100:\n- Melaena:\n- Syncope:\n- Hepatic disease:\n- Cardiac failure:\n\nScore: __\n0 = consider outpatient \u00b7 \u22651 = admit"
+          "text": "Glasgow-Blatchford:\n- Urea (mmol/L):\n- Hb (g/L):\n- Systolic BP:\n- Pulse ≥100:\n- Melaena:\n- Syncope:\n- Hepatic disease:\n- Cardiac failure:\n\nScore: __\n0 = consider outpatient · ≥1 = admit"
         }
       ]
     },
@@ -534,7 +534,7 @@
         {
           "type": "note",
           "label": "DMARD monitoring",
-          "text": "Methotrexate monitoring (NICE / BSR):\n\n\u2022 FBC + U&E + LFT every 12 weeks (or 4-weekly if dose change / new abnormalities)\n\u2022 Annual chest X-ray if respiratory symptoms\n\u2022 Pneumococcal + annual flu vaccine\n\u2022 Folic acid 5mg weekly (\u226524h after MTX)\n\nWarnings:\n\u2022 Teratogenic \u2014 6mo washout F, 3mo M before conception\n\u2022 Hepatotoxic \u2014 alcohol limits\n\u2022 Pulmonary toxicity \u2014 investigate any new SOB / dry cough\n\u2022 Drug interactions \u2014 esp. trimethoprim, NSAIDs (caution)"
+          "text": "Methotrexate monitoring (NICE / BSR):\n\n• FBC + U&E + LFT every 12 weeks (or 4-weekly if dose change / new abnormalities)\n• Annual chest X-ray if respiratory symptoms\n• Pneumococcal + annual flu vaccine\n• Folic acid 5mg weekly (≥24h after MTX)\n\nWarnings:\n• Teratogenic — 6mo washout F, 3mo M before conception\n• Hepatotoxic — alcohol limits\n• Pulmonary toxicity — investigate any new SOB / dry cough\n• Drug interactions — esp. trimethoprim, NSAIDs (caution)"
         },
         {
           "type": "snippet",
@@ -572,7 +572,7 @@
         {
           "type": "note",
           "label": "Lithium monitoring",
-          "text": "Lithium monitoring (NICE):\n\n\u2022 Level 12h post-dose, 3-monthly (more often if dose change, illness, drug interaction)\n\u2022 U&E + TFT + Ca every 6 months\n\u2022 Target range typically 0.6-0.8 mmol/L (0.4-1.0 acceptable)\n\u2022 Toxicity above 1.5 mmol/L\n\nCommon traps:\n\u2022 Dehydration / D&V \u2192 toxicity\n\u2022 NSAIDs, ACEi, thiazides \u2191 levels\n\u2022 Pregnancy considerations \u2014 specialist advice\n\u2022 Hypothyroidism long-term"
+          "text": "Lithium monitoring (NICE):\n\n• Level 12h post-dose, 3-monthly (more often if dose change, illness, drug interaction)\n• U&E + TFT + Ca every 6 months\n• Target range typically 0.6-0.8 mmol/L (0.4-1.0 acceptable)\n• Toxicity above 1.5 mmol/L\n\nCommon traps:\n• Dehydration / D&V → toxicity\n• NSAIDs, ACEi, thiazides ↑ levels\n• Pregnancy considerations — specialist advice\n• Hypothyroidism long-term"
         }
       ]
     },
@@ -616,7 +616,7 @@
         {
           "type": "note",
           "label": "Anticoag review",
-          "text": "Annual anticoagulant review:\n\n\u2022 Indication still valid?\n\u2022 Renal function \u2014 dose adjustment for DOACs\n\u2022 Bleeding risk reassessment (HAS-BLED, ORBIT)\n\u2022 CHA\u2082DS\u2082-VASc for AF (consider stopping if low risk)\n\u2022 Patient knows what to do if a dose is missed\n\u2022 Has Yellow Book / DOAC alert card\n\u2022 Interacting meds review (esp. NSAIDs, antibiotics, antifungals)\n\u2022 Bleeding episodes \u2014 frequency, severity, source\n\u2022 Falls risk if elderly"
+          "text": "Annual anticoagulant review:\n\n• Indication still valid?\n• Renal function — dose adjustment for DOACs\n• Bleeding risk reassessment (HAS-BLED, ORBIT)\n• CHA₂DS₂-VASc for AF (consider stopping if low risk)\n• Patient knows what to do if a dose is missed\n• Has Yellow Book / DOAC alert card\n• Interacting meds review (esp. NSAIDs, antibiotics, antifungals)\n• Bleeding episodes — frequency, severity, source\n• Falls risk if elderly"
         }
       ]
     },
@@ -671,7 +671,7 @@
         {
           "type": "snippet",
           "label": "UTI history & exam",
-          "text": "UTI history:\n- Dysuria / frequency / urgency:\n- Suprapubic pain / loin pain:\n- Duration of symptoms:\n- Fever / rigors / vomiting:\n- Vaginal discharge:\n- Sexually active / new partner:\n- Pregnancy possible:\n- Catheter / structural abnormality:\n- Recent abx / hospitalisation:\n- Recurrence (\u22653 in 12mo or \u22652 in 6mo):\n- Diabetes / immunosuppression:\n\nO/E:\n- Vitals (sepsis screen):\n- Abdominal exam:\n- Loin tenderness:\n- (Dipstick: not for \u226565y or catheterised):\n\nPlan:\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\n- 2nd line: pivmecillinam / fosfomycin\n- Pyelonephritis features \u2192 admit / IV abx"
+          "text": "UTI history:\n- Dysuria / frequency / urgency:\n- Suprapubic pain / loin pain:\n- Duration of symptoms:\n- Fever / rigors / vomiting:\n- Vaginal discharge:\n- Sexually active / new partner:\n- Pregnancy possible:\n- Catheter / structural abnormality:\n- Recent abx / hospitalisation:\n- Recurrence (≥3 in 12mo or ≥2 in 6mo):\n- Diabetes / immunosuppression:\n\nO/E:\n- Vitals (sepsis screen):\n- Abdominal exam:\n- Loin tenderness:\n- (Dipstick: not for ≥65y or catheterised):\n\nPlan:\n- 1st line: nitrofurantoin or trimethoprim per local sensitivity\n- 2nd line: pivmecillinam / fosfomycin\n- Pyelonephritis features → admit / IV abx"
         },
         {
           "type": "link",
@@ -681,7 +681,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (UTI)",
-          "text": "Consider Pharmacy First \u2014 uncomplicated lower UTI, women aged 16\u201364, not pregnant. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: pregnant, male, <16 or >64, recurrent UTI, catheter, immunosuppressed, suspected pyelonephritis (fever, loin/back pain, rigors, vomiting), visible haematuria, or not improving in 48h."
+          "text": "Consider Pharmacy First — uncomplicated lower UTI, women aged 16–64, not pregnant. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: pregnant, male, <16 or >64, recurrent UTI, catheter, immunosuppressed, suspected pyelonephritis (fever, loin/back pain, rigors, vomiting), visible haematuria, or not improving in 48h."
         }
       ]
     },
@@ -709,7 +709,7 @@
         {
           "type": "note",
           "label": "Airway emergency",
-          "text": "Suspected adult epiglottitis / supraglottitis \u2192 999 / same-day ED.\n\nRed flags (any): drooling or unable to swallow saliva, muffled \u201chot potato\u201d voice, stridor, sitting forward to breathe, severe sore throat with a normal-looking oropharynx, rapid deterioration.\n\nAction:\n\u2022 Do NOT attempt to examine the throat or use a tongue depressor \u2014 risk of precipitating airway obstruction\n\u2022 Keep the patient sitting upright; do not lie flat\n\u2022 999 transfer / immediate ENT-anaesthetics involvement\n\u2022 Differential: quinsy, deep neck-space infection, anaphylaxis"
+          "text": "Suspected adult epiglottitis / supraglottitis → 999 / same-day ED.\n\nRed flags (any): drooling or unable to swallow saliva, muffled “hot potato” voice, stridor, sitting forward to breathe, severe sore throat with a normal-looking oropharynx, rapid deterioration.\n\nAction:\n• Do NOT attempt to examine the throat or use a tongue depressor — risk of precipitating airway obstruction\n• Keep the patient sitting upright; do not lie flat\n• 999 transfer / immediate ENT-anaesthetics involvement\n• Differential: quinsy, deep neck-space infection, anaphylaxis"
         }
       ]
     },
@@ -752,7 +752,7 @@
         {
           "type": "snippet",
           "label": "FeverPAIN scoring",
-          "text": "FeverPAIN score (1 point each):\n- Fever in last 24h:\n- Purulence (tonsils):\n- Attended within 3 days of onset:\n- Inflamed tonsils (severe):\n- No cough or coryza:\n\nTotal: __\n0-1: 13-18% strep \u2014 no abx, self-care\n2-3: 34-40% strep \u2014 delayed abx (3d) or no abx\n4-5: 62-65% strep \u2014 immediate abx\n\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"
+          "text": "FeverPAIN score (1 point each):\n- Fever in last 24h:\n- Purulence (tonsils):\n- Attended within 3 days of onset:\n- Inflamed tonsils (severe):\n- No cough or coryza:\n\nTotal: __\n0-1: 13-18% strep — no abx, self-care\n2-3: 34-40% strep — delayed abx (3d) or no abx\n4-5: 62-65% strep — immediate abx\n\nAbx of choice: phenoxymethylpenicillin 500mg QDS 5-10d (clarithromycin if pen-allergic)"
         },
         {
           "type": "link",
@@ -762,7 +762,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (sore throat)",
-          "text": "Consider Pharmacy First \u2014 acute sore throat, age 5+. Pharmacist applies FeverPAIN.\n\nSafety-net / urgent: difficulty breathing, difficulty swallowing saliva, drooling, muffled \u201chot potato\u201d voice, stridor, neck stiffness, systemically very unwell, or immunosuppressed \u2192 same-day assessment (?quinsy / epiglottitis)."
+          "text": "Consider Pharmacy First — acute sore throat, age 5+. Pharmacist applies FeverPAIN.\n\nSafety-net / urgent: difficulty breathing, difficulty swallowing saliva, drooling, muffled “hot potato” voice, stridor, neck stiffness, systemically very unwell, or immunosuppressed → same-day assessment (?quinsy / epiglottitis)."
         }
       ]
     },
@@ -809,7 +809,7 @@
         {
           "type": "snippet",
           "label": "OM history & exam",
-          "text": "Otitis media history:\n- Onset / duration:\n- Fever / unwell:\n- Otalgia laterality:\n- Discharge / hearing loss:\n- Recent URTI:\n- Recurrent OM (\u22653 in 6mo or \u22654/yr):\n- Eardrum perforation history:\n- Grommets:\n\nO/E:\n- TM appearance: bulging / erythematous / dull / perforated / effusion\n- Mastoid tenderness:\n- General \u2014 temp, fluid intake:\n\nPlan:\n- Most resolve in 3 days, paracetamol / ibuprofen\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"
+          "text": "Otitis media history:\n- Onset / duration:\n- Fever / unwell:\n- Otalgia laterality:\n- Discharge / hearing loss:\n- Recent URTI:\n- Recurrent OM (≥3 in 6mo or ≥4/yr):\n- Eardrum perforation history:\n- Grommets:\n\nO/E:\n- TM appearance: bulging / erythematous / dull / perforated / effusion\n- Mastoid tenderness:\n- General — temp, fluid intake:\n\nPlan:\n- Most resolve in 3 days, paracetamol / ibuprofen\n- Abx if: <2y bilateral, perforation + discharge, systemically unwell, deteriorating\n- Amoxicillin 5-7d (clarithromycin if pen-allergic)\n- Safety net: persistent fever 3-4d, mastoid swelling, hearing loss >2-4w"
         },
         {
           "type": "link",
@@ -819,7 +819,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (otitis media)",
-          "text": "Consider Pharmacy First \u2014 acute otitis media, age 1\u201317. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: <1y or >17y, systemically very unwell, immunosuppressed, suspected mastoiditis (swelling/redness behind the ear), or symptoms not improving after 3 days."
+          "text": "Consider Pharmacy First — acute otitis media, age 1–17. If eligible, signpost to community pharmacy.\n\nNot suitable / safety-net: <1y or >17y, systemically very unwell, immunosuppressed, suspected mastoiditis (swelling/redness behind the ear), or symptoms not improving after 3 days."
         }
       ]
     },
@@ -859,7 +859,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (sinusitis)",
-          "text": "Consider Pharmacy First \u2014 acute sinusitis, age 12+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: symptoms >10 days, swelling or redness around the eye, double vision, severe frontal headache, photophobia, neck stiffness, or systemically very unwell."
+          "text": "Consider Pharmacy First — acute sinusitis, age 12+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: symptoms >10 days, swelling or redness around the eye, double vision, severe frontal headache, photophobia, neck stiffness, or systemically very unwell."
         }
       ]
     },
@@ -903,7 +903,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (infected insect bite)",
-          "text": "Consider Pharmacy First \u2014 infected insect bite, age 1+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: rapidly spreading redness, fever or systemic illness, suspected cellulitis, bite near the eye, or breathing difficulty / facial swelling suggesting anaphylaxis \u2192 emergency."
+          "text": "Consider Pharmacy First — infected insect bite, age 1+. If eligible, signpost to community pharmacy.\n\nSafety-net / urgent: rapidly spreading redness, fever or systemic illness, suspected cellulitis, bite near the eye, or breathing difficulty / facial swelling suggesting anaphylaxis → emergency."
         }
       ]
     },
@@ -940,7 +940,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (impetigo)",
-          "text": "Consider Pharmacy First \u2014 impetigo, age 1+ (non-bullous, localised). If eligible, signpost to community pharmacy.\n\nNot suitable / refer: bullous impetigo, widespread or recurrent, systemically unwell, immunosuppressed, or not improving with treatment."
+          "text": "Consider Pharmacy First — impetigo, age 1+ (non-bullous, localised). If eligible, signpost to community pharmacy.\n\nNot suitable / refer: bullous impetigo, widespread or recurrent, systemically unwell, immunosuppressed, or not improving with treatment."
         }
       ]
     },
@@ -979,7 +979,7 @@
         {
           "type": "snippet",
           "label": "Pharmacy First referral (shingles)",
-          "text": "Consider Pharmacy First \u2014 shingles, age 18+. Antiviral most effective within 72h of rash onset.\n\nUrgent / not suitable for PF: eye involvement or rash on the tip of the nose (Hutchinson\u2019s sign \u2014 ?ophthalmic zoster), immunocompromised, pregnant, severe / widespread / disseminated rash, or signs of complications."
+          "text": "Consider Pharmacy First — shingles, age 18+. Antiviral most effective within 72h of rash onset.\n\nUrgent / not suitable for PF: eye involvement or rash on the tip of the nose (Hutchinson’s sign — ?ophthalmic zoster), immunocompromised, pregnant, severe / widespread / disseminated rash, or signs of complications."
         }
       ]
     },
@@ -1038,7 +1038,7 @@
         {
           "type": "snippet",
           "label": "Back pain assessment",
-          "text": "Back pain \u2014 red flags (refer urgently):\n- Cauda equina (saddle anaesthesia, bladder/bowel)\n- Significant trauma\n- Age <20 or >55 new onset\n- Progressive neurological deficit\n- Fever / weight loss / night pain (cancer/infection)\n- IVDU / immunosuppression\n- History of malignancy\n- Severe progressive limb weakness\n\nYellow flags (psychosocial):\n- Belief pain is harmful\n- Avoidance behaviour\n- Low mood / withdrawal\n- Job dissatisfaction\n- Compensation/legal issues\n\nManagement (no red flags):\n- Stay active, return to normal activities\n- Analgesia: NSAIDs first-line (with PPI cover if indicated)\n- Avoid opioids and gabapentinoids for non-specific LBP\n- Refer to physio / MSK if not improving in 4-6 weeks"
+          "text": "Back pain — red flags (refer urgently):\n- Cauda equina (saddle anaesthesia, bladder/bowel)\n- Significant trauma\n- Age <20 or >55 new onset\n- Progressive neurological deficit\n- Fever / weight loss / night pain (cancer/infection)\n- IVDU / immunosuppression\n- History of malignancy\n- Severe progressive limb weakness\n\nYellow flags (psychosocial):\n- Belief pain is harmful\n- Avoidance behaviour\n- Low mood / withdrawal\n- Job dissatisfaction\n- Compensation/legal issues\n\nManagement (no red flags):\n- Stay active, return to normal activities\n- Analgesia: NSAIDs first-line (with PPI cover if indicated)\n- Avoid opioids and gabapentinoids for non-specific LBP\n- Refer to physio / MSK if not improving in 4-6 weeks"
         }
       ]
     },
@@ -1112,17 +1112,17 @@
         {
           "type": "note",
           "label": "Resp red flags",
-          "text": "Cough / breathlessness \u2014 concerning features:\n\u2022 Haemoptysis\n\u2022 Weight loss / night sweats\n\u2022 Smoker / ex-smoker, esp. age >40\n\u2022 Persistent cough >3 weeks\n\u2022 Hoarseness >3 weeks\n\u2022 Acute onset breathlessness (PE / pneumothorax)\n\u2022 Tachypnoea, hypoxia, accessory muscle use\n\u2022 Single-lobe / focal signs\n\u2022 Failure to respond to abx\n\nThresholds:\n\u2022 Same-day F2F if any red flag, hypoxia, or systemic unwellness\n\u2022 2WW chest if haemoptysis + age >40, or persistent cough + smoker"
+          "text": "Cough / breathlessness — concerning features:\n• Haemoptysis\n• Weight loss / night sweats\n• Smoker / ex-smoker, esp. age >40\n• Persistent cough >3 weeks\n• Hoarseness >3 weeks\n• Acute onset breathlessness (PE / pneumothorax)\n• Tachypnoea, hypoxia, accessory muscle use\n• Single-lobe / focal signs\n• Failure to respond to abx\n\nThresholds:\n• Same-day F2F if any red flag, hypoxia, or systemic unwellness\n• 2WW chest if haemoptysis + age >40, or persistent cough + smoker"
         },
         {
           "type": "snippet",
           "label": "Resp assessment",
-          "text": "Respiratory presentation:\n- Onset / duration:\n- Cough: dry / productive (colour, consistency):\n- Haemoptysis:\n- Breathlessness \u2014 exertional / rest, MRC grade:\n- Wheeze:\n- Fever, night sweats, weight loss:\n- Chest pain \u2014 pleuritic / cardiac:\n- PE risk: travel, immobility, surgery, OCP, malignancy, leg swelling:\n- Smoking pack-years:\n- Asthma / COPD:\n\nO/E:\n- Vitals: HR, BP, RR, sats, temp:\n- WOB / accessory muscles:\n- Chest exam:\n- PEFR (if asthma):\n\nPlan:"
+          "text": "Respiratory presentation:\n- Onset / duration:\n- Cough: dry / productive (colour, consistency):\n- Haemoptysis:\n- Breathlessness — exertional / rest, MRC grade:\n- Wheeze:\n- Fever, night sweats, weight loss:\n- Chest pain — pleuritic / cardiac:\n- PE risk: travel, immobility, surgery, OCP, malignancy, leg swelling:\n- Smoking pack-years:\n- Asthma / COPD:\n\nO/E:\n- Vitals: HR, BP, RR, sats, temp:\n- WOB / accessory muscles:\n- Chest exam:\n- PEFR (if asthma):\n\nPlan:"
         },
         {
           "type": "note",
           "label": "Asthma control (RCP3Q)",
-          "text": "RCP 3 Questions (any \u201cyes\u201d = poor control \u2192 review):\n1. Recent sleep disturbance from asthma?\n2. Usual daytime symptoms (cough/wheeze/tight chest)?\n3. Interference with usual activity?\n\nReliever use \u22653\u00d7/week or any night waking = uncontrolled \u2192 inhaler technique + adherence + step-up review.\n\nACUTE SEVERE (same-day): PEF 33\u201350% best, can\u2019t complete sentences, RR \u226525, HR \u2265110.\nLIFE-THREATENING (999): PEF <33%, silent chest, cyanosis, exhaustion, SpO\u2082 <92%.\nAfter any attack: steroid course completed? Follow-up within 48h."
+          "text": "RCP 3 Questions (any “yes” = poor control → review):\n1. Recent sleep disturbance from asthma?\n2. Usual daytime symptoms (cough/wheeze/tight chest)?\n3. Interference with usual activity?\n\nReliever use ≥3×/week or any night waking = uncontrolled → inhaler technique + adherence + step-up review.\n\nACUTE SEVERE (same-day): PEF 33–50% best, can’t complete sentences, RR ≥25, HR ≥110.\nLIFE-THREATENING (999): PEF <33%, silent chest, cyanosis, exhaustion, SpO₂ <92%.\nAfter any attack: steroid course completed? Follow-up within 48h."
         }
       ]
     },
@@ -1200,7 +1200,7 @@
         {
           "type": "snippet",
           "label": "7-point checklist",
-          "text": "Weighted 7-point checklist for pigmented lesion (refer 2WW if score \u22653 OR any major):\n\nMajor (2 points each):\n- Change in size:\n- Irregular shape:\n- Irregular colour:\n\nMinor (1 point each):\n- Largest diameter \u22657mm:\n- Inflammation:\n- Oozing / bleeding:\n- Change in sensation (itch):\n\nTotal: __\n\nLesion description:\n- Site:\n- Diameter:\n- Colour:\n- Border:\n- Evolution (timeline):\n- Symptoms:\n- ABCDE: Asymmetry / Border / Colour / Diameter / Evolving:\n\nPhoto on record? Y/N"
+          "text": "Weighted 7-point checklist for pigmented lesion (refer 2WW if score ≥3 OR any major):\n\nMajor (2 points each):\n- Change in size:\n- Irregular shape:\n- Irregular colour:\n\nMinor (1 point each):\n- Largest diameter ≥7mm:\n- Inflammation:\n- Oozing / bleeding:\n- Change in sensation (itch):\n\nTotal: __\n\nLesion description:\n- Site:\n- Diameter:\n- Colour:\n- Border:\n- Evolution (timeline):\n- Symptoms:\n- ABCDE: Asymmetry / Border / Colour / Diameter / Evolving:\n\nPhoto on record? Y/N"
         }
       ]
     },
@@ -1304,7 +1304,7 @@
         {
           "type": "snippet",
           "label": "MH consultation",
-          "text": "MH presentation:\n- Onset / duration / triggers:\n- Symptoms (mood, anhedonia, sleep, appetite, energy, concentration):\n- Anxiety symptoms / panic:\n- Functional impact (work, relationships, self-care):\n- Risk: thoughts of self-harm / suicide / harm to others:\n- Substance use:\n- Past MH history / family history:\n- Social context: housing, finances, support network:\n- Recent losses / life events:\n- PHQ-9: __ / GAD-7: __\n\nPlan:\n- Self-help / IAPT / counselling\n- SSRI if moderate-severe (caution under 25 \u2014 review 2 weekly):\n- Safety net + follow-up:"
+          "text": "MH presentation:\n- Onset / duration / triggers:\n- Symptoms (mood, anhedonia, sleep, appetite, energy, concentration):\n- Anxiety symptoms / panic:\n- Functional impact (work, relationships, self-care):\n- Risk: thoughts of self-harm / suicide / harm to others:\n- Substance use:\n- Past MH history / family history:\n- Social context: housing, finances, support network:\n- Recent losses / life events:\n- PHQ-9: __ / GAD-7: __\n\nPlan:\n- Self-help / IAPT / counselling\n- SSRI if moderate-severe (caution under 25 — review 2 weekly):\n- Safety net + follow-up:"
         }
       ]
     },
@@ -1348,12 +1348,12 @@
         {
           "type": "note",
           "label": "Post-discharge checklist",
-          "text": "After hospital discharge \u2014 review:\n\n\u2022 Medication reconciliation (new / changed / stopped)\n\u2022 Follow-up appointments booked?\n\u2022 Outstanding investigations / results pending?\n\u2022 Self-monitoring / safety-net advice given?\n\u2022 District nurse / community support arranged?\n\u2022 Social: home situation, carer, equipment\n\u2022 Code recent admission in record\n\u2022 Update problem list and registers (e.g. HF, COPD, AF post-MI)\n\u2022 Consider proactive care plan if frail / multimorbid"
+          "text": "After hospital discharge — review:\n\n• Medication reconciliation (new / changed / stopped)\n• Follow-up appointments booked?\n• Outstanding investigations / results pending?\n• Self-monitoring / safety-net advice given?\n• District nurse / community support arranged?\n• Social: home situation, carer, equipment\n• Code recent admission in record\n• Update problem list and registers (e.g. HF, COPD, AF post-MI)\n• Consider proactive care plan if frail / multimorbid"
         },
         {
           "type": "snippet",
           "label": "Post-discharge review",
-          "text": "Post-discharge review:\n\nAdmission:\n- Dates:\n- Diagnoses:\n- Procedures:\n- Discharge medications (new/changed):\n- Follow-up planned:\n\nReview today:\n- Recovery progress:\n- Symptoms \u2014 concerning / improving:\n- Pain control:\n- Mobility / ADLs:\n- Med compliance / side effects:\n- Outstanding actions chased:\n- Safety net advice:"
+          "text": "Post-discharge review:\n\nAdmission:\n- Dates:\n- Diagnoses:\n- Procedures:\n- Discharge medications (new/changed):\n- Follow-up planned:\n\nReview today:\n- Recovery progress:\n- Symptoms — concerning / improving:\n- Pain control:\n- Mobility / ADLs:\n- Med compliance / side effects:\n- Outstanding actions chased:\n- Safety net advice:"
         }
       ]
     },
@@ -1447,7 +1447,7 @@
         {
           "type": "snippet",
           "label": "Fit note template",
-          "text": "Med3 considerations:\n\n- Diagnosis (the condition affecting work):\n- Functional limitations (what can / can't do):\n- Duration: <3mo (any duration) / >3mo (max 3mo):\n- 'Not fit' or 'May be fit' (consider phased return / amended duties / altered hours / workplace adaptations):\n- Assessment date and end date:\n- Comments / advice to employer:\n\nFor mental health:\n- Avoid jargon \u2014 concrete functional language\n- Consider OH referral / IAPT signposting\n\nFor MSK:\n- Active management plan\n- Avoid bed rest > 1-2 days"
+          "text": "Med3 considerations:\n\n- Diagnosis (the condition affecting work):\n- Functional limitations (what can / can't do):\n- Duration: <3mo (any duration) / >3mo (max 3mo):\n- 'Not fit' or 'May be fit' (consider phased return / amended duties / altered hours / workplace adaptations):\n- Assessment date and end date:\n- Comments / advice to employer:\n\nFor mental health:\n- Avoid jargon — concrete functional language\n- Consider OH referral / IAPT signposting\n\nFor MSK:\n- Active management plan\n- Avoid bed rest > 1-2 days"
         }
       ]
     },
@@ -1557,7 +1557,7 @@
         {
           "type": "note",
           "label": "FAST pathway",
-          "text": "Suspected stroke (FAST: Face droop / Arm weakness / Speech / Time) with symptoms NOW or within hours \u2192 999. Thrombolysis & thrombectomy are time-critical.\n\nResolved deficit (?TIA): high early stroke risk \u2014 aspirin 300mg (unless contraindicated) + specialist TIA-clinic assessment within 24h (NICE NG128). Do NOT \u201cwait and see\u201d.\n\nMimics (hypo, migraine aura, Bell\u2019s palsy) \u2014 treat as stroke until assessed."
+          "text": "Suspected stroke (FAST: Face droop / Arm weakness / Speech / Time) with symptoms NOW or within hours → 999. Thrombolysis & thrombectomy are time-critical.\n\nResolved deficit (?TIA): high early stroke risk — aspirin 300mg (unless contraindicated) + specialist TIA-clinic assessment within 24h (NICE NG128). Do NOT “wait and see”.\n\nMimics (hypo, migraine aura, Bell’s palsy) — treat as stroke until assessed."
         },
         {
           "type": "link",
@@ -1605,7 +1605,7 @@
         {
           "type": "note",
           "label": "Sepsis screen",
-          "text": "Could this be sepsis? (NICE NG51 risk stratification.)\n\nHigh-risk features \u2192 999 / immediate F2F:\n\u2022 New altered mental state / hard to rouse\n\u2022 Mottled, ashen or cyanosed skin; non-blanching rash\n\u2022 RR \u226525, new O\u2082 requirement\n\u2022 HR \u2265130, SBP \u226490\n\u2022 Not passed urine in 18h\n\u2022 Rigors / uncontrollable shaking with fever\n\nRemember NEUTROPENIC sepsis: chemotherapy in last 6 weeks + fever = emergency admission, no delays."
+          "text": "Could this be sepsis? (NICE NG51 risk stratification.)\n\nHigh-risk features → 999 / immediate F2F:\n• New altered mental state / hard to rouse\n• Mottled, ashen or cyanosed skin; non-blanching rash\n• RR ≥25, new O₂ requirement\n• HR ≥130, SBP ≤90\n• Not passed urine in 18h\n• Rigors / uncontrollable shaking with fever\n\nRemember NEUTROPENIC sepsis: chemotherapy in last 6 weeks + fever = emergency admission, no delays."
         },
         {
           "type": "link",
@@ -1650,7 +1650,7 @@
         {
           "type": "note",
           "label": "Anaphylaxis pathway",
-          "text": "Airway/breathing/circulation involvement with an allergic trigger = anaphylaxis.\n\n\u2022 999 immediately\n\u2022 IM adrenaline 1:1000, 500 micrograms (adult) anterolateral thigh; repeat after 5 min if no improvement\n\u2022 Lie flat, raise legs (sit up only if breathing difficulty); do NOT stand the patient up\n\u2022 After emergency treatment: ensure 2 adrenaline auto-injectors carried + specialist allergy-clinic referral\n\nRash/itch alone without airway, breathing or circulation features is not anaphylaxis \u2014 antihistamine + safety-net."
+          "text": "Airway/breathing/circulation involvement with an allergic trigger = anaphylaxis.\n\n• 999 immediately\n• IM adrenaline 1:1000, 500 micrograms (adult) anterolateral thigh; repeat after 5 min if no improvement\n• Lie flat, raise legs (sit up only if breathing difficulty); do NOT stand the patient up\n• After emergency treatment: ensure 2 adrenaline auto-injectors carried + specialist allergy-clinic referral\n\nRash/itch alone without airway, breathing or circulation features is not anaphylaxis — antihistamine + safety-net."
         },
         {
           "type": "link",
@@ -1700,7 +1700,7 @@
         {
           "type": "note",
           "label": "Meningitis / meningococcal",
-          "text": "Fever + any of: non-blanching/petechial rash, neck stiffness, photophobia, new confusion or drowsiness \u2192 999 (NICE NG240, 2024).\n\n\u2022 Non-blanching rash + fever = meningococcal sepsis until proven otherwise (may occur WITHOUT meningitis)\n\u2022 Give IM/IV benzylpenicillin (or ceftriaxone) pre-hospital ONLY if transfer will be delayed \u2014 never delay transfer to give it\n\u2022 Glass/tumbler test is the patient-facing check for blanching"
+          "text": "Fever + any of: non-blanching/petechial rash, neck stiffness, photophobia, new confusion or drowsiness → 999 (NICE NG240, 2024).\n\n• Non-blanching rash + fever = meningococcal sepsis until proven otherwise (may occur WITHOUT meningitis)\n• Give IM/IV benzylpenicillin (or ceftriaxone) pre-hospital ONLY if transfer will be delayed — never delay transfer to give it\n• Glass/tumbler test is the patient-facing check for blanching"
         },
         {
           "type": "link",
@@ -1740,7 +1740,7 @@
         {
           "type": "note",
           "label": "Vascular emergency",
-          "text": "Sudden tearing/ripping back, abdominal or chest pain \u00b1 collapse, pallor, sweating, or a pulsatile abdominal mass = ruptured AAA / aortic dissection until proven otherwise.\n\n\u2022 999 \u2014 do not bring to surgery for assessment\n\u2022 Highest suspicion: older men, smokers, hypertension, known aneurysm/FH\n\u2022 Mimics renal colic in the elderly \u2014 first presentation of \u201crenal colic\u201d over 60 should raise AAA"
+          "text": "Sudden tearing/ripping back, abdominal or chest pain ± collapse, pallor, sweating, or a pulsatile abdominal mass = ruptured AAA / aortic dissection until proven otherwise.\n\n• 999 — do not bring to surgery for assessment\n• Highest suspicion: older men, smokers, hypertension, known aneurysm/FH\n• Mimics renal colic in the elderly — first presentation of “renal colic” over 60 should raise AAA"
         }
       ]
     },
@@ -1774,7 +1774,7 @@
         {
           "type": "note",
           "label": "Surgical emergency",
-          "text": "Sudden severe unilateral testicular pain \u00b1 nausea/vomiting = torsion until proven otherwise \u2014 the salvage window is ~6 hours.\n\n\u2022 Same-day urology / ED NOW \u2014 do not arrange routine review or wait for swelling to settle\n\u2022 Most common 12\u201325y but any age\n\u2022 Do not rely on ultrasound availability to decide \u2014 clinical suspicion is enough for referral"
+          "text": "Sudden severe unilateral testicular pain ± nausea/vomiting = torsion until proven otherwise — the salvage window is ~6 hours.\n\n• Same-day urology / ED NOW — do not arrange routine review or wait for swelling to settle\n• Most common 12–25y but any age\n• Do not rely on ultrasound availability to decide — clinical suspicion is enough for referral"
         },
         {
           "type": "link",
@@ -1820,12 +1820,12 @@
         {
           "type": "note",
           "label": "VTE / limb-ischaemia pathway",
-          "text": "Suspected PE: acute breathlessness \u00b1 pleuritic pain \u00b1 haemoptysis. Haemodynamic compromise or hypoxia \u2192 999; otherwise same-day assessment (Wells \u2192 D-dimer / CTPA) per NICE NG158.\n\nSuspected DVT: unilateral leg swelling/heat/tenderness \u2192 same-day Wells scoring + proximal leg ultrasound pathway. Do not massage the leg.\n\nCOLD, PALE, PULSELESS limb (6 P\u2019s) = acute limb ischaemia \u2192 999 / vascular surgery \u2014 hours matter."
+          "text": "Suspected PE: acute breathlessness ± pleuritic pain ± haemoptysis. Haemodynamic compromise or hypoxia → 999; otherwise same-day assessment (Wells → D-dimer / CTPA) per NICE NG158.\n\nSuspected DVT: unilateral leg swelling/heat/tenderness → same-day Wells scoring + proximal leg ultrasound pathway. Do not massage the leg.\n\nCOLD, PALE, PULSELESS limb (6 P’s) = acute limb ischaemia → 999 / vascular surgery — hours matter."
         },
         {
           "type": "snippet",
           "label": "Wells score (DVT)",
-          "text": "Wells DVT (1 point each unless stated):\n- Active cancer:\n- Paralysis / recent plaster immobilisation:\n- Bed >3d or major surgery <12wk:\n- Tenderness along deep venous system:\n- Entire leg swollen:\n- Calf >3cm larger than other side:\n- Pitting oedema (symptomatic leg):\n- Collateral superficial veins:\n- Previous DVT:\n- Alternative diagnosis at least as likely: -2\n\n\u22652 DVT likely \u2192 USS within 4h (or anticoagulate + USS within 24h)\n\u22641 DVT unlikely \u2192 D-dimer"
+          "text": "Wells DVT (1 point each unless stated):\n- Active cancer:\n- Paralysis / recent plaster immobilisation:\n- Bed >3d or major surgery <12wk:\n- Tenderness along deep venous system:\n- Entire leg swollen:\n- Calf >3cm larger than other side:\n- Pitting oedema (symptomatic leg):\n- Collateral superficial veins:\n- Previous DVT:\n- Alternative diagnosis at least as likely: -2\n\n≥2 DVT likely → USS within 4h (or anticoagulate + USS within 24h)\n≤1 DVT unlikely → D-dimer"
         },
         {
           "type": "link",
@@ -1868,7 +1868,7 @@
         {
           "type": "note",
           "label": "Surgical abdomen",
-          "text": "Peritonitic features (rigid/board-like abdomen, rebound, guarding, pain on movement/coughing, lying still) \u2192 same-day surgical assessment / 999 if shocked.\n\nConsider: perforation, pancreatitis, ischaemic bowel (pain out of proportion), appendicitis, ruptured ectopic.\n\nWomen of reproductive age with acute lower abdominal pain: ALWAYS pregnancy test (?ectopic)."
+          "text": "Peritonitic features (rigid/board-like abdomen, rebound, guarding, pain on movement/coughing, lying still) → same-day surgical assessment / 999 if shocked.\n\nConsider: perforation, pancreatitis, ischaemic bowel (pain out of proportion), appendicitis, ruptured ectopic.\n\nWomen of reproductive age with acute lower abdominal pain: ALWAYS pregnancy test (?ectopic)."
         }
       ]
     },
@@ -1901,7 +1901,7 @@
         {
           "type": "note",
           "label": "NICE traffic light",
-          "text": "Temperature \u226538\u00b0C in an infant UNDER 3 MONTHS is a RED traffic-light feature (NICE NG143) \u2192 same-day paediatric assessment (usually ED), regardless of how well the baby looks.\n\n3\u20136 months \u226539\u00b0C = amber minimum.\n\nAny age + fever with: drowsy/floppy, poor feeding, non-blanching rash, grunting/recession, reduced wet nappies \u2192 escalate same-day."
+          "text": "Temperature ≥38°C in an infant UNDER 3 MONTHS is a RED traffic-light feature (NICE NG143) → same-day paediatric assessment (usually ED), regardless of how well the baby looks.\n\n3–6 months ≥39°C = amber minimum.\n\nAny age + fever with: drowsy/floppy, poor feeding, non-blanching rash, grunting/recession, reduced wet nappies → escalate same-day."
         },
         {
           "type": "link",
@@ -1947,7 +1947,7 @@
         {
           "type": "note",
           "label": "Paediatric respiratory distress",
-          "text": "Signs of increased work of breathing in a child \u2014 recession (ribs/tummy sucking in), grunting, nasal flaring, stridor at rest, cyanosis/blue lips, too breathless to feed or talk \u2192 same-day assessment; 999 if stridor at rest, cyanosis, exhaustion or drowsiness.\n\nCroup: barky cough + stridor \u2014 oral dexamethasone if more than mild.\nBronchiolitis (<2y): escalate if feeding <50% of normal, apnoeas, marked recession, sats concern."
+          "text": "Signs of increased work of breathing in a child — recession (ribs/tummy sucking in), grunting, nasal flaring, stridor at rest, cyanosis/blue lips, too breathless to feed or talk → same-day assessment; 999 if stridor at rest, cyanosis, exhaustion or drowsiness.\n\nCroup: barky cough + stridor — oral dexamethasone if more than mild.\nBronchiolitis (<2y): escalate if feeding <50% of normal, apnoeas, marked recession, sats concern."
         },
         {
           "type": "link",
@@ -1989,7 +1989,7 @@
         {
           "type": "note",
           "label": "Seizure pathway",
-          "text": "\u2022 Seizure ongoing >5 min, repeated seizures, or not recovering consciousness \u2192 999 (status epilepticus)\n\u2022 FIRST-ever seizure (any age) \u2192 same-day assessment + urgent first-fit clinic referral; advise not to drive (DVLA)\n\u2022 Febrile convulsion (6m\u20135y): usually benign if simple (<15 min, generalised, full recovery) but first episode warrants same-day review and exclusion of meningitis/serious infection\n\u2022 Known epilepsy with typical self-terminated seizure \u2192 prompt review, check triggers/adherence"
+          "text": "• Seizure ongoing >5 min, repeated seizures, or not recovering consciousness → 999 (status epilepticus)\n• FIRST-ever seizure (any age) → same-day assessment + urgent first-fit clinic referral; advise not to drive (DVLA)\n• Febrile convulsion (6m–5y): usually benign if simple (<15 min, generalised, full recovery) but first episode warrants same-day review and exclusion of meningitis/serious infection\n• Known epilepsy with typical self-terminated seizure → prompt review, check triggers/adherence"
         },
         {
           "type": "link",
@@ -2029,7 +2029,7 @@
         {
           "type": "note",
           "label": "Early pregnancy pathway",
-          "text": "Pain and/or bleeding in (possible) pregnancy \u2192 same-day Early Pregnancy Unit assessment.\n\n\u2022 Ectopic can present with PAIN BEFORE any bleeding \u2014 one-sided pain, shoulder-tip pain, dizziness/collapse in early pregnancy = ruptured ectopic until proven otherwise \u2192 999\n\u2022 Always pregnancy-test women of reproductive age with abdominal pain\n\u2022 Anti-D consideration for surgical management of miscarriage"
+          "text": "Pain and/or bleeding in (possible) pregnancy → same-day Early Pregnancy Unit assessment.\n\n• Ectopic can present with PAIN BEFORE any bleeding — one-sided pain, shoulder-tip pain, dizziness/collapse in early pregnancy = ruptured ectopic until proven otherwise → 999\n• Always pregnancy-test women of reproductive age with abdominal pain\n• Anti-D consideration for surgical management of miscarriage"
         },
         {
           "type": "link",
@@ -2067,7 +2067,7 @@
         {
           "type": "note",
           "label": "RFM pathway (RCOG GTG57)",
-          "text": "Any maternal perception of reduced fetal movements (after ~24 weeks) \u2192 signpost DIRECTLY to maternity triage / day assessment unit NOW for CTG \u00b1 ultrasound.\n\n\u2022 Do NOT book a GP appointment or advise \u201cwait and count kicks\u201d\n\u2022 Never reassure by phone without fetal assessment\n\u2022 Repeat episodes still warrant assessment every time"
+          "text": "Any maternal perception of reduced fetal movements (after ~24 weeks) → signpost DIRECTLY to maternity triage / day assessment unit NOW for CTG ± ultrasound.\n\n• Do NOT book a GP appointment or advise “wait and count kicks”\n• Never reassure by phone without fetal assessment\n• Repeat episodes still warrant assessment every time"
         },
         {
           "type": "link",
@@ -2107,7 +2107,7 @@
         {
           "type": "note",
           "label": "Pre-eclampsia pathway",
-          "text": "Pregnancy (especially >20 weeks) + severe/persistent headache, visual disturbance, epigastric/RUQ pain, or sudden swelling of face/hands \u2192 same-day maternity assessment for BP + urine protein.\n\n\u2022 Can progress rapidly to eclampsia/HELLP\n\u2022 Seizure, severe hypertension or reduced consciousness \u2192 999\n\u2022 Direct to maternity triage, not a routine GP slot"
+          "text": "Pregnancy (especially >20 weeks) + severe/persistent headache, visual disturbance, epigastric/RUQ pain, or sudden swelling of face/hands → same-day maternity assessment for BP + urine protein.\n\n• Can progress rapidly to eclampsia/HELLP\n• Seizure, severe hypertension or reduced consciousness → 999\n• Direct to maternity triage, not a routine GP slot"
         },
         {
           "type": "link",
@@ -2152,7 +2152,7 @@
         {
           "type": "note",
           "label": "Sight-threatening pathway",
-          "text": "\u2022 Sudden painless loss of vision in one eye \u2192 same-day emergency ophthalmology (?CRAO/CRVO/retinal detachment/vitreous haemorrhage)\n\u2022 Curtain/shadow over vision, or flashes + NEW floaters \u2192 same-day (?retinal detachment/tear)\n\u2022 GCA: age >50 + new headache, scalp tenderness, jaw claudication \u00b1 visual symptoms \u2192 SAME-DAY high-dose steroid + urgent ophthalmology/rheumatology + ESR/CRP \u2014 the second eye is at risk\n\u2022 Painful red eye + visual loss \u2192 ?acute angle-closure \u2192 emergency"
+          "text": "• Sudden painless loss of vision in one eye → same-day emergency ophthalmology (?CRAO/CRVO/retinal detachment/vitreous haemorrhage)\n• Curtain/shadow over vision, or flashes + NEW floaters → same-day (?retinal detachment/tear)\n• GCA: age >50 + new headache, scalp tenderness, jaw claudication ± visual symptoms → SAME-DAY high-dose steroid + urgent ophthalmology/rheumatology + ESR/CRP — the second eye is at risk\n• Painful red eye + visual loss → ?acute angle-closure → emergency"
         },
         {
           "type": "link",
@@ -2190,7 +2190,7 @@
         {
           "type": "note",
           "label": "Septic arthritis pathway",
-          "text": "An acutely hot, swollen, very painful joint (especially single joint \u00b1 fever) = septic arthritis until proven otherwise.\n\n\u2022 Same-day orthopaedics / ED for joint aspiration BEFORE antibiotics\n\u2022 An untreated septic joint is destroyed within days\n\u2022 Prosthetic joint, immunosuppression, recent injection = even lower threshold\n\u2022 Do not assume gout if febrile or systemically unwell"
+          "text": "An acutely hot, swollen, very painful joint (especially single joint ± fever) = septic arthritis until proven otherwise.\n\n• Same-day orthopaedics / ED for joint aspiration BEFORE antibiotics\n• An untreated septic joint is destroyed within days\n• Prosthetic joint, immunosuppression, recent injection = even lower threshold\n• Do not assume gout if febrile or systemically unwell"
         }
       ]
     },
@@ -2227,7 +2227,7 @@
         {
           "type": "note",
           "label": "First-episode psychosis",
-          "text": "Hallucinations, delusions, thought disorder or marked paranoia \u2192 urgent referral to Early Intervention in Psychosis (EIP) \u2014 NICE: assessment started within 2 weeks; same-day crisis-team input if risk.\n\n\u2022 Command hallucinations / risk to self or others \u2192 crisis pathway now\n\u2022 Exclude organic causes (delirium, substances) \u2014 acute confusion in the elderly is delirium, not psychosis\n\u2022 POSTPARTUM PSYCHOSIS = psychiatric emergency \u2192 same-day perinatal MH / crisis team"
+          "text": "Hallucinations, delusions, thought disorder or marked paranoia → urgent referral to Early Intervention in Psychosis (EIP) — NICE: assessment started within 2 weeks; same-day crisis-team input if risk.\n\n• Command hallucinations / risk to self or others → crisis pathway now\n• Exclude organic causes (delirium, substances) — acute confusion in the elderly is delirium, not psychosis\n• POSTPARTUM PSYCHOSIS = psychiatric emergency → same-day perinatal MH / crisis team"
         },
         {
           "type": "link",
@@ -2266,7 +2266,7 @@
         {
           "type": "note",
           "label": "2WW pathway",
-          "text": "NICE NG12: visible haematuria aged \u226545 (unexplained, or persisting/recurring after UTI treatment) \u2192 2WW urology. Aged \u226560 with unexplained non-visible haematuria + dysuria or raised WCC \u2192 2WW.\n\nUnder the age cutoffs: still assess (UTI, stones, anticoagulants) and safety-net \u2014 haematuria is never normal.\n\nExclude/treat UTI but do not let an infection label close the loop without confirming resolution."
+          "text": "NICE NG12: visible haematuria aged ≥45 (unexplained, or persisting/recurring after UTI treatment) → 2WW urology. Aged ≥60 with unexplained non-visible haematuria + dysuria or raised WCC → 2WW.\n\nUnder the age cutoffs: still assess (UTI, stones, anticoagulants) and safety-net — haematuria is never normal.\n\nExclude/treat UTI but do not let an infection label close the loop without confirming resolution."
         },
         {
           "type": "link",
@@ -2303,7 +2303,7 @@
         {
           "type": "note",
           "label": "2WW pathway",
-          "text": "NICE NG12: post-menopausal bleeding (\u226512 months after last period) in women \u226555 \u2192 2WW gynaecology (transvaginal USS endometrial assessment); strongly consider for younger post-menopausal women too.\n\n\u2022 Includes spotting, staining and blood-streaked discharge\n\u2022 HRT breakthrough bleeding still needs assessment if unscheduled/persistent"
+          "text": "NICE NG12: post-menopausal bleeding (≥12 months after last period) in women ≥55 → 2WW gynaecology (transvaginal USS endometrial assessment); strongly consider for younger post-menopausal women too.\n\n• Includes spotting, staining and blood-streaked discharge\n• HRT breakthrough bleeding still needs assessment if unscheduled/persistent"
         },
         {
           "type": "link",
@@ -2342,7 +2342,7 @@
         {
           "type": "note",
           "label": "2WW pathway",
-          "text": "NICE NG12 breast referral:\n\u2022 Aged \u226530 with an unexplained breast lump \u2192 2WW\n\u2022 Aged \u226550 with nipple discharge, retraction or other concerning unilateral nipple change \u2192 2WW\n\u2022 Skin changes suggestive of cancer (dimpling, peau d\u2019orange, nipple eczema) or axillary lump \u2192 refer\n\u2022 Under 30 with a lump: non-urgent referral/assessment, lower threshold if FH\n\nIf the story is feeding-related (mastitis), treat \u2014 but a lump persisting after mastitis resolves needs 2WW."
+          "text": "NICE NG12 breast referral:\n• Aged ≥30 with an unexplained breast lump → 2WW\n• Aged ≥50 with nipple discharge, retraction or other concerning unilateral nipple change → 2WW\n• Skin changes suggestive of cancer (dimpling, peau d’orange, nipple eczema) or axillary lump → refer\n• Under 30 with a lump: non-urgent referral/assessment, lower threshold if FH\n\nIf the story is feeding-related (mastitis), treat — but a lump persisting after mastitis resolves needs 2WW."
         },
         {
           "type": "link",
@@ -2383,7 +2383,7 @@
         {
           "type": "note",
           "label": "2WW pathway",
-          "text": "NICE NG12:\n\u2022 Dysphagia (food sticking, progressive difficulty swallowing) at ANY age \u2192 2WW upper-GI endoscopy\n\u2022 Persistent hoarseness >3 weeks (especially >45y or smoker) \u2192 2WW ENT + consider CXR\n\nAcute painful swallow with sore throat/tonsillitis is different \u2014 see sore-throat rule. Difficulty swallowing SALIVA / drooling \u2192 same-day (?epiglottitis/quinsy)."
+          "text": "NICE NG12:\n• Dysphagia (food sticking, progressive difficulty swallowing) at ANY age → 2WW upper-GI endoscopy\n• Persistent hoarseness >3 weeks (especially >45y or smoker) → 2WW ENT + consider CXR\n\nAcute painful swallow with sore throat/tonsillitis is different — see sore-throat rule. Difficulty swallowing SALIVA / drooling → same-day (?epiglottitis/quinsy)."
         },
         {
           "type": "link",
@@ -2456,7 +2456,7 @@
         {
           "type": "note",
           "label": "Escalation thresholds",
-          "text": "RED FLAGS \u2192 same-day / 999:\n\u2022 ?DKA (esp. type 1): vomiting, abdominal pain, ketones, deep/fast breathing, fruity breath, drowsiness\n\u2022 ?HHS (esp. elderly type 2): very high glucose + dehydration + confusion\n\u2022 Severe hypo (needed help / unconscious / seizure) \u2192 999; IM glucagon if available\n\u2022 Vomiting and cannot keep fluids down \u2192 same-day\n\nSick-day rules: NEVER stop insulin; check glucose & ketones 2\u20134-hourly; keep drinking; ketones rising or persistent vomiting \u2192 urgent review.\n\nRoutine \u201csugars running high\u201d without red flags \u2192 prompt clinical review/titration, not emergency."
+          "text": "RED FLAGS → same-day / 999:\n• ?DKA (esp. type 1): vomiting, abdominal pain, ketones, deep/fast breathing, fruity breath, drowsiness\n• ?HHS (esp. elderly type 2): very high glucose + dehydration + confusion\n• Severe hypo (needed help / unconscious / seizure) → 999; IM glucagon if available\n• Vomiting and cannot keep fluids down → same-day\n\nSick-day rules: NEVER stop insulin; check glucose & ketones 2–4-hourly; keep drinking; ketones rising or persistent vomiting → urgent review.\n\nRoutine “sugars running high” without red flags → prompt clinical review/titration, not emergency."
         },
         {
           "type": "link",
@@ -2496,7 +2496,7 @@
         {
           "type": "note",
           "label": "Dehydration assessment",
-          "text": "Concerning: \u226550% fewer wet nappies, no tears, dry mouth, sunken eyes/fontanelle, lethargy, not tolerating fluids \u2192 same-day assessment.\n\nRED (\u2192 999/ED): mottled, cold extremities, cap refill >2s, very drowsy/floppy, no urine >12\u201324h, persistent bilious vomiting.\n\nMild D&V tolerating ORS \u2192 small frequent fluids + strict safety-net. Bulging fontanelle = different emergency (?meningitis)."
+          "text": "Concerning: ≥50% fewer wet nappies, no tears, dry mouth, sunken eyes/fontanelle, lethargy, not tolerating fluids → same-day assessment.\n\nRED (→ 999/ED): mottled, cold extremities, cap refill >2s, very drowsy/floppy, no urine >12–24h, persistent bilious vomiting.\n\nMild D&V tolerating ORS → small frequent fluids + strict safety-net. Bulging fontanelle = different emergency (?meningitis)."
         }
       ]
     },
@@ -2530,7 +2530,7 @@
         {
           "type": "note",
           "label": "Infant vomiting red flags",
-          "text": "\u2022 GREEN/BILIOUS vomiting in an infant = intestinal obstruction (?malrotation/volvulus) until proven otherwise \u2192 SAME-DAY surgical/ED \u2014 this is an emergency\n\u2022 Projectile vomiting in a 2\u20138-week-old, hungry after, weight faltering \u2192 ?pyloric stenosis \u2192 same-day referral\n\u2022 Vomiting + drowsy/floppy/bulging fontanelle \u2192 ?meningitis/raised ICP \u2192 emergency\n\u2022 Effortless small possets in a well, gaining baby = reflux \u2014 reassure + safety-net"
+          "text": "• GREEN/BILIOUS vomiting in an infant = intestinal obstruction (?malrotation/volvulus) until proven otherwise → SAME-DAY surgical/ED — this is an emergency\n• Projectile vomiting in a 2–8-week-old, hungry after, weight faltering → ?pyloric stenosis → same-day referral\n• Vomiting + drowsy/floppy/bulging fontanelle → ?meningitis/raised ICP → emergency\n• Effortless small possets in a well, gaining baby = reflux — reassure + safety-net"
         }
       ]
     },
@@ -2566,7 +2566,7 @@
         {
           "type": "note",
           "label": "NG232 CT criteria",
-          "text": "CT head WITHIN 1 HOUR (\u2192 ED now) if any: GCS <13 initially or <15 at 2h; suspected open/depressed or basal skull fracture (CSF leak, panda eyes, Battle\u2019s sign); post-traumatic seizure; focal neurology; >1 episode of vomiting.\n\nON ANTICOAGULANT (warfarin/DOAC) or with bleeding disorder: CT within 8h after ANY head injury, even if entirely well \u2014 send to ED.\n\nLOC or amnesia + (age \u226565 / dangerous mechanism / clotting issue) \u2192 CT within 8h.\n\nChildren: lower threshold; <1y with any bruise/swelling on head \u2192 assess; consider NAI if mechanism inconsistent."
+          "text": "CT head WITHIN 1 HOUR (→ ED now) if any: GCS <13 initially or <15 at 2h; suspected open/depressed or basal skull fracture (CSF leak, panda eyes, Battle’s sign); post-traumatic seizure; focal neurology; >1 episode of vomiting.\n\nON ANTICOAGULANT (warfarin/DOAC) or with bleeding disorder: CT within 8h after ANY head injury, even if entirely well — send to ED.\n\nLOC or amnesia + (age ≥65 / dangerous mechanism / clotting issue) → CT within 8h.\n\nChildren: lower threshold; <1y with any bruise/swelling on head → assess; consider NAI if mechanism inconsistent."
         },
         {
           "type": "link",
@@ -2604,7 +2604,7 @@
         {
           "type": "note",
           "label": "Limping child pathway",
-          "text": "Limp + fever or systemically unwell = septic arthritis/osteomyelitis until proven otherwise \u2192 same-day paediatric/ortho assessment (bloods + imaging).\n\n\u2022 Non-weight-bearing at any age \u2192 same-day (fracture, septic hip)\n\u2022 Child <3y with a limp \u2192 same-day assessment (and consider NAI)\n\u2022 Adolescent with hip/knee pain + limp \u2192 ?SUFE \u2192 urgent\n\u2022 Transient synovitis is a diagnosis of exclusion"
+          "text": "Limp + fever or systemically unwell = septic arthritis/osteomyelitis until proven otherwise → same-day paediatric/ortho assessment (bloods + imaging).\n\n• Non-weight-bearing at any age → same-day (fracture, septic hip)\n• Child <3y with a limp → same-day assessment (and consider NAI)\n• Adolescent with hip/knee pain + limp → ?SUFE → urgent\n• Transient synovitis is a diagnosis of exclusion"
         },
         {
           "type": "link",
@@ -2641,7 +2641,7 @@
         {
           "type": "note",
           "label": "Neonatal jaundice (NG98)",
-          "text": "\u2022 Jaundice in the FIRST 24 HOURS of life = always pathological \u2192 same-day urgent serum bilirubin + paediatric assessment\n\u2022 Visible jaundice any time in first 2 weeks \u2192 measure bilirubin (transcutaneous/serum) and plot on treatment-threshold chart \u2014 do not estimate by eye\n\u2022 Jaundice + poor feeding/drowsy \u2192 urgent same-day\n\u2022 Prolonged jaundice (>14 days term, >21 days preterm) \u2192 prolonged-jaundice screen incl. CONJUGATED bilirubin (?biliary atresia \u2014 pale stools/dark urine)"
+          "text": "• Jaundice in the FIRST 24 HOURS of life = always pathological → same-day urgent serum bilirubin + paediatric assessment\n• Visible jaundice any time in first 2 weeks → measure bilirubin (transcutaneous/serum) and plot on treatment-threshold chart — do not estimate by eye\n• Jaundice + poor feeding/drowsy → urgent same-day\n• Prolonged jaundice (>14 days term, >21 days preterm) → prolonged-jaundice screen incl. CONJUGATED bilirubin (?biliary atresia — pale stools/dark urine)"
         },
         {
           "type": "link",
@@ -2678,7 +2678,7 @@
         {
           "type": "note",
           "label": "Adult jaundice pathway",
-          "text": "New jaundice in an adult \u2192 same-day bloods (LFTs, FBC, U&E, INR) and urgent assessment.\n\n\u2022 PAINLESS jaundice (esp. >40y, weight loss, dark urine/pale stools) is a pancreatic-cancer red flag \u2192 NICE NG12 urgent CT/2WW pathway\n\u2022 Jaundice + fever/RUQ pain \u2192 ?cholangitis \u2192 same-day admission\n\u2022 Jaundice + confusion/bruising \u2192 ?acute liver failure \u2192 emergency\n\u2022 Check paracetamol overdose, alcohol, new drugs (incl. herbal)"
+          "text": "New jaundice in an adult → same-day bloods (LFTs, FBC, U&E, INR) and urgent assessment.\n\n• PAINLESS jaundice (esp. >40y, weight loss, dark urine/pale stools) is a pancreatic-cancer red flag → NICE NG12 urgent CT/2WW pathway\n• Jaundice + fever/RUQ pain → ?cholangitis → same-day admission\n• Jaundice + confusion/bruising → ?acute liver failure → emergency\n• Check paracetamol overdose, alcohol, new drugs (incl. herbal)"
         },
         {
           "type": "link",
@@ -2714,7 +2714,7 @@
         {
           "type": "note",
           "label": "2WW pathway",
-          "text": "NICE NG12: non-painful enlargement or change in shape/texture of the testis \u2192 2WW urology (any age \u2014 peak 15\u201340y). Consider direct-access ultrasound if unsure whether mass is testicular.\n\nSUDDEN SEVERE testicular PAIN = torsion \u2192 emergency (separate red rule).\nYoung men under-present \u2014 take written mentions seriously."
+          "text": "NICE NG12: non-painful enlargement or change in shape/texture of the testis → 2WW urology (any age — peak 15–40y). Consider direct-access ultrasound if unsure whether mass is testicular.\n\nSUDDEN SEVERE testicular PAIN = torsion → emergency (separate red rule).\nYoung men under-present — take written mentions seriously."
         },
         {
           "type": "link",
@@ -2747,7 +2747,7 @@
         {
           "type": "note",
           "label": "VZV in pregnancy",
-          "text": "Chickenpox CONTACT in pregnancy: same-day advice \u2014 check varicella history/immunity (IgG if uncertain); if non-immune and significant contact, post-exposure prophylaxis (antivirals/VZIG per current UKHSA guidance) is TIME-CRITICAL \u2192 discuss with obstetrics/virology today.\n\nChickenpox RASH in pregnancy: same-day clinical discussion \u2014 oral aciclovir if \u226520 weeks and within 24h of rash; severe disease/respiratory symptoms \u2192 admission. Risks: fetal varicella syndrome (<28wk), neonatal varicella (around delivery), maternal pneumonitis."
+          "text": "Chickenpox CONTACT in pregnancy: same-day advice — check varicella history/immunity (IgG if uncertain); if non-immune and significant contact, post-exposure prophylaxis (antivirals/VZIG per current UKHSA guidance) is TIME-CRITICAL → discuss with obstetrics/virology today.\n\nChickenpox RASH in pregnancy: same-day clinical discussion — oral aciclovir if ≥20 weeks and within 24h of rash; severe disease/respiratory symptoms → admission. Risks: fetal varicella syndrome (<28wk), neonatal varicella (around delivery), maternal pneumonitis."
         },
         {
           "type": "link",
@@ -2789,7 +2789,7 @@
         {
           "type": "note",
           "label": "EC time windows",
-          "text": "Time-critical \u2014 deal with today:\n\u2022 Copper IUD: most effective, up to 5 days (120h) after UPSI (or up to 5 days after earliest ovulation) \u2014 also ongoing contraception\n\u2022 Ulipristal (ellaOne): up to 120h\n\u2022 Levonorgestrel: up to 72h (less effective later; double dose if BMI/weight criteria per FSRH)\n\nCommunity pharmacy can supply oral EC free via Pharmacy First. Safeguard: under-16s (Fraser), coercion/assault \u2192 follow safeguarding pathway. Offer STI screen + ongoing contraception; pregnancy test if next period late."
+          "text": "Time-critical — deal with today:\n• Copper IUD: most effective, up to 5 days (120h) after UPSI (or up to 5 days after earliest ovulation) — also ongoing contraception\n• Ulipristal (ellaOne): up to 120h\n• Levonorgestrel: up to 72h (less effective later; double dose if BMI/weight criteria per FSRH)\n\nCommunity pharmacy can supply oral EC free via Pharmacy First. Safeguard: under-16s (Fraser), coercion/assault → follow safeguarding pathway. Offer STI screen + ongoing contraception; pregnancy test if next period late."
         },
         {
           "type": "link",
@@ -2834,7 +2834,7 @@
         {
           "type": "note",
           "label": "Mastitis pathway",
-          "text": "Lactational mastitis: continue feeding/expressing (milk drainage is the treatment), analgesia (paracetamol/ibuprofen safe), warm compress before feeds.\n\nAntibiotics (flucloxacillin 10\u201314d; erythromycin if pen-allergic) if: systemically unwell, nipple fissure infection, or not improving after 12\u201324h of effective milk removal.\n\n\u2022 Fluctuant mass \u2192 ?abscess \u2192 same-day referral for USS \u00b1 drainage\n\u2022 A discrete lump or skin change persisting AFTER mastitis resolves \u2192 breast 2WW (inflammatory cancer mimics mastitis)\n\u2022 Sepsis features \u2192 admit"
+          "text": "Lactational mastitis: continue feeding/expressing (milk drainage is the treatment), analgesia (paracetamol/ibuprofen safe), warm compress before feeds.\n\nAntibiotics (flucloxacillin 10–14d; erythromycin if pen-allergic) if: systemically unwell, nipple fissure infection, or not improving after 12–24h of effective milk removal.\n\n• Fluctuant mass → ?abscess → same-day referral for USS ± drainage\n• A discrete lump or skin change persisting AFTER mastitis resolves → breast 2WW (inflammatory cancer mimics mastitis)\n• Sepsis features → admit"
         },
         {
           "type": "link",
@@ -2876,7 +2876,7 @@
         {
           "type": "note",
           "label": "HMB pathway (NG88)",
-          "text": "\u2022 Check FBC (\u00b1 ferritin) \u2014 anaemia is common\n\u2022 First-line: LNG-IUS; or tranexamic acid \u00b1 NSAID, or hormonal options\n\u2022 Red flags out: intermenstrual/postcoital bleeding, post-menopausal bleeding (\u2192 2WW), pressure symptoms/mass (?fibroids \u2192 USS)\n\u2022 Acute flooding + dizziness/syncope or Hb concern \u2192 same-day review\n\u2022 Persistent IMB or treatment failure \u2192 gynae referral"
+          "text": "• Check FBC (± ferritin) — anaemia is common\n• First-line: LNG-IUS; or tranexamic acid ± NSAID, or hormonal options\n• Red flags out: intermenstrual/postcoital bleeding, post-menopausal bleeding (→ 2WW), pressure symptoms/mass (?fibroids → USS)\n• Acute flooding + dizziness/syncope or Hb concern → same-day review\n• Persistent IMB or treatment failure → gynae referral"
         },
         {
           "type": "link",
@@ -2916,7 +2916,7 @@
         {
           "type": "note",
           "label": "Postpartum red flags",
-          "text": "Postpartum women deteriorate FAST \u2014 low threshold for same-day review/admission.\n\n\u2022 Secondary PPH (heavy/increasing bleeding >24h\u201312wk post-delivery) \u2192 same-day; clots/offensive lochia \u2192 ?retained products/endometritis\n\u2022 Fever + foul lochia + uterine tenderness = endometritis \u2192 same-day, often admission for IV antibiotics\n\u2022 Wound infection: spreading erythema/systemic features \u2192 same-day\n\u2022 Always consider sepsis (MBRRACE: genital-tract sepsis remains a leading cause of maternal death)"
+          "text": "Postpartum women deteriorate FAST — low threshold for same-day review/admission.\n\n• Secondary PPH (heavy/increasing bleeding >24h–12wk post-delivery) → same-day; clots/offensive lochia → ?retained products/endometritis\n• Fever + foul lochia + uterine tenderness = endometritis → same-day, often admission for IV antibiotics\n• Wound infection: spreading erythema/systemic features → same-day\n• Always consider sepsis (MBRRACE: genital-tract sepsis remains a leading cause of maternal death)"
         }
       ]
     },
@@ -2952,7 +2952,7 @@
         {
           "type": "note",
           "label": "Red eye red flags",
-          "text": "Same-day ophthalmology if red eye PLUS any: pain (not just gritty), photophobia, reduced vision, haloes (?acute angle-closure), fixed/irregular pupil, CONTACT-LENS wearer (?microbial keratitis \u2014 lens out, same-day), herpetic vesicles, hypopyon, trauma.\n\nChemical injury: irrigate copiously NOW, then emergency referral.\n\nBland red eye, no pain/vision change = likely conjunctivitis \u2192 self-care/pharmacy + safety-net."
+          "text": "Same-day ophthalmology if red eye PLUS any: pain (not just gritty), photophobia, reduced vision, haloes (?acute angle-closure), fixed/irregular pupil, CONTACT-LENS wearer (?microbial keratitis — lens out, same-day), herpetic vesicles, hypopyon, trauma.\n\nChemical injury: irrigate copiously NOW, then emergency referral.\n\nBland red eye, no pain/vision change = likely conjunctivitis → self-care/pharmacy + safety-net."
         },
         {
           "type": "link",
@@ -2989,8 +2989,8 @@
       "actions": [
         {
           "type": "note",
-          "label": "SSNHL \u2014 urgent",
-          "text": "Sudden (\u226472h) unexplained hearing loss in one or both ears, not explained by wax/effusion on otoscopy, = sudden sensorineural hearing loss \u2192 URGENT same-day/24h ENT referral for audiometry + oral steroids \u2014 the treatment window is days, outcomes worsen with delay.\n\nDo NOT routine-refer. Tuning fork (Weber lateralises AWAY from affected ear in SNHL) helps distinguish from conductive causes.\n\nWith vertigo/neurology \u2192 consider stroke pathway."
+          "label": "SSNHL — urgent",
+          "text": "Sudden (≤72h) unexplained hearing loss in one or both ears, not explained by wax/effusion on otoscopy, = sudden sensorineural hearing loss → URGENT same-day/24h ENT referral for audiometry + oral steroids — the treatment window is days, outcomes worsen with delay.\n\nDo NOT routine-refer. Tuning fork (Weber lateralises AWAY from affected ear in SNHL) helps distinguish from conductive causes.\n\nWith vertigo/neurology → consider stroke pathway."
         }
       ]
     },
@@ -3024,7 +3024,7 @@
         {
           "type": "note",
           "label": "Epistaxis pathway",
-          "text": "First aid: sit forward, pinch the SOFT part of the nose firmly 10\u201315 min continuously, ice to bridge, spit don\u2019t swallow.\n\n\u2022 Not controlled after 2 \u00d7 15 min pressure \u2192 ED (cautery/packing)\n\u2022 On anticoagulant/antiplatelet + heavy or recurrent bleeding \u2192 same-day review (check INR if warfarin) \u2014 low threshold for ED\n\u2022 Posterior bleed (blood down throat both sides), haemodynamic symptoms \u2192 999/ED\n\u2022 Recurrent unilateral epistaxis + blocked nose in an adult \u2192 consider ENT referral (rare: tumour)"
+          "text": "First aid: sit forward, pinch the SOFT part of the nose firmly 10–15 min continuously, ice to bridge, spit don’t swallow.\n\n• Not controlled after 2 × 15 min pressure → ED (cautery/packing)\n• On anticoagulant/antiplatelet + heavy or recurrent bleeding → same-day review (check INR if warfarin) — low threshold for ED\n• Posterior bleed (blood down throat both sides), haemodynamic symptoms → 999/ED\n• Recurrent unilateral epistaxis + blocked nose in an adult → consider ENT referral (rare: tumour)"
         }
       ]
     },
@@ -3056,7 +3056,7 @@
         {
           "type": "note",
           "label": "Gout (NG219)",
-          "text": "Acute flare: NSAID (with PPI) OR colchicine 500mcg bd\u2013qds (cap dose; caution renal impairment/statins) OR short oral prednisolone \u2014 treat fast, any of the three.\n\n\u2022 Do NOT stop allopurinol/febuxostat during a flare\n\u2022 After the flare settles: offer urate-lowering therapy (treat-to-target serum urate <360 micromol/L; <300 if tophi/recurrent), start low + flare prophylaxis cover\n\u2022 Hot swollen joint + fever/unwell \u2192 treat as SEPTIC arthritis, not gout\n\u2022 Check U&E, consider CV risk/diuretic review"
+          "text": "Acute flare: NSAID (with PPI) OR colchicine 500mcg bd–qds (cap dose; caution renal impairment/statins) OR short oral prednisolone — treat fast, any of the three.\n\n• Do NOT stop allopurinol/febuxostat during a flare\n• After the flare settles: offer urate-lowering therapy (treat-to-target serum urate <360 micromol/L; <300 if tophi/recurrent), start low + flare prophylaxis cover\n• Hot swollen joint + fever/unwell → treat as SEPTIC arthritis, not gout\n• Check U&E, consider CV risk/diuretic review"
         },
         {
           "type": "link",
@@ -3095,7 +3095,7 @@
         {
           "type": "note",
           "label": "Cellulitis pathway",
-          "text": "Mark the border and date it. Uncomplicated: oral flucloxacillin (clarithromycin/doxycycline if pen-allergic), elevate, review 48h.\n\nAdmit / same-day ED if: systemic sepsis features, rapidly spreading, facial/periorbital (?orbital cellulitis \u2014 emergency), severe pain out of proportion (?necrotising \u2014 999), immunosuppressed, failed orals.\n\nUnilateral red swollen leg: consider DVT (often confused) and chronic venous eczema (usually bilateral, itchy, not febrile \u2014 doesn\u2019t need antibiotics)."
+          "text": "Mark the border and date it. Uncomplicated: oral flucloxacillin (clarithromycin/doxycycline if pen-allergic), elevate, review 48h.\n\nAdmit / same-day ED if: systemic sepsis features, rapidly spreading, facial/periorbital (?orbital cellulitis — emergency), severe pain out of proportion (?necrotising — 999), immunosuppressed, failed orals.\n\nUnilateral red swollen leg: consider DVT (often confused) and chronic venous eczema (usually bilateral, itchy, not febrile — doesn’t need antibiotics)."
         },
         {
           "type": "link",
@@ -3132,7 +3132,7 @@
         {
           "type": "note",
           "label": "ADR triage",
-          "text": "Prescriber review needed \u2014 check timing vs drug start, dose, interactions (BNF).\n\nSERIOUS \u2014 same-day/emergency:\n\u2022 ACEi angioedema (lip/tongue swelling) \u2192 emergency\n\u2022 New rash on allopurinol / lamotrigine / carbamazepine / penicillins \u2192 ?SJS/DRESS \u2192 stop + urgent review (mucosal involvement/blistering = emergency)\n\u2022 Muscle pain + dark urine on statin \u2192 ?rhabdo \u2192 same-day CK\n\u2022 Bleeding on anticoagulant \u2192 same-day\n\nReport serious/unexpected reactions via MHRA Yellow Card."
+          "text": "Prescriber review needed — check timing vs drug start, dose, interactions (BNF).\n\nSERIOUS — same-day/emergency:\n• ACEi angioedema (lip/tongue swelling) → emergency\n• New rash on allopurinol / lamotrigine / carbamazepine / penicillins → ?SJS/DRESS → stop + urgent review (mucosal involvement/blistering = emergency)\n• Muscle pain + dark urine on statin → ?rhabdo → same-day CK\n• Bleeding on anticoagulant → same-day\n\nReport serious/unexpected reactions via MHRA Yellow Card."
         },
         {
           "type": "link",
@@ -3173,7 +3173,7 @@
         {
           "type": "note",
           "label": "Delirium screen",
-          "text": "ACUTE change in cognition/attention = delirium until proven otherwise \u2014 in an older person this is a same-day assessment (4AT screen).\n\nHunt the cause: infection (UTI/chest), urinary retention, constipation, dehydration, hypoxia, drugs (opioids, anticholinergics, benzos \u2014 recent changes), alcohol withdrawal, electrolytes/glucose, pain, stroke.\n\nFluctuating course + inattention distinguishes from dementia (chronic \u2192 memory-loss rule). Both can coexist \u2014 acute-on-chronic change still needs same-day review."
+          "text": "ACUTE change in cognition/attention = delirium until proven otherwise — in an older person this is a same-day assessment (4AT screen).\n\nHunt the cause: infection (UTI/chest), urinary retention, constipation, dehydration, hypoxia, drugs (opioids, anticholinergics, benzos — recent changes), alcohol withdrawal, electrolytes/glucose, pain, stroke.\n\nFluctuating course + inattention distinguishes from dementia (chronic → memory-loss rule). Both can coexist — acute-on-chronic change still needs same-day review."
         },
         {
           "type": "link",
@@ -3214,7 +3214,7 @@
         {
           "type": "note",
           "label": "Alcohol pathway",
-          "text": "\u2022 Screen with AUDIT-C / full AUDIT\n\u2022 DEPENDENT drinkers must NOT stop abruptly \u2014 withdrawal seizures and delirium tremens can kill; arrange planned/supported detox\n\u2022 Already withdrawing (tremor, sweating, agitation, hallucinations, seizure) \u2192 same-day; severe \u2192 admission\n\u2022 Oral thiamine (Wernicke prophylaxis); refer local community alcohol service\n\u2022 Safeguarding: children/dependants at home; DVLA if relevant"
+          "text": "• Screen with AUDIT-C / full AUDIT\n• DEPENDENT drinkers must NOT stop abruptly — withdrawal seizures and delirium tremens can kill; arrange planned/supported detox\n• Already withdrawing (tremor, sweating, agitation, hallucinations, seizure) → same-day; severe → admission\n• Oral thiamine (Wernicke prophylaxis); refer local community alcohol service\n• Safeguarding: children/dependants at home; DVLA if relevant"
         },
         {
           "type": "link",
@@ -3255,7 +3255,7 @@
         {
           "type": "note",
           "label": "MEED risk assessment",
-          "text": "Eating disorders kill \u2014 assess medical risk (RCPsych MEED), do not rely on appearance or BMI alone (bulimia/ARFID often normal weight).\n\nCheck: rate of weight loss, BMI/%mBMI, HR (bradycardia <50), postural BP drop, core temp, SUSS test (sit-up/squat-stand), ECG (QTc), U&E (K+!), phosphate, glucose.\n\n\u2022 Physiological compromise \u2192 same-day medical admission (refeeding risk \u2014 admit, don\u2019t \u201cfeed up at home\u201d)\n\u2022 Under-18 \u2192 urgent referral to community eating-disorder service/CAMHS-ED (NICE NG69: do not delay for weight thresholds)"
+          "text": "Eating disorders kill — assess medical risk (RCPsych MEED), do not rely on appearance or BMI alone (bulimia/ARFID often normal weight).\n\nCheck: rate of weight loss, BMI/%mBMI, HR (bradycardia <50), postural BP drop, core temp, SUSS test (sit-up/squat-stand), ECG (QTc), U&E (K+!), phosphate, glucose.\n\n• Physiological compromise → same-day medical admission (refeeding risk — admit, don’t “feed up at home”)\n• Under-18 → urgent referral to community eating-disorder service/CAMHS-ED (NICE NG69: do not delay for weight thresholds)"
         },
         {
           "type": "link",
@@ -3299,7 +3299,7 @@
         {
           "type": "note",
           "label": "Perinatal MH pathway",
-          "text": "\u2022 Ask directly about thoughts of self-harm and of harming the baby; intrusive \u201cwhat if\u201d thoughts WITH distress and no intent are common in perinatal OCD \u2014 distinguish from psychotic ideation\n\u2022 Postpartum PSYCHOSIS (rapid onset days\u2013weeks post-birth: confusion, mania, delusions about the baby) = psychiatric emergency \u2192 same-day perinatal/crisis team\n\u2022 Refer perinatal mental-health team (priority access); EPDS/PHQ-9 useful\n\u2022 Baby blues (day 3\u201310, mild, self-limiting) \u2014 safety-net; persistent >2wk = treat as PND\n\u2022 Safeguarding: consider infant + other children"
+          "text": "• Ask directly about thoughts of self-harm and of harming the baby; intrusive “what if” thoughts WITH distress and no intent are common in perinatal OCD — distinguish from psychotic ideation\n• Postpartum PSYCHOSIS (rapid onset days–weeks post-birth: confusion, mania, delusions about the baby) = psychiatric emergency → same-day perinatal/crisis team\n• Refer perinatal mental-health team (priority access); EPDS/PHQ-9 useful\n• Baby blues (day 3–10, mild, self-limiting) — safety-net; persistent >2wk = treat as PND\n• Safeguarding: consider infant + other children"
         },
         {
           "type": "link",
@@ -3340,7 +3340,7 @@
         {
           "type": "note",
           "label": "Dental signposting",
-          "text": "GPs cannot provide NHS dental treatment and should not routinely prescribe for dental infection \u2014 the treatment is dental (drainage/extraction).\n\nSignpost: own dentist (urgent slot) or NHS 111 for urgent dental access if no dentist.\n\nESCALATE (\u2192 ED): facial swelling spreading to eye or neck, trismus, difficulty swallowing/breathing, systemically unwell (?Ludwig\u2019s angina / spreading odontogenic infection)."
+          "text": "GPs cannot provide NHS dental treatment and should not routinely prescribe for dental infection — the treatment is dental (drainage/extraction).\n\nSignpost: own dentist (urgent slot) or NHS 111 for urgent dental access if no dentist.\n\nESCALATE (→ ED): facial swelling spreading to eye or neck, trismus, difficulty swallowing/breathing, systemically unwell (?Ludwig’s angina / spreading odontogenic infection)."
         },
         {
           "type": "link",
@@ -3375,7 +3375,7 @@
         {
           "type": "note",
           "label": "Admin routing",
-          "text": "Results-status query \u2014 admin/clerical, not a clinical queue item.\n\n1. Check if result is filed \u2192 if normal & actioned, reception/portal can relay\n2. If abnormal/unactioned \u2192 route to the requesting clinician\n3. If pending \u2192 give expected turnaround\n4. Signpost NHS App / online record for future self-serve"
+          "text": "Results-status query — admin/clerical, not a clinical queue item.\n\n1. Check if result is filed → if normal & actioned, reception/portal can relay\n2. If abnormal/unactioned → route to the requesting clinician\n3. If pending → give expected turnaround\n4. Signpost NHS App / online record for future self-serve"
         }
       ]
     },
@@ -3406,7 +3406,7 @@
         {
           "type": "note",
           "label": "Admin routing",
-          "text": "Referral-status query \u2014 route to admin team, not the clinical queue.\n\n1. Check referral was sent + e-RS status\n2. If 2WW referral and no appointment within expected window \u2192 escalate to secretary/2WW chase actively (this one IS time-critical)\n3. Routine: signpost NHS App appointment tracking / hospital booking line\n4. New symptoms or deterioration while waiting \u2192 clinical review, consider expediting letter"
+          "text": "Referral-status query — route to admin team, not the clinical queue.\n\n1. Check referral was sent + e-RS status\n2. If 2WW referral and no appointment within expected window → escalate to secretary/2WW chase actively (this one IS time-critical)\n3. Routine: signpost NHS App appointment tracking / hospital booking line\n4. New symptoms or deterioration while waiting → clinical review, consider expediting letter"
         }
       ]
     },
@@ -3437,7 +3437,7 @@
         {
           "type": "note",
           "label": "Admin routing",
-          "text": "Letter/report request \u2014 admin workflow, not the clinical queue (fit notes have their own rule).\n\n\u2022 Non-NHS work: practice may charge (per BMA guidance) \u2014 admin to advise fee + timescale before clinician writes\n\u2022 Factual extracts can often be handled via SAR/online record instead of a bespoke letter\n\u2022 Route to designated letters clinician/secretary with clear purpose stated"
+          "text": "Letter/report request — admin workflow, not the clinical queue (fit notes have their own rule).\n\n• Non-NHS work: practice may charge (per BMA guidance) — admin to advise fee + timescale before clinician writes\n• Factual extracts can often be handled via SAR/online record instead of a bespoke letter\n• Route to designated letters clinician/secretary with clear purpose stated"
         }
       ]
     },
@@ -3469,7 +3469,7 @@
         {
           "type": "note",
           "label": "Travel health routing",
-          "text": "Planned preventive care \u2192 practice nurse travel clinic or private travel clinic, ideally 6\u20138 weeks before departure (some courses need time; late presentation still worth assessing).\n\n\u2022 Risk-assess via fitfortravel/NaTHNaC by destination\n\u2022 Only some vaccines are NHS-funded (typhoid, hep A, cholera, polio-containing booster); yellow fever/rabies/JE = private/registered centre\n\u2022 Malaria prophylaxis: private prescription\n\u2022 Returning traveller with FEVER = clinical, not admin (?malaria \u2014 same-day)"
+          "text": "Planned preventive care → practice nurse travel clinic or private travel clinic, ideally 6–8 weeks before departure (some courses need time; late presentation still worth assessing).\n\n• Risk-assess via fitfortravel/NaTHNaC by destination\n• Only some vaccines are NHS-funded (typhoid, hep A, cholera, polio-containing booster); yellow fever/rabies/JE = private/registered centre\n• Malaria prophylaxis: private prescription\n• Returning traveller with FEVER = clinical, not admin (?malaria — same-day)"
         },
         {
           "type": "link",
@@ -3505,7 +3505,7 @@
         {
           "type": "note",
           "label": "GLP-1 weight-management requests",
-          "text": "Rapidly growing request type \u2014 route to a planned appointment, not urgent queue.\n\n\u2022 NICE: semaglutide (Wegovy, TA875) via specialist weight management; tirzepatide (Mounjaro, TA1026) with phased primary-care rollout from 2025 under strict eligibility (BMI + comorbidity tiers) \u2014 CHECK CURRENT LOCAL COMMISSIONING before promising anything\n\u2022 Ozempic is licensed for T2DM, not weight loss \u2014 do not prescribe off-label for weight\n\u2022 Many patients buy privately online: ask, document, counsel (side effects, gallstones, pancreatitis, pregnancy avoidance)\n\u2022 Screen for eating disorder before supporting weight-loss medication"
+          "text": "Rapidly growing request type — route to a planned appointment, not urgent queue.\n\n• NICE: semaglutide (Wegovy, TA875) via specialist weight management; tirzepatide (Mounjaro, TA1026) with phased primary-care rollout from 2025 under strict eligibility (BMI + comorbidity tiers) — CHECK CURRENT LOCAL COMMISSIONING before promising anything\n• Ozempic is licensed for T2DM, not weight loss — do not prescribe off-label for weight\n• Many patients buy privately online: ask, document, counsel (side effects, gallstones, pancreatitis, pregnancy avoidance)\n• Screen for eating disorder before supporting weight-loss medication"
         }
       ]
     },
@@ -3540,7 +3540,7 @@
         {
           "type": "note",
           "label": "ACP routing",
-          "text": "Advance-care-planning / DNACPR / LPA request \u2014 sensitive but planned work: book with the patient\u2019s usual GP (or palliative lead), allow a double slot; not for the urgent queue.\n\n\u2022 DNACPR/ReSPECT: clinical decision made WITH patient/family \u2014 document and share (incl. out-of-hours/ambulance visibility)\n\u2022 LPA forms are completed via OPG \u2014 GP only needed if asked to act as certificate provider (may carry a fee)\n\u2022 If the text suggests the patient is actively dying or in symptom crisis \u2192 that is urgent clinical work, not admin"
+          "text": "Advance-care-planning / DNACPR / LPA request — sensitive but planned work: book with the patient’s usual GP (or palliative lead), allow a double slot; not for the urgent queue.\n\n• DNACPR/ReSPECT: clinical decision made WITH patient/family — document and share (incl. out-of-hours/ambulance visibility)\n• LPA forms are completed via OPG — GP only needed if asked to act as certificate provider (may carry a fee)\n• If the text suggests the patient is actively dying or in symptom crisis → that is urgent clinical work, not admin"
         },
         {
           "type": "link",
@@ -3580,7 +3580,7 @@
         {
           "type": "note",
           "label": "Memory pathway",
-          "text": "Gradual memory decline \u2192 routine (not urgent) workup: collateral history, cognitive test (GPCOG/6-CIT), dementia bloods (FBC, U&E, LFT, TFT, B12/folate, calcium, glucose \u00b1 HbA1c), depression screen, medication review (anticholinergic burden) \u2192 memory clinic referral.\n\n\u2022 ACUTE/fluctuating confusion = delirium \u2192 same-day (separate rule)\n\u2022 Rapid progression over weeks, young onset, neurology \u2192 urgent referral\n\u2022 Driving: advise DVLA notification where diagnosis made"
+          "text": "Gradual memory decline → routine (not urgent) workup: collateral history, cognitive test (GPCOG/6-CIT), dementia bloods (FBC, U&E, LFT, TFT, B12/folate, calcium, glucose ± HbA1c), depression screen, medication review (anticholinergic burden) → memory clinic referral.\n\n• ACUTE/fluctuating confusion = delirium → same-day (separate rule)\n• Rapid progression over weeks, young onset, neurology → urgent referral\n• Driving: advise DVLA notification where diagnosis made"
         },
         {
           "type": "link",
@@ -3813,7 +3813,7 @@
     },
     "queue.monitoringDueRed": {
       "enabled": false,
-      "label": "Monitoring \u00d7{count}",
+      "label": "Monitoring ×{count}",
       "kind": "red",
       "actions": []
     },
@@ -3891,7 +3891,7 @@
     },
     "record.stoppStart": {
       "enabled": true,
-      "label": "Rx review \u00d7{count}",
+      "label": "Rx review ×{count}",
       "kind": "amber",
       "actions": []
     },
@@ -3912,13 +3912,13 @@
         },
         {
           "type": "link",
-          "label": "eFI \u2014 electronic frailty index (NHSE)",
+          "label": "eFI — electronic frailty index (NHSE)",
           "url": "https://www.england.nhs.uk/ourwork/clinical-policy/older-people/frailty/efi/"
         },
         {
           "type": "note",
           "label": "How to use",
-          "text": "Signpost only \u2014 Medicus does not compute these scores.\n\nOpen the calculator and enter the inputs from the record:\n\u2022 QRISK3: age, sex, ethnicity, smoking, systolic BP, total cholesterol:HDL ratio, BMI, comorbidities\n\u2022 QCancer: age, sex, symptoms, comorbidities\n\u2022 eFI: coded frailty deficits\n\nAlways verify against the patient record."
+          "text": "Signpost only — Medicus does not compute these scores.\n\nOpen the calculator and enter the inputs from the record:\n• QRISK3: age, sex, ethnicity, smoking, systolic BP, total cholesterol:HDL ratio, BMI, comorbidities\n• QCancer: age, sex, symptoms, comorbidities\n• eFI: coded frailty deficits\n\nAlways verify against the patient record."
         }
       ]
     }
@@ -3932,10 +3932,34 @@
       "label": "Needs review",
       "normalLabel": "No growth",
       "analyte": {
-        "match": ["msu", "urine culture", "mid-stream urine", "mid stream urine", "m,c&s", "mc&s", "culture & sensitivity", "culture and sensitivity"]
+        "match": [
+          "msu",
+          "urine culture",
+          "mid-stream urine",
+          "mid stream urine",
+          "m,c&s",
+          "mc&s",
+          "culture & sensitivity",
+          "culture and sensitivity"
+        ]
       },
-      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"],
-      "abnormalText": ["pure growth of", "predominant growth of", "heavy growth of", "sensitive to", "resistant to", "sensitivities shown", "antimicrobial sensitivity"]
+      "normalText": [
+        "no growth",
+        "no bacterial growth",
+        "no significant growth",
+        "no organisms isolated",
+        "no organism isolated",
+        "no growth after"
+      ],
+      "abnormalText": [
+        "pure growth of",
+        "predominant growth of",
+        "heavy growth of",
+        "sensitive to",
+        "resistant to",
+        "sensitivities shown",
+        "antimicrobial sensitivity"
+      ]
     },
     {
       "id": "base-urine-sterile-pyuria",
@@ -3945,8 +3969,49 @@
       "label": "Sterile pyuria — pus cells raised, culture negative",
       "level": "amber",
       "conditions": [
-        { "analyte": { "match": ["pus cell", "white cell", "white blood cell", "wbc", "leucocyte", "leukocyte"], "specimen": ["urine", "msu", "mid-stream", "mid stream", "csu"] }, "comparator": "above", "value": 40 },
-        { "analyte": { "match": ["culture"], "specimen": ["urine", "msu", "mid-stream", "mid stream", "csu"] }, "contains": ["no growth", "no significant growth", "no bacterial growth", "no organisms isolated", "no organism isolated", "sterile"] }
+        {
+          "analyte": {
+            "match": [
+              "pus cell",
+              "white cell",
+              "white blood cell",
+              "wbc",
+              "leucocyte",
+              "leukocyte"
+            ],
+            "specimen": [
+              "urine",
+              "msu",
+              "mid-stream",
+              "mid stream",
+              "csu"
+            ]
+          },
+          "comparator": "above",
+          "value": 40
+        },
+        {
+          "analyte": {
+            "match": [
+              "culture"
+            ],
+            "specimen": [
+              "urine",
+              "msu",
+              "mid-stream",
+              "mid stream",
+              "csu"
+            ]
+          },
+          "contains": [
+            "no growth",
+            "no significant growth",
+            "no bacterial growth",
+            "no organisms isolated",
+            "no organism isolated",
+            "sterile"
+          ]
+        }
       ]
     },
     {
@@ -3956,9 +4021,22 @@
       "builtin": true,
       "label": "Bowel screening: no response",
       "analyte": {
-        "match": ["bcs:fob", "bcs fob", "bowel cancer screening", "faecal occult blood"]
+        "match": [
+          "bcs:fob",
+          "bcs fob",
+          "bowel cancer screening",
+          "faecal occult blood"
+        ]
       },
-      "abnormalText": ["no response to bowel cancer screening", "no response to bowel screening", "non-response to bowel cancer screening", "bowel cancer screening programme non-responder", "bowel cancer screening non-responder", "non-responder", "non responder"]
+      "abnormalText": [
+        "no response to bowel cancer screening",
+        "no response to bowel screening",
+        "non-response to bowel cancer screening",
+        "bowel cancer screening programme non-responder",
+        "bowel cancer screening non-responder",
+        "non-responder",
+        "non responder"
+      ]
     },
     {
       "id": "base-low-haemoglobin",
@@ -3967,8 +4045,15 @@
       "builtin": true,
       "label": "Critical low haemoglobin (red ≤80 g/L)",
       "analyte": {
-        "match": ["haemoglobin", "hemoglobin"],
-        "exclude": ["a1c", "glycated", "glycosylated"]
+        "match": [
+          "haemoglobin",
+          "hemoglobin"
+        ],
+        "exclude": [
+          "a1c",
+          "glycated",
+          "glycosylated"
+        ]
       },
       "comparator": "below",
       "red": 80,
@@ -3981,8 +4066,13 @@
       "builtin": true,
       "label": "Critical high potassium (red ≥6.5 mmol/L)",
       "analyte": {
-        "match": ["potassium"],
-        "exclude": ["urine", "urinary"]
+        "match": [
+          "potassium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary"
+        ]
       },
       "comparator": "above",
       "red": 6.5,
@@ -3995,8 +4085,14 @@
       "builtin": true,
       "label": "Critical low sodium (red ≤120 mmol/L)",
       "analyte": {
-        "match": ["sodium"],
-        "exclude": ["urine", "urinary", "valproate"]
+        "match": [
+          "sodium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "valproate"
+        ]
       },
       "comparator": "below",
       "red": 120,
@@ -4009,7 +4105,9 @@
       "builtin": true,
       "label": "Critical low eGFR (red ≤15 mL/min/1.73m²)",
       "analyte": {
-        "match": ["gfr"]
+        "match": [
+          "gfr"
+        ]
       },
       "comparator": "below",
       "red": 15,
@@ -4022,8 +4120,15 @@
       "builtin": true,
       "label": "Critical low platelets (red ≤30 ×10⁹/L)",
       "analyte": {
-        "match": ["platelet"],
-        "exclude": ["mean platelet", "volume", "ratio", "large"]
+        "match": [
+          "platelet"
+        ],
+        "exclude": [
+          "mean platelet",
+          "volume",
+          "ratio",
+          "large"
+        ]
       },
       "comparator": "below",
       "red": 30,
@@ -4036,8 +4141,14 @@
       "builtin": true,
       "label": "Critical low neutrophils (red ≤0.5 ×10⁹/L)",
       "analyte": {
-        "match": ["neutrophil"],
-        "exclude": ["%", "percent", "ratio"]
+        "match": [
+          "neutrophil"
+        ],
+        "exclude": [
+          "%",
+          "percent",
+          "ratio"
+        ]
       },
       "comparator": "below",
       "red": 0.5,
@@ -4050,7 +4161,11 @@
       "builtin": true,
       "label": "High INR (red ≥8)",
       "analyte": {
-        "match": ["inr", "international normalised ratio", "international normalized ratio"]
+        "match": [
+          "inr",
+          "international normalised ratio",
+          "international normalized ratio"
+        ]
       },
       "comparator": "above",
       "red": 8,
@@ -4063,14 +4178,38 @@
       "builtin": true,
       "label": "Prediabetes range — not on record (HbA1c 42–47)",
       "analyte": {
-        "match": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"]
+        "match": [
+          "hba1c",
+          "haemoglobin a1c",
+          "glycated haemoglobin",
+          "glycosylated haemoglobin"
+        ]
       },
       "comparator": "above",
       "amber": 42,
       "unit": "mmol/mol",
       "suppressIfProblem": {
-        "match": ["prediabetes", "pre-diabetes", "pre-diabetic", "impaired glucose", "impaired fasting", "non-diabetic hyperglycaemia", "non-diabetic hyperglycemia", "diabetes", "diabetic", "t1dm", "t2dm", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes"],
-        "exclude": ["family history", "diabetes insipidus", "gestational"]
+        "match": [
+          "prediabetes",
+          "pre-diabetes",
+          "pre-diabetic",
+          "impaired glucose",
+          "impaired fasting",
+          "non-diabetic hyperglycaemia",
+          "non-diabetic hyperglycemia",
+          "diabetes",
+          "diabetic",
+          "t1dm",
+          "t2dm",
+          "diabetes mellitus",
+          "type 1 diabetes",
+          "type 2 diabetes"
+        ],
+        "exclude": [
+          "family history",
+          "diabetes insipidus",
+          "gestational"
+        ]
       }
     },
     {
@@ -4080,14 +4219,41 @@
       "builtin": true,
       "label": "Possible diabetes — not on register (HbA1c ≥48)",
       "analyte": {
-        "match": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"]
+        "match": [
+          "hba1c",
+          "haemoglobin a1c",
+          "glycated haemoglobin",
+          "glycosylated haemoglobin"
+        ]
       },
       "comparator": "above",
       "red": 48,
       "unit": "mmol/mol",
       "suppressIfProblem": {
-        "match": ["diabetes", "diabetic", "t1dm", "t2dm", "diabetes mellitus", "type 1 diabetes", "type 2 diabetes", "type i diabetes", "type ii diabetes", "insulin dependent diabetes", "non insulin dependent diabetes"],
-        "exclude": ["family history", "non-diabetic", "pre-diabetic", "prediabetes", "pre-diabetes", "impaired glucose", "impaired fasting", "diabetes insipidus", "gestational"]
+        "match": [
+          "diabetes",
+          "diabetic",
+          "t1dm",
+          "t2dm",
+          "diabetes mellitus",
+          "type 1 diabetes",
+          "type 2 diabetes",
+          "type i diabetes",
+          "type ii diabetes",
+          "insulin dependent diabetes",
+          "non insulin dependent diabetes"
+        ],
+        "exclude": [
+          "family history",
+          "non-diabetic",
+          "pre-diabetic",
+          "prediabetes",
+          "pre-diabetes",
+          "impaired glucose",
+          "impaired fasting",
+          "diabetes insipidus",
+          "gestational"
+        ]
       }
     },
     {
@@ -4097,10 +4263,12 @@
       "builtin": true,
       "label": "High lithium level — toxicity risk (red ≥1.5 mmol/L)",
       "analyte": {
-        "match": ["lithium"]
+        "match": [
+          "lithium"
+        ]
       },
       "comparator": "above",
-      "amber": 1.0,
+      "amber": 1,
       "red": 1.5,
       "unit": "mmol/L"
     },
@@ -4111,11 +4279,13 @@
       "builtin": true,
       "label": "High digoxin level — toxicity risk (red ≥2.0 micrograms/L)",
       "analyte": {
-        "match": ["digoxin"]
+        "match": [
+          "digoxin"
+        ]
       },
       "comparator": "above",
       "amber": 1.5,
-      "red": 2.0,
+      "red": 2,
       "unit": "micrograms/L"
     },
     {
@@ -4125,11 +4295,16 @@
       "builtin": true,
       "label": "Critical low potassium (red ≤2.5 mmol/L)",
       "analyte": {
-        "match": ["potassium"],
-        "exclude": ["urine", "urinary"]
+        "match": [
+          "potassium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary"
+        ]
       },
       "comparator": "below",
-      "amber": 3.0,
+      "amber": 3,
       "red": 2.5,
       "unit": "mmol/L"
     },
@@ -4140,12 +4315,22 @@
       "builtin": true,
       "label": "High calcium — hypercalcaemia (red ≥3.0 mmol/L)",
       "analyte": {
-        "match": ["calcium"],
-        "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
+        "match": [
+          "calcium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "24 hour",
+          "24-hour",
+          "/creat",
+          "ionised",
+          "ionized"
+        ]
       },
       "comparator": "above",
       "amber": 2.6,
-      "red": 3.0,
+      "red": 3,
       "unit": "mmol/L"
     },
     {
@@ -4155,7 +4340,9 @@
       "builtin": true,
       "label": "Low eGFR — significant CKD (amber ≤30 mL/min/1.73m²)",
       "analyte": {
-        "match": ["gfr"]
+        "match": [
+          "gfr"
+        ]
       },
       "comparator": "below",
       "amber": 30,
@@ -4169,11 +4356,62 @@
       "label": "Blood culture — needs review",
       "normalLabel": "No growth",
       "analyte": {
-        "match": ["blood culture", "blood cx", "blood c&s"],
-        "exclude": ["urine", "wound", "sputum", "csf", "swab", "stool", "faeces", "faecal"]
+        "match": [
+          "blood culture",
+          "blood cx",
+          "blood c&s"
+        ],
+        "exclude": [
+          "urine",
+          "wound",
+          "sputum",
+          "csf",
+          "swab",
+          "stool",
+          "faeces",
+          "faecal"
+        ]
       },
-      "normalText": ["no growth", "no bacterial growth", "no significant growth", "no organisms isolated", "no organism isolated", "no growth after"],
-      "abnormalText": ["grown in aerobic bottle", "grown in anaerobic bottle", "positive blood culture", "gram positive", "gram negative", "gram-positive", "gram-negative", "bacteraemia", "bacteremia", "fungaemia", "sensitive to", "resistant to", "sensitivities shown", "staphylococcus", "streptococcus", "escherichia", "klebsiella", "enterococcus", "pseudomonas", "haemophilus", "neisseria", "listeria", "salmonella", "candida", "acinetobacter", "serratia", "enterobacter", "proteus", "citrobacter", "stenotrophomonas"]
+      "normalText": [
+        "no growth",
+        "no bacterial growth",
+        "no significant growth",
+        "no organisms isolated",
+        "no organism isolated",
+        "no growth after"
+      ],
+      "abnormalText": [
+        "grown in aerobic bottle",
+        "grown in anaerobic bottle",
+        "positive blood culture",
+        "gram positive",
+        "gram negative",
+        "gram-positive",
+        "gram-negative",
+        "bacteraemia",
+        "bacteremia",
+        "fungaemia",
+        "sensitive to",
+        "resistant to",
+        "sensitivities shown",
+        "staphylococcus",
+        "streptococcus",
+        "escherichia",
+        "klebsiella",
+        "enterococcus",
+        "pseudomonas",
+        "haemophilus",
+        "neisseria",
+        "listeria",
+        "salmonella",
+        "candida",
+        "acinetobacter",
+        "serratia",
+        "enterobacter",
+        "proteus",
+        "citrobacter",
+        "stenotrophomonas"
+      ]
     },
     {
       "id": "base-low-calcium",
@@ -4182,8 +4420,21 @@
       "builtin": true,
       "label": "Low adjusted calcium — hypocalcaemia (red ≤1.9 mmol/L)",
       "analyte": {
-        "match": ["adjusted calcium", "corrected calcium", "albumin-adjusted calcium", "albumin adjusted calcium"],
-        "exclude": ["urine", "urinary", "24 hour", "24-hour", "/creat", "ionised", "ionized"]
+        "match": [
+          "adjusted calcium",
+          "corrected calcium",
+          "albumin-adjusted calcium",
+          "albumin adjusted calcium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "24 hour",
+          "24-hour",
+          "/creat",
+          "ionised",
+          "ionized"
+        ]
       },
       "comparator": "below",
       "amber": 2.1,
@@ -4197,8 +4448,15 @@
       "builtin": true,
       "label": "Low magnesium — hypomagnesaemia (red ≤0.5 mmol/L)",
       "analyte": {
-        "match": ["magnesium"],
-        "exclude": ["urine", "urinary", "24 hour", "24-hour"]
+        "match": [
+          "magnesium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "24 hour",
+          "24-hour"
+        ]
       },
       "comparator": "below",
       "amber": 0.6,
@@ -4212,16 +4470,33 @@
       "builtin": true,
       "label": "High TSH — possible hypothyroidism (red ≥20 mU/L)",
       "analyte": {
-        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
-        "exclude": ["receptor", "antibody", "antibodies"]
+        "match": [
+          "tsh",
+          "thyroid stimulating hormone",
+          "thyroid-stimulating hormone"
+        ],
+        "exclude": [
+          "receptor",
+          "antibody",
+          "antibodies"
+        ]
       },
       "comparator": "above",
       "amber": 10,
       "red": 20,
       "unit": "mU/L",
       "suppressIfProblem": {
-        "match": ["hypothyroidism", "hypothyroid", "levothyroxine", "thyroxine", "myxoedema", "myxedema"],
-        "exclude": ["family history"]
+        "match": [
+          "hypothyroidism",
+          "hypothyroid",
+          "levothyroxine",
+          "thyroxine",
+          "myxoedema",
+          "myxedema"
+        ],
+        "exclude": [
+          "family history"
+        ]
       }
     },
     {
@@ -4231,16 +4506,36 @@
       "builtin": true,
       "label": "Suppressed TSH — possible thyrotoxicosis (red ≤0.01 mU/L)",
       "analyte": {
-        "match": ["tsh", "thyroid stimulating hormone", "thyroid-stimulating hormone"],
-        "exclude": ["receptor", "antibody", "antibodies"]
+        "match": [
+          "tsh",
+          "thyroid stimulating hormone",
+          "thyroid-stimulating hormone"
+        ],
+        "exclude": [
+          "receptor",
+          "antibody",
+          "antibodies"
+        ]
       },
       "comparator": "below",
       "amber": 0.1,
       "red": 0.01,
       "unit": "mU/L",
       "suppressIfProblem": {
-        "match": ["thyrotoxicosis", "hyperthyroidism", "hyperthyroid", "graves", "carbimazole", "propylthiouracil", "thyroid cancer", "levothyroxine", "thyroxine"],
-        "exclude": ["family history"]
+        "match": [
+          "thyrotoxicosis",
+          "hyperthyroidism",
+          "hyperthyroid",
+          "graves",
+          "carbimazole",
+          "propylthiouracil",
+          "thyroid cancer",
+          "levothyroxine",
+          "thyroxine"
+        ],
+        "exclude": [
+          "family history"
+        ]
       }
     },
     {
@@ -4251,8 +4546,15 @@
       "label": "Throat swab — needs review",
       "normalLabel": "Negative",
       "analyte": {
-        "match": ["throat swab", "throat culture", "culture"],
-        "specimen": ["throat swab", "throat"]
+        "match": [
+          "throat swab",
+          "throat culture",
+          "culture"
+        ],
+        "specimen": [
+          "throat swab",
+          "throat"
+        ]
       },
       "normalText": [
         "beta haemolytic streptococcus not isolated",
@@ -4265,6 +4567,234 @@
         "beta haemolytic streptococcus isolated",
         "group a streptococcus isolated"
       ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Echography",
+          "Ultrasound",
+          "Ultrasonography",
+          "USS"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-uss-abnormal",
+      "kind": "text",
+      "label": "Ultrasound — review",
+      "normalLabel": "Normal US",
+      "normalText": [
+        "No focal soft tissue abnormality",
+        "Lipoma",
+        "Unremarkable pelvic study",
+        "No sonographic abnormality identified"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Histology"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-histology-abnormal",
+      "kind": "text",
+      "label": "Histology — review",
+      "normalLabel": "Histology normal",
+      "normalText": [
+        "benign intradermal melanocytic naevus",
+        "no evidence of atypia or malignancy",
+        "no evidence of dysplasia or malignancy",
+        "no dysplasia or malignancy",
+        "no atypia or malignancy"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "HELICOBACTER PYLORI STOOL ANTIGEN",
+          "helicobacter pylori",
+          "H pylori antigen"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-h-pylori",
+      "kind": "text",
+      "label": "H. pylori positive",
+      "normalLabel": "H pylori normal",
+      "normalText": [
+        "NOT detected"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "CHLAMYDIA AND GONORRHOEA NAAT",
+          "chlamydia trachomatis",
+          "neisseria gonorrhoea"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-sti-naat",
+      "kind": "text",
+      "label": "STI screen positive",
+      "normalLabel": "STI screen NAD",
+      "normalText": [
+        "NOT detected"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Enteric pathogen DNA",
+          "FAECES - MOLECULAR SCREENING",
+          "Faeces MC&S"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-stool-mcs",
+      "kind": "text",
+      "label": "Stool MC&S — review",
+      "normalLabel": "MC&S NAD",
+      "normalText": [
+        "not detected"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Candida Culture"
+        ],
+        "specimen": [
+          "GENITAL SWAB CULTURE"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-genital-candida",
+      "kind": "text",
+      "label": "Vaginal thrush",
+      "normalLabel": "No vag. thrush",
+      "normalText": [
+        "Candida species not isolated"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Culture",
+          "Anaerobic culture"
+        ],
+        "specimen": [
+          "WOUND SWAB"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-wound-swab-growth",
+      "kind": "text",
+      "label": "Wound swab positive",
+      "normalLabel": "Wound swab no growth",
+      "normalText": [
+        "no growth",
+        "no significant growth",
+        "anaerobes not isolated"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Culture for fungi",
+          "Anaerobic culture"
+        ],
+        "specimen": [
+          "EAR SWAB"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-ear-swab-growth",
+      "kind": "text",
+      "label": "Ear swab positive",
+      "normalLabel": "No growth",
+      "normalText": [
+        "no growth",
+        "no significant growth",
+        "no organisms isolated"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "EBV - VCA IgM level",
+          "EBV capsid IgG level",
+          "EBV nuclear IgG level"
+        ],
+        "specimen": [
+          "Epstein-Barr virus serology"
+        ]
+      },
+      "builtin": true,
+      "enabled": true,
+      "id": "base-ebv-serology",
+      "kind": "text",
+      "label": "EBV positive",
+      "normalLabel": "No growth",
+      "normalText": [
+        "NOT detected"
+      ]
+    },
+    {
+      "analyte": {
+        "match": [
+          "Fibrosis-4 score"
+        ]
+      },
+      "builtin": true,
+      "comparator": "above",
+      "enabled": true,
+      "id": "base-fib4-elevated",
+      "kind": "threshold",
+      "label": "FIB-4 elevated — fibrosis risk (red ≥2.67, amber ≥1.3)",
+      "amber": 1.3,
+      "red": 2.67,
+      "unit": null
+    },
+    {
+      "analyte": {
+        "match": [
+          "ferritin"
+        ]
+      },
+      "builtin": true,
+      "comparator": "below",
+      "enabled": true,
+      "id": "base-low-ferritin",
+      "kind": "threshold",
+      "label": "Low ferritin (red <15, amber <60 µg/L)",
+      "amber": 60,
+      "red": 15,
+      "unit": "µg/L"
+    },
+    {
+      "analyte": {
+        "match": [
+          "B12"
+        ]
+      },
+      "builtin": true,
+      "comparator": "below",
+      "enabled": true,
+      "id": "base-low-b12",
+      "kind": "threshold",
+      "label": "Low B12 (red <110, amber <180 ng/L)",
+      "amber": 180,
+      "red": 110,
+      "unit": "ng/L"
     }
   ]
 }

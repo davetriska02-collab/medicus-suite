@@ -3080,7 +3080,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
             .filter(Boolean)
             .join(' · ');
       const row = document.createElement('div');
-      row.className = 'tl-rule-row' + (t.disabled ? ' tl-rule-disabled' : '');
+      // tl-rule-row-oir: a compact 4-column variant. The shared .tl-rule-row grid
+      // reserves two extra columns (patterns/actions counts) the OIR list never
+      // fills, whose dead width helped shove the Edit/× actions off a narrow panel.
+      row.className = 'tl-rule-row tl-rule-row-oir' + (t.disabled ? ' tl-rule-disabled' : '');
       row.innerHTML =
         '<span></span>' +
         '<span class="tl-rule-kind tl-rule-kind-' +
@@ -3097,8 +3100,6 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         escHtml(termSummary) +
         '</span>' +
         '</span>' +
-        '<span></span>' +
-        '<span></span>' +
         '<span class="tl-rule-actions">' +
         '<button class="tl-btn" data-act="edit">Edit</button>' +
         '<button class="tl-btn tl-btn-danger" data-act="del">×</button>' +

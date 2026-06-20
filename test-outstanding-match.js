@@ -142,6 +142,55 @@ check(
   '3-analyte U&E signature is confident + auto-ticks even without a panel title'
 );
 
+// ── 6a. URINE electrolytes must NOT match a BLOOD U&E request ──────────────────
+// A urine electrolytes panel shares every U&E analyte name (urine sodium/potassium/
+// urea/creatinine) and the word "electrolyte". Without the U&E def's `exclude`, it
+// matched — and with auto-tick on could wrongly clear an outstanding blood U&E.
+// (Reported false positive: a urine electrolytes report matching the U&E request.)
+console.log('urine electrolytes vs blood U&E (exclude):');
+const urineReport = {
+  title: 'Urine electrolytes',
+  results: [
+    { name: 'Urine sodium', specimen: 'Urine electrolytes', date: '2026-06-10' },
+    { name: 'Urine potassium', specimen: 'Urine electrolytes', date: '2026-06-10' },
+    { name: 'Urine urea', specimen: 'Urine electrolytes', date: '2026-06-10' },
+    { name: 'Urine creatinine', specimen: 'Urine electrolytes', date: '2026-06-10' },
+  ],
+};
+const urineVsUe = M.matchOutstanding(
+  [{ name: 'Urea and Electrolytes WITH Potassium', requestedDate: '2026-02-04' }],
+  urineReport
+);
+check(
+  urineVsUe[0].status === 'outstanding' && urineVsUe[0].autoTick === false,
+  'a urine electrolytes report does NOT clear an outstanding blood U&E request'
+);
+const urineCov = M.reportCoverage(urineReport);
+check(
+  !urineCov.confident.has('ue') && !urineCov.tentative.has('ue'),
+  'a urine-only report covers neither confident nor tentative U&E'
+);
+
+// 6a-ii. A genuine BLOOD U&E (with its specimen title) still auto-ticks — the
+// exclude must not over-reach and break the legitimate match.
+console.log('blood U&E still matches (exclude regression):');
+const bloodUeReport = {
+  title: 'Urea and electrolytes',
+  results: [
+    { name: 'Sodium', specimen: 'Urea and electrolytes', date: '2026-06-10' },
+    { name: 'Potassium', specimen: 'Urea and electrolytes', date: '2026-06-10' },
+    { name: 'Creatinine', specimen: 'Urea and electrolytes', date: '2026-06-10' },
+  ],
+};
+const bloodUe = M.matchOutstanding(
+  [{ name: 'Urea and Electrolytes WITH Potassium', requestedDate: '2026-02-04' }],
+  bloodUeReport
+);
+check(
+  bloodUe[0].status === 'resulted' && bloodUe[0].autoTick === true,
+  'a genuine blood U&E report still auto-ticks the U&E request'
+);
+
 // ── 6b. Real captured lipid report (analytes only, no specimen, sample 18 Jun) ─
 console.log('real captured lipid report:');
 const realLipidReport = {
@@ -379,8 +428,14 @@ check(hormoneKeys[0].key === 'fsh', 'Follicle Stimulating Hormone → fsh');
 check(hormoneKeys[1].key === 'lh', 'Luteinising Hormone → lh');
 
 // 9b. US spelling resolves too (luteinizing / estradiol).
-check(M.resolveDef('Luteinizing Hormone', ['req']) && M.resolveDef('Luteinizing Hormone', ['req']).key === 'lh', 'US spelling Luteinizing → lh');
-check(M.resolveDef('Estradiol', ['req']) && M.resolveDef('Estradiol', ['req']).key === 'oestradiol', 'US spelling Estradiol → oestradiol');
+check(
+  M.resolveDef('Luteinizing Hormone', ['req']) && M.resolveDef('Luteinizing Hormone', ['req']).key === 'lh',
+  'US spelling Luteinizing → lh'
+);
+check(
+  M.resolveDef('Estradiol', ['req']) && M.resolveDef('Estradiol', ['req']).key === 'oestradiol',
+  'US spelling Estradiol → oestradiol'
+);
 
 // 9c. Single-analyte report ticks its own request and nothing else.
 const fshReport = {
@@ -400,7 +455,10 @@ check(
 // 9d. LH analyte (the abbreviation as it appears on a report) is recognised confidently.
 const lhReport = { results: [{ name: 'LH', specimen: '', date: '2026-04-20' }] };
 const lhOut = M.matchOutstanding([HORMONE_LABELS[1]], lhReport);
-check(lhOut[0].status === 'resulted' && lhOut[0].autoTick === true, 'lone "LH" analyte resolves the LH request confidently');
+check(
+  lhOut[0].status === 'resulted' && lhOut[0].autoTick === true,
+  'lone "LH" analyte resolves the LH request confidently'
+);
 
 // 9e. Resulted-elsewhere now works for FSH (the originally-flagged failure):
 // an LH report leaves FSH outstanding, but history enrichment finds it in record.
@@ -426,21 +484,35 @@ console.log('user test dictionary:');
 
 // 10a. A brand-new custom test is recognised once merged in.
 const customDefs = M.mergeTestDefs(M.TEST_DEFS, [
-  { key: 'vitd', label: 'Vitamin D', req: ['vitamin d', '25-oh vit d'], rep: ['vitamin d'], analytes: ['vitamin d', '25 hydroxyvitamin d'], singleAnalyte: true },
+  {
+    key: 'vitd',
+    label: 'Vitamin D',
+    req: ['vitamin d', '25-oh vit d'],
+    rep: ['vitamin d'],
+    analytes: ['vitamin d', '25 hydroxyvitamin d'],
+    singleAnalyte: true,
+  },
 ]);
 check(M.resolveDef('Vitamin D Level', ['req']) === null, '10a built-in defs do NOT know Vitamin D (baseline)');
 check(
-  M.resolveDef('Vitamin D Level', ['req'], customDefs) && M.resolveDef('Vitamin D Level', ['req'], customDefs).key === 'vitd',
+  M.resolveDef('Vitamin D Level', ['req'], customDefs) &&
+    M.resolveDef('Vitamin D Level', ['req'], customDefs).key === 'vitd',
   '10a merged defs DO resolve a custom Vitamin D test'
 );
-const vitdReport = { title: 'Vitamin D', results: [{ name: '25 hydroxyvitamin D', specimen: 'Vitamin D', date: '2026-05-01' }] };
+const vitdReport = {
+  title: 'Vitamin D',
+  results: [{ name: '25 hydroxyvitamin D', specimen: 'Vitamin D', date: '2026-05-01' }],
+};
 const vitdOut = M.matchOutstanding(['Vitamin D (Dr X • 01 Apr 2026, 09:00)'], vitdReport, { testDefs: customDefs });
 check(vitdOut[0].status === 'resulted' && vitdOut[0].autoTick === true, '10a custom test auto-ticks via opts.testDefs');
 
 // 10b. Extending a built-in with a local lab synonym (append-only).
 const extDefs = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'ue', req: ['euc', 'renal screen'] }]);
 const ueDef = extDefs.find((d) => d.key === 'ue');
-check(ueDef.req.includes('euc') && ueDef.req.includes('electrolyte'), '10b extension APPENDS the synonym, keeps built-in terms');
+check(
+  ueDef.req.includes('euc') && ueDef.req.includes('electrolyte'),
+  '10b extension APPENDS the synonym, keeps built-in terms'
+);
 check(
   M.resolveDef('EUC Profile', ['req'], extDefs) && M.resolveDef('EUC Profile', ['req'], extDefs).key === 'ue',
   '10b local synonym "EUC" now resolves to U&E'
@@ -454,7 +526,10 @@ check(M.resolveDef('Prostate Specific Antigen (PSA)', ['req'], noPsa) === null, 
 // 10d. Safety: a user entry can NOT flip a built-in to singleAnalyte (would lower
 // the auto-tick threshold). lft stays a 2-analyte panel.
 const tamper = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'lft', singleAnalyte: true }]);
-check(tamper.find((d) => d.key === 'lft').singleAnalyte !== true, '10d user cannot flip a built-in panel to singleAnalyte');
+check(
+  tamper.find((d) => d.key === 'lft').singleAnalyte !== true,
+  '10d user cannot flip a built-in panel to singleAnalyte'
+);
 
 // 10e. Invalid entries (no key) are ignored.
 const safeMerge = M.mergeTestDefs(M.TEST_DEFS, [{ label: 'no key here' }, null, 'garbage']);
@@ -471,13 +546,23 @@ const tftReport = {
   ],
 };
 const tftDefault = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftReport);
-check(tftDefault[0].status === 'resulted' && tftDefault[0].autoTick === true, '11a default: 2-analyte TFT signature auto-ticks');
-const tftStrict = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftReport, { confidenceFloor: 'strict' });
-check(tftStrict[0].autoTick === false && tftStrict[0].confidence === 'tentative', '11a strict: analyte signature is demoted, no auto-tick');
+check(
+  tftDefault[0].status === 'resulted' && tftDefault[0].autoTick === true,
+  '11a default: 2-analyte TFT signature auto-ticks'
+);
+const tftStrict = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftReport, {
+  confidenceFloor: 'strict',
+});
+check(
+  tftStrict[0].autoTick === false && tftStrict[0].confidence === 'tentative',
+  '11a strict: analyte signature is demoted, no auto-tick'
+);
 
 // 11b. strict still trusts a specimen-group title.
 const tftTitled = { results: [{ name: 'TSH', specimen: 'Thyroid Function', date: '2026-05-01' }] };
-const tftStrictTitled = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftTitled, { confidenceFloor: 'strict' });
+const tftStrictTitled = M.matchOutstanding(['Thyroid Testing (Dr X • 01 Apr 2026, 09:00)'], tftTitled, {
+  confidenceFloor: 'strict',
+});
 check(tftStrictTitled[0].autoTick === true, '11b strict: a specimen-group title is still confident');
 
 // 11c. addMonths clamps correctly.
@@ -487,7 +572,12 @@ check(M.addMonths('2026-06-09', 12) === '2027-06-09', '11c addMonths adds a year
 // 11d. look-back ceiling drops a too-late "elsewhere" result.
 const ferritinReq = M.matchOutstanding([{ name: 'Ferritin', requestedDate: '2026-01-01' }], lipidReport);
 const lateFerritin = [
-  { name: 'Ferritin', group: 'Haematinics', unit: 'ug/L', history: [{ date: '2026-11-01', value: 30, rawValue: '30', isAbove: false, isBelow: false }] },
+  {
+    name: 'Ferritin',
+    group: 'Haematinics',
+    unit: 'ug/L',
+    history: [{ date: '2026-11-01', value: 30, rawValue: '30', isAbove: false, isBelow: false }],
+  },
 ];
 const noCeiling = M.enrichWithHistory(ferritinReq, lateFerritin);
 check(noCeiling[0].status === 'resulted_elsewhere', '11d no ceiling: late ferritin still matches');
