@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.125.0] — 2026-06-20
+
+### Enabled combined-hormonal-contraception (CHC) monitoring — Keeper follow-up
+
+The Keeper added the `chc-combined-hormonal` drug-monitoring rule (annual BP + BMI per
+FSRH/NICE) but shipped it `enabled: false` because the `hrt-systemic` rule matches the bare
+oestrogen term `estradiol`, which is a **substring** of the contraceptive oestrogen
+`ethinylestradiol` and of the natural-oestrogen pills' ingredients (`estradiol valerate` in
+Qlaira, `estradiol hemihydrate` in Zoely) — so enabling CHC would have made a CHC patient
+**also double-fire** the HRT review.
+
+Fixed at the data level (no `rules-engine.js` change):
+
+- `hrt-systemic` `drug.exclude` now also excludes `ethinylestradiol`, `ethinyloestradiol`,
+  `qlaira` and `zoely`. HRT uses estradiol/oestradiol/conjugated oestrogens and never
+  ethinylestradiol; Qlaira/Zoely are contraceptives, not HRT — so this exclude cannot drop
+  a genuine HRT product.
+- `chc-combined-hormonal` flipped to `enabled: true`. Its match keeps brand-based matching
+  and adds the contraceptive-only oestrogen terms `ethinylestradiol`/`ethinyloestradiol` so
+  generic ethinylestradiol + progestogen combination pills fire CHC (and only CHC). POPs
+  (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) remain excluded.
+- New regression test `test-contraception-hrt-disambiguation.js` asserts the no-double-fire
+  invariant both ways; `test-drug-brand-coverage.js` gains CHC EXPECTED + POP MUST_NOT
+  entries (satisfies the inverse-coverage check for the newly-enabled rule).
+
 ## [v3.124.0] — 2026-06-20
 
 ### Sentinel clinical-content expansion via The Keeper (Phase 2 — CSO change-proposal)

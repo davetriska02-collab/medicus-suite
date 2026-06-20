@@ -360,7 +360,7 @@
       "drugClass": "HRT",
       "drug": {
         "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary", "ethinylestradiol", "ethinyloestradiol", "qlaira", "zoely"]
       },
       "phase": "maintenance",
       "tests": [
@@ -510,12 +510,12 @@
     },
     {
       "type": "drug-monitoring",
-      "enabled": false,
+      "enabled": true,
       "id": "chc-combined-hormonal",
       "drugClass": "Combined hormonal contraception",
       "sex": "F",
       "drug": {
-        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring"],
+        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring", "ethinylestradiol", "ethinyloestradiol"],
         "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez"]
       },
       "phase": "maintenance",
@@ -524,7 +524,7 @@
         { "name": "BMI / Weight", "match": ["bmi", "body mass index", "weight", "body weight"], "snomed": ["60621009", "27113001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
-      "notes": "SHIPPED DISABLED pending engine disambiguation (Keeper 2026-06-20, needs_engine_change). FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule would enforce the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. WHY DISABLED: the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of 'ethinylestradiol' and of natural-oestrogen pills' 'estradiol valerate'/'estradiol hemihydrate' — so CHC matched by oestrogen ingredient (and Qlaira/Zoely) would double-fire the HRT monitoring rule. Enabling safely needs engine-level drug-class disambiguation. POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary/NICE CKS; pending primary-source confirmation.",
+      "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. DISAMBIGUATION (enabled 2026-06-20): the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of the contraceptive oestrogen 'ethinylestradiol' and of the natural-oestrogen pills' 'estradiol valerate' (Qlaira) / 'estradiol hemihydrate' (Zoely). To stop CHC patients double-firing the HRT review, hrt-systemic now EXCLUDES 'ethinylestradiol'/'ethinyloestradiol'/'qlaira'/'zoely' (none of which are HRT). CHC matches by brand plus the contraceptive-only oestrogen 'ethinylestradiol'/'ethinyloestradiol' (so generic ethinylestradiol+progestogen combos fire here, never as HRT). POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE: FSRH Combined Hormonal Contraception (2019, amended 2023); corroborated via NHS formulary/NICE CKS.",
       "sharedCare": false
     }
   ]

@@ -140,7 +140,12 @@ const EXPECTED = {
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
   'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
-  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection']
+  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection'],
+  'chc-combined-hormonal': [
+    'Microgynon 30 tablets', 'Rigevidon tablets', 'Yasmin tablets', 'Marvelon tablets',
+    'Cilique tablets', 'Gedarel 30/150 tablets', 'Femodene tablets', 'Lucette tablets',
+    'Evra transdermal patch', 'NuvaRing vaginal ring', 'Qlaira tablets', 'Zoely tablets'
+  ]
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {
@@ -166,7 +171,10 @@ const MUST_NOT = [
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],
   ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
-  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets']
+  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets'],
+  // progestogen-only pills (desogestrel) must NOT fire combined hormonal contraception
+  ['chc-combined-hormonal', 'Cerazette 75mcg tablets'],
+  ['chc-combined-hormonal', 'Cerelle 75microgram tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');
