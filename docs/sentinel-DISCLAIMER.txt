@@ -339,6 +339,80 @@ End of disclaimer.
 ================================================================================
 
 
+--- v3.122.1 addendum ---
+
+This addendum records the clinical safety position of the software at Medicus
+Suite v3.122.1 (incremental safety-case sync, 2026-06-20). The following
+changes occurred between v3.115.0 and v3.122.1 and are recorded here because
+each touches either the data-handling characteristics, write behaviour, or
+clinical-rule currency of the software. In each case the change remains within
+the intended purpose at section 3, but the write-path qualification at item (a)
+below requires disclosure against the "writes nothing, submits nothing, modifies
+nothing" statement in section 1.
+
+(a) OUTSTANDING INVESTIGATION REQUEST (OIR) SMART-MATCHING ENGINE (v3.118.0–
+    v3.122.1). The "Select all" bulk-tick button (v3.108.0) was removed in
+    v3.117.1. It has been replaced by the OIR smart-matching engine, which uses
+    text pattern matching (panel title / specimen group / analyte name) to
+    determine whether the current investigation report satisfies each outstanding
+    request listed on the Medicus Review Investigation Report page.
+
+    WRITE-PATH QUALIFICATION. Section 1 of this disclaimer states that Sentinel
+    "writes nothing, sends nothing, submits nothing, modifies nothing." That
+    statement remains true in advisory mode (the default). When the optional
+    auto-tick preference ("oirBulkTickOff") is explicitly enabled by a clinician,
+    the OIR engine ticks outstanding-investigation-request checkboxes by
+    simulating a DOM click() on the Medicus Vue/Quasar checkbox — replicating
+    the action the clinician would otherwise perform manually. The extension does
+    not call any Medicus API endpoint directly; it simulates a checkbox click,
+    and Medicus's own application then performs the server-side write using its
+    own session, CSRF protection, and submission validation. This is a qualified
+    write interaction: it is conditional on explicit clinician enablement; it is
+    limited to DOM click simulation (not direct API access); and it is gated
+    behind an enumerated confirmation dialog that the clinician must actively
+    confirm. The disclaimer's section 1 statements are to be read as qualified
+    by this addendum from v3.118.0 onwards.
+
+    SAFETY ARCHITECTURE OF THE OIR ENGINE:
+    - Two-tier confidence: "confident" (panel-title/specimen-group match) is
+      auto-tick-eligible. "Tentative" (analyte-name match only) is NEVER
+      auto-ticked — surfaced for clinician review only.
+    - Resulted-elsewhere detection (v3.119.0): if the engine finds the request
+      already resulted elsewhere in the observation history, it flags it but
+      NEVER auto-ticks it — always routes through the gated confirmation.
+    - Unrecognised → outstanding (fail-safe): a request the engine cannot match
+      remains outstanding and is never cleared.
+    - Gated enumerated confirmation (v3.121.0): every auto-tick requires the
+      clinician to review a named list and actively confirm.
+    - Advisory-only mode default: auto-tick is off unless explicitly enabled.
+    - Test-dictionary customisation (v3.122.0): practices may add custom test
+      definitions; these arrive as tentative-tier by default.
+    The OIR write path is separately hazarded at H-035 in HAZARD-LOG.md.
+
+(b) VACCINE RULE CURRENCY CORRECTIONS (v3.115.0, CSO-approved). The RSV
+    eligibility rule was corrected: the upper age boundary that previously
+    stopped the rule at age 79 was removed, and an adult care-home-resident
+    cohort was added, resolving a silent false-negative for all patients aged
+    80 and over (these patients were not receiving an eligibility chip). The
+    flu rule was extended to a people-experiencing-homelessness cohort (coded
+    via problem-list entries; operational outreach remains the primary delivery
+    mechanism). The pneumococcal rule was relabelled to PCV20/Apexxnar for the
+    routine 65+ programme, reflecting the change from PPV23 to PCV20 in early
+    2026; a prior PPV23 dose still counts as given. These corrections are
+    recorded against H-020 in HAZARD-LOG.md.
+
+(c) RESULT-RULE TWO-VIEW SYNC FIX (v3.115.1). The Suite Settings page
+    previously embedded the Triage Lens options page twice; each iframe
+    maintained its own in-memory config and overwrote the shared storage on
+    save, silently reverting result rules to disabled in the sibling view.
+    v3.115.1 hides the duplicate editing surface and adds a
+    chrome.storage.onChanged listener so all open instances stay in sync.
+    This eliminates a route by which a clinician-enabled threshold rule could
+    silently revert to disabled without the clinician being aware.
+
+(d) H-034 CLOSED. The "Select all" button is removed; H-034 is closed.
+    See (a) above and HAZARD-LOG.md H-034.
+
 --- v1.1.0 addendum ---
 
 Custom drug-monitoring rules authored through the built-in form builder remain within the stated intended purpose of this software. Custom rules use the same passive threshold-based display engine as the bundled rules: they re-display values already present in the patient record, indicate whether those values fall within the user-configured interval, and produce no clinical recommendation. The form builder does not expose arbitrary clinical decision logic. All constraints documented in the intended-purpose statement above apply without modification to custom-authored rules.
