@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-06-14",
+  "lastUpdated": "2026-06-20",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off.",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -262,7 +262,7 @@
         { "name": "LFT", "match": ["lft", "liver function"], "snomed": ["26958001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "BNF / NICE NG196 / EHRA guideline (2024 update)",
-      "notes": "Annual monitoring is the baseline. Increase to 6-monthly if eGFR <60, age >75, frailty, or extremes of weight; 3-monthly if eGFR <30. Dabigatran is renally cleared (contraindicated <30); edoxaban dose-adjusted at <50; apixaban and rivaroxaban have less strict renal cutoffs. Sentinel uses annual baseline — clinician must intensify monitoring per renal function and age.",
+      "notes": "Renal function for DOAC monitoring must be calculated as CrCl (Cockcroft-Gault), NOT eGFR — eGFR overestimates clearance (especially in low-weight elderly patients) and its use raises bleeding risk (MHRA/SPS). Monitoring frequency by CrCl: ≥60 mL/min → annual; 30–59 → 6-monthly; 15–29 → 3-monthly; <15 → all DOACs contraindicated (refer). EHRA rule-of-thumb for CrCl ≤60: recheck interval (months) = CrCl ÷ 10. Elderly (>75) or frail: at least 4–6 monthly regardless of band. Drug-specific renal handling: dabigatran ~80% renally cleared (contraindicated CrCl <30), edoxaban dose-adjusted <50, rivaroxaban ~35%, apixaban ~27% (least renal dependence). Sentinel enforces only the annual 365-day baseline (the schema cannot encode CrCl-conditional intervals — flagged for an engine extension); the clinician must intensify per CrCl band, age and frailty. Source: NHS SPS DOACs monitoring; EHRA practical guidance; 2024–2025 NHS ICB DOAC guidelines (corroborated; primary pages 403, pending confirmation).",
       "sharedCare": false
     },
     {
@@ -489,6 +489,43 @@
           "ferrous sulfate", "ferrous fumarate", "ferrous gluconate"
         ]
       }
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "dmpa-injectable",
+      "drugClass": "Progestogen-only injectable contraception",
+      "sex": "F",
+      "drug": {
+        "match": ["depo-provera", "depo provera", "sayana press", "sayana", "dmpa"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 730, "dueSoonDays": 60 },
+        { "name": "Weight", "match": ["weight", "body weight"], "snomed": ["27113001"], "intervalDays": 730, "dueSoonDays": 60 }
+      ],
+      "source": "FSRH Clinical Guideline: Progestogen-only Injectables (Dec 2014, amended Jul 2023)",
+      "notes": "DMPA = Depo-Provera (medroxyprogesterone acetate 150mg/1ml IM) and Sayana Press (104mg/0.65ml SC). FSRH: review at least every 2 years (730d) to reassess risk/benefit — particularly bone mineral density (small, largely reversible loss; heightened under-18 and over-40 and with osteoporosis risk factors). Review weight at the 2-yearly assessment (weight gain is a recognised effect). BP does not rise with progestogen-only injectables (unlike CHC) but is checked as a UKMEC eligibility criterion at each visit (UKMEC 4 if BP ≥160/100). Return to fertility may be delayed up to ~1 year after the last injection. MATCH is brand-only by design: the bare generic 'medroxyprogesterone' is deliberately NOT used because it appears in the hrt-systemic rule (oral MPA), so a generic-string injectable record would double-fire — flagged for engine disambiguation. Noristerat (norethisterone enantate, 8-weekly, short-term only) is a different depot and is out of scope. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary reproductions; pending primary-source confirmation.",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": false,
+      "id": "chc-combined-hormonal",
+      "drugClass": "Combined hormonal contraception",
+      "sex": "F",
+      "drug": {
+        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring"],
+        "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez"]
+      },
+      "phase": "maintenance",
+      "tests": [
+        { "name": "Blood pressure", "match": ["blood pressure", "bp"], "snomed": ["75367002"], "intervalDays": 365, "dueSoonDays": 30 },
+        { "name": "BMI / Weight", "match": ["bmi", "body mass index", "weight", "body weight"], "snomed": ["60621009", "27113001"], "intervalDays": 365, "dueSoonDays": 30 }
+      ],
+      "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
+      "notes": "SHIPPED DISABLED pending engine disambiguation (Keeper 2026-06-20, needs_engine_change). FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule would enforce the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. WHY DISABLED: the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of 'ethinylestradiol' and of natural-oestrogen pills' 'estradiol valerate'/'estradiol hemihydrate' — so CHC matched by oestrogen ingredient (and Qlaira/Zoely) would double-fire the HRT monitoring rule. Enabling safely needs engine-level drug-class disambiguation. POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary/NICE CKS; pending primary-source confirmation.",
+      "sharedCare": false
     }
   ]
 }

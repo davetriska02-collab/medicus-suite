@@ -118,6 +118,9 @@ const EXPECTED = {
   'event-count-2': { type: 'event-count', severity: 'amber', count: 2, op: '>=', ageMin: 65 },
   'composite-1': { type: 'composite', severity: 'red' },
   'trend-1': { type: 'qof-indicator', sex: 'M', ageMin: 40 },
+  'pincer-mtx-trimethoprim': { type: 'drug-combo', severity: 'red', terms: ['methotrexate', 'maxtrex', 'trimethoprim', 'co-trimoxazole'] },
+  'mhra-acei-arb-ksparing-hyperkalaemia': { type: 'drug-combo', severity: 'amber', terms: ['ramipril', 'losartan', 'spironolactone', 'eplerenone', 'amiloride', 'triamterene'] },
+  'alert-xoi-thiopurine-myelosuppression': { type: 'drug-combo', severity: 'red', terms: ['allopurinol', 'febuxostat', 'adenuric', 'azathioprine', 'mercaptopurine', 'xaluprine'] },
 };
 
 for (const [id, exp] of Object.entries(EXPECTED)) {
@@ -194,6 +197,14 @@ check(
 );
 check(comboFires('pincer-6', ['Ibuprofen 400mg'], {}, ['Heart failure']), 'pincer-6 fires: NSAID + HF problem');
 check(!comboFires('pincer-6', ['Ibuprofen 400mg'], {}, []), 'pincer-6 does NOT fire without HF problem');
+check(comboFires('pincer-mtx-trimethoprim', ['Methotrexate 2.5mg tablets', 'Trimethoprim 200mg tablets'], {}), 'MTX + trimethoprim fires');
+check(comboFires('pincer-mtx-trimethoprim', ['Maxtrex 2.5mg', 'Co-trimoxazole 480mg tablets'], {}), 'MTX + co-trimoxazole (hyphen) fires');
+check(!comboFires('pincer-mtx-trimethoprim', ['Methotrexate 2.5mg tablets', 'Nitrofurantoin 100mg'], {}), 'MTX + nitrofurantoin does NOT fire');
+check(comboFires('mhra-acei-arb-ksparing-hyperkalaemia', ['Ramipril 5mg capsules', 'Spironolactone 25mg tablets'], {}), 'ACEi + spironolactone fires');
+check(!comboFires('mhra-acei-arb-ksparing-hyperkalaemia', ['Ramipril 5mg capsules'], {}), 'ramipril alone does NOT fire');
+check(comboFires('alert-xoi-thiopurine-myelosuppression', ['Allopurinol 100mg tablets', 'Azathioprine 50mg tablets'], {}), 'allopurinol + azathioprine fires');
+check(comboFires('alert-xoi-thiopurine-myelosuppression', ['Adenuric 80mg tablets', 'Mercaptopurine 50mg tablets'], {}), 'febuxostat (Adenuric brand) + mercaptopurine fires');
+check(!comboFires('alert-xoi-thiopurine-myelosuppression', ['Allopurinol 100mg tablets'], {}), 'allopurinol alone does NOT fire');
 
 // === INVERSE COVERAGE: every library entry has an EXPECTED entry ===
 console.log('\n--- inverse coverage: every alert-library entry is pinned ---');

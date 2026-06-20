@@ -38,6 +38,15 @@
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
     { term: 'amoxapine', score: 2 },
+    // ── Score 2 additions (Keeper 2026-06-20, CSO proposal; medium confidence —
+    //    ACBcalc.com 403, corroborated vs Campbell 2012 Boustani ACB update +
+    //    multiple NHS ACB-scale reproductions). 5 further candidates were KILLED
+    //    in verification (cyclobenzaprine/loxapine: not UK primary-care; cimetidine/
+    //    baclofen: score conflict 1-vs-2; levomepromazine: actually score 3). ──
+    { term: 'carbamazepine', score: 2, note: 'Boustani/Campbell ACB score 2 (antiepileptic)' },
+    { term: 'oxcarbazepine', score: 2, note: 'Boustani/Campbell ACB score 2; 10-keto analogue of carbamazepine (not a substring of carbamazepine — no collision)' },
+    { term: 'amantadine', score: 2, note: 'Boustani/Campbell ACB score 2 (Parkinson)' },
+    { term: 'pethidine', score: 2, note: 'Boustani/Campbell ACB score 2 (opioid; UK name — meperidine is US name, not added)' },
     // ── Score 3: SSRIs/SNRIs with notable ACB ───────────────────────────────
     { term: 'paroxetine', score: 3 },
     // ── Score 3: Urological / bladder antispasmodics ─────────────────────────

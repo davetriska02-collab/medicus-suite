@@ -181,7 +181,7 @@
       ],
       "_droppedFromContentJs": {
         "note": "content.js previously scored these as anticholinergic; they are NOT on the Boustani/ACBcalc scale in engine/acb-scores.js and were dropped as likely false positives when the queue switched to the single scorer. (codeine/furosemide/prednisolone were ALSO scored by content.js but ARE on the engine's score-1 list, so they continue to score 1 — not dropped.) Recorded for audit so a future change that re-adds the dropped terms is a deliberate, reviewed act.",
-        "terms": ["amantadine", "cimetidine", "tramadol", "metformin"]
+        "terms": ["cimetidine", "tramadol", "metformin"]
       }
     }
   }

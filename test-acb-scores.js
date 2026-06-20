@@ -43,6 +43,12 @@ console.log('\n--- Individual drug scores ---');
   assert(r.perDrug[0].score === 2, 'amoxapine scores 2');
   assert(r.perDrug[0].matchedTerm === 'amoxapine', 'amoxapine matchedTerm is "amoxapine"');
 }
+{ const r = computeACB(['carbamazepine 200mg tablets']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'carbamazepine scores 2 (Keeper)'); }
+{ const r = computeACB(['oxcarbazepine 300mg tablets']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'oxcarbazepine scores 2 (Keeper)'); }
+{ const r = computeACB(['oxcarbazepine 300mg tablets']); assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'oxcarbazepine', 'oxcarbazepine matches its own term, not carbamazepine'); }
+{ const r = computeACB(['carbamazepine 200mg tablets']); assert(r.perDrug[0] && r.perDrug[0].matchedTerm === 'carbamazepine', 'carbamazepine matches its own term'); }
+{ const r = computeACB(['amantadine 100mg capsules']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'amantadine scores 2 (Keeper)'); }
+{ const r = computeACB(['pethidine 50mg injection']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'pethidine scores 2 (Keeper)'); }
 {
   const r = computeACB(['cetirizine']);
   assert(r.perDrug[0].score === 1, 'cetirizine scores 1');

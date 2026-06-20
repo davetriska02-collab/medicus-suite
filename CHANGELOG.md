@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.124.0] — 2026-06-20
+
+### Sentinel clinical-content expansion via The Keeper (Phase 2 — CSO change-proposal)
+
+Phase-2 of the multi-agent rules-engine review, run through The Keeper (scan → verify →
+conservative apply). Every change is sourced and was independently verified; clinical content
+is a **CSO change-proposal**, not auto-merged. Full report:
+`the-keeper-report-2026-06-20.md`. Source note: BNF/SPS/MHRA/emc/FSRH/ACBcalc primary pages
+returned HTTP 403 this run, so changes are corroborated across multiple NHS ICB / regulatory
+secondary sources and flagged "pending primary-source confirmation".
+
+- **Three drug–drug-interaction alerts** added to `rules/alert-library.json` (alert-library
+  `version` 1.2 → 1.3):
+  - `pincer-mtx-trimethoprim` (🔴 red) — methotrexate + trimethoprim/co-trimoxazole, severe/fatal
+    bone-marrow suppression (a named never-event). Relies on the Phase-1 combo-normaliser fix so
+    the hyphenated `co-trimoxazole` matches.
+  - `alert-xoi-thiopurine-myelosuppression` (🔴 red) — allopurinol/febuxostat +
+    azathioprine/mercaptopurine, life-threatening myelosuppression. Brand terms
+    (`zyloric`/`adenuric`/`xaluprine`) listed explicitly so brand-only records still fire.
+  - `mhra-acei-arb-ksparing-hyperkalaemia` (🟠 amber) — ACEi/ARB + potassium-sparing diuretic.
+    Deliberately amber, not red: spironolactone + ACEi is guideline-endorsed four-pillar heart-
+    failure therapy, so a red would misfire across the HF register.
+- **ACB scale** (`engine/acb-scores.js`): four verified score-2 additions — carbamazepine,
+  oxcarbazepine, amantadine, pethidine (these also feed STOPP anticholinergic-elderly). Five
+  candidates were **killed in verification**: cyclobenzaprine/loxapine (not UK primary-care),
+  cimetidine/baclofen (score conflict 1-vs-2), and levomepromazine (actually score 3, not 2 —
+  adding it at 2 would have *under*-scored it). `amantadine` removed from the term-coverage
+  snapshot's "deliberately dropped (scores 0)" audit list, as it is now genuinely on the scale.
+- **DOAC monitoring notes** corrected in `rules/drug-rules.json` to specify **CrCl
+  (Cockcroft-Gault), not eGFR** (eGFR overestimates clearance and raises bleeding risk), with the
+  renal/age-banded cadence documented. The 365-day default is unchanged — value-banded intervals
+  need an engine extension (flagged).
+- **Contraception monitoring** added to `rules/drug-rules.json`: `dmpa-injectable` (enabled —
+  Depo-Provera/Sayana Press, 2-yearly BP+weight, FSRH). `chc-combined-hormonal` is shipped
+  **disabled** pending engine work: the `hrt-systemic` rule matches the bare term `estradiol`,
+  a substring of `ethinylestradiol`, so an enabled CHC rule would double-fire the HRT rule —
+  enabling needs engine-level drug-class disambiguation.
+- Regression tests extended: `test-alert-library-coverage.js` (3 new combos + firing checks),
+  `test-acb-scores.js` (4 drugs + collision guards), `test-drug-brand-coverage.js` (DMPA).
+
 ## [v3.123.0] — 2026-06-20
 
 ### Sentinel rules engine — safety, provenance & efficiency hardening (Phase 1)
