@@ -1172,7 +1172,8 @@
     { match: /amiodarone/i, name: 'Amiodarone', monitoring: 'TFT/LFT q6mo' },
     { match: /clozapine/i, name: 'Clozapine', monitoring: 'FBC' },
     { match: /spironolactone/i, name: 'Spironolactone', monitoring: 'U&E' },
-    { match: /digoxin/i, name: 'Digoxin', monitoring: 'Level + U&E' }
+    { match: /digoxin/i, name: 'Digoxin', monitoring: 'Level + U&E' },
+    { match: /carbamazepine|tegretol|carbagen/i, name: 'Carbamazepine', monitoring: 'FBC/LFT/U&E/Na q6-12mo' }
   ];
 
   const ANTICOAGS = [/warfarin/i, /apixaban/i, /rivaroxaban/i, /edoxaban/i, /dabigatran/i];

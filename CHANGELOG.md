@@ -2,6 +2,79 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.123.0] — 2026-06-20
+
+### The Keeper: clinical rule currency update (2026-06-20 run)
+
+Scheduled horizon scan against UK authoritative sources. All changes verified before
+application. **CSO (Dave) must review items marked "sign-off pending" before go-live.**
+See `the-keeper-report.md` on the PR for the full sourced change proposal.
+
+**Medicines monitoring (drug-rules.json)**
+- Leflunomide: added `leflunomide medac` (TEVA brand) to drug.match — silent monitoring
+  gap in dispensing practices where the full product name is recorded
+- Hydroxychloroquine: added Zentiva, Blackrock, Accord, Ipca generic manufacturer brands
+  to drug.match
+- GLP-1 agonist rule: notes updated for MHRA Feb 2026 DSU (semaglutide NAION) and MHRA
+  June 2026 oral semaglutide (Wegovy tablet) UK approval
+
+**Prescribing-safety alerts (alert-library.json — version 1.3)**
+- QTc combination alert: added ondansetron / Zofran (CredibleMeds Known Risk)
+- Falls alert (event-count-2): age band expanded 65→50 per NICE NG249 (April 2025,
+  replaces CG161)
+- Valproate PPG: notes updated for MHRA June 2025 paternal guidance
+- Isotretinoin PPG: notes updated for MHRA Jan 2026 DSU (second-prescriber removal)
+- New alert `mhra-semaglutide-naion`: NAION vision loss risk — MHRA DSU Feb 2026
+- New alert `mhra-acei-angioedema`: delayed angioedema — MHRA DSU June 2026
+- New alert `mhra-finasteride-dutasteride-psychiatric`: psychiatric/sexual dysfunction
+  including post-discontinuation persistence — MHRA DSU May 2026 (males only)
+
+**Vaccine eligibility (vaccine-rules.json)**
+- Flu 2026/27: homelessness cohort age floor added (16+) per DHSC/NHSE/UKHSA amendment
+  letter (9 June 2026)
+- Shingles: severely immunosuppressed cohort (18+) added per UKHSA Sept 2025 expansion
+  (problem criteria: transplant, leukaemia, lymphoma, myeloma, HIV etc.; safe medication
+  criteria: rituximab, cyclophosphamide etc.; MTX/AZA intentionally excluded — dose
+  thresholds the engine cannot evaluate). **CSO sign-off required before go-live.**
+- Pneumococcal: source note corrected (UK brand is Prevenar 20, not Apexxnar)
+- RSV: notes corrected for April 2026 expansion (adults 80+ and care-home residents)
+- COVID: source updated to JCVI statement 16 July 2025
+
+**QOF (qof-rules.json)**
+- New NDH register (non-diabetic hyperglycaemia, includes gestational diabetes) for
+  QOF 2026/27
+- New NDH003 indicator: HbA1c or FPG in preceding 12 months (20 pts, 50–90%,
+  replaces NDH002)
+- OB004 and OB005 obesity indicators enabled (confirmed QOF 2026/27 live)
+
+**Medication-review instruments**
+- ACB scores (acb-scores.js): added darifenacin (score 3), Emselex brand (score 3),
+  carbamazepine (score 2), Tegretol brand (score 2), Carbagen SR brand (score 2),
+  loxapine (score 3, confidence medium — CSO to verify vs ACBcalc), Adasuve brand
+  (score 3)
+- STOPP/START (stopp-start.js): added torasemide and Torem to LOOP_DIURETIC_TERMS
+  (STOPP criterion B5 now fires for patients on torasemide + NSAID)
+- Triage-lens HUD (content.js): added carbamazepine to HIGH_RISK_DRUGS chip array
+
+**Reception pathways (reception-pathways.json — v1.4)**
+- Back pain: added rf-urinary-hesitancy (999) — difficulty initiating micturition as
+  independent cauda equina flag (NICE CKS/MPS 2023/2024 update). CSO sign-off pending.
+- Back pain: added rf-sexual (999) — new sexual dysfunction as cauda equina flag (NICE
+  CKS/MPS 2023/2024). CSO sign-off pending.
+- Feverish child: added NG143 2-hour assessment note; 999 fallback if duty route cannot
+  achieve same-session assessment. CSO sign-off pending.
+- Urinary: added rf-anuria (999) — no urine >18h per NICE NG253 (Nov 2025, urosepsis
+  cluster). CSO sign-off pending.
+- Sore throat: added note to rf-trismus flagging Pharmacy First v1.1 hospital/A&E
+  direction vs current 'duty' escalation. CSO decision pending on upgrade.
+
+**Tests updated:** test-drug-brand-coverage.js, test-acb-scores.js, test-stopp-start.js,
+test-reception-pathways.js, test-qof-indicator-filters.js — all 16 test files passing.
+
+**Sources:** MHRA DSUs (Feb, May, Jun 2026; Jan 2026; Jun 2025), NICE NG249/NG253/NG143,
+NICE CKS low back pain, NHS England QOF 2026/27 PRN02356, JCVI/UKHSA flu/shingles/RSV/
+COVID/pneumococcal letters, CredibleMeds, Boustani ACBcalc, BNF/dm+d.
+
 ## [v3.122.1] — 2026-06-19
 
 ### Surface the Outstanding Requests settings in Suite Settings

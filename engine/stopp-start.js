@@ -73,7 +73,7 @@
   ];
 
   // Loop diuretics — subset of HIGH_RISK_DRUGS id:'diuretic'
-  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide'];
+  const LOOP_DIURETIC_TERMS = ['furosemide', 'frusemide', 'bumetanide', 'torasemide', 'torem'];
 
   // Benzodiazepines — standard UK generics
   const BENZO_TERMS = [

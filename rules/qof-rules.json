@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-06-10",
+  "lastUpdated": "2026-06-20",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes.",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported).",
@@ -135,8 +135,20 @@
       "registerName": "Obesity",
       "problemMatch": ["obesity", "obese", "morbid obesity", "severe obesity"],
       "problemExclude": ["no obesity", "not obese", "family history", "maternal obesity", "history of obesity in family"],
-      "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). DRAFT — corroborated via search, pending PRN02356 primary-source confirmation.",
+      "source": "QOF 26/27 OB register (NEW clinical area for 2026/27, NHS England PRN02356). Confirmed: BMI ≥30 (or ≥27.5 for South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean background). Register stays disabled — problem-matching limitation is a known BMI-observation gap that requires an engine extension before clinical use.",
       "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching, which will MISS obese patients who have a recorded BMI but no 'obesity' problem label, and is age-agnostic. Proper membership needs a BMI-observation-based register (engine extension) before this should be relied on. Underpins indicators OB004/OB005 (shipped disabled pending confirmation)."
+    },
+
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "NDH",
+      "registerName": "Non-Diabetic Hyperglycaemia",
+      "problemMatch": ["non-diabetic hyperglycaemia", "non diabetic hyperglycaemia", "pre-diabetes", "pre diabetes", "prediabetes", "prediabetic", "pre-diabetic", "impaired fasting glucose", "impaired glucose tolerance", "gestational diabetes", "borderline diabetes", "high blood sugar not diabetic"],
+      "problemExclude": ["no diabetes", "diabetes insipidus"],
+      "source": "QOF 26/27 NDH register (NHS England PRN02356; NICE IND172 NDH003). VERIFIER-B confirmed 2026-06-20 via 3+ sources. Note: gestational diabetes IS included in the NDH register from NDH003 onwards (change from NDH002) — the DM register explicitly excludes gestational diabetes so there is no double-counting.",
+      "notes": "The NDH register covers adults with confirmed non-diabetic hyperglycaemia (HbA1c 42–47 mmol/mol or fasting glucose 6.1–6.9 mmol/L). Unlike the DM register, gestational diabetes is IN scope from NDH003. Substring match approximation — will not capture patients who have the underlying HbA1c range but no coded problem label. Links to indicator NDH003 (qof-ndh003)."
     },
 
     {
@@ -1056,9 +1068,9 @@
     {
       "id": "qof-ob004",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB004",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "indicatorName": "Offer of referral to a weight-management programme in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "observation-recent",
@@ -1067,15 +1079,15 @@
       },
       "thresholds": { "lower": 10, "upper": 30 },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 26/27 OB004 (NHS England PRN02356, March 2026). Confirmed: 5 points, 10–30% thresholds (VERIFIER-B corroborated via 3+ independent sources 2026-06-20).",
+      "notes": "NEW 26/27 indicator, enabled 2026-06-20. True definition requires referral offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing; this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Depends on the OB register, which is itself a BMI-driven approximation (OB register must be enabled and the engine must be extended to support BMI-observation-based register membership before this is reliable for QOF claim purposes — use as a prompt only)."
     },
     {
       "id": "qof-ob005",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB005",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "indicatorName": "Weight-management pharmacotherapy / shared decision-making in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "medication-present",
@@ -1083,8 +1095,26 @@
       },
       "thresholds": { "lower": 50, "upper": 80 },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 26/27 OB005 (NHS England PRN02356, March 2026); tirzepatide eligibility per NICE TA1026. Confirmed: 13 points, 50–80% thresholds (VERIFIER-B corroborated via 3+ independent sources 2026-06-20).",
+      "notes": "NEW 26/27 indicator, enabled 2026-06-20. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing."
+    },
+
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "NDH003",
+      "indicatorName": "HbA1c or FPG recorded in NDH in preceding 12 months",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "fasting plasma glucose", "fasting blood glucose", "fasting glucose", "fpg"],
+        "withinDays": 365
+      },
+      "thresholds": { "lower": 50, "upper": 90 },
+      "points": 20,
+      "source": "QOF 26/27 NDH003 (NHS England PRN02356; NICE IND172). VERIFIER-B confirmed 2026-06-20: 20 points (up from 18 in NDH002), 50–90% thresholds, HbA1c OR fasting plasma glucose within preceding 365 days. Key change from NDH002: gestational diabetes patients now included in denominator.",
+      "notes": "Replaces NDH002. Key change for 26/27: patients with a previous gestational diabetes diagnosis are now included in the NDH denominator. Sentinel checks for a recent HbA1c OR fasting glucose — either satisfies the indicator. The QOF year floor (1 Apr – 31 Mar) applies. Lifestyle advice and referral to an evidence-based behaviour change programme are the core NDH interventions; this indicator checks the monitoring interval only. Coding note: patients may be on NDH register without a recent coded problem (historical HbA1c-coded entry) — this chip may be the prompt for annual blood recall."
     }
   ]
 }

@@ -1,7 +1,8 @@
 {
   "version": "1.2",
-  "lastUpdated": "2026-06-14",
-  "specVersion": "PINCER/NICE prescribing-safety alert library v1.2",
+  "lastUpdated": "2026-06-20",
+  "version": "1.3",
+  "specVersion": "PINCER/NICE prescribing-safety alert library v1.3",
   "keeperNote": "2026-06-14 CSO-approved Keeper addition: added awareness alert 'mhra-glp1-acute-pancreatitis' (GLP-1 / dual GLP-1-GIP receptor agonists — strengthened acute-pancreatitis warning incl. necrotising/fatal cases; watch for severe persistent abdominal pain radiating to the back), modelled on the existing SGLT2 DKA awareness entry and matching the GLP-1/GIP drug set used in drug-rules.json. Source: MHRA Drug Safety Update (gov.uk) — WebSearch-corroborated, CSO-signed-off. 2026-06-11 (The Keeper): triage-lens ruleset review follow-up. (a) NSAID drug-set — added etodolac (Lodine SR, emc 3857, active May 2026) and flurbiprofen (Froben, emc 327/326), which were absent from every NSAID-combo rule AND from the built-in content.js NSAIDS regex, so a patient on either silently fired no NSAID PINCER/STOPP alert; also added the UK dm+d/BNF spelling 'indometacin' (the existing 'indomethacin' does not substring-match the UK spelling — content.js already handled this via 'indometh?acin'). Note: 'dexibuprofen'/'dexketoprofen' are redundant under substring matching ('ibuprofen'/'ketoprofen' already cover them) but kept for explicitness. (b) Anticoagulant set (pincer-2, pincer-13) — added acenocoumarol (Sinthrome) and phenindione (Dindevan), both active UK oral VKAs in BNF 2.8.2, previously listed in content.js's regex but not here. (c) ACEi/ARB set (pincer-4) — added quinapril (Accupro), imidapril (Tanatril), eprosartan (Teveten) and cilazapril (Vascace, discontinued for new patients but legacy repeats persist); moexipril deliberately NOT added (UK-discontinued March 2016). 2026-06-04 prior note: completed shared NSAID set with tenoxicam, sulindac, dexketoprofen, tiaprofenic acid, tolfenamic acid, fenoprofen. SOURCE GAP this run: bnf.nice.org.uk / OpenPrescribing / MHRA register returned 403; additions corroborated against emc SmPC product IDs + multiple NHS ICB formularies (confidence medium-high; all additive, cannot weaken matching).",
   "notes": "Starter library of prescribing-safety and clinical alerts for UK primary care. Based on PINCER (BMJ 2012, doi:10.1136/bmj.e6501) and UK prescribing safety guidelines. Each rule is an editable starting point — GPs should review match terms and thresholds against their local formulary and patient population. See individual notes fields for clinical justification and known limitations.",
   "library": [
@@ -342,7 +343,7 @@
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "red",
-        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero.",
+        "notes": "MHRA Pregnancy Prevention Programme (PPP): valproate must not be prescribed to women/girls of childbearing potential without annual specialist review, confirmed effective contraception, and a signed PPP form (MHRA 2024 update). Check PPP compliance annually. Valproate causes major congenital malformations (10%) and neurodevelopmental disorders (30–40%) in children exposed in utero. June 2025 MHRA DSU update: new guidance on valproate in males — fathers or sperm donors taking valproate should not father children during treatment and for at least 3 months after stopping (paternal genotoxicity risk). Prescribers should discuss risks with male patients of reproductive age at each annual review and consider whether valproate should be used or continued.",
         "source": "MHRA Drug Safety Update"
       }
     },
@@ -439,7 +440,7 @@
         "requiresProblem": [],
         "excludesProblem": [],
         "severity": "amber",
-        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
+        "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained. January 2026 MHRA DSU update: the requirement for a second prescriber sign-off for patients under 18 has been removed (regulatory simplification); however the PPP requirements (contraception, pregnancy testing, patient card) remain mandatory and the under-18 review frequency at specialist level is unchanged. Separately, MHRA also updated the isotretinoin SmPC in Jan 2026 to strengthen warnings on psychiatric adverse effects (depression, suicidality) — ask about mood at each contact for patients on isotretinoin regardless of age.",
         "source": "MHRA Pregnancy Prevention Programme"
       }
     },
@@ -456,8 +457,8 @@
         "enabled": true,
         "label": "QTc-prolonging drug combination",
         "drugSets": [
-          { "name": "QTc drug A", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] },
-          { "name": "QTc drug B", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine"] }
+          { "name": "QTc drug A", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine","ondansetron","zofran"] },
+          { "name": "QTc drug B", "match": ["amiodarone","sotalol","quinidine","disopyramide","domperidone","methadone","haloperidol","chlorpromazine","quetiapine","citalopram","escitalopram","azithromycin","erythromycin","clarithromycin","fluconazole","hydroxychloroquine","ondansetron","zofran"] }
         ],
         "sex": "any",
         "requiresProblem": [],
@@ -499,7 +500,7 @@
       "subcategory": "Falls",
       "title": "Recurrent falls (≥2 in 12 months, ≥65)",
       "description": "Patient aged ≥65 with 2 or more falls coded in the last 12 months — consider multifactorial falls assessment.",
-      "source": "NICE CG161",
+      "source": "NICE NG249",
       "rule": {
         "type": "event-count",
         "enabled": true,
@@ -510,11 +511,11 @@
         "windowMonths": 12,
         "countThreshold": 2,
         "operator": ">=",
-        "ageRange": { "min": 65 },
+        "ageRange": { "min": 50 },
         "sex": "any",
         "severity": "amber",
-        "notes": "NICE CG161: offer multifactorial falls assessment to older people with ≥2 falls or one fall with injury in 12 months. Review medications (particularly those causing hypotension, sedation), vision, balance, home hazards. Consider medication review, physiotherapy, and home assessment.",
-        "source": "NICE CG161"
+        "notes": "NICE NG249 (Falls in older people, April 2025 — replaces CG161): offer multifactorial falls assessment to adults aged ≥50 with ≥2 falls or one fall with injury in 12 months. Age band extended from 65 to 50 in NG249. Review medications (particularly those causing hypotension, sedation, anticholinergic burden), vision, balance, home hazards. Consider medication review, physiotherapy, and home assessment.",
+        "source": "NICE NG249 (Falls in older people, April 2025)"
       }
     },
 
@@ -533,6 +534,75 @@
         "ruleIds": ["custom-replace-with-pincer-2-id","custom-replace-with-pincer-6-id"],
         "severity": "red",
         "notes": "Composite rule example. Replace the placeholder ruleIds above with the actual saved IDs of the pincer-2 (anticoagulant+NSAID) and pincer-6 (NSAID in HF) rules in your custom rules list after importing them. When both fire simultaneously this composite surfaces a consolidated high-severity alert."
+      }
+    },
+
+    {
+      "libId": "mhra-semaglutide-naion",
+      "category": "Prescribing safety",
+      "subcategory": "Vision",
+      "title": "Semaglutide — NAION awareness (vision loss risk)",
+      "description": "Patient on semaglutide: awareness reminder about risk of non-arteritic anterior ischaemic optic neuropathy (NAION) — sudden vision loss. MHRA Drug Safety Update February 2026.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Semaglutide — NAION vision loss reminder",
+        "drugSets": [
+          { "name": "Semaglutide", "match": ["semaglutide","ozempic","wegovy","rybelsus"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "info",
+        "notes": "MHRA Drug Safety Update February 2026: semaglutide is associated with a small increased risk of non-arteritic anterior ischaemic optic neuropathy (NAION), a rare but potentially sight-threatening condition causing sudden, painless vision loss in one eye. Risk is higher in patients with pre-existing cardiovascular or diabetic eye disease, but may occur in any patient. Action: counsel patients at initiation and review to report any sudden vision loss immediately and seek urgent ophthalmology assessment. Do not restart semaglutide if NAION is confirmed. This is an informational awareness chip — no routine eye monitoring is mandated, but ask about visual symptoms at each medication review.",
+        "source": "MHRA Drug Safety Update — semaglutide and risk of non-arteritic anterior ischaemic optic neuropathy (NAION), February 2026"
+      }
+    },
+
+    {
+      "libId": "mhra-acei-angioedema",
+      "category": "Prescribing safety",
+      "subcategory": "Allergy / adverse reaction",
+      "title": "ACE inhibitor — delayed angioedema awareness",
+      "description": "Patient on an ACE inhibitor: reminder that ACEi-induced angioedema can occur at any point during treatment — even after months or years. MHRA Drug Safety Update June 2026.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "ACE inhibitor — angioedema risk reminder",
+        "drugSets": [
+          { "name": "ACE inhibitor", "match": ["ramipril","lisinopril","perindopril","enalapril","captopril","trandolapril","fosinopril","quinapril","imidapril","cilazapril"] }
+        ],
+        "sex": "any",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update June 2026: ACE inhibitor-induced angioedema can occur at any time during treatment — onset is unpredictable and may occur years after starting therapy (late-onset angioedema). Angioedema affecting the tongue, pharynx or larynx is life-threatening. Action: (1) counsel patients at initiation and each annual review — they should seek emergency care immediately if they experience swelling of the face, lips, tongue or throat, or difficulty breathing or swallowing; (2) if ACEi-induced angioedema occurs, stop the ACE inhibitor immediately and do not restart it or switch to another ACEi — consider ARB only with specialist advice; (3) document ACEi angioedema clearly in the allergy/adverse reaction field. Black and African-Caribbean patients have a higher risk of ACEi-induced angioedema. This chip is an awareness reminder — reassess at every medication review.",
+        "source": "MHRA Drug Safety Update — ACE inhibitors and angioedema: reminder of risk and management, June 2026"
+      }
+    },
+
+    {
+      "libId": "mhra-finasteride-dutasteride-psychiatric",
+      "category": "Prescribing safety",
+      "subcategory": "Psychiatric / sexual",
+      "title": "Finasteride / dutasteride — psychiatric and sexual dysfunction risk (male)",
+      "description": "Male patient on finasteride or dutasteride: awareness reminder about persistent psychiatric and sexual adverse effects, including post-finasteride syndrome. MHRA Drug Safety Update May 2026.",
+      "source": "MHRA",
+      "rule": {
+        "type": "drug-combo",
+        "enabled": true,
+        "label": "Finasteride / dutasteride — psychiatric / sexual dysfunction",
+        "drugSets": [
+          { "name": "5-alpha reductase inhibitor", "match": ["finasteride","proscar","propecia","dutasteride","avodart","combodart","duodart"] }
+        ],
+        "sex": "M",
+        "requiresProblem": [],
+        "excludesProblem": [],
+        "severity": "amber",
+        "notes": "MHRA Drug Safety Update May 2026: updated labelling and prescriber/patient communications for finasteride and dutasteride on psychiatric and sexual adverse effects. Affected adverse effects include: depression, suicidal ideation, anxiety, sexual dysfunction (erectile dysfunction, decreased libido, ejaculatory disorder), and — importantly — reports of these persisting after stopping the drug (post-finasteride/dutasteride syndrome). Action: (1) inform patients before starting of the psychiatric and sexual adverse effect risks; (2) monitor for mood change, suicidal ideation, and sexual dysfunction at each review; (3) if symptoms develop, seriously consider stopping the drug and document the adverse effect; (4) advise patients that symptoms may persist after stopping and to report any ongoing symptoms; (5) for finasteride, post-discontinuation persistence has been well documented in the medical literature — ensure the patient is aware. Report cases to Yellow Card. This chip applies to finasteride at all doses (1mg for hair loss, 5mg for BPH) and to dutasteride.",
+        "source": "MHRA Drug Safety Update — finasteride and dutasteride: updated information on psychiatric and sexual adverse effects including persistence after stopping treatment, May 2026"
       }
     },
 

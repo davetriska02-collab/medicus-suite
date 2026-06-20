@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-06-14",
-  "specVersion": "Reception capture pathways v1.3 — CSO-signed-off 2026-06-14 (escalation re-tiering 2026-06-10; CSO 999-promotion pass 2026-06-14)",
+  "lastUpdated": "2026-06-20",
+  "specVersion": "Reception capture pathways v1.4 — updated 2026-06-20 (The Keeper run): cauda equina red flags expanded (rf-urinary-hesitancy, rf-sexual per NICE CKS/MPS 2023/2024 update); anuria flag added to urinary pathway (rf-anuria, NICE NG253 Nov 2025 urosepsis cluster); sore-throat trismus CSO-pending note added. CSO sign-off required before go-live on items marked 'CSO sign-off pending'.",
   "sourceNotes": "Question sets and red flags derived from NICE CKS topic red-flag lists (sore throat — acute; otitis media — acute; cough — acute; UTI in women; headache — assessment; low back pain; feverish children; cellulitis / rashes), the NICE NG143 feverish-child traffic-light features, the NHS Pharmacy First clinical pathways, and NICE NG253/NG254/NG255 (suspected sepsis, replacing NG51) for urosepsis / sepsis escalation, re-phrased in lay language for telephone use by non-clinical staff. 2026-06-10: escalation re-tiering pass — several time-critical presentations (urosepsis, cauda equina, PE, large haemoptysis, sepsis, self-harm with means) promoted to 999 level. 2026-06-14: CSO signed off the reception tiers and red-flag escalation levels for live use (DRAFT blocker lifted), and promoted five red flags from urgent-duty to 999 on clinical review — suspected SJS/TEN (rash), sepsis with rigors (UTI), possible cauda equina / bilateral leg weakness or numbness (back pain), mastoiditis (earache), and red painful eye with halos / suspected acute angle-closure glaucoma (headache). This tool captures a structured history only — it does not triage, diagnose, or advise beyond red-flag escalation prompts. Every pathway and red-flag list must be reviewed by the practice's clinical safety officer before deployment and re-checked by The Keeper alongside the other rule files.",
   "escalations": {
     "999": "Possible emergency: follow practice emergency policy NOW — advise calling 999 / transfer to the duty clinician immediately. Do not put the caller in a queue.",
@@ -24,7 +24,7 @@
       "redFlags": [
         { "id": "rf-breathing", "ask": "Any difficulty breathing, or noisy / high-pitched breathing?", "escalate": "999" },
         { "id": "rf-drooling", "ask": "Are they drooling, or unable to swallow their own saliva?", "escalate": "999" },
-        { "id": "rf-trismus", "ask": "Unable to open the mouth properly, or voice sounds muffled like a 'hot potato' voice?", "escalate": "duty" },
+        { "id": "rf-trismus", "ask": "Unable to open the mouth properly, or voice sounds muffled like a 'hot potato' voice?", "escalate": "duty", "note": "Pharmacy First v1.1 (01/10/2025) specifies trismus → refer to hospital / A&E. Current escalation is 'duty'. CSO decision pending on whether to upgrade to 999/A&E — flagged on PR 2026-06-20." },
         { "id": "rf-onesided", "ask": "Severe pain on ONE side of the throat with swelling of the face or neck?", "escalate": "duty" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when pressed with a glass?", "escalate": "999" },
         { "id": "rf-immune", "ask": "Do they take any medicine that weakens the immune system — e.g. carbimazole, methotrexate, chemotherapy, or other immune-suppressing tablets?", "escalate": "duty" },
@@ -101,6 +101,7 @@
         { "id": "rf-sepsis", "ask": "Fever with shaking or uncontrollable shivering (rigors) — without the confusion covered above?", "escalate": "999" },
         { "id": "rf-loin", "ask": "Pain in the back or side, around kidney level?", "escalate": "duty" },
         { "id": "rf-vomiting", "ask": "Vomiting and unable to keep fluids down?", "escalate": "duty" },
+        { "id": "rf-anuria", "ask": "Have they not passed any urine in the last 18 hours or more? (Can be a sign of severe infection)", "escalate": "999" },
         { "id": "rf-pregnant", "ask": "Is there any chance she is pregnant?", "escalate": "duty" },
         { "id": "rf-male-child", "ask": "Is the patient male, or under 16? (different pathway — needs a clinician)", "escalate": "duty" },
         { "id": "rf-confusion", "ask": "New confusion or unusual drowsiness (especially in an older person), not already captured above?", "escalate": "999" }
@@ -146,6 +147,8 @@
       "redFlags": [
         { "id": "rf-saddle", "ask": "Any NEW numbness or tingling around the genitals or back passage (the area that would sit on a saddle)? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
         { "id": "rf-bladder", "ask": "Any new trouble controlling the bladder or bowels, or unable to feel when they are passing urine? (Needs A&E now — cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-urinary-hesitancy", "ask": "Any new difficulty starting to urinate, or difficulty feeling the flow of urine — even without full loss of control? (Needs A&E now — possible cauda equina emergency)", "escalate": "999" },
+        { "id": "rf-sexual", "ask": "Any new loss of sexual sensation or function — such as difficulty with erection, ejaculation, or loss of vaginal sensation — that started at the same time as the back pain? (Needs A&E now — possible cauda equina emergency)", "escalate": "999" },
         { "id": "rf-bothlegs", "ask": "Weakness or numbness in BOTH legs?", "escalate": "999" },
         { "id": "rf-trauma", "ask": "Did it start after a significant fall or accident?", "escalate": "duty" },
         { "id": "rf-fever", "ask": "Fever or feeling generally very unwell with the back pain? (Especially if they inject drugs, have a weakened immune system, or have had recent back surgery — risk of spinal infection)", "escalate": "duty" },
@@ -165,7 +168,7 @@
       "title": "Feverish child",
       "appliesTo": "Children. Babies under 3 months with fever always need same-day clinical advice.",
       "sources": ["NICE NG143: Fever in under 5s (traffic-light features, lay-phrased)", "NICE CKS: Feverish children"],
-      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO has confirmed the local escalation route for this age group is urgent duty, contacted immediately (not a routine callback queue).",
+      "notes": "NICE NG143 high-risk group: a febrile infant under 3 months is high-risk and the duty clinician must be contacted immediately — do not put on a routine callback queue. The CSO has confirmed the local escalation route for this age group is urgent duty, contacted immediately (not a routine callback queue). NG143 red category requires urgent face-to-face assessment within 2 hours AND/OR urgent paediatric specialist review — the duty clinician contacted immediately must be able to arrange this within 2 hours; if the duty route cannot achieve a 2-hour face-to-face assessment, escalate to 999 (CSO sign-off pending on this clarification — flagged on PR 2026-06-20).",
       "redFlags": [
         { "id": "rf-under3m", "ask": "Is the baby under 3 months old with any fever?", "escalate": "duty" },
         { "id": "rf-rash", "ask": "Any rash that does NOT fade when a glass is pressed against it?", "escalate": "999" },

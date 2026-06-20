@@ -38,10 +38,12 @@ const EXPECTED = {
     // exclusions were removed — injectable/parenteral forms must fire too
     'Methotrexate 50mg/2ml injection', 'Methotrexate injection'
   ],
-  'leflunomide-maintenance': ['Leflunomide 20mg tablets', 'Arava 20mg tablets'],
+  'leflunomide-maintenance': ['Leflunomide 20mg tablets', 'Arava 20mg tablets', 'Leflunomide Medac 10mg tablets'],
   'hydroxychloroquine-maintenance': [
     'Hydroxychloroquine 200mg tablets', 'Quinoric 200mg tablets',
-    'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets'
+    'Plaquenil 200mg tablets', 'Chloroquine 250mg tablets', 'Avloclor 250mg tablets',
+    'Zentiva hydroxychloroquine 200mg', 'Blackrock hydroxychloroquine 200mg',
+    'Accord hydroxychloroquine 200mg', 'Ipca hydroxychloroquine 200mg'
   ],
   'azathioprine-maintenance': ['Azathioprine 50mg tablets', 'Imuran 50mg tablets', 'Azapress 50mg tablets', 'Jayempi 10mg/ml oral suspension'],
   'sulfasalazine-maintenance': [

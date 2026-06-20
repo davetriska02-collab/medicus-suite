@@ -77,5 +77,29 @@ for (const p of doc.pathways || []) {
   }
 }
 
+// ── Named regression guards for 2026-06-20 The Keeper additions ───────────
+console.log('\n--- 2026-06-20 Keeper: new red-flag regression guards ---');
+{
+  // Cauda equina expansion: rf-urinary-hesitancy must exist in backpain pathway at 999
+  const bp = doc.pathways.find((p) => p.id === 'backpain');
+  const rf = (bp?.redFlags || []).find((f) => f.id === 'rf-urinary-hesitancy');
+  check(!!rf, 'backpain/rf-urinary-hesitancy exists (NICE CKS/MPS cauda equina update 2023/2024)');
+  check(rf?.escalate === '999', 'backpain/rf-urinary-hesitancy escalates to 999');
+}
+{
+  // Cauda equina expansion: rf-sexual must exist in backpain pathway at 999
+  const bp = doc.pathways.find((p) => p.id === 'backpain');
+  const rf = (bp?.redFlags || []).find((f) => f.id === 'rf-sexual');
+  check(!!rf, 'backpain/rf-sexual exists (NICE CKS/MPS cauda equina update 2023/2024)');
+  check(rf?.escalate === '999', 'backpain/rf-sexual escalates to 999');
+}
+{
+  // Urosepsis: rf-anuria must exist in urinary pathway at 999 (NICE NG253 Nov 2025)
+  const u = doc.pathways.find((p) => p.id === 'urinary');
+  const rf = (u?.redFlags || []).find((f) => f.id === 'rf-anuria');
+  check(!!rf, 'urinary/rf-anuria exists (NICE NG253 anuria >18h urosepsis criterion)');
+  check(rf?.escalate === '999', 'urinary/rf-anuria escalates to 999');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

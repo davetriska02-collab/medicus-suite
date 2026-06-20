@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-14",
+  "lastUpdated": "2026-06-20",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off.",
@@ -29,7 +29,7 @@
       "id": "leflunomide-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["leflunomide", "arava"],
+        "match": ["leflunomide", "arava", "leflunomide medac"],
         "snomed": ["386982008"]
       },
       "phase": "maintenance",
@@ -50,7 +50,7 @@
       "id": "hydroxychloroquine-maintenance",
       "drugClass": "DMARD",
       "drug": {
-        "match": ["hydroxychloroquine", "chloroquine", "quinoric", "plaquenil", "avloclor"],
+        "match": ["hydroxychloroquine", "chloroquine", "quinoric", "plaquenil", "avloclor", "zentiva", "blackrock", "accord", "ipca"],
         "snomed": ["387397007"]
       },
       "phase": "maintenance",
@@ -243,8 +243,8 @@
         { "name": "Annual review", "match": ["glp-1 review", "weight management review", "diabetes annual review", "obesity review"], "intervalDays": 365, "dueSoonDays": 30 },
         { "name": "U&E", "match": ["u&e", "urea and electrolytes", "renal profile", "egfr"], "snomed": ["1019331000000106"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
-      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Update Jan 2024",
-      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations.",
+      "source": "BNF / NICE TA1026 (semaglutide for weight), TA1004 (tirzepatide) / SPCs / MHRA Drug Safety Updates 2024-2026",
+      "notes": "No mandatory blood monitoring schedule but annual review (renal function, treatment response, side-effect screening) is appropriate. Counsel on pancreatitis warning signs, dehydration risk from GI side effects, gallbladder disease, and (for T2DM) accelerated diabetic retinopathy when HbA1c drops rapidly. Tirzepatide specifically requires renal function assessment pre-initiation. SafePrescriber/MHRA repeatedly highlights non-medical use risks for weight-loss formulations. Feb 2026 MHRA DSU: semaglutide associated with a small increased risk of non-arteritic anterior ischaemic optic neuropathy (NAION) — counsel patients to report sudden vision loss; the semaglutide alert library rule (mhra-semaglutide-naion) provides the awareness chip. Oral semaglutide (Wegovy tablet, 7mg/17mg) received MHRA approval 11 June 2026 for weight management — 'rybelsus' in the match list already covers the prior oral diabetes formulation; the match list covers the tablet formulation via 'semaglutide' generic.",
       "sharedCare": false
     },
     {

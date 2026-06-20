@@ -123,7 +123,7 @@ console.log('\n--- Object input (label property) ---');
   assert(r.total === 4, 'amitriptyline(3) + furosemide(1) = 4');
 }
 
-// ── Brand names (Detrusitol, Ditropan) ───────────────────────────────────
+// ── Brand names (Detrusitol, Ditropan, Emselex, Adasuve, Tegretol) ───────
 console.log('\n--- UK brand names ---');
 {
   const r = computeACB(['Detrusitol 2mg tablets']);
@@ -134,6 +134,52 @@ console.log('\n--- UK brand names ---');
   const r = computeACB(['Ditropan 5mg tablets']);
   assert(r.perDrug.length === 1, 'Ditropan (oxybutynin brand) yields 1 entry');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
+}
+{
+  // medrev-002: darifenacin (urological antimuscarinic) — ACB score 3
+  const r = computeACB(['darifenacin 7.5mg tablets']);
+  assert(r.perDrug.length === 1, 'darifenacin yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'darifenacin scores 3');
+}
+{
+  // medrev-002: Emselex — UK brand of darifenacin
+  const r = computeACB(['Emselex 7.5mg prolonged-release tablets']);
+  assert(r.perDrug.length === 1, 'Emselex (darifenacin brand) yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'Emselex scores 3');
+  assert(r.perDrug[0].matchedTerm === 'emselex', 'Emselex matchedTerm is "emselex"');
+}
+{
+  // medrev-003: carbamazepine — ACB score 2 (Boustani 2012)
+  const r = computeACB(['carbamazepine 200mg tablets']);
+  assert(r.perDrug.length === 1, 'carbamazepine yields 1 entry');
+  assert(r.perDrug[0].score === 2, 'carbamazepine scores 2');
+}
+{
+  // medrev-003: Tegretol — UK brand of carbamazepine
+  const r = computeACB(['Tegretol Prolonged Release 400mg tablets']);
+  assert(r.perDrug.length === 1, 'Tegretol (carbamazepine brand) yields 1 entry');
+  assert(r.perDrug[0].score === 2, 'Tegretol scores 2');
+  assert(r.perDrug[0].matchedTerm === 'tegretol', 'Tegretol matchedTerm is "tegretol"');
+}
+{
+  // medrev-003: Carbagen SR — UK brand of carbamazepine SR
+  const r = computeACB(['Carbagen SR 200mg tablets']);
+  assert(r.perDrug.length === 1, 'Carbagen SR (carbamazepine brand) yields 1 entry');
+  assert(r.perDrug[0].score === 2, 'Carbagen scores 2');
+  assert(r.perDrug[0].matchedTerm === 'carbagen', 'Carbagen matchedTerm is "carbagen"');
+}
+{
+  // medrev-004: loxapine — dibenzoxazepine antipsychotic, ACB score 3 (confidence medium)
+  const r = computeACB(['loxapine 25mg capsules']);
+  assert(r.perDrug.length === 1, 'loxapine yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'loxapine scores 3');
+}
+{
+  // medrev-004: Adasuve — UK brand of loxapine (inhaled)
+  const r = computeACB(['Adasuve 9.1mg inhalation powder']);
+  assert(r.perDrug.length === 1, 'Adasuve (loxapine brand) yields 1 entry');
+  assert(r.perDrug[0].score === 3, 'Adasuve scores 3');
+  assert(r.perDrug[0].matchedTerm === 'adasuve', 'Adasuve matchedTerm is "adasuve"');
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────

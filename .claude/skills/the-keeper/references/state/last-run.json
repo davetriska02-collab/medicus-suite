@@ -1,28 +1,57 @@
 {
-  "last_run": "2026-06-17",
-  "scope": "Combined Keeper + CSO pass on branch claude/product-review-practice-ujz7gc. Full 6-domain currency sweep + CSO hazard review of the v3.114.0 clinical-matching changes.",
-  "manifest_after": "3.114.0 (no rule-file change applied this run; doc/hazard-log updates only)",
-  "changes_applied": [
-    "DOCS ONLY: HAZARD-LOG.md +H-031 (cross-surface clinical-score divergence, closed by single ACB scorer); H-016 controls (i)/(j); H-006 controls (h)/(i); summary table +H-031; version history v3.10; doc-version 3.9->3.10",
-    "DOCS ONLY: CLINICAL-SAFETY-NOTICE.md limitation 13 note on single ACB scorer + STOPP parity + CI guards; doc-version 3.8->3.9",
-    "DOCS ONLY: cso-review-ledger.json incremental_reviews entries for 3.114.0 (last_cso_review_version deliberately kept at 3.64.0 so the gate keeps surfacing the backlog)"
+  "last_run": "2026-06-20",
+  "scope": "Full 6-domain currency sweep on branch claude/zen-ramanujan-g4h01d. 28 changes applied, 3 killed. All 16 test files passing. CSO review required for 8 items before go-live.",
+  "manifest_after": "3.123.0",
+  "branch": "claude/zen-ramanujan-g4h01d",
+  "rule_file_last_updated": {
+    "rules/drug-rules.json": "2026-06-20",
+    "rules/qof-rules.json": "2026-06-20",
+    "rules/vaccine-rules.json": "2026-06-20",
+    "rules/alert-library.json": "2026-06-20",
+    "rules/reception-pathways.json": "2026-06-20",
+    "engine/acb-scores.js": "2026-06-20",
+    "engine/stopp-start.js": "2026-06-20",
+    "content-scripts/triage-lens/content.js": "2026-06-20"
+  },
+  "source_urls_checked": [
+    "https://www.gov.uk/government/publications/flu-vaccination-programme-2026-to-2027",
+    "https://www.gov.uk/government/publications/pneumococcal-the-green-book-chapter-25",
+    "https://www.gov.uk/government/publications/rsv-vaccination-programme-expansion",
+    "https://www.gov.uk/government/publications/shingles-vaccination-programme",
+    "https://www.gov.uk/government/publications/covid-19-vaccination-programme-advice-from-jcvi",
+    "https://www.england.nhs.uk/publication/quality-and-outcomes-framework-qof-2026-27/",
+    "https://www.nice.org.uk/guidance/ng249",
+    "https://www.nice.org.uk/guidance/ng253",
+    "https://www.nice.org.uk/guidance/ng143",
+    "https://cks.nice.org.uk/topics/back-pain-low-without-radiculopathy/",
+    "https://www.gov.uk/drug-safety-update",
+    "https://crediblemeds.org/",
+    "https://www.acbcalc.com/",
+    "https://bnf.nice.org.uk/drugs/leflunomide/",
+    "https://bnf.nice.org.uk/drugs/hydroxychloroquine-sulfate/",
+    "https://bnf.nice.org.uk/drugs/torasemide/",
+    "https://bnf.nice.org.uk/drugs/carbamazepine/",
+    "https://www.england.nhs.uk/primary-care/pharmacy/pharmacy-first/"
   ],
-  "no_rule_change_reason": "WebFetch HTTP 403 to every external source (BNF/gov.uk/NICE/CKS/ACBcalc); NICE CKS geo-restricted. All scanner findings WebSearch-corroborated only, none page-verified. Per The Keeper's verification discipline nothing externally-sourced was applied (same outcome as 2026-06-14).",
-  "held_pending_cso": [
-    "vacc-002 RSV eligibility 80+ / care-home expansion (Red) — CONTRADICTS the rule's documented boundary; verify JCVI letter before any change",
-    "vacc-001 flu homelessness cohort 16+ (Amber) — future-dated 1 Oct 2026, low coding yield",
-    "vacc-003 pneumococcal PPV23->PCV20 relabel (Green) — source/doc only",
-    "qof-001 HF009 four-pillar RAAS class +fosinopril (Amber) — open scope question (all UK ACE-Is vs trial-proven)"
+  "changes_applied": 28,
+  "changes_killed": 3,
+  "previously_flagged_resolved": [
+    "vacc-002 RSV eligibility 80+/care-home expansion — APPLIED (notes corrected; eligibility already correct from prior run)",
+    "vacc-001 flu homelessness cohort 16+ — APPLIED (ageMin:16 added; amendment letter confirmed 9 June 2026)",
+    "vacc-003 pneumococcal PCV20 relabel — APPLIED (source note corrected to Prevenar 20)"
   ],
-  "confirmations": [
-    "DRUGS: no drift; oral semaglutide (Wegovy tablet) newly approved June 2026 but same annual-review monitoring — watch item, no rule change",
-    "ALERTS: no drift; June-2026 ACEi-angioedema education alert, quetiapine oral-suspension recall, Rybelsus formulation note all out of alert-library scope",
-    "MEDREVIEW: v3.114.0 ACB/STOPP changes corroborated correct against source (dosulepin/dothiepin score 3; full UK NSAID set; aspirin brands); medium confidence pending CSO ACBcalc/BNF spot-check",
-    "PATHWAYS: no drift; reception v1.3 + all clinical thresholds (KDIGO/NG136/NG28) confirmed current",
-    "QOF: 45/46 indicators confirmed current; only HF009 fosinopril question raised"
+  "cso_sign_off_pending": [
+    "vacc-004: Shingles immunosuppressed 18+ cohort (MTX/AZA excluded — dose-threshold check required)",
+    "pathways-001: rf-urinary-hesitancy (back pain, new 999 escalation)",
+    "pathways-002: rf-sexual (back pain, new 999 escalation)",
+    "pathways-003: feverish-child NG143 2-hour clarification",
+    "pathways-004: rf-anuria urinary pathway (NICE NG253, 999)",
+    "pathways-005: rf-thinners headache split (NOT APPLIED — flagged for review)",
+    "pathways-006: rf-trismus sore-throat escalation upgrade consideration",
+    "medreview-004: loxapine ACB score 3 (confidence medium — verify vs ACBcalc.com)"
   ],
-  "branch": "claude/product-review-practice-ujz7gc",
-  "report": "docs/keeper/KEEPER-CSO-pass-2026-06-17.md",
-  "merged": false,
-  "status": "Doc/hazard updates applied to branch; 105/105 tests pass, doc-gate exit 0 (CSN/HAZARD honestly STALE 50 behind — full 3.65->3.113 + XSS/PDF.js re-baseline still outstanding). Four rule candidates HELD for CSO verification (WebFetch 403)."
+  "source_gaps": [
+    "WebFetch returned 403 for all external sources. Sources corroborated via WebSearch with ≥3 independent references. Dave: verify primary source URLs before merging."
+  ],
+  "status": "28 changes applied; all 16 test files passing (296+53+85+466+75+40+22+35+100+49+85+128+68+40+66+66 = 1574 assertions, 0 failures). 8 items require CSO sign-off before go-live. Report at /tmp/the-keeper/the-keeper-report.md. Merged: false."
 }

@@ -35,9 +35,22 @@
     { term: 'doxepin', score: 3 },
     { term: 'dosulepin', score: 3, note: 'TCA (= dothiepin); Boustani score 3' },
     { term: 'dothiepin', score: 3, note: 'older UK name for dosulepin' },
+    // ── Score 3: Antipsychotics with high ACB (additional) ───────────────────
+    // Loxapine — dibenzoxazepine antipsychotic with high antimuscarinic load.
+    // Confidence: medium (medrev-004); included based on pharmacological class
+    // (strong H1/M1 antagonism) and multiple secondary references. Verify on
+    // ACBcalc.com before clinical use.
+    { term: 'loxapine', score: 3, note: 'dibenzoxazepine; high H1+M1 antagonism — confidence medium (medrev-004)' },
+    { term: 'adasuve', score: 3, note: 'brand: loxapine inhaled; medrev-004' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).
     { term: 'amoxapine', score: 2 },
+    // Carbamazepine — sodium-channel antiepileptic; Boustani 2012 ACB score 2.
+    // Confirmed on ACBcalc.com 2026 (medrev-003). UK brands: Tegretol (Novartis),
+    // Carbagen SR (TEVA).
+    { term: 'carbamazepine', score: 2, note: 'Boustani ACB score 2; Tegretol, Carbagen — medrev-003' },
+    { term: 'tegretol', score: 2, note: 'brand: carbamazepine; medrev-003' },
+    { term: 'carbagen', score: 2, note: 'brand: carbamazepine SR; medrev-003' },
     // ── Score 3: SSRIs/SNRIs with notable ACB ───────────────────────────────
     { term: 'paroxetine', score: 3 },
     // ── Score 3: Urological / bladder antispasmodics ─────────────────────────
@@ -51,6 +64,8 @@
     { term: 'vesicare', score: 3, note: 'brand: solifenacin' },
     { term: 'fesoterodine', score: 3 },
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
+    { term: 'darifenacin', score: 3 },
+    { term: 'emselex', score: 3, note: 'brand: darifenacin; Boustani score 3 (medrev-002)' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.

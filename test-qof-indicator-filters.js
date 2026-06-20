@@ -142,6 +142,41 @@ check(onOb('Obese (clinical finding)'), 'matches "Obese..."');
 check(!onOb('Family history of obesity'), 'excludes "Family history of obesity"');
 check(!onOb('No obesity'), 'excludes "No obesity"');
 
+// ── NDH register (new 26/27) substring membership ────────────────────────────
+console.log('\n--- NDH register (Non-Diabetic Hyperglycaemia, new 26/27) ---');
+const ndh = qof.rules.find((r) => r.registerCode === 'NDH');
+const onNdh = (label) => engine.patientOnRegister([{ label }], ndh).matched === true;
+check(!!ndh, 'NDH register exists in qof-rules.json');
+check(ndh?.enabled === true, 'NDH register is enabled');
+check(onNdh('Non-diabetic hyperglycaemia'), 'NDH matches "Non-diabetic hyperglycaemia"');
+check(onNdh('Pre-diabetes'), 'NDH matches "Pre-diabetes"');
+check(onNdh('Prediabetes'), 'NDH matches "Prediabetes"');
+check(onNdh('Impaired fasting glucose'), 'NDH matches "Impaired fasting glucose"');
+check(onNdh('Impaired glucose tolerance'), 'NDH matches "Impaired glucose tolerance"');
+check(onNdh('Gestational diabetes'), 'NDH matches "Gestational diabetes" (NDH003 addition)');
+check(!onNdh('No diabetes'), 'NDH excludes "No diabetes"');
+check(!onNdh('Diabetes insipidus'), 'NDH excludes "Diabetes insipidus"');
+
+// ── NDH003 indicator exists and is enabled ────────────────────────────────────
+console.log('\n--- NDH003 indicator (26/27, replaces NDH002) ---');
+const ndh003 = qof.rules.find((r) => r.id === 'qof-ndh003');
+check(!!ndh003, 'NDH003 indicator exists in qof-rules.json');
+check(ndh003?.enabled === true, 'NDH003 is enabled');
+check(ndh003?.indicatorCode === 'NDH003', 'NDH003 indicatorCode is "NDH003"');
+check(ndh003?.requiresRegister === 'NDH', 'NDH003 requiresRegister is "NDH"');
+check(ndh003?.check?.kind === 'observation-recent', 'NDH003 check kind is observation-recent');
+check(ndh003?.check?.withinDays === 365, 'NDH003 check window is 365 days');
+check(
+  (ndh003?.check?.observation || []).some((t) => /hba1c/i.test(t)),
+  'NDH003 check includes HbA1c observation term'
+);
+check(
+  (ndh003?.check?.observation || []).some((t) => /fasting.*glucose|fpg/i.test(t)),
+  'NDH003 check includes fasting glucose / FPG observation term'
+);
+check(ndh003?.points === 20, 'NDH003 is worth 20 points');
+check(ndh003?.thresholds?.lower === 50 && ndh003?.thresholds?.upper === 90, 'NDH003 thresholds 50-90%');
+
 // ── F10: HRT review chip gated on co-prescribed oestrogen ────────────────────
 console.log('\n--- F10: HRT chip requires systemic oestrogen ---');
 const hrt = drug.rules.find((r) => r.id === 'hrt-systemic');

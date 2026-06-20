@@ -61,6 +61,16 @@ console.log('\n--- STOPP 2: NSAID + loop diuretic ---');
   assert(f.severity === 'amber', 'STOPP 2 severity = amber');
 }
 {
+  // Torasemide is a loop diuretic — STOPP 2 must fire (regression guard: added 2026-06-20)
+  const flags = computeStoppStart({
+    drugs: ['naproxen 500mg', 'torasemide 5mg'],
+    problems: [],
+    ageYears: 65,
+    egfr: 60,
+  });
+  assert(!!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 fires: naproxen + torasemide (Torem brand also loop diuretic)');
+}
+{
   // No loop diuretic → no STOPP 2
   const flags = computeStoppStart({ drugs: ['naproxen 500mg', 'indapamide'], problems: [], ageYears: 65, egfr: 60 });
   assert(!find(flags, 'stopp_nsaid_loop'), 'STOPP 2 does NOT fire: naproxen + indapamide (thiazide, not loop)');
