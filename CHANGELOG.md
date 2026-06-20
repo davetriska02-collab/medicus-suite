@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.0] — 2026-06-20
+
+### New engine capability: `intervalByBand` (escalate-only, shortest-wins)
+
+Added a generic, **OPTIONAL** per-test `intervalByBand` capability to the drug-monitoring
+evaluator (`engine/rules-engine.js`). A monitoring test may now SHORTEN its review interval
+when a source observation (e.g. renal function) falls into a worse band:
+
+```
+effectiveInterval = min(test.intervalDays || 365, matchedBand.intervalDays)
+```
+
+- **Escalate-only / shortest-wins / monotonic.** Banding may only SHORTEN the baseline
+  interval, never lengthen it. **Hard invariant** (asserted in code AND in
+  `test-interval-by-band.js`): `effectiveInterval <= (test.intervalDays || 365)` ALWAYS.
+- **Fail-safe.** If the source value is absent, unparseable, unit-conflicting, or STALE
+  (older than its freshness window; default = the baseline interval), the engine falls back
+  to the baseline interval — never a longer interval, and **never suppresses the chip**.
+  Reuses the existing `findLatestObservation` / `parseNumeric` / unit-conflict / staleness
+  guards.
+- **Bands are inclusive upper-bounds.** First band (listed ascending) whose `max >= value`
+  is selected; a value above all bands → baseline (no shortening).
+- **Auditable.** The trace `arithmetic` block records which band fired, the source value,
+  baseline vs effective interval, and the reason.
+- **Optional — existing rules unaffected.** No shipped rule uses `intervalByBand`;
+  `rules/drug-rules.json` and `defaults.json` are unchanged.
+
+### DOAC renal-banded monitoring DEFERRED (per hazard log)
+
+The capability exists but is intentionally **not** wired to the `doac` rule. DOAC must band
+on **CrCl (Cockcroft-Gault), not eGFR**, which requires trustworthy structured weight and
+numeric+unit-validated creatinine that are not yet available. Deferral recorded as **D-001**
+in `docs/HAZARD-LOG.md`.
+
 ## [v3.124.0] — 2026-06-20
 
 ### Sentinel clinical-content expansion via The Keeper (Phase 2 — CSO change-proposal)
