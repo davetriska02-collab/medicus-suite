@@ -136,6 +136,21 @@ console.log('\n--- UK brand names ---');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
 }
 
+// ── Levomepromazine / methotrimeprazine / Nozinan (Keeper follow-up) ──────
+console.log('\n--- Levomepromazine (ACB score 3) ---');
+{
+  const r = computeACB(['Levomepromazine 25mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'levomepromazine scores 3');
+}
+{
+  const r = computeACB(['Nozinan 25mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Nozinan (levomepromazine) scores 3');
+}
+{
+  const r = computeACB(['methotrimeprazine 25mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'methotrimeprazine scores 3');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

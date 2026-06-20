@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.122.2] — 2026-06-20
+
+### ACB scale — add levomepromazine / methotrimeprazine / Nozinan (score 3)
+
+Keeper follow-up. **Levomepromazine** (older name **methotrimeprazine**; UK brand **Nozinan**)
+— a high-potency anticholinergic phenothiazine used in UK palliative care — was absent from
+the ACB table in `engine/acb-scores.js`, a genuine gap. Added at **score 3** alongside the
+other phenothiazines (chlorpromazine / prochlorperazine). Corroborated as Boustani/Campbell
+ACB score 3 (NOT score 2); primary-source confirmation pending. Regression assertions added
+to `test-acb-scores.js`. No substring collision with existing shorter terms — longest-match-wins
+SORTED_TABLE behaviour verified.
+
 ## [v3.122.1] — 2026-06-19
 
 ### Surface the Outstanding Requests settings in Suite Settings
