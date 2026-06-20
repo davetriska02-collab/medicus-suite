@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.115.0
-**Generated:** 2026-06-17
+**Version:** v3.123.0
+**Generated:** 2026-06-20
 
 ## What it is
 
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 - 4 in-page content-script features (on-screen overlays and relays)
 - 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
 - 7 rule types in the alert engine
-- 25 drug-monitoring rules, 61 QOF rules, 21 bundled investigation result rules, and 22 starter alerts in the prescribing-safety library
+- 25 drug-monitoring rules, 61 QOF rules, 35 bundled investigation result rules, and 22 starter alerts in the prescribing-safety library
 
 ## Side-panel modules
 
@@ -141,7 +141,7 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 
 **Triage Lens — request queue** (all Medicus pages): overlays the patient request queue with semantic triage chips. Red = same-day or 999; amber = urgent; info = supplementary. 77+ built-in rules across chest pain, sepsis, stroke/TIA, anaphylaxis, obstetric emergencies, mental health crisis, paediatric red flags, 2WW cancer patterns, and common acute presentations. New built-in rules reach existing users automatically; rules deliberately deleted stay deleted.
 
-**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. Result rules can be **scoped to a specimen** (`analyte.specimen`, captured from the result's specimen header) so a threshold applies only to the right sample type, with fail-open behaviour when no specimen is present. 21 built-in result rules ship enabled; new custom rules arrive disabled and require clinician review before firing.
+**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. Result rules can be **scoped to a specimen** (`analyte.specimen`, captured from the result's specimen header) so a threshold applies only to the right sample type, with fail-open behaviour when no specimen is present. 35 built-in result rules ship enabled — biochemistry/haematology thresholds (eGFR, potassium, sodium, calcium, magnesium, haemoglobin, platelets, neutrophils, INR, HbA1c, lithium, digoxin, TSH, ferritin, B12, FIB-4) and microbiology/imaging text classifiers (blood/urine/throat/wound/ear/genital culture, stool MC&S, H. pylori, STI NAAT, EBV serology, histology, ultrasound, bowel-screening); new custom rules arrive disabled and require clinician review before firing.
 
 **Sentinel content script** (all Medicus pages): provides per-patient monitoring data to the Sentinel side-panel module. Also drives prescribing-safety combination chips (STOPP/START-style), QRISK3/QCancer/eFI risk-calculator signpost chips, and NHS Pharmacy First pathway hints on the patient record view.
 

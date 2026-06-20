@@ -37,9 +37,9 @@
     },
     {
       "file": "docs/feature-list.md",
-      "last_cso_review_version": "3.113.0",
-      "last_cso_review_date": "2026-06-16",
-      "notes": "Feature list regenerated at 3.113.0 on 2026-06-16."
+      "last_cso_review_version": "3.123.0",
+      "last_cso_review_date": "2026-06-20",
+      "notes": "Feature list refreshed at 3.123.0 on 2026-06-20: built-in investigation result rules updated to 35 (12 added from Dr Grundy's result-matching set — microbiology/imaging text classifiers plus FIB-4/ferritin/B12 thresholds)."
     }
   ]
 }

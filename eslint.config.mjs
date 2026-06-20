@@ -64,8 +64,9 @@ export default [
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
   {
-    // Node ESM tooling scripts (e.g. brand/generate-icons.mjs)
-    files: ['brand/**/*.mjs'],
+    // Node ESM tooling scripts (e.g. brand/generate-icons.mjs,
+    // design-system/build.mjs — esbuild bundlers run under Node, never shipped)
+    files: ['brand/**/*.mjs', 'design-system/**/*.mjs'],
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
 ];
