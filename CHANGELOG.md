@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.123.0] — 2026-06-20
+
+### Sentinel rules engine — safety, provenance & efficiency hardening (Phase 1)
+
+Outcome of a multi-agent review of the investigations & safety-monitoring rules engine.
+Six low-risk, no-clinical-sign-off-needed changes; clinical-content expansion (drug–drug
+interaction checks, ACB score-2 tier, renal-adjusted DOAC intervals, contraception) is
+deliberately deferred to a Keeper run with primary-source verification + CSO review.
+
+- **Drug-combo matching silent-miss fixed.** `evaluateDrugComboRule` used a bare
+  `.toLowerCase()` while single-drug matching folds `-`/`_` to spaces via
+  `normaliseDrugString`. The two paths disagreed on any hyphen-vs-space mismatch, so a
+  hyphenated interaction drug (`co-trimoxazole`, `co-amilofruse`, …) could match its
+  single-drug monitoring rule but **silently never fire a drug-combo interaction alert**.
+  Both paths now share one normaliser. New `test-drug-combo-agreement.js` pins single ≡
+  combo matching (incl. the hyphen↔space cases that fail pre-fix). This is the hard gate
+  for any future interaction rules.
+- **alert-library.json clinical content is now content-tested.** New
+  `test-alert-library-coverage.js` pins type, severity, monitoring intervals, drug-set
+  membership and the safety-critical demographic gates for all 23 entries (13 PINCER, MHRA
+  valproate/isotretinoin PPP, NICE lithium, QTc, recurrent-UTI/falls, rising-PSA), and
+  fires the highest-stakes combos through the real engine. Previously these had schema +
+  currency-date checks only — a severity downgrade or interval change would have passed
+  every test.
+- **Unit-safety guard on threshold/alert assertions.** Before asserting a "high"/"low"
+  fact, the observation's unit is checked against the rule's expected unit; a recognised,
+  genuinely-different unit (e.g. potassium mmol/L vs an eGFR mL/min value) now abstains
+  instead of asserting a wrong-direction alert. Fail-open: an absent/unknown unit still
+  fires, so a real alert is never suppressed by a unit we don't recognise.
+- **STATUS_RANK drift fixed and pinned.** `sentinel-core.js` was missing the `vax_*`
+  keys the engine emits, so a due vaccine ranked 99 (un-prioritised) on the panel and its
+  "Offer to book" instruction was dead code. Added the keys (parity with the sweep surface)
+  and added `test-status-rank-sync.js` pinning the engine and sentinel-core rank tables to
+  deep-equality so future drift fails CI.
+- **Sentinel now consumes the shared provenance caveat canon.** The primary monitoring
+  surface previously re-hand-wrote its caveats; it now uses `shared/provenance.js`. The
+  green "checked & clear" audit headline carries the canonical *live-snapshot, verify
+  before acting* caveat, and the empty/all-clear states carry *no alert ≠ monitoring
+  complete* — closing the over-claim on the highest-confidence (in-date) surfaces.
+- **Record-pipeline evaluation memo (`engine/eval-cache.js`).** The record HUD re-ran the
+  full `evaluatePatient` (O(rules × observations)) on every render. It now memoises the
+  evaluation keyed on a content hash of the **freshly-fetched** data — so the redundant
+  re-evaluation is skipped when nothing changed, but the fetch stays fresh and the hash is
+  self-invalidating (any changed med/observation/problem/rule/day busts it). The memo can
+  never serve a stale all-clear; `test-eval-cache.js` proves the invalidation, not just the
+  hit-rate.
+
 ## [v3.122.1] — 2026-06-19
 
 ### Surface the Outstanding Requests settings in Suite Settings
