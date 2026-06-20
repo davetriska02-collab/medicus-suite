@@ -28,9 +28,9 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Skip if the token secret isn't configured yet, so the workflow no-ops
-    # cleanly instead of failing red before setup is done.
-    if: ${{ github.event.pull_request.draft == false }}
+    # Review contributors' PRs, but NOT the maintainer's own — Dave doesn't need
+    # his digital twin reviewing him. Skip drafts too.
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.user.login != 'davetriska02-collab' }}
     steps:
       - name: Check out PR
         uses: actions/checkout@v4

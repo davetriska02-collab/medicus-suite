@@ -40,19 +40,24 @@ That's it. The next PR Nick opens gets a Virtual Dave review automatically.
 > The token expires periodically — if reviews stop appearing, re-run
 > `claude setup-token` and update the secret.
 
-### Scoping it to just Nick (optional)
+### Who gets reviewed
 
-By default it reviews **all** PRs. To restrict it to specific authors, add an
-`if:` guard to the `review` job in the workflow once you know Nick's GitHub
-username, e.g.:
+It reviews contributors' PRs but **skips the maintainer's own** — the `review`
+job has an `if:` guard excluding `davetriska02-collab`, because Dave doesn't
+need his own digital twin reviewing him:
+
+```yaml
+  review:
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.user.login != 'davetriska02-collab' }}
+```
+
+To instead restrict it to *only* specific authors (e.g. once you know Nick's
+GitHub username), swap the guard for:
 
 ```yaml
   review:
     if: ${{ github.event.pull_request.user.login == 'NICKS_USERNAME' }}
 ```
-
-Leaving it on for everyone is fine too — a second pair of (Dave-flavoured) eyes
-never hurts.
 
 ---
 
