@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.0] — 2026-06-20
+
+### Keeper follow-ups — four parallel work items (scoped by virtual-dave)
+
+Consolidated batch of the four open follow-ups from the Phase-1/Phase-2 rules-engine work,
+developed in parallel on isolated branches and integration-tested together (full suite
+112/112).
+
+- **`intervalByBand` engine capability** (`engine/rules-engine.js`, new
+  `resolveEffectiveInterval`) — optional, value-banded monitoring intervals with a hard
+  **escalate-only / shortest-wins / monotonic** invariant asserted in code
+  (`effectiveInterval <= baseline` always) and a 5000-iteration property test. Missing /
+  unparseable / unit-conflicting / stale band-input falls back to the baseline, never longer,
+  never suppressed. **DOAC is deliberately NOT wired** — it must band on CrCl (Cockcroft-Gault),
+  not eGFR, and the inputs (structured dated weight; numeric serum creatinine) aren't reliably
+  available; deferral recorded in `docs/HAZARD-LOG.md`.
+- **CHC monitoring rule enabled** (`rules/drug-rules.json`) — `chc-combined-hormonal` flipped to
+  enabled after disambiguating the `hrt-systemic` overlap by excluding `ethinylestradiol`/
+  `qlaira`/`zoely` from the HRT rule (HRT never uses ethinylestradiol). New
+  `test-contraception-hrt-disambiguation.js` pins the no-double-fire invariant; HRT brand
+  coverage confirmed intact.
+- **levomepromazine / methotrimeprazine / Nozinan added to the ACB scale at score 3**
+  (`engine/acb-scores.js`) — the score-3 gap the Keeper verification surfaced (it had been
+  mis-proposed at score 2 and killed).
+- **Primary-source reconfirmation status** recorded in
+  `the-keeper-source-reconfirmation-2026-06-20.md` for the Phase-2 clinical changes.
+
 ## [v3.125.0] — 2026-06-20
 
 ### Fix: urine electrolytes no longer matches a blood U&E request

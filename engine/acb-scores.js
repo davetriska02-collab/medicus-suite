@@ -81,6 +81,9 @@
     { term: 'quetiapine', score: 3 },
     { term: 'clozapine', score: 3 },
     { term: 'chlorpromazine', score: 3 },
+    { term: 'levomepromazine', score: 3, note: 'Boustani/Campbell ACB score 3 (phenothiazine; = methotrimeprazine)' },
+    { term: 'methotrimeprazine', score: 3, note: 'older name for levomepromazine; Boustani/Campbell ACB score 3' },
+    { term: 'nozinan', score: 3, note: 'brand: levomepromazine' },
     // ── Score 3: Antiparkinson drugs with anticholinergic action ─────────────
     { term: 'procyclidine', score: 3 },
     { term: 'orphenadrine', score: 3 },

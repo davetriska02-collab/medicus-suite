@@ -241,6 +241,103 @@
     return e !== a;
   }
 
+  // === OPTIONAL: interval-by-band resolution ===
+  // A drug-monitoring test may carry an OPTIONAL `intervalByBand` block to SHORTEN
+  // its review interval when a source observation (e.g. renal function) falls into
+  // a worse band. The capability is ESCALATE-ONLY / shortest-wins / monotonic:
+  //
+  //   effectiveInterval = min(baseline, matchedBand.intervalDays)
+  //
+  // where baseline = test.intervalDays || 365. Banding may ONLY shorten the
+  // interval, never lengthen it — see the HARD INVARIANT below.
+  //
+  // Bands are UPPER-BOUNDS: each band's `max` is INCLUSIVE. The first band (in
+  // listed order) whose `max` >= value is selected. List bands ascending by `max`
+  // so e.g. eGFR 28 lands in {max:29} not {max:59}. A value above every band's
+  // `max` matches no band → baseline (no shortening), the safe default for a
+  // healthy / unbanded source value.
+  //
+  // FAIL-SAFE: if the source observation is absent, unparseable, unit-conflicting,
+  // or STALE (older than its freshness window), we return the baseline interval —
+  // NEVER a longer interval, and NEVER a suppression. A missing renal value must
+  // not be allowed to *relax* monitoring; the worst it can do is leave the baseline
+  // interval in place.
+  //
+  // Schema (per test, optional):
+  //   intervalByBand: {
+  //     source: "<observation match key or name>",   // string or string[]
+  //     unit:   "<optional expected unit for conflict guard>",
+  //     freshnessDays: <optional override; default = baseline interval window>,
+  //     bands:  [ { max: 14, intervalDays: 90 }, { max: 29, intervalDays: 90 },
+  //               { max: 59, intervalDays: 182 } ]
+  //   }
+  //
+  // Returns { effectiveInterval, band, sourceValue, sourceObs, reason } where
+  // `reason` documents WHY (for the audit trace): 'banded' | 'no-config' |
+  // 'no-source-obs' | 'unparseable' | 'unit-conflict' | 'stale' | 'no-band-match'.
+  function resolveEffectiveInterval(test, observations, now) {
+    const baseline = test.intervalDays || 365;
+    const cfg = test.intervalByBand;
+    if (!cfg || !Array.isArray(cfg.bands) || cfg.bands.length === 0) {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: null,
+        sourceObs: null,
+        reason: 'no-config',
+      };
+    }
+    // `source` may be a single string or an array of match terms; normalise to a
+    // `match` array the existing observation lookup understands.
+    const sourceTerms = Array.isArray(cfg.source) ? cfg.source : cfg.source != null ? [cfg.source] : [];
+    const obs = findLatestObservation(observations, { match: sourceTerms, snomed: cfg.snomed });
+    const fail = (reason) => ({
+      effectiveInterval: baseline,
+      band: null,
+      sourceValue: null,
+      sourceObs: obs || null,
+      reason,
+    });
+    if (!obs || !obs.date) return fail('no-source-obs');
+    // Unparseable date → cannot assert freshness → treat as stale → baseline.
+    if (isNaN(new Date(obs.date).getTime())) return fail('stale');
+    const value = parseNumeric(obs.value);
+    if (value == null) return fail('unparseable');
+    // Unit safety: a conflicting unit means the number is not comparable to the
+    // band thresholds — fall back to baseline rather than band on a wrong unit.
+    if (unitsConflict(cfg.unit, obs.unit)) return fail('unit-conflict');
+    // Staleness: default freshness window = the baseline interval itself, so a
+    // renal value older than one review cycle can no longer justify shortening.
+    const freshnessDays = cfg.freshnessDays || baseline;
+    const ageDays = daysBetween(obs.date, now);
+    if (ageDays == null || ageDays > freshnessDays) return fail('stale');
+    // First band (in listed order) whose inclusive upper-bound max >= value.
+    const band = cfg.bands.find((b) => typeof b.max === 'number' && value <= b.max) || null;
+    if (!band || typeof band.intervalDays !== 'number') {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: value,
+        sourceObs: obs,
+        reason: 'no-band-match',
+      };
+    }
+    // ESCALATE-ONLY / shortest-wins: min(baseline, band) — banding may only shorten.
+    const effectiveInterval = Math.min(baseline, band.intervalDays);
+    // HARD INVARIANT: banding can never LENGTHEN the baseline interval. Math.min
+    // guarantees this; the guard makes the contract explicit and fails safe.
+    if (effectiveInterval > baseline) {
+      return {
+        effectiveInterval: baseline,
+        band: null,
+        sourceValue: value,
+        sourceObs: obs,
+        reason: 'no-band-match',
+      };
+    }
+    return { effectiveInterval, band, sourceValue: value, sourceObs: obs, reason: 'banded' };
+  }
+
   // === HRT PROGESTOGEN CONTEXT ===
   // For oestrogen-triggered HRT chips, annotate with whether the patient has
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
@@ -651,7 +748,17 @@
         if (days == null) {
           return { ...test, status: 'no_data', latestObs: obs, days: null };
         }
-        const intervalDays = test.intervalDays || 365;
+        const baselineDays = test.intervalDays || 365;
+        // OPTIONAL escalate-only banding: may only SHORTEN baselineDays. Absent /
+        // unparseable / unit-conflicting / stale source → baseline (never longer).
+        const banding = resolveEffectiveInterval(test, data.observations, now);
+        const intervalDays = banding.effectiveInterval;
+        // HARD INVARIANT (assert in code): banding may only shorten the baseline.
+        if (intervalDays > baselineDays) {
+          throw new Error(
+            `intervalByBand invariant violated: effective ${intervalDays} > baseline ${baselineDays} for test ${test.name || ''}`
+          );
+        }
         const dueSoonDays = test.dueSoonDays || 30;
         const staleDays = intervalDays * 2;
         let status;
@@ -659,7 +766,9 @@
         else if (days > intervalDays) status = 'overdue';
         else if (days > intervalDays - dueSoonDays) status = 'due_soon';
         else status = 'in_date';
-        return { ...test, status, latestObs: obs, days };
+        // Carry banding audit onto the evaluation so the trace can record WHICH
+        // band fired and the source value. `intervalDays` is the EFFECTIVE value.
+        return { ...test, status, latestObs: obs, days, intervalDays, baselineIntervalDays: baselineDays, banding };
       });
 
       // Recently-initiated: if drug start date is within smallest interval, suppress no_data
@@ -736,13 +845,31 @@
           te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
           te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
             const lastDate = tv.latestObs ? tv.latestObs.date : null;
+            // tv.intervalDays is the EFFECTIVE (post-banding) interval; due date is
+            // computed off it so a banded shortening shows in the audited due date.
             const intDays = tv.intervalDays || 365;
+            const baselineDays = tv.baselineIntervalDays || tv.intervalDays || 365;
             let dueDate = null;
             if (lastDate) {
               const d = new Date(lastDate);
               d.setDate(d.getDate() + intDays);
               dueDate = d.toISOString().slice(0, 10);
             }
+            // OPTIONAL banding audit: record WHICH band fired and the source value
+            // so a reviewer can see why monitoring was shortened. Only emitted when
+            // an intervalByBand config is present on the test (reason !== 'no-config').
+            const b = tv.banding;
+            const banding =
+              b && b.reason !== 'no-config'
+                ? {
+                    applied: b.reason === 'banded',
+                    reason: b.reason,
+                    baselineIntervalDays: baselineDays,
+                    effectiveIntervalDays: intDays,
+                    sourceValue: b.sourceValue,
+                    band: b.band ? { max: b.band.max, intervalDays: b.band.intervalDays } : null,
+                  }
+                : null;
             return {
               test: tv.testName || tv.name || '',
               observation: tv.latestObs
@@ -755,6 +882,8 @@
                 : null,
               lastDate,
               intervalDays: intDays,
+              baselineIntervalDays: baselineDays,
+              banding,
               dueSoonDays: tv.dueSoonDays || 30,
               daysSince: tv.days,
               dueDate,
@@ -2162,6 +2291,7 @@
     qofYearLabel,
     parseBp,
     parseNumeric,
+    resolveEffectiveInterval,
     patientOnRegister,
     evaluateDrugRule,
     evaluateQofRegisterRule,
