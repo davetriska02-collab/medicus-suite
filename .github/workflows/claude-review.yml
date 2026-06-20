@@ -1,0 +1,89 @@
+name: Virtual Dave PR review
+
+# Auto-reviews pull requests with the "virtual-dave" persona (Dr Dave Triska's
+# digital twin, defined in .claude/agents/virtual-dave.md). Posts a single
+# review comment per PR with a safety-first verdict. Aimed at giving Nick (and
+# any contributor) fast, in-character feedback before Dave reviews by hand.
+#
+# ONE-TIME SETUP (see docs/PR-REVIEW-SETUP.md):
+#   1. Install the Claude GitHub App on the repo (github.com/apps/claude).
+#   2. Add repo secret CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token` on the
+#      Max plan and paste the result). No per-PR API billing — draws on the sub.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Don't pile up reviews when a PR is pushed to repeatedly — cancel the old run.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip if the token secret isn't configured yet, so the workflow no-ops
+    # cleanly instead of failing red before setup is done.
+    if: ${{ github.event.pull_request.draft == false }}
+    steps:
+      - name: Check out PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Virtual Dave review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Opus for the persona's judgement quality (alias resolves on the sub).
+          claude_args: '--model opus'
+          prompt: |
+            You are reviewing pull request #${{ github.event.pull_request.number }}
+            ("${{ github.event.pull_request.title }}") opened by
+            @${{ github.event.pull_request.user.login }}.
+
+            FIRST, get into character and ground yourself in the repo:
+            1. Read `.claude/agents/virtual-dave.md` and adopt that persona fully
+               — you ARE Virtual Dave for this review. Stay in character.
+            2. Read `CLAUDE.md`, and skim `docs/VISION.md` and
+               `docs/INTENDED-PURPOSE.md` so your verdict is grounded.
+            3. Read the actual diff for this PR and the changed files. Don't
+               review from the title — review the code. Cite `file:line`.
+
+            THEN review the change against what Dave actually cares about, in
+            priority order:
+            - PATIENT SAFETY FIRST. Anything that could surface a wrong/missing
+              clinical alert, leak PHI, weaken a review gate, or break the
+              read-only / no-exfiltration model is a blocker. Call it out hard.
+            - The repo's golden rules (from CLAUDE.md): no patient data committed;
+              version bump in manifest.json + a CHANGELOG.md entry on the same
+              commit when shipping a change; defaults.json version bump when
+              shipped rules/chips/thresholds change; tests added/updated for new
+              rule coverage.
+            - Correctness and tech debt: does it do what it claims, will it
+              survive the Vue/AG-Grid SPA churn if it touches queue injection,
+              is there a sharper/simpler way.
+            - Clinician UX: does it get in the way of an 8-minute appointment.
+
+            Remember the author may be a newer contributor (Nick is learning the
+            codebase): be direct and honest in Dave's voice, but constructive —
+            point at the fix, the file, the pattern to copy. Celebrate what's
+            genuinely good; never generic praise.
+
+            FINALLY, post ONE pull-request review comment (use the gh CLI / the
+            tools available to you) structured as:
+            - **Verdict:** one of `Ship it`, `Ship after tweaks`, or
+              `Needs work / blocked` — with a one-line why.
+            - **What's good:** specific, cite file:line.
+            - **What needs fixing:** specific, cite file:line, ordered by
+              severity (safety first).
+            - **Quick wins / nice-to-haves:** optional.
+
+            Keep it high-signal and readable — this is a review comment, not an
+            essay. Do not modify any code or push commits; review only.
