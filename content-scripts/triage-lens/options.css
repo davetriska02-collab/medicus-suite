@@ -300,6 +300,18 @@ main {
 .tl-rule-row.tl-rule-disabled {
   opacity: 0.5;
 }
+/* Grid items default to min-width:auto, so an unbreakable token (e.g. an
+   auto-generated custom-test key like "hum_papill_vir_dna_dtctn_assay") forces
+   the text track wider than the panel and shoves the Edit/× actions off the
+   right edge. min-width:0 lets the track shrink; the label/meta wrap instead. */
+.tl-rule-row > * {
+  min-width: 0;
+}
+/* OIR test-dictionary rows only use kind + text + actions, so they drop the two
+   middle count columns of the shared grid and let the text column take the slack. */
+.tl-rule-row-oir {
+  grid-template-columns: 36px 90px 1fr auto;
+}
 
 .tl-rule-toggle {
   width: 18px;
@@ -335,10 +347,12 @@ main {
 
 .tl-rule-label {
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 .tl-rule-meta {
   color: var(--text-3);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 .tl-rule-row > .tl-rule-actions {
   display: flex;

@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.122.2] — 2026-06-20
+
+### Fix: long OIR test names pushed the Edit/× buttons off the panel
+
+Reported by a user: in the **Outstanding Requests** test-dictionary editor, an
+auto-generated custom-test row with a long, unbreakable key (e.g.
+`hum_papill_vir_dna_dtctn_assay`) or a long term summary stretched the row's text
+column past the panel edge, shoving the **Edit** and **×** action buttons out of
+view and out of reach.
+
+Two layout fixes in `content-scripts/triage-lens/options.css` /
+`content-scripts/triage-lens/options.js`:
+
+- `.tl-rule-row > *` now gets `min-width: 0` and the label/meta wrap with
+  `overflow-wrap: anywhere`, so an unbreakable token wraps instead of forcing the
+  flexible text track wider than the panel (the default grid `min-width: auto` was
+  the root cause).
+- OIR rows now use a dedicated compact 4-column grid (`.tl-rule-row-oir`) instead of
+  the shared 6-column rules grid, dropping the two empty "patterns/actions count"
+  columns whose reserved width compounded the overflow on a narrow panel.
+
 ## [v3.122.1] — 2026-06-19
 
 ### Surface the Outstanding Requests settings in Suite Settings
