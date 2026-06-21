@@ -267,7 +267,7 @@ function renderCollapsedStrip() {
   return `
     <div class="setup-card setup-card--collapsed" role="region" aria-label="Suite setup">
       <span class="setup-collapsed-icon setup-step-icon--done" aria-hidden="true">&#10003;</span>
-      <span class="setup-collapsed-text">Setup: practice code ready &middot; ${esc(optionalLabel)}</span>
+      <span class="setup-collapsed-text" title="Practice code set &middot; ${esc(optionalLabel)}">Practice code set</span>
       ${chooseTabs}
       <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
       <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>

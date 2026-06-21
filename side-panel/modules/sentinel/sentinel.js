@@ -1816,7 +1816,6 @@ function scaffoldHtml() {
           <div class="mod-title">Monitoring</div>
         </div>
         <div class="sent-header-meta">
-          <span class="module-ver">v0.5.1</span>
           <button class="sent-tool-btn" id="sentRefreshBtn" title="Refresh now (the panel also refreshes itself every 10 seconds)" aria-label="Refresh">${toolIcon(TOOL_ICONS.refresh)}</button>
         </div>
       </div>

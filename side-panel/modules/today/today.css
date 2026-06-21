@@ -34,6 +34,53 @@
   box-shadow: var(--shadow-2);
 }
 
+/* G3 (design-house appraisal 2026-06-21): one hero per tab. Today was a flat
+   stack of six equal cards with no focal point; the live waiting room is the
+   morning's primary decision driver, so it floats forward — stronger elevation,
+   emphasised border, a louder header label and a larger headline count — while
+   the other metric cards rest as a calm supporting stack. Hierarchy by weight
+   and space, not colour: the hero must never read as an alert (the urgency tint
+   on the count is a separate, real wait-time signal and is untouched). */
+.today-card[data-card='wr'] {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+}
+.today-card[data-card='wr'] .today-card-label {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.today-card[data-card='wr'] .today-hero-count {
+  font-size: 34px;
+}
+
+/* Phase 2 (Vogue map): composition, not arrangement. Only the Waiting Room hero
+   stays a distinct elevated card; the supporting cards shed their border, shadow
+   and header fill and read as quiet sections under it, separated by space and a
+   hairline. Six equal boxes become one hero + a calm supporting stack. */
+.today-card:not([data-card='wr']) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.today-card:not([data-card='wr']):hover {
+  border-color: transparent;
+  box-shadow: none;
+}
+.today-card:not([data-card='wr']) + .today-card:not([data-card='wr']) {
+  border-top: 1px solid var(--border);
+}
+.today-card:not([data-card='wr']) .today-card-header {
+  background: transparent;
+  border-bottom-color: transparent;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.today-card:not([data-card='wr']) .today-card-body {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
 /* ── Card header ─────────────────────────────────────────────────────────────── */
 
 .today-card-header {
@@ -45,27 +92,32 @@
   background: var(--bg-mid);
 }
 
+/* Type-system revision 2026-06-21 (DOCTRINE #4): card headers are the voice —
+   sentence-case sans, hierarchy by weight, not mono-caps. */
 .today-card-label {
-  font-family: var(--mono);
-  font-size: 9px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
 
-/* Decision H: demote rest colour to text-4; add :focus-visible and :active */
+/* Demoted to a single quiet chevron glyph (Vogue map Phase 1): six standing
+   "Open →" labels were repeated chrome noise; the arrow alone keeps the
+   affordance discoverable without shouting. */
 .today-card-open {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-5);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
-  padding: 2px 6px;
+  padding: 1px 5px;
   cursor: pointer;
   transition:
     color var(--fast) var(--ease),
@@ -97,10 +149,30 @@
 /* ── Loading / error / empty states ─────────────────────────────────────────── */
 
 .today-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
   letter-spacing: 0.06em;
+}
+/* Reticle-geometry spinner (brand-motif seed): a ring with one accent arc,
+   echoing the mark's rangefinder ring. (Craft pass 2026-06-21.) */
+.today-loading::before {
+  content: '';
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-loading::before {
+    animation-duration: 0s;
+  }
 }
 
 /* Decision F: error state — glyph + mono copy, severity not on hue alone */
@@ -169,11 +241,11 @@
 /* ── Setup link ──────────────────────────────────────────────────────────────── */
 
 .today-setup-link {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
   text-decoration: none;
   margin-top: 2px;
@@ -191,11 +263,11 @@
 /* ── Ghost button ────────────────────────────────────────────────────────────── */
 
 .today-ghost-btn {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   background: transparent;
   border: 1px solid var(--border-hi);
@@ -348,12 +420,15 @@
   cursor: default;
 }
 
+/* Converge with the top "Triage:" strip pills: same data must not read in two
+   styles (Vogue/Geoff). The label is a word (sentence-case sans); the count
+   stays mono data. (Type recast / pill convergence, 2026-06-21.) */
 .today-rm-pill-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
 }
 
@@ -365,22 +440,20 @@
   color: var(--text-1);
 }
 
-.today-rm-pill--new .today-rm-pill-count {
-  color: var(--amber);
-}
-
-.today-rm-pill--new {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-}
-
+/* Palette cull + pill convergence (Vogue map Phase 1): the per-type amber/blue
+   tint on count AND capsule was decorative — new-vs-reply is already in the
+   label — and diluted the clinical palette. All triage pills are now one neutral
+   capsule with the count emphasised by weight; amber/blue stay reserved for real
+   signals. */
+.today-rm-pill--new .today-rm-pill-count,
 .today-rm-pill--reply .today-rm-pill-count {
-  color: var(--accent);
+  color: var(--text-1);
 }
 
+.today-rm-pill--new,
 .today-rm-pill--reply {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-color: var(--border);
 }
 
 .today-rm-pill--zero {

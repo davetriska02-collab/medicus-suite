@@ -31,11 +31,11 @@
   box-shadow: var(--shadow-1);
 }
 .rcp-card-title {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   margin-bottom: 6px;
 }
@@ -372,10 +372,11 @@
   gap: 4px;
 }
 .rcp-sort-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   margin-right: 2px;
 }
@@ -582,11 +583,11 @@
   margin-bottom: 12px;
 }
 .rcp-section-title {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   margin-bottom: 5px;
 }

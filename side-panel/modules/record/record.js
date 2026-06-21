@@ -776,9 +776,15 @@ function skeleton() {
     </div>`;
 }
 
+// Monochrome reticle glyph — the brand mark's geometry (ring + cardinal ticks +
+// centre dot) echoed into the chrome. Faint/currentColor, no brand cyan (the
+// doctrine keeps the brand colours out of the clinical UI).
+const RETICLE_GLYPH = `<svg class="rec-state-glyph" width="30" height="30" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="16" cy="16" r="9"/><line x1="16" y1="2.5" x2="16" y2="7"/><line x1="16" y1="25" x2="16" y2="29.5"/><line x1="2.5" y1="16" x2="7" y2="16"/><line x1="25" y1="16" x2="29.5" y2="16"/><circle cx="16" cy="16" r="2.4" fill="currentColor" stroke="none"/></svg>`;
+
 function stateCard(title, msg, retry) {
   return `
     <div class="rec-state">
+      ${RETICLE_GLYPH}
       <div class="rec-state-title">${esc(title)}</div>
       <div class="rec-state-msg">${esc(msg)}</div>
       ${retry ? `<button class="rec-retry" id="recRetry">Retry</button>` : ''}

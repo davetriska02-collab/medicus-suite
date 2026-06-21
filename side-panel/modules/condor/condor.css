@@ -51,6 +51,15 @@
   font-weight: 400;
 }
 
+/* Demand qualifier — names the population ("med + admin") inline so the figure
+   reconciles against the all-types velocity total (56) rather than reading as a
+   contradictory second demand number. (Practice appraisal R1, 2026-06-21.) */
+.condor-headline-qual {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
 /* Band colours — full-strength fills, kept as a safety signal (see pill comment). */
 .condor-headline-green {
   border-left-color: var(--green);
@@ -83,6 +92,13 @@
   text-align: right;
   padding: 2px 12px 0;
   letter-spacing: 0.06em;
+}
+
+/* Defensible cut-off clock — a manager quoting the figure to partners needs an
+   explicit "as at HH:MM", not only the relative "just now". (Appraisal R2.) */
+.condor-asat {
+  color: var(--text-2);
+  margin-left: 6px;
 }
 
 .condor-grid {
@@ -123,18 +139,24 @@
   font-family: var(--sans);
 }
 
+/* Type recast 2026-06-21 (DOCTRINE #4): card headers are sentence-case sans. */
 .condor-card-title {
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-2);
   margin-bottom: 6px;
 }
 
 /* ── State helpers ────────────────────────────────────────────────────────── */
 
 .condor-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: var(--text-4);
   font-family: var(--mono);
   font-size: 10px;
@@ -142,6 +164,22 @@
   text-transform: uppercase;
   padding: 24px 16px;
   text-align: center;
+}
+/* Reticle-geometry spinner (brand-motif seed). */
+.condor-loading::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .condor-loading::before {
+    animation-duration: 0s;
+  }
 }
 
 .condor-placeholder {
@@ -211,7 +249,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 1px 7px;
+  /* G4: nudge the suite's tightest pill toward the family vertical rhythm. */
+  padding: 2px 8px;
   border-radius: var(--r-pill);
   line-height: 1.6;
 }

@@ -68,11 +68,11 @@
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   cursor: pointer;
   white-space: nowrap;
@@ -210,10 +210,11 @@
    Muted/uppercase like .sent-group-label; does not reduce alert salience. */
 .sent-patient-lead {
   display: block;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-bottom: 3px;
 }
@@ -305,11 +306,11 @@
   background: transparent;
   border: 1px solid transparent; /* reserved — active state adds border without layout shift */
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 4px;
@@ -350,11 +351,12 @@
   margin-bottom: 14px;
 }
 .sent-group-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
   margin-bottom: 5px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -602,12 +604,14 @@
   margin: 0 auto 8px;
   color: var(--text-5);
 }
+/* Type recast 2026-06-21 (DOCTRINE #4): headings/labels are sentence-case sans. */
 .sent-idle-heading {
-  font-family: var(--mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
   margin-bottom: 4px;
 }
 .sent-idle-body {
@@ -716,11 +720,15 @@
   color: var(--green);
 }
 
-/* B: .wr-waiting de-amberised — calm surface, left bar only for accent */
+/* The waiting-room block is the room, NOT a monitoring result, so it must not
+   wear the clinical alert hue: an amber/red left-bar read as "overdue" to three
+   domain personas (nurse, pharmacist, registrar). Use the informational accent
+   so the container reads as a status panel, not an alert. The per-row wait-time
+   escalation below is a duration signal, kept. (Practice appraisal G2, 2026-06-21.) */
 .wr-waiting {
   background: var(--bg-elev);
   border-color: var(--border-hi);
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--accent);
 }
 
 /* B: .wr-pin-head border uses neutral --border */
@@ -786,15 +794,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Wait duration colour escalation — UNCHANGED (salience well spent) */
+/* Wait-duration emphasis carried by WEIGHT, not clinical hue. The minutes are a
+   waiting-room duration, NOT a monitoring result; four domain personas read the
+   old amber/red minutes as "overdue/act now" and warned a tired clinician could
+   mistake the idle waiting list for a fired monitoring alert (a patient-safety
+   misread). Within the Monitoring tab, red is now reserved for a genuine
+   overdue monitoring check; the longest waits still stand out via weight and a
+   muted neutral tone. (Practice appraisal G2 follow-through, 2026-06-21.) */
 .wr-row-amber .wr-row-wait {
-  color: var(--amber);
+  color: var(--text-2);
+  font-weight: 700;
 }
 .wr-row-amber .wr-row-name {
   color: var(--text-1);
 }
 .wr-row-red .wr-row-wait {
-  color: var(--red);
+  color: var(--text-1);
+  font-weight: 700;
 }
 .wr-row-red .wr-row-name {
   color: var(--text-1);
@@ -1047,10 +1063,11 @@
 /* K-10: .sent-ev-label — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-label {
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   padding-top: 1px;
 }
 .sent-ev-value {
@@ -1107,10 +1124,11 @@
 }
 /* K-10: .sent-ev-refs-head — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-refs-head {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-3);
   margin-bottom: 4px;
 }
@@ -1559,11 +1577,11 @@
   border: 1px solid var(--accent-line);
   border-radius: var(--r-sm);
   color: var(--accent);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   padding: 3px 9px;
   transition:
@@ -1637,12 +1655,12 @@
 }
 
 .sent-act-section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
 
 /* Per-section Copy button */
@@ -1725,12 +1743,12 @@
 }
 
 .sent-brief-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
   flex-shrink: 0;
 }
 

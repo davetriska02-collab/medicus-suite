@@ -235,13 +235,13 @@
 }
 
 .trends-section-lbl {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
   color: var(--text-4);
   padding: 6px 12px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .trends-count {
   font-family: var(--mono);
@@ -499,13 +499,13 @@
 }
 
 .acrt-section-lbl {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
   color: var(--text-4);
   padding: 6px 12px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .acrt-band-legend {

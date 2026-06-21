@@ -43,10 +43,10 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 4px 10px;
@@ -75,11 +75,12 @@
 }
 
 .section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
   margin-bottom: 6px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -291,6 +292,22 @@ html[data-theme='dark'] .staff-split .split-pm {
 }
 
 /* staff-count — scoped to mini context (Decision H) */
+/* Phase 3 (Vogue map): the clinician row reads as a scannable micro-grid, not a
+   sentence — am / pm / total in fixed mono tabular columns so digits align down
+   the list and the eye scans a column. */
+.staff-count-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.staff-count-mini > span[title] {
+  font-family: var(--mono);
+  display: inline-block;
+  min-width: 27px;
+  text-align: right;
+  color: var(--text-4);
+}
 .staff-count-mini .staff-count {
   font-family: var(--mono);
   font-size: 11px;
@@ -298,6 +315,8 @@ html[data-theme='dark'] .staff-split .split-pm {
   color: var(--green);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  text-align: right;
 }
 
 .staff-detail {
@@ -476,15 +495,25 @@ html[data-theme='dark'] .staff-split .split-pm {
 
 /* slots-count-label: mono, uppercase, letterspaced, machine-voice label (Decision H) */
 .slots-count-label {
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--green);
 }
 .slots-count-label.zero {
   color: var(--text-4);
+}
+/* Practice-wide scope + defensible cut-off clock — a manager quoting free
+   capacity to partners needs to know it is the whole practice and "as at when".
+   (Practice appraisal, Slots re-run 2026-06-21.) */
+.slots-hero-asat {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
 }
 /* Label inherits the highest triggered slot-alert level — signal, not décor */
 .slots-count-label.amber {
@@ -630,8 +659,8 @@ html[data-theme='dark'] .staff-split .split-pm {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   font-size: 9px;
   font-weight: 600;
 }
@@ -714,12 +743,15 @@ html[data-theme='dark'] .staff-split .split-pm {
   display: flex;
   gap: 8px;
 }
+/* G4 (design-house 2026-06-21): converge on the canonical pill family — the
+   AM/PM chips sit beside the r-pill slot pills, so they take the pill radius too
+   (was the squared --r-sm). Radius only; no box-size change. */
 .ampm-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   padding: 4px 8px;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   border: 1px solid var(--border);
 }
@@ -884,10 +916,10 @@ html[data-theme='dark'] .staff-split .split-pm {
   background: transparent;
   border: none;
   padding: 0;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: inherit;
   opacity: 0.7;
   cursor: pointer;

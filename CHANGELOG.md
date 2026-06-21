@@ -2,6 +2,302 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.128.2] — 2026-06-21
+
+### Road to 10 — Phase 2 cont: pill convergence (Vogue 8.3 -> )
+
+Vogue re-scored the Phase 1 + Today recomposition build at 8.3/10 — past the
+flagship threshold. Continuing Phase 2: the triage demand strip pills now adopt
+the canonical capsule grammar (sans label + mono count) so the same counts no
+longer read in two different languages between the top strip and the Triage Load
+card. Held by design: the strip threshold wash (red/amber when the waiting room/
+demand crosses its limit) is the clinical/demand alert and is NOT dimmed; the
+Condor workload mini-charts use the doctrine-sanctioned --cat-* data-viz ramp and
+are left on-doctrine.
+
+## [v3.128.1] — 2026-06-21
+
+### Road to 10 — Phase 2 (Vogue map): Today is a composition
+
+The marquee structural move: Today was six near-identical bordered cards of equal
+weight (an arrangement). Now only the Waiting Room hero is a distinct elevated
+card; Triage Load / Demand / Slots / Morning Sweep / Recent Alerts shed their
+border, shadow and header fill and read as quiet hairline-separated sections
+beneath it. One hero plus a calm supporting stack, light and dark. Verified the
+clinical red on the hero holds full salience.
+
+## [v3.128.0] — 2026-06-21
+
+### Road to 10 — Phase 1 (Vogue map): "stop shouting"
+
+Pure subtraction, the highest-leverage cheap wins toward the 10/10 target
+(docs/appraisal/VOGUE-MAP-TO-10-2026-06-21.md). Both panels flagged buttons as the
+#1 remaining tell.
+
+- **Action buttons recast to sentence-case sans** (21 classes: Choose tabs,
+  Expand, Dismiss, Copy figures, Open full report, Run the pre-clinic sweep, the
+  date/period presets, sentinel/capacity/slots/submissions buttons). Mono stays on
+  data, nav and status. The last shouting register is gone.
+- **Accent palette culled.** The triage pills (Today card + top strip) dropped
+  their decorative amber/blue tint — new-vs-reply is already in the label — so
+  amber/blue stay reserved for real clinical/capacity signals. Today now carries
+  clinical red + neutral only.
+- **"Open to" demoted to a single quiet chevron** on the six Today cards (was six
+  repeated standing labels).
+- **Truncated setup banner fixed** — reads "Practice code set" cleanly.
+
+Suite 113/113; lint and format clean.
+
+## [v3.127.3] — 2026-06-21
+
+### Craft tail — spinner rollout + reticle empty-state glyph
+
+- Rolled the reticle-geometry spinner into the Condor loading state (joins
+  Today).
+- Added a monochrome reticle glyph (the brand mark's geometry — ring, cardinal
+  ticks, centre dot — faint, no brand cyan) to the Record state cards, seeding
+  the reticle motif in the empty-state chrome. Suite 113/113.
+
+## [v3.127.2] — 2026-06-21
+
+### Signature motion + brand-motif seed
+
+- **Overlay entrance motion.** The display, all-tabs and help popovers and the
+  command palette now ease in on open (a 130ms fade + rise, `prefers-reduced-
+  motion` guarded). Motion is deliberately **interaction-driven only** — never on
+  a data poll, since modules re-render on poll and animating their content would
+  twitch every few seconds. With the Condor index-meter fill (v3.127.1), the
+  suite now has one consistent, restrained motion language.
+- **Reticle-geometry spinner.** Added a shared `.ch-spinner` — a ring with one
+  accent arc, echoing the brand mark's rangefinder ring — and wired it into the
+  Today loading state via `::before` (no markup change). The first step of
+  propagating the reticle motif into the chrome.
+
+Remaining craft tail: roll the spinner out to the other modules' loading states
+and add a reticle-derived empty-state glyph. Suite 113/113; lint and format clean.
+
+## [v3.127.1] — 2026-06-21
+
+### Craft pass — owned gauge, pill convergence, type-recast tail
+
+Three road-to-10 craft items, done in parallel:
+
+- **Condor Practice Pressure — owned data-viz (replaces the stock half-doughnut).**
+  Vogue flagged the gauge as the one component that "looks bought, not made". It
+  is now a horizontal 0–100 **index meter** with the GREEN/AMBER/RED band
+  thresholds marked at 40 and 70, so a low index that is floored to AMBER by
+  capacity reads truthfully — you see the fill sit left of the amber tick. Also
+  resolves the daily-driver confusion (a bare "23" on a doughnut). The fill eases
+  in with a single motion beat (`prefers-reduced-motion` guarded) — the suite's
+  first signature motion.
+- **Pill convergence — the two triage styles unified.** The "Triage:" strip and
+  the "Triage Load" card showed the same counts in two different pill styles
+  (sentence-case vs mono-caps). The card pill label is now the same sentence-case
+  sans + mono-count as the strip. One representation, not two.
+- **Type-recast residual tail.** Converted the chart titles (`submissions
+  .chart-hdr`), the record card headers (`record .rec-card-h`) and the options-
+  page section/field labels to sentence-case sans, finishing the v3.127.0 recast.
+  Buttons, tags, badges, status tokens, axis labels and empty/loading states
+  correctly stay mono.
+
+Suite 113/113; lint and format clean. Remaining road-to-10 craft: broader motion
+(number settles, strip easing) and propagating the reticle motif into the chrome.
+
+## [v3.127.0] — 2026-06-21
+
+### Type-system recast — headers in sans, data in mono (hybrid, doctrine #4 revised)
+
+Acting on the Vogue design-house critique ("all-caps monospace doing all the
+work reads as terminal cosplay, not authored") via the hybrid option: the dual
+voice stays, but what each voice owns has moved. **Section headers and card
+labels are now sentence-case sans** (hierarchy by size/weight, not uppercase
+letter-spacing); **mono is pulled back to data** (counts, times, indices, dates,
+codes, version, freshness), the **nav rail**, and **status micro-tokens** (the
+`AMBER` band, kbd hints). This is the deepest "premium/authored" lever from the
+road-to-10 review.
+
+- Canon updated: `DOCTRINE.md` principle #4 and `TOKENS.md` typography +
+  Section-header recipe rewritten to the recast.
+- Converted the shared `.mod-eyebrow` (flips every module eyebrow at once) plus
+  the section-header / card-label classes across Today, Condor, Slots, Sentinel,
+  Submissions, Activity, Referrals, Reception, Trends, Capacity, Knowledge and
+  Sweep. Buttons, tags, counts, the status bands and the nav stay mono.
+- Verified on the hero surfaces (light + dark) and the data-bearing modules.
+- Known residual (next polish pass): a few module-specific chart titles and axis
+  labels still render mono-caps; options pages not yet recast.
+
+Suite 113/113; lint and format clean.
+
+## [v3.126.7] — 2026-06-21
+
+### Road-to-10 review fixes (Practice + Vogue panels)
+
+Ran two panels on the v3.126.6 renders — The Practice (usability, mean ≈7.1/10,
+up from 5.7) and Vogue (design house, ~6.5/10 craft, "not yet a £200m look").
+Both named the same two free wins, fixed here:
+
+- **Clipped "TODA" nav label** — the in-nav wordmark crowded the tab rail in the
+  400px panel, truncating the active tab. Dropped the redundant in-chrome
+  wordmark (the new reticle mark carries the brand; the full wordmark still
+  appears in About / Options / the visualiser); the active tab now reads "TODAY"
+  in full with "SLOTS" beside it. Also tightened the tab-rail overflow fade from
+  8% to 3% so it can never eat a label character.
+- **"v0.5.1" on the Monitoring header** — a literal "pre-release" signal on a
+  clinical tab. Removed.
+
+The full road-to-10 synthesis (both ladders, and the pivotal type-system call
+for Dave) is in `docs/appraisal/ROAD-TO-10-2026-06-21.md`.
+
+## [v3.126.6] — 2026-06-21
+
+### Design-house G5 (legibility floor) + G4 (component convergence)
+
+**G5 — contrast floor, not a size bump.** The doctrine permits mono labels at
+9–11px, so the real floor issue is faint greys carrying load-bearing text. Fixed
+the four sub-floor 8px labels (submissions metric-delta / legend-note, setup
+recommended badge) up to the 9px floor, and lifted the faintest tier `--text-5`
+in both themes (light `#6c7c91`→`#5f6f85`, dark `#5d7a9d`→`#6c89ac`) — only ever
+raising contrast. Synced the stale `TOKENS.md` text-4/5 row to the live values.
+
+**G4 — pills were already substantially converged.** Audit found the canonical
+`.pill` migration has largely happened: `slot-pill` matches the recipe exactly,
+and `condor-pill` / `today-name-chip` already use `--r-pill`. Aligned the two
+real outliers — the AM/PM chips took the pill radius (was squared `--r-sm`), and
+the suite's tightest pill (`condor-pill`) was nudged to the family vertical
+rhythm. No class renames (per TOKENS.md "do not mass-rename in one pass").
+
+This closes the in-house design-house items; G1/G2/G3 shipped in v3.126.3–.5.
+The remaining gap, G1's brand mini-guide aside, is none — the appraisal's
+foundations were already strong.
+
+## [v3.126.5] — 2026-06-21
+
+### Design-house G1 — brand identity refresh (precision-instrument mark)
+
+The placeholder identity (a generic gold guardian shield) was the design-house
+appraisal's headline gap for the £200m bar (G1). New mark: a gold **precision
+reticle** — rangefinder/avionics sight (outer ring, four cardinal index ticks,
+inner ring) — on the deep-navy instrument bezel, with the cyan **live-lock
+beacon** kept at the crosshair centre as the recurring focal element. It reads as
+the clinical instrument the suite actually is (the doctrine's flight-deck /
+rangefinder register, and the "Sentinel" that watches), and recomposes the
+existing navy/gold/cyan equity rather than discarding it.
+
+- Vector is now the source of truth: `brand/app-icon-master.svg` (512) +
+  `brand/app-icon-16.svg` (simplified favicon). `generate-icons.mjs` renders
+  `brand/app-icon.png` and `icons/icon-16/48/128.png` from the SVGs (via sharp).
+- The mark updates everywhere it appears automatically (nav, pop-out, options,
+  about, visualiser drop, README, extension icons). The 16px nav logos point to
+  the crisp simplified favicon rather than downscaling the detailed master.
+- Signature element: the cyan live-lock dot recurs across brand surfaces but is
+  deliberately kept **out of the clinical chrome** — the UI reserves colour for
+  clinical status, so the brand cyan is never mistaken for a signal. Brand guide
+  refreshed (`brand/BRAND.md`).
+
+Remaining design-house items: G4 component convergence, G5 legibility floor.
+
+## [v3.126.4] — 2026-06-21
+
+### Design-house Phase 2 (G3 — one hero per tab: Today)
+
+Today was a flat stack of six equal cards with no focal point (design-house gap
+G3). The live Waiting Room card now floats forward as the page's hero — stronger
+elevation and border, a louder header label, and a larger headline count — while
+the Triage Load / Demand / Slots / Sweep / Alerts cards rest as a calm supporting
+stack. Hierarchy is carried by weight and space, not colour: the hero is
+deliberately neutral so it never reads as an alert (the urgency tint on the
+waiting count remains a separate, real wait-time signal and is untouched).
+Verified in light and dark. Remaining design-house items: G1 identity sprint
+(needs a brand brief), G4 component convergence, G5 legibility floor.
+
+## [v3.126.3] — 2026-06-21
+
+### Design-house Phase 2 (chrome economy) + Sentinel rule refresh
+
+**Design (G2 — "calm field, sharp signal" restored).** The two permanent demand
+strips no longer wear an always-on wash: the waiting-room strip's
+below-threshold state and the triage strip's base now rest on neutral chrome
+(`--bg-mid` / `--border`) instead of a standing green / accent tint. The
+amber/red threshold states are untouched, so a crossed threshold now stands out
+against a calm field rather than competing with a permanent colour wash. This is
+the highest-leverage item from the design-house appraisal
+(`docs/appraisal/DESIGN-HOUSE-2026-06-21.md`, gap G2); the larger items (one
+hero per tab G3, component convergence G4, legibility floor G5, and the identity
+sprint G1) remain queued.
+
+**Sentinel rules (The Keeper — additive only, no interval/match change).** Acted
+on the safe, additive findings from `docs/appraisal/KEEPER-sentinel-2026-06-21.md`:
+- `glp1-receptor-agonist`: added the MHRA DSU 29 Jan 2026 strengthened
+  acute-pancreatitis warning (necrotising/fatal) to notes + source.
+- DMARDs (methotrexate, leflunomide, azathioprine, sulfasalazine,
+  hydroxychloroquine): refreshed the source citation to the 2025 BSR csDMARD
+  guideline (Rheumatology, Nov 2025). No monitoring interval changed.
+- `chc-combined-hormonal`: noted the MHRA tirzepatide → reduced
+  oral-contraceptive absorption interaction.
+
+All corroborated across secondary summaries; primary PDFs were unreachable (403)
+this run, so each is annotated "pending primary-source confirmation". **Held, not
+changed:** the QOF DM036 age-band discrepancy (file ≤70 vs one secondary source
+≤79) — a clinical threshold that could cause a silent chip change either way, so
+it waits for the primary QOF PDF. Coverage guard 314/314, full suite 113/113.
+
+## [v3.126.2] — 2026-06-21
+
+### Slots + Sentinel re-appraisal follow-through (panel, 2026-06-21)
+
+Re-ran the Practice panel on Slots and Sentinel after v3.126.1. Two convergent
+findings acted on; UX only, no clinical-rule or alert-salience change.
+
+- **Sentinel waiting-room minutes no longer mimic an overdue alert (G2, root
+  cause).** v3.126.1 reframed the block's container bar to the informational
+  accent, but four domain personas (nurse, pharmacist, partner, GP) reported the
+  per-row wait-time minutes were still clinical red/amber and read as
+  "overdue/act now" — risking a tired clinician mistaking the idle waiting list
+  for a fired monitoring alert. The minutes now carry their emphasis by weight
+  and a muted neutral tone; within the Monitoring tab, red is reserved for a
+  genuine overdue monitoring check. The wait-time ordering and the "not a
+  monitoring result" caption are unchanged.
+- **Slots headline says what the number is, and as-at when (R1/R2 parity).** The
+  hero label now reads "free slots remaining today" (was "slots remaining
+  today") so the count is unambiguously bookable capacity, and a muted
+  "practice-wide · as at HH:MM" line was added so a manager can quote a
+  defensible point-in-time figure — matching the as-at clock added to Condor in
+  v3.126.1.
+
+## [v3.126.1] — 2026-06-21
+
+### Practice appraisal quick wins (whole-suite panel, 2026-06-21)
+
+Acted on the verified, low-risk findings from the whole-suite Practice appraisal
+(`docs/appraisal/PRACTICE-whole-suite-2026-06-21.md`). UX/accessibility only; no
+clinical-rule or alert-salience changes.
+
+- **Setup banner no longer reads as a warning (U1).** The collapsed setup strip
+  said `Setup: practice code ready · …` which truncated to "…code re…" in the
+  400px panel and read like "re-check / required" — the opposite of its meaning.
+  It now leads with `Practice code set · …` (unambiguous even when truncated) and
+  carries the full text as a `title`.
+- **Header icons named for assistive tech (U2).** Added `aria-label`s to the
+  command-palette, display, pop-out and settings buttons (previously `title`
+  only), and named the palette's tab-count badge so the bare "15" can't be
+  mistaken for an unread count. Mirrored in the pop-out shell.
+- **Condor demand figure now reconciles (R1).** The headline strip labels the
+  figure `Demand N (med + admin)` so it no longer reads as a contradiction
+  against the all-task-types velocity total. Confirmed against `condor.js`
+  (`demandCount = medical + admin`).
+- **Condor shows a defensible cut-off clock (R2).** Added an explicit
+  `as at HH:MM` next to the live-freshness label, for a figure a manager quotes
+  to partners.
+- **Sentinel waiting-room block no longer mimics a clinical alert (G2).** The
+  block is the waiting room, not a monitoring result, yet still wore an amber
+  alert left-bar that three domain personas read as "overdue". Reframed to the
+  informational accent; the per-row wait-time escalation (a duration signal) is
+  unchanged, as is the disambiguating caption.
+
+The capacity safety floor (band raised to AMBER when over capacity, never GREEN)
+and the gauge arc colour were left unchanged — verified already correct, and the
+floor is an alert signal that must not be recommended down.
+
 ## [v3.126.0] — 2026-06-20
 
 ### Keeper follow-ups — four parallel work items (scoped by virtual-dave)

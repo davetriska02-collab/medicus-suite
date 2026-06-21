@@ -232,10 +232,10 @@
   padding: 10px 12px;
 }
 .rec-card-h {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-3);
   margin: 0 0 8px;
   display: flex;
@@ -490,6 +490,13 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elev);
+}
+/* Reticle brand glyph echoed into the empty/state card (monochrome, faint —
+   no brand cyan in the clinical chrome). (Craft pass 2026-06-21.) */
+.rec-state-glyph {
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--text-5);
 }
 .rec-state-title {
   font-size: 14px;

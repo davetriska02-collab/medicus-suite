@@ -7,8 +7,23 @@ function ensureStyles() {
   cssInjected = true;
   const s = document.createElement('style');
   s.textContent = `
-    .condor-ppi-svg { display:block; margin:0 auto; max-width:200px; }
-    .condor-ppi-label { text-align:center; font-size:13px; font-weight:700; margin:4px 0; }
+    /* Owned index meter (replaces the stock half-doughnut, 2026-06-21). A linear
+       0-100 track with the GREEN/AMBER/RED band thresholds marked at 40 and 70,
+       so a low index that is floored to AMBER by capacity reads truthfully: you
+       see the fill sit left of the amber tick. */
+    .condor-ppi-meter { padding: 2px 2px 0; }
+    .condor-ppi-readout { display:flex; align-items:baseline; justify-content:center; gap:5px; margin-bottom:9px; }
+    .condor-ppi-value { font-family:var(--sans); font-size:30px; font-weight:700; line-height:1; }
+    .condor-ppi-outof { font-family:var(--mono); font-size:11px; color:var(--text-4); font-variant-numeric:tabular-nums; }
+    .condor-ppi-band { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:0.08em; margin-left:3px; }
+    .condor-ppi-track { position:relative; height:10px; border-radius:var(--r-pill); background:var(--bg-mid); border:1px solid var(--border); overflow:hidden; }
+    .condor-ppi-fill { position:absolute; left:0; top:0; bottom:0; border-radius:var(--r-pill); transform-origin:left center; animation:condor-ppi-grow 520ms var(--ease) both; }
+    .condor-ppi-thresh { position:absolute; top:0; bottom:0; width:2px; transform:translateX(-1px); opacity:0.85; }
+    .condor-ppi-thresh--amber { background:var(--amber); }
+    .condor-ppi-thresh--red { background:var(--red); }
+    .condor-ppi-scale { display:flex; justify-content:space-between; margin-top:3px; font-family:var(--mono); font-size:8px; color:var(--text-4); font-variant-numeric:tabular-nums; }
+    @keyframes condor-ppi-grow { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+    @media (prefers-reduced-motion: reduce) { .condor-ppi-fill { animation:none; } }
     .condor-ppi-green { color:var(--green); }
     .condor-ppi-amber { color:var(--amber); }
     .condor-ppi-red   { color:var(--red); }
@@ -94,22 +109,22 @@ export function renderPpi(data) {
     strokeColor = 'var(--amber)';
   }
 
-  const total = Math.PI * 80;
-  // Clamp to 98% of arc at maximum so stroke-linecap="round" doesn't overshoot at PPI=100.
-  const maxDash = total - 2;
-  const dashLen = Math.min((ppi / 100) * total, maxDash);
-  const dashRem = total - dashLen;
-
-  const arcPath = 'M 20 100 A 80 80 0 0 1 180 100';
-
-  const svg =
-    `<svg viewBox="0 0 200 110" class="condor-svg condor-ppi-svg" aria-label="Practice Pressure Index gauge">` +
-    `<path d="${arcPath}" fill="none" stroke="var(--border)" stroke-width="12" stroke-linecap="round"/>` +
-    `<path d="${arcPath}" fill="none" stroke="${strokeColor}" stroke-width="12" stroke-linecap="round"` +
-    ` stroke-dasharray="${dashLen.toFixed(1)} ${dashRem.toFixed(1)}"/>` +
-    `<text x="100" y="88" text-anchor="middle" font-size="28" font-weight="700" fill="var(--t1)" font-family="var(--sans)">${ppi}</text>` +
-    `<text x="100" y="104" text-anchor="middle" font-size="9" fill="var(--text-3)" font-family="var(--sans)">PRESSURE INDEX · 0–100</text>` +
-    `</svg>`;
+  // Minimum visible sliver so a low-but-nonzero index still shows on the track.
+  const fillPct = ppi <= 0 ? 0 : Math.max(3, Math.min(ppi, 100));
+  const meter =
+    `<div class="condor-ppi-meter">` +
+    `<div class="condor-ppi-readout">` +
+    `<span class="condor-ppi-value ${colorClass}">${ppi}</span>` +
+    `<span class="condor-ppi-outof">/100</span>` +
+    `<span class="condor-ppi-band ${colorClass}">${colorLabel}</span>` +
+    `</div>` +
+    `<div class="condor-ppi-track" role="img" aria-label="Pressure index ${ppi} of 100, band ${colorLabel}">` +
+    `<div class="condor-ppi-fill" style="width:${fillPct}%;background:${strokeColor}"></div>` +
+    `<span class="condor-ppi-thresh condor-ppi-thresh--amber" style="left:40%" title="Amber from 40"></span>` +
+    `<span class="condor-ppi-thresh condor-ppi-thresh--red" style="left:70%" title="Red from 70"></span>` +
+    `</div>` +
+    `<div class="condor-ppi-scale"><span>0</span><span>pressure index</span><span>100</span></div>` +
+    `</div>`;
 
   const capacityNote =
     capacityStretched && ppi < 70
@@ -136,8 +151,7 @@ export function renderPpi(data) {
     `<span class="condor-card-title">Practice Pressure</span>` +
     `<button class="condor-ppi-info" aria-label="How is the pressure index calculated?" data-tip="${ppiInfoAttr}" title="${ppiInfoAttr}">&#9432;</button>` +
     `</div>` +
-    svg +
-    `<div class="condor-ppi-label ${colorClass}">${colorLabel} · ${ppi}/100</div>` +
+    meter +
     `<div class="condor-ppi-breakdown">` +
     `<span class="condor-ppi-chip">WR: ${arrivedCount}</span>` +
     `<span class="condor-ppi-chip">Queue: ${queueCount}</span>` +
