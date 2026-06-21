@@ -4,10 +4,13 @@
 'use strict';
 
 async function triageExport() {
-  const r = await chrome.storage.local.get(['triagelens.config', 'config']);
+  const r = await chrome.storage.local.get(['triagelens.config', 'config', 'triagelens.routineRx']);
   // Prefer namespaced key; fall back to legacy key during transition
   const config = r['triagelens.config'] ?? r['config'] ?? {};
-  return { config };
+  const out = { config };
+  // Routine-prescription button prefs (team list / last team / commit mode).
+  if (r['triagelens.routineRx'] !== undefined) out.routineRx = r['triagelens.routineRx'];
+  return out;
 }
 
 async function triageImport(data, _opts = {}) {
@@ -21,6 +24,10 @@ async function triageImport(data, _opts = {}) {
   // so importing them used to wipe the user's current triage-lens settings.
   if (Object.keys(data.config).length === 0) return;
   await chrome.storage.local.set({ 'triagelens.config': data.config });
+  // Restore routine-prescription button prefs when present in the backup.
+  if (data.routineRx && typeof data.routineRx === 'object' && !Array.isArray(data.routineRx)) {
+    await chrome.storage.local.set({ 'triagelens.routineRx': data.routineRx });
+  }
   // Clean up legacy bare 'config' key from pre-1.x installs, but only if it
   // actually exists — gating prevents removing a key some other module owns.
   const existing = await chrome.storage.local.get('config');

@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.2] — 2026-06-21
+
+### Routine-Rx button: sit inline with the task actions, not the viewport corner
+
+The button now injects **inline beside the task's action buttons** (anchored to
+the "More actions" button's row, prepended) instead of floating fixed at the
+bottom-right of the window. Follows the queue-chip reconciler rules — PREPEND +
+re-inject on every mutation + idempotent — so Vue doesn't strip it. The ▾ menu
+now opens upward above the button.
+
+## [v3.131.1] — 2026-06-21
+
+### Routine-Rx button: wait for "Re-assign task" to enable before committing
+
+Hardened against the real UI confirmed by on-screen capture: Medicus keeps the
+`Re-assign task` button **disabled until a valid assignee is registered**, so
+the macro now **waits until the button is enabled** before clicking (rather than
+clicking immediately and silently no-op-ing), and reports clearly if it stays
+disabled. Also fires keyboard events alongside the typed team-name filter for
+comboboxes that only open/filter on keydown.
+
+## [v3.131.0] — 2026-06-21
+
+### One-click "send to routine prescriptions" button (prescribing window)
+
+A floating action button on the prescription-request task overview that
+re-assigns the task to a configured team (default "Prescribing / Meds
+Management") in one click. It **drives the real Medicus UI** — clicking the
+same `Save & re-assign to someone else` → `Assign to` → team → `Re-assign task`
+controls a clinician would — so Medicus's own validation, access control and
+audit trail fire exactly as for a manual re-assignment. It makes **no network
+calls** and reads **no patient-data values**.
+
+- **Configurable + remembers last choice:** an inline ▾ menu switches team,
+  adds a team, and sets the commit behaviour; the last team and mode are
+  remembered. Stored under `triagelens.routineRx` (included in suite backups
+  via `triage-io.js`).
+- **Commit gate (default safe):** `confirm` (default) names the destination
+  team and asks before committing; `manual` pre-fills and highlights
+  `Re-assign task` for the clinician to click; `auto` is opt-in.
+- **Safety:** matches controls **only by visible text** (every id on this
+  screen is generated per session) and **aborts, clicking nothing further, if
+  any step's control is not found**. New hazard **H-035** logged.
+
+This is the suite's first control that can *commit* a workflow action rather
+than only display or pre-tick; see `docs/HAZARD-LOG.md` H-035.
+
 ## [v3.128.2] — 2026-06-21
 
 ### Road to 10 — Phase 2 cont: pill convergence (Vogue 8.3 -> )
