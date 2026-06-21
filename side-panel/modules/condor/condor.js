@@ -180,7 +180,7 @@ function buildHeadlineStrip(data) {
   return (
     `<div class="condor-headline ${cls}">` +
     `<span class="condor-headline-band">${esc(idx.band)}</span>` +
-    `<span class="condor-headline-figs">Demand ${esc(idx.demandCount)} · Capacity ${esc(idx.capacityCount)} · ${esc(capLabel)}</span>` +
+    `<span class="condor-headline-figs">Demand ${esc(idx.demandCount)} <span class="condor-headline-qual">(med + admin)</span> · Capacity ${esc(idx.capacityCount)} · ${esc(capLabel)}</span>` +
     flooredNote +
     `</div>`
   );
@@ -251,6 +251,7 @@ async function poll() {
         <div class="condor-hero">${cards.renderPpi(data)}</div>
         <div class="condor-ts">
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
+          <span class="condor-asat">as at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
           <button class="ghost-btn condor-copy-btn" id="condorCopyBtn">Copy figures</button>
           <button class="ghost-btn condor-copy-btn" id="condorCsvBtn" title="Download these figures as a CSV file">↓ CSV</button>
         </div>

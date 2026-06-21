@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.1] — 2026-06-21
+
+### Practice appraisal quick wins (whole-suite panel, 2026-06-21)
+
+Acted on the verified, low-risk findings from the whole-suite Practice appraisal
+(`docs/appraisal/PRACTICE-whole-suite-2026-06-21.md`). UX/accessibility only; no
+clinical-rule or alert-salience changes.
+
+- **Setup banner no longer reads as a warning (U1).** The collapsed setup strip
+  said `Setup: practice code ready · …` which truncated to "…code re…" in the
+  400px panel and read like "re-check / required" — the opposite of its meaning.
+  It now leads with `Practice code set · …` (unambiguous even when truncated) and
+  carries the full text as a `title`.
+- **Header icons named for assistive tech (U2).** Added `aria-label`s to the
+  command-palette, display, pop-out and settings buttons (previously `title`
+  only), and named the palette's tab-count badge so the bare "15" can't be
+  mistaken for an unread count. Mirrored in the pop-out shell.
+- **Condor demand figure now reconciles (R1).** The headline strip labels the
+  figure `Demand N (med + admin)` so it no longer reads as a contradiction
+  against the all-task-types velocity total. Confirmed against `condor.js`
+  (`demandCount = medical + admin`).
+- **Condor shows a defensible cut-off clock (R2).** Added an explicit
+  `as at HH:MM` next to the live-freshness label, for a figure a manager quotes
+  to partners.
+- **Sentinel waiting-room block no longer mimics a clinical alert (G2).** The
+  block is the waiting room, not a monitoring result, yet still wore an amber
+  alert left-bar that three domain personas read as "overdue". Reframed to the
+  informational accent; the per-row wait-time escalation (a duration signal) is
+  unchanged, as is the disambiguating caption.
+
+The capacity safety floor (band raised to AMBER when over capacity, never GREEN)
+and the gauge arc colour were left unchanged — verified already correct, and the
+floor is an alert signal that must not be recommended down.
+
 ## [v3.126.0] — 2026-06-20
 
 ### Keeper follow-ups — four parallel work items (scoped by virtual-dave)

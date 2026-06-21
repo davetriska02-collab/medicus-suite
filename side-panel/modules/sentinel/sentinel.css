@@ -716,11 +716,15 @@
   color: var(--green);
 }
 
-/* B: .wr-waiting de-amberised — calm surface, left bar only for accent */
+/* The waiting-room block is the room, NOT a monitoring result, so it must not
+   wear the clinical alert hue: an amber/red left-bar read as "overdue" to three
+   domain personas (nurse, pharmacist, registrar). Use the informational accent
+   so the container reads as a status panel, not an alert. The per-row wait-time
+   escalation below is a duration signal, kept. (Practice appraisal G2, 2026-06-21.) */
 .wr-waiting {
   background: var(--bg-elev);
   border-color: var(--border-hi);
-  border-left: 3px solid var(--amber);
+  border-left: 3px solid var(--accent);
 }
 
 /* B: .wr-pin-head border uses neutral --border */

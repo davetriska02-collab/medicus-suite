@@ -403,6 +403,10 @@ updateNavOverflow();
   const total = document.querySelectorAll('.nav-tab').length;
   if (!total) return;
   btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl+K)`;
+  // The bare count badge ("15") read as a mystery number to the appraisal panel;
+  // name it for assistive tech and tooltip so it can't be mistaken for an unread
+  // count. (Practice appraisal U2, 2026-06-21.)
+  btn.setAttribute('aria-label', `Command palette — jump to any of the ${total} tabs (Ctrl+K)`);
   let badge = btn.querySelector('.palette-count');
   if (!badge) {
     badge = document.createElement('span');

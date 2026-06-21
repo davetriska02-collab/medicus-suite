@@ -51,6 +51,15 @@
   font-weight: 400;
 }
 
+/* Demand qualifier — names the population ("med + admin") inline so the figure
+   reconciles against the all-types velocity total (56) rather than reading as a
+   contradictory second demand number. (Practice appraisal R1, 2026-06-21.) */
+.condor-headline-qual {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
 /* Band colours — full-strength fills, kept as a safety signal (see pill comment). */
 .condor-headline-green {
   border-left-color: var(--green);
@@ -83,6 +92,13 @@
   text-align: right;
   padding: 2px 12px 0;
   letter-spacing: 0.06em;
+}
+
+/* Defensible cut-off clock — a manager quoting the figure to partners needs an
+   explicit "as at HH:MM", not only the relative "just now". (Appraisal R2.) */
+.condor-asat {
+  color: var(--text-2);
+  margin-left: 6px;
 }
 
 .condor-grid {
