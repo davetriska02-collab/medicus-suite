@@ -33,7 +33,9 @@ const FORBIDDEN_DIRS = ['uploads/', 'data/sars/', 'output/'];
 // (e.g. synthetic fixtures that deliberately exercise NHS-number handling).
 // Keep this SHORT and justify every entry — each is a hole in the guard.
 const NHS_ADD_ALLOWLIST = new Set([
-  // 'test-some-fixture.js',  // synthetic NHS numbers for parser tests
+  // This guard's own regression test deliberately embeds synthetic Modulus-11
+  // numbers to prove detection works — they are not patient data.
+  'test-no-patient-data-guard.js',
 ]);
 
 // Never NHS-scan these (binaries / vendored bundles / lockfiles).
