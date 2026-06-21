@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.125.0
-**Generated:** 2026-06-20
+**Version:** v3.126.0
+**Generated:** 2026-06-21 (automated)
 
 ## What it is
 
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 - 4 in-page content-script features (on-screen overlays and relays)
 - 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
 - 7 rule types in the alert engine
-- 25 drug-monitoring rules, 61 QOF rules, 35 bundled investigation result rules, and 22 starter alerts in the prescribing-safety library
+- 27 drug-monitoring rules, 50 QOF indicators, 13 QOF registers, 5 vaccine rules, 35 bundled investigation result rules, and 26 starter alerts in the prescribing-safety library
 
 ## Side-panel modules
 
@@ -33,7 +33,7 @@ The default tab. One glance answers "what does today look like?" before clinic s
 The core per-patient alerting module. When a patient record is open in Medicus, Sentinel evaluates the practice's monitoring rules against that patient's medications, observations, problems, and vaccination history, and displays colour-coded chips for anything overdue, due soon, or not achieved.
 
 - Drug-monitoring chips show which specific blood tests are overdue and by how long, with monitoring interval and source citation
-- Each drug-monitoring chip shows the matched rule term as a hover tooltip ("Matched monitoring rule on '<term>'") so a clinician can confirm a correct hit rather than a lucky substring match
+- Each drug-monitoring chip shows the matched rule term as a hover tooltip so a clinician can confirm a correct hit rather than a lucky substring match
 - QOF indicator chips flag register members whose targets are not met or approaching threshold
 - Vaccine chips reflect seasonal campaign windows (flu and COVID appear only during the active campaign period)
 - A collapsible **Brief** card gives a 30-second risk summary: patient line, red/amber count, and the four highest-priority signals. The "+N more" overflow line annotates how many hidden chips are red, so a red signal beyond the top-4 is never silently swallowed
@@ -99,6 +99,7 @@ A live analytics dashboard pulling from multiple Medicus data streams into eight
 
 - **PPI** (demand intensity), **Demand gap** (capacity minus demand), **Velocity** (task throughput), **Task age** (outstanding task age distribution)
 - **Workload** (clinician-level load), **Waiting room** (arrived count and wait), **Day score** (configurable end-of-day score with manual entry), **Activity** (session activity count)
+- Daily snapshots captured automatically for the Practice Report trend views
 
 ### Trends (Observation trends)
 
@@ -141,7 +142,7 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 
 **Triage Lens — request queue** (all Medicus pages): overlays the patient request queue with semantic triage chips. Red = same-day or 999; amber = urgent; info = supplementary. 77+ built-in rules across chest pain, sepsis, stroke/TIA, anaphylaxis, obstetric emergencies, mental health crisis, paediatric red flags, 2WW cancer patterns, and common acute presentations. New built-in rules reach existing users automatically; rules deliberately deleted stay deleted.
 
-**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. Result rules can be **scoped to a specimen** (`analyte.specimen`, captured from the result's specimen header) so a threshold applies only to the right sample type, with fail-open behaviour when no specimen is present. 35 built-in result rules ship enabled — biochemistry/haematology thresholds (eGFR, potassium, sodium, calcium, magnesium, haemoglobin, platelets, neutrophils, INR, HbA1c, lithium, digoxin, TSH, ferritin, B12, FIB-4) and microbiology/imaging text classifiers (blood/urine/throat/wound/ear/genital culture, stool MC&S, H. pylori, STI NAAT, EBV serology, histology, ultrasound, bowel-screening); new custom rules arrive disabled and require clinician review before firing.
+**Triage Lens — investigation results queue** (Medicus Investigation Results filing queue): decorates each pending result row with per-row severity chips — Urgent (red, lab's own flag), N abnormal (amber, lab's above/below-reference flags), Under-prioritised (red, result severity exceeds assigned priority), and Unmatched patient (amber). User-authored analyte threshold rules and text-classification rules (e.g. MSU/urine culture) can escalate severity but can never lower or suppress a laboratory's own urgent or abnormal flag. Result rules can be scoped to a specimen so a threshold applies only to the right sample type, with fail-open behaviour when no specimen is present. 35 built-in result rules ship enabled — biochemistry/haematology thresholds (eGFR, potassium, sodium, calcium, magnesium, haemoglobin, platelets, neutrophils, INR, HbA1c, lithium, digoxin, TSH, ferritin, B12, FIB-4) and microbiology/imaging text classifiers (blood/urine/throat/wound/ear/genital culture, stool MC&S, H. pylori, STI NAAT, EBV serology, histology, ultrasound, bowel-screening); new custom rules arrive disabled and require clinician review before firing.
 
 **Sentinel content script** (all Medicus pages): provides per-patient monitoring data to the Sentinel side-panel module. Also drives prescribing-safety combination chips (STOPP/START-style), QRISK3/QCancer/eFI risk-calculator signpost chips, and NHS Pharmacy First pathway hints on the patient record view.
 
@@ -153,10 +154,10 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 
 The rules engine evaluates patient data against seven rule types:
 
-- **drug-monitoring**: drug X must have test Y within Z days. Fires overdue/due-soon/in-date chips with exact test names and intervals. 25 built-in rules covering lithium, methotrexate, azathioprine, ciclosporin, leflunomide, hydroxychloroquine, amiodarone, clozapine, and more
+- **drug-monitoring**: drug X must have test Y within Z days. Fires overdue/due-soon/in-date chips with exact test names and intervals. Supports **value-banded intervals** (`intervalByBand`): if a result falls into an abnormal band the monitoring interval shortens automatically — the engine always applies the shortest applicable interval (escalate-only; never extends beyond the baseline). 27 built-in rules covering lithium, methotrexate, azathioprine, ciclosporin, leflunomide, hydroxychloroquine, amiodarone, clozapine, combined hormonal contraception, and more
 - **qof-register**: detects QOF register membership from active problems. 13 built-in registers (diabetes, CKD, hypertension, COPD, asthma, AF, CHD, heart failure, dementia, depression, mental health, palliative care, obesity)
-- **qof-indicator**: evaluates a target (observation value, medication presence, or observation trend) against a QOF threshold. 48 bundled indicators covering the major QOF 2025/26 clinical domains
-- **drug-combo**: flags clinically significant prescribing combinations (STOPP/START, PINCER-style). Age and sex filters; problem-list suppression. 22 starter alerts in the prescribing-safety library. Term lists for ACEi/ARB, beta-blockers, and statins updated to full UK market coverage (v3.81)
+- **qof-indicator**: evaluates a target (observation value, medication presence, or observation trend) against a QOF threshold. 50 bundled indicators covering the major QOF 2025/26 clinical domains
+- **drug-combo**: flags clinically significant prescribing combinations (STOPP/START, PINCER-style). Age and sex filters; problem-list suppression. 26 starter alerts in the prescribing-safety library, including named PINCER interactions (methotrexate + trimethoprim/co-trimoxazole; allopurinol/febuxostat + azathioprine/mercaptopurine; ACEi/ARB + potassium-sparing diuretics)
 - **event-count**: fires on presence or count of coded events (e.g. A&E attendances ≥3 in 12 months). Supports count/min/max operators
 - **composite**: combines the results of other rules with AND/OR logic for complex multi-condition alerts
 - **vaccine**: seasonal window rules; flu and COVID chips appear only during the active campaign period (dates refreshed to 2026/27 JCVI guidance)
@@ -170,31 +171,22 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 - **Choose your tabs**: pick which side-panel tabs appear and in what order — discoverable in Options, and surfaced for managed installs so a Practice Profile can ship a tailored tab set per seat
 - **Backup / restore**: full suite-wide envelope export and import covering all modules and rule sets. All backups contain configuration only — no patient-identifiable data is ever included
 - **Display preferences**: theme (light/dark/auto), size (compact/medium/large), and colourblind mode
-- **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live **result inspector** that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, and QOF submission thresholds
+- **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live result inspector that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, and QOF submission thresholds
 - **Glossary tooltips**: clinical codes, jargon, and pressure indices carry click-to-explain inline tooltips across the Condor, Reception, and Sentinel modules
 
 ## Recent additions (last 4 weeks)
 
-- **v3.111.0–v3.113.0 (2026-06-16)** — Whole-suite UX from a Practice appraisal: plain-language + legibility lift on load-bearing labels, an "All tabs" menu (every tab reachable by name in one click), keyboard tab navigation, and Condor CSV export
-- **v3.110.2 (2026-06-16)** — CQC Inspection Readiness is now a discoverable **Settings tab** (Options → CQC Readiness) with a launch button, not only the Ctrl+K command
-- **v3.110.0 (2026-06-16)** — CQC Inspection Readiness: a new page (Ctrl+K → "CQC inspection readiness…") turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Supporting evidence, not proof of compliance; built from shipped rule data only, no patient data
+- **v3.126.0 (2026-06-20)** — Value-banded monitoring intervals: drug-monitoring rules can now shorten the monitoring interval when a result falls into an abnormal band — shortest interval always wins, baseline is the fallback. CHC (combined hormonal contraception) monitoring rule enabled. Levomepromazine/methotrimeprazine added to the ACB scale at score 3
+- **v3.125.0 (2026-06-20)** — Urine electrolytes false-positive fix (patient-safety): urine electrolytes can no longer wrongly clear an outstanding blood U&E request. Twelve new shipped result rules promoted to built-in defaults: ultrasound, histology, H. pylori, STI NAAT, stool MC&S, vaginal/wound/ear swab, EBV serology (text classifiers), plus FIB-4 elevated, low ferritin, and low B12 thresholds
+- **v3.124.0 (2026-06-20)** — Three new drug-combination alerts: methotrexate + trimethoprim/co-trimoxazole (red, named PINCER never-event); allopurinol/febuxostat + azathioprine/mercaptopurine (red, life-threatening myelosuppression); ACEi/ARB + potassium-sparing diuretic (amber, monitoring required). ACB scale additions: carbamazepine, oxcarbazepine, amantadine, pethidine (score 2)
+- **v3.114.0 (2026-06-17)** — Whole-suite clinical-matching hardening: single canonical ACB scorer across queue and panel (strong anticholinergics now score identically everywhere); STOPP NSAID term list brought to full UK generic + brand coverage; producer→consumer contract tests lock the engine↔renderer interface; CQC evidence pack updated with honest cohort counts; provenance canon centralises clinical caveats
+- **v3.111.0–v3.113.0 (2026-06-16)** — Whole-suite UX from a Practice appraisal: plain-language + legibility lift on load-bearing labels, "All tabs" menu (every tab reachable by name in one click), keyboard tab navigation, and Condor CSV export
+- **v3.110.0–v3.110.2 (2026-06-16)** — CQC Inspection Readiness: a new page turning the monitoring rule-set and its dated currency into Safe/Well-led evidence — internal readiness check plus a gated, sign-off-stamped Evidence export. Now also discoverable as a Settings tab (Options → CQC Readiness)
 - **v3.109.0 (2026-06-16)** — Record tab: a live-first patient summary (problems, meds, results, prescribing-safety prompts) with the full visualiser nested behind it
-- **v3.107.0 (2026-06-16)** — Practice letterhead: recall letters and SMS auto-fill the practice/clinician sign-off (blank-guarded to keep the placeholder rather than send an empty sign-off)
-- **v3.100.0–v3.106.0 (2026-06-16)** — Practice Report: a periodised (Today/7d/30d/custom) operational report with three audience profiles (Management with per-clinician drill-down; Staff aggregate-only; ICB GPAD-framed), print→PDF + profile-aware CSV, sortable columns and section toggles; result-rule chips now show their trigger value
-- **v3.99.0 (2026-06-15)** — Referrals now populate headlessly (no need to open the Clinical Audit Report first), with a stale-template self-heal; whole-suite "gap-to-9" UX fixes (glossary tooltips, setup-checklist collapse, self-describing empty states)
-- **v3.96.0–v3.98.0 (2026-06-15)** — Focus mode + alert roll-up with worst-wait headline and plain-English hovers; user-editable alert thresholds from the command palette and Options
-- **v3.92.0 (2026-06-15)** — Result-rule inspector: click a parsed line's name/specimen to build the rule (analyte match + specimen scope, deduped, keyboard-accessible); clearer "Load a recent result" guidance (keep the Medicus results queue open in a separate window)
-- **v3.91.5–v3.91.6 (2026-06-15)** — Security/safety: PDF.js upgraded to 4.2.67 (CVE-2024-4367 fixed); Triage Lens preview now shares the live rule matcher so it can't diverge from what fires on the page, and surfaces invalid patterns instead of swallowing them
-- **v3.91.2 (2026-06-15)** — Security: closed an attribute-injection XSS in the side-panel chip/rule renderers (quote-unsafe HTML-attribute escaping); imported custom-rule id validation tightened; knowledge link scheme-checked at the sink
-- **v3.91.0 (2026-06-15)** — Choose your tabs: pick which side-panel tabs appear and in what order, discoverable in Options and surfaced for managed installs
-- **v3.90.0 (2026-06-15)** — Result-rule inspector loads a recent result live, on demand — no JSON paste needed
-- **v3.89.0 (2026-06-15)** — Result-rule authoring: discoverable inspector, specimen-scope UI, and in-session analyte-name/specimen suggestions drawn from the open queue
-- **v3.88.0 (2026-06-15)** — Specimen-header capture and `analyte.specimen` scoping for result rules, with fail-open behaviour when no specimen is present
-- **v3.87.0 (2026-06-15)** — Single "Accept this for practice" switch (Options → Clinical Safety) unlocks all three central attestations together
-- **v3.86.3 (2026-06-15)** — Reception "Referrals on file" card trialled (v3.85.0) and withdrawn after live testing showed it did not work reliably on Medicus
-- **v3.84.3 (2026-06-15)** — Brand identity: app icon (guardian shield + cyan ECG pulse + beacon on deep navy), with a dedicated simplified 16px favicon; wired into the side panel, pop-out, Options, About panel, visualiser and README
-- **v3.84.0 (2026-06-14)** — Sweep multi-clinician filter: select any combination of the day's clinicians; printed handout labels the audience; selection persisted across tab switches
-- **v3.83.0 (2026-06-14)** — Sweep day-picker: sweep any day (past or future), not just today; handout headers and last-run display reflect the chosen day
+- **v3.100.0–v3.108.0 (2026-06-16)** — Practice Report (periodised with three audience profiles, print→PDF + CSV); "Select all" for Outstanding Investigation Requests (with safety confirm dialog); practice letterhead auto-fill for recall letters and SMS
+- **v3.91.0–v3.99.0 (2026-06-15)** — Choose your tabs; result-rule inspector (loads a recent result live on demand); specimen-scope UI; single "Accept for practice" switch; brand identity icon; whole-suite gap-to-9 UX fixes; user-editable alert thresholds; referrals headless population
+- **v3.84.0–v3.91.2 (2026-06-14–15)** — Sweep multi-clinician filter and day-picker; security fixes (XSS closed in chip renderers, PDF.js CVE-2024-4367 patched); Triage Lens preview aligned to live rule matcher
+- **v3.0.0–v3.83.0 (2026-05-28–2026-06-14)** — Major version uplift: Practice Profile managed deployment; Knowledge base; Reception guided capture (CSO-signed-off pathways); Trends; pop-out window; theme system; Submissions, Activity, Referrals, Capacity, Condor modules; Triage Lens result-severity chips and drug-combo alerts; full suite backup/restore
 
 ## Safety posture
 
