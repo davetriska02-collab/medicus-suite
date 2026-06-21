@@ -2187,13 +2187,19 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 
 /* Collapsed strip — shown once the practice code is detected so the full
-   multi-step card no longer dominates the module body. Thin, single row. */
+   multi-step card no longer dominates the module body. Thin, single row.
+   Phase 3 (Vogue map): a transient confirmation must NOT out-rank the live
+   Waiting Room card below it, so the collapsed strip sheds the bright card
+   surface (bg/border/shadow) and rests as a quiet line. */
 .setup-card--collapsed {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
+  padding: 6px 4px;
   margin-bottom: 2px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .setup-collapsed-icon {
