@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.4] — 2026-06-21
+
+### Design-house Phase 2 (G3 — one hero per tab: Today)
+
+Today was a flat stack of six equal cards with no focal point (design-house gap
+G3). The live Waiting Room card now floats forward as the page's hero — stronger
+elevation and border, a louder header label, and a larger headline count — while
+the Triage Load / Demand / Slots / Sweep / Alerts cards rest as a calm supporting
+stack. Hierarchy is carried by weight and space, not colour: the hero is
+deliberately neutral so it never reads as an alert (the urgency tint on the
+waiting count remains a separate, real wait-time signal and is untouched).
+Verified in light and dark. Remaining design-house items: G1 identity sprint
+(needs a brand brief), G4 component convergence, G5 legibility floor.
+
 ## [v3.126.3] — 2026-06-21
 
 ### Design-house Phase 2 (chrome economy) + Sentinel rule refresh

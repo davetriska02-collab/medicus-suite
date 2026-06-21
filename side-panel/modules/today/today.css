@@ -34,6 +34,25 @@
   box-shadow: var(--shadow-2);
 }
 
+/* G3 (design-house appraisal 2026-06-21): one hero per tab. Today was a flat
+   stack of six equal cards with no focal point; the live waiting room is the
+   morning's primary decision driver, so it floats forward — stronger elevation,
+   emphasised border, a louder header label and a larger headline count — while
+   the other metric cards rest as a calm supporting stack. Hierarchy by weight
+   and space, not colour: the hero must never read as an alert (the urgency tint
+   on the count is a separate, real wait-time signal and is untouched). */
+.today-card[data-card='wr'] {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+}
+.today-card[data-card='wr'] .today-card-label {
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.today-card[data-card='wr'] .today-hero-count {
+  font-size: 34px;
+}
+
 /* ── Card header ─────────────────────────────────────────────────────────────── */
 
 .today-card-header {
