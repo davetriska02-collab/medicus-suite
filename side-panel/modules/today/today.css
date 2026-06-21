@@ -118,10 +118,30 @@
 /* ── Loading / error / empty states ─────────────────────────────────────────── */
 
 .today-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
   letter-spacing: 0.06em;
+}
+/* Reticle-geometry spinner (brand-motif seed): a ring with one accent arc,
+   echoing the mark's rangefinder ring. (Craft pass 2026-06-21.) */
+.today-loading::before {
+  content: '';
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-loading::before {
+    animation-duration: 0s;
+  }
 }
 
 /* Decision F: error state — glyph + mono copy, severity not on hue alone */

@@ -275,6 +275,69 @@ body {
   }
 }
 
+/* ── Signature motion (2026-06-21 craft pass) ────────────────────────────────
+   Restrained, interaction-driven only — overlays ease in on open, never on a
+   data poll (modules re-render on poll, so animating their content would twitch
+   every few seconds). All motion is killed under prefers-reduced-motion. */
+@keyframes ch-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ch-pop-in-center {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+.dp-popover,
+.alltabs-popover,
+.help-popover {
+  animation: ch-pop-in 130ms var(--ease);
+}
+.suite-palette {
+  animation: ch-pop-in-center 130ms var(--ease);
+}
+
+/* Reticle-geometry spinner — a ring with one accent arc, echoing the brand
+   mark's rangefinder ring. Consumed via the .ch-spinner utility or ::before. */
+@keyframes ch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ch-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+  vertical-align: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-popover,
+  .alltabs-popover,
+  .help-popover,
+  .suite-palette {
+    animation: none;
+  }
+  .ch-spinner {
+    animation-duration: 0s;
+  }
+}
+
 .nav-brand {
   display: flex;
   align-items: center;

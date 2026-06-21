@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.127.2] — 2026-06-21
+
+### Signature motion + brand-motif seed
+
+- **Overlay entrance motion.** The display, all-tabs and help popovers and the
+  command palette now ease in on open (a 130ms fade + rise, `prefers-reduced-
+  motion` guarded). Motion is deliberately **interaction-driven only** — never on
+  a data poll, since modules re-render on poll and animating their content would
+  twitch every few seconds. With the Condor index-meter fill (v3.127.1), the
+  suite now has one consistent, restrained motion language.
+- **Reticle-geometry spinner.** Added a shared `.ch-spinner` — a ring with one
+  accent arc, echoing the brand mark's rangefinder ring — and wired it into the
+  Today loading state via `::before` (no markup change). The first step of
+  propagating the reticle motif into the chrome.
+
+Remaining craft tail: roll the spinner out to the other modules' loading states
+and add a reticle-derived empty-state glyph. Suite 113/113; lint and format clean.
+
 ## [v3.127.1] — 2026-06-21
 
 ### Craft pass — owned gauge, pill convergence, type-recast tail
