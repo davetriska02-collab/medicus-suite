@@ -45,11 +45,11 @@
   /* Reserve the border on rest state so activation never shifts layout */
   border: 1px solid transparent;
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-sm);
   padding: 4px 10px;

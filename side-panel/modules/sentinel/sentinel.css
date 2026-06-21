@@ -68,11 +68,11 @@
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   cursor: pointer;
   white-space: nowrap;
@@ -306,11 +306,11 @@
   background: transparent;
   border: 1px solid transparent; /* reserved — active state adds border without layout shift */
   color: var(--text-4);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 4px;
@@ -1577,11 +1577,11 @@
   border: 1px solid var(--accent-line);
   border-radius: var(--r-sm);
   color: var(--accent);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   padding: 3px 9px;
   transition:

@@ -686,7 +686,7 @@ function renderScaffold() {
           <div class="today-card" data-card="${c.id}">
             <div class="today-card-header">
               <span class="today-card-label"${c.tipKey ? ` data-tip-key="${esc(c.tipKey)}" title="${esc(c.tipText || '')}" tabindex="0" role="button"` : ''}>${esc(c.label)}</span>
-              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">Open →</button>` : ''}
+              ${c.navModule ? `<button class="today-card-open" data-nav="${c.navModule}" aria-label="Open ${esc(c.label)}">→</button>` : ''}
             </div>
             <div class="today-card-body" aria-live="polite"><span class="today-loading">Loading…</span></div>
           </div>

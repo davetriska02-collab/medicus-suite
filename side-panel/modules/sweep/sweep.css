@@ -197,10 +197,10 @@
 }
 
 .sweep-open-record {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--accent);
   text-decoration: none;
   margin-left: auto;

@@ -566,11 +566,11 @@ body {
   background: transparent;
   border: 1px solid var(--border-hi);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   border-radius: var(--r-md);
   padding: 5px 10px;
@@ -1408,22 +1408,20 @@ body {
   text-align: right;
 }
 
-/* Highlight pills with any items */
+/* Highlight pills with any items — Palette cull (Vogue map Phase 1): "has items"
+   reads from a neutral fill + a weighted count, not a hue. Amber/blue stay
+   reserved for the strip's real capacity alert (.rm-strip-alerted-*) and for
+   clinical signals, not decorative bucket tinting. */
 .rm-pill-active {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-color: var(--border-hi);
 }
 .rm-pill-active .rm-pill-count {
-  color: var(--accent);
+  color: var(--text-1);
 }
-
-/* Reply buckets in amber */
 .rm-pill-reply.rm-pill-active {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-}
-.rm-pill-reply.rm-pill-active .rm-pill-count {
-  color: var(--amber);
+  background: var(--bg-mid);
+  border-color: var(--border-hi);
 }
 
 .rm-strip-error {
@@ -1962,11 +1960,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 9px;
   cursor: pointer;
   transition:
@@ -2006,11 +2004,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: none;
   padding: 0;
   cursor: pointer;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   transition: color var(--fast) var(--ease);
 }
@@ -2401,11 +2399,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 
 .setup-link {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
   text-decoration: none;
   border-bottom: 1px solid var(--accent-line);
@@ -2531,10 +2529,10 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   margin-bottom: 12px;
 }
 .suite-tabs-presets-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-right: 2px;
 }
@@ -2543,11 +2541,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border-hi);
   border-radius: var(--r-pill);
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 4px 10px;
   cursor: pointer;
   transition:
@@ -2654,11 +2652,11 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
   color: var(--bg-deep);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   padding: 6px 16px;
   cursor: pointer;
   flex-shrink: 0;

@@ -75,18 +75,21 @@
   color: var(--text-2);
 }
 
-/* Decision H: demote rest colour to text-4; add :focus-visible and :active */
+/* Demoted to a single quiet chevron glyph (Vogue map Phase 1): six standing
+   "Open →" labels were repeated chrome noise; the arrow alone keeps the
+   affordance discoverable without shouting. */
 .today-card-open {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-5);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
-  padding: 2px 6px;
+  padding: 1px 5px;
   cursor: pointer;
   transition:
     color var(--fast) var(--ease),
@@ -210,11 +213,11 @@
 /* ── Setup link ──────────────────────────────────────────────────────────────── */
 
 .today-setup-link {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--accent);
   text-decoration: none;
   margin-top: 2px;
@@ -232,11 +235,11 @@
 /* ── Ghost button ────────────────────────────────────────────────────────────── */
 
 .today-ghost-btn {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   background: transparent;
   border: 1px solid var(--border-hi);
@@ -409,22 +412,20 @@
   color: var(--text-1);
 }
 
-.today-rm-pill--new .today-rm-pill-count {
-  color: var(--amber);
-}
-
-.today-rm-pill--new {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
-}
-
+/* Palette cull + pill convergence (Vogue map Phase 1): the per-type amber/blue
+   tint on count AND capsule was decorative — new-vs-reply is already in the
+   label — and diluted the clinical palette. All triage pills are now one neutral
+   capsule with the count emphasised by weight; amber/blue stay reserved for real
+   signals. */
+.today-rm-pill--new .today-rm-pill-count,
 .today-rm-pill--reply .today-rm-pill-count {
-  color: var(--accent);
+  color: var(--text-1);
 }
 
+.today-rm-pill--new,
 .today-rm-pill--reply {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-color: var(--border);
 }
 
 .today-rm-pill--zero {

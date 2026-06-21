@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.128.0] — 2026-06-21
+
+### Road to 10 — Phase 1 (Vogue map): "stop shouting"
+
+Pure subtraction, the highest-leverage cheap wins toward the 10/10 target
+(docs/appraisal/VOGUE-MAP-TO-10-2026-06-21.md). Both panels flagged buttons as the
+#1 remaining tell.
+
+- **Action buttons recast to sentence-case sans** (21 classes: Choose tabs,
+  Expand, Dismiss, Copy figures, Open full report, Run the pre-clinic sweep, the
+  date/period presets, sentinel/capacity/slots/submissions buttons). Mono stays on
+  data, nav and status. The last shouting register is gone.
+- **Accent palette culled.** The triage pills (Today card + top strip) dropped
+  their decorative amber/blue tint — new-vs-reply is already in the label — so
+  amber/blue stay reserved for real clinical/capacity signals. Today now carries
+  clinical red + neutral only.
+- **"Open to" demoted to a single quiet chevron** on the six Today cards (was six
+  repeated standing labels).
+- **Truncated setup banner fixed** — reads "Practice code set" cleanly.
+
+Suite 113/113; lint and format clean.
+
 ## [v3.127.3] — 2026-06-21
 
 ### Craft tail — spinner rollout + reticle empty-state glyph
