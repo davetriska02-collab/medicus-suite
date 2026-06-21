@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.127.3] — 2026-06-21
+
+### Craft tail — spinner rollout + reticle empty-state glyph
+
+- Rolled the reticle-geometry spinner into the Condor loading state (joins
+  Today).
+- Added a monochrome reticle glyph (the brand mark's geometry — ring, cardinal
+  ticks, centre dot — faint, no brand cyan) to the Record state cards, seeding
+  the reticle motif in the empty-state chrome. Suite 113/113.
+
 ## [v3.127.2] — 2026-06-21
 
 ### Signature motion + brand-motif seed

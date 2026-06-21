@@ -491,6 +491,13 @@
   border-radius: 8px;
   background: var(--bg-elev);
 }
+/* Reticle brand glyph echoed into the empty/state card (monochrome, faint —
+   no brand cyan in the clinical chrome). (Craft pass 2026-06-21.) */
+.rec-state-glyph {
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--text-5);
+}
 .rec-state-title {
   font-size: 14px;
   font-weight: 700;

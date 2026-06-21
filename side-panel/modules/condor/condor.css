@@ -153,6 +153,10 @@
 /* ── State helpers ────────────────────────────────────────────────────────── */
 
 .condor-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: var(--text-4);
   font-family: var(--mono);
   font-size: 10px;
@@ -160,6 +164,22 @@
   text-transform: uppercase;
   padding: 24px 16px;
   text-align: center;
+}
+/* Reticle-geometry spinner (brand-motif seed). */
+.condor-loading::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ch-spin 700ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .condor-loading::before {
+    animation-duration: 0s;
+  }
 }
 
 .condor-placeholder {
