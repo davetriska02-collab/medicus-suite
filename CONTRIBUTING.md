@@ -49,3 +49,5 @@ Run a single test file directly: `node test-foo.js`.
 
 Ask. Either ask Claude to explain what it's about to do, or ping Dave on the PR.
 There is no daft question on clinical software.
+
+<!-- branch-protection smoke test, will be reverted -->
