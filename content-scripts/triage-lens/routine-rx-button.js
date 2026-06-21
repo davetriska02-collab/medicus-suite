@@ -5,10 +5,10 @@
 // re-assigns the task to a configured team (e.g. "Prescribing / Meds Management")
 // by DRIVING THE REAL MEDICUS UI — it clicks the same controls a user would:
 //
-//   1. radio  "Save & re-assign to someone else"
+//   1. radio  "Save & send to routine requests task list"
 //   2. input  "Assign to"            (opens the assignee picker)
 //   3. option <the configured team>  ([id^="select-item-"], matched by text)
-//   4. button "Re-assign task"       (the commit)
+//   4. button "Send to routine list" (the commit)
 //
 // WHY drive the UI rather than the API: this keeps Medicus as the system of
 // record — its own validation, access control and audit trail all fire exactly
@@ -172,12 +172,12 @@
     running = true;
     setBusy(true);
     try {
-      // 1. radio: Save & re-assign to someone else
+      // 1. radio: Save & send to routine requests task list
       var radio = findByText(
         ['label', '[role="radio"]', '.radio', 'div', 'span'],
-        'Save & re-assign to someone else'
+        'Save & send to routine requests task list'
       );
-      if (!radio) return abort('Couldn’t find the “Save & re-assign to someone else” option on this screen.');
+      if (!radio) return abort('Couldn’t find the “Save & send to routine requests task list” option on this screen.');
       realClick(radio);
 
       // 2. Assign-to picker
@@ -211,25 +211,25 @@
       // 4. commit — find the button, then wait until Medicus ENABLES it
       //    (it stays disabled until a valid assignee is registered).
       var commit = await waitFor(function () {
-        var b = findByText(['button', '[role="button"]'], 'Re-assign task');
+        var b = findByText(['button', '[role="button"]'], 'Send to routine list');
         return b && isEnabled(b) ? b : null;
       }, 5000);
       if (!commit) {
-        if (findByText(['button', '[role="button"]'], 'Re-assign task')) {
-          return abort('Selected “' + team + '”, but “Re-assign task” stayed disabled — the assignee may not have registered. Check the picker.');
+        if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
+          return abort('Selected “' + team + '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.');
         }
-        return abort('Selected “' + team + '”, but couldn’t find the “Re-assign task” button.');
+        return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.');
       }
 
       cfg.lastTeam = team; saveCfg(); renderButton();
 
       if (mode === 'manual') {
         highlight(commit);
-        toast('Ready — review and click “Re-assign task”.', 'ok');
+        toast('Ready — review and click “Send to routine list”.', 'ok');
         return;
       }
       if (mode === 'confirm') {
-        var ok = window.confirm('Re-assign this prescription to “' + team + '”?');
+        var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
         if (!ok) { toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn'); return; }
       }
       realClick(commit);
