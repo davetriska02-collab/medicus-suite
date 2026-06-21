@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.3] — 2026-06-21
+
+### Design-house Phase 2 (chrome economy) + Sentinel rule refresh
+
+**Design (G2 — "calm field, sharp signal" restored).** The two permanent demand
+strips no longer wear an always-on wash: the waiting-room strip's
+below-threshold state and the triage strip's base now rest on neutral chrome
+(`--bg-mid` / `--border`) instead of a standing green / accent tint. The
+amber/red threshold states are untouched, so a crossed threshold now stands out
+against a calm field rather than competing with a permanent colour wash. This is
+the highest-leverage item from the design-house appraisal
+(`docs/appraisal/DESIGN-HOUSE-2026-06-21.md`, gap G2); the larger items (one
+hero per tab G3, component convergence G4, legibility floor G5, and the identity
+sprint G1) remain queued.
+
+**Sentinel rules (The Keeper — additive only, no interval/match change).** Acted
+on the safe, additive findings from `docs/appraisal/KEEPER-sentinel-2026-06-21.md`:
+- `glp1-receptor-agonist`: added the MHRA DSU 29 Jan 2026 strengthened
+  acute-pancreatitis warning (necrotising/fatal) to notes + source.
+- DMARDs (methotrexate, leflunomide, azathioprine, sulfasalazine,
+  hydroxychloroquine): refreshed the source citation to the 2025 BSR csDMARD
+  guideline (Rheumatology, Nov 2025). No monitoring interval changed.
+- `chc-combined-hormonal`: noted the MHRA tirzepatide → reduced
+  oral-contraceptive absorption interaction.
+
+All corroborated across secondary summaries; primary PDFs were unreachable (403)
+this run, so each is annotated "pending primary-source confirmation". **Held, not
+changed:** the QOF DM036 age-band discrepancy (file ≤70 vs one secondary source
+≤79) — a clinical threshold that could cause a silent chip change either way, so
+it waits for the primary QOF PDF. Coverage guard 314/314, full suite 113/113.
+
 ## [v3.126.2] — 2026-06-21
 
 ### Slots + Sentinel re-appraisal follow-through (panel, 2026-06-21)

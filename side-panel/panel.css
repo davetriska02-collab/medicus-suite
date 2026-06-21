@@ -1169,9 +1169,14 @@ body {
   display: none;
 }
 
+/* G2 (design-house appraisal 2026-06-21): a resting strip is CALM chrome, not an
+   always-on wash. A green tint that is always present cannot also be a sharp
+   signal, so the below-threshold state rests neutral and only amber/red (a
+   crossed threshold) washes. This RAISES signal contrast; it never dims an
+   alert. */
 .wr-strip-green {
-  background: var(--green-dim);
-  border-bottom-color: var(--green-line);
+  background: var(--bg-mid);
+  border-bottom-color: var(--border);
 }
 .wr-strip-amber {
   background: var(--amber-dim);
@@ -1276,9 +1281,12 @@ body {
   padding: 6px 15px;
   font-size: 13px;
   flex-shrink: 0;
+  /* G2 (design-house 2026-06-21): rest neutral, not a permanent accent wash —
+     the always-on blue tint made the strip read as a standing alert. The
+     amber/red threshold states (.rm-strip-alerted-*) carry the signal. */
   border-bottom: 1px solid var(--border);
-  background: var(--accent-dim);
-  border-bottom-color: var(--accent-line);
+  background: var(--bg-mid);
+  border-bottom-color: var(--border);
   min-height: 35px;
 }
 
