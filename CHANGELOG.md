@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.128.1] — 2026-06-21
+
+### Road to 10 — Phase 2 (Vogue map): Today is a composition
+
+The marquee structural move: Today was six near-identical bordered cards of equal
+weight (an arrangement). Now only the Waiting Room hero is a distinct elevated
+card; Triage Load / Demand / Slots / Morning Sweep / Recent Alerts shed their
+border, shadow and header fill and read as quiet hairline-separated sections
+beneath it. One hero plus a calm supporting stack, light and dark. Verified the
+clinical red on the hero holds full salience.
+
 ## [v3.128.0] — 2026-06-21
 
 ### Road to 10 — Phase 1 (Vogue map): "stop shouting"

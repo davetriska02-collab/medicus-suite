@@ -53,6 +53,34 @@
   font-size: 34px;
 }
 
+/* Phase 2 (Vogue map): composition, not arrangement. Only the Waiting Room hero
+   stays a distinct elevated card; the supporting cards shed their border, shadow
+   and header fill and read as quiet sections under it, separated by space and a
+   hairline. Six equal boxes become one hero + a calm supporting stack. */
+.today-card:not([data-card='wr']) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.today-card:not([data-card='wr']):hover {
+  border-color: transparent;
+  box-shadow: none;
+}
+.today-card:not([data-card='wr']) + .today-card:not([data-card='wr']) {
+  border-top: 1px solid var(--border);
+}
+.today-card:not([data-card='wr']) .today-card-header {
+  background: transparent;
+  border-bottom-color: transparent;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.today-card:not([data-card='wr']) .today-card-body {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
 /* ── Card header ─────────────────────────────────────────────────────────────── */
 
 .today-card-header {
