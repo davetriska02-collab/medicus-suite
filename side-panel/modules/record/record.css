@@ -232,10 +232,10 @@
   padding: 10px 12px;
 }
 .rec-card-h {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-3);
   margin: 0 0 8px;
   display: flex;

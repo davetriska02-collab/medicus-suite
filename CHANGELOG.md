@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.127.1] — 2026-06-21
+
+### Craft pass — owned gauge, pill convergence, type-recast tail
+
+Three road-to-10 craft items, done in parallel:
+
+- **Condor Practice Pressure — owned data-viz (replaces the stock half-doughnut).**
+  Vogue flagged the gauge as the one component that "looks bought, not made". It
+  is now a horizontal 0–100 **index meter** with the GREEN/AMBER/RED band
+  thresholds marked at 40 and 70, so a low index that is floored to AMBER by
+  capacity reads truthfully — you see the fill sit left of the amber tick. Also
+  resolves the daily-driver confusion (a bare "23" on a doughnut). The fill eases
+  in with a single motion beat (`prefers-reduced-motion` guarded) — the suite's
+  first signature motion.
+- **Pill convergence — the two triage styles unified.** The "Triage:" strip and
+  the "Triage Load" card showed the same counts in two different pill styles
+  (sentence-case vs mono-caps). The card pill label is now the same sentence-case
+  sans + mono-count as the strip. One representation, not two.
+- **Type-recast residual tail.** Converted the chart titles (`submissions
+  .chart-hdr`), the record card headers (`record .rec-card-h`) and the options-
+  page section/field labels to sentence-case sans, finishing the v3.127.0 recast.
+  Buttons, tags, badges, status tokens, axis labels and empty/loading states
+  correctly stay mono.
+
+Suite 113/113; lint and format clean. Remaining road-to-10 craft: broader motion
+(number settles, strip easing) and propagating the reticle motif into the chrome.
+
 ## [v3.127.0] — 2026-06-21
 
 ### Type-system recast — headers in sans, data in mono (hybrid, doctrine #4 revised)
