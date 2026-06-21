@@ -34,7 +34,7 @@
   border: 1px solid var(--border-hi);
   background: var(--bg-elev);
   color: var(--text-2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   height: 28px;
   padding: 0 10px;
   font-size: 11.5px;
@@ -42,7 +42,7 @@
   cursor: pointer;
   line-height: 1;
   white-space: nowrap;
-  transition: background 0.15s;
+  transition: background var(--fast) var(--ease);
 }
 .rec-copy-btn:hover:not(:disabled) {
   background: var(--bg-hover);
@@ -67,7 +67,7 @@
   border: 1px solid var(--border);
   background: var(--bg-elev);
   color: var(--text-3);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   width: 28px;
   height: 28px;
   font-size: 15px;
@@ -118,8 +118,8 @@
 /* demographics -------------------------------------------------------------- */
 .rec-demo {
   background: var(--accent);
-  color: #fff;
-  border-radius: 8px;
+  color: var(--bg-deep);
+  border-radius: var(--r-lg);
   padding: 10px 12px;
 }
 .rec-demo-name {
@@ -148,11 +148,11 @@
 }
 .rec-badge-deceased {
   background: var(--text-3);
-  color: #fff;
+  color: var(--bg-deep);
 }
 .rec-badge-test {
   background: var(--amber);
-  color: #fff;
+  color: var(--bg-deep);
 }
 
 /* primary safety banner (the one genuine warning) --------------------------- */
@@ -160,7 +160,7 @@
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
   border-left: 4px solid var(--amber);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 8px 10px 8px 32px;
   font-size: 12px;
   color: var(--text-2);
@@ -184,7 +184,7 @@
 .rec-partial {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 6px 9px;
   font-size: 11px;
   color: var(--text-2);
@@ -201,7 +201,7 @@
   flex-direction: column;
   border: 1px solid var(--amber-line);
   border-left: 4px solid var(--amber);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 6px 9px 6px 30px;
   background: var(--amber-dim);
   position: relative;
@@ -228,7 +228,7 @@
 .rec-card {
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 10px 12px;
 }
 .rec-card-h {
@@ -265,7 +265,7 @@
   line-height: 1.4;
   background: var(--bg-mid);
   border-left: 3px solid var(--border-hi);
-  border-radius: 5px;
+  border-radius: var(--r-md);
   padding: 6px 9px;
 }
 .rec-empty {
@@ -333,7 +333,7 @@
   font-size: 10px;
   font-weight: 700;
   padding: 0 5px;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   margin-left: 4px;
   vertical-align: middle;
 }
@@ -387,7 +387,7 @@
 .rec-score {
   border: 1px solid var(--border);
   border-left-width: 5px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 7px 9px;
   margin-bottom: 6px;
 }
@@ -432,7 +432,7 @@
   font-size: 9px;
   font-weight: 700;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   letter-spacing: 0.03em;
 }
 .rec-ss-stopp {
@@ -457,7 +457,7 @@
   border: 1px solid var(--accent);
   background: var(--bg-elev);
   color: var(--accent);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   padding: 10px 12px;
   font-size: 13px;
   font-weight: 700;
@@ -488,7 +488,7 @@
   text-align: center;
   padding: 28px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
 }
 .rec-state-title {
@@ -506,8 +506,8 @@
   margin-top: 10px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
-  border-radius: 6px;
+  color: var(--bg-deep);
+  border-radius: var(--r-md);
   padding: 6px 16px;
   font-size: 12px;
   font-weight: 600;
@@ -517,7 +517,7 @@
 /* skeleton ------------------------------------------------------------------ */
 .rec-skel-head {
   height: 52px;
-  border-radius: 8px;
+  border-radius: var(--r-lg);
   background: linear-gradient(90deg, var(--bg-mid) 25%, var(--bg-hover) 50%, var(--bg-mid) 75%);
   background-size: 200% 100%;
   animation: rec-shimmer 1.2s infinite;
@@ -527,7 +527,7 @@
 }
 .rec-skel-bar {
   height: 14px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   margin-bottom: 6px;
   background: linear-gradient(90deg, var(--bg-mid) 25%, var(--bg-hover) 50%, var(--bg-mid) 75%);
   background-size: 200% 100%;

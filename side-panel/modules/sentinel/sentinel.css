@@ -958,7 +958,7 @@
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border);
-  animation: sent-ev-fade 120ms ease;
+  animation: sent-ev-fade var(--fast) var(--ease);
 }
 .sent-vax-row {
   display: flex;
@@ -1008,7 +1008,7 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-2);
-  animation: sent-ev-fade 120ms ease;
+  animation: sent-ev-fade var(--fast) var(--ease);
 }
 @keyframes sent-ev-fade {
   from {

@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.1] — 2026-06-21
+
+### Atelier polish pass — token-drift heal (Record, Condor, Sentinel)
+
+A conservative design-system tidy bringing three module stylesheets back onto the
+TOKENS.md canon. No layout, no class renames — only token substitution and contrast
+correction, so the panel reads identically (or more correctly) in both themes.
+
+- **Record module (`record.css`)** — the biggest offender. Every hardcoded `border-radius`
+  now consumes the canon radius scale (`--r-sm`/`--r-md`/`--r-lg`), with off-grid `3px`/`5px`
+  values normalised onto the 4px grid. Hardcoded `#fff` text on the demographics block,
+  deceased/test badges and the retry button is replaced with the theme-adaptive
+  `var(--bg-deep)` — fixing a real contrast risk on the pastel **dark** accent/amber fills
+  (pure white was ~3.4:1). The copy-button transition is tokenised to `var(--fast) var(--ease)`.
+- **Condor (`condor.css`)** — report-strip radius onto `var(--r-lg)`; dead `transparent`
+  background fallback removed.
+- **Sentinel (`sentinel.css`)** — the evidence-panel and vaccine-detail fade animations
+  tokenised to `var(--fast) var(--ease)` (already covered by the reduced-motion kill switch).
+
+Full suite 113/113 green. Deliberately left as intentional exceptions: Capacity's four-step
+"tight" RAG local and Referrals' JS-set `--chip-colour` custom prop (both documented in place).
+
 ## [v3.126.0] — 2026-06-20
 
 ### Keeper follow-ups — four parallel work items (scoped by virtual-dave)

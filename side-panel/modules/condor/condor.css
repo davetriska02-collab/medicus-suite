@@ -278,8 +278,8 @@
   margin: 4px 0 2px;
   padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elev, transparent);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
 }
 .condor-report-label {
   font-size: 11px;
