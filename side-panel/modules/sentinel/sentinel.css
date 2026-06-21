@@ -790,15 +790,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Wait duration colour escalation — UNCHANGED (salience well spent) */
+/* Wait-duration emphasis carried by WEIGHT, not clinical hue. The minutes are a
+   waiting-room duration, NOT a monitoring result; four domain personas read the
+   old amber/red minutes as "overdue/act now" and warned a tired clinician could
+   mistake the idle waiting list for a fired monitoring alert (a patient-safety
+   misread). Within the Monitoring tab, red is now reserved for a genuine
+   overdue monitoring check; the longest waits still stand out via weight and a
+   muted neutral tone. (Practice appraisal G2 follow-through, 2026-06-21.) */
 .wr-row-amber .wr-row-wait {
-  color: var(--amber);
+  color: var(--text-2);
+  font-weight: 700;
 }
 .wr-row-amber .wr-row-name {
   color: var(--text-1);
 }
 .wr-row-red .wr-row-wait {
-  color: var(--red);
+  color: var(--text-1);
+  font-weight: 700;
 }
 .wr-row-red .wr-row-name {
   color: var(--text-1);

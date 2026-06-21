@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.2] — 2026-06-21
+
+### Slots + Sentinel re-appraisal follow-through (panel, 2026-06-21)
+
+Re-ran the Practice panel on Slots and Sentinel after v3.126.1. Two convergent
+findings acted on; UX only, no clinical-rule or alert-salience change.
+
+- **Sentinel waiting-room minutes no longer mimic an overdue alert (G2, root
+  cause).** v3.126.1 reframed the block's container bar to the informational
+  accent, but four domain personas (nurse, pharmacist, partner, GP) reported the
+  per-row wait-time minutes were still clinical red/amber and read as
+  "overdue/act now" — risking a tired clinician mistaking the idle waiting list
+  for a fired monitoring alert. The minutes now carry their emphasis by weight
+  and a muted neutral tone; within the Monitoring tab, red is reserved for a
+  genuine overdue monitoring check. The wait-time ordering and the "not a
+  monitoring result" caption are unchanged.
+- **Slots headline says what the number is, and as-at when (R1/R2 parity).** The
+  hero label now reads "free slots remaining today" (was "slots remaining
+  today") so the count is unambiguously bookable capacity, and a muted
+  "practice-wide · as at HH:MM" line was added so a manager can quote a
+  defensible point-in-time figure — matching the as-at clock added to Condor in
+  v3.126.1.
+
 ## [v3.126.1] — 2026-06-21
 
 ### Practice appraisal quick wins (whole-suite panel, 2026-06-21)

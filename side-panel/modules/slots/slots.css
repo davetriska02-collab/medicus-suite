@@ -486,6 +486,16 @@ html[data-theme='dark'] .staff-split .split-pm {
 .slots-count-label.zero {
   color: var(--text-4);
 }
+/* Practice-wide scope + defensible cut-off clock — a manager quoting free
+   capacity to partners needs to know it is the whole practice and "as at when".
+   (Practice appraisal, Slots re-run 2026-06-21.) */
+.slots-hero-asat {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
 /* Label inherits the highest triggered slot-alert level — signal, not décor */
 .slots-count-label.amber {
   color: var(--amber);
