@@ -1,0 +1,35 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22416d"/><stop offset="1" stop-color="#0f2647"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="80" x2="0" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e7cd86"/><stop offset="1" stop-color="#b8923f"/>
+    </linearGradient>
+    <radialGradient id="beacon" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#aef6ff"/>
+      <stop offset="0.45" stop-color="#43dcec"/>
+      <stop offset="1" stop-color="#43dcec" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- instrument bezel -->
+  <rect x="8" y="8" width="496" height="496" rx="108" fill="url(#tile)"/>
+
+  <!-- precision reticle: outer ring + four cardinal index ticks crossing it -->
+  <circle cx="256" cy="256" r="150" fill="none" stroke="url(#gold)" stroke-width="12"/>
+  <g stroke="url(#gold)" stroke-width="12" stroke-linecap="round">
+    <line x1="256" y1="84"  x2="256" y2="128"/>
+    <line x1="256" y1="384" x2="256" y2="428"/>
+    <line x1="84"  y1="256" x2="128" y2="256"/>
+    <line x1="384" y1="256" x2="428" y2="256"/>
+  </g>
+
+  <!-- thin inner ring -->
+  <circle cx="256" cy="256" r="74" fill="none" stroke="url(#gold)" stroke-width="6" stroke-opacity="0.9"/>
+
+  <!-- live lock beacon — the recurring focal element -->
+  <circle cx="256" cy="256" r="70" fill="url(#beacon)" opacity="0.6"/>
+  <circle cx="256" cy="256" r="30" fill="#43dcec"/>
+  <circle cx="256" cy="256" r="17" fill="#aef6ff"/>
+</svg>

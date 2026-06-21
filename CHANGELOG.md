@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.5] — 2026-06-21
+
+### Design-house G1 — brand identity refresh (precision-instrument mark)
+
+The placeholder identity (a generic gold guardian shield) was the design-house
+appraisal's headline gap for the £200m bar (G1). New mark: a gold **precision
+reticle** — rangefinder/avionics sight (outer ring, four cardinal index ticks,
+inner ring) — on the deep-navy instrument bezel, with the cyan **live-lock
+beacon** kept at the crosshair centre as the recurring focal element. It reads as
+the clinical instrument the suite actually is (the doctrine's flight-deck /
+rangefinder register, and the "Sentinel" that watches), and recomposes the
+existing navy/gold/cyan equity rather than discarding it.
+
+- Vector is now the source of truth: `brand/app-icon-master.svg` (512) +
+  `brand/app-icon-16.svg` (simplified favicon). `generate-icons.mjs` renders
+  `brand/app-icon.png` and `icons/icon-16/48/128.png` from the SVGs (via sharp).
+- The mark updates everywhere it appears automatically (nav, pop-out, options,
+  about, visualiser drop, README, extension icons). The 16px nav logos point to
+  the crisp simplified favicon rather than downscaling the detailed master.
+- Signature element: the cyan live-lock dot recurs across brand surfaces but is
+  deliberately kept **out of the clinical chrome** — the UI reserves colour for
+  clinical status, so the brand cyan is never mistaken for a signal. Brand guide
+  refreshed (`brand/BRAND.md`).
+
+Remaining design-house items: G4 component convergence, G5 legibility floor.
+
 ## [v3.126.4] — 2026-06-21
 
 ### Design-house Phase 2 (G3 — one hero per tab: Today)
