@@ -172,6 +172,7 @@
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Decision O: demote hero number from 32px → 26px */
