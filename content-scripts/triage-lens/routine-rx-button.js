@@ -324,7 +324,6 @@
     if (host) return;
     host = document.createElement('div');
     host.className = 'chrx-host';
-    host.style.display = 'none';
 
     btn = document.createElement('button');
     btn.className = 'chrx-btn';
@@ -337,7 +336,6 @@
 
     host.appendChild(btn);
     host.appendChild(caret);
-    document.body.appendChild(host);
     renderButton();
 
     var style = document.createElement('style');
@@ -345,28 +343,39 @@
     document.head.appendChild(style);
   }
 
-  // Show only when the prescription re-assign controls are on screen.
-  function onPrescribingScreen() {
-    return !!(
-      findByText(['label', '[role="radio"]', 'div', 'span'], 'Save & re-assign to someone else') ||
-      findByText(['button', '[role="button"]'], 'Re-assign task')
-    );
+  // Anchor: the action-button row at the foot of the Next Steps panel always
+  // carries a "More actions" button — sit inline beside it so we line up with
+  // Issue / Re-assign task rather than floating in the viewport corner.
+  function findActionAnchor() {
+    var more = findByText(['button', '[role="button"]'], 'More actions');
+    return more ? more.parentElement : null;
   }
 
-  function refreshVisibility() {
+  // Inject inline when on the prescribing screen; remove otherwise. PREPEND and
+  // re-inject on every mutation so Vue's reconciler can't strip us as a trailing
+  // node (see CLAUDE.md). Idempotent: only acts when placement actually changed.
+  function ensureInjected() {
     if (!host) return;
-    host.style.display = onPrescribingScreen() ? 'flex' : 'none';
+    var anchor = findActionAnchor();
+    if (!anchor) {
+      if (host.parentElement) host.parentElement.removeChild(host);
+      closeMenu();
+      return;
+    }
+    if (host.parentElement !== anchor) {
+      anchor.insertBefore(host, anchor.firstChild);
+    }
   }
 
   var CSS = [
-    '.chrx-host{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;align-items:stretch;',
-    'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25);border-radius:8px;overflow:visible}',
-    '.chrx-btn{background:#0d6e5e;color:#fff;border:0;padding:10px 14px;border-radius:8px 0 0 8px;cursor:pointer;max-width:340px;',
+    '.chrx-host{display:inline-flex;align-items:stretch;vertical-align:middle;position:relative;margin:0 8px 0 0;',
+    'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.18);border-radius:8px}',
+    '.chrx-btn{background:#0d6e5e;color:#fff;border:0;padding:9px 13px;border-radius:8px 0 0 8px;cursor:pointer;max-width:300px;',
     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.chrx-btn:hover{background:#0a5a4d}',
     '.chrx-caret{background:#0a5a4d;color:#fff;border:0;border-left:1px solid rgba(255,255,255,.25);padding:0 11px;border-radius:0 8px 8px 0;cursor:pointer}',
     '.chrx-caret:hover{background:#084a40}',
-    '.chrx-menu{position:absolute;right:0;bottom:46px;min-width:240px;background:#fff;color:#10302a;border:1px solid #cdd8d4;',
+    '.chrx-menu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:2147483000;min-width:240px;background:#fff;color:#10302a;border:1px solid #cdd8d4;',
     'border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:6px;display:flex;flex-direction:column;gap:2px}',
     '.chrx-menu-h{font:700 11px/1 system-ui;text-transform:uppercase;letter-spacing:.04em;color:#5b6b66;padding:8px 8px 4px}',
     '.chrx-menu-item{text-align:left;background:none;border:0;padding:7px 9px;border-radius:6px;cursor:pointer;font:500 13px/1.2 system-ui;color:#10302a}',
@@ -383,8 +392,8 @@
 
   loadCfg().then(function () {
     buildUI();
-    refreshVisibility();
-    var mo = new MutationObserver(function () { refreshVisibility(); });
+    ensureInjected();
+    var mo = new MutationObserver(function () { ensureInjected(); });
     mo.observe(document.body, { childList: true, subtree: true });
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {

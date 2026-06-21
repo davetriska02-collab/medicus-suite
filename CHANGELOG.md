@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.2] — 2026-06-21
+
+### Routine-Rx button: sit inline with the task actions, not the viewport corner
+
+The button now injects **inline beside the task's action buttons** (anchored to
+the "More actions" button's row, prepended) instead of floating fixed at the
+bottom-right of the window. Follows the queue-chip reconciler rules — PREPEND +
+re-inject on every mutation + idempotent — so Vue doesn't strip it. The ▾ menu
+now opens upward above the button.
+
 ## [v3.131.1] — 2026-06-21
 
 ### Routine-Rx button: wait for "Re-assign task" to enable before committing
