@@ -15,11 +15,17 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          # Full history so the patient-data guard can diff against the base branch.
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Guard against committed patient data (forbidden paths + NHS numbers)
+        run: node scripts/check-no-patient-data.js
 
       - name: Verify Triage Lens defaults are in sync (3-copy guard)
         run: node scripts/regen-defaults.js --check
