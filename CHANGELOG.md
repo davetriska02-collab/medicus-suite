@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.7] — 2026-06-21
+
+### Road-to-10 review fixes (Practice + Vogue panels)
+
+Ran two panels on the v3.126.6 renders — The Practice (usability, mean ≈7.1/10,
+up from 5.7) and Vogue (design house, ~6.5/10 craft, "not yet a £200m look").
+Both named the same two free wins, fixed here:
+
+- **Clipped "TODA" nav label** — the in-nav wordmark crowded the tab rail in the
+  400px panel, truncating the active tab. Dropped the redundant in-chrome
+  wordmark (the new reticle mark carries the brand; the full wordmark still
+  appears in About / Options / the visualiser); the active tab now reads "TODAY"
+  in full with "SLOTS" beside it. Also tightened the tab-rail overflow fade from
+  8% to 3% so it can never eat a label character.
+- **"v0.5.1" on the Monitoring header** — a literal "pre-release" signal on a
+  clinical tab. Removed.
+
+The full road-to-10 synthesis (both ladders, and the pivotal type-system call
+for Dave) is in `docs/appraisal/ROAD-TO-10-2026-06-21.md`.
+
+## [v3.126.6] — 2026-06-21
+
+### Design-house G5 (legibility floor) + G4 (component convergence)
+
+**G5 — contrast floor, not a size bump.** The doctrine permits mono labels at
+9–11px, so the real floor issue is faint greys carrying load-bearing text. Fixed
+the four sub-floor 8px labels (submissions metric-delta / legend-note, setup
+recommended badge) up to the 9px floor, and lifted the faintest tier `--text-5`
+in both themes (light `#6c7c91`→`#5f6f85`, dark `#5d7a9d`→`#6c89ac`) — only ever
+raising contrast. Synced the stale `TOKENS.md` text-4/5 row to the live values.
+
+**G4 — pills were already substantially converged.** Audit found the canonical
+`.pill` migration has largely happened: `slot-pill` matches the recipe exactly,
+and `condor-pill` / `today-name-chip` already use `--r-pill`. Aligned the two
+real outliers — the AM/PM chips took the pill radius (was squared `--r-sm`), and
+the suite's tightest pill (`condor-pill`) was nudged to the family vertical
+rhythm. No class renames (per TOKENS.md "do not mass-rename in one pass").
+
+This closes the in-house design-house items; G1/G2/G3 shipped in v3.126.3–.5.
+The remaining gap, G1's brand mini-guide aside, is none — the appraisal's
+foundations were already strong.
+
 ## [v3.126.5] — 2026-06-21
 
 ### Design-house G1 — brand identity refresh (precision-instrument mark)

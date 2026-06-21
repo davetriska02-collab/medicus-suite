@@ -227,7 +227,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 1px 7px;
+  /* G4: nudge the suite's tightest pill toward the family vertical rhythm. */
+  padding: 2px 8px;
   border-radius: var(--r-pill);
   line-height: 1.6;
 }

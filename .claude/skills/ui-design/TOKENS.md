@@ -20,8 +20,8 @@ extend the canon here _and_ in `panel.css`, then use it.
 | `--text-1`    | `#0f172a` | `#f1f5f9` | headings, primary data            |
 | `--text-2`    | `#1e3a5f` | `#cfe1ff` | secondary, active chrome          |
 | `--text-3`    | `#475569` | `#93a8c5` | tertiary, labels with content     |
-| `--text-4`    | `#64748b` | `#5d7a9d` | muted — supplementary only        |
-| `--text-5`    | `#94a3b8` | `#3d5070` | faintest — decoration-grade       |
+| `--text-4`    | `#556377` | `#7d97b5` | muted — supplementary only        |
+| `--text-5`    | `#5f6f85` | `#6c89ac` | faintest — decoration-grade       |
 
 Legacy aliases `--t1`…`--t5` map to `--text-1`…`--text-5` (older strip CSS
 referenced them before they existed — the aliases make those rules resolve).

@@ -26,7 +26,7 @@
      (setup badges, strip labels, OPTIONAL/RECOMMENDED). Lifted one slate step
      each for contrast — a tired technophobe reader misread the old pale grey. */
   --text-4: #556377;
-  --text-5: #6c7c91;
+  --text-5: #5f6f85;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-dim: rgba(37, 99, 235, 0.09);
@@ -102,7 +102,7 @@ html[data-theme='dark'] {
   --text-3: #93a8c5;
   /* Eyesight floor (dark): lift the two faintest text tokens one step. */
   --text-4: #7d97b5;
-  --text-5: #5d7a9d;
+  --text-5: #6c89ac;
   --accent: #5b8fc7;
   --accent-hover: #7eaad6;
   --accent-dim: rgba(91, 143, 199, 0.14);
@@ -291,14 +291,12 @@ body {
   flex: none;
 }
 
+/* In the 400px panel chrome the wordmark text crowded the tab rail enough to
+   clip the active tab's label ("TODA"). The distinctive mark now carries the
+   brand in-chrome; the full wordmark still appears in About / Options / the
+   visualiser. (Practice/Vogue 10-review, 2026-06-21.) */
 .nav-name {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text-3);
-  text-transform: uppercase;
-  white-space: nowrap;
+  display: none;
 }
 
 .nav-tabs {
@@ -310,8 +308,12 @@ body {
   overflow-y: hidden;
   scrollbar-width: none;
   scroll-behavior: smooth;
-  -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%);
-  mask-image: linear-gradient(to right, black 92%, transparent 100%);
+  /* The overflow fade hints "more tabs that way" but must never eat a tab label:
+     an 8% fade clipped the active tab to "TODA". Keep it to a narrow 3% so the
+     hint stays without truncating the busiest control. (Practice/Vogue 10-review,
+     2026-06-21.) */
+  -webkit-mask-image: linear-gradient(to right, black 97%, transparent 100%);
+  mask-image: linear-gradient(to right, black 97%, transparent 100%);
 }
 .nav-tabs::-webkit-scrollbar {
   display: none;
@@ -2267,7 +2269,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .setup-optional-badge,
 .setup-recommended-badge {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
