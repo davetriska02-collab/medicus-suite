@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.127.0] — 2026-06-21
+
+### Vogue Season 2 — "Frosted Deck" (visual-language refresh)
+
+First aesthetic season shipped via the new **Vogue** creative-director skill — a
+deliberate evolution of the suite's look, chosen by Dave from a rendered
+mood board of five candidate directions.
+
+- **Frosted glass nav** — `.suite-nav` now uses a self-owned frosted material
+  (`backdrop-filter` blur over a `color-mix` tint, driven by new `--glass-blur`/
+  `--glass-fill` tokens). **Chrome only**: glass never sits behind content cards
+  or the alert strips (`#wrStrip`/`#rmStrip`/`#subRagStrip` are carved out at
+  full opacity), and it collapses to solid `--bg-mid` under
+  `prefers-reduced-transparency: reduce`.
+- **Deepened field + lifted depth** — `--bg-deep` deepened (light
+  `#f8fafc`→`#e9eef6`, dark `#050a14`→`#03070f`) with a faint accent radial
+  bleed so light reads as coming through the glass; `--shadow-*` raised/softened;
+  radii rounded (`--r-sm/md/lg` 4/6/8 → 5/8/11). Borders re-toned to match.
+- **Clinical palette untouched** — accent and the red/amber/green status triads
+  are unchanged; alert salience, dual-voice typography, density, focus rings and
+  reduced-motion are all preserved (Vogue FLOOR invariants).
+- Canon updated in `side-panel/panel.css` and mirrored into the injected-surface
+  token blocks (`sidebar/sidebar.css`, `content-scripts/triage-lens/hud.css`);
+  `TOKENS.md` + Atelier doctrine note the active season; logged as Season 2 in
+  `.claude/skills/vogue/SEASONS.md`.
+- Verified via lint + full test suite + the live HTML mood board. Headless
+  screenshot verification was deferred (Chromium unavailable in the build env);
+  review on the real panel before merge.
+
 ## [v3.126.0] — 2026-06-20
 
 ### Keeper follow-ups — four parallel work items (scoped by virtual-dave)

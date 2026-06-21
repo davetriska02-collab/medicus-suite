@@ -13,12 +13,14 @@
 
 :root {
   /* Default: light theme — canon: .claude/skills/ui-design/TOKENS.md */
-  --bg-deep: #f8fafc;
-  --bg-mid: #f1f5f9;
+  /* Frosted Deck season (v2): the field is deepened so the nav glass has
+     something to refract; cards (--bg-elev) stay bright. */
+  --bg-deep: #e9eef6;
+  --bg-mid: #f1f5fb;
   --bg-elev: #ffffff;
-  --bg-hover: #e2eaf5;
-  --border: #cbd5e1;
-  --border-hi: #94a3b8;
+  --bg-hover: #dfe8f5;
+  --border: #c5d2e6;
+  --border-hi: #90a2c0;
   --text-1: #0f172a;
   --text-2: #1e3a5f;
   --text-3: #475569;
@@ -47,13 +49,17 @@
   --violet-dim: rgba(124, 58, 237, 0.09);
   --violet-line: rgba(124, 58, 237, 0.3);
   /* Shape, depth, motion */
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 8px;
+  /* Frosted Deck season (v2): rounder radii + lifted, softer elevation to sell
+     depth under the glass; --glass-* drive the nav material (chrome only). */
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 11px;
   --r-pill: 999px;
-  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
-  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --shadow-1: 0 1px 3px rgba(20, 40, 80, 0.08);
+  --shadow-2: 0 6px 18px rgba(20, 40, 80, 0.12);
+  --shadow-3: 0 16px 40px rgba(20, 40, 80, 0.2);
+  --glass-blur: 14px;
+  --glass-fill: 68%;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --fast: 120ms;
   --med: 200ms;
@@ -91,12 +97,13 @@
 
 /* Dark theme override */
 html[data-theme='dark'] {
-  --bg-deep: #050a14;
-  --bg-mid: #0b1424;
+  /* Frosted Deck season (v2): deeper field, glass tints cooler on dark. */
+  --bg-deep: #03070f;
+  --bg-mid: #0c1626;
   --bg-elev: #131e34;
   --bg-hover: #1a2a44;
-  --border: #1c2e4e;
-  --border-hi: #2a4060;
+  --border: #20355a;
+  --border-hi: #34527d;
   --text-1: #f1f5f9;
   --text-2: #cfe1ff;
   --text-3: #93a8c5;
@@ -119,9 +126,10 @@ html[data-theme='dark'] {
   --violet: #a78bfa;
   --violet-dim: rgba(167, 139, 250, 0.14);
   --violet-line: rgba(167, 139, 250, 0.35);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --shadow-3: 0 10px 32px rgba(0, 0, 0, 0.55);
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.65);
+  --glass-fill: 60%;
   /* Heavier veil on dark — the light-tuned 15/23/42 @ .55 barely darkens an
      already-dark page; modal/overlay separation needs a deeper scrim here. */
   --scrim: rgba(0, 0, 0, 0.66);
@@ -186,12 +194,44 @@ body {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--bg-mid);
-  border-bottom: 1px solid var(--border);
+  /* Frosted Deck season — self-owned nav glass (CHROME ONLY). Translucent tint
+     over a backdrop blur; solid fallback via prefers-reduced-transparency below.
+     Glass never goes behind content cards or the alert strips (FLOOR). */
+  background: color-mix(in srgb, var(--bg-mid) var(--glass-fill), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.45);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.45);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   padding: 0 8px;
   height: 44px;
   flex-shrink: 0;
   position: relative;
+  z-index: 2;
+}
+
+/* Frosted Deck season — a faint accent bleed in the deepened field so light
+   reads as coming through the glass. Subtle by design. */
+body {
+  background-image:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    radial-gradient(120% 80% at 0% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* FLOOR: glass is chrome-only — alert strips always read at full opacity. */
+#wrStrip,
+#rmStrip,
+#subRagStrip {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Accessibility: opaque nav when the OS asks to reduce transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  .suite-nav {
+    background: var(--bg-mid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 /* Fade gradients on edges when nav tabs overflow */

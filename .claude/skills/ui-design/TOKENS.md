@@ -9,14 +9,18 @@ extend the canon here _and_ in `panel.css`, then use it.
 
 ## Surfaces & text (slate family — tinted, never pure gray)
 
+Values below reflect the **active season** (Vogue Season 2 — _Frosted Deck_:
+deepened field so the nav glass refracts, cards kept bright). Season ledger:
+`.claude/skills/vogue/SEASONS.md`.
+
 | Token         | Light     | Dark      | Role                              |
 | ------------- | --------- | --------- | --------------------------------- |
-| `--bg-deep`   | `#f8fafc` | `#050a14` | page background                   |
-| `--bg-mid`    | `#f1f5f9` | `#0b1424` | nav, grouped regions, input wells |
+| `--bg-deep`   | `#e9eef6` | `#03070f` | page background (deepened)        |
+| `--bg-mid`    | `#f1f5fb` | `#0c1626` | nav, grouped regions, input wells |
 | `--bg-elev`   | `#ffffff` | `#131e34` | cards, popovers                   |
-| `--bg-hover`  | `#e2eaf5` | `#1a2a44` | hover wash on neutral elements    |
-| `--border`    | `#cbd5e1` | `#1c2e4e` | hairline default                  |
-| `--border-hi` | `#94a3b8` | `#2a4060` | emphasised / hovered border       |
+| `--bg-hover`  | `#dfe8f5` | `#1a2a44` | hover wash on neutral elements    |
+| `--border`    | `#c5d2e6` | `#20355a` | hairline default                  |
+| `--border-hi` | `#90a2c0` | `#34527d` | emphasised / hovered border       |
 | `--text-1`    | `#0f172a` | `#f1f5f9` | headings, primary data            |
 | `--text-2`    | `#1e3a5f` | `#cfe1ff` | secondary, active chrome          |
 | `--text-3`    | `#475569` | `#93a8c5` | tertiary, labels with content     |
@@ -98,20 +102,30 @@ that is the point of the triads.
 
 ## Shape, depth, motion, focus
 
-| Token                                 | Light                           | Dark                          |
-| ------------------------------------- | ------------------------------- | ----------------------------- |
-| `--r-sm` `--r-md` `--r-lg` `--r-pill` | `4px` `6px` `8px` `999px`       | same                          |
-| `--shadow-1`                          | `0 1px 2px rgba(15,23,42,.05)`  | `0 1px 2px rgba(0,0,0,.4)`    |
-| `--shadow-2`                          | `0 2px 8px rgba(15,23,42,.08)`  | `0 4px 12px rgba(0,0,0,.45)`  |
-| `--shadow-3`                          | `0 8px 28px rgba(15,23,42,.14)` | `0 10px 32px rgba(0,0,0,.55)` |
-| `--ease`                              | `cubic-bezier(.2,0,0,1)`        | same                          |
-| `--fast` / `--med`                    | `120ms` / `200ms`               | same                          |
+| Token                                 | Light                            | Dark                          |
+| ------------------------------------- | -------------------------------- | ----------------------------- |
+| `--r-sm` `--r-md` `--r-lg` `--r-pill` | `5px` `8px` `11px` `999px`       | same                          |
+| `--shadow-1`                          | `0 1px 3px rgba(20,40,80,.08)`   | `0 1px 3px rgba(0,0,0,.5)`    |
+| `--shadow-2`                          | `0 6px 18px rgba(20,40,80,.12)`  | `0 6px 18px rgba(0,0,0,.55)`  |
+| `--shadow-3`                          | `0 16px 40px rgba(20,40,80,.2)`  | `0 16px 40px rgba(0,0,0,.65)` |
+| `--glass-blur` / `--glass-fill`       | `14px` / `68%`                   | `14px` / `60%`                |
+| `--ease`                              | `cubic-bezier(.2,0,0,1)`         | same                          |
+| `--fast` / `--med`                    | `120ms` / `200ms`                | same                          |
 
 Radius semantics: `--r-sm` compact controls/badges, `--r-md` buttons, inputs,
 chips, cards, `--r-lg` modals/popovers/sections, `--r-pill` pills & toggles.
 Elevation = hairline border **plus** shadow, always both, both subtle.
 `--shadow-1` cards at rest · `--shadow-2` hover lift & dropdowns ·
 `--shadow-3` modals/HUD only.
+
+**Nav glass (Frosted Deck season).** `--glass-blur` / `--glass-fill` drive the
+self-owned frosted material on `.suite-nav` only:
+`background: color-mix(in srgb, var(--bg-mid) var(--glass-fill), transparent)`
+plus `backdrop-filter: blur(var(--glass-blur)) saturate(1.45)`. **Chrome only** —
+glass never goes behind content cards or the alert strips (`#wrStrip`/`#rmStrip`/
+`#subRagStrip` carve it out at full opacity; this is a FLOOR property). It
+collapses to a solid `--bg-mid` under `@media (prefers-reduced-transparency:
+reduce)`. If a future season retires glass, drop these tokens and the nav rule.
 
 Overlay veil: `--scrim` — the dimming layer behind modals, the tab chooser and
 the tour spotlight. Light `rgba(15,23,42,.55)`; dark `rgba(0,0,0,.66)` (the

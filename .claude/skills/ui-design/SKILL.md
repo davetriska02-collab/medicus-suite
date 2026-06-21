@@ -130,8 +130,13 @@ auto-merge; UI changes are reviewed by Dave looking at the actual panel.
   user explicitly asks for structural redesign.
 - No decorative animation. Motion is feedback, ≤200ms, and always wrapped in
   `@media (prefers-reduced-motion: reduce)` opt-outs per TOKENS.md.
-- No trend-chasing (glassmorphism, neumorphism, gradients-as-decoration).
-  The aesthetic is *instrument*, not *landing page* — see DOCTRINE.md.
+- No *unsanctioned* trend-chasing. The aesthetic is *instrument*, not *landing
+  page* (see DOCTRINE.md) — but the **active Vogue season** may license a
+  specific material: the current Season 2 _Frosted Deck_ uses frosted glass as
+  the **nav material only** (`--glass-blur`/`--glass-fill`, chrome only, never
+  behind content or alert strips). Honour the active season in
+  `.claude/skills/vogue/SEASONS.md`; outside what it licenses, no glassmorphism,
+  neumorphism, or gradients-as-decoration.
 - Never dim, shrink, or de-emphasise clinical alert states (red/amber chips,
   strips, RAG pills) for aesthetic reasons. Alert salience is a safety
   property. If an alert looks "too loud", it's correct.

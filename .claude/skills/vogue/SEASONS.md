@@ -4,7 +4,7 @@
      re-proposing it. Every candidate must move meaningfully off the entry at
      the top. -->
 
-SEASON_VERSION: 1
+SEASON_VERSION: 2
 
 # Vogue season ledger
 
@@ -15,7 +15,37 @@ deliberate and traceable, not random.
 
 ## The seasons
 
-### Season 1 — "Instrument" — active since 2026-06-21 (inaugural)
+### Season 2 — "Frosted Deck" — active since 2026-06-21
+- **Mood:** Modern depth. Self-owned frosted glass on the nav/chrome over a
+  deepened field, so light reads as coming through the panel's top layer.
+- **Surface material:** Frosted glass on `.suite-nav` ONLY
+  (`backdrop-filter: blur(14px) saturate(1.45)` over a `color-mix` tint; tokens
+  `--glass-blur`/`--glass-fill`). Content cards stay opaque `--bg-elev`; the
+  field `--bg-deep` is deepened (light `#f8fafc`→`#e9eef6`, dark `#050a14`→
+  `#03070f`) with a faint `--accent` radial bleed. Elevation lifted/softer
+  (`--shadow-*` raised); radii rounded (`--r-sm/md/lg` 4/6/8 → 5/8/11).
+- **Accent / colour:** Unchanged from Instrument — clinical blue accent, status
+  triads untouched (FLOOR). The season is material + depth, not palette.
+- **Type:** Dual-voice casting and the 9–18px scale unchanged.
+- **Motion:** Unchanged (≤200ms, reduced-motion honoured); glass also collapses
+  to solid under `prefers-reduced-transparency: reduce`.
+- **Source / rationale:** Vogue scout (2026-06-21). Durable, MV3-safe signal:
+  Apple "Liquid Glass" (iOS/macOS 26, HIG Materials) + Linear's *self-owned*
+  frosted nav material (linear.app/now/linear-liquid-glass) — apply glass
+  sparingly to navigation, own the material rather than depend on the OS.
+  `backdrop-filter` + `color-mix()` are Baseline-stable in Chrome. Chosen by Dave
+  from a 5-candidate rendered mood board (over Warm Paper, Warm Frosted,
+  Graphite).
+- **Retired:** Season 1 "Instrument" — flat opaque elevation retired in favour of
+  glass-on-chrome depth; the calm instrument identity is preserved underneath.
+- **FLOOR check at land:** contrast held (glass on chrome only, never behind text
+  or chips); alert strips carved out opaque; dual-voice + density + focus +
+  reduced-motion untouched; reduced-transparency fallback added; visualiser
+  (NHS print palette) not in scope. Headless screenshot verification deferred —
+  Chromium unavailable in the build env; verified via the live HTML mood board
+  + lint + full test suite, pending Dave's eyeball on the real panel.
+
+### Season 1 — "Instrument" — active 2026-06-21 → 2026-06-21 (inaugural)
 - **Mood:** Precision clinical instrument. Flight-deck avionics / Leica /
   Linear's issue list. Calm layered neutral field, sharp clinical signals.
 - **Surface material:** Flat, opaque. Elevation = 1px hairline border + a
