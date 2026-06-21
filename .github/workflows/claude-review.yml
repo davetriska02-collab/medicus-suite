@@ -12,7 +12,11 @@ name: Virtual Dave PR review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # Review once when a PR opens / is reopened / is marked ready — NOT on every
+    # push (`synchronize`), which would burn subscription quota re-reviewing
+    # work-in-progress. Re-review a pushed PR by closing+reopening, or ask in a
+    # live session. Add `synchronize` back here if you want every push reviewed.
+    types: [opened, reopened, ready_for_review]
 
 # Don't pile up reviews when a PR is pushed to repeatedly — cancel the old run.
 concurrency:
