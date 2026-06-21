@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.128.2] — 2026-06-21
+
+### Road to 10 — Phase 2 cont: pill convergence (Vogue 8.3 -> )
+
+Vogue re-scored the Phase 1 + Today recomposition build at 8.3/10 — past the
+flagship threshold. Continuing Phase 2: the triage demand strip pills now adopt
+the canonical capsule grammar (sans label + mono count) so the same counts no
+longer read in two different languages between the top strip and the Triage Load
+card. Held by design: the strip threshold wash (red/amber when the waiting room/
+demand crosses its limit) is the clinical/demand alert and is NOT dimmed; the
+Condor workload mini-charts use the doctrine-sanctioned --cat-* data-viz ramp and
+are left on-doctrine.
+
 ## [v3.128.1] — 2026-06-21
 
 ### Road to 10 — Phase 2 (Vogue map): Today is a composition
