@@ -757,6 +757,25 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-035 — One-click "send to routine prescriptions" re-assigns the wrong task, or to the wrong team
+
+| Field                           | Value |
+| ------------------------------- | ----- |
+| **Hazard ID**                   | H-035 |
+| **Description**                 | The routine-prescription button (v3.131.0) re-assigns the prescription task currently on screen to a configured team by **driving the real Medicus UI** (it clicks the same "Save & re-assign to someone else" → "Assign to" → team → "Re-assign task" controls a clinician would). This is the suite's first control that can **commit** a workflow action rather than only display or pre-tick. The hazard is that a task is re-assigned (a) for the **wrong patient/task** because the wrong task was on screen, or (b) to the **wrong team** because the configured team name resolved to an unintended assignee — potentially de-prioritising or misrouting a prescription. |
+| **Potential causes**            | The clinician presses the button with the wrong task open; the configured team name partially matches a different team in the "Assign to" list; the macro selects a near-named option; in `auto` commit mode there is no confirmation between press and commit; automation bias (H-007) leads to pressing without checking the task or destination. |
+| **Affected users / components** | Clinicians authorising/routing prescription requests. Components: `content-scripts/triage-lens/routine-rx-button.js` (the injected button + UI-driving macro). |
+| **Initial severity**            | 3 (Moderate — a misrouted/wrongly-re-assigned prescription task delays correct handling; the receiving team still reviews, and Medicus records the action in its own audit trail) |
+| **Initial likelihood**          | 3 (Possible) |
+| **Initial risk**                | 9 |
+| **Controls / mitigations**      | (a) **Drives the real Medicus UI** rather than replaying an API call — Medicus's own validation, access control and audit trail fire exactly as for a manual re-assignment; the suite makes no network calls and reads no patient-data values. (b) **Commit gate defaults to `confirm`**, which names the destination team ("Re-assign this prescription to '<team>'?") before committing; `manual` mode only pre-fills and the clinician clicks Re-assign task; `auto` (full automation) is **opt-in**. (c) The macro matches controls **only by visible text** and **aborts, clicking nothing further, if any step's control is not found** — it cannot click a wrong control silently. (d) Team is matched by the clinician's **own configured exact team name** (prefers an exact text match over a partial one). (e) The button is **only shown** when the prescription re-assign controls are present on screen. (f) The clinician chooses when to press it and which task is on screen — the suite never selects the patient. |
+| **Residual severity**           | 3 |
+| **Residual likelihood**         | 2 (with the default confirm gate and abort-on-not-found; `auto` mode is an explicit user choice that removes the confirm and raises likelihood toward initial) |
+| **Residual risk**               | 6 — Acceptable (ALARP) in the default `confirm`/`manual` modes |
+| **Acceptability**               | Accepted (ALARP). The drive-the-real-UI design (preserving Medicus validation and audit), the team-named confirm-by-default gate, and abort-on-not-found are the primary controls. Users who opt into `auto` mode accept the higher residual likelihood; the Clinical Safety Notice should record this as a known limitation. |
+
+---
+
 ## 6. Hazard summary
 
 | ID    | Hazard                                                       | Initial S×L | Initial risk | Residual S×L | Residual risk | Status                                       |
@@ -795,6 +814,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-032 | Record tab snapshot misread as complete record               | 3×2         | 6            | 3×2          | 6             | Accepted (ALARP)                             |
 | H-033 | CQC pack misread as compliance proof / coverage              | 3×2         | 6            | 3×2          | 6             | Accepted (ALARP)                             |
 | H-034 | "Select all" bulk-selects wrong/too many investigations      | 3×2         | 6            | 3×2          | 6             | Accepted (ALARP)                             |
+| H-035 | Routine-Rx button re-assigns wrong task / wrong team         | 3×3         | 9            | 3×2          | 6             | Accepted (ALARP) — confirm-by-default        |
 
 No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. This is the full CSO hazard re-baseline from v3.64.0 up to and including v3.115.0: the modules, controls and clinical changes shipped across v3.65.0–v3.114.0 (the Record, Practice Report/Condor and CQC Inspection Readiness modules; the v3.91.2 attribute-injection-XSS remediation and the PDF.js 4.x upgrade; the v3.100.0 critical-low-Hb 100→80 g/L threshold change; the result-rule expansions; the practice-attestation switch; and the navigation/UX additions) are recorded above against new hazards H-032/H-033/H-034 and as control updates to H-002, H-006, H-007, H-009, H-016, H-022, H-023, H-024, H-028 and H-030. On the basis of this hazard log the Clinical Safety Officer's sign-off for **v3.115.0** is sought by merge of the review branch (see §9 and the version history note v3.11 for the scope of this re-baseline).
 
