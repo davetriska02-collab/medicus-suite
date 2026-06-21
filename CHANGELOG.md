@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.3] — 2026-06-21
+
+### Routine-Rx button: target the dedicated "send to routine requests" option
+
+Medicus now has a dedicated **"Save & send to routine requests task list"**
+radio (distinct from "Save & re-assign to someone else"), with a **"Send to
+routine list"** commit button. The macro now drives those controls instead of
+the generic re-assign path — it still selects the configured team in "Assign
+to" and waits for the commit button to enable. Confirm prompt and hazard H-035
+control names updated to match.
+
 ## [v3.131.2] — 2026-06-21
 
 ### Routine-Rx button: sit inline with the task actions, not the viewport corner
