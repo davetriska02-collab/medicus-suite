@@ -64,13 +64,15 @@
   background: var(--bg-mid);
 }
 
+/* Type-system revision 2026-06-21 (DOCTRINE #4): card headers are the voice —
+   sentence-case sans, hierarchy by weight, not mono-caps. */
 .today-card-label {
-  font-family: var(--mono);
-  font-size: 9px;
+  font-family: var(--sans);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
 
 /* Decision H: demote rest colour to text-4; add :focus-visible and :active */

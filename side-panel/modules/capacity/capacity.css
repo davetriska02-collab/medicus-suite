@@ -108,10 +108,11 @@ html[data-theme='dark'] .cap-status-tight {
   margin-bottom: 8px;
 }
 .cap-preset-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   flex-shrink: 0;
 }
@@ -317,10 +318,11 @@ html[data-theme='dark'] .cap-status-tight {
   margin-bottom: 14px;
 }
 .section-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-bottom: 5px;
   padding-bottom: 4px;
@@ -443,10 +445,11 @@ html[data-theme='dark'] .cap-status-tight {
   gap: 10px;
 }
 .cap-summary-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
 }
 .cap-summary-num {
@@ -703,10 +706,10 @@ html[data-theme='dark'] .cap-status-tight {
 }
 
 .cap-field-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   font-weight: 600;
 }

@@ -139,12 +139,14 @@
   font-family: var(--sans);
 }
 
+/* Type recast 2026-06-21 (DOCTRINE #4): card headers are sentence-case sans. */
 .condor-card-title {
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-2);
   margin-bottom: 6px;
 }
 

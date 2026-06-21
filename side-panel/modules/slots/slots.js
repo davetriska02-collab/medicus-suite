@@ -387,7 +387,7 @@ function renderHeroCard(visible, visibleSum) {
       <div class="slots-hero-main">
         <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
         <div class="slots-hero-right">
-          <div class="slots-count-label${labelCls}">${isToday ? 'free slots remaining today' : 'free slots available'}</div>
+          <div class="slots-count-label${labelCls}">${isToday ? 'Free slots remaining today' : 'Free slots available'}</div>
           <div class="slots-ampm-split">
             <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
             <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>

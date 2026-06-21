@@ -210,10 +210,11 @@
    Muted/uppercase like .sent-group-label; does not reduce alert salience. */
 .sent-patient-lead {
   display: block;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
   margin-bottom: 3px;
 }
@@ -350,11 +351,12 @@
   margin-bottom: 14px;
 }
 .sent-group-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
   margin-bottom: 5px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -602,12 +604,14 @@
   margin: 0 auto 8px;
   color: var(--text-5);
 }
+/* Type recast 2026-06-21 (DOCTRINE #4): headings/labels are sentence-case sans. */
 .sent-idle-heading {
-  font-family: var(--mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
   margin-bottom: 4px;
 }
 .sent-idle-body {
@@ -1059,10 +1063,11 @@
 /* K-10: .sent-ev-label — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-label {
   color: var(--text-3);
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   padding-top: 1px;
 }
 .sent-ev-value {
@@ -1119,10 +1124,11 @@
 }
 /* K-10: .sent-ev-refs-head — letter-spacing 0.06em + mono font (surveyor F-21) */
 .sent-ev-refs-head {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-3);
   margin-bottom: 4px;
 }
@@ -1649,12 +1655,12 @@
 }
 
 .sent-act-section-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
 }
 
 /* Per-section Copy button */
@@ -1737,12 +1743,12 @@
 }
 
 .sent-brief-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
   flex-shrink: 0;
 }
 

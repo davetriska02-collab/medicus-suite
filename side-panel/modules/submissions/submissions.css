@@ -94,11 +94,12 @@
 }
 
 .dp-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
   color: var(--text-4);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .dp-wrap input[type='date'] {
@@ -157,10 +158,11 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-3);
   margin-bottom: 3px;
 }

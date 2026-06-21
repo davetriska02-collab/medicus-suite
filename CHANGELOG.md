@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.127.0] — 2026-06-21
+
+### Type-system recast — headers in sans, data in mono (hybrid, doctrine #4 revised)
+
+Acting on the Vogue design-house critique ("all-caps monospace doing all the
+work reads as terminal cosplay, not authored") via the hybrid option: the dual
+voice stays, but what each voice owns has moved. **Section headers and card
+labels are now sentence-case sans** (hierarchy by size/weight, not uppercase
+letter-spacing); **mono is pulled back to data** (counts, times, indices, dates,
+codes, version, freshness), the **nav rail**, and **status micro-tokens** (the
+`AMBER` band, kbd hints). This is the deepest "premium/authored" lever from the
+road-to-10 review.
+
+- Canon updated: `DOCTRINE.md` principle #4 and `TOKENS.md` typography +
+  Section-header recipe rewritten to the recast.
+- Converted the shared `.mod-eyebrow` (flips every module eyebrow at once) plus
+  the section-header / card-label classes across Today, Condor, Slots, Sentinel,
+  Submissions, Activity, Referrals, Reception, Trends, Capacity, Knowledge and
+  Sweep. Buttons, tags, counts, the status bands and the nav stay mono.
+- Verified on the hero surfaces (light + dark) and the data-bearing modules.
+- Known residual (next polish pass): a few module-specific chart titles and axis
+  labels still render mono-caps; options pages not yet recast.
+
+Suite 113/113; lint and format clean.
+
 ## [v3.126.7] — 2026-06-21
 
 ### Road-to-10 review fixes (Practice + Vogue panels)

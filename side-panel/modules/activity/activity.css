@@ -24,11 +24,12 @@
 }
 
 .act-date-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   color: var(--text-4);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .act-date-input {
@@ -159,10 +160,11 @@
 }
 
 .act-totals-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
 }
 
@@ -249,10 +251,11 @@
 }
 
 .act-chart-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-4);
 }
 

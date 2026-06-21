@@ -28,16 +28,29 @@ Density is achieved with the compact type scale and tight-but-regular spacing
 tight. Between cards and sections: generous enough to scan. The eye should
 find group boundaries without borders doing all the work.
 
-### 4. The dual-voice typography is the brand
-Two voices, strictly cast:
-- **Mono (JetBrains Mono), small caps, letterspaced** — the *machine* voice:
-  labels, nav, badges, counts, metadata, anything the system says about data.
-- **Sans, sentence case** — the *human* voice: patient names, clinical text,
-  prose, anything a person reads as content.
+### 4. Dual voice, recast — headers in sans, data in mono
+**(Revised 2026-06-21 — the hybrid recast. Supersedes the old "everything the
+system says is uppercase mono" rule, which let mono-caps carry *everything* and
+made whole screens read as terminal cosplay. The dual voice stays; what each
+voice owns moves.)**
 
-Never blur the casting. A patient name in uppercase mono is a bug; a section
-label in 13px sans is a missed note. This contrast does more for the
-"professional instrument" feel than any color ever will.
+Two voices, recast so the caps stop doing all the work:
+- **Sans, sentence case, a real weight ramp** — now owns the reading layer:
+  **section headers and card labels**, module titles, prose, patient names,
+  descriptions, empty states. Headers earn hierarchy with **size and weight**
+  (600–700), not uppercase letter-spacing. Sentence case ("Waiting room",
+  "Demand today"), never SHOUTING CAPS.
+- **Mono (JetBrains Mono), tabular-nums** — stays the machine voice, but now
+  pulled back to where it earns its precision: **data** (counts, times,
+  durations, indices, percentages, dates, codes, IDs, version, the relative-
+  freshness value), **wayfinding chrome** (the nav rail), and **status
+  micro-tokens** (a band like `AMBER`, a keyboard hint). If it is a value, a tab,
+  or a tiny status token, mono; if a human reads it as a header or a sentence,
+  sans.
+
+Never blur the recast casting. A count in sans is a missed note; a **section
+header** in uppercase mono is now a bug. Words-as-headers in sans, values in
+mono — that contrast is what makes the suite read as *authored*, not assembled.
 
 ### 5. States are part of the component, not an afterthought
 Every interactive element ships with all of: rest, `:hover`,

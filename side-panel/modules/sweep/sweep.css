@@ -132,11 +132,11 @@
 
 /* Section headers */
 .sweep-section-head {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   padding: 6px 0 3px 0;
   border-bottom: 1px solid var(--border);
@@ -464,10 +464,11 @@
 
 /* Day selector — mirrors the clinician filter so it lines up alongside it */
 .sweep-ctl-label {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   margin-left: 8px;
 }
@@ -563,10 +564,11 @@
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-4);
   user-select: none;
 }
