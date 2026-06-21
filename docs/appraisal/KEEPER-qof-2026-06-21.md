@@ -86,3 +86,22 @@ only status), with the smoking/MH011 drift logged as the one open change.
 
 Apply (1)–(3) as a single reviewed commit with the test updates, or keep this as
 the change proposal. DM036 needs nothing. Everything else is current.
+
+---
+
+## APPLIED — 2026-06-21 (primary-source verified)
+
+The change set was implemented in `rules/qof-rules.json` (full suite 113/113):
+
+1. **MH011 re-mapped** to lipid profile in SMI (`requiresRegister: SMI`,
+   observation = lipid/cholesterol panel within 365 days, **7 pts, 50–90%**).
+2. **SMOK001 ×8 replaced by SMOK002 ×9** — the official register set CHD, PAD,
+   stroke/TIA, **hypertension**, diabetes, COPD, CKD, asthma, **SMI** (the stale
+   **HF** entry was dropped — HF is not in SMOK002), each **25 pts, 50–90%**,
+   modelled as one per-register check (the schema gates by a single register).
+3. **SMOK004 added, shipped disabled** — its cohort ("current smokers aged 15+")
+   is not a disease register and is not expressible in the current schema; values
+   (12 pts, 40–90%, NICE IND99) recorded for when a smoking-status cohort gate
+   lands. Engine follow-up.
+
+DM036 left unchanged (confirmed correct).
