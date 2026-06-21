@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.1] — 2026-06-21
+
+### Routine-Rx button: wait for "Re-assign task" to enable before committing
+
+Hardened against the real UI confirmed by on-screen capture: Medicus keeps the
+`Re-assign task` button **disabled until a valid assignee is registered**, so
+the macro now **waits until the button is enabled** before clicking (rather than
+clicking immediately and silently no-op-ing), and reports clearly if it stays
+disabled. Also fires keyboard events alongside the typed team-name filter for
+comboboxes that only open/filter on keydown.
+
 ## [v3.131.0] — 2026-06-21
 
 ### One-click "send to routine prescriptions" button (prescribing window)

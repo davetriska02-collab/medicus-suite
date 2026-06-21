@@ -76,6 +76,14 @@
   function visible(el) {
     return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
   }
+  // Medicus keeps "Re-assign task" disabled until a valid assignee is chosen.
+  function isEnabled(el) {
+    if (!el) return false;
+    if (el.disabled) return false;
+    if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') return false;
+    if (el.classList && el.classList.contains('disabled')) return false;
+    return true;
+  }
   // own/visible text of an element, trimmed
   function textOf(el) {
     return norm(el && (el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent));
@@ -177,8 +185,13 @@
       if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?');
       assign.focus();
       realClick(assign);
-      // try to filter the list by typing the team name (most comboboxes filter)
+      // Filter the list by typing the team name — confirmed to narrow the list
+      // (e.g. "pres" → "Prescribing / Meds Management"). Fire keyboard events too
+      // for comboboxes that only open/filter on keydown.
       setNativeValue(assign, team);
+      var lastCh = team.slice(-1);
+      assign.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: lastCh }));
+      assign.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: lastCh }));
 
       // 3. the team option
       var option = await waitFor(function () {
@@ -195,11 +208,18 @@
       if (!option) return abort('Team “' + team + '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.');
       realClick(option);
 
-      // 4. commit
+      // 4. commit — find the button, then wait until Medicus ENABLES it
+      //    (it stays disabled until a valid assignee is registered).
       var commit = await waitFor(function () {
-        return findByText(['button', '[role="button"]'], 'Re-assign task');
-      }, 4000);
-      if (!commit) return abort('Selected “' + team + '”, but couldn’t find the “Re-assign task” button.');
+        var b = findByText(['button', '[role="button"]'], 'Re-assign task');
+        return b && isEnabled(b) ? b : null;
+      }, 5000);
+      if (!commit) {
+        if (findByText(['button', '[role="button"]'], 'Re-assign task')) {
+          return abort('Selected “' + team + '”, but “Re-assign task” stayed disabled — the assignee may not have registered. Check the picker.');
+        }
+        return abort('Selected “' + team + '”, but couldn’t find the “Re-assign task” button.');
+      }
 
       cfg.lastTeam = team; saveCfg(); renderButton();
 
