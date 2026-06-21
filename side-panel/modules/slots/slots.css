@@ -292,6 +292,22 @@ html[data-theme='dark'] .staff-split .split-pm {
 }
 
 /* staff-count — scoped to mini context (Decision H) */
+/* Phase 3 (Vogue map): the clinician row reads as a scannable micro-grid, not a
+   sentence — am / pm / total in fixed mono tabular columns so digits align down
+   the list and the eye scans a column. */
+.staff-count-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.staff-count-mini > span[title] {
+  font-family: var(--mono);
+  display: inline-block;
+  min-width: 27px;
+  text-align: right;
+  color: var(--text-4);
+}
 .staff-count-mini .staff-count {
   font-family: var(--mono);
   font-size: 11px;
@@ -299,6 +315,8 @@ html[data-theme='dark'] .staff-split .split-pm {
   color: var(--green);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  text-align: right;
 }
 
 .staff-detail {
