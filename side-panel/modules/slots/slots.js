@@ -11,7 +11,7 @@ import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
 import { SWATCH_KEYS, sanitisePillPrefs, applyPillOrder } from '../shared/pill-prefs.js';
 import {
-  detectAppOrigin,
+  detectMedicusTab,
   detectPatientId,
   fetchAppointmentFinder,
   fetchAvailableSlots,
@@ -48,6 +48,7 @@ let state = {
     open: false,
     initLoading: false,
     initError: null,
+    tabId: null,
     appOrigin: null,
     patientId: null,
     providerId: null,
@@ -130,7 +131,7 @@ export async function init(el) {
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
     if (state.bk.reservationId && state.bk.appOrigin) {
-      releaseReservation(state.bk.appOrigin, state.bk.reservationId).catch(() => {});
+      releaseReservation(state.bk.tabId, state.bk.appOrigin, state.bk.reservationId).catch(() => {});
     }
     container = null;
   };
@@ -817,14 +818,15 @@ async function doInitBooking() {
   if (!bk.date) bk.date = todayISO();
   render();
   try {
-    const [origin, patientId] = await Promise.all([detectAppOrigin(), detectPatientId()]);
-    bk.appOrigin = origin;
-    bk.patientId = patientId;
-    if (!origin) {
+    const detected = await detectMedicusTab();
+    bk.tabId = detected?.tabId ?? null;
+    bk.appOrigin = detected?.origin ?? null;
+    bk.patientId = await detectPatientId(detected?.tab ?? null);
+    if (!detected) {
       bk.initError = 'Could not detect Medicus — open a Medicus tab and sign in.';
       return;
     }
-    const finder = await fetchAppointmentFinder(origin);
+    const finder = await fetchAppointmentFinder(bk.tabId, bk.appOrigin);
     bk.providerId = finder.localOrganisationDetails?.id || null;
     const types = [];
     for (const svc of finder.localOrganisationDetails?.services || []) {
@@ -851,7 +853,7 @@ async function doSearchSlots() {
   bk.hasSearched = false;
   render();
   try {
-    bk.slots = await fetchAvailableSlots(bk.appOrigin, {
+    bk.slots = await fetchAvailableSlots(bk.tabId, bk.appOrigin, {
       providerId: bk.providerId,
       appointmentTypeId: bk.selectedTypeId,
       date: bk.date,
@@ -873,7 +875,7 @@ async function doSelectSlot(slot) {
   bk.slotsError = null;
   render();
   try {
-    const result = await reserveSlot(bk.appOrigin, {
+    const result = await reserveSlot(bk.tabId, bk.appOrigin, {
       diaryId: slot.diaryId,
       startDateTime: slot.startDateTime,
       duration: slot.duration,
@@ -895,7 +897,7 @@ async function doSelectSlot(slot) {
 function doCancelBooking() {
   const { bk } = state;
   if (bk.reservationId && bk.appOrigin) {
-    releaseReservation(bk.appOrigin, bk.reservationId).catch(() => {});
+    releaseReservation(bk.tabId, bk.appOrigin, bk.reservationId).catch(() => {});
   }
   bk.reservationId = null;
   bk.selectedSlot = null;
@@ -912,7 +914,7 @@ async function doConfirmBooking() {
   bk.confirmError = null;
   render();
   try {
-    const formData = await fetchCreateForm(bk.appOrigin, {
+    const formData = await fetchCreateForm(bk.tabId, bk.appOrigin, {
       slotReservationId: bk.reservationId,
       patientId: bk.patientId,
     });
@@ -945,7 +947,7 @@ async function doConfirmBooking() {
       ),
       rescheduledAppointmentVersionId: null,
     };
-    const result = await createAppointment(bk.appOrigin, payload);
+    const result = await createAppointment(bk.tabId, bk.appOrigin, payload);
     bk.bookedId = result.appointmentId;
     bk.reservationId = null; // server releases on create
     bk.step = 'booked';
@@ -1183,7 +1185,7 @@ function bindEvents() {
     if (bk.open) {
       // Closing — release any held reservation
       if (bk.reservationId && bk.appOrigin) {
-        releaseReservation(bk.appOrigin, bk.reservationId).catch(() => {});
+        releaseReservation(bk.tabId, bk.appOrigin, bk.reservationId).catch(() => {});
         bk.reservationId = null;
       }
       if (bk.step === 'confirm') {

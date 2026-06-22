@@ -1,41 +1,101 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Booking API client for the Slots module.
+//
+// All /scheduling/* endpoints on england.medicus.health are same-origin only:
+// they return the SPA HTML shell to cross-origin callers. We relay those
+// fetches through booking-bridge.js (a content script running inside the
+// Medicus tab) via chrome.tabs.sendMessage so the browser sees them as
+// same-origin XHR with full session-cookie context.
 'use strict';
 
 function pad(n) {
   return String(n).padStart(2, '0');
 }
 
-export async function detectAppOrigin() {
+// Returns { tabId, origin, tab } for the best available Medicus app tab,
+// or null if no Medicus tab is open / signed in.
+export async function detectMedicusTab() {
   const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
   for (const t of tabs) {
     try {
       const u = new URL(t.url);
-      if (!u.hostname.includes('.api.')) return u.origin;
+      if (!u.hostname.includes('.api.')) return { tabId: t.id, origin: u.origin, tab: t };
     } catch (_) {}
   }
   return null;
 }
 
-export async function detectPatientId() {
-  const tabs = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
-  for (const t of tabs) {
-    const m = t.url.match(/(?:patient|care-record)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-    if (m) return m[1];
+// Detects the patient UUID from the given tab object. Handles:
+//   - direct patient URLs: /patient/{uuid}, /care-record/{uuid}
+//   - task URLs: /tasks/data/{typeSlug}/overview/{taskUuid}
+// Task URLs are resolved via the API subdomain (works cross-origin from the
+// extension — only the main-host /scheduling/ endpoints are origin-gated).
+export async function detectPatientId(tab) {
+  if (!tab) return null;
+  let u;
+  try {
+    u = new URL(tab.url);
+  } catch (_) {
+    return null;
   }
+
+  const careMatch = u.pathname.match(/\/care-record\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (careMatch) return careMatch[1];
+
+  const patMatch = u.pathname.match(/\/patient\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (patMatch) return patMatch[1];
+
+  // Task URL: /tasks/data/{typeSlug}/overview/{taskUuid} — taskUuid ≠ patientId
+  const taskMatch = u.pathname.match(
+    /\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+  );
+  if (taskMatch) {
+    const parts = u.pathname.split('/').filter(Boolean);
+    const siteId = parts[0];
+    if (/^[0-9a-f]{4,}$/i.test(siteId)) {
+      const apiBase = `https://${siteId}.api.${u.hostname}`;
+      const typeSlug = taskMatch[1];
+      const taskUuid = taskMatch[2];
+      try {
+        const resp = await fetch(`${apiBase}/tasks/data/${typeSlug}/overview/${taskUuid}`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          return data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
+        }
+      } catch (_) {}
+    }
+  }
+
   return null;
 }
 
-export async function fetchAppointmentFinder(origin) {
-  const resp = await fetch(`${origin}/scheduling/data/appointment-service/available-appointment-finder`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!resp.ok) throw new Error(`Appointment finder: ${resp.status}`);
-  return resp.json();
+// Relay a fetch through the content-script bridge running in the Medicus tab.
+// The bridge (booking-bridge.js) validates that the URL targets /scheduling/*
+// on the tab's own hostname before firing, so we can't be used as an SSRF proxy.
+async function bridgeFetch(tabId, url, opts) {
+  opts = opts || {};
+  const msg = {
+    type: 'CH_BOOKING_FETCH',
+    url,
+    method: opts.method || 'GET',
+    headers: opts.headers || {},
+    body: opts.body || null,
+  };
+  const result = await chrome.tabs.sendMessage(tabId, msg);
+  if (!result) throw new Error('No response from booking bridge — is the Medicus tab open?');
+  if (result.error) throw new Error(result.error);
+  if (!result.ok) throw new Error(`HTTP ${result.status}`);
+  return JSON.parse(result.text);
 }
 
-export async function fetchAvailableSlots(origin, { providerId, appointmentTypeId, date }) {
+export async function fetchAppointmentFinder(tabId, origin) {
+  return bridgeFetch(tabId, `${origin}/scheduling/data/appointment-service/available-appointment-finder`);
+}
+
+export async function fetchAvailableSlots(tabId, origin, { providerId, appointmentTypeId, date }) {
   const now = new Date();
   const todayYmd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const minDateTime =
@@ -46,12 +106,10 @@ export async function fetchAvailableSlots(origin, { providerId, appointmentTypeI
     minDateTime,
     'localOrganisationFilters[appointmentTypeId]': appointmentTypeId,
   });
-  const resp = await fetch(
-    `${origin}/scheduling/data/appointment-service/available-appointment-places-between-range?${qs}`,
-    { credentials: 'include', headers: { Accept: 'application/json' } }
+  const data = await bridgeFetch(
+    tabId,
+    `${origin}/scheduling/data/appointment-service/available-appointment-places-between-range?${qs}`
   );
-  if (!resp.ok) throw new Error(`Available slots: ${resp.status}`);
-  const data = await resp.json();
   const slots = [];
   for (const diary of data.availablePlaces?.[date]?.diaries || []) {
     for (const entry of diary.entries || []) {
@@ -61,13 +119,13 @@ export async function fetchAvailableSlots(origin, { providerId, appointmentTypeI
   return slots;
 }
 
-export async function reserveSlot(origin, { diaryId, startDateTime, duration, appointmentTypeId }) {
-  const resp = await fetch(
+export async function reserveSlot(tabId, origin, { diaryId, startDateTime, duration, appointmentTypeId }) {
+  return bridgeFetch(
+    tabId,
     `${origin}/scheduling/slot-reservation/reserve-slot-and-broadcast-appointment-booking-in-progress`,
     {
       method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         diaryId,
         intendedStartDateTime: startDateTime,
@@ -84,45 +142,35 @@ export async function reserveSlot(origin, { diaryId, startDateTime, duration, ap
       }),
     }
   );
-  if (!resp.ok) throw new Error(`Reserve slot: ${resp.status}`);
-  return resp.json();
 }
 
-export async function fetchCreateForm(origin, { slotReservationId, patientId }) {
+export async function fetchCreateForm(tabId, origin, { slotReservationId, patientId }) {
   const qs = new URLSearchParams({
     context: 'create-booked-appointment',
     appointmentTemporalType: 'timed',
     slotReservationId,
     patientId,
   });
-  const resp = await fetch(`${origin}/scheduling/data/appointment/create-appointment?${qs}`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!resp.ok) throw new Error(`Create form: ${resp.status}`);
-  return resp.json();
+  return bridgeFetch(tabId, `${origin}/scheduling/data/appointment/create-appointment?${qs}`);
 }
 
-export async function createAppointment(origin, payload) {
-  const resp = await fetch(`${origin}/scheduling/appointment/create-appointment`, {
+export async function createAppointment(tabId, origin, payload) {
+  return bridgeFetch(tabId, `${origin}/scheduling/appointment/create-appointment`, {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!resp.ok) throw new Error(`Create appointment: ${resp.status}`);
-  return resp.json();
 }
 
-export async function releaseReservation(origin, slotReservationId) {
-  if (!origin || !slotReservationId) return;
+export async function releaseReservation(tabId, origin, slotReservationId) {
+  if (!tabId || !origin || !slotReservationId) return;
   try {
-    await fetch(
+    await bridgeFetch(
+      tabId,
       `${origin}/scheduling/slot-reservation/remove-slot-reservation-and-broadcast-appointment-booking-ended`,
       {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slotReservationId }),
       }
     );

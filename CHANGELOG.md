@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.1] — 2026-06-22
+
+### Bug fix: booking panel now works from any Medicus screen
+
+Two fixes for the v3.132.0 booking panel:
+
+**Fix 1 — JSON error on all booking API calls.** The `/scheduling/*` endpoints
+on `england.medicus.health` return the SPA HTML shell to cross-origin callers
+(the extension side panel), causing `Unexpected token '<'` JSON parse errors.
+Added `content-scripts/booking-bridge.js` — a new content script that runs in
+the isolated world of every Medicus tab and listens for `CH_BOOKING_FETCH`
+messages from the extension. It relays the fetch from inside the tab (same-origin
+context, full session cookies) and returns the response text. SSRF guard: the
+bridge only relays to `/scheduling/` paths on the tab's own hostname; any other
+URL is rejected. Rewrote `booking-api.js` to route all six booking API calls
+through this bridge via `chrome.tabs.sendMessage`.
+
+**Fix 2 — no patient detected on the triage / patient-request screen.** The
+original `detectPatientId()` only matched `/patient/{uuid}` and
+`/care-record/{uuid}` URL patterns. Task screens use
+`/tasks/data/{typeSlug}/overview/{taskUuid}` where the UUID is the *task* ID,
+not the patient ID. The updated `detectPatientId(tab)` now detects this pattern
+and resolves the patient by fetching
+`https://{siteId}.api.england.medicus.health/tasks/data/{typeSlug}/overview/{taskUuid}`
+directly from the extension (the API subdomain is not origin-gated), extracting
+`data.data.patient.id` from the response.
+
 ## [v3.132.0] — 2026-06-22
 
 ### Slots tab: embedded appointment booking
