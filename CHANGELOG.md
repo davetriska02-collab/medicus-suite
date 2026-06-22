@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.0] — 2026-06-22
+
+### Slots tab: embedded appointment booking
+
+New collapsible "Book appointment for patient" panel at the bottom of the Slots
+tab. Clicking it auto-detects the current patient record and Medicus origin from
+the open Medicus tab, fetches appointment types from the practice's
+`available-appointment-finder` endpoint, then lets the receptionist pick a type,
+date, and available slot — all without leaving the side panel.
+
+**Flow:** type + date picker → Find slots (calls
+`available-appointment-places-between-range`) → click a slot to reserve it
+(server-side `reserve-slot-and-broadcast-...`) → confirm step with optional
+reason field → POST to `create-appointment` which triggers patient SMS/email
+notifications via the `bookingConfirmationRecipients` the server pre-populates →
+success state with "Book another" reset.
+
+**Safety:** the slot reservation is released via `remove-slot-reservation-...`
+on Back/cancel, on panel close while in the confirm step, and on module teardown
+— so an abandoned booking never locks a slot for other receptionists. The server
+also releases it automatically on a successful create.
+
+Implementation: new `side-panel/modules/slots/booking-api.js` (pure async
+functions, no DOM), all booking state isolated in `state.bk`, no changes to the
+slots overview data path or alert rules.
+
 ## [v3.131.5] — 2026-06-22
 
 ### Dev tool: fix booking-flow capture console flood; widen default filter
