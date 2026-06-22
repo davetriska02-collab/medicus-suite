@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.5] — 2026-06-22
+
+### Bug fix: "send to routine" button now works on non-routine repeat requests
+
+v3.131.x switched the routine-rx macro to the dedicated routine controls only
+("Save & send to routine requests task list" → "Send to routine list"), and
+v3.132.4's visibility gate followed suit. But **non-routine repeat requests**
+don't have those controls — their Next Steps offers the generic "Save &
+re-assign to someone else" → "Re-assign task" instead — so the button stopped
+appearing there entirely.
+
+The gate and the macro now support **both** workflows, preferring the dedicated
+routine control when present and falling back to the generic re-assign control
+otherwise:
+
+- Visibility gate accepts either "Save & send to routine requests task list" or
+  "Save & re-assign to someone else" as the routing control (still URL-scoped to
+  `prescription` task overviews and same-panel anchored).
+- The macro clicks whichever Next Steps option is present, then commits via the
+  matching button ("Send to routine list" or "Re-assign task"), preferring the
+  flow it started in. Confirm/manual prompts name the actual commit button.
+
 ## [v3.132.4] — 2026-06-22
 
 ### Bug fix: "send to routine" button restricted to the prescription-routing workflow

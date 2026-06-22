@@ -5,10 +5,12 @@
 // re-assigns the task to a configured team (e.g. "Prescribing / Meds Management")
 // by DRIVING THE REAL MEDICUS UI — it clicks the same controls a user would:
 //
-//   1. radio  "Save & send to routine requests task list"
+//   1. radio  the routing "next step" — "Save & send to routine requests task
+//             list" on routine requests, or "Save & re-assign to someone else"
+//             on non-routine repeat requests
 //   2. input  "Assign to"            (opens the assignee picker)
 //   3. option <the configured team>  ([id^="select-item-"], matched by text)
-//   4. button "Send to routine list" (the commit)
+//   4. button the commit — "Send to routine list" or "Re-assign task"
 //
 // WHY drive the UI rather than the API: this keeps Medicus as the system of
 // record — its own validation, access control and audit trail all fire exactly
@@ -147,6 +149,26 @@
     return false;
   }
 
+  // The prescription "Next Steps" workflow has two wordings, depending on whether
+  // the request is routine or non-routine:
+  //   • routine requests     → "Save & send to routine requests task list" → "Send to routine list"
+  //   • non-routine requests → "Save & re-assign to someone else"          → "Re-assign task"
+  // Both route the task to the configured team; we support both, preferring the
+  // dedicated routine control when it is present. (v3.131.x switched to the
+  // routine-only path, which silently broke non-routine repeat requests.)
+  var STEP1_TEXTS = ['Save & send to routine requests task list', 'Save & re-assign to someone else'];
+  var COMMIT_TEXTS = ['Send to routine list', 'Re-assign task'];
+
+  // Return { el, index, text } for the first of `wantedList` that findByText
+  // locates (visible), preserving list priority order; null if none present.
+  function findFirstByText(selectors, wantedList) {
+    for (var i = 0; i < wantedList.length; i++) {
+      var el = findByText(selectors, wantedList[i]);
+      if (el) return { el: el, index: i, text: wantedList[i] };
+    }
+    return null;
+  }
+
   function waitFor(fn, timeout, interval) {
     timeout = timeout || 5000;
     interval = interval || 120;
@@ -228,13 +250,12 @@
     running = true;
     setBusy(true);
     try {
-      // 1. radio: Save & send to routine requests task list
-      var radio = findByText(
-        ['label', '[role="radio"]', '.radio', 'div', 'span'],
-        'Save & send to routine requests task list'
-      );
-      if (!radio) return abort('Couldn’t find the “Save & send to routine requests task list” option on this screen.');
-      realClick(radio);
+      // 1. radio: whichever "next step" routes the task to a team — the dedicated
+      //    routine option on routine requests, or the generic re-assign option on
+      //    non-routine repeat requests.
+      var step1 = findFirstByText(['label', '[role="radio"]', '.radio', 'div', 'span'], STEP1_TEXTS);
+      if (!step1) return abort('Couldn’t find a “send to routine / re-assign” option on this screen.');
+      realClick(step1.el);
 
       // 2. Assign-to picker
       var assign = await waitFor(findAssignInput, 4000);
@@ -274,21 +295,28 @@
       realClick(option);
 
       // 4. commit — find the button, then wait until Medicus ENABLES it
-      //    (it stays disabled until a valid assignee is registered).
-      var commit = await waitFor(function () {
-        var b = findByText(['button', '[role="button"]'], 'Send to routine list');
-        return b && isEnabled(b) ? b : null;
+      //    (it stays disabled until a valid assignee is registered). Prefer the
+      //    commit that matches the flow we started in step 1, but accept either.
+      var commitTexts = step1.index === 0 ? COMMIT_TEXTS : COMMIT_TEXTS.slice().reverse();
+      var commitMatch = await waitFor(function () {
+        var m = findFirstByText(['button', '[role="button"]'], commitTexts);
+        return m && isEnabled(m.el) ? m : null;
       }, 5000);
-      if (!commit) {
-        if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
+      if (!commitMatch) {
+        var present = findFirstByText(['button', '[role="button"]'], commitTexts);
+        if (present) {
           return abort(
             'Selected “' +
               team +
-              '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.'
+              '”, but “' +
+              present.text +
+              '” stayed disabled — the assignee may not have registered. Check the picker.'
           );
         }
-        return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.');
+        return abort('Selected “' + team + '”, but couldn’t find the commit button.');
       }
+      var commit = commitMatch.el;
+      var commitLabel = commitMatch.text;
 
       cfg.lastTeam = team;
       saveCfg();
@@ -296,11 +324,11 @@
 
       if (mode === 'manual') {
         highlight(commit);
-        toast('Ready — review and click “Send to routine list”.', 'ok');
+        toast('Ready — review and click “' + commitLabel + '”.', 'ok');
         return;
       }
       if (mode === 'confirm') {
-        var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
+        var ok = window.confirm('Send this prescription to “' + team + '”?');
         if (!ok) {
           toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
           return;
@@ -492,11 +520,12 @@
   function findActionAnchor() {
     if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
 
-    var routine = findByText(
-      ['label', '[role="radio"]', '.radio', 'div', 'span'],
-      'Save & send to routine requests task list'
-    );
-    if (!routine) return null;
+    // The routing control — the routine "send to routine requests task list"
+    // option, or the non-routine "re-assign to someone else" option. Either marks
+    // this as the prescription-routing workflow.
+    var step1 = findFirstByText(['label', '[role="radio"]', '.radio', 'div', 'span'], STEP1_TEXTS);
+    if (!step1) return null;
+    var routine = step1.el;
 
     var candidates = collectByText(['button', '[role="button"]'], 'More actions');
     for (var i = 0; i < candidates.length; i++) {
