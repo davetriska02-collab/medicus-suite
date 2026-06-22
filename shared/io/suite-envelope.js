@@ -28,7 +28,10 @@
 
 const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
-const EXTENSION_VERSION = '2.5.0';
+const EXTENSION_VERSION =
+  typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function'
+    ? chrome.runtime.getManifest().version
+    : '3.125.0';
 
 // ── Payload integrity digest ──────────────────────────────────────────────────
 //

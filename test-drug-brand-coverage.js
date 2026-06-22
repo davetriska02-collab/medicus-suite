@@ -140,7 +140,19 @@ const EXPECTED = {
   ],
   'atomoxetine-maintenance': ['Atomoxetine 40mg', 'Strattera 40mg'],
   'guanfacine-maintenance': ['Guanfacine 2mg', 'Intuniv 2mg'],
-  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection']
+  'dmpa-injectable': ['Depo-Provera 150mg/1ml injection', 'Depo Provera injection', 'Sayana Press 104mg/0.65ml injection', 'DMPA injection'],
+  'chc-combined-hormonal': [
+    'Microgynon 30 tablets', 'Ovranette 150mcg/30mcg tablets', 'Rigevidon 150mcg/30mcg',
+    'Levest 150mcg/30mcg', 'Maexeni 150mcg/30mcg', 'Cilique 150mcg/30mcg', 'Lizinna 150mcg/30mcg',
+    'Marvelon 150mcg/30mcg', 'Mercilon 150mcg/20mcg', 'Gedarel 150mcg/30mcg', 'Cimizt 150mcg/20mcg',
+    'Femodene 75mcg/30mcg', 'Femodette 75mcg/20mcg', 'Millinette 75mcg/30mcg',
+    'Yasmin 3mg/30mcg', 'Lucette 3mg/30mcg', 'Eloine 3mg/20mcg',
+    'Dianette 2mg/35mcg', 'Brevinor 500mcg/35mcg', 'Norimin 1mg/35mcg', 'Ovysmen 500mcg/35mcg',
+    'Loestrin 20 1mg/20mcg', 'Qlaira tablets', 'Zoely 2.5mg/1.5mg',
+    'Evra 150mcg/20mcg transdermal patch', 'NuvaRing vaginal delivery system', 'SyreniRing 11.7mg/2.7mg',
+    // generic coding path (ethinylestradiol as ingredient name)
+    'Ethinylestradiol 30mcg / Levonorgestrel 150mcg tablets', 'ethinylestradiol 20mcg norethisterone'
+  ]
 };
 
 for (const [id, meds] of Object.entries(EXPECTED)) {
@@ -166,7 +178,19 @@ const MUST_NOT = [
   ['hrt-systemic', 'Vagifem 10mcg vaginal tablets'],
   ['hrt-systemic', 'Ovestin 0.1% vaginal cream'],
   ['hrt-systemic', 'Estring 7.5mcg vaginal ring'],
-  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets']
+  ['dmpa-injectable', 'Medroxyprogesterone 10mg tablets'],
+  // CHC/HRT disambiguation: ethinylestradiol and CHC brands must NOT fire hrt-systemic
+  ['hrt-systemic', 'Ethinylestradiol 30mcg / Levonorgestrel 150mcg tablets'],
+  ['hrt-systemic', 'ethinylestradiol 20mcg norethisterone'],
+  ['hrt-systemic', 'Microgynon 30 tablets'],
+  ['hrt-systemic', 'Yasmin 3mg/30mcg tablets'],
+  // POPs must NOT fire chc-combined-hormonal
+  ['chc-combined-hormonal', 'Cerazette 75mcg tablets'],
+  ['chc-combined-hormonal', 'Cerelle 75mcg tablets'],
+  ['chc-combined-hormonal', 'Zelleta 75mcg tablets'],
+  ['chc-combined-hormonal', 'Lovima 75mcg tablets'],
+  ['chc-combined-hormonal', 'Hana 75mcg tablets'],
+  ['chc-combined-hormonal', 'Nacrez 75mcg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');

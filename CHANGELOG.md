@@ -2,6 +2,59 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.126.0] — 2026-06-22
+
+### Security fix: XSS attribute injection in panel.js escStrip()
+
+`escStrip()` in `side-panel/panel.js` now escapes double-quote (`"`) and
+single-quote (`'`) characters, matching the safe `escapeHtml()` pattern used
+by `content.js` and `options.js`. The function was previously used in HTML
+attribute contexts at lines 936 and 1346 where `b.label` and `a.title` may
+contain user-entered free text from the request-monitor API response. A
+malicious or accidentally-formed string like `x" onmouseover="alert(1)` could
+break out of the attribute and inject an event handler into the privileged
+side-panel DOM.
+
+A source-guard check added to `test-xss-attribute-escaping.js` will catch
+any future regression that removes the `&quot;` escape from `escStrip`.
+
+### Clinical safety fix: CHC monitoring rule re-enabled
+
+The `chc-combined-hormonal` drug-monitoring rule (annual BP + BMI for women
+on combined hormonal contraception) has been enabled after resolving the
+CHC/HRT engine collision that caused it to be shipped disabled.
+
+**Root cause:** `hrt-systemic` matched on the bare term `"estradiol"`, which
+is a substring of `"ethinylestradiol"` (the synthetic oestrogen in all CHC
+pills). A patient coded generically with `ethinylestradiol` would fire the
+HRT monitoring rule instead of (or as well as) the CHC rule.
+
+**Fix:** `"ethinylestradiol"` added to `hrt-systemic.drug.exclude` — this
+ensures CHC patients never receive a spurious HRT monitoring alert. `"ethinylestradiol"`
+also added to `chc-combined-hormonal.drug.match` to catch practices that code
+the generic ingredient rather than the brand name. CHC brands already matched
+by name (Microgynon, Yasmin, Evra, etc.) are unaffected.
+
+Regression-guarded by new positive and negative controls in
+`test-drug-brand-coverage.js`: CHC brands + generic ethinylestradiol must
+fire `chc-combined-hormonal`; they must NOT fire `hrt-systemic`; POPs
+(desogestrel brands) must not fire `chc-combined-hormonal`.
+
+### Fix: backup envelopes now carry the correct extension version
+
+`shared/io/suite-envelope.js` previously used a hardcoded constant
+`EXTENSION_VERSION = '2.5.0'` for the metadata field embedded in every
+exported backup file. This has been replaced with a runtime lookup via
+`chrome.runtime.getManifest().version` (with a current-version fallback for
+the Node test context). Backup files now correctly report the version of the
+extension that produced them, which matters for clinical audit trails.
+
+### Documentation: DPIA updated to current version
+
+`docs/DPIA.md` updated to product version 3.126.0, DPO contact
+(david.triska@nhs.net) filled in, consultation section completed. ICO
+registration number field noted as pending receipt; to be inserted on arrival.
+
 ## [v3.125.0] — 2026-06-20
 
 ### Fix: urine electrolytes no longer matches a blood U&E request

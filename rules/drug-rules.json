@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-20",
+  "lastUpdated": "2026-06-22",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - June 2026 review",
   "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation.",
@@ -360,7 +360,7 @@
       "drugClass": "HRT",
       "drug": {
         "match": ["estradiol", "oestradiol", "conjugated oestrogens", "conjugated estrogens", "tibolone", "femoston", "kliovance", "kliofem", "kliogest", "elleste duet", "elleste solo", "indivina", "premique", "premarin", "evorel", "femseven", "estradot", "sandrena", "oestrogel", "livial", "lenzetto", "progynova", "zumenon", "climaval", "estraderm", "nuvelle", "norethisterone", "medroxyprogesterone", "micronised progesterone", "utrogestan", "bijuve", "mirena", "levonorgestrel intrauterine", "levonorgestrel ius", "levosert", "jaydess", "kyleena", "lng-ius"],
-        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary"]
+        "exclude": ["vagifem", "imvaggis", "ovestin", "estring", "vagirux", "blissel", "intrarosa", "vaginal cream", "vaginal tablet", "vaginal ring", "vaginal pessary", "vaginal gel", "pessary", "ethinylestradiol"]
       },
       "phase": "maintenance",
       "tests": [
@@ -510,12 +510,12 @@
     },
     {
       "type": "drug-monitoring",
-      "enabled": false,
+      "enabled": true,
       "id": "chc-combined-hormonal",
       "drugClass": "Combined hormonal contraception",
       "sex": "F",
       "drug": {
-        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring"],
+        "match": ["microgynon", "ovranette", "rigevidon", "levest", "maexeni", "cilique", "lizinna", "marvelon", "mercilon", "gedarel", "cimizt", "femodene", "femodette", "millinette", "yasmin", "lucette", "eloine", "dianette", "brevinor", "norimin", "ovysmen", "loestrin", "qlaira", "zoely", "evra", "nuvaring", "syreniring", "ethinylestradiol"],
         "exclude": ["cerazette", "cerelle", "zelleta", "lovima", "hana", "nacrez"]
       },
       "phase": "maintenance",
@@ -524,7 +524,7 @@
         { "name": "BMI / Weight", "match": ["bmi", "body mass index", "weight", "body weight"], "snomed": ["60621009", "27113001"], "intervalDays": 365, "dueSoonDays": 30 }
       ],
       "source": "FSRH Guideline: Combined Hormonal Contraception (Jan 2019, amended Oct 2023); NICE CKS Contraception",
-      "notes": "SHIPPED DISABLED pending engine disambiguation (Keeper 2026-06-20, needs_engine_change). FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule would enforce the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. WHY DISABLED: the hrt-systemic rule matches the bare term 'estradiol', which is a SUBSTRING of 'ethinylestradiol' and of natural-oestrogen pills' 'estradiol valerate'/'estradiol hemihydrate' — so CHC matched by oestrogen ingredient (and Qlaira/Zoely) would double-fire the HRT monitoring rule. Enabling safely needs engine-level drug-class disambiguation. POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary/NICE CKS; pending primary-source confirmation.",
+      "notes": "FSRH/NICE mandate BP+BMI at initiation, a 3-month review, then at least annually — this rule enforces the annual recurring BP+BMI check. CHC = combined pills + Evra patch + NuvaRing/SyreniRing. Contraindicated in uncontrolled hypertension (UKMEC 4 ≥160/100; UKMEC 3 ≥140/90 or BMI ≥35); reassess VTE/CVD risk at each review. Disambiguation fix (2026-06-22): 'ethinylestradiol' added to hrt-systemic.drug.exclude so CHC patients no longer double-fire the HRT rule; 'ethinylestradiol' added here to catch generic-coded CHC prescriptions. POPs (Cerazette/Cerelle/Zelleta/Lovima/Hana/Nacrez — desogestrel) are excluded. SOURCE GAP: FSRH primary PDF 403 — corroborated via NHS formulary/NICE CKS; pending primary-source confirmation.",
       "sharedCare": false
     }
   ]

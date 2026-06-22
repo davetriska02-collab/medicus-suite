@@ -115,5 +115,21 @@ console.log('--- escAttr coverage ---');
   }
 }
 
+// ── 4. panel.js escStrip must escape double quotes ───────────────────────────
+//    escStrip() is used in double-quoted HTML attribute positions at panel.js:936
+//    and :1346 where b.label / a.title may contain user-entered free text.
+console.log('--- panel.js escStrip escapes double quotes ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'side-panel/panel.js'), 'utf8');
+  check(
+    src.includes('&quot;') && /function escStrip/.test(src),
+    'panel.js: escStrip function escapes the double-quote (&quot;)'
+  );
+  check(
+    !src.includes("replace(/\"/g, '\"')"),
+    'panel.js: escStrip does not leave raw double-quotes unescaped'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

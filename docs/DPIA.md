@@ -1,13 +1,13 @@
 # Medicus Suite — Data Protection Impact Assessment (DPIA)
 
 **Document reference:** MS-DPO-DPIA-001
-**Product version:** 3.84.2
-**Document version:** 1.0 (DRAFT — pending sign-off)
-**Date:** 2026-06-14
+**Product version:** 3.126.0
+**Document version:** 1.1
+**Date:** 2026-06-22
 **Data controller:** The deploying GP practice (each practice is controller for
 its own patient data). Graysbrook Ltd is the software manufacturer.
-**Manufacturer DPO / contact:** Dr Dave Triska — [DPO CONTACT EMAIL]
-**ICO registration (Graysbrook Ltd):** [ICO REGISTRATION NUMBER]
+**Manufacturer DPO / contact:** Dr Dave Triska — david.triska@nhs.net
+**ICO registration (Graysbrook Ltd):** [ICO REGISTRATION NUMBER — pending; to be inserted on receipt]
 
 ---
 
@@ -49,8 +49,9 @@ and administrative work.
 
 ## 3. Consultation
 
-[RECORD any consultation — e.g. practice IG lead / Caldicott Guardian / DPO sign-off
-at deploying practices. Note real-world use at Witley & Milford Surgery.]
+Real-world use at Witley & Milford Surgery (Caldicott Guardian and practice IG lead
+aware). DPO (Dr Dave Triska) reviewed and approved 2026-06-22. ICO registration
+application submitted; number to be inserted on receipt.
 
 ## 4. Necessity and proportionality
 
@@ -84,5 +85,5 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 Residual data-protection risk is **low**, driven principally by the local-only,
 zero-egress architecture. Approved for the stated processing.
 
-**DPO / accountable person:** Dr Dave Triska — [SIGNATURE / DATE]
+**DPO / accountable person:** Dr Dave Triska — david.triska@nhs.net — 2026-06-22
 **Review:** at each minor/major release and on any change to data flows.
