@@ -60,7 +60,12 @@
   var redact = true;
   // Default interest: scheduling-ish paths, OR any write (POST/PUT/PATCH/DELETE)
   // — the booking *submit* is the call we must not miss, wherever it lands.
-  var INTEREST_RE = /(schedul|appointment|appt|\/slot|diary|booking|\bbook\b|availab|clinician|session|calendar)/i;
+  // Booking on Medicus is a server-driven-UI *drawer* with a slot-reservation
+  // lifecycle (confirmed from the call-stacks: drawer.open → permission check →
+  // loadComponent/getUI → search → reserve slot → confirm), so the filter also
+  // matches those adjacent verbs. Use chBook.all() if you want truly everything.
+  var INTEREST_RE =
+    /(schedul|appointment|appt|\/slot|diary|booking|\bbook\b|availab|clinician|session|calendar|reserv|component|permission|drawer|get-?ui|\/ui\/|search)/i;
   // Always-ignore noise (host-app telemetry — see CLAUDE.md "host-app noise is not us").
   var IGNORE_RE =
     /(sentry\.io|\/telemetry|\/analytics|google-analytics|googletagmanager|hotjar|fullstory|datadog|newrelic|\.png|\.jpg|\.svg|\.css|\.woff)/i;
@@ -310,16 +315,16 @@
         xhr.addEventListener('loadend', function () {
           entry.status = xhr.status;
           entry.ms = Date.now() - started;
+          // Only 'content-type' is read: it is CORS-safelisted. 'location' (and
+          // other non-safelisted headers) are forbidden on cross-origin XHR
+          // responses — getResponseHeader doesn't throw for them, it logs an
+          // uncatchable "Refused to get unsafe header" warning + stack on every
+          // call, which floods the console. So we never read it here.
           var ct = '';
           try {
             ct = xhr.getResponseHeader('content-type') || '';
           } catch (_) {}
           if (ct) entry.resType = ct;
-          var loc = '';
-          try {
-            loc = xhr.getResponseHeader('location') || '';
-          } catch (_) {}
-          if (loc) entry.resLocation = safeUrl(loc);
           try {
             entry.resBody = parseBody(
               xhr.responseType === '' || xhr.responseType === 'text' ? xhr.responseText : xhr.response

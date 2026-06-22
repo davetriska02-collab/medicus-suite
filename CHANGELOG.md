@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.5] — 2026-06-22
+
+### Dev tool: fix booking-flow capture console flood; widen default filter
+
+First live run of `scripts/booking-flow-capture.js` flooded the console with
+`Refused to get unsafe header "location"` + a stack trace on every XHR. Cause:
+the XHR handler read the `location` response header, which is CORS-forbidden on
+cross-origin responses — `getResponseHeader` doesn't throw for it (so the
+`try/catch` couldn't suppress it), it logs an uncatchable warning. Removed that
+read; only the CORS-safelisted `content-type` is read now.
+
+Also widened the default capture filter using what the first run's call-stacks
+revealed: booking is a **server-driven-UI drawer** with a **slot-reservation
+lifecycle** (drawer.open → permission check → loadComponent/getUI → search →
+reserve slot → confirm; reservation released on close, coordinated over Pusher).
+The filter now also matches `permission`, `component`, `drawer`, `get-ui`,
+`/ui/`, `reserv` and `search` so those steps aren't missed. Dev-only;
+`scripts/` is excluded from the release zip.
+
 ## [v3.131.4] — 2026-06-22
 
 ### Dev tool: booking-flow network+DOM capture (recon for embedded booking)
