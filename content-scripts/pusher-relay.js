@@ -62,10 +62,11 @@
     // queueRafScheduled pattern in triage-lens/content.js. This changes only WHEN
     // the (idempotent) channel check runs, never WHETHER a recreation is detected.
     let rafScheduled = false;
+    let unsubscribe = null;
     const checkChannel = () => {
       const newCh = pusher.channels?.channels?.[channelName];
       if (newCh && newCh !== ch) {
-        observer.disconnect();
+        if (unsubscribe) unsubscribe();
         document.removeEventListener('visibilitychange', onVisible);
         // Release the old channel's handler so a stale closure can't keep firing
         // on the previous channel, then restore the full wait budget for the new
@@ -89,8 +90,17 @@
     // When the tab is re-shown, run one check: bursts that fired while hidden were
     // skipped, so the channel may have been recreated in the meantime.
     const onVisible = () => { if (!document.hidden) checkChannel(); };
-    const observer = new MutationObserver(scheduleCheck);
-    observer.observe(document.body, { childList: true, subtree: true });
+    // Prefer the shared observer hub (one body observer for the whole injection
+    // surface); fall back to a private observer when it isn't present. The channel
+    // check is idempotent, so routing it through the hub changes only WHEN it runs.
+    const hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      unsubscribe = hub.subscribe(scheduleCheck);
+    } else {
+      const observer = new MutationObserver(scheduleCheck);
+      observer.observe(document.body, { childList: true, subtree: true });
+      unsubscribe = () => observer.disconnect();
+    }
     document.addEventListener('visibilitychange', onVisible);
   }
 

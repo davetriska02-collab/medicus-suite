@@ -604,14 +604,25 @@
   let _lastPath = location.pathname;
   let _throttle = null;
 
-  const _obs = new MutationObserver(onMutations);
+  // React to SPA DOM churn via the shared observer hub (one body observer for the
+  // whole injection surface) when present; else fall back to a private observer so
+  // the widget still works on its own. _isOwnWidgetMutation prevents
+  // self-triggered scans either way; the disconnect in withObserverPaused is only
+  // the fallback path's belt-and-braces.
+  let _obs = null;
 
   function observeBody() {
-    _obs.observe(document.body, { childList: true, subtree: true });
+    if (_obs) _obs.observe(document.body, { childList: true, subtree: true });
   }
 
-  // Run a DOM write with the observer disconnected so it can't self-trigger.
+  // Run a DOM write without self-triggering a scan. Fallback path: disconnect the
+  // private observer across the write. Hub path: there's no private observer to
+  // pause and the own-mutation filter already ignores our write, so just run it.
   function withObserverPaused(fn) {
+    if (!_obs) {
+      fn();
+      return;
+    }
     _obs.disconnect();
     try {
       fn();
@@ -687,7 +698,15 @@
     });
   }
 
-  observeBody();
+  // Subscribe to the shared observer hub if present; else stand up a private
+  // observer (identical behaviour) so the widget works even without the hub.
+  const _hub = window.__chObserverHub;
+  if (_hub && _hub.subscribe) {
+    _hub.subscribe(onMutations);
+  } else {
+    _obs = new MutationObserver(onMutations);
+    observeBody();
+  }
 
   // Re-check when the tab returns to the foreground (we skip work while hidden).
   document.addEventListener('visibilitychange', () => {

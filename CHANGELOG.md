@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.6] — 2026-06-22
+
+### Performance: one shared DOM-observer hub for all page-injection features
+
+Follow-up to v3.132.5. The injected features each still ran their **own**
+`MutationObserver` over the whole `document.body` subtree, so every Medicus
+(Vue + AG-Grid) re-render woke three separate observers — three callbacks, three
+rAF gates, three visibility checks, every frame. Introduced
+`content-scripts/dom-observer-hub.js`: a single body-subtree observer (loaded first
+in the manifest, shared via `window.__chObserverHub`) that fans one rAF-coalesced
+mutation batch out to all subscribers and is paused while the tab is backgrounded.
+
+- `routine-rx-button.js`, `booking-inline.js` and `pusher-relay.js` now **subscribe**
+  to the hub instead of each constructing a body observer (3 observers → 1).
+- Each keeps its own self-mutation filter and placement fast-path; under the hub
+  the per-feature disconnect-around-write is unnecessary (the own-mutation filter
+  already ignores our own writes) and is retained only on the fallback path.
+- **Fallback:** if the hub is absent each feature stands up its own private
+  observer exactly as before, so nothing depends on the hub for correctness — only
+  for efficiency.
+
+Covered by `test-dom-observer-hub.js` (one observer for N subscribers, coalesced
+fan-out, hidden-pause, unsubscribe, error isolation, idempotent load). `content.js`
+(scoped queue observer, already optimal) and `sentinel.js` (nav-detection
+semantics) keep their own observers and are untouched.
+
 ## [v3.132.5] — 2026-06-22
 
 ### Performance: page-injection observers no longer scan on idle SPA re-renders

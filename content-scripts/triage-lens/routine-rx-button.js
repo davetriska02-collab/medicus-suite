@@ -633,8 +633,9 @@
 
   // ---- boot --------------------------------------------------------------
 
-  // The body observer. Hoisted to module scope so insertHost() can disconnect it
-  // across our own DOM writes (self-mutation guard).
+  // The body observer for the FALLBACK path only (used when the shared observer
+  // hub is absent). Hoisted so insertHost() can disconnect it across our own DOM
+  // writes; under the hub it stays null and isOwnMutation does that job instead.
   var mo = null;
 
   // True when EVERY element node added/removed in this batch is our own host
@@ -684,13 +685,23 @@
   loadCfg().then(function () {
     buildUI();
     ensureInjected();
-    mo = new MutationObserver(function (mutations) {
-      // Skip batches that are entirely our own host inject/remove — they'd
-      // otherwise self-trigger a needless rescan.
+    // Skip batches that are entirely our own host inject/remove — they'd
+    // otherwise self-trigger a needless rescan.
+    var onBodyMutations = function (mutations) {
       if (isOwnMutation(mutations)) return;
       scheduleEnsure();
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
+    };
+    // Prefer the shared observer hub (one body observer for the whole injection
+    // surface); fall back to a private observer if it isn't present so the button
+    // still works on its own. Under the hub `mo` stays null, so insertHost's
+    // disconnect is a no-op and isOwnMutation alone guards self-triggering.
+    var hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      hub.subscribe(onBodyMutations);
+    } else {
+      mo = new MutationObserver(onBodyMutations);
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
     // When the tab is re-shown, re-check once (mutations that fired while hidden
     // were skipped, so placement may be stale).
     document.addEventListener('visibilitychange', function () {
