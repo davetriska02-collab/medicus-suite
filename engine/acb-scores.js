@@ -38,9 +38,9 @@
     // ── Score 3: Antipsychotics with high ACB (additional) ───────────────────
     // Loxapine — dibenzoxazepine antipsychotic with high antimuscarinic load.
     // Confidence: medium (medrev-004); included based on pharmacological class
-    // (strong H1/M1 antagonism) and multiple secondary references. Verify on
-    // ACBcalc.com before clinical use.
-    { term: 'loxapine', score: 3, note: 'dibenzoxazepine; high H1+M1 antagonism — confidence medium (medrev-004)' },
+    // (strong H1/M1 antagonism) and multiple secondary references.
+    // CSO-signed-off 2026-06-22.
+    { term: 'loxapine', score: 3, note: 'dibenzoxazepine; high H1+M1 antagonism — confidence medium (medrev-004); CSO-signed-off 2026-06-22' },
     { term: 'adasuve', score: 3, note: 'brand: loxapine inhaled; medrev-004' },
     // ── Score 2: Tricyclic antidepressant (moderate ACB) ─────────────────────
     // Amoxapine — dibenzoxazepine tricyclic; Boustani/ACBcalc score 2 (medrev-005).

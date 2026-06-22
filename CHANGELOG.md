@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.123.1] — 2026-06-22
+
+### CSO sign-off pass on The Keeper 2026-06-20 changes
+
+Dr Dave Triska (CSO) signed off all 8 pending items from the 2026-06-20 Keeper run.
+"CSO sign-off pending" flags replaced with "CSO-signed-off 2026-06-22" throughout:
+
+- **Shingles eligibility (vax-shingles):** Severely immunosuppressed 18+ cohort — live.
+  MTX/AZA dose-threshold exclusion confirmed correct (manual review still required).
+- **Back pain rf-urinary-hesitancy (999):** Difficulty initiating micturition — live.
+- **Back pain rf-sexual (999):** New sexual dysfunction — live.
+- **Feverish child NG143 2-hour note:** 999 fallback if duty route cannot achieve 2h — live.
+- **Urinary rf-anuria (999):** No urine ≥18h (NICE NG253) — live.
+- **Sore throat rf-trismus:** Escalation confirmed as 'duty' by CSO (clinician dispatched
+  will arrange A&E referral as clinically indicated). Note updated accordingly.
+- **Loxapine ACB score 3:** Accepted at medium confidence; signed off 2026-06-22.
+- **Headache rf-thinners split:** Acknowledged; not yet applied (requires wording work).
+
 ## [v3.123.0] — 2026-06-20
 
 ### The Keeper: clinical rule currency update (2026-06-20 run)
