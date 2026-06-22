@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.4] — 2026-06-22
+
+### Bug fix: "send to routine" button restricted to the prescription-routing workflow
+
+The routine-rx button was leaking onto screens that merely share a "More actions"
+button — the "View Prescription" detail modal and, most recently, the
+appointment-booked drawer that overlays the prescription page (same URL, so a URL
+guard alone can't exclude it). Reworked the visibility gate to implement H-035
+control (e) properly — the button now appears only where the routing workflow
+genuinely exists:
+
+1. **URL pre-filter** — slug must contain `prescription`
+   (`/tasks/data/…prescription…/overview/`), confirmed `prescription-requests` in
+   `engine/extractors/patient-context.js`. (Replaces the looser `(?:prescri|medic)`
+   from v3.132.2, which also matched `medical_patient_request_task` etc.)
+2. **Control present** — the "Save & send to routine requests task list" option
+   (the very control the macro clicks first) must be present and visible on screen.
+3. **Same-panel anchor** — the button only mounts beside a "More actions" button
+   that shares a panel with that routing control, and never inside a
+   `role="dialog"`/`aria-modal` overlay. This is what keeps it off an appointment
+   drawer overlaying the prescription page.
+
+Also debounced the mutation-observer re-check (200 ms) since the gate now scans
+for the routing control.
+
 ## [v3.132.3] — 2026-06-22
 
 ### Bug fix: booking API now targets the correct host (root cause of JSON errors)

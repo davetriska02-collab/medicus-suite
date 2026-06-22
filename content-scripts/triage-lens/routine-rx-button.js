@@ -116,6 +116,37 @@
     return exact || partial;
   }
 
+  // Like findByText, but returns EVERY visible element whose text contains
+  // `wanted`. Used when a label (e.g. "More actions") can appear in more than one
+  // panel and we must choose the right one by context rather than take the first.
+  function collectByText(selectors, wanted) {
+    var w = norm(wanted);
+    var nodes = [];
+    selectors.forEach(function (sel) {
+      try {
+        Array.prototype.push.apply(nodes, document.querySelectorAll(sel));
+      } catch (e) {
+        /* ignore */
+      }
+    });
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (visible(nodes[i]) && textOf(nodes[i]).indexOf(w) >= 0) out.push(nodes[i]);
+    }
+    return out;
+  }
+
+  // True when `a` sits within `depth` ancestor levels of `b` — i.e. they share a
+  // card/panel rather than being on separate top-level surfaces (a task form vs
+  // an overlapping appointment/results drawer).
+  function sharesPanel(a, b, depth) {
+    var node = b;
+    for (var i = 0; i < (depth || 12) && node; i++, node = node.parentElement) {
+      if (node.contains(a)) return true;
+    }
+    return false;
+  }
+
   function waitFor(fn, timeout, interval) {
     timeout = timeout || 5000;
     interval = interval || 120;
@@ -442,21 +473,38 @@
     document.head.appendChild(style);
   }
 
-  // Anchor: the action-button row at the foot of the Next Steps panel always
-  // carries a "More actions" button — sit inline beside it so we line up with
-  // Issue / Re-assign task rather than floating in the viewport corner.
+  // Where to inject the button. The H-035 visibility control is that the button
+  // appears ONLY where the "send to routine requests" workflow genuinely exists —
+  // never on a screen, modal or drawer that merely happens to carry a "More
+  // actions" button (the View Prescription modal, an appointment-booked drawer,
+  // results/document drawers, etc.). Three gates, in order:
   //
-  // Guard: only activate on medication/prescription request task overview pages,
-  // and never inside a modal overlay (e.g. the "View Prescription" detail panel
-  // which also has a "More actions" button but is not the task form).
+  //   1. URL is a prescription/medication request task overview (slug contains
+  //      "prescription" — confirmed `prescription-requests` in
+  //      engine/extractors/patient-context.js). Cheap pre-filter.
+  //   2. The actual routing control — the "Save & send to routine requests task
+  //      list" option the macro clicks first — is present and visible on screen.
+  //      If it isn't here, this isn't the prescription-routing workflow.
+  //   3. We anchor beside a "More actions" button that lives in the SAME panel as
+  //      that routing control (not inside a dialog, and not an overlapping
+  //      drawer's own action row). This is what stops the button leaking onto an
+  //      appointment drawer that overlays the prescription page.
   function findActionAnchor() {
-    // Must be on a prescription or medication task overview page
-    if (!/\/tasks\/data\/[^/]*(?:prescri|medic)[^/]*\/overview\//i.test(location.pathname)) return null;
-    var more = findByText(['button', '[role="button"]'], 'More actions');
-    if (!more) return null;
-    // Don't inject inside a dialog/modal overlay
-    if (more.closest('[role="dialog"], [aria-modal="true"]')) return null;
-    return more.parentElement;
+    if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
+
+    var routine = findByText(
+      ['label', '[role="radio"]', '.radio', 'div', 'span'],
+      'Save & send to routine requests task list'
+    );
+    if (!routine) return null;
+
+    var candidates = collectByText(['button', '[role="button"]'], 'More actions');
+    for (var i = 0; i < candidates.length; i++) {
+      var more = candidates[i];
+      if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;
+      if (sharesPanel(routine, more, 12)) return more.parentElement;
+    }
+    return null;
   }
 
   // Inject inline when on the prescribing screen; remove otherwise. PREPEND and
@@ -498,12 +546,21 @@
 
   // ---- boot --------------------------------------------------------------
 
+  // Debounce re-checks: findActionAnchor now scans for the routing control, so we
+  // coalesce the SPA's mutation bursts instead of scanning on every micro-change.
+  var ensureTimer = null;
+  function scheduleEnsure() {
+    if (ensureTimer) return;
+    ensureTimer = setTimeout(function () {
+      ensureTimer = null;
+      ensureInjected();
+    }, 200);
+  }
+
   loadCfg().then(function () {
     buildUI();
     ensureInjected();
-    var mo = new MutationObserver(function () {
-      ensureInjected();
-    });
+    var mo = new MutationObserver(scheduleEnsure);
     mo.observe(document.body, { childList: true, subtree: true });
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
