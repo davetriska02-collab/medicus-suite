@@ -53,7 +53,8 @@
         if (s && typeof s === 'object') {
           cfg.teams = Array.isArray(s.teams) && s.teams.length ? s.teams.slice() : DEFAULTS.teams.slice();
           cfg.lastTeam = typeof s.lastTeam === 'string' && s.lastTeam ? s.lastTeam : cfg.teams[0];
-          cfg.commitMode = ['confirm', 'manual', 'auto'].indexOf(s.commitMode) >= 0 ? s.commitMode : DEFAULTS.commitMode;
+          cfg.commitMode =
+            ['confirm', 'manual', 'auto'].indexOf(s.commitMode) >= 0 ? s.commitMode : DEFAULTS.commitMode;
         }
         if (cfg.teams.indexOf(cfg.lastTeam) < 0) cfg.teams.unshift(cfg.lastTeam);
         resolve();
@@ -86,7 +87,7 @@
   }
   // own/visible text of an element, trimmed
   function textOf(el) {
-    return norm(el && (el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent));
+    return norm((el && el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent));
   }
   // Find the first visible element matching one of `selectors` whose text equals
   // (or, as a fallback, contains) `wanted`.
@@ -94,26 +95,39 @@
     var w = norm(wanted);
     var nodes = [];
     selectors.forEach(function (sel) {
-      try { Array.prototype.push.apply(nodes, document.querySelectorAll(sel)); } catch (e) { /* ignore */ }
+      try {
+        Array.prototype.push.apply(nodes, document.querySelectorAll(sel));
+      } catch (e) {
+        /* ignore */
+      }
     });
-    var exact = null, partial = null;
+    var exact = null,
+      partial = null;
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (!visible(el)) continue;
       var t = textOf(el);
-      if (t === w) { exact = el; break; }
+      if (t === w) {
+        exact = el;
+        break;
+      }
       if (!partial && t.indexOf(w) >= 0) partial = el;
     }
     return exact || partial;
   }
 
   function waitFor(fn, timeout, interval) {
-    timeout = timeout || 5000; interval = interval || 120;
+    timeout = timeout || 5000;
+    interval = interval || 120;
     return new Promise(function (resolve) {
       var t0 = Date.now();
       (function poll() {
         var v;
-        try { v = fn(); } catch (e) { v = null; }
+        try {
+          v = fn();
+        } catch (e) {
+          v = null;
+        }
         if (v) return resolve(v);
         if (Date.now() - t0 >= timeout) return resolve(null);
         setTimeout(poll, interval);
@@ -124,18 +138,29 @@
   function realClick(el) {
     if (!el) return;
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
-      try { el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); } catch (e) { /* ignore */ }
+      try {
+        el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      } catch (e) {
+        /* ignore */
+      }
     });
-    try { if (typeof el.click === 'function') el.click(); } catch (e) { /* ignore */ }
+    try {
+      if (typeof el.click === 'function') el.click();
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function setNativeValue(el, val) {
     try {
       var proto = Object.getPrototypeOf(el);
       var desc = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (desc && desc.set) desc.set.call(el, val); else el.value = val;
+      if (desc && desc.set) desc.set.call(el, val);
+      else el.value = val;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   // The "Assign to" control: an input reachable after the re-assign radio is on.
@@ -196,16 +221,25 @@
       // 3. the team option
       var option = await waitFor(function () {
         var opts = document.querySelectorAll('[id^="select-item-"], [role="option"], li[role="option"]');
-        var exact = null, partial = null;
+        var exact = null,
+          partial = null;
         for (var i = 0; i < opts.length; i++) {
           if (!visible(opts[i])) continue;
           var t = textOf(opts[i]);
-          if (t === norm(team)) { exact = opts[i]; break; }
+          if (t === norm(team)) {
+            exact = opts[i];
+            break;
+          }
           if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
         }
         return exact || partial;
       }, 4000);
-      if (!option) return abort('Team “' + team + '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.');
+      if (!option)
+        return abort(
+          'Team “' +
+            team +
+            '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.'
+        );
       realClick(option);
 
       // 4. commit — find the button, then wait until Medicus ENABLES it
@@ -216,12 +250,18 @@
       }, 5000);
       if (!commit) {
         if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
-          return abort('Selected “' + team + '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.');
+          return abort(
+            'Selected “' +
+              team +
+              '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.'
+          );
         }
         return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.');
       }
 
-      cfg.lastTeam = team; saveCfg(); renderButton();
+      cfg.lastTeam = team;
+      saveCfg();
+      renderButton();
 
       if (mode === 'manual') {
         highlight(commit);
@@ -230,7 +270,10 @@
       }
       if (mode === 'confirm') {
         var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
-        if (!ok) { toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn'); return; }
+        if (!ok) {
+          toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
+          return;
+        }
       }
       realClick(commit);
       toast('Sent to “' + team + '”.', 'ok');
@@ -242,11 +285,18 @@
 
   // ---- UI: floating button + inline menu --------------------------------
 
-  var host = null, btn = null, caret = null, menu = null, busy = false;
+  var host = null,
+    btn = null,
+    caret = null,
+    menu = null,
+    busy = false;
 
   function setBusy(b) {
     busy = b;
-    if (btn) { btn.disabled = b; btn.style.opacity = b ? '0.6' : '1'; }
+    if (btn) {
+      btn.disabled = b;
+      btn.style.opacity = b ? '0.6' : '1';
+    }
   }
 
   function highlight(el) {
@@ -254,8 +304,12 @@
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       var prev = el.style.boxShadow;
       el.style.boxShadow = '0 0 0 3px #d97706';
-      setTimeout(function () { el.style.boxShadow = prev; }, 2600);
-    } catch (e) { /* ignore */ }
+      setTimeout(function () {
+        el.style.boxShadow = prev;
+      }, 2600);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function toast(msg, kind) {
@@ -263,44 +317,79 @@
     t.className = 'chrx-toast chrx-' + (kind || 'ok');
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(function () { t.classList.add('chrx-show'); }, 10);
-    setTimeout(function () { t.classList.remove('chrx-show'); setTimeout(function () { t.remove(); }, 300); }, 4200);
+    setTimeout(function () {
+      t.classList.add('chrx-show');
+    }, 10);
+    setTimeout(function () {
+      t.classList.remove('chrx-show');
+      setTimeout(function () {
+        t.remove();
+      }, 300);
+    }, 4200);
   }
 
-  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+  function closeMenu() {
+    if (menu) {
+      menu.remove();
+      menu = null;
+    }
+  }
 
   function openMenu() {
     closeMenu();
     menu = document.createElement('div');
     menu.className = 'chrx-menu';
 
-    var h1 = document.createElement('div'); h1.className = 'chrx-menu-h'; h1.textContent = 'Send to team'; menu.appendChild(h1);
+    var h1 = document.createElement('div');
+    h1.className = 'chrx-menu-h';
+    h1.textContent = 'Send to team';
+    menu.appendChild(h1);
     cfg.teams.forEach(function (team) {
       var item = document.createElement('button');
       item.className = 'chrx-menu-item' + (team === cfg.lastTeam ? ' chrx-sel' : '');
       item.textContent = (team === cfg.lastTeam ? '● ' : '○ ') + team;
-      item.onclick = function () { cfg.lastTeam = team; saveCfg(); renderButton(); closeMenu(); };
+      item.onclick = function () {
+        cfg.lastTeam = team;
+        saveCfg();
+        renderButton();
+        closeMenu();
+      };
       menu.appendChild(item);
     });
     var add = document.createElement('button');
-    add.className = 'chrx-menu-item chrx-add'; add.textContent = '+ Add team…';
+    add.className = 'chrx-menu-item chrx-add';
+    add.textContent = '+ Add team…';
     add.onclick = function () {
       var name = window.prompt('Exact team name as it appears in the Medicus “Assign to” list:');
       if (name && name.trim()) {
         name = name.trim();
         if (cfg.teams.indexOf(name) < 0) cfg.teams.push(name);
-        cfg.lastTeam = name; saveCfg(); renderButton();
+        cfg.lastTeam = name;
+        saveCfg();
+        renderButton();
       }
       closeMenu();
     };
     menu.appendChild(add);
 
-    var h2 = document.createElement('div'); h2.className = 'chrx-menu-h'; h2.textContent = 'On commit'; menu.appendChild(h2);
-    [['confirm', 'Ask, then send'], ['manual', 'Pre-fill, I’ll click'], ['auto', 'Send automatically']].forEach(function (m) {
+    var h2 = document.createElement('div');
+    h2.className = 'chrx-menu-h';
+    h2.textContent = 'On commit';
+    menu.appendChild(h2);
+    [
+      ['confirm', 'Ask, then send'],
+      ['manual', 'Pre-fill, I’ll click'],
+      ['auto', 'Send automatically'],
+    ].forEach(function (m) {
       var item = document.createElement('button');
       item.className = 'chrx-menu-item' + (m[0] === cfg.commitMode ? ' chrx-sel' : '');
       item.textContent = (m[0] === cfg.commitMode ? '● ' : '○ ') + m[1];
-      item.onclick = function () { cfg.commitMode = m[0]; saveCfg(); renderButton(); closeMenu(); };
+      item.onclick = function () {
+        cfg.commitMode = m[0];
+        saveCfg();
+        renderButton();
+        closeMenu();
+      };
       menu.appendChild(item);
     });
 
@@ -310,12 +399,15 @@
     }, 0);
   }
   function onDocClick(e) {
-    if (menu && !host.contains(e.target)) { closeMenu(); document.removeEventListener('click', onDocClick, true); }
+    if (menu && !host.contains(e.target)) {
+      closeMenu();
+      document.removeEventListener('click', onDocClick, true);
+    }
   }
 
   function renderButton() {
     if (!btn) return;
-    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : (cfg.commitMode === 'manual' ? ' ✎' : '');
+    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : cfg.commitMode === 'manual' ? ' ✎' : '';
     btn.textContent = '→ ' + cfg.lastTeam + modeTag;
     btn.title = 'Re-assign this prescription to “' + cfg.lastTeam + '” (' + cfg.commitMode + '). Use ▾ to change.';
   }
@@ -327,12 +419,19 @@
 
     btn = document.createElement('button');
     btn.className = 'chrx-btn';
-    btn.onclick = function () { if (!busy) runMacro(cfg.lastTeam, cfg.commitMode); };
+    btn.onclick = function () {
+      if (!busy) runMacro(cfg.lastTeam, cfg.commitMode);
+    };
 
     caret = document.createElement('button');
-    caret.className = 'chrx-caret'; caret.textContent = '▾';
+    caret.className = 'chrx-caret';
+    caret.textContent = '▾';
     caret.title = 'Change team / commit behaviour';
-    caret.onclick = function (e) { e.stopPropagation(); if (menu) closeMenu(); else openMenu(); };
+    caret.onclick = function (e) {
+      e.stopPropagation();
+      if (menu) closeMenu();
+      else openMenu();
+    };
 
     host.appendChild(btn);
     host.appendChild(caret);
@@ -346,9 +445,18 @@
   // Anchor: the action-button row at the foot of the Next Steps panel always
   // carries a "More actions" button — sit inline beside it so we line up with
   // Issue / Re-assign task rather than floating in the viewport corner.
+  //
+  // Guard: only activate on medication/prescription request task overview pages,
+  // and never inside a modal overlay (e.g. the "View Prescription" detail panel
+  // which also has a "More actions" button but is not the task form).
   function findActionAnchor() {
+    // Must be on a prescription or medication task overview page
+    if (!/\/tasks\/data\/[^/]*(?:prescri|medic)[^/]*\/overview\//i.test(location.pathname)) return null;
     var more = findByText(['button', '[role="button"]'], 'More actions');
-    return more ? more.parentElement : null;
+    if (!more) return null;
+    // Don't inject inside a dialog/modal overlay
+    if (more.closest('[role="dialog"], [aria-modal="true"]')) return null;
+    return more.parentElement;
   }
 
   // Inject inline when on the prescribing screen; remove otherwise. PREPEND and
@@ -393,11 +501,15 @@
   loadCfg().then(function () {
     buildUI();
     ensureInjected();
-    var mo = new MutationObserver(function () { ensureInjected(); });
+    var mo = new MutationObserver(function () {
+      ensureInjected();
+    });
     mo.observe(document.body, { childList: true, subtree: true });
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === 'local' && changes[STORE_KEY]) { loadCfg().then(renderButton); }
+        if (area === 'local' && changes[STORE_KEY]) {
+          loadCfg().then(renderButton);
+        }
       });
     }
   });

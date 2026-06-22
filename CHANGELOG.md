@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.2] — 2026-06-22
+
+### Bug fix: "Prescribing / Meds Management" button scoped to prescription tasks only
+
+The routine-rx button was appearing on the "View Prescription" detail panel
+(a modal overlay) because `findActionAnchor()` matched any "More actions" button
+on the page. Fixed with two guards: (1) URL must match a prescription/medication
+task overview path; (2) the matched button must not be inside a `role="dialog"`
+or `aria-modal` overlay.
+
+### Booking: inline widget injected into Medicus page below "Codes & actions"
+
+New `content-scripts/booking-inline.js` injects a collapsible "Book appointment
+for this patient" panel directly into the Medicus task page, below the "Codes &
+actions" section. Unlike the side-panel widget, the inline widget makes direct
+same-origin fetches to `/scheduling/*` (the content script runs on
+`england.medicus.health`, so no bridge is needed). Patient ID is resolved from
+the task UUID via the API subdomain as before.
+
+### Bug fix: side-panel booking connection error
+
+Replaced `chrome.tabs.sendMessage` with `chrome.scripting.executeScript` in
+`bridgeFetch`. The previous approach required `booking-bridge.js` to be
+pre-loaded in the tab (failing with "Receiving end does not exist" on tabs opened
+before the extension reload). `executeScript` injects and runs the fetch inline
+on demand — no pre-loaded content script required. `booking-bridge.js` removed
+from the manifest.
+
 ## [v3.132.1] — 2026-06-22
 
 ### Bug fix: booking panel now works from any Medicus screen

@@ -72,20 +72,37 @@ export async function detectPatientId(tab) {
   return null;
 }
 
-// Relay a fetch through the content-script bridge running in the Medicus tab.
-// The bridge (booking-bridge.js) validates that the URL targets /scheduling/*
-// on the tab's own hostname before firing, so we can't be used as an SSRF proxy.
+// Execute a fetch inside the Medicus tab via chrome.scripting.executeScript so
+// it runs in the tab's renderer process (same-origin, full session cookies).
+// No pre-loaded content script is required — executeScript injects on demand.
 async function bridgeFetch(tabId, url, opts) {
   opts = opts || {};
-  const msg = {
-    type: 'CH_BOOKING_FETCH',
-    url,
-    method: opts.method || 'GET',
-    headers: opts.headers || {},
-    body: opts.body || null,
-  };
-  const result = await chrome.tabs.sendMessage(tabId, msg);
-  if (!result) throw new Error('No response from booking bridge — is the Medicus tab open?');
+  let results;
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async (fetchUrl, method, headers, body) => {
+        try {
+          const resp = await fetch(fetchUrl, {
+            method,
+            credentials: 'include',
+            headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, headers),
+            ...(body ? { body } : {}),
+          });
+          const text = await resp.text();
+          return { ok: resp.ok, status: resp.status, text };
+        } catch (err) {
+          return { error: err.message };
+        }
+      },
+      args: [url, opts.method || 'GET', opts.headers || {}, opts.body || null],
+    });
+  } catch (err) {
+    throw new Error(`Could not reach Medicus tab: ${err.message}`);
+  }
+  const result = results?.[0]?.result;
+  if (!result) throw new Error('No response from Medicus tab — try refreshing the Medicus tab.');
   if (result.error) throw new Error(result.error);
   if (!result.ok) throw new Error(`HTTP ${result.status}`);
   return JSON.parse(result.text);
