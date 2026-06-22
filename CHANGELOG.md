@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.3] — 2026-06-22
+
+### Bug fix: booking API now targets the correct host (root cause of JSON errors)
+
+The `/scheduling/*` booking endpoints live on the **API subdomain**
+(`{siteId}.api.england.medicus.health`) — the same host the slots-overview call
+already uses — **not** the page host. The page host serves the SPA HTML shell
+for `/scheduling/*`, which is what produced every `Unexpected token '<',
+"<!doctype ..."` error. (The earlier "root-relative path" reading was an artefact
+of `scripts/booking-flow-capture.js`, whose `safeUrl()` strips the host and
+records only the path — so the capture never revealed which host the calls used.)
+
+- **Inline widget** (`booking-inline.js`): `apiFetch` now builds URLs against
+  `{siteId}.api.<host>` instead of `location.origin`. CORS from the page origin
+  is already allowed (Medicus's own SPA calls the API subdomain the same way).
+- **Side panel** (`booking-api.js`): rewritten to fetch the API subdomain
+  directly with credentials — the side panel is an extension page with
+  `host_permissions` for `*.api.england.medicus.health`, so this works exactly
+  like the existing overview call. Dropped the `executeScript`/`booking-bridge.js`
+  relay (no longer needed); `booking-bridge.js` deleted.
+
+### Inline widget: now inserts BELOW the "Codes & actions" card
+
+`findCard()` walks up from the "Codes & actions" heading to the lowest common
+ancestor that also contains the form's "Submit" button — i.e. the whole card —
+and inserts the widget immediately *after* it, so it sits below the section
+rather than inside it.
+
 ## [v3.132.2] — 2026-06-22
 
 ### Bug fix: "Prescribing / Meds Management" button scoped to prescription tasks only

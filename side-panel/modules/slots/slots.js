@@ -50,6 +50,7 @@ let state = {
     initError: null,
     tabId: null,
     appOrigin: null,
+    apiBase: null,
     patientId: null,
     providerId: null,
     types: [],
@@ -130,8 +131,8 @@ export async function init(el) {
     document.removeEventListener('suite:slots:refresh', onRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
-    if (state.bk.reservationId && state.bk.appOrigin) {
-      releaseReservation(state.bk.tabId, state.bk.appOrigin, state.bk.reservationId).catch(() => {});
+    if (state.bk.reservationId && state.bk.apiBase) {
+      releaseReservation(state.bk.apiBase, state.bk.reservationId).catch(() => {});
     }
     container = null;
   };
@@ -691,8 +692,7 @@ function renderBookingSection() {
 function renderBookingContent() {
   const { bk } = state;
   if (bk.initLoading) return `<div class="bk-loading">Loading appointment types…</div>`;
-  if (bk.initError)
-    return `<div class="bk-error">${escHtml(bk.initError)}</div>`;
+  if (bk.initError) return `<div class="bk-error">${escHtml(bk.initError)}</div>`;
   if (bk.step === 'booked') return renderBookingSuccess();
   if (bk.step === 'confirm') return renderBookingConfirm();
   return renderBookingBrowse();
@@ -721,7 +721,7 @@ function renderBookingBrowse() {
     slotsHtml = `<div class="bk-no-slots">No available slots on this date.</div>`;
   }
 
-  const canSearch = bk.selectedTypeId && bk.date && !bk.slotsLoading && bk.appOrigin;
+  const canSearch = bk.selectedTypeId && bk.date && !bk.slotsLoading && bk.apiBase;
   const bkDate = bk.date || todayISO();
 
   return `
@@ -821,12 +821,13 @@ async function doInitBooking() {
     const detected = await detectMedicusTab();
     bk.tabId = detected?.tabId ?? null;
     bk.appOrigin = detected?.origin ?? null;
+    bk.apiBase = detected?.apiBase ?? null;
     bk.patientId = await detectPatientId(detected?.tab ?? null);
     if (!detected) {
       bk.initError = 'Could not detect Medicus — open a Medicus tab and sign in.';
       return;
     }
-    const finder = await fetchAppointmentFinder(bk.tabId, bk.appOrigin);
+    const finder = await fetchAppointmentFinder(bk.apiBase);
     bk.providerId = finder.localOrganisationDetails?.id || null;
     const types = [];
     for (const svc of finder.localOrganisationDetails?.services || []) {
@@ -846,14 +847,14 @@ async function doInitBooking() {
 
 async function doSearchSlots() {
   const { bk } = state;
-  if (!bk.appOrigin || !bk.providerId || !bk.selectedTypeId || !bk.date) return;
+  if (!bk.apiBase || !bk.providerId || !bk.selectedTypeId || !bk.date) return;
   bk.slotsLoading = true;
   bk.slotsError = null;
   bk.slots = null;
   bk.hasSearched = false;
   render();
   try {
-    bk.slots = await fetchAvailableSlots(bk.tabId, bk.appOrigin, {
+    bk.slots = await fetchAvailableSlots(bk.apiBase, {
       providerId: bk.providerId,
       appointmentTypeId: bk.selectedTypeId,
       date: bk.date,
@@ -870,12 +871,12 @@ async function doSearchSlots() {
 
 async function doSelectSlot(slot) {
   const { bk } = state;
-  if (!bk.appOrigin || !slot) return;
+  if (!bk.apiBase || !slot) return;
   bk.slotsLoading = true;
   bk.slotsError = null;
   render();
   try {
-    const result = await reserveSlot(bk.tabId, bk.appOrigin, {
+    const result = await reserveSlot(bk.apiBase, {
       diaryId: slot.diaryId,
       startDateTime: slot.startDateTime,
       duration: slot.duration,
@@ -896,8 +897,8 @@ async function doSelectSlot(slot) {
 
 function doCancelBooking() {
   const { bk } = state;
-  if (bk.reservationId && bk.appOrigin) {
-    releaseReservation(bk.tabId, bk.appOrigin, bk.reservationId).catch(() => {});
+  if (bk.reservationId && bk.apiBase) {
+    releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
   }
   bk.reservationId = null;
   bk.selectedSlot = null;
@@ -914,7 +915,7 @@ async function doConfirmBooking() {
   bk.confirmError = null;
   render();
   try {
-    const formData = await fetchCreateForm(bk.tabId, bk.appOrigin, {
+    const formData = await fetchCreateForm(bk.apiBase, {
       slotReservationId: bk.reservationId,
       patientId: bk.patientId,
     });
@@ -936,18 +937,14 @@ async function doConfirmBooking() {
       embargoOverrideReason: null,
       slotReservationId: bk.reservationId,
       nhsNationalSlotTypeCategory:
-        formData.nhsNationalSlotTypeCategory ||
-        slot.nhsNationalSlotTypeCategoryDefault?.value ||
-        '10127',
+        formData.nhsNationalSlotTypeCategory || slot.nhsNationalSlotTypeCategoryDefault?.value || '10127',
       allowOverlappingAppointments: 'allow',
       gpadReportingExceptionReasons: [],
       clinicalCaseId: null,
-      bookingConfirmationRecipients: (formData.bookingConfirmationRecipientOptions || []).map(
-        (o) => o.value
-      ),
+      bookingConfirmationRecipients: (formData.bookingConfirmationRecipientOptions || []).map((o) => o.value),
       rescheduledAppointmentVersionId: null,
     };
-    const result = await createAppointment(bk.tabId, bk.appOrigin, payload);
+    const result = await createAppointment(bk.apiBase, payload);
     bk.bookedId = result.appointmentId;
     bk.reservationId = null; // server releases on create
     bk.step = 'booked';
@@ -1184,8 +1181,8 @@ function bindEvents() {
     const { bk } = state;
     if (bk.open) {
       // Closing — release any held reservation
-      if (bk.reservationId && bk.appOrigin) {
-        releaseReservation(bk.tabId, bk.appOrigin, bk.reservationId).catch(() => {});
+      if (bk.reservationId && bk.apiBase) {
+        releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
         bk.reservationId = null;
       }
       if (bk.step === 'confirm') {

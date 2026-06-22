@@ -88,17 +88,33 @@
     return data?.data?.patient?.id || data?.data?.patientId || data?.patient?.id || data?.patientId || null;
   }
 
-  // Direct same-origin fetch for /scheduling/* (page is on england.medicus.health)
+  // The /scheduling/* API lives on the API subdomain ({siteId}.api.<host>) — the
+  // SAME host the slots-overview call uses — NOT the page host. The page host
+  // (england.medicus.health) serves the SPA HTML shell for /scheduling/*, which
+  // is what produced the "Unexpected token '<'" JSON errors. The API subdomain
+  // allows CORS from the page origin (Medicus's own SPA calls it the same way).
+  function apiBaseUrl() {
+    const info = getTaskInfo();
+    const parts = location.pathname.split('/').filter(Boolean);
+    const siteId = (info && info.siteId) || parts[0] || '';
+    return `https://${siteId}.api.${location.hostname}`;
+  }
+
   async function apiFetch(path, opts) {
     opts = opts || {};
-    const resp = await fetch(`${location.origin}${path}`, {
+    const resp = await fetch(`${apiBaseUrl()}${path}`, {
       method: opts.method || 'GET',
       credentials: 'include',
       headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
       body: opts.body,
     });
     if (!resp.ok) throw new Error(`API ${resp.status}`);
-    return resp.json();
+    const text = await resp.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      throw new Error('Scheduling API returned an unexpected response.');
+    }
   }
 
   async function apiFetchFinder() {
@@ -178,32 +194,43 @@
 
   // ── DOM injection ─────────────────────────────────────────────────────────────
 
-  // Find the container of the "Codes & actions" section so we can insert after it.
-  function findInsertionPoint() {
-    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend,label,div,span,p')) {
+  // Find the whole "Codes & actions" CARD so we can insert our widget directly
+  // after it (below the section, not inside it). The card is the smallest
+  // ancestor of the section heading that ALSO contains the form's "Submit"
+  // button — i.e. the lowest common ancestor of the heading and the Submit
+  // button, which is exactly the bounding card.
+  function findCard() {
+    let heading = null;
+    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend,div,span,p')) {
       const txt = el.textContent.trim();
       if (!/^Codes\s*(?:&|&amp;|and)\s*actions$/i.test(txt)) continue;
-      // Avoid matching our own widget if it somehow got into the tree
       if (el.closest('#ms-bk-widget')) continue;
-      // Walk up to find an ancestor that has a next sibling we can insert after
-      let p = el.parentElement;
-      while (p && p !== document.body) {
-        if (p.nextElementSibling && p.nextElementSibling.id !== 'ms-bk-widget') return p;
-        p = p.parentElement;
-      }
+      heading = el;
+      break;
     }
-    return null;
+    if (!heading) return null;
+    let node = heading.parentElement;
+    let fallback = node;
+    while (node && node !== document.body) {
+      const btns = node.querySelectorAll('button, [role="button"], input[type="submit"]');
+      for (const b of btns) {
+        if (/^submit$/i.test((b.value || b.textContent || '').trim())) return node;
+      }
+      fallback = node;
+      node = node.parentElement;
+    }
+    return fallback;
   }
 
   function injectWidget() {
     if (!getTaskInfo()) return;
     if (document.getElementById('ms-bk-widget')) return;
-    const target = findInsertionPoint();
-    if (!target) return;
+    const card = findCard();
+    if (!card || !card.parentElement) return;
     const w = document.createElement('div');
     w.id = 'ms-bk-widget';
     renderInto(w);
-    target.after(w);
+    card.after(w);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
