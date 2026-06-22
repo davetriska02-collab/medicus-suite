@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.132.4",
+  "version": "3.132.6",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -26,6 +26,7 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
+        "content-scripts/dom-observer-hub.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
         "engine/extractors/medications.js",

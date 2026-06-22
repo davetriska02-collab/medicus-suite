@@ -199,15 +199,40 @@
   // ancestor of the section heading that ALSO contains the form's "Submit"
   // button — i.e. the lowest common ancestor of the heading and the Submit
   // button, which is exactly the bounding card.
-  function findCard() {
-    let heading = null;
-    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend,div,span,p')) {
-      const txt = el.textContent.trim();
-      if (!/^Codes\s*(?:&|&amp;|and)\s*actions$/i.test(txt)) continue;
-      if (el.closest('#ms-bk-widget')) continue;
-      heading = el;
-      break;
+  //
+  // PERF: the heading scan is the expensive part on this heavy Vue+AG-Grid SPA
+  // (thousands of nodes). Two guards keep it cheap:
+  //   1. Search the *realistic* heading carriers first (h1–h6/strong/b/legend),
+  //      which are few; only fall back to the broad div/span/p scan if that
+  //      narrow pass fails.
+  //   2. Don't read `.textContent` of large subtrees — that concatenates every
+  //      descendant's text per node. Skip any element that has child *elements*
+  //      (a heading is a leaf-ish text node), so `.textContent` only ever reads
+  //      a small string. Stop the instant the heading is found.
+  const HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
+
+  function matchHeading(el) {
+    if (el.closest('#ms-bk-widget')) return false;
+    // A heading carries only text, no nested elements — cheap to read and avoids
+    // concatenating a giant subtree's textContent on container nodes.
+    if (el.firstElementChild) return false;
+    return HEADING_RE.test(el.textContent.trim());
+  }
+
+  function findHeading() {
+    // Narrow pass: real heading elements only — a tiny node set.
+    for (const el of document.querySelectorAll('h1,h2,h3,h4,h5,h6,strong,b,legend')) {
+      if (matchHeading(el)) return el;
     }
+    // Fallback pass: Medicus sometimes renders the label in a plain div/span/p.
+    for (const el of document.querySelectorAll('div,span,p')) {
+      if (matchHeading(el)) return el;
+    }
+    return null;
+  }
+
+  function findCard() {
+    const heading = findHeading();
     if (!heading) return null;
     let node = heading.parentElement;
     let fallback = node;
@@ -230,7 +255,10 @@
     const w = document.createElement('div');
     w.id = 'ms-bk-widget';
     renderInto(w);
-    card.after(w);
+    // Disconnect around the DOM write so the injection itself (a body mutation
+    // inside the observed subtree) can't re-fire the observer and reschedule a
+    // scan. Re-observe immediately after.
+    withObserverPaused(() => card.after(w));
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -560,31 +588,135 @@
   }
 
   // ── SPA navigation & re-injection ─────────────────────────────────────────────
+  //
+  // The Medicus SPA (Vue + AG-Grid) churns its DOM constantly, so a naive
+  // body-subtree observer fires on every render. Three things keep the cost
+  // near-zero (mirroring content.js's queueObserver):
+  //   • _isOwnWidgetMutation — ignore batches that are entirely our own widget
+  //     subtree, so the widget's own rerender() (innerHTML swaps while the user
+  //     types / picks a slot) never reschedules a scan;
+  //   • a cheap path-gate (getTaskInfo() is just a regex on the pathname) before
+  //     any throttle/scan, so non-task pages cost nothing;
+  //   • the heavy findCard scan is deferred to a throttle + animation frame and
+  //     short-circuited when the widget is already placed, when backgrounded, or
+  //     when the path is unchanged and nothing of ours is missing.
 
   let _lastPath = location.pathname;
   let _throttle = null;
 
-  function tryInject() {
-    if (_throttle) return;
-    _throttle = setTimeout(() => {
-      _throttle = null;
-      const currentPath = location.pathname;
-      if (currentPath !== _lastPath) {
-        _lastPath = currentPath;
-        if (s.reservationId) apiReleaseReservation(s.reservationId);
-        s = blankState();
-      }
-      if (!document.getElementById('ms-bk-widget')) injectWidget();
-    }, 350);
+  // React to SPA DOM churn via the shared observer hub (one body observer for the
+  // whole injection surface) when present; else fall back to a private observer so
+  // the widget still works on its own. _isOwnWidgetMutation prevents
+  // self-triggered scans either way; the disconnect in withObserverPaused is only
+  // the fallback path's belt-and-braces.
+  let _obs = null;
+
+  function observeBody() {
+    if (_obs) _obs.observe(document.body, { childList: true, subtree: true });
   }
 
-  const _obs = new MutationObserver(tryInject);
-  _obs.observe(document.body, { childList: true, subtree: true });
+  // Run a DOM write without self-triggering a scan. Fallback path: disconnect the
+  // private observer across the write. Hub path: there's no private observer to
+  // pause and the own-mutation filter already ignores our write, so just run it.
+  function withObserverPaused(fn) {
+    if (!_obs) {
+      fn();
+      return;
+    }
+    _obs.disconnect();
+    try {
+      fn();
+    } finally {
+      observeBody();
+    }
+  }
+
+  // True when EVERY element node added/removed in this batch belongs to our own
+  // widget subtree — i.e. the mutation is our rerender()/inject, not genuine SPA
+  // churn. An empty/text-only batch returns true (nothing relevant → skip).
+  // (Mirrors content.js's _isOwnChipMutation.)
+  function _isOwnWidgetMutation(mutations) {
+    for (const m of mutations) {
+      // A mutation whose target is inside our widget is ours (covers innerHTML
+      // swaps inside #ms-bk-widget during rerender()).
+      if (m.target && m.target.nodeType === 1 && m.target.closest && m.target.closest('#ms-bk-widget')) {
+        continue;
+      }
+      for (const nodes of [m.addedNodes, m.removedNodes]) {
+        for (const n of nodes) {
+          if (n.nodeType !== 1) continue; // ignore text nodes
+          if (n.id === 'ms-bk-widget') continue;
+          if (n.closest && n.closest('#ms-bk-widget')) continue;
+          return false; // a foreign element changed → genuine SPA mutation
+        }
+      }
+    }
+    return true; // nothing but our own widget (or text) changed
+  }
+
+  function onMutations(mutations) {
+    // Our own widget's re-renders must never reschedule a scan.
+    if (_isOwnWidgetMutation(mutations)) return;
+    scheduleInject();
+  }
+
+  function scheduleInject() {
+    if (_throttle) return;
+    // Cheap path-gate FIRST: no point throttling a whole-page scan on a page
+    // that isn't a task overview. Still handle path-change state reset below.
+    const onTaskPage = !!getTaskInfo();
+    const pathChanged = location.pathname !== _lastPath;
+    if (!onTaskPage && !pathChanged) return;
+    // Already placed and still connected → nothing to do.
+    if (onTaskPage && !pathChanged) {
+      const existing = document.getElementById('ms-bk-widget');
+      if (existing && existing.isConnected) return;
+    }
+    _throttle = setTimeout(runInject, 350);
+  }
+
+  function runInject() {
+    _throttle = null;
+    const currentPath = location.pathname;
+    if (currentPath !== _lastPath) {
+      _lastPath = currentPath;
+      if (s.reservationId) apiReleaseReservation(s.reservationId);
+      s = blankState();
+    }
+    // Skip the heavy scan while backgrounded; visibilitychange re-checks.
+    if (document.hidden) return;
+    if (!getTaskInfo()) return;
+    const existing = document.getElementById('ms-bk-widget');
+    if (existing && existing.isConnected) return;
+    // Defer the expensive findCard scan to an animation frame so it never runs
+    // synchronously inside the observer callback / timer tick.
+    requestAnimationFrame(() => {
+      if (document.hidden) return;
+      const w = document.getElementById('ms-bk-widget');
+      if (w && w.isConnected) return;
+      injectWidget();
+    });
+  }
+
+  // Subscribe to the shared observer hub if present; else stand up a private
+  // observer (identical behaviour) so the widget works even without the hub.
+  const _hub = window.__chObserverHub;
+  if (_hub && _hub.subscribe) {
+    _hub.subscribe(onMutations);
+  } else {
+    _obs = new MutationObserver(onMutations);
+    observeBody();
+  }
+
+  // Re-check when the tab returns to the foreground (we skip work while hidden).
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) scheduleInject();
+  });
 
   // Initial inject
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryInject);
+    document.addEventListener('DOMContentLoaded', scheduleInject);
   } else {
-    tryInject();
+    scheduleInject();
   }
 })();

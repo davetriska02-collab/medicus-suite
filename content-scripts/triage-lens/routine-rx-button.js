@@ -489,37 +489,124 @@
   //      that routing control (not inside a dialog, and not an overlapping
   //      drawer's own action row). This is what stops the button leaking onto an
   //      appointment drawer that overlays the prescription page.
+  //
+  // findRoutingControl (gate 2) and findActionAnchor (gates 1+3) follow.
+
+  // Locate the "Save & send to routine requests task list" routing control. This
+  // is the expensive call (it can reflow many nodes via visible()), so we try the
+  // realistic carriers FIRST — on Medicus this control is a label / radio — and
+  // only widen to the costly div/span sweep if the narrow set yields nothing. The
+  // narrow set covers the live app; the wide set is a defensive fallback.
+  function findRoutingControl() {
+    return (
+      findByText(['label', '[role="radio"]', '.radio'], 'Save & send to routine requests task list') ||
+      findByText(['div', 'span'], 'Save & send to routine requests task list')
+    );
+  }
+
   function findActionAnchor() {
     if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
 
-    var routine = findByText(
-      ['label', '[role="radio"]', '.radio', 'div', 'span'],
-      'Save & send to routine requests task list'
-    );
+    var routine = findRoutingControl();
     if (!routine) return null;
 
     var candidates = collectByText(['button', '[role="button"]'], 'More actions');
     for (var i = 0; i < candidates.length; i++) {
       var more = candidates[i];
       if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;
-      if (sharesPanel(routine, more, 12)) return more.parentElement;
+      if (sharesPanel(routine, more, 12)) {
+        placedRoutingControl = routine;
+        return more.parentElement;
+      }
     }
     return null;
   }
 
+  // The anchor the host is currently parented to. Kept so the hot path can
+  // CHEAPLY re-validate placement (host still inside this anchor, anchor still in
+  // the document) without re-running the expensive findActionAnchor() div/span
+  // scan on every idle SPA re-render. Cleared whenever we remove/lose the host.
+  var placedAnchor = null;
+  // The routing control ("Save & send to routine requests task list") matched by
+  // the last successful scan. Re-checked on the fast path with a cheap isConnected
+  // read (no reflow) so the button can't linger if Vue tears the routing form out
+  // while leaving the action-row anchor attached — i.e. H-035 gate 2 stays
+  // enforced between scans, not only at first placement and click time.
+  var placedRoutingControl = null;
+
   // Inject inline when on the prescribing screen; remove otherwise. PREPEND and
-  // re-inject on every mutation so Vue's reconciler can't strip us as a trailing
-  // node (see CLAUDE.md). Idempotent: only acts when placement actually changed.
+  // re-inject on every relevant mutation so Vue's reconciler can't strip us as a
+  // trailing node (see CLAUDE.md).
+  //
+  // Cost discipline: the only expensive thing here is findActionAnchor() (it
+  // sweeps the DOM and calls visible() → forced reflow). We must run it RARELY —
+  // only when placement genuinely needs to change. Order of checks:
+  //   1. Cheap URL pre-filter. Not a prescription overview → tear down, return.
+  //   2. FAST PATH: if the host is still connected, still inside the cached
+  //      anchor, and that anchor is still in the document, nothing relevant
+  //      changed → return WITHOUT scanning. This is the common idle case.
+  //   3. Only when the host is missing / detached / orphaned do we run the full
+  //      scan, re-validating the H-035 gates (routing control present + visible,
+  //      "More actions" beside it, not in a dialog) before (re)placing — so a
+  //      stale cache can never show the button on the wrong screen.
   function ensureInjected() {
     if (!host) return;
+
+    // 1. Cheap path gate — no DOM scan, no reflow.
+    if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) {
+      removeHost();
+      return;
+    }
+
+    // 2. Fast path: placement already valid → skip the expensive scan entirely.
+    //    host.isConnected + document.contains(anchor) + anchor.contains(host) +
+    //    routing-control.isConnected are all cheap connectivity checks (no layout
+    //    flush), unlike visible(). The routing-control check keeps H-035 gate 2
+    //    enforced between scans without paying for a re-scan on idle re-renders.
+    if (
+      host.isConnected &&
+      placedAnchor &&
+      placedAnchor === host.parentElement &&
+      document.contains(placedAnchor) &&
+      placedAnchor.contains(host) &&
+      placedRoutingControl &&
+      placedRoutingControl.isConnected
+    ) {
+      return;
+    }
+
+    // 3. Host missing / detached / orphaned — run the full (expensive) scan and
+    //    re-validate every H-035 gate before placing.
     var anchor = findActionAnchor();
     if (!anchor) {
-      if (host.parentElement) host.parentElement.removeChild(host);
-      closeMenu();
+      removeHost();
       return;
     }
     if (host.parentElement !== anchor) {
+      insertHost(anchor);
+    }
+    placedAnchor = anchor;
+  }
+
+  function removeHost() {
+    if (host && host.parentElement) host.parentElement.removeChild(host);
+    placedAnchor = null;
+    placedRoutingControl = null;
+    closeMenu();
+  }
+
+  // Write our node WITHOUT self-triggering a rescan. Our own insertBefore is a
+  // body childList mutation, so it would otherwise wake the observer and schedule
+  // another full scan (self-trigger). We disconnect across the write and re-attach
+  // immediately — mirroring content.js's refreshQueueChips, which disconnects its
+  // queueObserver around its own DOM writes. PREPEND (insertBefore firstChild),
+  // never append: trailing nodes get reconciled away by Vue (see CLAUDE.md).
+  function insertHost(anchor) {
+    if (mo) mo.disconnect();
+    try {
       anchor.insertBefore(host, anchor.firstChild);
+    } finally {
+      if (mo) mo.observe(document.body, { childList: true, subtree: true });
     }
   }
 
@@ -546,22 +633,80 @@
 
   // ---- boot --------------------------------------------------------------
 
-  // Debounce re-checks: findActionAnchor now scans for the routing control, so we
-  // coalesce the SPA's mutation bursts instead of scanning on every micro-change.
+  // The body observer for the FALLBACK path only (used when the shared observer
+  // hub is absent). Hoisted so insertHost() can disconnect it across our own DOM
+  // writes; under the hub it stays null and isOwnMutation does that job instead.
+  var mo = null;
+
+  // True when EVERY element node added/removed in this batch is our own host
+  // subtree — i.e. the mutation was caused by our own inject/remove, not by the
+  // SPA. Such batches change nothing we care about, so we skip the scan. Mirrors
+  // content.js's _isOwnChipMutation. (Belt-and-braces with the disconnect in
+  // insertHost: a removeHost write, or any stray host mutation, is filtered here.)
+  function isOwnMutation(mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var m = mutations[i];
+      var lists = [m.addedNodes, m.removedNodes];
+      for (var l = 0; l < lists.length; l++) {
+        var nodes = lists[l];
+        for (var n = 0; n < nodes.length; n++) {
+          var node = nodes[n];
+          if (node.nodeType !== 1) continue; // ignore text nodes
+          if (node !== host && !(host && host.contains && host.contains(node))) return false;
+        }
+      }
+    }
+    return true; // every element node added/removed was ours (or batch was text-only)
+  }
+
+  // Coalesce the SPA's mutation bursts to a single deferred run. We keep the
+  // existing ~200ms debounce (collapses a burst) AND hop to requestAnimationFrame
+  // (keeps the actual work off the hot mutation-callback path and aligned to a
+  // frame, like content.js's queueRafScheduled). Crucially, ensureInjected's fast
+  // path means each fired tick does NO DOM scan / reflow when placement is already
+  // valid — so idle SPA churn is now near-free.
   var ensureTimer = null;
+  var rafScheduled = false;
   function scheduleEnsure() {
-    if (ensureTimer) return;
+    if (document.hidden) return; // paused while backgrounded; visibilitychange re-checks
+    if (ensureTimer || rafScheduled) return;
     ensureTimer = setTimeout(function () {
       ensureTimer = null;
-      ensureInjected();
+      if (rafScheduled) return;
+      rafScheduled = true;
+      requestAnimationFrame(function () {
+        rafScheduled = false;
+        if (document.hidden) return;
+        ensureInjected();
+      });
     }, 200);
   }
 
   loadCfg().then(function () {
     buildUI();
     ensureInjected();
-    var mo = new MutationObserver(scheduleEnsure);
-    mo.observe(document.body, { childList: true, subtree: true });
+    // Skip batches that are entirely our own host inject/remove — they'd
+    // otherwise self-trigger a needless rescan.
+    var onBodyMutations = function (mutations) {
+      if (isOwnMutation(mutations)) return;
+      scheduleEnsure();
+    };
+    // Prefer the shared observer hub (one body observer for the whole injection
+    // surface); fall back to a private observer if it isn't present so the button
+    // still works on its own. Under the hub `mo` stays null, so insertHost's
+    // disconnect is a no-op and isOwnMutation alone guards self-triggering.
+    var hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      hub.subscribe(onBodyMutations);
+    } else {
+      mo = new MutationObserver(onBodyMutations);
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
+    // When the tab is re-shown, re-check once (mutations that fired while hidden
+    // were skipped, so placement may be stale).
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) scheduleEnsure();
+    });
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === 'local' && changes[STORE_KEY]) {

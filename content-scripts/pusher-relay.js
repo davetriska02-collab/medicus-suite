@@ -49,11 +49,25 @@
     };
     ch.bind('appointments-updated', handler);
 
-    // Re-bind if the page navigates within the SPA and the channel is recreated
-    const observer = new MutationObserver(() => {
+    // Re-bind if the page navigates within the SPA and the channel is recreated.
+    //
+    // Performance: the SPA re-renders its DOM constantly, so a body-subtree observer
+    // fires on every frame's mutation burst. The actual check is only a couple of
+    // optional-chained property reads + an identity compare, but there is no need to
+    // run it more than once per frame, nor at all while the tab is backgrounded
+    // (the channel object's identity is independent of visibility, so a single
+    // re-check on visibilitychange catches any recreation that happened while
+    // hidden). We therefore coalesce mutation bursts to one rAF-aligned check and
+    // pause entirely when document.hidden — mirroring the queue observer's
+    // queueRafScheduled pattern in triage-lens/content.js. This changes only WHEN
+    // the (idempotent) channel check runs, never WHETHER a recreation is detected.
+    let rafScheduled = false;
+    let unsubscribe = null;
+    const checkChannel = () => {
       const newCh = pusher.channels?.channels?.[channelName];
       if (newCh && newCh !== ch) {
-        observer.disconnect();
+        if (unsubscribe) unsubscribe();
+        document.removeEventListener('visibilitychange', onVisible);
         // Release the old channel's handler so a stale closure can't keep firing
         // on the previous channel, then restore the full wait budget for the new
         // channel (elapsed is otherwise never reset, so a late reconnect could
@@ -62,8 +76,32 @@
         elapsed = 0;
         setTimeout(tryBind, 500);
       }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    };
+    const scheduleCheck = () => {
+      if (document.hidden) return; // paused while backgrounded; visibilitychange re-checks
+      if (rafScheduled) return;
+      rafScheduled = true;
+      requestAnimationFrame(() => {
+        rafScheduled = false;
+        if (document.hidden) return;
+        checkChannel();
+      });
+    };
+    // When the tab is re-shown, run one check: bursts that fired while hidden were
+    // skipped, so the channel may have been recreated in the meantime.
+    const onVisible = () => { if (!document.hidden) checkChannel(); };
+    // Prefer the shared observer hub (one body observer for the whole injection
+    // surface); fall back to a private observer when it isn't present. The channel
+    // check is idempotent, so routing it through the hub changes only WHEN it runs.
+    const hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      unsubscribe = hub.subscribe(scheduleCheck);
+    } else {
+      const observer = new MutationObserver(scheduleCheck);
+      observer.observe(document.body, { childList: true, subtree: true });
+      unsubscribe = () => observer.disconnect();
+    }
+    document.addEventListener('visibilitychange', onVisible);
   }
 
   // Start polling once DOM is ready

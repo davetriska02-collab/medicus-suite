@@ -2,6 +2,73 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.6] — 2026-06-22
+
+### Performance: one shared DOM-observer hub for all page-injection features
+
+Follow-up to v3.132.5. The injected features each still ran their **own**
+`MutationObserver` over the whole `document.body` subtree, so every Medicus
+(Vue + AG-Grid) re-render woke three separate observers — three callbacks, three
+rAF gates, three visibility checks, every frame. Introduced
+`content-scripts/dom-observer-hub.js`: a single body-subtree observer (loaded first
+in the manifest, shared via `window.__chObserverHub`) that fans one rAF-coalesced
+mutation batch out to all subscribers and is paused while the tab is backgrounded.
+
+- `routine-rx-button.js`, `booking-inline.js` and `pusher-relay.js` now **subscribe**
+  to the hub instead of each constructing a body observer (3 observers → 1).
+- Each keeps its own self-mutation filter and placement fast-path; under the hub
+  the per-feature disconnect-around-write is unnecessary (the own-mutation filter
+  already ignores our own writes) and is retained only on the fallback path.
+- **Fallback:** if the hub is absent each feature stands up its own private
+  observer exactly as before, so nothing depends on the hub for correctness — only
+  for efficiency.
+
+Covered by `test-dom-observer-hub.js` (one observer for N subscribers, coalesced
+fan-out, hidden-pause, unsubscribe, error isolation, idempotent load). `content.js`
+(scoped queue observer, already optimal) and `sentinel.js` (nav-detection
+semantics) keep their own observers and are untouched.
+
+## [v3.132.5] — 2026-06-22
+
+### Performance: page-injection observers no longer scan on idle SPA re-renders
+
+The injected page features (the "send to routine" button, the inline "Book
+appointment" widget, and the Pusher relay) each ran a `MutationObserver` over the
+whole `document.body` subtree, which fires on every Medicus (Vue + AG-Grid) render.
+On each fired tick they re-ran whole-page DOM scans — and the worst offenders read
+`offsetParent` / `getClientRects` (forced synchronous layout/reflow) on thousands
+of nodes **even when nothing relevant had changed and the control was already
+placed**. That is the UI slowdown. Reworked all three to the same hardened pattern
+that the queue-chip observer in `content.js` already uses:
+
+- **`content-scripts/triage-lens/routine-rx-button.js`** — added a reflow-free
+  fast path: once the button is placed, idle re-renders are dismissed with cheap
+  connectivity checks (`isConnected` / `contains`) and the cached routing-control's
+  `isConnected` (keeps H-035 gate 2 enforced between scans), doing **zero** layout
+  flushes. The expensive `findActionAnchor` scan now runs only on a real placement
+  change, and even then tries the narrow `label`/`[role=radio]` carriers before any
+  `div`/`span` sweep. Added a self-mutation filter + disconnect-around-write so our
+  own inject can't self-trigger a rescan, an rAF hop off the mutation-callback path,
+  and a `document.hidden` pause. PREPEND, re-inject durability, the H-035 visibility
+  gates and text-only control matching are all unchanged.
+- **`content-scripts/booking-inline.js`** — the widget's own `rerender()` (an
+  `innerHTML` swap on every keystroke / slot pick) no longer wakes the observer
+  (own-mutation filter), the `findCard` heading scan searches the realistic
+  `h1`–`h6`/`strong`/`b`/`legend` carriers first and skips reading `.textContent` of
+  large subtrees, and the scan is gated behind a cheap path check, a fast-path skip
+  when already placed, an rAF, and a `document.hidden` pause. Networking/booking
+  flow, HTML-escaping and below-card placement unchanged.
+- **`content-scripts/pusher-relay.js`** — its channel-rebind observer now coalesces
+  bursts to one rAF-aligned check and pauses while backgrounded (the channel check
+  is idempotent, so this changes only *when* it runs, never whether a recreation is
+  detected).
+
+Pure performance pass — no behavioural change. `content.js`'s queue observer was
+already optimal and was left untouched; `sentinel.js`'s nav-detection observer was
+deliberately left as-is (already cheap, and a naive change would risk patient-switch
+detection). Consolidating the remaining body observers into one shared dispatcher is
+noted as a follow-up.
+
 ## [v3.132.4] — 2026-06-22
 
 ### Bug fix: "send to routine" button restricted to the prescription-routing workflow
