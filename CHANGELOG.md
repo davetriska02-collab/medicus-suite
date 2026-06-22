@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.131.4] — 2026-06-22
+
+### Dev tool: booking-flow network+DOM capture (recon for embedded booking)
+
+New `scripts/booking-flow-capture.js` — a console-pasteable recorder that maps
+what Medicus does when you click **Actions → Appointment**, so the booking flow
+can be replicated and embedded into the Slots page. It is the network+DOM
+sibling of `scripts/ui-clickpath-recorder.js` (which captures click structure but
+deliberately never touches the network).
+
+Runs in the page's MAIN world (the same axios/XHR-wrap technique as
+`page-world.js`, since Medicus is a Vue + AG-Grid SPA on axios under a strict
+CSP). It records, on one ordered timeline: every scheduling/appointment request
+(and all writes) with method, path, request payload, request headers, response
+shape and timing; booking modal/drawer appearance (control names/labels/types —
+never field values); and SPA route changes. Output via `chBook.summary()`
+(deduped endpoint list), `.dump()`, `.copy()`, `.save()`.
+
+Observation only — never blocks, rewrites, replays or sends anything; nothing
+leaves the browser except the local copy/save you trigger. Bodies are
+PII-redacted by default (names, DOB, NHS number, address, postcode, phone, email
+masked by key; NHS-number/postcode value-detection as a backstop), keeping
+booking-relevant structure (slot / appointment-type / clinician / date ids and
+UUIDs). Dev-only: `scripts/` is excluded from the release zip, so nothing ships
+to users. Use a TEST patient.
+
 ## [v3.131.3] — 2026-06-21
 
 ### Routine-Rx button: target the dedicated "send to routine requests" option
