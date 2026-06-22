@@ -53,7 +53,8 @@
         if (s && typeof s === 'object') {
           cfg.teams = Array.isArray(s.teams) && s.teams.length ? s.teams.slice() : DEFAULTS.teams.slice();
           cfg.lastTeam = typeof s.lastTeam === 'string' && s.lastTeam ? s.lastTeam : cfg.teams[0];
-          cfg.commitMode = ['confirm', 'manual', 'auto'].indexOf(s.commitMode) >= 0 ? s.commitMode : DEFAULTS.commitMode;
+          cfg.commitMode =
+            ['confirm', 'manual', 'auto'].indexOf(s.commitMode) >= 0 ? s.commitMode : DEFAULTS.commitMode;
         }
         if (cfg.teams.indexOf(cfg.lastTeam) < 0) cfg.teams.unshift(cfg.lastTeam);
         resolve();
@@ -86,7 +87,7 @@
   }
   // own/visible text of an element, trimmed
   function textOf(el) {
-    return norm(el && (el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent));
+    return norm((el && el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent));
   }
   // Find the first visible element matching one of `selectors` whose text equals
   // (or, as a fallback, contains) `wanted`.
@@ -94,26 +95,70 @@
     var w = norm(wanted);
     var nodes = [];
     selectors.forEach(function (sel) {
-      try { Array.prototype.push.apply(nodes, document.querySelectorAll(sel)); } catch (e) { /* ignore */ }
+      try {
+        Array.prototype.push.apply(nodes, document.querySelectorAll(sel));
+      } catch (e) {
+        /* ignore */
+      }
     });
-    var exact = null, partial = null;
+    var exact = null,
+      partial = null;
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (!visible(el)) continue;
       var t = textOf(el);
-      if (t === w) { exact = el; break; }
+      if (t === w) {
+        exact = el;
+        break;
+      }
       if (!partial && t.indexOf(w) >= 0) partial = el;
     }
     return exact || partial;
   }
 
+  // Like findByText, but returns EVERY visible element whose text contains
+  // `wanted`. Used when a label (e.g. "More actions") can appear in more than one
+  // panel and we must choose the right one by context rather than take the first.
+  function collectByText(selectors, wanted) {
+    var w = norm(wanted);
+    var nodes = [];
+    selectors.forEach(function (sel) {
+      try {
+        Array.prototype.push.apply(nodes, document.querySelectorAll(sel));
+      } catch (e) {
+        /* ignore */
+      }
+    });
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (visible(nodes[i]) && textOf(nodes[i]).indexOf(w) >= 0) out.push(nodes[i]);
+    }
+    return out;
+  }
+
+  // True when `a` sits within `depth` ancestor levels of `b` — i.e. they share a
+  // card/panel rather than being on separate top-level surfaces (a task form vs
+  // an overlapping appointment/results drawer).
+  function sharesPanel(a, b, depth) {
+    var node = b;
+    for (var i = 0; i < (depth || 12) && node; i++, node = node.parentElement) {
+      if (node.contains(a)) return true;
+    }
+    return false;
+  }
+
   function waitFor(fn, timeout, interval) {
-    timeout = timeout || 5000; interval = interval || 120;
+    timeout = timeout || 5000;
+    interval = interval || 120;
     return new Promise(function (resolve) {
       var t0 = Date.now();
       (function poll() {
         var v;
-        try { v = fn(); } catch (e) { v = null; }
+        try {
+          v = fn();
+        } catch (e) {
+          v = null;
+        }
         if (v) return resolve(v);
         if (Date.now() - t0 >= timeout) return resolve(null);
         setTimeout(poll, interval);
@@ -124,18 +169,29 @@
   function realClick(el) {
     if (!el) return;
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
-      try { el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window })); } catch (e) { /* ignore */ }
+      try {
+        el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      } catch (e) {
+        /* ignore */
+      }
     });
-    try { if (typeof el.click === 'function') el.click(); } catch (e) { /* ignore */ }
+    try {
+      if (typeof el.click === 'function') el.click();
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function setNativeValue(el, val) {
     try {
       var proto = Object.getPrototypeOf(el);
       var desc = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (desc && desc.set) desc.set.call(el, val); else el.value = val;
+      if (desc && desc.set) desc.set.call(el, val);
+      else el.value = val;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   // The "Assign to" control: an input reachable after the re-assign radio is on.
@@ -196,16 +252,25 @@
       // 3. the team option
       var option = await waitFor(function () {
         var opts = document.querySelectorAll('[id^="select-item-"], [role="option"], li[role="option"]');
-        var exact = null, partial = null;
+        var exact = null,
+          partial = null;
         for (var i = 0; i < opts.length; i++) {
           if (!visible(opts[i])) continue;
           var t = textOf(opts[i]);
-          if (t === norm(team)) { exact = opts[i]; break; }
+          if (t === norm(team)) {
+            exact = opts[i];
+            break;
+          }
           if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
         }
         return exact || partial;
       }, 4000);
-      if (!option) return abort('Team “' + team + '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.');
+      if (!option)
+        return abort(
+          'Team “' +
+            team +
+            '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.'
+        );
       realClick(option);
 
       // 4. commit — find the button, then wait until Medicus ENABLES it
@@ -216,12 +281,18 @@
       }, 5000);
       if (!commit) {
         if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
-          return abort('Selected “' + team + '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.');
+          return abort(
+            'Selected “' +
+              team +
+              '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.'
+          );
         }
         return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.');
       }
 
-      cfg.lastTeam = team; saveCfg(); renderButton();
+      cfg.lastTeam = team;
+      saveCfg();
+      renderButton();
 
       if (mode === 'manual') {
         highlight(commit);
@@ -230,7 +301,10 @@
       }
       if (mode === 'confirm') {
         var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
-        if (!ok) { toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn'); return; }
+        if (!ok) {
+          toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
+          return;
+        }
       }
       realClick(commit);
       toast('Sent to “' + team + '”.', 'ok');
@@ -242,11 +316,18 @@
 
   // ---- UI: floating button + inline menu --------------------------------
 
-  var host = null, btn = null, caret = null, menu = null, busy = false;
+  var host = null,
+    btn = null,
+    caret = null,
+    menu = null,
+    busy = false;
 
   function setBusy(b) {
     busy = b;
-    if (btn) { btn.disabled = b; btn.style.opacity = b ? '0.6' : '1'; }
+    if (btn) {
+      btn.disabled = b;
+      btn.style.opacity = b ? '0.6' : '1';
+    }
   }
 
   function highlight(el) {
@@ -254,8 +335,12 @@
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       var prev = el.style.boxShadow;
       el.style.boxShadow = '0 0 0 3px #d97706';
-      setTimeout(function () { el.style.boxShadow = prev; }, 2600);
-    } catch (e) { /* ignore */ }
+      setTimeout(function () {
+        el.style.boxShadow = prev;
+      }, 2600);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function toast(msg, kind) {
@@ -263,44 +348,79 @@
     t.className = 'chrx-toast chrx-' + (kind || 'ok');
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(function () { t.classList.add('chrx-show'); }, 10);
-    setTimeout(function () { t.classList.remove('chrx-show'); setTimeout(function () { t.remove(); }, 300); }, 4200);
+    setTimeout(function () {
+      t.classList.add('chrx-show');
+    }, 10);
+    setTimeout(function () {
+      t.classList.remove('chrx-show');
+      setTimeout(function () {
+        t.remove();
+      }, 300);
+    }, 4200);
   }
 
-  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+  function closeMenu() {
+    if (menu) {
+      menu.remove();
+      menu = null;
+    }
+  }
 
   function openMenu() {
     closeMenu();
     menu = document.createElement('div');
     menu.className = 'chrx-menu';
 
-    var h1 = document.createElement('div'); h1.className = 'chrx-menu-h'; h1.textContent = 'Send to team'; menu.appendChild(h1);
+    var h1 = document.createElement('div');
+    h1.className = 'chrx-menu-h';
+    h1.textContent = 'Send to team';
+    menu.appendChild(h1);
     cfg.teams.forEach(function (team) {
       var item = document.createElement('button');
       item.className = 'chrx-menu-item' + (team === cfg.lastTeam ? ' chrx-sel' : '');
       item.textContent = (team === cfg.lastTeam ? '● ' : '○ ') + team;
-      item.onclick = function () { cfg.lastTeam = team; saveCfg(); renderButton(); closeMenu(); };
+      item.onclick = function () {
+        cfg.lastTeam = team;
+        saveCfg();
+        renderButton();
+        closeMenu();
+      };
       menu.appendChild(item);
     });
     var add = document.createElement('button');
-    add.className = 'chrx-menu-item chrx-add'; add.textContent = '+ Add team…';
+    add.className = 'chrx-menu-item chrx-add';
+    add.textContent = '+ Add team…';
     add.onclick = function () {
       var name = window.prompt('Exact team name as it appears in the Medicus “Assign to” list:');
       if (name && name.trim()) {
         name = name.trim();
         if (cfg.teams.indexOf(name) < 0) cfg.teams.push(name);
-        cfg.lastTeam = name; saveCfg(); renderButton();
+        cfg.lastTeam = name;
+        saveCfg();
+        renderButton();
       }
       closeMenu();
     };
     menu.appendChild(add);
 
-    var h2 = document.createElement('div'); h2.className = 'chrx-menu-h'; h2.textContent = 'On commit'; menu.appendChild(h2);
-    [['confirm', 'Ask, then send'], ['manual', 'Pre-fill, I’ll click'], ['auto', 'Send automatically']].forEach(function (m) {
+    var h2 = document.createElement('div');
+    h2.className = 'chrx-menu-h';
+    h2.textContent = 'On commit';
+    menu.appendChild(h2);
+    [
+      ['confirm', 'Ask, then send'],
+      ['manual', 'Pre-fill, I’ll click'],
+      ['auto', 'Send automatically'],
+    ].forEach(function (m) {
       var item = document.createElement('button');
       item.className = 'chrx-menu-item' + (m[0] === cfg.commitMode ? ' chrx-sel' : '');
       item.textContent = (m[0] === cfg.commitMode ? '● ' : '○ ') + m[1];
-      item.onclick = function () { cfg.commitMode = m[0]; saveCfg(); renderButton(); closeMenu(); };
+      item.onclick = function () {
+        cfg.commitMode = m[0];
+        saveCfg();
+        renderButton();
+        closeMenu();
+      };
       menu.appendChild(item);
     });
 
@@ -310,12 +430,15 @@
     }, 0);
   }
   function onDocClick(e) {
-    if (menu && !host.contains(e.target)) { closeMenu(); document.removeEventListener('click', onDocClick, true); }
+    if (menu && !host.contains(e.target)) {
+      closeMenu();
+      document.removeEventListener('click', onDocClick, true);
+    }
   }
 
   function renderButton() {
     if (!btn) return;
-    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : (cfg.commitMode === 'manual' ? ' ✎' : '');
+    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : cfg.commitMode === 'manual' ? ' ✎' : '';
     btn.textContent = '→ ' + cfg.lastTeam + modeTag;
     btn.title = 'Re-assign this prescription to “' + cfg.lastTeam + '” (' + cfg.commitMode + '). Use ▾ to change.';
   }
@@ -327,12 +450,19 @@
 
     btn = document.createElement('button');
     btn.className = 'chrx-btn';
-    btn.onclick = function () { if (!busy) runMacro(cfg.lastTeam, cfg.commitMode); };
+    btn.onclick = function () {
+      if (!busy) runMacro(cfg.lastTeam, cfg.commitMode);
+    };
 
     caret = document.createElement('button');
-    caret.className = 'chrx-caret'; caret.textContent = '▾';
+    caret.className = 'chrx-caret';
+    caret.textContent = '▾';
     caret.title = 'Change team / commit behaviour';
-    caret.onclick = function (e) { e.stopPropagation(); if (menu) closeMenu(); else openMenu(); };
+    caret.onclick = function (e) {
+      e.stopPropagation();
+      if (menu) closeMenu();
+      else openMenu();
+    };
 
     host.appendChild(btn);
     host.appendChild(caret);
@@ -343,12 +473,38 @@
     document.head.appendChild(style);
   }
 
-  // Anchor: the action-button row at the foot of the Next Steps panel always
-  // carries a "More actions" button — sit inline beside it so we line up with
-  // Issue / Re-assign task rather than floating in the viewport corner.
+  // Where to inject the button. The H-035 visibility control is that the button
+  // appears ONLY where the "send to routine requests" workflow genuinely exists —
+  // never on a screen, modal or drawer that merely happens to carry a "More
+  // actions" button (the View Prescription modal, an appointment-booked drawer,
+  // results/document drawers, etc.). Three gates, in order:
+  //
+  //   1. URL is a prescription/medication request task overview (slug contains
+  //      "prescription" — confirmed `prescription-requests` in
+  //      engine/extractors/patient-context.js). Cheap pre-filter.
+  //   2. The actual routing control — the "Save & send to routine requests task
+  //      list" option the macro clicks first — is present and visible on screen.
+  //      If it isn't here, this isn't the prescription-routing workflow.
+  //   3. We anchor beside a "More actions" button that lives in the SAME panel as
+  //      that routing control (not inside a dialog, and not an overlapping
+  //      drawer's own action row). This is what stops the button leaking onto an
+  //      appointment drawer that overlays the prescription page.
   function findActionAnchor() {
-    var more = findByText(['button', '[role="button"]'], 'More actions');
-    return more ? more.parentElement : null;
+    if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
+
+    var routine = findByText(
+      ['label', '[role="radio"]', '.radio', 'div', 'span'],
+      'Save & send to routine requests task list'
+    );
+    if (!routine) return null;
+
+    var candidates = collectByText(['button', '[role="button"]'], 'More actions');
+    for (var i = 0; i < candidates.length; i++) {
+      var more = candidates[i];
+      if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;
+      if (sharesPanel(routine, more, 12)) return more.parentElement;
+    }
+    return null;
   }
 
   // Inject inline when on the prescribing screen; remove otherwise. PREPEND and
@@ -390,14 +546,27 @@
 
   // ---- boot --------------------------------------------------------------
 
+  // Debounce re-checks: findActionAnchor now scans for the routing control, so we
+  // coalesce the SPA's mutation bursts instead of scanning on every micro-change.
+  var ensureTimer = null;
+  function scheduleEnsure() {
+    if (ensureTimer) return;
+    ensureTimer = setTimeout(function () {
+      ensureTimer = null;
+      ensureInjected();
+    }, 200);
+  }
+
   loadCfg().then(function () {
     buildUI();
     ensureInjected();
-    var mo = new MutationObserver(function () { ensureInjected(); });
+    var mo = new MutationObserver(scheduleEnsure);
     mo.observe(document.body, { childList: true, subtree: true });
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === 'local' && changes[STORE_KEY]) { loadCfg().then(renderButton); }
+        if (area === 'local' && changes[STORE_KEY]) {
+          loadCfg().then(renderButton);
+        }
       });
     }
   });

@@ -10,6 +10,16 @@ import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { downloadCsv } from '../shared/export-util.js';
 import { SWATCH_KEYS, sanitisePillPrefs, applyPillOrder } from '../shared/pill-prefs.js';
+import {
+  detectMedicusTab,
+  detectPatientId,
+  fetchAppointmentFinder,
+  fetchAvailableSlots,
+  reserveSlot,
+  fetchCreateForm,
+  createAppointment,
+  releaseReservation,
+} from './booking-api.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -34,6 +44,31 @@ let state = {
   organisePills: false, // ephemeral: reorder/colour mode
   openColourFor: null, // type whose colour palette is open, or null
   typesOpen: false, // whether the by-type details panel is open
+  bk: {
+    open: false,
+    initLoading: false,
+    initError: null,
+    tabId: null,
+    appOrigin: null,
+    apiBase: null,
+    patientId: null,
+    providerId: null,
+    types: [],
+    selectedTypeId: '',
+    date: null, // set to todayISO() on first open
+    slots: null, // null = no search yet; [] = searched, no results
+    hasSearched: false,
+    slotsLoading: false,
+    slotsError: null,
+    step: 'browse', // 'browse' | 'confirm' | 'booked'
+    selectedSlot: null,
+    reservationId: null,
+    formData: null,
+    confirming: false,
+    confirmError: null,
+    reason: '',
+    bookedId: null,
+  },
 };
 
 // The pill colour palette, prefs validation and ordering rule are shared with
@@ -96,6 +131,9 @@ export async function init(el) {
     document.removeEventListener('suite:slots:refresh', onRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
     stopFresh();
+    if (state.bk.reservationId && state.bk.apiBase) {
+      releaseReservation(state.bk.apiBase, state.bk.reservationId).catch(() => {});
+    }
     container = null;
   };
 }
@@ -344,6 +382,7 @@ function render() {
       ${!state.loading && d ? renderAlertRibbon(d.byType) : ''}
       ${!state.loading && d ? renderHeroCard(visible, visibleSum) : ''}
       ${state.loading ? renderSkeleton() : d ? renderData(d, visible, visibleSum) : ''}
+      ${renderBookingSection()}
       <div class="foot">${state.lastFetched ? freshnessHtml(state.lastFetched) : ''}</div>
     </div>
   `;
@@ -633,6 +672,304 @@ function renderData(d, visible, visibleSum) {
   `;
 }
 
+// ── Booking section ───────────────────────────────────────────────────────────
+
+function renderBookingSection() {
+  const { bk } = state;
+  const headerLabel = 'Book appointment for patient';
+  return `
+    <section class="slots-section bk-section">
+      <button class="bk-toggle-row" id="bkToggle" aria-expanded="${bk.open}">
+        <span class="bk-toggle-chevron" aria-hidden="true">${bk.open ? '▾' : '▸'}</span>
+        <span class="bk-toggle-text">${headerLabel}</span>
+        ${bk.open && bk.patientId ? `<span class="bk-pt-badge">patient</span>` : ''}
+      </button>
+      ${bk.open ? renderBookingContent() : ''}
+    </section>
+  `;
+}
+
+function renderBookingContent() {
+  const { bk } = state;
+  if (bk.initLoading) return `<div class="bk-loading">Loading appointment types…</div>`;
+  if (bk.initError) return `<div class="bk-error">${escHtml(bk.initError)}</div>`;
+  if (bk.step === 'booked') return renderBookingSuccess();
+  if (bk.step === 'confirm') return renderBookingConfirm();
+  return renderBookingBrowse();
+}
+
+function renderBookingBrowse() {
+  const { bk } = state;
+  const typesHtml =
+    bk.types.length === 0
+      ? '<option value="" disabled>No appointment types found</option>'
+      : bk.types
+          .map(
+            (t) =>
+              `<option value="${escHtml(t.value)}"${bk.selectedTypeId === t.value ? ' selected' : ''}>${escHtml(t.label)}</option>`
+          )
+          .join('');
+
+  let slotsHtml = '';
+  if (bk.slotsLoading) {
+    slotsHtml = `<div class="bk-loading">Searching for slots…</div>`;
+  } else if (bk.slotsError) {
+    slotsHtml = `<div class="bk-error">${escHtml(bk.slotsError)}</div>`;
+  } else if (bk.hasSearched && bk.slots && bk.slots.length > 0) {
+    slotsHtml = `<div class="bk-slot-list">${bk.slots.map((s, i) => renderSlotRow(s, i)).join('')}</div>`;
+  } else if (bk.hasSearched) {
+    slotsHtml = `<div class="bk-no-slots">No available slots on this date.</div>`;
+  }
+
+  const canSearch = bk.selectedTypeId && bk.date && !bk.slotsLoading && bk.apiBase;
+  const bkDate = bk.date || todayISO();
+
+  return `
+    <div class="bk-browse">
+      ${!bk.appOrigin && !bk.initLoading ? `<div class="bk-warn">Could not detect Medicus — open a Medicus tab and sign in.</div>` : ''}
+      ${!bk.patientId && !bk.initLoading ? `<div class="bk-warn">No patient record open — navigate to a patient in Medicus first.</div>` : ''}
+      <div class="bk-row">
+        <label class="bk-label" for="bkType">Type</label>
+        <select class="bk-select" id="bkType"${bk.types.length === 0 ? ' disabled' : ''}>
+          <option value="">— pick type —</option>
+          ${typesHtml}
+        </select>
+      </div>
+      <div class="bk-row">
+        <label class="bk-label" for="bkDate">Date</label>
+        <input type="date" class="date-input bk-date-input" id="bkDate" value="${escHtml(bkDate)}" max="2099-12-31" />
+      </div>
+      <button class="bk-action-btn" id="bkSearch"${canSearch ? '' : ' disabled'}>Find slots</button>
+      ${slotsHtml}
+    </div>
+  `;
+}
+
+function renderSlotRow(slot, idx) {
+  const time = escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '');
+  const end = escHtml(slot.end || slot.endDateTime?.substring(11, 16) || '');
+  const duration = escHtml(slot.formattedDuration || `${slot.duration} mins`);
+  const site = escHtml(slot.siteName || '');
+  const type = escHtml(slot.appointmentType?.name || '');
+  return `
+    <button class="bk-slot-row" data-slot-idx="${idx}">
+      <span class="bk-slot-time">${time}${end ? `–${end}` : ''}</span>
+      <span class="bk-slot-meta">
+        ${site ? `<span class="bk-slot-site">${site}</span>` : ''}
+        ${type ? `<span class="bk-slot-type">${type}</span>` : ''}
+      </span>
+      <span class="bk-slot-dur">${duration}</span>
+    </button>
+  `;
+}
+
+function renderBookingConfirm() {
+  const { bk } = state;
+  const slot = bk.selectedSlot;
+  if (!slot) return '';
+  const time = escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '');
+  const end = escHtml(slot.end || slot.endDateTime?.substring(11, 16) || '');
+  const duration = escHtml(slot.formattedDuration || `${slot.duration} mins`);
+  const site = escHtml(slot.siteName || '');
+  const type = escHtml(slot.appointmentType?.name || '');
+  const dateStr = escHtml(formatDate(bk.date || todayISO()));
+  return `
+    <div class="bk-confirm">
+      <div class="bk-confirm-summary">
+        <div class="bk-confirm-row"><span class="bk-confirm-label">Date</span><span>${dateStr}</span></div>
+        <div class="bk-confirm-row"><span class="bk-confirm-label">Time</span><span>${time}${end ? `–${end}` : ''} (${duration})</span></div>
+        ${site ? `<div class="bk-confirm-row"><span class="bk-confirm-label">Site</span><span>${site}</span></div>` : ''}
+        ${type ? `<div class="bk-confirm-row"><span class="bk-confirm-label">Type</span><span>${type}</span></div>` : ''}
+      </div>
+      <div class="bk-row">
+        <label class="bk-label" for="bkReason">Reason <span class="bk-optional">(opt.)</span></label>
+        <input type="text" class="bk-text-input" id="bkReason" value="${escHtml(bk.reason)}" placeholder="Reason for appointment" maxlength="255" />
+      </div>
+      ${bk.confirmError ? `<div class="bk-error">${escHtml(bk.confirmError)}</div>` : ''}
+      <div class="bk-confirm-actions">
+        <button class="ghost-btn" id="bkBack"${bk.confirming ? ' disabled' : ''}>Back</button>
+        <button class="bk-action-btn bk-confirm-btn" id="bkConfirm"${bk.confirming ? ' disabled' : ''}>${bk.confirming ? 'Booking…' : 'Confirm booking'}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderBookingSuccess() {
+  const { bk } = state;
+  const slot = bk.selectedSlot;
+  const time = slot ? escHtml(slot.start || slot.startDateTime?.substring(11, 16) || '') : '';
+  const dateStr = escHtml(formatDate(bk.date || todayISO()));
+  return `
+    <div class="bk-success">
+      <div class="bk-success-icon" aria-hidden="true">✓</div>
+      <div class="bk-success-msg">Appointment booked</div>
+      <div class="bk-success-detail">${dateStr}${time ? ` at ${time}` : ''}</div>
+      <button class="ghost-btn bk-again-btn" id="bkAgain">Book another</button>
+    </div>
+  `;
+}
+
+// ── Booking actions ───────────────────────────────────────────────────────────
+
+async function doInitBooking() {
+  const { bk } = state;
+  bk.initLoading = true;
+  bk.initError = null;
+  if (!bk.date) bk.date = todayISO();
+  render();
+  try {
+    const detected = await detectMedicusTab();
+    bk.tabId = detected?.tabId ?? null;
+    bk.appOrigin = detected?.origin ?? null;
+    bk.apiBase = detected?.apiBase ?? null;
+    bk.patientId = await detectPatientId(detected?.tab ?? null);
+    if (!detected) {
+      bk.initError = 'Could not detect Medicus — open a Medicus tab and sign in.';
+      return;
+    }
+    const finder = await fetchAppointmentFinder(bk.apiBase);
+    bk.providerId = finder.localOrganisationDetails?.id || null;
+    const types = [];
+    for (const svc of finder.localOrganisationDetails?.services || []) {
+      for (const t of svc.appointmentTypes || []) {
+        if (!types.some((e) => e.value === t.value)) types.push({ value: t.value, label: t.label });
+      }
+    }
+    bk.types = types;
+    if (types.length === 1) bk.selectedTypeId = types[0].value;
+  } catch (err) {
+    bk.initError = err.message || 'Failed to load appointment types.';
+  } finally {
+    bk.initLoading = false;
+    render();
+  }
+}
+
+async function doSearchSlots() {
+  const { bk } = state;
+  if (!bk.apiBase || !bk.providerId || !bk.selectedTypeId || !bk.date) return;
+  bk.slotsLoading = true;
+  bk.slotsError = null;
+  bk.slots = null;
+  bk.hasSearched = false;
+  render();
+  try {
+    bk.slots = await fetchAvailableSlots(bk.apiBase, {
+      providerId: bk.providerId,
+      appointmentTypeId: bk.selectedTypeId,
+      date: bk.date,
+    });
+  } catch (err) {
+    bk.slotsError = err.message || 'Failed to fetch available slots.';
+    bk.slots = null;
+  } finally {
+    bk.hasSearched = true;
+    bk.slotsLoading = false;
+    render();
+  }
+}
+
+async function doSelectSlot(slot) {
+  const { bk } = state;
+  if (!bk.apiBase || !slot) return;
+  bk.slotsLoading = true;
+  bk.slotsError = null;
+  render();
+  try {
+    const result = await reserveSlot(bk.apiBase, {
+      diaryId: slot.diaryId,
+      startDateTime: slot.startDateTime,
+      duration: slot.duration,
+      appointmentTypeId: slot.appointmentType?.id,
+    });
+    bk.reservationId = result.slotReservationId;
+    bk.selectedSlot = slot;
+    bk.step = 'confirm';
+    bk.confirmError = null;
+    bk.reason = '';
+  } catch (err) {
+    bk.slotsError = err.message || 'Could not reserve slot — it may have just been taken.';
+  } finally {
+    bk.slotsLoading = false;
+    render();
+  }
+}
+
+function doCancelBooking() {
+  const { bk } = state;
+  if (bk.reservationId && bk.apiBase) {
+    releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+  }
+  bk.reservationId = null;
+  bk.selectedSlot = null;
+  bk.step = 'browse';
+  bk.confirmError = null;
+  bk.formData = null;
+  render();
+}
+
+async function doConfirmBooking() {
+  const { bk } = state;
+  if (bk.confirming || !bk.reservationId || !bk.patientId || !bk.selectedSlot) return;
+  bk.confirming = true;
+  bk.confirmError = null;
+  render();
+  try {
+    const formData = await fetchCreateForm(bk.apiBase, {
+      slotReservationId: bk.reservationId,
+      patientId: bk.patientId,
+    });
+    bk.formData = formData;
+    const slot = bk.selectedSlot;
+    const payload = {
+      context: 'create-booked-appointment',
+      appointmentTemporalType: 'timed',
+      appointmentTypeId: slot.appointmentType?.id,
+      patientId: bk.patientId,
+      deliveryMode: formData.deliveryMode || slot.defaultDeliveryMode?.value || 'face-to-face',
+      intendedDuration: slot.duration,
+      diaryId: slot.diaryId,
+      isHighPriority: false,
+      isHiddenFromPatientFacingServices: false,
+      intendedStartDateTime: slot.startDateTime,
+      reasonForAppointment: bk.reason || null,
+      additionalInformation: null,
+      embargoOverrideReason: null,
+      slotReservationId: bk.reservationId,
+      nhsNationalSlotTypeCategory:
+        formData.nhsNationalSlotTypeCategory || slot.nhsNationalSlotTypeCategoryDefault?.value || '10127',
+      allowOverlappingAppointments: 'allow',
+      gpadReportingExceptionReasons: [],
+      clinicalCaseId: null,
+      bookingConfirmationRecipients: (formData.bookingConfirmationRecipientOptions || []).map((o) => o.value),
+      rescheduledAppointmentVersionId: null,
+    };
+    const result = await createAppointment(bk.apiBase, payload);
+    bk.bookedId = result.appointmentId;
+    bk.reservationId = null; // server releases on create
+    bk.step = 'booked';
+  } catch (err) {
+    bk.confirmError = err.message || 'Booking failed — please try again.';
+  } finally {
+    bk.confirming = false;
+    render();
+  }
+}
+
+function resetBookingToSlots() {
+  const { bk } = state;
+  bk.step = 'browse';
+  bk.selectedSlot = null;
+  bk.reservationId = null;
+  bk.formData = null;
+  bk.bookedId = null;
+  bk.confirmError = null;
+  bk.hasSearched = false;
+  bk.slots = null;
+  bk.slotsError = null;
+  render();
+}
+
 // ── Event binding ─────────────────────────────────────────────────────────────
 
 function bindEvents() {
@@ -837,4 +1174,63 @@ function bindEvents() {
       render();
     });
   });
+
+  // ── Booking panel events ──────────────────────────────────────────────────
+
+  container.querySelector('#bkToggle')?.addEventListener('click', () => {
+    const { bk } = state;
+    if (bk.open) {
+      // Closing — release any held reservation
+      if (bk.reservationId && bk.apiBase) {
+        releaseReservation(bk.apiBase, bk.reservationId).catch(() => {});
+        bk.reservationId = null;
+      }
+      if (bk.step === 'confirm') {
+        bk.step = 'browse';
+        bk.selectedSlot = null;
+      }
+    }
+    bk.open = !bk.open;
+    if (bk.open && !bk.appOrigin && !bk.initLoading) {
+      doInitBooking();
+    } else {
+      render();
+    }
+  });
+
+  container.querySelector('#bkType')?.addEventListener('change', (e) => {
+    state.bk.selectedTypeId = e.target.value;
+    state.bk.hasSearched = false;
+    state.bk.slots = null;
+    state.bk.slotsError = null;
+    render();
+  });
+
+  container.querySelector('#bkDate')?.addEventListener('change', (e) => {
+    state.bk.date = e.target.value;
+    state.bk.hasSearched = false;
+    state.bk.slots = null;
+    state.bk.slotsError = null;
+    render();
+  });
+
+  container.querySelector('#bkSearch')?.addEventListener('click', () => doSearchSlots());
+
+  container.querySelectorAll('.bk-slot-row').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.slotIdx, 10);
+      const slot = state.bk.slots?.[idx];
+      if (slot) doSelectSlot(slot);
+    });
+  });
+
+  container.querySelector('#bkBack')?.addEventListener('click', () => doCancelBooking());
+
+  container.querySelector('#bkReason')?.addEventListener('input', (e) => {
+    state.bk.reason = e.target.value;
+  });
+
+  container.querySelector('#bkConfirm')?.addEventListener('click', () => doConfirmBooking());
+
+  container.querySelector('#bkAgain')?.addEventListener('click', () => resetBookingToSlots());
 }

@@ -2,6 +2,185 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.132.4] — 2026-06-22
+
+### Bug fix: "send to routine" button restricted to the prescription-routing workflow
+
+The routine-rx button was leaking onto screens that merely share a "More actions"
+button — the "View Prescription" detail modal and, most recently, the
+appointment-booked drawer that overlays the prescription page (same URL, so a URL
+guard alone can't exclude it). Reworked the visibility gate to implement H-035
+control (e) properly — the button now appears only where the routing workflow
+genuinely exists:
+
+1. **URL pre-filter** — slug must contain `prescription`
+   (`/tasks/data/…prescription…/overview/`), confirmed `prescription-requests` in
+   `engine/extractors/patient-context.js`. (Replaces the looser `(?:prescri|medic)`
+   from v3.132.2, which also matched `medical_patient_request_task` etc.)
+2. **Control present** — the "Save & send to routine requests task list" option
+   (the very control the macro clicks first) must be present and visible on screen.
+3. **Same-panel anchor** — the button only mounts beside a "More actions" button
+   that shares a panel with that routing control, and never inside a
+   `role="dialog"`/`aria-modal` overlay. This is what keeps it off an appointment
+   drawer overlaying the prescription page.
+
+Also debounced the mutation-observer re-check (200 ms) since the gate now scans
+for the routing control.
+
+## [v3.132.3] — 2026-06-22
+
+### Bug fix: booking API now targets the correct host (root cause of JSON errors)
+
+The `/scheduling/*` booking endpoints live on the **API subdomain**
+(`{siteId}.api.england.medicus.health`) — the same host the slots-overview call
+already uses — **not** the page host. The page host serves the SPA HTML shell
+for `/scheduling/*`, which is what produced every `Unexpected token '<',
+"<!doctype ..."` error. (The earlier "root-relative path" reading was an artefact
+of `scripts/booking-flow-capture.js`, whose `safeUrl()` strips the host and
+records only the path — so the capture never revealed which host the calls used.)
+
+- **Inline widget** (`booking-inline.js`): `apiFetch` now builds URLs against
+  `{siteId}.api.<host>` instead of `location.origin`. CORS from the page origin
+  is already allowed (Medicus's own SPA calls the API subdomain the same way).
+- **Side panel** (`booking-api.js`): rewritten to fetch the API subdomain
+  directly with credentials — the side panel is an extension page with
+  `host_permissions` for `*.api.england.medicus.health`, so this works exactly
+  like the existing overview call. Dropped the `executeScript`/`booking-bridge.js`
+  relay (no longer needed); `booking-bridge.js` deleted.
+
+### Inline widget: now inserts BELOW the "Codes & actions" card
+
+`findCard()` walks up from the "Codes & actions" heading to the lowest common
+ancestor that also contains the form's "Submit" button — i.e. the whole card —
+and inserts the widget immediately *after* it, so it sits below the section
+rather than inside it.
+
+## [v3.132.2] — 2026-06-22
+
+### Bug fix: "Prescribing / Meds Management" button scoped to prescription tasks only
+
+The routine-rx button was appearing on the "View Prescription" detail panel
+(a modal overlay) because `findActionAnchor()` matched any "More actions" button
+on the page. Fixed with two guards: (1) URL must match a prescription/medication
+task overview path; (2) the matched button must not be inside a `role="dialog"`
+or `aria-modal` overlay.
+
+### Booking: inline widget injected into Medicus page below "Codes & actions"
+
+New `content-scripts/booking-inline.js` injects a collapsible "Book appointment
+for this patient" panel directly into the Medicus task page, below the "Codes &
+actions" section. Unlike the side-panel widget, the inline widget makes direct
+same-origin fetches to `/scheduling/*` (the content script runs on
+`england.medicus.health`, so no bridge is needed). Patient ID is resolved from
+the task UUID via the API subdomain as before.
+
+### Bug fix: side-panel booking connection error
+
+Replaced `chrome.tabs.sendMessage` with `chrome.scripting.executeScript` in
+`bridgeFetch`. The previous approach required `booking-bridge.js` to be
+pre-loaded in the tab (failing with "Receiving end does not exist" on tabs opened
+before the extension reload). `executeScript` injects and runs the fetch inline
+on demand — no pre-loaded content script required. `booking-bridge.js` removed
+from the manifest.
+
+## [v3.132.1] — 2026-06-22
+
+### Bug fix: booking panel now works from any Medicus screen
+
+Two fixes for the v3.132.0 booking panel:
+
+**Fix 1 — JSON error on all booking API calls.** The `/scheduling/*` endpoints
+on `england.medicus.health` return the SPA HTML shell to cross-origin callers
+(the extension side panel), causing `Unexpected token '<'` JSON parse errors.
+Added `content-scripts/booking-bridge.js` — a new content script that runs in
+the isolated world of every Medicus tab and listens for `CH_BOOKING_FETCH`
+messages from the extension. It relays the fetch from inside the tab (same-origin
+context, full session cookies) and returns the response text. SSRF guard: the
+bridge only relays to `/scheduling/` paths on the tab's own hostname; any other
+URL is rejected. Rewrote `booking-api.js` to route all six booking API calls
+through this bridge via `chrome.tabs.sendMessage`.
+
+**Fix 2 — no patient detected on the triage / patient-request screen.** The
+original `detectPatientId()` only matched `/patient/{uuid}` and
+`/care-record/{uuid}` URL patterns. Task screens use
+`/tasks/data/{typeSlug}/overview/{taskUuid}` where the UUID is the *task* ID,
+not the patient ID. The updated `detectPatientId(tab)` now detects this pattern
+and resolves the patient by fetching
+`https://{siteId}.api.england.medicus.health/tasks/data/{typeSlug}/overview/{taskUuid}`
+directly from the extension (the API subdomain is not origin-gated), extracting
+`data.data.patient.id` from the response.
+
+## [v3.132.0] — 2026-06-22
+
+### Slots tab: embedded appointment booking
+
+New collapsible "Book appointment for patient" panel at the bottom of the Slots
+tab. Clicking it auto-detects the current patient record and Medicus origin from
+the open Medicus tab, fetches appointment types from the practice's
+`available-appointment-finder` endpoint, then lets the receptionist pick a type,
+date, and available slot — all without leaving the side panel.
+
+**Flow:** type + date picker → Find slots (calls
+`available-appointment-places-between-range`) → click a slot to reserve it
+(server-side `reserve-slot-and-broadcast-...`) → confirm step with optional
+reason field → POST to `create-appointment` which triggers patient SMS/email
+notifications via the `bookingConfirmationRecipients` the server pre-populates →
+success state with "Book another" reset.
+
+**Safety:** the slot reservation is released via `remove-slot-reservation-...`
+on Back/cancel, on panel close while in the confirm step, and on module teardown
+— so an abandoned booking never locks a slot for other receptionists. The server
+also releases it automatically on a successful create.
+
+Implementation: new `side-panel/modules/slots/booking-api.js` (pure async
+functions, no DOM), all booking state isolated in `state.bk`, no changes to the
+slots overview data path or alert rules.
+
+## [v3.131.5] — 2026-06-22
+
+### Dev tool: fix booking-flow capture console flood; widen default filter
+
+First live run of `scripts/booking-flow-capture.js` flooded the console with
+`Refused to get unsafe header "location"` + a stack trace on every XHR. Cause:
+the XHR handler read the `location` response header, which is CORS-forbidden on
+cross-origin responses — `getResponseHeader` doesn't throw for it (so the
+`try/catch` couldn't suppress it), it logs an uncatchable warning. Removed that
+read; only the CORS-safelisted `content-type` is read now.
+
+Also widened the default capture filter using what the first run's call-stacks
+revealed: booking is a **server-driven-UI drawer** with a **slot-reservation
+lifecycle** (drawer.open → permission check → loadComponent/getUI → search →
+reserve slot → confirm; reservation released on close, coordinated over Pusher).
+The filter now also matches `permission`, `component`, `drawer`, `get-ui`,
+`/ui/`, `reserv` and `search` so those steps aren't missed. Dev-only;
+`scripts/` is excluded from the release zip.
+
+## [v3.131.4] — 2026-06-22
+
+### Dev tool: booking-flow network+DOM capture (recon for embedded booking)
+
+New `scripts/booking-flow-capture.js` — a console-pasteable recorder that maps
+what Medicus does when you click **Actions → Appointment**, so the booking flow
+can be replicated and embedded into the Slots page. It is the network+DOM
+sibling of `scripts/ui-clickpath-recorder.js` (which captures click structure but
+deliberately never touches the network).
+
+Runs in the page's MAIN world (the same axios/XHR-wrap technique as
+`page-world.js`, since Medicus is a Vue + AG-Grid SPA on axios under a strict
+CSP). It records, on one ordered timeline: every scheduling/appointment request
+(and all writes) with method, path, request payload, request headers, response
+shape and timing; booking modal/drawer appearance (control names/labels/types —
+never field values); and SPA route changes. Output via `chBook.summary()`
+(deduped endpoint list), `.dump()`, `.copy()`, `.save()`.
+
+Observation only — never blocks, rewrites, replays or sends anything; nothing
+leaves the browser except the local copy/save you trigger. Bodies are
+PII-redacted by default (names, DOB, NHS number, address, postcode, phone, email
+masked by key; NHS-number/postcode value-detection as a backstop), keeping
+booking-relevant structure (slot / appointment-type / clinician / date ids and
+UUIDs). Dev-only: `scripts/` is excluded from the release zip, so nothing ships
+to users. Use a TEST patient.
+
 ## [v3.131.3] — 2026-06-21
 
 ### Routine-Rx button: target the dedicated "send to routine requests" option
