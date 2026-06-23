@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.0] — 2026-06-23
+
+### New: inline "Create task for this patient" widget (real API wiring)
+
+Replaces the earlier click-path "+ Task" button — which tried to puppet an
+on-page "Create task" control that doesn't exist on the prescribing screen — with
+a proper inline panel built the same way as the booking widget: it drives
+Medicus's own task API directly.
+
+- New `content-scripts/task-inline.js` + `task-inline.css`: a collapsible
+  **"Create task for this patient"** panel injected below the "Codes & actions"
+  card on task overviews (stacks beneath the booking widget when present).
+- On open it resolves the patient from the task UUID and `GET`s
+  `/patient/data/workflow/general-task/create?patientId=…` to populate **Assign
+  to** (teams + staff option-groups) and **Priority**; **Create** `POST`s to
+  `/patient/workflow/general-task/create` with
+  `{ patientId, assigneeId, assigneeType, description, priority, snoozeUntil }`.
+- Same injection discipline as booking-inline (shared observer hub with private
+  fallback, own-mutation filter, throttle + rAF, and remove-on-leave so it can't
+  strand on a non-task page). Credentialed same-origin fetch; no patient-data
+  field values are read.
+- Removed the abandoned `content-scripts/triage-lens/task-button.js` and its
+  `triagelens.taskMacro` backup wiring (the click-path approach is gone).
+
 ## [v3.133.5] — 2026-06-23
 
 ### "+ Task" button: tidy leftover menu CSS (interim)
