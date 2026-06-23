@@ -53,6 +53,51 @@ export function startMockStt({ text = 'This is a verbatim transcript.', transcri
   });
 }
 
+// Deterministic bag-of-words embeddings over a small fixed vocab, so RAG retrieval is testable
+// without a real embeddings model (similar texts → similar vectors).
+const RAG_VOCAB = ['flu', 'vaccine', 'eligible', 'aged', '65', 'cough', 'referral', 'cancer', 'blood', 'pressure', 'statin', 'cholesterol', 'diabetes', 'review'];
+function bow(text) {
+  const t = String(text).toLowerCase();
+  return RAG_VOCAB.map((w) => {
+    let n = 0;
+    let i = 0;
+    while ((i = t.indexOf(w, i)) !== -1) {
+      n += 1;
+      i += w.length;
+    }
+    return n;
+  });
+}
+export function startMockEmbeddings() {
+  const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/embeddings') {
+      let b = '';
+      req.on('data', (c) => (b += c));
+      req.on('end', () => {
+        const body = b ? JSON.parse(b) : {};
+        const arr = Array.isArray(body.input) ? body.input : [body.input];
+        const data = arr.map((t, index) => ({ index, embedding: bow(t) }));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ data }));
+      });
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ baseUrl: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(r)) });
+    });
+  });
+}
+
 function defaultChat() {
   const content = JSON.stringify({
     title: 'Flu clinic invitation',

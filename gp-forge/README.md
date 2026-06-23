@@ -73,6 +73,8 @@ OpenAI-compatible, so the swap is a config change). Pre-download the model weigh
 | POST | `/v1/draft` | administrative draft. Bearer key required. Guarded → constrained → validated → audited. Returns `{ draft, audit_id, review_required: true }`. `401` no key · `422` refused (out-of-scope/clinical) · `502` invalid output · `503` LLM down. |
 | POST | `/v1/transcribe` | **verbatim** speech-to-text (Phase 1 — not a generative summary). Bearer key + raw audio body (`content-type: audio/*`, optional `x-filename`). Forwards to the local STT engine, audited. Returns `{ transcript, audit_id, review_required: true }`. `401` no key · `501` STT not configured · `503` STT down. |
 | POST | `/v1/note` | **Phase 2 (medical-device-class) — DISABLED by default** (`GPF_ENABLE_PHASE2`). Generative SOAP summary of a transcript, **grounded** by verbatim evidence quotes (an ungrounded quote → rejected). `501` when disabled · `422` injected transcript · `502` invalid/ungrounded · `503` LLM down. **Not for clinical use without conformity assessment.** |
+| POST | `/v1/corpus` | Ingest local guidance into the RAG store: `{ source, chunks: [text…] }` → embedded + stored. Requires embeddings configured (`501` otherwise). Corpus must be **licence-cleared**. |
+| POST | `/v1/ask` | **Extractive/quote-only** local-guidance retrieval: `{ question }` → retrieve → answer **only** by citing verbatim quotes from the passages, with **refuse-when-off-corpus**. An ungrounded citation → `502`. Surfaces existing guidance; **not clinical advice**. `501` if RAG not configured. |
 
 ## Layout
 

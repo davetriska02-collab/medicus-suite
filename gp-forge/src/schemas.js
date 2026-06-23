@@ -29,6 +29,30 @@ export const SOAP_NOTE_SCHEMA = {
   },
 };
 
+// Local-guidance RAG — extractive answer with grounded citations (validated in rag.js).
+export const RAG_ANSWER_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['answer', 'grounded', 'citations'],
+  properties: {
+    answer: { type: 'string', minLength: 1, maxLength: 4000 },
+    grounded: { type: 'boolean' },
+    citations: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['source', 'quote'],
+        properties: {
+          source: { type: 'string', maxLength: 200 },
+          quote: { type: 'string', minLength: 1, maxLength: 500 },
+        },
+      },
+    },
+  },
+};
+
 export const ADMIN_DRAFT_SCHEMA = {
   type: 'object',
   additionalProperties: false,

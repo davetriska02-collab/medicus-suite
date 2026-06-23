@@ -48,6 +48,15 @@ export function loadConfig(env = process.env) {
     },
     rateRpm: Number(env.GPF_RATE_RPM || 60), // per-key requests/min; 0 disables
     phase2Enabled: bool(env.GPF_ENABLE_PHASE2, false), // Phase-2 = medical-device-class (SOAP summarisation); OFF by default
+    // Optional local-guidance RAG. Empty embeddings baseUrl = disabled.
+    embeddings: {
+      baseUrl: (env.GPF_EMBEDDINGS_BASE_URL || '').replace(/\/$/, ''),
+      apiKey: env.GPF_EMBEDDINGS_API_KEY || '',
+      model: env.GPF_EMBEDDINGS_MODEL || 'bge-m3',
+      timeoutMs: Number(env.GPF_EMBEDDINGS_TIMEOUT_MS || 30000),
+    },
+    corpusPath: env.GPF_CORPUS_PATH || './data/corpus.jsonl',
+    ragMinScore: Number(env.GPF_RAG_MIN_SCORE || 0.3), // off-corpus threshold: below this top score → refuse
   };
 
   const errors = [];

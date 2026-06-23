@@ -9,11 +9,13 @@
 
 import { createServer } from 'node:http';
 import { guardRequest, buildPrompt, SYSTEM_PROMPT, PHASE1_TASKS, detectInjection } from './phase1.js';
-import { ADMIN_DRAFT_SCHEMA, SOAP_NOTE_SCHEMA } from './schemas.js';
+import { ADMIN_DRAFT_SCHEMA, SOAP_NOTE_SCHEMA, RAG_ANSWER_SCHEMA } from './schemas.js';
 import { parseJson, validateAdminDraft } from './validate.js';
 import { SOAP_SYSTEM_PROMPT, buildSoapPrompt, validateSoapNote } from './phase2.js';
+import { RAG_SYSTEM_PROMPT, buildRagPrompt, contextText, validateRagAnswer } from './rag.js';
 import { LlmUnavailableError } from './llm-client.js';
 import { SttUnavailableError } from './stt-client.js';
+import { EmbeddingsUnavailableError } from './embeddings-client.js';
 
 const VERSION = '0.1.0';
 
@@ -76,7 +78,7 @@ function authenticate(req, apiKeys) {
 
 // deps: { llm, audit, stt, limiter } — injected so the server is testable without a real backend.
 // stt may be null; limiter defaults to a pass-through.
-export function createApp({ config, llm, audit, stt, limiter = { check: () => ({ ok: true }) } }) {
+export function createApp({ config, llm, audit, stt, embeddings, store, limiter = { check: () => ({ ok: true }) } }) {
   return async function handler(req, res) {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -96,6 +98,7 @@ export function createApp({ config, llm, audit, stt, limiter = { check: () => ({
           tasks: Object.fromEntries(Object.entries(PHASE1_TASKS).map(([k, v]) => [k, v.description])),
           transcription: stt ? 'verbatim (configured) — not a generative summary' : 'not configured',
           phase2_soap: config.phase2Enabled ? 'ENABLED — experimental medical-device-class (NOT cleared, not for clinical use)' : 'disabled',
+          rag: embeddings ? 'extractive/quote-only local-guidance (configured)' : 'not configured',
         });
       }
 
@@ -277,6 +280,100 @@ export function createApp({ config, llm, audit, stt, limiter = { check: () => ({
         });
       }
 
+      if (req.method === 'POST' && url.pathname === '/v1/corpus') {
+        const actor = authenticate(req, config.apiKeys);
+        if (!actor) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        if (!embeddings || !store) return send(res, 501, { error: 'rag_not_configured', message: 'no embeddings backend configured' });
+        let body;
+        try {
+          body = await readBody(req);
+        } catch (err) {
+          return send(res, 400, { error: 'bad_request', message: err.message });
+        }
+        const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim() : 'unspecified';
+        const rawChunks = Array.isArray(body.chunks) ? body.chunks : [];
+        const texts = rawChunks
+          .map((c) => (typeof c === 'string' ? c : c && typeof c.text === 'string' ? c.text : ''))
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (texts.length === 0) return send(res, 400, { error: 'bad_request', message: 'chunks (non-empty array of text) is required' });
+        let vectors;
+        try {
+          vectors = await embeddings.embed(texts);
+        } catch (err) {
+          if (err instanceof EmbeddingsUnavailableError) return send(res, 503, { error: 'embeddings_unavailable', message: 'embeddings backend unavailable' });
+          throw err;
+        }
+        for (let i = 0; i < texts.length; i++) store.add({ source, text: texts[i], embedding: vectors[i] });
+        audit.append({ actor, task: 'corpus_ingest', action: 'ingested', input: `${source}:${texts.length}chunks` });
+        return send(res, 200, { ingested: texts.length, total: store.size, source });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/v1/ask') {
+        const actor = authenticate(req, config.apiKeys);
+        if (!actor) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        const rl = limiter.check(actor);
+        if (!rl.ok) {
+          audit.append({ actor, task: 'ask', action: 'rate_limited' });
+          return send(res, 429, { error: 'rate_limited', message: 'too many requests', retry_after_s: rl.retryAfter }, { 'retry-after': String(rl.retryAfter) });
+        }
+        if (!embeddings || !store) return send(res, 501, { error: 'rag_not_configured', message: 'no embeddings backend configured' });
+        let body;
+        try {
+          body = await readBody(req);
+        } catch (err) {
+          return send(res, 400, { error: 'bad_request', message: err.message });
+        }
+        const question = typeof body.question === 'string' ? body.question.trim() : '';
+        if (!question) return send(res, 400, { error: 'bad_request', message: 'question (string) is required' });
+
+        let qvec;
+        try {
+          [qvec] = await embeddings.embed([question]);
+        } catch (err) {
+          if (err instanceof EmbeddingsUnavailableError) return send(res, 503, { error: 'embeddings_unavailable', message: 'embeddings backend unavailable' });
+          throw err;
+        }
+
+        const hits = store.search(qvec, 5);
+        const top = hits[0] ? hits[0].score : 0;
+        // Refuse when off-corpus (nothing relevant in the local guidance) — a refusal, not an error.
+        if (!hits.length || top < config.ragMinScore) {
+          const record = audit.append({ actor, task: 'ask', action: 'off_corpus', input: `q:${question.length}c` });
+          return send(res, 200, { answer: 'No relevant guidance found in the local corpus.', citations: [], grounded: false, audit_id: record.id, review_required: true, note: 'Off-corpus — nothing relevant in the local guidance.' });
+        }
+
+        const ctx = contextText(hits);
+        let content;
+        try {
+          content = await llm.chat({ system: RAG_SYSTEM_PROMPT, user: buildRagPrompt(question, hits), schema: RAG_ANSWER_SCHEMA });
+        } catch (err) {
+          if (err instanceof LlmUnavailableError) {
+            audit.append({ actor, task: 'ask', action: 'llm_unavailable' });
+            return send(res, 503, { error: 'llm_unavailable', message: 'local LLM backend is unavailable' });
+          }
+          throw err;
+        }
+
+        const parsed = parseJson(content);
+        const validated = parsed.ok ? validateRagAnswer(parsed.value, ctx) : parsed;
+        if (!validated.ok) {
+          audit.append({ actor, task: 'ask', action: 'rejected_output', output: content });
+          return send(res, 502, { error: 'invalid_output', messages: validated.errors });
+        }
+
+        const record = audit.append({ actor, task: 'ask', model: config.llm.model, action: 'answered', input: `q:${question.length}c`, output: JSON.stringify(validated.value) });
+        return send(res, 200, {
+          answer: validated.value.answer,
+          grounded: validated.value.grounded,
+          citations: validated.value.citations,
+          sources: hits.map((h) => ({ source: h.source, score: Number(h.score.toFixed(3)) })),
+          audit_id: record.id,
+          review_required: true,
+          note: 'Surfaced from local guidance — verify against the source; not clinical advice.',
+        });
+      }
+
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
       return send(res, 500, { error: 'internal_error', message: err.message });
@@ -288,8 +385,8 @@ function stableInput(body) {
   return JSON.stringify({ kind: body.kind ?? null, context: body.context ?? null });
 }
 
-export function startServer({ config, llm, audit, stt, limiter }) {
-  const server = createServer(createApp({ config, llm, audit, stt, limiter }));
+export function startServer({ config, llm, audit, stt, embeddings, store, limiter }) {
+  const server = createServer(createApp({ config, llm, audit, stt, embeddings, store, limiter }));
   return new Promise((resolve) => {
     server.listen(config.port, () => resolve(server));
   });
