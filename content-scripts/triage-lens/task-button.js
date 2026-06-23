@@ -196,14 +196,6 @@
     return out;
   }
 
-  function sharesPanel(a, b, depth) {
-    var node = b;
-    for (var i = 0; i < (depth || 12) && node; i++, node = node.parentElement) {
-      if (node.contains(a)) return true;
-    }
-    return false;
-  }
-
   function waitFor(fn, timeout, interval) {
     timeout = timeout || 4000;
     interval = interval || 120;
@@ -547,35 +539,40 @@
     document.head.appendChild(style);
   }
 
-  // Where to inject — same gating doctrine as routine-rx-button.js: only on the
-  // prescription task overview, anchored beside the "More actions" button that
-  // shares a panel with the "Save & send to routine requests task list" routing
-  // control (never inside a dialog or an overlapping drawer's own action row).
-  function findRoutingControl() {
-    return (
-      findByTextAny(['label', '[role="radio"]', '.radio'], ['Save & send to routine requests task list']) ||
-      findByTextAny(['div', 'span'], ['Save & send to routine requests task list'])
-    );
+  // Where to inject — on the prescription task overview, anchored beside the
+  // "More actions" button in the main action row (with "Issue" as a fallback
+  // anchor). UNLIKE routine-rx-button.js we do NOT require the "Save & send to
+  // routine requests task list" radio: the task macro clicks the global "Create
+  // task" control, so it must work on every prescription overview, including
+  // Routine Repeat Request screens that have no such radio. The dialog guard
+  // keeps us off overlapping drawers' own action rows.
+  function isInDialog(el) {
+    return !!(el.closest && el.closest('[role="dialog"], [aria-modal="true"]'));
+  }
+
+  // Pick the action-row button to sit beside: prefer the bottom-most visible
+  // "More actions" not inside a dialog (action rows live at the foot of the
+  // panel); fall back to the "Issue" button if "More actions" isn't present.
+  function findAnchorButton() {
+    var more = collectByText(['button', '[role="button"]'], 'More actions');
+    for (var i = more.length - 1; i >= 0; i--) {
+      if (!isInDialog(more[i])) return more[i];
+    }
+    var issue = findByTextAny(['button', '[role="button"]'], ['Issue']);
+    if (issue && !isInDialog(issue)) return issue;
+    return null;
   }
 
   function findActionAnchor() {
     if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
-    var routine = findRoutingControl();
-    if (!routine) return null;
-    var candidates = collectByText(['button', '[role="button"]'], 'More actions');
-    for (var i = 0; i < candidates.length; i++) {
-      var more = candidates[i];
-      if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;
-      if (sharesPanel(routine, more, 12)) {
-        placedRoutingControl = routine;
-        return more.parentElement;
-      }
-    }
-    return null;
+    var anchorBtn = findAnchorButton();
+    if (!anchorBtn || !anchorBtn.parentElement) return null;
+    placedAnchorBtn = anchorBtn;
+    return anchorBtn.parentElement;
   }
 
   var placedAnchor = null;
-  var placedRoutingControl = null;
+  var placedAnchorBtn = null;
 
   function ensureInjected() {
     if (!host) return;
@@ -589,8 +586,8 @@
       placedAnchor === host.parentElement &&
       document.contains(placedAnchor) &&
       placedAnchor.contains(host) &&
-      placedRoutingControl &&
-      placedRoutingControl.isConnected
+      placedAnchorBtn &&
+      placedAnchorBtn.isConnected
     ) {
       return;
     }
@@ -608,7 +605,7 @@
   function removeHost() {
     if (host && host.parentElement) host.parentElement.removeChild(host);
     placedAnchor = null;
-    placedRoutingControl = null;
+    placedAnchorBtn = null;
     closeMenu();
   }
 
