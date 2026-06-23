@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.5] — 2026-06-23
+
+### "+ Task" button: tidy leftover menu CSS (interim)
+
+Removed the now-unused `.chtk-caret`/`.chtk-menu*`/`.chtk-step` rules left behind
+by the config-menu deletion and squared off the single button's border-radius.
+Cosmetic only; the API-driven task-creation rebuild is still in progress.
+
 ## [v3.133.4] — 2026-06-23
 
 ### "+ Task" button: removed the config menu (interim)
