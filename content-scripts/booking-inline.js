@@ -261,6 +261,18 @@
     withObserverPaused(() => card.after(w));
   }
 
+  // Tear the widget out — used when we leave a task-overview page. Without this
+  // the node lingers (Vue keeps it parented to a card that survives the SPA
+  // transition), stranding the panel at the bottom of e.g. a task-LIST page where
+  // there is no single patient — hence the "Could not determine patient ID"
+  // warning the user sees. Releases any held slot reservation first.
+  function removeWidget() {
+    const w = document.getElementById('ms-bk-widget');
+    if (!w) return;
+    if (s.reservationId) apiReleaseReservation(s.reservationId);
+    withObserverPaused(() => w.remove());
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   function renderInto(el) {
@@ -685,7 +697,12 @@
     }
     // Skip the heavy scan while backgrounded; visibilitychange re-checks.
     if (document.hidden) return;
-    if (!getTaskInfo()) return;
+    // Left a task-overview page (e.g. navigated to a task-LIST): drop any stale
+    // widget so it can't strand at the bottom of the wrong page.
+    if (!getTaskInfo()) {
+      removeWidget();
+      return;
+    }
     const existing = document.getElementById('ms-bk-widget');
     if (existing && existing.isConnected) return;
     // Defer the expensive findCard scan to an animation frame so it never runs
