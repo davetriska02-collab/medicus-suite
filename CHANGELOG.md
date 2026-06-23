@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.3] — 2026-06-23
+
+### Fix: "+ Task" button now appears on all prescription overviews
+
+The button was copied from `routine-rx-button.js`, which gates injection on the
+"Save & send to routine requests task list" radio being present. That radio does
+not exist on **Routine Repeat Request** overviews (their Next Steps are "Issue 1
+approved item / Save & re-assign / Save & come back later"), so the anchor scan
+bailed and the button never showed. The task macro clicks the global "Create
+task" control, not that radio, so the dependency was wrong.
+
+- Dropped the routing-control requirement. `findActionAnchor` now anchors to the
+  bottom-most visible **"More actions"** button in the main action row (with the
+  **"Issue"** button as a fallback), excluding any inside a dialog/drawer.
+- Fast-path re-validation keyed on the anchor button's `isConnected` instead of
+  the (now-removed) routing control; dead `sharesPanel`/`findRoutingControl`
+  helpers removed.
+
 ## [v3.133.2] — 2026-06-23
 
 ### "+ Task" button default click-path matched to live Medicus
