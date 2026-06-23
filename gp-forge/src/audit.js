@@ -6,7 +6,7 @@
 // PHI store. Set storeContent:true only with DB/disk encryption-at-rest + a retention policy.
 
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export const GENESIS = 'GENESIS';
@@ -47,7 +47,7 @@ export class AuditLog {
   append(entry) {
     const rec = {
       id: randomUUID(),
-      ts: new Date().toISOString(),
+      ts: entry.ts || new Date().toISOString(),
       actor: entry.actor ?? null,
       task: entry.task ?? null,
       model: entry.model ?? null,
@@ -86,4 +86,38 @@ export function verifyChain(path) {
     prev = hash;
   }
   return { ok: true, count: lines.length };
+}
+
+// Retention: archive records older than `beforeISO` (the chain prefix from GENESIS, so the archive
+// stays independently verifiable) and re-chain the kept records into a fresh active log. Re-chaining
+// changes the kept records' hashes — that is the documented retention action; the archive preserves
+// the originals.
+export function pruneBefore(path, beforeISO) {
+  if (!existsSync(path)) return { kept: 0, archived: 0, archivePath: null };
+  const recs = readFileSync(path, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+  const cutoff = new Date(beforeISO).toISOString();
+  const archived = recs.filter((r) => r.ts < cutoff);
+  const kept = recs.filter((r) => r.ts >= cutoff);
+
+  let archivePath = null;
+  if (archived.length) {
+    archivePath = `${path}.${Date.now()}.archive.jsonl`;
+    writeFileSync(archivePath, archived.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  }
+
+  let prev = GENESIS;
+  const rechained = kept.map((r) => {
+    const { hash, prevHash, ...rest } = r;
+    void hash;
+    void prevHash;
+    const base = { ...rest, prevHash: prev };
+    const h = sha256(prev + stableStringify(base));
+    prev = h;
+    return { ...base, hash: h };
+  });
+  writeFileSync(path, rechained.length ? rechained.map((r) => JSON.stringify(r)).join('\n') + '\n' : '');
+  return { kept: kept.length, archived: archived.length, archivePath };
 }

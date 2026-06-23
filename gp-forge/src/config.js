@@ -46,6 +46,7 @@ export function loadConfig(env = process.env) {
       model: env.GPF_STT_MODEL || 'whisper-1',
       timeoutMs: Number(env.GPF_STT_TIMEOUT_MS || 60000),
     },
+    rateRpm: Number(env.GPF_RATE_RPM || 60), // per-key requests/min; 0 disables
   };
 
   const errors = [];

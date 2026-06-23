@@ -2,7 +2,7 @@
 // GP Forge — hash-chained audit log tests. Run: node test/test-audit.js
 
 import { harness } from './helpers.js';
-import { AuditLog, verifyChain, sha256 } from '../src/audit.js';
+import { AuditLog, verifyChain, sha256, pruneBefore } from '../src/audit.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -38,6 +38,18 @@ const path2 = join(dir, 'audit-content.jsonl');
 const log2 = new AuditLog({ path: path2, storeContent: true });
 log2.append({ actor: 'alice', task: 'admin_draft', model: 'm', action: 'drafted', input: 'INPUTX', output: 'OUTPUTX' });
 check(readFileSync(path2, 'utf8').includes('OUTPUTX'), 'storeContent=true persists raw content');
+
+// Retention: prune archives old records (independently verifiable) and re-chains the kept ones.
+const ppath = join(dir, 'audit-prune.jsonl');
+const plog = new AuditLog({ path: ppath, storeContent: false });
+plog.append({ actor: 'a', task: 't', model: 'm', action: 'x', ts: '2020-01-01T00:00:00.000Z' });
+plog.append({ actor: 'b', task: 't', model: 'm', action: 'y', ts: '2020-06-01T00:00:00.000Z' });
+plog.append({ actor: 'c', task: 't', model: 'm', action: 'z', ts: '2026-06-23T00:00:00.000Z' });
+check(verifyChain(ppath).ok, 'pre-prune chain intact');
+const pr = pruneBefore(ppath, '2021-01-01T00:00:00.000Z');
+check(pr.archived === 2 && pr.kept === 1, 'prune splits by date (2 archived, 1 kept)');
+check(verifyChain(ppath).ok, 'active log re-chained & intact after prune');
+check(!!pr.archivePath && verifyChain(pr.archivePath).ok, 'archive is independently verifiable');
 
 rmSync(dir, { recursive: true, force: true });
 finish();

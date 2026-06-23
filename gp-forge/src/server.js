@@ -16,9 +16,9 @@ import { SttUnavailableError } from './stt-client.js';
 
 const VERSION = '0.1.0';
 
-function send(res, status, obj) {
+function send(res, status, obj, extraHeaders) {
   const body = JSON.stringify(obj);
-  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
+  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(extraHeaders || {}) });
   res.end(body);
 }
 
@@ -73,8 +73,9 @@ function authenticate(req, apiKeys) {
   return apiKeys.get(m[1].trim()) || null; // actor name, or null if unknown key
 }
 
-// deps: { llm, audit, stt } — injected so the server is testable without a real backend. stt may be null.
-export function createApp({ config, llm, audit, stt }) {
+// deps: { llm, audit, stt, limiter } — injected so the server is testable without a real backend.
+// stt may be null; limiter defaults to a pass-through.
+export function createApp({ config, llm, audit, stt, limiter = { check: () => ({ ok: true }) } }) {
   return async function handler(req, res) {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -99,6 +100,12 @@ export function createApp({ config, llm, audit, stt }) {
       if (req.method === 'POST' && url.pathname === '/v1/draft') {
         const actor = authenticate(req, config.apiKeys);
         if (!actor) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+
+        const rl = limiter.check(actor);
+        if (!rl.ok) {
+          audit.append({ actor, task: 'admin_draft', model: config.llm.model, action: 'rate_limited' });
+          return send(res, 429, { error: 'rate_limited', message: 'too many requests', retry_after_s: rl.retryAfter }, { 'retry-after': String(rl.retryAfter) });
+        }
 
         let body;
         try {
@@ -152,6 +159,12 @@ export function createApp({ config, llm, audit, stt }) {
       if (req.method === 'POST' && url.pathname === '/v1/transcribe') {
         const actor = authenticate(req, config.apiKeys);
         if (!actor) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+
+        const rl = limiter.check(actor);
+        if (!rl.ok) {
+          audit.append({ actor, task: 'transcribe', model: config.stt && config.stt.model, action: 'rate_limited' });
+          return send(res, 429, { error: 'rate_limited', message: 'too many requests', retry_after_s: rl.retryAfter }, { 'retry-after': String(rl.retryAfter) });
+        }
         if (!stt) return send(res, 501, { error: 'transcription_not_configured', message: 'no local STT backend configured' });
 
         let audio;
@@ -205,8 +218,8 @@ function stableInput(body) {
   return JSON.stringify({ kind: body.kind ?? null, context: body.context ?? null });
 }
 
-export function startServer({ config, llm, audit, stt }) {
-  const server = createServer(createApp({ config, llm, audit, stt }));
+export function startServer({ config, llm, audit, stt, limiter }) {
+  const server = createServer(createApp({ config, llm, audit, stt, limiter }));
   return new Promise((resolve) => {
     server.listen(config.port, () => resolve(server));
   });
