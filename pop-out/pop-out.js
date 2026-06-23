@@ -59,6 +59,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',
   },
+  'ai-assist': {
+    js: () => import('../side-panel/modules/ai-assist/ai-assist.js'),
+    css: '../side-panel/modules/ai-assist/ai-assist.css',
+  },
 };
 
 // ── Per-tab help registry (mirrors panel.js — keep in sync) ─────────────────────

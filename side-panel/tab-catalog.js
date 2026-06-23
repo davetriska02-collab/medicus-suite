@@ -32,6 +32,11 @@ export const TAB_CATALOG = [
     name: 'Record',
     blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
   },
+  {
+    id: 'ai-assist',
+    name: 'AI Assist',
+    blurb: 'Draft admin text (recall invites, notes) via your practice’s local GP Forge server. Off by default.',
+  },
   { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];

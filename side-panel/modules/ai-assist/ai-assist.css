@@ -1,0 +1,137 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — AI Assist (Phase 1) module styles. Scoped to .ai-assist. */
+
+.ai-assist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.ai-banner {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-2, #f1f5f9);
+  color: var(--text-2, #334155);
+  border: 1px solid var(--border, #e2e8f0);
+  line-height: 1.4;
+}
+
+.ai-banner.ai-warn {
+  background: var(--amber-dim, #fef3c7);
+  border-color: var(--amber, #f59e0b);
+  color: var(--text-1, #1f2937);
+}
+
+.ai-error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--red-dim, #fee2e2);
+  border: 1px solid var(--red, #ef4444);
+  color: var(--text-1, #1f2937);
+}
+
+.ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--text-2, #334155);
+}
+
+.ai-field input,
+.ai-field textarea,
+.ai-out-title,
+.ai-out-body {
+  font: inherit;
+  font-weight: 400;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--surface-1, #fff);
+  color: var(--text-1, #1f2937);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ai-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2, #334155);
+}
+
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent, #2563eb);
+  background: var(--accent, #2563eb);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.ai-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-btn-ghost {
+  background: transparent;
+  color: var(--accent, #2563eb);
+}
+
+.ai-status {
+  color: var(--text-3, #64748b);
+}
+
+.ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  padding-top: 10px;
+}
+
+.ai-review {
+  font-weight: 700;
+  color: var(--text-1, #1f2937);
+}
+
+.ai-out-title {
+  font-weight: 700;
+}
+
+.ai-placeholders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-ph-label {
+  width: 100%;
+  color: var(--text-3, #64748b);
+}
+
+.ai-ph {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--amber-dim, #fef3c7);
+  border: 1px solid var(--amber, #f59e0b);
+  font-size: 12px;
+}
+
+.ai-foot {
+  color: var(--text-3, #64748b);
+  font-size: 12px;
+}

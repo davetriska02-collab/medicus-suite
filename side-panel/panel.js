@@ -119,6 +119,7 @@ const MODULES = {
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
+  'ai-assist': { js: () => import('./modules/ai-assist/ai-assist.js'), css: './modules/ai-assist/ai-assist.css' },
   about: null,
 };
 

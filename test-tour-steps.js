@@ -44,6 +44,7 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'reception',
   'sweep',
   'knowledge',
+  'ai-assist', // off-by-default, opt-in admin-drafting tool (GP Forge client) — overview mention only
   'visualiser', // opens a full tab, not a panel module — overview mention only
   'about',
 ]);

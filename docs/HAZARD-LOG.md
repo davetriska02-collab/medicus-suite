@@ -776,6 +776,25 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 
 ---
 
+### H-036 — AI Assist (GP Forge client) — administrative text sent to the local LLM server, or an out-of-scope/clinical draft relied upon
+
+| Field                           | Value |
+| ------------------------------- | ----- |
+| **Hazard ID**                   | H-036 (DRAFT — pending CSO review/baseline; feature ships disabled) |
+| **Description**                 | The AI Assist tab (v3.133.0) is a client for the on-prem **GP Forge** server. When a practice enables it, the clinician's typed **administrative** prompt is sent to the practice's local GP Forge appliance and a draft is returned. Two hazards: (a) **data egress** — text the clinician types (which could inadvertently include patient-identifiable detail) leaves the browser to the local server; (b) **out-of-scope / clinical content** — a draft is relied upon as clinical advice, or contains clinical content, despite Phase 1 being administrative-only. |
+| **Potential causes**            | A clinician types patient-identifiable detail into the prompt instead of a [PLACEHOLDER]; the GP Forge URL is misconfigured to an unintended host; a user treats an administrative draft as clinical guidance; automation bias (H-007) leads to using a draft unreviewed; a compromised/poisoned model emits clinical content. |
+| **Affected users / components** | Clinicians/admin staff using the AI Assist tab. Components: `side-panel/modules/ai-assist/ai-assist.js` (client) and the GP Forge server (`gp-forge/`). |
+| **Initial severity**            | 3 (Moderate — controlled local egress of clinician-typed administrative text, or reliance on a non-clinical draft; not patient-record extraction, no internet egress) |
+| **Initial likelihood**          | 2 (Unlikely) |
+| **Initial risk**                | 6 |
+| **Controls / mitigations**      | (a) **Ships disabled**; the practice must set the server URL/key and explicitly enable it. (b) Default install permissions are **not broadened** — the GP Forge origin is granted only at enable time via `optional_host_permissions` + `chrome.permissions.request`. (c) **Phase 1 sends only the typed administrative prompt — no patient record is attached**; the UI instructs the user to use [PLACEHOLDERS], not patient detail. (d) GP Forge enforces an **administrative-only scope guard** (refuses clinical / decision-support / prompt-injection requests) and **validates output** for clinical-leak, server-side, with a **fail-closed single egress** (no internet) and a **hash-chained audit**. (e) **Human-in-the-loop**: every draft is shown for review/edit and **nothing is written to Medicus** by the suite. (f) Persistent **"administrative drafts only — not clinical advice"** banner. (g) **Graceful degradation** — if GP Forge is unreachable the tab shows a notice and no other suite feature is affected. |
+| **Residual severity**           | 3 |
+| **Residual likelihood**         | 2 |
+| **Residual risk**               | 6 — Acceptable (ALARP) in the disabled-by-default + administrative-only + human-review configuration |
+| **Acceptability**               | DRAFT — to be reviewed and baselined by the CSO before the feature is enabled with real patient activity. Enabling AI Assist changes the suite's "no patient data leaves the browser" posture (typed text goes to the local appliance), so `docs/INTENDED-PURPOSE.md` and `docs/DPIA.md` must be updated in step. The off-by-default design, no-record-attached data path, server-side scope guard, fail-closed egress, and human review are the primary controls. |
+
+---
+
 ## 6. Hazard summary
 
 | ID    | Hazard                                                       | Initial S×L | Initial risk | Residual S×L | Residual risk | Status                                       |
@@ -815,6 +834,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-033 | CQC pack misread as compliance proof / coverage              | 3×2         | 6            | 3×2          | 6             | Accepted (ALARP)                             |
 | H-034 | "Select all" bulk-selects wrong/too many investigations      | 3×2         | 6            | 3×2          | 6             | Accepted (ALARP)                             |
 | H-035 | Routine-Rx button re-assigns wrong task / wrong team         | 3×3         | 9            | 3×2          | 6             | Accepted (ALARP) — confirm-by-default        |
+| H-036 | AI Assist (GP Forge client) — admin-text egress / OOS draft  | 3×2         | 6            | 3×2          | 6             | DRAFT — pending CSO baseline; ships disabled |
 
 No hazard has a residual risk score exceeding 9. No hazard at residual score 10 or above is open. This is the full CSO hazard re-baseline from v3.64.0 up to and including v3.115.0: the modules, controls and clinical changes shipped across v3.65.0–v3.114.0 (the Record, Practice Report/Condor and CQC Inspection Readiness modules; the v3.91.2 attribute-injection-XSS remediation and the PDF.js 4.x upgrade; the v3.100.0 critical-low-Hb 100→80 g/L threshold change; the result-rule expansions; the practice-attestation switch; and the navigation/UX additions) are recorded above against new hazards H-032/H-033/H-034 and as control updates to H-002, H-006, H-007, H-009, H-016, H-022, H-023, H-024, H-028 and H-030. On the basis of this hazard log the Clinical Safety Officer's sign-off for **v3.115.0** is sought by merge of the review branch (see §9 and the version history note v3.11 for the scope of this re-baseline).
 
