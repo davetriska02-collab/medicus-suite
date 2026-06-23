@@ -6,6 +6,14 @@ artefact. Author: Claude (Opus) at Dave's request, 2026-06-22. Everything here i
 fast-moving model facts must be re-verified against the cited primaries before any of it becomes a
 real procurement or DPIA input.*
 
+*Revised 2026-06-22 after a `virtual-dave` review. Corrected the governance-inheritance claim (this
+needs a **fresh** DPIA + hazard log — the suite's are premised on no-runtime-AI/no-egress and are
+**invalidated**, not extended); hardened single-egress into a fail-closed runtime control; added the
+net-new clinical-safety hazards (STT error, confident hallucination, LLM-vs-rule divergence, prompt
+injection) and an evidenced review gate; flagged the RAG/retrieval function as the highest
+device-line risk; and added a Build-vs-buy section (§9½). The self-hosted direction is retained
+deliberately — the genuine niche is practices/contexts that cannot accept **any** cloud processing.*
+
 ---
 
 ## 0. The one-paragraph version
@@ -270,7 +278,15 @@ the server-to-server Medicus connector (§3, §11).
 A single augmented LLM + tools + **RAG over a local corpus** (NICE/CKS/BNF/local formulary/practice
 policies — the same sources the suite's rules already encode). Pattern: hybrid retrieve (dense +
 keyword) → rerank → generate **with mandatory inline citations** → **refuse when off-corpus** →
-human reads. Tools are narrow and least-privilege (look up a guideline, fetch a structured value,
+human reads.
+
+> ⚠️ **This is the highest device-line risk in the plan and the riskiest Phase-1 item.** The suite's
+> existing signposting is defensible because it is *deterministic* (a chip that links to QRISK3 and
+> computes nothing). A generative model *told* to behave like static reference text is one
+> system-prompt regression away from synthesising a clinical recommendation (→ Class IIa). Controls:
+> keep it **extractive / quote-only** (return cited source spans, never free-form synthesis) and
+> gate it with a committed adversarial release test. Plus a **licensing landmine** — BNF/NICE text is
+> not freely redistributable; the local corpus must be licence-cleared before indexing. Tools are narrow and least-privilege (look up a guideline, fetch a structured value,
 draft a document). This is the "ask the practice's knowledge base" capability.
 
 **The acute clinical threat here is indirect prompt injection** (OWASP LLM01): a poisoned
@@ -293,9 +309,9 @@ wears **both** clinical-safety hats.
 |--------------------|--------|--------------------|
 | **Intended-purpose statement (written first)** | MHRA SaMD | The single document that decides device status. Write it before building. Admin/documentation = likely not a device; diagnosis/triage/risk = device. *(You already have `docs/INTENDED-PURPOSE.md` for the suite — extend that discipline.)* |
 | **MHRA device classification + UKCA** (if/when applicable) | UK MDR 2002; MHRA | Generative summarisation → ≥ Class 1 (register with MHRA). Decision support → ≥ Class IIa (Approved Body, UKCA mark). The **AI Airlock** sandbox is the route for novel generative-AI devices (TORTUS was in Phase 2). |
-| **DPIA (before go-live)** | UK GDPR Art 35(3)(b) + ICO "innovative tech" | Mandatory — novel AI on large-scale special-category data trips multiple high-risk triggers at once. *(You have `docs/DPIA.md` — this needs its own.)* |
+| **DPIA (before go-live)** | UK GDPR Art 35(3)(b) + ICO "innovative tech" | Mandatory — novel AI on large-scale special-category data trips multiple high-risk triggers at once. *(⚠️ The suite's `docs/DPIA.md` is premised on "no AI inference at runtime… no external transmission" — this server **invalidates** that premise. A fresh, from-scratch high-risk DPIA is required, **not** an amendment.)* |
 | **Lawful basis: Art 6(1)(e) public task + Art 9(2)(h) health/social care** | UK GDPR; DPA 2018 Sch 1 Pt 1 para 2 | Not consent. Plus an **Appropriate Policy Document** (DPA 2018 Sch 1 Pt 4). |
-| **Clinical Safety Officer + Hazard Log + Clinical Safety Case Report** | **DCB0129 (manufacturer) + DCB0160 (deployer)** — statutory under s.250 HSCA 2012 | A registered clinician CSO; a living hazard log; a safety case. *(You already run this for the suite: `docs/HAZARD-LOG.md`, `docs/CLINICAL-SAFETY-CASE-REPORT.md`, `docs/CSO-DECLARATION.md` — the LLM server needs the same, dual-hatted.)* |
+| **Clinical Safety Officer + Hazard Log + Clinical Safety Case Report** | **DCB0129 (manufacturer) + DCB0160 (deployer)** — statutory under s.250 HSCA 2012 | A registered clinician CSO; a living hazard log; a safety case. *(⚠️ A **fresh** hazard log — the suite's 35-hazard register covers a read-only, no-inference tool and contains **no** hazard for hallucination, prompt injection or STT error. Start a new log + safety case, dual-hatted; do not extend the suite's.)* |
 | **DTAC pack** | NHS procurement baseline | Clinical safety (C1→DCB), data protection (C2→DPIA/DSPT), technical security (C3→Cyber Essentials), interoperability (C4), usability (D). *(You have `docs/DTAC-STATUS.md`.)* |
 | **DSPT + Cyber Essentials (Plus)** | NHS Data Security & Protection Toolkit | Organisational security baseline; required to be on the AVT registry. |
 | **Caldicott Guardian sign-off** | Caldicott Principles | The practice's Guardian owns the "is this a justified use of confidential data" call. |
@@ -312,6 +328,11 @@ core of the data-protection argument in this design's favour.
 
 - **Network:** appliance on its own VLAN; **default-deny egress** with a single allow-list entry
   (Medicus API host); inbound only from surgery subnets to the gateway.
+- **Single-egress is a *runtime* control, not a checklist tick — CSO sign-off depends on it.** It
+  must be **continuously monitored, alerting, and fail-closed**: if egress integrity cannot be
+  verified (an unexpected outbound route, a `:latest` image phoning home, a debug port left open),
+  the appliance **refuses to process patient data**. A one-time PoC egress test is a snapshot, not a
+  control.
 - **Auth:** per-clinician virtual keys (LiteLLM) mapped to SSO; mTLS or short-lived tokens between
   clients and the box; no shared "god key".
 - **Audit:** append-only, tamper-evident log of {who, when, model+version, inputs, outputs,
@@ -323,18 +344,30 @@ core of the data-protection argument in this design's favour.
   model version reaches clinicians (model swaps can change behaviour — treat as a change under
   DCB0160).
 - **Prompt-injection defence:** untrusted-by-default handling of record/RAG content, output
-  validation, least-privilege tools, human approval for actions, adversarial test suite as a
-  release gate.
+  validation, least-privilege tools, human approval for actions, and a **committed adversarial test
+  suite that fails CI** (the same discipline as `test-drug-brand-coverage.js`) — until injection
+  defence is a failing-CI gate, it is aspirational.
 
 ### 8c. Clinical-safety controls (the human layer)
 
-- **Edit-before-file**, with the edit and the review logged (defeats rubber-stamping).
+- **Evidenced edit-before-file:** not merely "logged that review happened" (that's theatre) —
+  surface the source span beside each drafted line, log keystroke-level edit deltas, and flag drafts
+  filed *unedited* for audit. This is the *measurable* definition of "the review gate is real".
 - **Provenance on every claim** (citations / source spans) so review is *possible*, not theatre.
 - **Refuse-when-uncertain / off-corpus** rather than confabulate.
 - **Semantic validators** downstream of the model: dose/range checks, controlled-vocabulary/code-set
   validation, cross-field consistency — the schema won't catch a valid-but-wrong SNOMED or dose.
 - **Automation-bias mitigation:** label AI content clearly; don't pre-tick; surface disagreement
   with the deterministic rules engine rather than hiding it.
+- **Net-new hazards for the *fresh* hazard log (none are in the suite's 35-hazard register):**
+  (1) **STT mis-transcription** — Whisper inverting a negation ("no chest pain"→"chest pain") or
+  mangling a dose/drug name, presented as a *faithful* verbatim transcript; a Phase-1 hazard that
+  exists the day transcription ships. (2) **Confident hallucination + automation bias** — a fluent,
+  wrong draft is a nastier over-trust surface than an over-trusted deterministic chip. (3)
+  **LLM-narrative-vs-rule divergence** — when an LLM annotation contradicts the deterministic rule
+  that fired a chip, the persuasive narrative can win in the clinician's eye (cf. suite H-031); the
+  rule must visibly win and the divergence be surfaced. (4) **Indirect prompt injection** via a
+  poisoned record/RAG passage.
 
 ---
 
@@ -359,6 +392,34 @@ The suite is the natural client. From the codebase:
   meds, problems, observations + history (`engine/extractors/*`, `engine/normalisers.js`). That
   normalised snapshot is exactly what you POST to the local server — no new Medicus scraping needed
   for the interactive path.
+
+---
+
+## 9½. Build vs buy (an honest fork — added after review)
+
+The AVT Self-Certified Supplier Registry now lists ~23 assured scribe suppliers (TORTUS, Heidi,
+Accurx Scribe, Microsoft Dragon, Optum/EMIS…) who have **already** carried the cost this plan would
+otherwise impose: Class 1 MHRA registration, DTAC, DSPT, DCB0129/0160 safety cases, and evidence of
+benefit (the GOSH/TORTUS trial is *theirs*). You cannot realistically out-govern a funded vendor
+whose entire existence is clearing that bar, and the 9 June 2025 Priority Notification makes an
+unassured scribe a live liability for both the practice **and** the individual clinician.
+
+The honest split:
+- **Buy** the generative scribe (the Phase-2 Class-1 piece). It's now a commodity with assured
+  suppliers; re-deriving it solo means a worse evidence base and a one-person safety case.
+- **Build** the white space the market does *not* sell: the **read-only, Medicus-native,
+  deterministic augmentation layer** — the `ai-assist` thin client + orchestration surface,
+  safety-by-architecture graceful degradation, suite-native review gates, and (optionally)
+  LLM-narrative-on-deterministic-chips enrichment. The best-shaped version of the whole idea:
+  *the assured third-party scribe writes the note; the Medicus Suite is the local intelligence layer
+  that makes the rest of the record smarter around it.*
+
+**Why self-hosting is nonetheless retained here as the chosen direction:** there's a genuine niche
+the AVT market doesn't fully serve — practices or data-sensitive contexts that cannot accept *any*
+cloud processing of patient audio/text. A self-contained, no-egress appliance is the only answer for
+them, and it keeps the augmentation white space and the scribe under one roof. That's a deliberate
+choice for the hard-local-only minority, made with eyes open to the ops cost in §11 — not the
+default recommendation for every practice.
 
 ---
 
@@ -396,7 +457,10 @@ at all.
    is the biggest unknown in the whole plan.
 2. **"Build it yourself" = you are the manufacturer.** That's DCB0129 *and* DCB0160, a CSO, hazard
    log, safety case, and (for any device-class feature) MHRA registration/UKCA. This is real, ongoing
-   work, not a one-off. The upside: you already run this machinery for the suite.
+   work, not a one-off — and **it does not inherit from the suite's governance.** The suite's DPIA
+   and 35-hazard register are built on *no runtime AI and no egress*, the two things this server
+   adds, so they are **invalidated, not extended**. Budget for a fresh DPIA, a fresh hazard log (top
+   hazards: hallucination, prompt injection, STT error), and a living dual-hat safety case.
 3. **Hallucination + automation bias is the headline patient-safety risk**, and "a clinician
    reviewed it" is a *leaky* control (the literature is clear it's necessary but not sufficient). The
    mitigations (provenance, edit-before-file, validators, audit of *actual* review) are load-bearing.
@@ -411,7 +475,14 @@ at all.
    PRO 6000 with vLLM continuous batching is comfortable. But size `max_num_seqs` to true peak and
    add admission control so a spike degrades gracefully, not silently.
 7. **Cost & maintenance.** ~£8k box + UPS + a competent maintainer + ongoing governance. Cheaper than
-   per-seat cloud AI at scale and far better for IG, but it's not free and it's not zero-ops.
+   per-seat cloud AI at scale and far better for IG, but it's not free and it's not zero-ops. Running
+   vLLM/LiteLLM/Postgres/TEI/nginx on a GPU box is a small production ML platform (CUDA/driver
+   patching, image CVEs, thermal/acoustics, cert rotation) *on top of* a living dual-hat safety
+   case — be honest about whether that eats a partner's life (see §9½).
+8. **RAG corpus licensing + device-line drift.** BNF/NICE text is not freely redistributable — any
+   local guidance corpus must be licence-cleared before indexing. And the retrieval feature is the
+   one most likely to drift across the device line (§7c): keep it extractive/quote-only and
+   release-gated, or defer it.
 
 ---
 

@@ -5,6 +5,11 @@ and `docs/INTENDED-PURPOSE-LLM-SERVER.md` (Phase-1 scope / device boundary). Cod
 illustrative skeleton, not production code. The PoC runs against MOCK / test-patient data only
 until the DPIA + DCB0160 are signed.*
 
+*Revised 2026-06-22 after review: single-egress specified as a fail-closed monitored control; STT
+mis-transcription and prompt injection added as net-new hazards with release-gate tests; the review
+gate given a measurable definition; exit criteria require a **fresh** DPIA + hazard log (not an
+extension of the suite's); RAG corpus licensing flagged.*
+
 ---
 
 ## 0. What the PoC proves (and what it deliberately doesn't)
@@ -19,6 +24,13 @@ when the box is off.
 Class 1), any decision-support (Phase 3, Class IIa), and the autonomous server-to-server Medicus
 connector (blocked on the Medicus partner-API question — see plan §11). PoC is interactive,
 browser-mediated, mock-data only.
+
+**Build-vs-buy note:** the *generative scribe* (Phase 2) is now a commodity with ~23 assured
+AVT-registry vendors who already hold Class 1 + DTAC + DSPT + DCB0129/0160 — buying it is the
+pragmatic path. This PoC deliberately builds only the **self-hosted, no-egress** thesis and the
+**Medicus-native augmentation layer** (the genuine white space), for the niche that cannot accept
+any cloud processing. If that niche doesn't apply to a given practice, buy the scribe and build only
+the `ai-assist` layer (see plan §9½).
 
 **Exit criteria → Phase 2:** see §6.
 
@@ -53,18 +65,28 @@ production buy once value is shown.
 | Embeddings | **TEI** serving **bge-m3** | for the retrieval/signposting function. |
 | Vector DB | **pgvector** in Postgres | Postgres also backs LiteLLM keys/audit — one fewer service. |
 
+> **RAG corpus caveat:** BNF/NICE text is **not freely redistributable** — a local guidance corpus
+> must be licence-cleared before indexing. Retrieval is also the highest device-line risk (plan §7c
+> / the intended-purpose statement); keep it extractive/quote-only, or defer it past the PoC.
+
 ---
 
 ## 2. Network & security checklist (PoC)
 
 - [ ] Appliance on its **own VLAN**; inbound only from clinician subnets to the nginx endpoint.
-- [ ] **Default-deny egress**; allow-list **only** the Medicus API host. Verify with an egress test
-      (the box cannot reach `example.com` but can reach the Medicus API host).
+- [ ] **Default-deny egress**, allow-list **only** the Medicus API host — implemented as a
+      **continuously monitored, fail-closed runtime control** (not a one-time check): if egress
+      integrity can't be verified, the box refuses to process PHI. The egress test below is the
+      *start* of this control, not the whole of it.
 - [ ] TLS via internal CA; per-clinician LiteLLM virtual key (no shared key).
 - [ ] Append-only audit log {who, when, model+version, inputs, outputs, reviewer, action}.
 - [ ] **Decide consciously:** whether prompts/responses are stored. LiteLLM stores them **plaintext**
       when enabled → if yes, DB encryption-at-rest + retention (`"7d"`) + lock the logging callback.
 - [ ] Audio retention policy: transient audio deleted post-transcription.
+- [ ] **STT verification UX:** verbatim transcripts shown as *unverified* and read against source;
+      mis-transcription (inverted negation / wrong dose / wrong drug) treated as a logged hazard.
+- [ ] **Committed adversarial / prompt-injection test** that fails CI before any RAG or record
+      content can enter a model context (cf. `test-drug-brand-coverage.js`).
 - [ ] **PoC uses MOCK data only** until DPIA + DCB0160 signed.
 
 ---
@@ -285,8 +307,12 @@ general_settings:
       validators catch injected bad values.
 - [ ] Graceful degradation verified (box off → suite unaffected).
 - [ ] Audit log captures who/what/when/reviewer for every call.
-- [ ] Clinician UX review: is the review-and-edit gate *real* (provenance shown, edit-before-use)?
-- [ ] Governance readiness: draft DPIA, draft Phase-1 hazard log, CSO engaged, Caldicott briefed.
+- [ ] **Review gate is *evidenced*, not theatre:** source span shown beside each drafted line,
+      keystroke-level edit deltas logged, drafts filed *unedited* flagged for audit (a measurable
+      pass, not a yes/no opinion).
+- [ ] Governance readiness: a **fresh** high-risk DPIA (the suite's is invalidated by runtime AI +
+      egress) and a **new** Phase-1 hazard log whose top hazards (hallucination, prompt injection,
+      STT error) are absent from the suite's 35-hazard register; CSO engaged, Caldicott briefed.
 - [ ] **Medicus partner-API question answered** before any Phase-2 autonomous/server-to-server work.
 
 Only when these pass — and the governance artefacts are signed — does Phase 2 (generative scribe as a

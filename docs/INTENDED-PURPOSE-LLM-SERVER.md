@@ -8,6 +8,12 @@
 asserted; it must be finalised, dated and signed by the Clinical Safety Officer before any
 deployment.
 
+**Revised 2026-06-22 after review:** the retrieval/signposting function (c) is flagged as the
+highest device-line risk and constrained to extractive/quote-only output (see *Device-status
+boundary*); the prerequisites now require a **fresh** DPIA and hazard log (the suite's are
+invalidated by adding runtime AI + egress, not extended); and single-egress is specified as a
+continuously-monitored, fail-closed runtime control.
+
 ---
 
 ## Why this document exists
@@ -47,6 +53,13 @@ decision:
 
 All outputs are presented to a qualified human who reviews, edits where appropriate, and decides
 whether and how to use them. The software files nothing to the patient record autonomously.
+
+> **⚠️ Highest-risk Phase-1 function.** The local-guidance retrieval (c) uses a *generative* model
+> and is therefore materially riskier than the Suite's *deterministic* signposting precedent (a chip
+> that links to a calculator and computes nothing). To stay outside the device definition it must be
+> **extractive / quote-only** — returning cited source spans, never a synthesised recommendation —
+> and protected by a committed adversarial release-gate test. A single system-prompt regression here
+> is the most likely route to an unregistered Class IIa device.
 
 ---
 
@@ -88,7 +101,9 @@ are not crossed.** Each of these is a deliberate, separately-governed step, not 
   of scope for this statement.
 - **A retrieval/assistant feature that crosses from surfacing existing reference text into
   generating a clinical answer or recommendation** crosses the same line. The Phase-1 retrieval
-  function must surface cited source passages, not synthesise a clinical recommendation.
+  function must surface cited source passages, not synthesise a clinical recommendation — it must be
+  **extractive/quote-only** and protected by a committed release-gate test, and is the
+  highest-risk Phase-1 item.
 
 The MHRA explicitly warns that generative-AI tools can **drift beyond their stated intended
 purpose**. Scope creep from Phase 1 into Phase 2/3 by incremental feature change, without the
@@ -111,6 +126,9 @@ through change management under DCB0160.
 - It is not a substitute for reading the patient record or for clinical judgement.
 - Its transcripts and drafts are unverified machine output; absence of an error in a draft does not
   indicate the draft is complete or correct.
+- Its transcripts can contain **confident mis-transcriptions** — an inverted negation ("no chest
+  pain" → "chest pain"), a wrong dose or drug name — presented as faithful. A verbatim transcript is
+  not a verified record and must be read against what was actually said.
 - It is not a record-of-truth; nothing it produces is a clinical record until a qualified human has
   reviewed it and entered it into Medicus.
 
@@ -146,7 +164,8 @@ This software must not be used:
 - Before the deployment-side clinical safety case (DCB0160) and DPIA are complete and signed.
 - In any configuration where its single controlled egress is not enforced (i.e. if the appliance
   can reach the internet beyond the allow-listed Medicus endpoint, it must not process patient
-  data).
+  data). Enforcement must be continuous, monitored and fail-closed; an unverifiable perimeter means
+  no patient-data processing.
 - Where its limitations (see the Phase-1 hazard log) are not understood and accepted by the user.
 
 ---
@@ -154,7 +173,10 @@ This software must not be used:
 ## Prerequisites before this statement can be relied upon
 
 1. Finalised, CSO-signed version of this statement.
-2. Phase-1 hazard log and DCB0160 deployment clinical safety case report.
-3. Completed DPIA with DPO and Caldicott Guardian input.
-4. Confirmed enforcement of the single-egress network control.
+2. A **fresh** Phase-1 hazard log (not an extension of the suite's, which has no hazard for
+   hallucination, prompt injection or STT error) and a DCB0160 deployment clinical safety case report.
+3. A **from-scratch high-risk DPIA** with DPO and Caldicott Guardian input — the suite's DPIA is
+   premised on no-runtime-AI/no-egress and does not cover this.
+4. Single-egress enforced as a **continuously monitored, fail-closed runtime control** (not a
+   one-time test), verified.
 5. Documented retention/deletion policy for audio, transcripts and drafts.
