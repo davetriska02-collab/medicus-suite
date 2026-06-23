@@ -1,6 +1,34 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // GP Forge — JSON schemas for constrained decoding + downstream validation.
 
+// PHASE 2 (medical-device-class) — generative SOAP summarisation. Grounded by an evidence array
+// whose quotes must appear verbatim in the source transcript (validated downstream in phase2.js).
+export const SOAP_NOTE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['subjective', 'objective', 'assessment', 'plan', 'evidence'],
+  properties: {
+    subjective: { type: 'string', minLength: 1, maxLength: 4000 },
+    objective: { type: 'string', minLength: 1, maxLength: 4000 },
+    assessment: { type: 'string', minLength: 1, maxLength: 4000 },
+    plan: { type: 'string', minLength: 1, maxLength: 4000 },
+    evidence: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 50,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['section', 'quote'],
+        properties: {
+          section: { type: 'string', enum: ['subjective', 'objective', 'assessment', 'plan'] },
+          quote: { type: 'string', minLength: 1, maxLength: 500 },
+        },
+      },
+    },
+  },
+};
+
 export const ADMIN_DRAFT_SCHEMA = {
   type: 'object',
   additionalProperties: false,

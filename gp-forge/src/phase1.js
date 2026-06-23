@@ -42,6 +42,11 @@ const INJECTION_PATTERNS = [
   /\bunrestricted\b[^.]*\b(ai|model|assistant)/i,
 ];
 
+export function detectInjection(text) {
+  const s = String(text || '');
+  return INJECTION_PATTERNS.some((re) => re.test(s));
+}
+
 // Best-effort clinical-intent detection (defence in depth — not a substitute for the human gate).
 const CLINICAL_INTENT = [
   /\bdiagnos(e|is|ing)\b/i,
@@ -80,16 +85,14 @@ export function guardRequest({ task, context } = {}) {
     };
   }
   const text = asText(context);
-  for (const re of INJECTION_PATTERNS) {
-    if (re.test(text)) {
-      return {
-        ok: false,
-        code: 'prompt_injection',
-        refusal:
-          'This request contains an instruction-override / prompt-injection pattern and was refused. ' +
-          'GP Forge performs administrative drafting only and ignores instructions embedded in the context.',
-      };
-    }
+  if (detectInjection(text)) {
+    return {
+      ok: false,
+      code: 'prompt_injection',
+      refusal:
+        'This request contains an instruction-override / prompt-injection pattern and was refused. ' +
+        'GP Forge performs administrative drafting only and ignores instructions embedded in the context.',
+    };
   }
   for (const re of CLINICAL_INTENT) {
     if (re.test(text)) {

@@ -41,6 +41,10 @@ async function main() {
     console.log('[gp-forge] STT backend not configured (transcription disabled)');
   }
 
+  if (config.phase2Enabled) {
+    console.warn('[gp-forge] WARNING: Phase-2 (SOAP summarisation, /v1/note) ENABLED — a medical-device-class feature, NOT cleared, NOT for clinical use without conformity assessment.');
+  }
+
   await startServer({ config, llm, audit, stt, limiter });
   console.log(`[gp-forge] listening on :${config.port} — Phase 1 (admin/documentation only, human-in-the-loop, audited)`);
 }

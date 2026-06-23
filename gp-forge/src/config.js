@@ -47,6 +47,7 @@ export function loadConfig(env = process.env) {
       timeoutMs: Number(env.GPF_STT_TIMEOUT_MS || 60000),
     },
     rateRpm: Number(env.GPF_RATE_RPM || 60), // per-key requests/min; 0 disables
+    phase2Enabled: bool(env.GPF_ENABLE_PHASE2, false), // Phase-2 = medical-device-class (SOAP summarisation); OFF by default
   };
 
   const errors = [];
