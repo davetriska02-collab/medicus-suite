@@ -276,6 +276,14 @@
 
   async function doOpen() {
     s.open = true;
+    // Cached for this task — state is reset on SPA navigation (runInject), so if
+    // the assignee/priority lists are already loaded nothing changed; just reveal
+    // the form instead of re-resolving the patient and re-fetching the form data.
+    if (s.patientId && (s.teams.length || s.staff.length)) {
+      s.error = null;
+      rerender();
+      return;
+    }
     s.loading = true;
     s.error = null;
     rerender();
@@ -360,11 +368,12 @@
     });
 
     // Don't rerender on each keystroke (it would drop focus); just keep state and
-    // toggle the Create button's enabled flag live.
+    // toggle the Create button's enabled flag live. Capture the button once
+    // rather than re-querying the document on every character.
+    const createBtn = el.querySelector('#ms-tk-create');
     el.querySelector('#ms-tk-desc')?.addEventListener('input', (e) => {
       s.description = e.target.value;
-      const btn = document.querySelector('#ms-tk-create');
-      if (btn) btn.disabled = !(s.description.trim() && s.assignee && !s.creating);
+      if (createBtn) createBtn.disabled = !(s.description.trim() && s.assignee && !s.creating);
     });
 
     el.querySelector('#ms-tk-priority')?.addEventListener('change', (e) => {

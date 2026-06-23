@@ -103,15 +103,19 @@
     });
     var exact = null,
       partial = null;
+    // Match TEXT first (cheap — textContent/aria-label, no geometry) and only
+    // call visible() — which forces a layout reflow via offsetParent/
+    // getClientRects — on the few text-matching candidates. Otherwise a wide
+    // div/span fallback sweep would trigger a per-node reflow storm.
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      if (!visible(el)) continue;
       var t = textOf(el);
       if (t === w) {
+        if (!visible(el)) continue;
         exact = el;
         break;
       }
-      if (!partial && t.indexOf(w) >= 0) partial = el;
+      if (!partial && t.indexOf(w) >= 0 && visible(el)) partial = el;
     }
     return exact || partial;
   }
@@ -130,8 +134,9 @@
       }
     });
     var out = [];
+    // Text test first; visible() (reflow) only on text matches — see findByText.
     for (var i = 0; i < nodes.length; i++) {
-      if (visible(nodes[i]) && textOf(nodes[i]).indexOf(w) >= 0) out.push(nodes[i]);
+      if (textOf(nodes[i]).indexOf(w) >= 0 && visible(nodes[i])) out.push(nodes[i]);
     }
     return out;
   }

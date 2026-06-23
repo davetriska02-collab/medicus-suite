@@ -107,6 +107,9 @@
       credentials: 'include',
       headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
       body: opts.body,
+      // keepalive lets a fire-and-forget release survive page unload (see
+      // apiReleaseReservation + the pagehide handler).
+      keepalive: !!opts.keepalive,
     });
     if (!resp.ok) throw new Error(`API ${resp.status}`);
     const text = await resp.text();
@@ -189,6 +192,7 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slotReservationId }),
+      keepalive: true,
     }).catch(() => {});
   }
 
@@ -402,15 +406,25 @@
 
   async function doOpen() {
     s.open = true;
+    // Cached for this task — state is reset on SPA navigation (runInject), so if
+    // patient/provider/types are already populated nothing changed; just reveal
+    // the form instead of re-resolving the patient and re-fetching the finder.
+    if (s.patientId && s.providerId && s.types.length) {
+      rerender();
+      return;
+    }
     s.loading = true;
     s.error = null;
     rerender();
     try {
       const info = getTaskInfo();
-      if (info) {
-        s.patientId = await resolvePatientId(info.siteId, info.typeSlug, info.taskUuid);
-      }
-      const finder = await apiFetchFinder();
+      // patient-id resolution and the appointment finder are independent — run
+      // them in parallel so open latency is one round-trip, not two.
+      const [patientId, finder] = await Promise.all([
+        info ? resolvePatientId(info.siteId, info.typeSlug, info.taskUuid) : Promise.resolve(null),
+        apiFetchFinder(),
+      ]);
+      s.patientId = patientId;
       s.providerId = finder.localOrganisationDetails?.id || null;
       const types = [];
       for (const svc of finder.localOrganisationDetails?.services || []) {
@@ -728,6 +742,14 @@
   // Re-check when the tab returns to the foreground (we skip work while hidden).
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) scheduleInject();
+  });
+
+  // Release any held slot reservation if the tab is closed/navigated mid-booking
+  // — otherwise the slot stays locked for other bookers until the backend TTL
+  // expires. pagehide (not unload) fires on bfcache too; keepalive lets the POST
+  // complete past teardown.
+  window.addEventListener('pagehide', () => {
+    if (s.reservationId) apiReleaseReservation(s.reservationId);
   });
 
   // Initial inject

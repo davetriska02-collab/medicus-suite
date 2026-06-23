@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.1] — 2026-06-23
+
+### Performance: injected-widget optimisations (task / booking / routine-rx)
+
+Three-agent optimisation pass over the injected surfaces. All three were already
+sound on the SPA hot path (path-gate, own-mutation filter, placed fast-path,
+hidden guard, rAF-deferred heavy scan); these are the targeted wins on top.
+
+- **routine-rx-button.js** — `findByText` / `collectByText` now test the
+  control's TEXT first and call `visible()` (which forces a layout reflow via
+  `offsetParent`/`getClientRects`) **only** on text-matching candidates. The slow
+  path's wide `div/span` fallback sweep can no longer trigger a per-node reflow
+  storm.
+- **booking-inline.js** —
+  - Fixed a **slot-reservation leak**: a held reservation is now released on
+    `pagehide` via a `keepalive` POST, so closing/navigating mid-booking no longer
+    leaves the slot locked for other bookers until the backend TTL expires.
+  - `doOpen` resolves the patient and fetches the appointment finder **in
+    parallel** (independent calls) instead of sequentially — one round-trip of
+    open latency, not two.
+  - Re-opening the panel for the same task **reuses** the already-loaded
+    patient / provider / appointment types instead of re-fetching.
+- **task-inline.js** — re-opening reuses the already-loaded assignee/priority
+  lists instead of re-resolving the patient and re-fetching the form; the
+  per-keystroke handler caches the Create-button reference instead of querying
+  the document on every character.
+
 ## [v3.134.0] — 2026-06-23
 
 ### New: inline "Create task for this patient" widget (real API wiring)
