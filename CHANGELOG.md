@@ -2,6 +2,80 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.1] — 2026-06-23
+
+### Performance: injected-widget optimisations (task / booking / routine-rx)
+
+Three-agent optimisation pass over the injected surfaces. All three were already
+sound on the SPA hot path (path-gate, own-mutation filter, placed fast-path,
+hidden guard, rAF-deferred heavy scan); these are the targeted wins on top.
+
+- **routine-rx-button.js** — `findByText` / `collectByText` now test the
+  control's TEXT first and call `visible()` (which forces a layout reflow via
+  `offsetParent`/`getClientRects`) **only** on text-matching candidates. The slow
+  path's wide `div/span` fallback sweep can no longer trigger a per-node reflow
+  storm.
+- **booking-inline.js** —
+  - Fixed a **slot-reservation leak**: a held reservation is now released on
+    `pagehide` via a `keepalive` POST, so closing/navigating mid-booking no longer
+    leaves the slot locked for other bookers until the backend TTL expires.
+  - `doOpen` resolves the patient and fetches the appointment finder **in
+    parallel** (independent calls) instead of sequentially — one round-trip of
+    open latency, not two.
+  - Re-opening the panel for the same task **reuses** the already-loaded
+    patient / provider / appointment types instead of re-fetching.
+- **task-inline.js** — re-opening reuses the already-loaded assignee/priority
+  lists instead of re-resolving the patient and re-fetching the form; the
+  per-keystroke handler caches the Create-button reference instead of querying
+  the document on every character.
+
+## [v3.134.0] — 2026-06-23
+
+### New: inline "Create task for this patient" widget (real API wiring)
+
+Replaces the earlier click-path "+ Task" button — which tried to puppet an
+on-page "Create task" control that doesn't exist on the prescribing screen — with
+a proper inline panel built the same way as the booking widget: it drives
+Medicus's own task API directly.
+
+- New `content-scripts/task-inline.js` + `task-inline.css`: a collapsible
+  **"Create task for this patient"** panel injected below the "Codes & actions"
+  card on task overviews (stacks beneath the booking widget when present).
+- On open it resolves the patient from the task UUID and `GET`s
+  `/patient/data/workflow/general-task/create?patientId=…` to populate **Assign
+  to** (teams + staff option-groups) and **Priority**; **Create** `POST`s to
+  `/patient/workflow/general-task/create` with
+  `{ patientId, assigneeId, assigneeType, description, priority, snoozeUntil }`.
+- Same injection discipline as booking-inline (shared observer hub with private
+  fallback, own-mutation filter, throttle + rAF, and remove-on-leave so it can't
+  strand on a non-task page). Credentialed same-origin fetch; no patient-data
+  field values are read.
+- Removed the abandoned `content-scripts/triage-lens/task-button.js` and its
+  `triagelens.taskMacro` backup wiring (the click-path approach is gone).
+
+## [v3.133.5] — 2026-06-23
+
+### "+ Task" button: tidy leftover menu CSS (interim)
+
+Removed the now-unused `.chtk-caret`/`.chtk-menu*`/`.chtk-step` rules left behind
+by the config-menu deletion and squared off the single button's border-radius.
+Cosmetic only; the API-driven task-creation rebuild is still in progress.
+
+## [v3.133.4] — 2026-06-23
+
+### "+ Task" button: removed the config menu (interim)
+
+Stripped the ▾ caret dropdown (captured-steps list, "Edit steps (paste JSON)",
+reset, commit-mode options) — it exposed developer-facing JSON config that has no
+place in the clinical UI. The button is now a single "+ Task" control. Also
+removed a dangling `closeMenu()` reference left by the menu deletion.
+
+This is an interim step: the click-path-replay model is the wrong approach for
+this button (there is no on-page "Create task" control to drive on the prescribing
+screen). It will be rebuilt as direct task-API wiring — an inline create-task
+panel modelled on `booking-inline.js` — once the task-creation API contract is
+captured.
+
 ## [v3.133.3] — 2026-06-23
 
 ### Fix: "+ Task" button now appears on all prescription overviews

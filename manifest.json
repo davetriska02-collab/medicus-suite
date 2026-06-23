@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.133.3",
+  "version": "3.134.1",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -50,14 +50,14 @@
     },
     {
       "matches": ["https://*.medicus.health/*"],
-      "js": ["content-scripts/triage-lens/rule-match.js", "content-scripts/triage-lens/content.js", "content-scripts/triage-lens/routine-rx-button.js", "content-scripts/triage-lens/task-button.js"],
+      "js": ["content-scripts/triage-lens/rule-match.js", "content-scripts/triage-lens/content.js", "content-scripts/triage-lens/routine-rx-button.js"],
       "css": ["content-scripts/triage-lens/hud.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://*.medicus.health/*"],
-      "js": ["content-scripts/booking-inline.js"],
-      "css": ["content-scripts/booking-inline.css"],
+      "js": ["content-scripts/booking-inline.js", "content-scripts/task-inline.js"],
+      "css": ["content-scripts/booking-inline.css", "content-scripts/task-inline.css"],
       "run_at": "document_idle"
     }
   ],

@@ -1,0 +1,161 @@
+/* Medicus Suite — inline "create task" widget injected into task pages */
+/* All selectors scoped to #ms-tk-widget to avoid Medicus style conflicts */
+
+#ms-tk-widget {
+  margin: 16px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+}
+
+#ms-tk-widget .ms-tk-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f0f4ff;
+  border: 1px solid #c3cef5;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e3a8a;
+}
+
+#ms-tk-widget .ms-tk-header:hover {
+  background: #e0eaff;
+}
+
+#ms-tk-widget .ms-tk-chevron {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+#ms-tk-widget .ms-tk-body {
+  border: 1px solid #c3cef5;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 14px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-tk-widget .ms-tk-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-tk-widget .ms-tk-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-tk-widget .ms-tk-select,
+#ms-tk-widget .ms-tk-textarea {
+  padding: 7px 10px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #1a2030;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+#ms-tk-widget .ms-tk-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.4;
+}
+
+#ms-tk-widget .ms-tk-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#ms-tk-widget .ms-tk-btn {
+  padding: 8px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+}
+
+#ms-tk-widget .ms-tk-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+#ms-tk-widget .ms-tk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-tk-widget .ms-tk-btn-ghost {
+  padding: 7px 14px;
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid #c3cef5;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ms-tk-widget .ms-tk-btn-ghost:hover:not(:disabled) {
+  background: #f0f4ff;
+}
+
+#ms-tk-widget .ms-tk-loading {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-tk-widget .ms-tk-error {
+  padding: 8px 10px;
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+#ms-tk-widget .ms-tk-warn {
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+#ms-tk-widget .ms-tk-success {
+  align-items: center;
+  text-align: center;
+}
+
+#ms-tk-widget .ms-tk-success-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}
