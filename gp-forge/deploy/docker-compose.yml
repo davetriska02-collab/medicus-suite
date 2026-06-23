@@ -1,0 +1,53 @@
+# GP Forge — Phase 1 PoC stack. MOCK / test-patient data only until DPIA + DCB0160 are signed.
+# No service has internet egress in production; the host firewall allow-lists ONLY the Medicus API
+# host. On this dev compose, GPF_ALLOW_OPEN_EGRESS=true is set so GP Forge will start on a normal
+# (open-egress) workstation FOR MOCK USE ONLY — set it to false once the box is on its locked VLAN.
+services:
+  gp-forge: # the orchestrator (this project)
+    build: ..
+    depends_on: [litellm]
+    environment:
+      - GPF_PORT=8089
+      - GPF_API_KEYS=dev-key-alice:alice,dev-key-bob:bob
+      - GPF_LLM_BASE_URL=http://litellm:4000/v1
+      - GPF_LLM_API_KEY=sk-litellm-local
+      - GPF_MODEL=qwen3-30b
+      - GPF_AUDIT_PATH=/data/audit.jsonl
+      - GPF_AUDIT_STORE_CONTENT=false
+      - GPF_ALLOW_OPEN_EGRESS=true # DEV ONLY. Production: lock egress + set this to false.
+    volumes: [gpf_data:/data]
+    restart: unless-stopped
+
+  ollama: # inference (swap for a vllm service in production for concurrency)
+    image: ollama/ollama:latest
+    deploy: { resources: { reservations: { devices: [{ capabilities: [gpu] }] } } }
+    volumes: [ollama_models:/root/.ollama]
+    # pre-pull offline: ./pull-models.sh  (then lock egress)
+    restart: unless-stopped
+
+  postgres: # backs LiteLLM virtual keys / usage / audit
+    image: pgvector/pgvector:pg16
+    environment: [POSTGRES_PASSWORD=__set_me__, POSTGRES_DB=ai]
+    volumes: [pg:/var/lib/postgresql/data]
+    restart: unless-stopped
+
+  litellm: # gateway: virtual keys, quotas, audit, OpenAI-compatible. ONLY local backends configured.
+    image: ghcr.io/berriai/litellm:main-stable
+    depends_on: [ollama, postgres]
+    environment:
+      - LITELLM_MASTER_KEY=sk-litellm-local
+      - DATABASE_URL=postgresql://postgres:__set_me__@postgres:5432/ai
+    volumes: [./litellm.config.yaml:/app/config.yaml:ro]
+    command: ["--config", "/app/config.yaml"]
+    restart: unless-stopped
+
+  nginx: # TLS edge (internal CA); the ONLY port exposed to the LAN. Streaming-safe (buffering off).
+    image: nginx:stable
+    depends_on: [gp-forge]
+    ports: ["443:443"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./tls:/etc/nginx/tls:ro # provide server.crt / server.key (internal CA)
+    restart: unless-stopped
+
+volumes: { gpf_data: {}, ollama_models: {}, pg: {} }

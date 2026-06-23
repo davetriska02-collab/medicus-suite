@@ -1,0 +1,15 @@
+# LiteLLM gateway config for GP Forge. ONLY local backends are listed, so there is NO code path to
+# the internet for inference — the single permitted egress remains the firewall-level Medicus link.
+model_list:
+  - model_name: qwen3-30b
+    litellm_params:
+      model: ollama/qwen3:30b-a3b
+      api_base: http://ollama:11434
+
+general_settings:
+  master_key: sk-litellm-local # change me; issue per-clinician virtual keys from this
+  database_url: postgresql://postgres:__set_me__@postgres:5432/ai
+  # store_prompts_in_spend_logs: false
+  #   Decide consciously: when ON, LiteLLM stores prompts/responses as PLAINTEXT in Postgres.
+  #   If you enable it, add DB encryption-at-rest + a retention policy. GP Forge keeps its own
+  #   hash-chained audit (gp-forge/src/audit.js) which does NOT store raw PHI by default.

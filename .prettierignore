@@ -5,3 +5,4 @@ content-scripts/triage-lens/defaults.json
 content-scripts/triage-lens/content.js
 package-lock.json
 CHANGELOG.md
+gp-forge/

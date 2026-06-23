@@ -1,0 +1,12 @@
+{
+  "name": "gp-forge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GP Forge — a self-contained, on-prem LLM orchestrator for general practice. Phase 1: administrative/documentation support only (NOT a medical device). Single controlled egress, human-in-the-loop, audited. See ../docs/INTENDED-PURPOSE-LLM-SERVER.md.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test --test-concurrency=1 test/test-*.js"
+  }
+}

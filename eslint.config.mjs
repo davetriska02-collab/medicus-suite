@@ -69,4 +69,10 @@ export default [
     files: ['brand/**/*.mjs', 'design-system/**/*.mjs'],
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
+  {
+    // GP Forge — standalone on-prem LLM orchestrator subproject (its own package.json,
+    // type:module, Node ESM, zero deps). Not part of the shipped extension.
+    files: ['gp-forge/**/*.js'],
+    languageOptions: { sourceType: 'module', ecmaVersion: 2023, globals: { ...globals.node } },
+  },
 ];

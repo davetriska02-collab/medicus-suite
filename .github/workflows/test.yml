@@ -49,6 +49,9 @@ jobs:
       - name: Run automated test suite (fails closed)
         run: node --test --test-concurrency=1 test-*.js
 
+      - name: Run GP Forge test suite (standalone subproject, fails closed)
+        run: node --test --test-concurrency=1 gp-forge/test/test-*.js
+
   lint:
     runs-on: ubuntu-latest
     steps:
