@@ -51,15 +51,15 @@
   // ---- config / storage --------------------------------------------------
 
   var STORE_KEY = 'triagelens.taskMacro';
-  // Default replay: open the new-task workflow via the common Medicus controls.
-  // Carries NO submit step, so out of the box the button only OPENS the form.
+  // Default replay (captured on live Medicus, Jun 2026): the "Create task" button
+  // opens a modal of task-type choices ("Appointment request", "Other", …); the
+  // clinician picks the type. So the default is the single durable step that
+  // OPENS that picker — no type is hard-wired, no submit step, nothing is created.
+  // To always jump straight to one type, append e.g. { kind:'click', text:['Other'] }.
   var DEFAULTS = {
     label: 'Task',
     commitMode: 'open', // 'open' | 'manual' | 'auto'
-    steps: [
-      { kind: 'click', text: ['More actions'] },
-      { kind: 'click', text: ['Add task', 'Create task', 'New task', 'Add a task'] },
-    ],
+    steps: [{ kind: 'click', text: ['Create task'] }],
   };
   var cfg = clone(DEFAULTS);
 

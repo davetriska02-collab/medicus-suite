@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.2] — 2026-06-23
+
+### "+ Task" button default click-path matched to live Medicus
+
+Captured the real task-creation flow on live Medicus: a top-level **"Create task"**
+button opens a modal of task-type choices ("Appointment request", "Other", …) from
+which the clinician picks the type. Replaced the placeholder default
+("More actions" → "Add task") with the single durable step that opens that picker:
+
+- Default `steps` is now `[{ kind:'click', text:['Create task'] }]` — opens the
+  task-type modal and stops; the clinician chooses the type. No type is
+  hard-wired and nothing is created automatically (`commitMode: 'open'`).
+- To always jump straight to one type, append e.g.
+  `{ kind:'click', text:['Other'] }` via the button's ▾ → "Edit steps…".
+
 ## [v3.133.1] — 2026-06-23
 
 ### Fix: booking widget stranded at the bottom of task-LIST pages
