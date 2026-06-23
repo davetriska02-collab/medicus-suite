@@ -5,11 +5,16 @@
 // depth). It does NOT — and cannot — validate clinical correctness; that is the human review gate.
 
 const CLINICAL_LEAK = [
-  /\byou should (take|start|stop|increase|decrease)\b/i,
-  /\b(diagnos(is|ed)|differential)\b/i,
+  /\byou should (take|start|stop|increase|decrease|reduce|continue|avoid)\b/i,
+  /\b(start|stop|increase|decrease|reduce|titrate|continue) (taking |your |the )?(this |that )?(medication|dose|antibiotic|statin|insulin|inhaler|treatment|tablets?)\b/i,
+  /\b(diagnos(is|ed|e)|differential|prognosis)\b/i,
   /\b(prescrib|titrat)/i,
   /\bmanagement plan\b/i,
-  /\b\d+\s?mg\b/i, // a dose in an administrative draft is a red flag
+  /\b\d+\s?(mg|mcg|microgram|ml|units?|g)\b/i, // a dose/quantity in an administrative draft is a red flag
+  /\b(two[-\s]?week wait|2ww|urgent(ly)? refer|refer urgently|admit to (hospital|a&e)|attend a&e|emergency department)\b/i,
+  /\b(likely|suspected|consistent with|concerning for) (cancer|sepsis|stroke|mi|dvt|pe|infection|malignancy)\b/i,
+  /\bsafety[-\s]?net/i,
+  /\bwe suspect\b/i,
 ];
 
 export function parseJson(content) {

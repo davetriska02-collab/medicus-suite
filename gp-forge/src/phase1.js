@@ -24,6 +24,24 @@ export const SYSTEM_PROMPT = [
   'Respond ONLY with JSON matching the provided schema.',
 ].join(' ');
 
+// Prompt-injection / instruction-override attempts (direct and indirect, e.g. embedded in a
+// pasted "record"). Refused outright — GP Forge ignores instructions carried inside the context.
+const INJECTION_PATTERNS = [
+  /ignore (all|any|the)?\s*(previous|prior|above|earlier) (instruction|prompt|rule|message)/i,
+  /disregard (the|your|all|any)?\s*(system|previous|above)?\s*(prompt|instruction|message|rule)/i,
+  /\byou are now\b/i,
+  /\bact as\b/i,
+  /\bpretend (to be|you are|that)\b/i,
+  /\bnew instructions?\s*:/i,
+  /\bsystem\s*:/i,
+  /\bassistant\s*:/i,
+  /\boverride\b[^.]*\b(rule|instruction|guard|safety|filter)/i,
+  /\bjailbreak\b/i,
+  /reveal (your|the)\s*(system\s*)?(prompt|instruction)/i,
+  /\bbypass\b[^.]*\b(guard|safety|filter|rule|restriction)/i,
+  /\bunrestricted\b[^.]*\b(ai|model|assistant)/i,
+];
+
 // Best-effort clinical-intent detection (defence in depth — not a substitute for the human gate).
 const CLINICAL_INTENT = [
   /\bdiagnos(e|is|ing)\b/i,
@@ -62,6 +80,17 @@ export function guardRequest({ task, context } = {}) {
     };
   }
   const text = asText(context);
+  for (const re of INJECTION_PATTERNS) {
+    if (re.test(text)) {
+      return {
+        ok: false,
+        code: 'prompt_injection',
+        refusal:
+          'This request contains an instruction-override / prompt-injection pattern and was refused. ' +
+          'GP Forge performs administrative drafting only and ignores instructions embedded in the context.',
+      };
+    }
+  }
   for (const re of CLINICAL_INTENT) {
     if (re.test(text)) {
       return {
