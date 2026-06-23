@@ -25,6 +25,7 @@ The extension comprises the following functional modules:
 | **Referrals Tracker** | Displays referral audit data drawn from Medicus, including specialty, priority, status, and clinician breakdowns. |
 | **Waiting Room / Request Monitor** | Displays live waiting-room patient counts and new-request demand counts with configurable amber/red thresholds. |
 | **Patient Record Visualiser** | Analyses a Medicus EPR export PDF locally in the browser to produce a multi-tab clinical dashboard. Outputs include: continuity-of-care indices, investigation trends with clinical zone bands, medication monitoring compliance against NICE/BNF intervals, electronic frailty index (eFI), PINCER-style prescribing safety flags, QOF register review status, and a D3 swim-lane event timeline. No patient data leaves the browser at any stage. |
+| **AI Assist** *(optional, off by default)* | Connects to a practice-hosted, **on-premises GP Forge LLM server** for administrative drafting and **verbatim** consultation transcription. Local-network only (no internet egress); outputs are human-reviewed; nothing is written to the record. **Not a medical device.** Off by default — see the dedicated section below and hazard H-036. |
 
 ---
 
@@ -39,6 +40,36 @@ The extension comprises the following functional modules:
 > The software does not generate clinical diagnoses, clinical recommendations, prescribing decisions, or triage decisions. It does not write to, modify, or submit any data to the patient record or to any external system. It does not transmit patient data outside the user's own browser session. It does not replace clinical judgement. All clinical decisions, including verification of displayed values against the source record, remain the sole responsibility of the clinician.
 
 Any use of Medicus Suite outside this stated purpose is at the user's sole risk.
+
+> **Proposed amendment (v3.134.0) — pending CSO / DPO / Caldicott sign-off.** The statements above
+> (no transmission outside the browser; no runtime AI inference) describe the **core suite**. The
+> **optional AI Assist module** below is the single, documented exception. It ships **disabled** and
+> is not covered by the frozen statement until this amendment is signed
+> (see `docs/CSO-SIGNOFF-gp-forge-ai-assist.md`).
+
+---
+
+## Optional AI Assist module (v3.133.0–v3.134.0) — off by default
+
+AI Assist is an **optional** side-panel module, **disabled by default**, that connects to a
+**practice-hosted, on-premises GP Forge LLM server** (see `docs/INTENDED-PURPOSE-LLM-SERVER.md`).
+When a practice explicitly enables it:
+
+- It provides **administrative drafting** (recall/invitation wording, internal admin text) and
+  **verbatim speech-to-text transcription** of a consultation. It performs **no generative clinical
+  summarisation, diagnosis, triage, prognosis or decision support** — those are out of scope and
+  would be a separate, regulated medical-device function.
+- It **transmits** the clinician's typed administrative prompt or captured audio to the practice's
+  **local GP Forge server only** — on the practice LAN, with **no internet egress** and **no cloud
+  or third-party processor**. No patient record is auto-attached.
+- Every output (draft or transcript) is returned for **human review and edit**; the module **writes
+  nothing to Medicus**. Dictation requires a **patient-informed consent acknowledgement**.
+- It is **not a medical device**: it produces administrative text and verbatim transcripts that the
+  clinician verifies; it makes no diagnostic, prognostic, triage or treatment claim.
+
+This module is governed by hazard **H-036** and the change-proposal in
+`docs/CSO-SIGNOFF-gp-forge-ai-assist.md`, and must not be enabled with real patient activity until
+that sign-off (and the deploying practice's own DPIA / DCB0160) is complete.
 
 ---
 

@@ -791,7 +791,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual severity**           | 3 |
 | **Residual likelihood**         | 2 |
 | **Residual risk**               | 6 — Acceptable (ALARP) in the disabled-by-default + administrative-only + human-review configuration |
-| **Acceptability**               | DRAFT — to be reviewed and baselined by the CSO before the feature is enabled with real patient activity. Enabling AI Assist changes the suite's "no patient data leaves the browser" posture (typed text goes to the local appliance), so `docs/INTENDED-PURPOSE.md` and `docs/DPIA.md` must be updated in step. The off-by-default design, no-record-attached data path, server-side scope guard, fail-closed egress, and human review are the primary controls. |
+| **Acceptability**               | DRAFT — proposed for CSO baseline at v3.134.0. The required governance is now drafted: the `docs/INTENDED-PURPOSE.md` amendment (optional AI Assist module), the `docs/DPIA.md` §7 addendum, and the consolidated change-proposal `docs/CSO-SIGNOFF-gp-forge-ai-assist.md`. Sign-off by CSO + DPO + Caldicott Guardian (and the deploying practice's own DPIA / DCB0160) is required before enablement with real patients. The off-by-default design, no-record-attached data path, consent acknowledgement, server-side scope guard, fail-closed egress, and human review are the primary controls. |
 
 ---
 

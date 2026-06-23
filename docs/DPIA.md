@@ -82,7 +82,55 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 ## 6. Outcome and sign-off
 
 Residual data-protection risk is **low**, driven principally by the local-only,
-zero-egress architecture. Approved for the stated processing.
+zero-egress architecture. Approved for the stated processing. **This outcome covers the core suite; the optional AI Assist module (off by default) is assessed separately in §7 and is not approved for real patient use until that addendum is signed.**
 
 **DPO / accountable person:** Dr Dave Triska — [SIGNATURE / DATE]
 **Review:** at each minor/major release and on any change to data flows.
+
+---
+
+## 7. Addendum — optional AI Assist module / GP Forge (proposed, pending DPO + Caldicott sign-off)
+
+Sections 1–6 describe the **core suite**, whose low residual risk rests on its local-only,
+zero-egress design. The optional **AI Assist** module (v3.133.0–v3.134.0, **disabled by default**)
+introduces a new, bounded processing activity assessed here separately. It must not be enabled with
+real patient data until this addendum is signed **and** the deploying practice has completed its own
+DPIA and DCB0160 for the GP Forge appliance.
+
+**Nature of the new processing.** When a practice enables AI Assist, the clinician's typed
+administrative prompt — or, in Dictate mode, captured consultation audio — is transmitted to a
+**practice-hosted, on-premises GP Forge LLM server** for (a) administrative text drafting or
+(b) verbatim speech-to-text transcription. No patient record is auto-attached. Outputs are
+human-reviewed; nothing is written to Medicus.
+
+**Data categories.** Free-text administrative instructions (which may inadvertently include
+patient-identifiable detail) and, in Dictate mode, **consultation audio** (special-category health
+data).
+
+**Data flows / recipients.** Browser → **local GP Forge server on the practice LAN only**. **No
+internet egress, no cloud service, no third-party processor.** GP Forge enforces a single
+allow-listed egress (to the Medicus API host only) as a fail-closed runtime control; it retains no
+audio and stores only **hashes** of inputs/outputs in a tamper-evident audit log by default.
+
+**Lawful basis.** Unchanged from §4: Art.6(1)(e) public task + Art.9(2)(h) (provision of health
+care). No new purpose beyond supporting the clinician's existing authorised work.
+
+**Why on-prem materially limits risk.** No international transfer (UK GDPR Ch.V not engaged) and no
+external processor (no Art.28 contract) — provided the no-egress control is genuine and enforced.
+
+**Risks and mitigations (AI Assist):**
+
+| Risk | Likelihood / impact | Mitigation | Residual |
+|---|---|---|---|
+| Patient-identifiable detail typed/spoken and sent to the local server | Low / Med | Off by default; admin/verbatim only; no record attached; UI instructs use of [PLACEHOLDERS] + consent acknowledgement; LAN-only, no egress | Low |
+| Audio captured/transmitted (special-category) | Low / Med | Local server only; no internet egress; no audio retained by the suite; consent acknowledgement before recording | Low |
+| Output relied on as clinical advice | Low / Med | Verbatim/admin only; "not clinical advice" banner; human review/edit; nothing written to Medicus | Low |
+| Egress control fails (data could leave the perimeter) | Low / High | GP Forge fail-closed egress runtime control (CSO sign-off condition); off by default until verified | Low |
+| Mis-transcription presented as faithful | Med / Med | Transcript shown as unverified for review; clinician verifies against what was said (H-036) | Low |
+
+**Outcome (addendum).** Residual risk is assessed **low when AI Assist is operated off-by-default,
+on-prem/no-egress, admin+verbatim only, with human review** — but this is a **new processing
+activity** requiring DPO + Caldicott Guardian sign-off, plus the deploying practice's own DPIA /
+DCB0160, before enablement with real patients. **Proposed; pending sign-off.**
+
+**DPO / Caldicott Guardian:** [SIGNATURE / DATE]
