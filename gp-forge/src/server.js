@@ -16,6 +16,7 @@ import { RAG_SYSTEM_PROMPT, buildRagPrompt, contextText, validateRagAnswer } fro
 import { LlmUnavailableError } from './llm-client.js';
 import { SttUnavailableError } from './stt-client.js';
 import { EmbeddingsUnavailableError } from './embeddings-client.js';
+import { verifyChain, queryAudit } from './audit.js';
 
 const VERSION = '0.1.0';
 
@@ -78,7 +79,16 @@ function authenticate(req, apiKeys) {
 
 // deps: { llm, audit, stt, limiter } — injected so the server is testable without a real backend.
 // stt may be null; limiter defaults to a pass-through.
-export function createApp({ config, llm, audit, stt, embeddings, store, limiter = { check: () => ({ ok: true }) } }) {
+export function createApp({
+  config,
+  llm,
+  audit,
+  stt,
+  embeddings,
+  store,
+  limiter = { check: () => ({ ok: true }) },
+  metrics = { inc: () => {}, setGauge: () => {}, prometheus: () => '', actionCounts: () => ({}) },
+}) {
   return async function handler(req, res) {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -374,6 +384,43 @@ export function createApp({ config, llm, audit, stt, embeddings, store, limiter 
         });
       }
 
+      // ── Safety & ops console ──────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/metrics') {
+        metrics.setGauge('gpf_up', 1);
+        metrics.setGauge('gpf_corpus_chunks', store ? store.size : 0);
+        const text = metrics.prometheus(); // aggregate counters only — no PHI
+        res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4', 'content-length': Buffer.byteLength(text) });
+        res.end(text);
+        return;
+      }
+
+      if (req.method === 'GET' && url.pathname === '/v1/audit/verify') {
+        if (!authenticate(req, config.apiKeys)) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        return send(res, 200, verifyChain(audit.path));
+      }
+
+      if (req.method === 'GET' && url.pathname === '/v1/audit/query') {
+        if (!authenticate(req, config.apiKeys)) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        const q = url.searchParams;
+        const records = queryAudit(audit.path, {
+          action: q.get('action') || undefined,
+          actor: q.get('actor') || undefined,
+          task: q.get('task') || undefined,
+          since: q.get('since') || undefined,
+          limit: q.get('limit') ? Number(q.get('limit')) : 100,
+        });
+        return send(res, 200, { count: records.length, records });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/v1/safety/summary') {
+        if (!authenticate(req, config.apiKeys)) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        const actions = metrics.actionCounts();
+        const FLAGGED = ['refused', 'rate_limited', 'rejected_output', 'llm_unavailable', 'stt_unavailable', 'embeddings_unavailable', 'off_corpus'];
+        const flagged = {};
+        for (const a of FLAGGED) flagged[a] = actions[a] || 0;
+        return send(res, 200, { audit: verifyChain(audit.path), actions, flagged });
+      }
+
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
       return send(res, 500, { error: 'internal_error', message: err.message });
@@ -385,8 +432,8 @@ function stableInput(body) {
   return JSON.stringify({ kind: body.kind ?? null, context: body.context ?? null });
 }
 
-export function startServer({ config, llm, audit, stt, embeddings, store, limiter }) {
-  const server = createServer(createApp({ config, llm, audit, stt, embeddings, store, limiter }));
+export function startServer({ config, llm, audit, stt, embeddings, store, limiter, metrics }) {
+  const server = createServer(createApp({ config, llm, audit, stt, embeddings, store, limiter, metrics }));
   return new Promise((resolve) => {
     server.listen(config.port, () => resolve(server));
   });

@@ -8,6 +8,7 @@ import { createSttClient } from './stt-client.js';
 import { createEmbeddingsClient } from './embeddings-client.js';
 import { VectorStore } from './vector-store.js';
 import { createRateLimiter } from './rate-limit.js';
+import { createMetrics } from './metrics.js';
 import { AuditLog } from './audit.js';
 import { startServer } from './server.js';
 
@@ -32,7 +33,8 @@ async function main() {
 
   const llm = createLlmClient(config.llm);
   const stt = config.stt.baseUrl ? createSttClient(config.stt) : null;
-  const audit = new AuditLog(config.audit);
+  const metrics = createMetrics();
+  const audit = new AuditLog({ ...config.audit, onAppend: (rec) => metrics.inc('gpf_actions_total', { action: rec.action || 'unknown' }) });
   const embeddings = config.embeddings.baseUrl ? createEmbeddingsClient(config.embeddings) : null;
   const store = embeddings ? new VectorStore({ path: config.corpusPath }) : null;
   const limiter = createRateLimiter({ rpm: config.rateRpm });
@@ -56,7 +58,7 @@ async function main() {
     console.log('[gp-forge] embeddings backend not configured (local-guidance RAG disabled)');
   }
 
-  await startServer({ config, llm, audit, stt, embeddings, store, limiter });
+  await startServer({ config, llm, audit, stt, embeddings, store, limiter, metrics });
   console.log(`[gp-forge] listening on :${config.port} — Phase 1 (admin/documentation only, human-in-the-loop, audited)`);
 }
 

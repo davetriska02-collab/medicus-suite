@@ -75,6 +75,10 @@ OpenAI-compatible, so the swap is a config change). Pre-download the model weigh
 | POST | `/v1/note` | **Phase 2 (medical-device-class) — DISABLED by default** (`GPF_ENABLE_PHASE2`). Generative SOAP summary of a transcript, **grounded** by verbatim evidence quotes (an ungrounded quote → rejected). `501` when disabled · `422` injected transcript · `502` invalid/ungrounded · `503` LLM down. **Not for clinical use without conformity assessment.** |
 | POST | `/v1/corpus` | Ingest local guidance into the RAG store: `{ source, chunks: [text…] }` → embedded + stored. Requires embeddings configured (`501` otherwise). Corpus must be **licence-cleared**. |
 | POST | `/v1/ask` | **Extractive/quote-only** local-guidance retrieval: `{ question }` → retrieve → answer **only** by citing verbatim quotes from the passages, with **refuse-when-off-corpus**. An ungrounded citation → `502`. Surfaces existing guidance; **not clinical advice**. `501` if RAG not configured. |
+| GET | `/metrics` | Prometheus exposition (aggregate counters only, **no PHI**, no auth) — `gpf_actions_total{action}` etc. for monitoring/scraping. |
+| GET | `/v1/audit/verify` | Bearer key. Hash-chain integrity check (`{ ok, count }` or `{ ok:false, brokenAt, reason }`) — cron/CSO-friendly. |
+| GET | `/v1/audit/query` | Bearer key. Post-market-surveillance query over the audit log: `?action=&actor=&task=&since=&limit=`. Returns metadata records (content only if `storeContent`). |
+| GET | `/v1/safety/summary` | Bearer key. CSO console: chain status + action counts + **flagged** events (refusals, rate-limits, caught fabrications, unavailability, off-corpus). |
 
 ## Layout
 

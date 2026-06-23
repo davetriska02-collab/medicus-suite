@@ -35,10 +35,11 @@ function lastHashOf(path) {
 }
 
 export class AuditLog {
-  constructor({ path, storeContent = false } = {}) {
+  constructor({ path, storeContent = false, onAppend = null } = {}) {
     if (!path) throw new Error('AuditLog requires a path');
     this.path = path;
     this.storeContent = storeContent;
+    this.onAppend = onAppend; // (rec) => void — e.g. bump metrics; must never throw the audit
     mkdirSync(dirname(path), { recursive: true });
     this.prevHash = lastHashOf(path);
   }
@@ -64,6 +65,13 @@ export class AuditLog {
     rec.hash = sha256(this.prevHash + stableStringify(rec));
     appendFileSync(this.path, JSON.stringify(rec) + '\n');
     this.prevHash = rec.hash;
+    if (this.onAppend) {
+      try {
+        this.onAppend(rec);
+      } catch {
+        /* metrics/hooks must never break the audit */
+      }
+    }
     return rec;
   }
 }
@@ -120,4 +128,30 @@ export function pruneBefore(path, beforeISO) {
   });
   writeFileSync(path, rechained.length ? rechained.map((r) => JSON.stringify(r)).join('\n') + '\n' : '');
   return { kept: kept.length, archived: archived.length, archivePath };
+}
+
+// CSO post-market-surveillance query over the audit log. Returns matching records (metadata; content
+// only if storeContent was on), most-recent-first, capped.
+export function queryAudit(path, { action, actor, task, since, limit = 100 } = {}) {
+  if (!existsSync(path)) return [];
+  const recs = readFileSync(path, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const filtered = recs.filter(
+    (r) =>
+      (!action || r.action === action) &&
+      (!actor || r.actor === actor) &&
+      (!task || r.task === task) &&
+      (!since || (r.ts && r.ts >= since))
+  );
+  const n = Math.max(1, Math.min(1000, Number(limit) || 100));
+  return filtered.slice(-n).reverse();
 }
