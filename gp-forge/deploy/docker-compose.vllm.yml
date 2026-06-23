@@ -1,0 +1,65 @@
+# GP Forge — PRODUCTION stack using vLLM (PagedAttention + continuous batching) instead of Ollama,
+# for real 5–20-concurrent-clinician throughput on a single GPU (e.g. RTX PRO 6000 96GB running a
+# 30B MoE). Self-contained; use INSTEAD of docker-compose.yml:
+#     docker compose -f deploy/docker-compose.vllm.yml up -d
+# The GP Forge orchestrator is byte-for-byte the same — only the backend behind LiteLLM changes.
+# MOCK / test-patient data only until DPIA + DCB0160 are signed. No internet egress in production.
+services:
+  gp-forge:
+    build: ..
+    depends_on: [litellm, stt]
+    environment:
+      - GPF_PORT=8089
+      - GPF_API_KEYS=dev-key-alice:alice,dev-key-bob:bob
+      - GPF_RATE_RPM=60
+      - GPF_LLM_BASE_URL=http://litellm:4000/v1
+      - GPF_LLM_API_KEY=sk-litellm-local
+      - GPF_MODEL=qwen3-30b
+      - GPF_STT_BASE_URL=http://stt:8000/v1
+      - GPF_STT_MODEL=Systran/faster-whisper-large-v3
+      - GPF_AUDIT_PATH=/data/audit.jsonl
+      - GPF_AUDIT_STORE_CONTENT=false
+      - GPF_ALLOW_OPEN_EGRESS=true # DEV ONLY. Production: lock egress + set this to false.
+    volumes: [gpf_data:/data]
+    restart: unless-stopped
+
+  vllm: # OpenAI-compatible server with continuous batching — the concurrency lever
+    image: vllm/vllm-openai:latest
+    command: ["--model", "Qwen/Qwen3-30B-A3B", "--port", "8000", "--max-model-len", "32768", "--gpu-memory-utilization", "0.92"]
+    deploy: { resources: { reservations: { devices: [{ capabilities: [gpu] }] } } }
+    ipc: host # vLLM needs host IPC for its shared-memory tensor parallelism
+    volumes: [hf_cache:/root/.cache/huggingface] # pre-download weights here for air-gap
+    restart: unless-stopped
+
+  stt: # verbatim transcription (faster-whisper)
+    image: fedirz/faster-whisper-server:latest-cuda
+    deploy: { resources: { reservations: { devices: [{ capabilities: [gpu] }] } } }
+    environment: [WHISPER__MODEL=large-v3, WHISPER__COMPUTE_TYPE=int8]
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment: [POSTGRES_PASSWORD=__set_me__, POSTGRES_DB=ai]
+    volumes: [pg:/var/lib/postgresql/data]
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    depends_on: [vllm, postgres]
+    environment:
+      - LITELLM_MASTER_KEY=sk-litellm-local
+      - DATABASE_URL=postgresql://postgres:__set_me__@postgres:5432/ai
+    volumes: [./litellm.vllm.yaml:/app/config.yaml:ro]
+    command: ["--config", "/app/config.yaml"]
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:stable
+    depends_on: [gp-forge]
+    ports: ["443:443"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./tls:/etc/nginx/tls:ro
+    restart: unless-stopped
+
+volumes: { gpf_data: {}, hf_cache: {}, pg: {} }

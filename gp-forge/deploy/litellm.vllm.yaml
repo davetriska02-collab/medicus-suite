@@ -1,0 +1,14 @@
+# LiteLLM config for the vLLM backend (production concurrency). ONLY a local backend is listed, so
+# there is no code path to the internet for inference. Issue per-clinician virtual keys from the
+# master key. The user-facing model name (qwen3-30b) is unchanged, so GP Forge needs no change.
+model_list:
+  - model_name: qwen3-30b
+    litellm_params:
+      model: openai/Qwen/Qwen3-30B-A3B # served by the local vLLM OpenAI server
+      api_base: http://vllm:8000/v1
+      api_key: not-needed
+
+general_settings:
+  master_key: sk-litellm-local
+  database_url: postgresql://postgres:__set_me__@postgres:5432/ai
+  # store_prompts_in_spend_logs: false  # plaintext PHI when on — keep OFF / encrypt at rest

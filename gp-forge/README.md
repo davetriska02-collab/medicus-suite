@@ -52,6 +52,18 @@ curl -s -X POST localhost:8089/v1/draft \
 Postgres + nginx. Pre-pull models with `deploy/pull-models.sh`, then lock egress and set
 `GPF_ALLOW_OPEN_EGRESS=false`.
 
+**Production concurrency (vLLM):** for real 5–20-concurrent-clinician throughput on one GPU
+(e.g. an RTX PRO 6000 96GB running the 30B MoE), use `deploy/docker-compose.vllm.yml` instead — it
+swaps Ollama for **vLLM** (PagedAttention + continuous batching) behind the same LiteLLM gateway:
+
+```
+docker compose -f deploy/docker-compose.vllm.yml up -d
+```
+
+The GP Forge orchestrator is **unchanged** — only the backend behind LiteLLM differs (everything is
+OpenAI-compatible, so the swap is a config change). Pre-download the model weights into the
+`hf_cache` volume before locking egress.
+
 ## API (Phase 1)
 
 | Method | Path | Notes |
