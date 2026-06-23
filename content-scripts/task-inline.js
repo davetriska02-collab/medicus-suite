@@ -110,12 +110,23 @@
 
   // ── DOM injection ─────────────────────────────────────────────────────────────
   //
-  // Anchor below the "Codes & actions" card (same host as the booking widget); if
-  // the booking widget is already there, stack directly beneath it. Heading scan
-  // is kept cheap exactly as booking-inline does (narrow heading carriers first,
-  // skip container nodes whose textContent would concatenate a big subtree).
+  // Anchor preference, in order:
+  //   1. directly beneath the booking widget when it's present (keeps them paired);
+  //   2. after the "Codes & actions" card (task types that have it);
+  //   3. above the bottom "More actions" action row — prescribing overviews
+  //      (Routine / Non-Routine Repeat Request, Medications for Re-authorisation)
+  //      have NO "Codes & actions" card, so anchoring to it alone meant the widget
+  //      never injected there. Every task overview has the action row, so this is
+  //      the universal fallback.
+  // Heading scan is kept cheap exactly as booking-inline does (narrow heading
+  // carriers first, skip container nodes whose textContent would concatenate a
+  // big subtree).
 
   const HEADING_RE = /^Codes\s*(?:&|&amp;|and)\s*actions$/i;
+
+  function visible(el) {
+    return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length)));
+  }
 
   function matchHeading(el) {
     if (el.closest('#ms-tk-widget')) return false;
@@ -149,16 +160,39 @@
     return fallback;
   }
 
+  // The bottom-most visible "More actions" button's row, excluding any inside a
+  // dialog/drawer. Returns the row element so we can insert the panel above it.
+  function findActionRow() {
+    const btns = document.querySelectorAll('button, [role="button"]');
+    for (let i = btns.length - 1; i >= 0; i--) {
+      const b = btns[i];
+      if (!/more actions/i.test((b.textContent || '').trim())) continue;
+      if (b.closest('[role="dialog"], [aria-modal="true"]')) continue;
+      if (!visible(b)) continue;
+      return b.parentElement;
+    }
+    return null;
+  }
+
   function injectWidget() {
     if (!getTaskInfo()) return;
     if (document.getElementById('ms-tk-widget')) return;
-    // Prefer to sit just below the booking widget when present, else after the card.
-    const anchor = document.getElementById('ms-bk-widget') || findCard();
-    if (!anchor || !anchor.parentElement) return;
     const w = document.createElement('div');
     w.id = 'ms-tk-widget';
     renderInto(w);
-    withObserverPaused(() => anchor.after(w));
+    // 1/2: after the booking widget or the "Codes & actions" card.
+    const after = document.getElementById('ms-bk-widget') || findCard();
+    if (after && after.parentElement) {
+      withObserverPaused(() => after.after(w));
+      return;
+    }
+    // 3: above the bottom action row (prescribing overviews have no card).
+    const row = findActionRow();
+    if (row && row.parentElement) {
+      withObserverPaused(() => row.parentElement.insertBefore(w, row));
+      return;
+    }
+    // Nothing to anchor to on this page — leave it for a later mutation tick.
   }
 
   // Tear the widget out when we leave a task overview (mirrors booking-inline's

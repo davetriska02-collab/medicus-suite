@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.2] — 2026-06-23
+
+### Fix: create-task widget missing on prescribing overviews (no "Codes & actions" card)
+
+The inline "Create task for this patient" widget anchored only to the booking
+widget or the "Codes & actions" card. Prescribing task overviews (Routine /
+Non-Routine Repeat Request, Medications for Re-authorisation) have **neither**, so
+`injectWidget` found no anchor and the panel never appeared there.
+
+- Added a universal fallback in `task-inline.js`: when there's no booking widget
+  and no "Codes & actions" card, anchor the panel **above the bottom "More
+  actions" action row** (excluding any inside a dialog/drawer) — every task
+  overview has that row. Anchor preference is now booking widget → Codes &
+  actions card → action row.
+
 ## [v3.134.1] — 2026-06-23
 
 ### Performance: injected-widget optimisations (task / booking / routine-rx)
