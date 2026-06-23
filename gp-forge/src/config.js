@@ -39,6 +39,13 @@ export function loadConfig(env = process.env) {
       canaryPort: Number(env.GPF_EGRESS_CANARY_PORT || 443),
       allowOpen: bool(env.GPF_ALLOW_OPEN_EGRESS, false),
     },
+    // Optional local speech-to-text (faster-whisper, OpenAI-compatible). Empty baseUrl = disabled.
+    stt: {
+      baseUrl: (env.GPF_STT_BASE_URL || '').replace(/\/$/, ''),
+      apiKey: env.GPF_STT_API_KEY || '',
+      model: env.GPF_STT_MODEL || 'whisper-1',
+      timeoutMs: Number(env.GPF_STT_TIMEOUT_MS || 60000),
+    },
   };
 
   const errors = [];

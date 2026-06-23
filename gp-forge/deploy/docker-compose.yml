@@ -5,13 +5,15 @@
 services:
   gp-forge: # the orchestrator (this project)
     build: ..
-    depends_on: [litellm]
+    depends_on: [litellm, stt]
     environment:
       - GPF_PORT=8089
       - GPF_API_KEYS=dev-key-alice:alice,dev-key-bob:bob
       - GPF_LLM_BASE_URL=http://litellm:4000/v1
       - GPF_LLM_API_KEY=sk-litellm-local
       - GPF_MODEL=qwen3-30b
+      - GPF_STT_BASE_URL=http://stt:8000/v1 # verbatim transcription (faster-whisper)
+      - GPF_STT_MODEL=Systran/faster-whisper-large-v3 # must match the stt service's model
       - GPF_AUDIT_PATH=/data/audit.jsonl
       - GPF_AUDIT_STORE_CONTENT=false
       - GPF_ALLOW_OPEN_EGRESS=true # DEV ONLY. Production: lock egress + set this to false.

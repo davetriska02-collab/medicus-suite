@@ -23,6 +23,36 @@ export function harness() {
   };
 }
 
+// Mock OpenAI-compatible STT (/audio/transcriptions). transcribe: ({contentType,length}) => {status,body}
+export function startMockStt({ text = 'This is a verbatim transcript.', transcribe } = {}) {
+  const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ object: 'list', data: [] }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/audio/transcriptions') {
+      const ct = req.headers['content-type'] || '';
+      let size = 0;
+      req.on('data', (c) => (size += c.length));
+      req.on('end', () => {
+        const result = transcribe ? transcribe({ contentType: ct, length: size }) : { status: 200, body: { text } };
+        res.writeHead(result.status || 200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(result.body));
+      });
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ baseUrl: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(r)) });
+    });
+  });
+}
+
 function defaultChat() {
   const content = JSON.stringify({
     title: 'Flu clinic invitation',

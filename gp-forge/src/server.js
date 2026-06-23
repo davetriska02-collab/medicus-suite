@@ -3,14 +3,16 @@
 // Phase-1 endpoints:
 //   GET  /healthz      liveness + LLM reachability (always 200)
 //   GET  /v1/info      service info, phase, allowed tasks
-//   POST /v1/draft     administrative draft (auth required) — guarded, constrained, validated, audited
-// The server NEVER writes to Medicus and returns review_required:true on every draft (human-in-the-loop).
+//   POST /v1/draft       administrative draft (auth required) — guarded, constrained, validated, audited
+//   POST /v1/transcribe  verbatim speech-to-text (auth required) — verbatim only (Phase 1), audited
+// The server NEVER writes to Medicus and returns review_required:true on every output (human-in-the-loop).
 
 import { createServer } from 'node:http';
 import { guardRequest, buildPrompt, SYSTEM_PROMPT, PHASE1_TASKS } from './phase1.js';
 import { ADMIN_DRAFT_SCHEMA } from './schemas.js';
 import { parseJson, validateAdminDraft } from './validate.js';
 import { LlmUnavailableError } from './llm-client.js';
+import { SttUnavailableError } from './stt-client.js';
 
 const VERSION = '0.1.0';
 
@@ -46,6 +48,24 @@ function readBody(req, limitBytes = 1_000_000) {
   });
 }
 
+function readRawBody(req, limitBytes = 25_000_000) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limitBytes) {
+        reject(new Error('payload too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 function authenticate(req, apiKeys) {
   const h = req.headers['authorization'] || '';
   const m = /^Bearer\s+(.+)$/i.exec(h);
@@ -53,15 +73,16 @@ function authenticate(req, apiKeys) {
   return apiKeys.get(m[1].trim()) || null; // actor name, or null if unknown key
 }
 
-// deps: { llm, audit } — injected so the server is testable without a real backend.
-export function createApp({ config, llm, audit }) {
+// deps: { llm, audit, stt } — injected so the server is testable without a real backend. stt may be null.
+export function createApp({ config, llm, audit, stt }) {
   return async function handler(req, res) {
     try {
       const url = new URL(req.url, 'http://localhost');
 
       if (req.method === 'GET' && url.pathname === '/healthz') {
         const llmUp = await llm.ping();
-        return send(res, 200, { status: 'ok', version: VERSION, llm: llmUp ? 'up' : 'down' });
+        const sttUp = stt ? await stt.ping() : null;
+        return send(res, 200, { status: 'ok', version: VERSION, llm: llmUp ? 'up' : 'down', stt: stt ? (sttUp ? 'up' : 'down') : 'n/a' });
       }
 
       if (req.method === 'GET' && url.pathname === '/v1/info') {
@@ -71,6 +92,7 @@ export function createApp({ config, llm, audit }) {
           phase: 1,
           note: 'Administrative/documentation support only. Not a medical device. Human review required.',
           tasks: Object.fromEntries(Object.entries(PHASE1_TASKS).map(([k, v]) => [k, v.description])),
+          transcription: stt ? 'verbatim (configured) — not a generative summary' : 'not configured',
         });
       }
 
@@ -127,6 +149,51 @@ export function createApp({ config, llm, audit }) {
         });
       }
 
+      if (req.method === 'POST' && url.pathname === '/v1/transcribe') {
+        const actor = authenticate(req, config.apiKeys);
+        if (!actor) return send(res, 401, { error: 'unauthorized', message: 'valid Bearer key required' });
+        if (!stt) return send(res, 501, { error: 'transcription_not_configured', message: 'no local STT backend configured' });
+
+        let audio;
+        try {
+          audio = await readRawBody(req);
+        } catch (err) {
+          return send(res, 400, { error: 'bad_request', message: err.message });
+        }
+        if (!audio || audio.length === 0) return send(res, 400, { error: 'bad_request', message: 'empty audio body' });
+
+        const mimeType = req.headers['content-type'] || 'application/octet-stream';
+        const filename = (req.headers['x-filename'] || 'audio').toString().replace(/[^\w.-]/g, '_');
+
+        let text;
+        try {
+          text = await stt.transcribe({ audio, filename, mimeType });
+        } catch (err) {
+          if (err instanceof SttUnavailableError) {
+            audit.append({ actor, task: 'transcribe', model: config.stt.model, action: 'stt_unavailable', input: `audio:${audio.length}b` });
+            return send(res, 503, { error: 'stt_unavailable', message: 'local STT backend is unavailable' });
+          }
+          throw err;
+        }
+
+        const record = audit.append({
+          actor,
+          task: 'transcribe',
+          model: config.stt.model,
+          action: 'transcribed',
+          input: `audio:${audio.length}b`,
+          output: text,
+        });
+
+        // Phase 1: VERBATIM transcript only — NOT a generative clinical summary (that is Phase 2).
+        return send(res, 200, {
+          transcript: text,
+          audit_id: record.id,
+          review_required: true,
+          note: 'Verbatim transcript — verify against what was said. Not a clinical summary.',
+        });
+      }
+
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
       return send(res, 500, { error: 'internal_error', message: err.message });
@@ -138,8 +205,8 @@ function stableInput(body) {
   return JSON.stringify({ kind: body.kind ?? null, context: body.context ?? null });
 }
 
-export function startServer({ config, llm, audit }) {
-  const server = createServer(createApp({ config, llm, audit }));
+export function startServer({ config, llm, audit, stt }) {
+  const server = createServer(createApp({ config, llm, audit, stt }));
   return new Promise((resolve) => {
     server.listen(config.port, () => resolve(server));
   });

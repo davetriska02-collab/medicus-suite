@@ -4,6 +4,7 @@
 import { loadConfig } from './config.js';
 import { assertEgressLocked, EgressOpenError } from './egress-guard.js';
 import { createLlmClient } from './llm-client.js';
+import { createSttClient } from './stt-client.js';
 import { AuditLog } from './audit.js';
 import { startServer } from './server.js';
 
@@ -27,11 +28,18 @@ async function main() {
   }
 
   const llm = createLlmClient(config.llm);
+  const stt = config.stt.baseUrl ? createSttClient(config.stt) : null;
   const audit = new AuditLog(config.audit);
   const up = await llm.ping();
   console.log(`[gp-forge] LLM backend ${up ? 'reachable ✓' : 'NOT reachable (clients will get 503 until it is up)'} at ${config.llm.baseUrl}`);
+  if (stt) {
+    const sttUp = await stt.ping();
+    console.log(`[gp-forge] STT backend ${sttUp ? 'reachable ✓' : 'NOT reachable'} at ${config.stt.baseUrl}`);
+  } else {
+    console.log('[gp-forge] STT backend not configured (transcription disabled)');
+  }
 
-  await startServer({ config, llm, audit });
+  await startServer({ config, llm, audit, stt });
   console.log(`[gp-forge] listening on :${config.port} — Phase 1 (admin/documentation only, human-in-the-loop, audited)`);
 }
 

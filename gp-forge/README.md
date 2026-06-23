@@ -59,12 +59,13 @@ Postgres + nginx. Pre-pull models with `deploy/pull-models.sh`, then lock egress
 | GET | `/healthz` | liveness + LLM reachability |
 | GET | `/v1/info` | service info, phase, allowed tasks |
 | POST | `/v1/draft` | administrative draft. Bearer key required. Guarded → constrained → validated → audited. Returns `{ draft, audit_id, review_required: true }`. `401` no key · `422` refused (out-of-scope/clinical) · `502` invalid output · `503` LLM down. |
+| POST | `/v1/transcribe` | **verbatim** speech-to-text (Phase 1 — not a generative summary). Bearer key + raw audio body (`content-type: audio/*`, optional `x-filename`). Forwards to the local STT engine, audited. Returns `{ transcript, audit_id, review_required: true }`. `401` no key · `501` STT not configured · `503` STT down. |
 
 ## Layout
 
 ```
-src/  config · llm-client (constrained) · phase1 (scope guard) · schemas · validate ·
-      audit (hash chain) · egress-guard (fail-closed) · server · index
+src/  config · llm-client (constrained) · stt-client (verbatim STT) · phase1 (scope guard) ·
+      schemas · validate · audit (hash chain) · egress-guard (fail-closed) · server · index
 test/ exit-code-driven suites (run standalone or under `node --test`)
 deploy/ docker-compose · litellm.config.yaml · nginx.conf (streaming-safe) · pull-models.sh
 ```
