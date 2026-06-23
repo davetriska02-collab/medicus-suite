@@ -352,12 +352,10 @@
     }
   }
 
-  // ---- UI: floating button + inline menu --------------------------------
+  // ---- UI: single floating button ---------------------------------------
 
   var host = null,
     btn = null,
-    caret = null,
-    menu = null,
     busy = false;
 
   function setBusy(b) {
@@ -397,116 +395,10 @@
     }, 4600);
   }
 
-  function closeMenu() {
-    if (menu) {
-      menu.remove();
-      menu = null;
-    }
-  }
-
-  function openMenu() {
-    closeMenu();
-    menu = document.createElement('div');
-    menu.className = 'chtk-menu';
-
-    var h1 = document.createElement('div');
-    h1.className = 'chtk-menu-h';
-    h1.textContent = 'Task click-path (' + cfg.steps.length + ' step' + (cfg.steps.length === 1 ? '' : 's') + ')';
-    menu.appendChild(h1);
-
-    cfg.steps.forEach(function (s, idx) {
-      var row = document.createElement('div');
-      row.className = 'chtk-step';
-      var what =
-        s.kind === 'pick'
-          ? 'pick “' + s.value + '”'
-          : (s.kind === 'submit' ? 'submit ' : 'click ') + '“' + s.text[0] + '”';
-      row.textContent = idx + 1 + '. ' + what;
-      menu.appendChild(row);
-    });
-
-    var edit = document.createElement('button');
-    edit.className = 'chtk-menu-item chtk-edit';
-    edit.textContent = '✎ Edit steps (paste captured JSON)…';
-    edit.onclick = function () {
-      var current = JSON.stringify({ label: cfg.label, commitMode: cfg.commitMode, steps: cfg.steps }, null, 2);
-      var input = window.prompt(
-        'Paste the JSON from the recorder’s chRec.macro() (or edit the current steps):',
-        current
-      );
-      if (input != null) {
-        var parsed = null;
-        try {
-          parsed = normaliseMacro(JSON.parse(input));
-        } catch (e) {
-          parsed = null;
-        }
-        if (parsed && parsed.steps.length) {
-          cfg = parsed;
-          saveCfg();
-          renderButton();
-        } else {
-          toast('Couldn’t read those steps — expected JSON with a non-empty “steps” array.', 'err');
-        }
-      }
-      closeMenu();
-    };
-    menu.appendChild(edit);
-
-    var reset = document.createElement('button');
-    reset.className = 'chtk-menu-item';
-    reset.textContent = '↺ Reset to default';
-    reset.onclick = function () {
-      cfg = clone(DEFAULTS);
-      saveCfg();
-      renderButton();
-      closeMenu();
-    };
-    menu.appendChild(reset);
-
-    var h2 = document.createElement('div');
-    h2.className = 'chtk-menu-h';
-    h2.textContent = 'On the final step';
-    menu.appendChild(h2);
-    [
-      ['open', 'Just open the form'],
-      ['manual', 'Highlight save, I’ll click'],
-      ['auto', 'Save automatically'],
-    ].forEach(function (m) {
-      var item = document.createElement('button');
-      item.className = 'chtk-menu-item' + (m[0] === cfg.commitMode ? ' chtk-sel' : '');
-      item.textContent = (m[0] === cfg.commitMode ? '● ' : '○ ') + m[1];
-      item.onclick = function () {
-        cfg.commitMode = m[0];
-        saveCfg();
-        renderButton();
-        closeMenu();
-      };
-      menu.appendChild(item);
-    });
-
-    host.appendChild(menu);
-    setTimeout(function () {
-      document.addEventListener('click', onDocClick, true);
-    }, 0);
-  }
-  function onDocClick(e) {
-    if (menu && !host.contains(e.target)) {
-      closeMenu();
-      document.removeEventListener('click', onDocClick, true);
-    }
-  }
-
   function renderButton() {
     if (!btn) return;
-    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : cfg.commitMode === 'manual' ? ' ✎' : '';
-    btn.textContent = '+ ' + cfg.label + modeTag;
-    btn.title =
-      'Open the new-task workflow on this prescription (' +
-      cfg.steps.length +
-      ' captured step' +
-      (cfg.steps.length === 1 ? '' : 's') +
-      '). Use ▾ to edit the click-path.';
+    btn.textContent = '+ ' + cfg.label;
+    btn.title = 'Create a task for this patient';
   }
 
   function buildUI() {
@@ -520,18 +412,7 @@
       if (!busy) runMacro();
     };
 
-    caret = document.createElement('button');
-    caret.className = 'chtk-caret';
-    caret.textContent = '▾';
-    caret.title = 'Edit captured steps / commit behaviour';
-    caret.onclick = function (e) {
-      e.stopPropagation();
-      if (menu) closeMenu();
-      else openMenu();
-    };
-
     host.appendChild(btn);
-    host.appendChild(caret);
     renderButton();
 
     var style = document.createElement('style');
@@ -606,7 +487,6 @@
     if (host && host.parentElement) host.parentElement.removeChild(host);
     placedAnchor = null;
     placedAnchorBtn = null;
-    closeMenu();
   }
 
   // PREPEND (never append): trailing nodes get reconciled away by Vue. Disconnect

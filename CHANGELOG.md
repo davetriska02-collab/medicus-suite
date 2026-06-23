@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.4] — 2026-06-23
+
+### "+ Task" button: removed the config menu (interim)
+
+Stripped the ▾ caret dropdown (captured-steps list, "Edit steps (paste JSON)",
+reset, commit-mode options) — it exposed developer-facing JSON config that has no
+place in the clinical UI. The button is now a single "+ Task" control. Also
+removed a dangling `closeMenu()` reference left by the menu deletion.
+
+This is an interim step: the click-path-replay model is the wrong approach for
+this button (there is no on-page "Create task" control to drive on the prescribing
+screen). It will be rebuilt as direct task-API wiring — an inline create-task
+panel modelled on `booking-inline.js` — once the task-creation API contract is
+captured.
+
 ## [v3.133.3] — 2026-06-23
 
 ### Fix: "+ Task" button now appears on all prescription overviews
