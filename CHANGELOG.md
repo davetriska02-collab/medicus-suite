@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.1] — 2026-06-23
+
+### Fix: booking widget stranded at the bottom of task-LIST pages
+
+The inline "Book appointment for this patient" widget only ever **injected** on a
+task-overview page; it had no removal path. On SPA navigation from an overview
+back to a task-LIST page, `runInject` reset its state and returned early
+**without removing the widget node**, so Vue left the panel parented to a card
+that survived the transition — stranding it at the bottom of the list page, where
+(with no single patient) it re-showed "Could not determine patient ID — try
+navigating away and back".
+
+- Added `removeWidget()` (releases any held slot reservation, then removes
+  `#ms-bk-widget` with the observer paused).
+- `runInject` now calls it on the `!getTaskInfo()` branch — leaving a task
+  overview tears the widget down instead of orphaning it.
+
 ## [v3.133.0] — 2026-06-23
 
 ### New: "+ Task" button on the prescribing screen (captured click-path replay)
