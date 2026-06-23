@@ -25,6 +25,10 @@ const STORAGE_KEY = 'aiAssist.config';
 
 let container = null;
 let _cfg = { baseUrl: '', apiKey: '', enabled: false };
+let _mode = 'draft'; // 'draft' | 'dictate'
+let _recorder = null;
+let _chunks = [];
+let _stream = null;
 
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -162,39 +166,193 @@ function renderOffline() {
 function renderWorkbench() {
   container.innerHTML = `
     <div class="ai-assist">
-      <div class="ai-banner">Administrative drafts only — <strong>not clinical advice</strong>.
-        Review and edit before use. Do not enter patient-identifiable detail; use [PLACEHOLDERS].</div>
-      <label class="ai-field">Kind of administrative text
-        <input id="ai-kind" type="text" list="ai-kinds" value="recall invitation" />
-        <datalist id="ai-kinds">
-          <option value="recall invitation"></option>
-          <option value="appointment reminder"></option>
-          <option value="internal admin note"></option>
-          <option value="routine correspondence"></option>
-        </datalist>
-      </label>
-      <label class="ai-field">What should it say? (administrative instructions only)
-        <textarea id="ai-prompt" rows="4" placeholder="e.g. invite eligible patients to the seasonal flu clinic; friendly tone; ask them to call to book"></textarea>
-      </label>
-      <div class="ai-row">
-        <button id="ai-draft" class="ai-btn">Draft</button>
+      <div class="ai-row ai-modes">
+        <button id="ai-mode-draft" class="ai-btn ai-btn-ghost">Admin draft</button>
+        <button id="ai-mode-dictate" class="ai-btn ai-btn-ghost">Dictate (verbatim)</button>
         <button id="ai-settings" class="ai-btn ai-btn-ghost">Settings</button>
-        <span id="ai-status" class="ai-status"></span>
       </div>
-      <div id="ai-result" class="ai-result" hidden>
-        <div class="ai-review">Draft — review &amp; edit before use:</div>
-        <input id="ai-out-title" type="text" class="ai-out-title" />
-        <textarea id="ai-out-body" rows="8" class="ai-out-body"></textarea>
-        <div id="ai-placeholders" class="ai-placeholders"></div>
-        <div class="ai-row">
-          <button id="ai-copy" class="ai-btn">Copy</button>
-          <span class="ai-foot">Nothing is filed to Medicus — you paste/use this yourself.</span>
-        </div>
+      <div id="ai-content"></div>
+    </div>`;
+  container.querySelector('#ai-mode-draft').addEventListener('click', () => { _mode = 'draft'; paintMode(); });
+  container.querySelector('#ai-mode-dictate').addEventListener('click', () => { _mode = 'dictate'; paintMode(); });
+  container.querySelector('#ai-settings').addEventListener('click', () => renderSetup());
+  paintMode();
+}
+
+function paintMode() {
+  container.querySelector('#ai-mode-draft').classList.toggle('ai-active', _mode === 'draft');
+  container.querySelector('#ai-mode-dictate').classList.toggle('ai-active', _mode === 'dictate');
+  const host = container.querySelector('#ai-content');
+  host.innerHTML = _mode === 'dictate' ? dictateMarkup() : draftMarkup();
+  if (_mode === 'dictate') {
+    container.querySelector('#ai-rec').addEventListener('click', onRecordToggle);
+    container.querySelector('#ai-tx-copy').addEventListener('click', onCopyTranscript);
+    container.querySelector('#ai-consent').addEventListener('change', updateRecEnabled);
+    updateRecEnabled();
+  } else {
+    container.querySelector('#ai-draft').addEventListener('click', onDraft);
+    container.querySelector('#ai-copy').addEventListener('click', onCopy);
+  }
+}
+
+function draftMarkup() {
+  return `
+    <div class="ai-banner">Administrative drafts only — <strong>not clinical advice</strong>.
+      Review and edit before use. Do not enter patient-identifiable detail; use [PLACEHOLDERS].</div>
+    <label class="ai-field">Kind of administrative text
+      <input id="ai-kind" type="text" list="ai-kinds" value="recall invitation" />
+      <datalist id="ai-kinds">
+        <option value="recall invitation"></option>
+        <option value="appointment reminder"></option>
+        <option value="internal admin note"></option>
+        <option value="routine correspondence"></option>
+      </datalist>
+    </label>
+    <label class="ai-field">What should it say? (administrative instructions only)
+      <textarea id="ai-prompt" rows="4" placeholder="e.g. invite eligible patients to the seasonal flu clinic; friendly tone; ask them to call to book"></textarea>
+    </label>
+    <div class="ai-row">
+      <button id="ai-draft" class="ai-btn">Draft</button>
+      <span id="ai-status" class="ai-status"></span>
+    </div>
+    <div id="ai-result" class="ai-result" hidden>
+      <div class="ai-review">Draft — review &amp; edit before use:</div>
+      <input id="ai-out-title" type="text" class="ai-out-title" />
+      <textarea id="ai-out-body" rows="8" class="ai-out-body"></textarea>
+      <div id="ai-placeholders" class="ai-placeholders"></div>
+      <div class="ai-row">
+        <button id="ai-copy" class="ai-btn">Copy</button>
+        <span class="ai-foot">Nothing is filed to Medicus — you paste/use this yourself.</span>
       </div>
     </div>`;
-  container.querySelector('#ai-draft').addEventListener('click', onDraft);
-  container.querySelector('#ai-settings').addEventListener('click', () => renderSetup());
-  container.querySelector('#ai-copy').addEventListener('click', onCopy);
+}
+
+function dictateMarkup() {
+  return `
+    <div class="ai-banner">Verbatim transcript — <strong>not a clinical summary</strong>. Review &amp; edit
+      before use. Audio is sent only to your practice's local GP Forge server; nothing is filed to Medicus.</div>
+    <label class="ai-check"><input id="ai-consent" type="checkbox" /> I have told the patient an AI transcription tool is being used.</label>
+    <div class="ai-row">
+      <button id="ai-rec" class="ai-btn" disabled>● Record</button>
+      <span id="ai-tx-status" class="ai-status"></span>
+    </div>
+    <div class="ai-result">
+      <div class="ai-review">Transcript — review &amp; edit before use:</div>
+      <textarea id="ai-tx-body" rows="10" class="ai-out-body" placeholder="(verbatim transcript will appear here)"></textarea>
+      <div class="ai-row">
+        <button id="ai-tx-copy" class="ai-btn">Copy</button>
+        <span class="ai-foot">Verbatim machine transcript — verify against what was said.</span>
+      </div>
+    </div>`;
+}
+
+// ── dictate (verbatim transcription) ─────────────────────────────────────────────
+function setTxStatus(msg) {
+  const el = container.querySelector('#ai-tx-status');
+  if (el) el.textContent = msg || '';
+}
+
+function updateRecEnabled() {
+  const consent = container.querySelector('#ai-consent');
+  const rec = container.querySelector('#ai-rec');
+  if (rec && consent && !_recorder) rec.disabled = !consent.checked; // gate recording on patient-informed consent
+}
+
+function extFor(type) {
+  if (/ogg/.test(type)) return '.ogg';
+  if (/mp4|m4a/.test(type)) return '.m4a';
+  if (/wav/.test(type)) return '.wav';
+  return '.webm';
+}
+
+async function onRecordToggle() {
+  if (_recorder && _recorder.state === 'recording') {
+    try {
+      _recorder.stop();
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  try {
+    _stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    setTxStatus('Microphone access denied.');
+    return;
+  }
+  _chunks = [];
+  _recorder = new MediaRecorder(_stream);
+  _recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size) _chunks.push(e.data);
+  };
+  _recorder.onstop = onRecordingStopped;
+  _recorder.start();
+  const rec = container.querySelector('#ai-rec');
+  if (rec) {
+    rec.textContent = '■ Stop';
+    rec.classList.add('ai-recording');
+  }
+  setTxStatus('Recording…');
+}
+
+async function onRecordingStopped() {
+  const rec = container.querySelector('#ai-rec');
+  if (rec) {
+    rec.textContent = '● Record';
+    rec.classList.remove('ai-recording');
+    rec.disabled = true;
+  }
+  if (_stream) {
+    _stream.getTracks().forEach((t) => t.stop());
+    _stream = null;
+  }
+  const type = (_recorder && _recorder.mimeType) || 'audio/webm';
+  _recorder = null;
+  const blob = new Blob(_chunks, { type });
+  _chunks = [];
+  if (!blob.size) {
+    setTxStatus('No audio captured.');
+    updateRecEnabled();
+    return;
+  }
+  setTxStatus('Transcribing…');
+  try {
+    const r = await fetch(`${normBase(_cfg.baseUrl)}/v1/transcribe`, {
+      method: 'POST',
+      headers: { 'content-type': type, 'x-filename': 'consult' + extFor(type), authorization: `Bearer ${_cfg.apiKey}` },
+      body: blob,
+    });
+    if (r.status === 200) {
+      const j = await r.json();
+      const ta = container.querySelector('#ai-tx-body');
+      if (ta) ta.value = j.transcript || '';
+      setTxStatus('');
+    } else if (r.status === 401) {
+      setTxStatus('Authentication failed — check your key in Settings.');
+    } else if (r.status === 501) {
+      setTxStatus('Transcription is not enabled on the GP Forge server.');
+    } else if (r.status === 503) {
+      setTxStatus('Transcription service unavailable.');
+    } else if (r.status === 429) {
+      setTxStatus('Rate limit reached — try again shortly.');
+    } else {
+      setTxStatus(`Could not transcribe (${r.status}).`);
+    }
+  } catch {
+    setTxStatus('GP Forge not reachable.');
+  } finally {
+    updateRecEnabled();
+  }
+}
+
+async function onCopyTranscript() {
+  const text = container.querySelector('#ai-tx-body').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    setTxStatus('Copied.');
+  } catch {
+    setTxStatus('Copy failed — select and copy manually.');
+  }
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────────
@@ -301,5 +459,20 @@ export async function init(el) {
 }
 
 export function cleanup() {
+  try {
+    if (_recorder && _recorder.state === 'recording') _recorder.stop();
+  } catch {
+    /* ignore */
+  }
+  if (_stream) {
+    try {
+      _stream.getTracks().forEach((t) => t.stop());
+    } catch {
+      /* ignore */
+    }
+    _stream = null;
+  }
+  _recorder = null;
+  _chunks = [];
   container = null;
 }

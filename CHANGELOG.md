@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.0] — 2026-06-23
+
+### AI Assist: verbatim Dictate pane (Phase 1 scribe, off by default)
+
+Adds a **Dictate (verbatim)** mode to the AI Assist tab: capture consultation audio in the browser
+(microphone, requested at use time), send it to the practice's local **GP Forge** `/v1/transcribe`
+endpoint, and get a **verbatim transcript** back into an editable box for review. Verbatim only — no
+generative clinical summary (that is Phase 2 and a medical device). Off by default and governed
+exactly as the rest of AI Assist (see H-036):
+
+- A **patient-informed consent acknowledgement** must be ticked before recording can start (per NHS
+  England ambient-voice guidance).
+- Audio is sent only to the **local** GP Forge server (no internet egress); the suite retains no
+  audio and **files nothing to Medicus** — the clinician reviews/edits and uses the transcript.
+- Graceful degradation unchanged: if GP Forge / STT is unavailable the pane shows a notice.
+
+> Governance still outstanding: `docs/INTENDED-PURPOSE.md` + `docs/DPIA.md` need the GP Forge egress
+> update and H-036 needs CSO baseline before enabling with real patients.
+
+## [v3.133.0] — 2026-06-23
+
+### New: AI Assist tab (Phase 1) — client for the on-prem GP Forge server
+
+A new side-panel/pop-out module, **`ai-assist`**, that connects to the practice's local **GP Forge**
+appliance (the standalone on-prem LLM server in `gp-forge/`) for **administrative drafting only**
+(recall/invitation wording, internal admin text). Not a medical device; no clinical advice — see
+`docs/INTENDED-PURPOSE-LLM-SERVER.md` and hazard **H-036**.
+
+- **Ships disabled**; explicit practice opt-in. Default-install permissions are **not** broadened —
+  the GP Forge origin is granted at enable time via `optional_host_permissions` +
+  `chrome.permissions.request`.
+- **Minimal egress**: Phase 1 sends only the clinician's typed administrative prompt — no patient
+  record attached; GP Forge itself has no internet egress.
+- **Human-in-the-loop**: every draft returned for review/edit; nothing written to Medicus.
+- **Graceful degradation**: GP Forge unreachable → notice; rest of the suite unaffected.
+
 ## [v3.132.6] — 2026-06-22
 
 ### Performance: one shared DOM-observer hub for all page-injection features

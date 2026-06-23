@@ -90,6 +90,23 @@
   color: var(--accent, #2563eb);
 }
 
+.ai-modes {
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.ai-btn.ai-active {
+  background: var(--accent, #2563eb);
+  color: #fff;
+}
+
+.ai-btn.ai-recording {
+  background: var(--red, #ef4444);
+  border-color: var(--red, #ef4444);
+  color: #fff;
+}
+
 .ai-status {
   color: var(--text-3, #64748b);
 }
