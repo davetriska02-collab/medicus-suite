@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.135.0] — 2026-06-23
+
+### Feature: tactile press feedback on panel controls
+
+Pressable controls in the panel shell now confirm a click with a snappy
+scale-in on `:active`, on top of the existing colour/wash change — a flat
+control that still "clicks". Distilled from the Medicus Suite design-system
+handoff (the one genuinely-new item in it; the rest was a faithful mirror of
+the shipped token canon).
+
+- New shape tokens in `panel.css` `:root` (documented in `ui-design/TOKENS.md`):
+  `--press: 90ms` (quicker than `--fast` so the snap-back feels immediate),
+  `--press-scale: 0.97` (buttons) and `--press-scale-sm: 0.92` (small chrome
+  controls press harder).
+- Applied to every pressable control in the shell — `.nav-tab` (new `:active`),
+  `.icon-btn`, `.ghost-btn`, `.wr-strip-goto`, `.rm-pill`, `.ui-health-btn`,
+  `.sub-rag-goto`, `.dp-seg`, `.suite-tour-btn` / `.suite-tour-next` — each
+  gaining `transform var(--press) var(--ease)` in its transition list and a
+  `transform: scale(...)` on `:active`. The pop-out inherits it automatically
+  (it links `side-panel/panel.css`).
+- **Reduced-motion:** the press scale is decorative confirmation, so the
+  `prefers-reduced-motion` block now drops the transform entirely
+  (`transform: none`) rather than just snapping it — the global rule only kills
+  the transition duration.
+
 ## [v3.134.2] — 2026-06-23
 
 ### Fix: create-task widget missing on prescribing overviews (no "Codes & actions" card)

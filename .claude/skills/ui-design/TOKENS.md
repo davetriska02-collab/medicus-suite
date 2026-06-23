@@ -106,6 +106,8 @@ that is the point of the triads.
 | `--shadow-3`                          | `0 8px 28px rgba(15,23,42,.14)` | `0 10px 32px rgba(0,0,0,.55)` |
 | `--ease`                              | `cubic-bezier(.2,0,0,1)`        | same                          |
 | `--fast` / `--med`                    | `120ms` / `200ms`               | same                          |
+| `--press`                             | `90ms`                          | same                          |
+| `--press-scale` / `--press-scale-sm`  | `0.97` / `0.92`                 | same                          |
 
 Radius semantics: `--r-sm` compact controls/badges, `--r-md` buttons, inputs,
 chips, cards, `--r-lg` modals/popovers/sections, `--r-pill` pills & toggles.
@@ -125,6 +127,16 @@ Never suppress it; never use `:focus` for the ring (mouse users get flashed).
 Motion: transitions use `var(--fast) var(--ease)` (color/border/background)
 or `var(--med)` (transform/opacity/layout-adjacent). Any keyframe animation
 gets a `prefers-reduced-motion: reduce` kill switch.
+
+Press feedback: a flat control still "clicks". On `:active`, pressable controls
+scale-in — `transform: scale(var(--press-scale))` for buttons, the harder
+`--press-scale-sm` for small chrome (nav tabs, icon buttons, strip pills) —
+eased over `--press` (`90ms`, quicker than `--fast` so the snap-back is
+immediate), added _alongside_ the existing `:active` wash, never replacing it.
+The press scale is decorative confirmation, so the reduced-motion block drops
+the transform entirely (`transform: none`), not just its transition. Add
+`transform var(--press) var(--ease)` to the control's `transition` list so the
+scale eases in both directions.
 
 ## Typography (revised 2026-06-21 — sans is the voice, mono is data only)
 

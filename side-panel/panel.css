@@ -57,6 +57,14 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --fast: 120ms;
   --med: 200ms;
+  /* Press feedback — a flat control still "clicks": a snappy scale-in on
+     :active confirms the action before the finger lifts. --press is quicker
+     than --fast so the snap-back feels immediate. Buttons use --press-scale;
+     small chrome controls press harder with --press-scale-sm. Dropped entirely
+     under prefers-reduced-motion (see the reduced-motion block). Canon: TOKENS.md */
+  --press: 90ms;
+  --press-scale: 0.97;
+  --press-scale-sm: 0.92;
   --mono: 'JetBrains Mono', 'Courier New', monospace;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   /* Overlay scrim — pure refactor; same value as the raw rgba it replaces */
@@ -168,6 +176,20 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  /* Press-scale is decorative confirmation — drop the transform entirely rather
+     than just snapping it (the global rule above only kills the transition). */
+  .nav-tab:active,
+  .icon-btn:active,
+  .ghost-btn:active,
+  .wr-strip-goto:active,
+  .rm-pill:active,
+  .ui-health-btn:active,
+  .sub-rag-goto:active,
+  .dp-seg:active,
+  .suite-tour-btn:active,
+  .suite-tour-next:active {
+    transform: none;
   }
 }
 
@@ -404,13 +426,18 @@ body {
   transition:
     background var(--fast) var(--ease),
     color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
   white-space: nowrap;
 }
 
 .nav-tab:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+
+.nav-tab:active {
+  transform: scale(var(--press-scale-sm));
 }
 
 .nav-tab.active {
@@ -457,7 +484,8 @@ body {
   align-items: center;
   transition:
     color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+    background var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 
 .icon-btn:hover {
@@ -468,6 +496,7 @@ body {
 .icon-btn:active {
   color: var(--text-1);
   background: var(--bg-hover);
+  transform: scale(var(--press-scale-sm));
 }
 
 /* Shared data-freshness chip (side-panel/modules/shared/freshness.js). One
@@ -577,7 +606,8 @@ body {
   transition:
     border-color var(--fast) var(--ease),
     color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+    background var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 
 .ghost-btn:hover {
@@ -589,6 +619,7 @@ body {
 .ghost-btn:active {
   background: var(--accent-dim);
   border-color: var(--accent);
+  transform: scale(var(--press-scale));
 }
 
 .ghost-btn:disabled {
@@ -1326,7 +1357,8 @@ body {
   cursor: pointer;
   transition:
     color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
   white-space: nowrap;
 }
 .wr-strip-goto:hover {
@@ -1336,6 +1368,7 @@ body {
 .wr-strip-goto:active {
   color: var(--text-1);
   background: var(--bg-hover);
+  transform: scale(var(--press-scale-sm));
 }
 
 /* ── Request Monitor strip (v1.3) ────────────────────────────────────────────
@@ -1393,7 +1426,8 @@ body {
   flex-shrink: 0;
   transition:
     background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 .rm-pill:hover {
   background: var(--bg-hover);
@@ -1402,6 +1436,7 @@ body {
 .rm-pill:active {
   background: var(--bg-hover);
   border-color: var(--accent-line);
+  transform: scale(var(--press-scale-sm));
 }
 .rm-pill-count {
   font-family: var(--mono);
@@ -1638,7 +1673,8 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   cursor: pointer;
   transition:
     background var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 .ui-health-btn:hover {
   background: var(--amber);
@@ -1650,6 +1686,7 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   border-color: var(--amber);
   color: var(--bg-elev);
   opacity: 0.85;
+  transform: scale(var(--press-scale));
 }
 .ui-health-btn:disabled {
   opacity: 0.6;
@@ -1679,7 +1716,8 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   flex-shrink: 0;
   transition:
     color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 .sub-rag-goto:hover {
   color: var(--text-2);
@@ -1688,6 +1726,7 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
 .sub-rag-goto:active {
   color: var(--text-1);
   background: var(--bg-hover);
+  transform: scale(var(--press-scale-sm));
 }
 
 /* ── Display preferences ─────────────────────────────────────────────────── */
@@ -1815,7 +1854,8 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   transition:
     background var(--fast) var(--ease),
     color var(--fast) var(--ease),
-    border-color var(--fast) var(--ease);
+    border-color var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 
 .dp-seg:hover {
@@ -1824,6 +1864,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .dp-seg:active {
   background: var(--bg-hover);
   color: var(--text-1);
+  transform: scale(var(--press-scale-sm));
 }
 .dp-seg.active {
   background: var(--bg-hover);
@@ -1974,7 +2015,8 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   transition:
     border-color var(--fast) var(--ease),
     color var(--fast) var(--ease),
-    background var(--fast) var(--ease);
+    background var(--fast) var(--ease),
+    transform var(--press) var(--ease);
 }
 .suite-tour-btn:hover {
   border-color: var(--accent);
@@ -1984,6 +2026,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .suite-tour-btn:active {
   background: var(--accent-dim);
   border-color: var(--accent);
+  transform: scale(var(--press-scale));
 }
 .suite-tour-btn:disabled {
   opacity: 0.45;
@@ -2002,6 +2045,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .suite-tour-next:active {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  transform: scale(var(--press-scale));
 }
 .suite-tour-skip {
   background: transparent;
