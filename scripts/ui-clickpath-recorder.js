@@ -17,6 +17,9 @@
 //      to drop a free-text marker between steps.
 //   5. When done, call  chRec.dump()  to print the ordered JSON, or
 //      chRec.copy()  to copy it to the clipboard. chRec.stop() to disarm.
+//   6. To feed the Task button: call  chRec.macro()  — it emits the compact
+//      replay format to paste into the prescribing screen's "+ Task" button
+//      (▾ → "Edit steps…"). Capture only up to OPENING the task form.
 //
 // WHAT IT CAPTURES PER CLICK
 //   - visible label/text of the control (trimmed, capped — no long free text)
@@ -188,6 +191,25 @@
         console.log('[recorder] copied ' + steps.length + ' steps to clipboard');
       });
       return json;
+    },
+    // Emit the compact REPLAY format consumed by task-button.js (▾ → "Edit
+    // steps…"). Each recorded click becomes a text-matched click step; markers
+    // are dropped. Hand-edit afterwards to mark a final `submit` step or change a
+    // navigation step to a `pick` (type-into-field + select-option). Stops short
+    // of any captured Save by default — the button should OPEN the form, not
+    // create the record.
+    macro: function (label) {
+      var out = { label: label || 'Task', commitMode: 'open', steps: [] };
+      steps.forEach(function (s) {
+        if (s.marker || !s.label) return;
+        out.steps.push({ kind: 'click', text: [s.label] });
+      });
+      var json = JSON.stringify(out, null, 2);
+      console.log(json);
+      if (navigator.clipboard) navigator.clipboard.writeText(json).then(function () {
+        console.log('[recorder] macro (' + out.steps.length + ' steps) copied — paste into the Task button’s ▾ → "Edit steps…"');
+      });
+      return out;
     },
     stop: function () {
       document.removeEventListener('click', onClick, true);

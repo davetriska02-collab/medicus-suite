@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.133.0] — 2026-06-23
+
+### New: "+ Task" button on the prescribing screen (captured click-path replay)
+
+The prescription-request task overview has no "add task" control of its own, even
+though that action exists elsewhere in the record. Added
+`content-scripts/triage-lens/task-button.js`: a floating **"+ Task"** button that
+injects beside the existing routine-prescription button (same H-035 gating —
+prescription overview only, anchored to the "More actions" row that shares a panel
+with the routing control, never inside a dialog/drawer) and, on click, **replays a
+captured click-path by driving the real Medicus UI** to open the new-task workflow.
+
+- **Configurable, not hard-coded.** Task-creation controls differ between Medicus
+  builds, so the replay sequence is captured per install. `scripts/ui-clickpath-recorder.js`
+  gains `chRec.macro()`, which emits the compact replay JSON; paste it into the
+  button's ▾ menu → "Edit steps…". A sensible default ("More actions" → "Add task")
+  ships so it works out of the box on builds using those labels.
+- **Safe by default.** Controls are matched by **visible text** (never per-session
+  ids); any missing step **aborts** and clicks nothing further. The default
+  `commitMode: 'open'` replays only the navigation steps and **stops with the form
+  open** for the clinician to complete — it never creates a record on its own. A
+  step explicitly marked `submit` is gated by mode (`open` / `manual` / `auto`).
+- Makes **no network calls** and reads **no patient-data field values**.
+- Subscribes to the shared `__chObserverHub` (falls back to a private observer),
+  PREPENDs its host and re-validates placement on the fast path — same injection
+  discipline as `routine-rx-button.js`.
+- The captured click-path (`triagelens.taskMacro`) is included in suite backups via
+  `shared/io/triage-io.js`, alongside the routine-prescription prefs.
+
 ## [v3.132.6] — 2026-06-22
 
 ### Performance: one shared DOM-observer hub for all page-injection features
