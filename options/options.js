@@ -1730,6 +1730,25 @@ const rmSaveBtn = document.getElementById('saveRm');
 const rmSavedTag = document.getElementById('rmSaved');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Non-anchored variant for pulling a UUID out of a pasted string (URL/fragment).
+const UUID_ANY_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+// Accept a bare UUID, a full Medicus inbox URL, or a `masterAssignee=…` fragment
+// and return the bare assignee UUID. Users naturally copy the whole URL from the
+// task list rather than hand-trimming the 36-char UUID, so normalise it for them.
+// Returns '' if no UUID can be recovered.
+function extractAssigneeId(raw) {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  if (UUID_RE.test(s)) return s.toLowerCase();
+  // Prefer the masterAssignee query param if the paste contains one (avoids
+  // grabbing some other UUID that might appear elsewhere in a URL path).
+  const param = s.match(/masterAssignee=([0-9a-f-]{36})/i);
+  if (param && UUID_RE.test(param[1])) return param[1].toLowerCase();
+  // Otherwise fall back to the first UUID-shaped substring anywhere in the paste.
+  const any = s.match(UUID_ANY_RE);
+  return any ? any[0].toLowerCase() : '';
+}
 
 function toggleRmConditional() {
   if (!rmConditional || !rmEnabled) return;
@@ -1754,14 +1773,21 @@ function toggleRmConditional() {
 rmEnabled?.addEventListener('change', toggleRmConditional);
 
 rmSaveBtn?.addEventListener('click', async () => {
-  const assigneeId = (rmAssigneeId?.value || '').trim();
+  const rawAssignee = rmAssigneeId?.value || '';
+  // Tolerate a pasted inbox URL / `masterAssignee=…` fragment, not just a bare UUID.
+  const assigneeId = extractAssigneeId(rawAssignee);
+  // Reflect the cleaned UUID back into the field so the user sees what was saved.
+  if (rmAssigneeId && assigneeId && rmAssigneeId.value.trim() !== assigneeId) {
+    rmAssigneeId.value = assigneeId;
+  }
   const enabled = !!rmEnabled?.checked;
   let pollSeconds = parseInt(rmPollSeconds?.value, 10);
   if (isNaN(pollSeconds) || pollSeconds < 30) pollSeconds = 60;
   if (pollSeconds > 600) pollSeconds = 600;
 
-  // Validate UUID if enabling
-  if (enabled && assigneeId && !UUID_RE.test(assigneeId)) {
+  // Validate UUID if enabling. `assigneeId` is the extracted value, so this only
+  // fails when the paste contains no recoverable UUID at all.
+  if (enabled && rawAssignee.trim() && !UUID_RE.test(assigneeId)) {
     if (rmSavedTag) {
       rmSavedTag.textContent = 'Invalid UUID — check format';
       rmSavedTag.style.color = '#f87171';
