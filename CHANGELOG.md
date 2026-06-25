@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.3] — 2026-06-25
+
+### Fix: Triage monitor "Invalid UUID" when pasting the inbox URL
+
+The Request Monitor's **Team / assignee UUID** field only accepted a bare 36-char
+UUID, so pasting the whole Medicus task-list URL — or a `masterAssignee=…`
+fragment — was rejected with `Invalid UUID — check format`, even though the URL
+contains a perfectly valid UUID. Copying the full URL is the natural thing to do
+(the help text even points you at the URL), so this read as the feature being
+broken.
+
+- `options/options.js` — new `extractAssigneeId()` normalises the field on save:
+  a bare UUID, a full inbox URL, or a `masterAssignee=…` fragment all resolve to
+  the bare assignee UUID (preferring the `masterAssignee` param, falling back to
+  the first UUID-shaped substring). The cleaned UUID is written back into the
+  field so the user sees what was saved. The "Invalid UUID" error now only fires
+  when the paste contains **no** recoverable UUID at all.
+- `options/options.html` — help text updated: paste the whole task-list URL (the
+  UUID is extracted automatically); the bare UUID still works too.
+
 ## [v3.134.2] — 2026-06-23
 
 ### Fix: create-task widget missing on prescribing overviews (no "Codes & actions" card)
