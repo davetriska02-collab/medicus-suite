@@ -647,6 +647,52 @@ const fbcRealReport = {
 const fbcRealCov = M.reportCoverage(fbcRealReport);
 check(fbcRealCov.confident.has('fbc'), '12d a real FBC report still covers fbc (exclude did not over-reach)');
 
+// ── 13. TSH anchor: a TSH-only report confidently clears a thyroid request ─────
+// UK labs reflex-test thyroid (TSH first; FT4/FT3 only if TSH abnormal), so a
+// TSH-only report is the complete thyroid result and auto-ticks the request.
+// A lone FT4/FT3 (no TSH) is unusual and stays tentative.
+console.log('TSH anchor (reflex thyroid):');
+const tshOnlyReport = {
+  // No specimen title — only the TSH analyte, exactly as the reflex report arrives.
+  results: [{ name: 'TSH', specimen: null, date: '2026-06-25' }],
+};
+const tshCov = M.reportCoverage(tshOnlyReport);
+check(tshCov.confident.has('tft'), '13 TSH-only report covers tft CONFIDENTLY (anchor)');
+check(!tshCov.tentative.has('tft'), '13 TSH-only is not merely tentative');
+
+const tshOut = M.matchOutstanding(
+  [{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }],
+  tshOnlyReport
+);
+check(
+  tshOut[0].status === 'resulted' && tshOut[0].autoTick === true && tshOut[0].confidence === 'confident',
+  `13a TSH-only report auto-ticks the Thyroid Testing request (${tshOut[0].status}/${tshOut[0].autoTick})`
+);
+
+// 13b. A lone FT4 (no TSH) is NOT an anchor → stays tentative, never auto-ticks.
+const ft4OnlyReport = { results: [{ name: 'Free T4', specimen: null, date: '2026-06-25' }] };
+const ft4Cov = M.reportCoverage(ft4OnlyReport);
+check(ft4Cov.tentative.has('tft') && !ft4Cov.confident.has('tft'), '13b lone Free T4 is tentative, not confident');
+const ft4Out = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }], ft4OnlyReport);
+check(ft4Out[0].autoTick === false, '13b lone Free T4 does NOT auto-tick the thyroid request');
+
+// 13c. The anchor must not over-reach: TSH does not make any OTHER panel confident.
+check(
+  !tshCov.confident.has('fbc') && !tshCov.confident.has('lipids') && !tshCov.confident.has('ue'),
+  '13c TSH anchor only affects the thyroid panel'
+);
+
+// 13d. Strict floor still demotes a TSH-only report (anchor is an inferred-analyte
+// signal, not a lab-assigned title) — strict trusts only the specimen-group title.
+const tshStrict = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }], tshOnlyReport, {
+  confidenceFloor: 'strict',
+});
+check(tshStrict[0].autoTick === false, '13d strict floor: a TSH-only report is not auto-ticked');
+
+// 13e. Resulted-elsewhere (history) is unchanged: a lone TSH in history stays
+// tentative (test 8e) — the anchor is THIS-report only. Re-assert here for clarity.
+check(tftEnriched[0].confidence === 'tentative', '13e lone TSH in HISTORY remains tentative (anchor is report-only)');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

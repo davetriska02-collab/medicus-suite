@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.5] — 2026-06-26
+
+### Fix: TSH-only thyroid report not confidently matched to its request
+
+On the **Outstanding Investigation Requests** card, a "Thyroid Testing" request
+was recognised but a TSH-only report only matched it *tentatively*
+("✓? resulted? (this report)"), so it was never auto-ticked. UK labs reflex-test
+thyroid (TSH first; FT4/FT3 only if TSH is abnormal), so a TSH-only report **is**
+the complete thyroid result and should confidently clear the request.
+
+Root cause: `tft` is a multi-analyte panel, and the matcher's analyte signature
+needs ≥2 distinct analytes to be confident — a lone TSH scored only 1.
+
+- `engine/outstanding-match.js` — added an optional **`anchors`** concept to a
+  test definition: an analyte that, on its own, confidently identifies a complete
+  result for the panel (below the usual 2-analyte threshold). Set
+  `anchors: ['tsh', 'thyroid stimulating hormone']` on the `tft` def. A TSH-only
+  report now auto-ticks a predating thyroid request; a lone FT4/FT3 (no TSH) stays
+  tentative.
+- Scoped to **this-report** coverage (`reportCoverage`) only — NOT to
+  resulted-elsewhere history enrichment, where a single analyte from a different
+  past report is weaker evidence and remains tentative (a TSH in this report is
+  direct evidence the request just resulted; a TSH in the record is circumstantial).
+- Strict confidence floor still demotes a TSH-only report (an anchor is an
+  inferred-analyte signal, not a lab-assigned specimen-group title).
+- `test-outstanding-match.js` — new section 13 guards it: TSH-only is confident +
+  auto-ticks, lone FT4 stays tentative, the anchor touches no other panel, strict
+  floor still demotes, and a lone TSH in history is unchanged (still tentative).
+
 ## [v3.134.4] — 2026-06-26
 
 ### Fix: HbA1c not matched to its outstanding investigation request

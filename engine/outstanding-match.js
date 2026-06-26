@@ -105,6 +105,17 @@
   //              here without a `rep` hit is a TENTATIVE match (surfaced, not
   //              auto-ticked). Shared analytes (ALP ∈ LFT & Bone; calcium ∈ Bone)
   //              are deliberately omitted so they can't establish a panel alone.
+  // `anchors`  — OPTIONAL subset of `analytes`. An anchor is an analyte that, on
+  //              its own, CONFIDENTLY identifies a complete result for the panel —
+  //              so a report carrying just the anchor is auto-tick-eligible without
+  //              the usual 2-analyte signature. Use ONLY when one analyte genuinely
+  //              completes the request in routine UK practice. The motivating case
+  //              is THYROID: labs reflex-test (TSH first; FT4/FT3 only if TSH is
+  //              abnormal), so a TSH-only report IS the complete thyroid result,
+  //              whereas a lone FT4/FT3 is unusual and stays tentative. Anchors are
+  //              applied to THIS-report coverage only (reportCoverage) — NOT to
+  //              resulted-elsewhere history enrichment, where a single analyte from
+  //              a different past report is weaker evidence and stays tentative.
   //
   // VALIDATION STATUS: `rep`/`analytes` are seeded from standard UK panel
   // composition and MUST be confirmed against a parsed report (report-side
@@ -178,6 +189,10 @@
       req: ['thyroid', 'tft'],
       rep: ['tft', 'thyroid', 'thyroid function'],
       analytes: ['tsh', 'free t4', 'ft4', 'free t3', 'thyroid stimulating hormone'],
+      // UK labs reflex-test thyroid (TSH first; FT4/FT3 only if TSH abnormal), so a
+      // TSH-only report is the complete thyroid result and confidently clears the
+      // request. A lone FT4/FT3 (no TSH) is unusual and stays tentative.
+      anchors: ['tsh', 'thyroid stimulating hormone'],
     },
     {
       key: 'fit',
@@ -455,7 +470,11 @@
         }
         const def = defs.find((d) => d.key === key);
         const min = def && def.singleAnalyte ? 1 : 2;
-        if (set.size >= min) confident.add(key);
+        // An anchor analyte (e.g. TSH for a reflex-tested thyroid panel) confidently
+        // identifies the panel on its own, even below the normal signature threshold.
+        const anchors = def && Array.isArray(def.anchors) ? def.anchors.map((t) => norm(t)) : [];
+        const hasAnchor = anchors.length > 0 && [...set].some((t) => anchors.includes(t));
+        if (set.size >= min || hasAnchor) confident.add(key);
         else tentative.add(key);
       });
     }
