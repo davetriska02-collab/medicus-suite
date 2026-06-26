@@ -211,6 +211,21 @@
       singleAnalyte: true,
     },
     {
+      // B12 / folate — a combined haematinics request ("B12 / Folate") satisfied by
+      // a report carrying BOTH analytes. Deliberately NOT singleAnalyte: a 2-analyte
+      // threshold means a report with only B12 (or only folate) stays TENTATIVE —
+      // the other half of the combined request may still be pending, so it must not
+      // auto-clear. A report with both is a confident auto-tick. (A standalone B12-only
+      // or folate-only request will therefore tentatively-match a single-analyte
+      // report — safe under-clear, surfaced for a one-click confirm.) Without this def
+      // the request "B12 / Folate" resolved to key=null and never matched at all.
+      key: 'b12folate',
+      label: 'B12 / folate',
+      req: ['b12', 'folate', 'cobalamin'],
+      rep: ['b12', 'folate', 'cobalamin'],
+      analytes: ['b12', 'cobalamin', 'folate'],
+    },
+    {
       key: 'bone',
       label: 'Bone profile',
       req: ['bone profile'],
