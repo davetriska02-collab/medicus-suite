@@ -588,6 +588,111 @@ const withCeiling = M.enrichWithHistory(
 );
 check(withCeiling[0].status === 'outstanding', '11d 3-month ceiling: a result 10 months later is excluded');
 
+// ── 12. HbA1c (the unrecognised-request gap reported on a DM-diagnosis report) ──
+// The outstanding request "Haemoglobin A1C (HbA1C)" resolved to key=null, so an
+// incoming HbA1c result could never be matched to it — it stayed outstanding.
+console.log('HbA1c outstanding match:');
+const HBA1C_LABEL = 'Haemoglobin A1C (HbA1C) (Samantha Thomason • 28 May 2026, 08:56)';
+const hba1cParsed = M.parseRequestLabel(HBA1C_LABEL);
+check(hba1cParsed.name === 'Haemoglobin A1C (HbA1C)', `12 request name keeps the (HbA1C) suffix (${hba1cParsed.name})`);
+const hba1cDef = M.resolveDef(hba1cParsed.name, ['req']);
+check(hba1cDef && hba1cDef.key === 'hba1c', `12 "Haemoglobin A1C (HbA1C)" resolves to key=hba1c (was null)`);
+
+// 12a. An HbA1c report (analyte "HbA1c", as on the DM-diagnosis report) auto-ticks
+// its own request — single-analyte, so one result is a confident match.
+const hba1cReport = {
+  title: 'HBA1C FOR DM DIAGNOSIS',
+  results: [{ name: 'HbA1c', specimen: null, date: '2026-06-25' }],
+};
+const hba1cOut = M.matchOutstanding([HBA1C_LABEL], hba1cReport);
+check(
+  hba1cOut[0].status === 'resulted' && hba1cOut[0].autoTick === true && hba1cOut[0].confidence === 'confident',
+  `12a HbA1c report auto-ticks the HbA1c request (${hba1cOut[0].status}/${hba1cOut[0].autoTick})`
+);
+
+// 12b. An HbA1c report does NOT clear an unrelated outstanding FBC / U&E request,
+// even though the report name shares the "haemoglobin" token with FBC.
+const hba1cMixed = M.matchOutstanding(
+  [
+    HBA1C_LABEL,
+    'Full Blood Count (Dr Natalie Azadian • 04 Feb 2026, 15:03)',
+    'Creatinine + Electrolyte Profile, Blood (Dr Natalie Azadian • 04 Feb 2026, 15:03)',
+  ],
+  hba1cReport
+);
+check(hba1cMixed[0].status === 'resulted', '12b the HbA1c request is resulted');
+check(
+  hba1cMixed[1].status === 'outstanding' && hba1cMixed[2].status === 'outstanding',
+  '12b an HbA1c report leaves FBC and U&E requests outstanding'
+);
+
+// 12c. Lab spelling "Haemoglobin A1c" must NOT feed the FBC analyte signature
+// (it shares the 'haemoglobin' token) — the FBC exclude keeps it out.
+const hba1cNamedReport = { results: [{ name: 'Haemoglobin A1c', specimen: null, date: '2026-06-25' }] };
+const hba1cCov = M.reportCoverage(hba1cNamedReport);
+check(hba1cCov.confident.has('hba1c'), '12c "Haemoglobin A1c" report covers hba1c confidently');
+check(
+  !hba1cCov.confident.has('fbc') && !hba1cCov.tentative.has('fbc'),
+  '12c "Haemoglobin A1c" does NOT feed the FBC signature (exclude holds)'
+);
+
+// 12d. Regression: a genuine FBC report (with a real Haemoglobin result) still matches.
+const fbcRealReport = {
+  results: [
+    { name: 'Haemoglobin', specimen: null, date: '2026-06-25' },
+    { name: 'White cell count', specimen: null, date: '2026-06-25' },
+    { name: 'Platelet count', specimen: null, date: '2026-06-25' },
+  ],
+};
+const fbcRealCov = M.reportCoverage(fbcRealReport);
+check(fbcRealCov.confident.has('fbc'), '12d a real FBC report still covers fbc (exclude did not over-reach)');
+
+// ── 13. TSH anchor: a TSH-only report confidently clears a thyroid request ─────
+// UK labs reflex-test thyroid (TSH first; FT4/FT3 only if TSH abnormal), so a
+// TSH-only report is the complete thyroid result and auto-ticks the request.
+// A lone FT4/FT3 (no TSH) is unusual and stays tentative.
+console.log('TSH anchor (reflex thyroid):');
+const tshOnlyReport = {
+  // No specimen title — only the TSH analyte, exactly as the reflex report arrives.
+  results: [{ name: 'TSH', specimen: null, date: '2026-06-25' }],
+};
+const tshCov = M.reportCoverage(tshOnlyReport);
+check(tshCov.confident.has('tft'), '13 TSH-only report covers tft CONFIDENTLY (anchor)');
+check(!tshCov.tentative.has('tft'), '13 TSH-only is not merely tentative');
+
+const tshOut = M.matchOutstanding(
+  [{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }],
+  tshOnlyReport
+);
+check(
+  tshOut[0].status === 'resulted' && tshOut[0].autoTick === true && tshOut[0].confidence === 'confident',
+  `13a TSH-only report auto-ticks the Thyroid Testing request (${tshOut[0].status}/${tshOut[0].autoTick})`
+);
+
+// 13b. A lone FT4 (no TSH) is NOT an anchor → stays tentative, never auto-ticks.
+const ft4OnlyReport = { results: [{ name: 'Free T4', specimen: null, date: '2026-06-25' }] };
+const ft4Cov = M.reportCoverage(ft4OnlyReport);
+check(ft4Cov.tentative.has('tft') && !ft4Cov.confident.has('tft'), '13b lone Free T4 is tentative, not confident');
+const ft4Out = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }], ft4OnlyReport);
+check(ft4Out[0].autoTick === false, '13b lone Free T4 does NOT auto-tick the thyroid request');
+
+// 13c. The anchor must not over-reach: TSH does not make any OTHER panel confident.
+check(
+  !tshCov.confident.has('fbc') && !tshCov.confident.has('lipids') && !tshCov.confident.has('ue'),
+  '13c TSH anchor only affects the thyroid panel'
+);
+
+// 13d. Strict floor still demotes a TSH-only report (anchor is an inferred-analyte
+// signal, not a lab-assigned title) — strict trusts only the specimen-group title.
+const tshStrict = M.matchOutstanding([{ name: 'Thyroid Testing', requestedDate: '2026-06-01' }], tshOnlyReport, {
+  confidenceFloor: 'strict',
+});
+check(tshStrict[0].autoTick === false, '13d strict floor: a TSH-only report is not auto-ticked');
+
+// 13e. Resulted-elsewhere (history) is unchanged: a lone TSH in history stays
+// tentative (test 8e) — the anchor is THIS-report only. Re-assert here for clarity.
+check(tftEnriched[0].confidence === 'tentative', '13e lone TSH in HISTORY remains tentative (anchor is report-only)');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

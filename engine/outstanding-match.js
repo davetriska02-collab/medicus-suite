@@ -105,6 +105,17 @@
   //              here without a `rep` hit is a TENTATIVE match (surfaced, not
   //              auto-ticked). Shared analytes (ALP ∈ LFT & Bone; calcium ∈ Bone)
   //              are deliberately omitted so they can't establish a panel alone.
+  // `anchors`  — OPTIONAL subset of `analytes`. An anchor is an analyte that, on
+  //              its own, CONFIDENTLY identifies a complete result for the panel —
+  //              so a report carrying just the anchor is auto-tick-eligible without
+  //              the usual 2-analyte signature. Use ONLY when one analyte genuinely
+  //              completes the request in routine UK practice. The motivating case
+  //              is THYROID: labs reflex-test (TSH first; FT4/FT3 only if TSH is
+  //              abnormal), so a TSH-only report IS the complete thyroid result,
+  //              whereas a lone FT4/FT3 is unusual and stays tentative. Anchors are
+  //              applied to THIS-report coverage only (reportCoverage) — NOT to
+  //              resulted-elsewhere history enrichment, where a single analyte from
+  //              a different past report is weaker evidence and stays tentative.
   //
   // VALIDATION STATUS: `rep`/`analytes` are seeded from standard UK panel
   // composition and MUST be confirmed against a parsed report (report-side
@@ -137,6 +148,25 @@
       req: ['full blood count', 'fbc'],
       rep: ['fbc', 'full blood count'],
       analytes: ['haemoglobin', 'haematocrit', 'white cell count', 'platelet', 'neutrophil', 'mcv'],
+      // "Haemoglobin A1c" / "Glycated haemoglobin" share the 'haemoglobin' analyte
+      // token but are an HbA1c test, NOT an FBC. Without this exclude an HbA1c result
+      // named "Haemoglobin A1c" would feed the FBC signature and could surface a
+      // genuinely-outstanding FBC as tentatively resulted. (Mirrors the same exclude
+      // on the base-low-haemoglobin result rule in defaults.json.)
+      exclude: ['a1c', 'glycated', 'glycosylated'],
+    },
+    {
+      // HbA1c (glycated haemoglobin) — diabetes diagnosis / monitoring. One HbA1c
+      // result IS the test, so it is single-analyte. Without this def the outstanding
+      // request "Haemoglobin A1C (HbA1C)" resolved to key=null ("not recognised") and
+      // could never be matched to its own incoming result — the request stayed
+      // outstanding forever. Match terms mirror the HbA1c result rules in defaults.json.
+      key: 'hba1c',
+      label: 'HbA1c',
+      req: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      rep: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      analytes: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      singleAnalyte: true,
     },
     {
       key: 'lft',
@@ -159,6 +189,10 @@
       req: ['thyroid', 'tft'],
       rep: ['tft', 'thyroid', 'thyroid function'],
       analytes: ['tsh', 'free t4', 'ft4', 'free t3', 'thyroid stimulating hormone'],
+      // UK labs reflex-test thyroid (TSH first; FT4/FT3 only if TSH abnormal), so a
+      // TSH-only report is the complete thyroid result and confidently clears the
+      // request. A lone FT4/FT3 (no TSH) is unusual and stays tentative.
+      anchors: ['tsh', 'thyroid stimulating hormone'],
     },
     {
       key: 'fit',
@@ -436,7 +470,11 @@
         }
         const def = defs.find((d) => d.key === key);
         const min = def && def.singleAnalyte ? 1 : 2;
-        if (set.size >= min) confident.add(key);
+        // An anchor analyte (e.g. TSH for a reflex-tested thyroid panel) confidently
+        // identifies the panel on its own, even below the normal signature threshold.
+        const anchors = def && Array.isArray(def.anchors) ? def.anchors.map((t) => norm(t)) : [];
+        const hasAnchor = anchors.length > 0 && [...set].some((t) => anchors.includes(t));
+        if (set.size >= min || hasAnchor) confident.add(key);
         else tentative.add(key);
       });
     }

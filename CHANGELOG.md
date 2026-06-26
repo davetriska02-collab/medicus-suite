@@ -2,6 +2,66 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.5] — 2026-06-26
+
+### Fix: TSH-only thyroid report not confidently matched to its request
+
+On the **Outstanding Investigation Requests** card, a "Thyroid Testing" request
+was recognised but a TSH-only report only matched it *tentatively*
+("✓? resulted? (this report)"), so it was never auto-ticked. UK labs reflex-test
+thyroid (TSH first; FT4/FT3 only if TSH is abnormal), so a TSH-only report **is**
+the complete thyroid result and should confidently clear the request.
+
+Root cause: `tft` is a multi-analyte panel, and the matcher's analyte signature
+needs ≥2 distinct analytes to be confident — a lone TSH scored only 1.
+
+- `engine/outstanding-match.js` — added an optional **`anchors`** concept to a
+  test definition: an analyte that, on its own, confidently identifies a complete
+  result for the panel (below the usual 2-analyte threshold). Set
+  `anchors: ['tsh', 'thyroid stimulating hormone']` on the `tft` def. A TSH-only
+  report now auto-ticks a predating thyroid request; a lone FT4/FT3 (no TSH) stays
+  tentative.
+- Scoped to **this-report** coverage (`reportCoverage`) only — NOT to
+  resulted-elsewhere history enrichment, where a single analyte from a different
+  past report is weaker evidence and remains tentative (a TSH in this report is
+  direct evidence the request just resulted; a TSH in the record is circumstantial).
+- Strict confidence floor still demotes a TSH-only report (an anchor is an
+  inferred-analyte signal, not a lab-assigned specimen-group title).
+- `test-outstanding-match.js` — new section 13 guards it: TSH-only is confident +
+  auto-ticks, lone FT4 stays tentative, the anchor touches no other panel, strict
+  floor still demotes, and a lone TSH in history is unchanged (still tentative).
+
+## [v3.134.4] — 2026-06-26
+
+### Fix: HbA1c not matched to its outstanding investigation request
+
+On a "Review Investigation Report" task, the **Outstanding Investigation
+Requests** card matches the incoming report to the requests awaiting a result.
+An HbA1c report was never matched to its own request: the request
+"Haemoglobin A1C (HbA1C)" resolved to no canonical test (`key: null`), so it was
+classed as *"request test not recognised — left for manual review"* and stayed
+outstanding even though the very result that satisfied it was on screen.
+
+Root cause: `engine/outstanding-match.js` `TEST_DEFS` had entries for lipids,
+U&E, FBC, LFT, PSA, TFT, FIT, ferritin, bone and the sex-hormone family, but
+**none for HbA1c** — the same unrecognised-request gap previously fixed for
+FSH/LH.
+
+- `engine/outstanding-match.js` — added an `hba1c` test definition (single-analyte;
+  `req`/`rep`/`analytes` mirror the HbA1c result rules in `defaults.json`:
+  `hba1c`, `haemoglobin a1c`, `glycated haemoglobin`, `glycosylated haemoglobin`).
+  One HbA1c result is now a confident match and auto-ticks its predating request.
+- `engine/outstanding-match.js` — hardened the `fbc` def with
+  `exclude: ['a1c', 'glycated', 'glycosylated']` so a lab spelling like
+  "Haemoglobin A1c" (which shares the `haemoglobin` token) cannot feed the FBC
+  analyte signature and tentatively flag a genuinely-outstanding FBC. Mirrors the
+  same exclude on the `base-low-haemoglobin` result rule. Fail-safe: it only
+  narrows FBC, never widens it, and a real FBC report still matches.
+- `test-outstanding-match.js` — new section 12 guards the fix: the request now
+  resolves to `key=hba1c`, an HbA1c report auto-ticks it, an HbA1c report leaves
+  FBC/U&E outstanding, "Haemoglobin A1c" does not feed the FBC signature, and a
+  genuine FBC report still matches.
+
 ## [v3.134.3] — 2026-06-25
 
 ### Fix: Triage monitor "Invalid UUID" when pasting the inbox URL
