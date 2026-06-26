@@ -693,6 +693,45 @@ check(tshStrict[0].autoTick === false, '13d strict floor: a TSH-only report is n
 // tentative (test 8e) — the anchor is THIS-report only. Re-assert here for clarity.
 check(tftEnriched[0].confidence === 'tentative', '13e lone TSH in HISTORY remains tentative (anchor is report-only)');
 
+// ── 14. B12 / folate combined haematinics request ─────────────────────────────
+// "B12 / Folate" resolved to key=null and never matched. It is a combined request:
+// confident (auto-tick) only when BOTH analytes are present; one alone is tentative.
+console.log('B12 / folate combined request:');
+const B12FOL_LABEL = 'B12 / Folate (Jessica Foreman • 17 Jun 2026, 11:15)';
+const b12folDef = M.resolveDef(M.parseRequestLabel(B12FOL_LABEL).name, ['req']);
+check(b12folDef && b12folDef.key === 'b12folate', `14 "B12 / Folate" resolves to key=b12folate (was null)`);
+
+// 14a. A report with BOTH B12 and Folate → confident + auto-ticks.
+const b12folReport = {
+  results: [
+    { name: 'B12', specimen: null, date: '2026-06-25' },
+    { name: 'Folate', specimen: null, date: '2026-06-25' },
+  ],
+};
+const b12folOut = M.matchOutstanding([{ name: 'B12 / Folate', requestedDate: '2026-06-17' }], b12folReport);
+check(
+  b12folOut[0].status === 'resulted' && b12folOut[0].autoTick === true && b12folOut[0].confidence === 'confident',
+  `14a B12 + Folate report auto-ticks the combined request (${b12folOut[0].status}/${b12folOut[0].autoTick})`
+);
+
+// 14b. A B12-ONLY report → tentative, never auto-ticked (folate may still be pending).
+const b12OnlyReport = { results: [{ name: 'Serum vitamin B12', specimen: null, date: '2026-06-25' }] };
+const b12OnlyOut = M.matchOutstanding([{ name: 'B12 / Folate', requestedDate: '2026-06-17' }], b12OnlyReport);
+check(
+  b12OnlyOut[0].status === 'resulted' && b12OnlyOut[0].confidence === 'tentative' && b12OnlyOut[0].autoTick === false,
+  '14b a B12-only report is tentative for the combined request, never auto-ticked'
+);
+
+// 14c. The def must not over-reach onto other haematinics: a ferritin report does
+// NOT match the B12/folate request, and a B12/folate report does NOT match ferritin.
+const b12folCov = M.reportCoverage(b12folReport);
+check(!b12folCov.confident.has('ferritin') && !b12folCov.tentative.has('ferritin'), '14c B12/folate report does not feed ferritin');
+const ferritinOnly = M.reportCoverage({ results: [{ name: 'Ferritin', specimen: null, date: '2026-06-25' }] });
+check(
+  !ferritinOnly.confident.has('b12folate') && !ferritinOnly.tentative.has('b12folate'),
+  '14c a ferritin report does not feed b12folate'
+);
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

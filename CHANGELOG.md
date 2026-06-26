@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.6] — 2026-06-26
+
+### Fix: "B12 / Folate" not matched to its outstanding request
+
+A combined "B12 / Folate" haematinics request was never matched to its report:
+it resolved to no canonical test (`key: null`) → *"request test not recognised"*
+→ stayed outstanding even with both B12 and folate results on screen.
+`TEST_DEFS` had no B12/folate entry.
+
+- `engine/outstanding-match.js` — added a `b12folate` def. Deliberately a
+  two-analyte panel (NOT single-analyte): a report carrying **both** B12 and
+  folate is a confident auto-tick; a report with only one of them stays tentative
+  (the other half of the combined request may still be pending, so it must not
+  auto-clear). `req`/`rep`/`analytes` cover `b12`, `cobalamin`, `folate`.
+- `test-outstanding-match.js` — new section 14: the request now resolves, a
+  B12 + folate report auto-ticks it, a B12-only report is tentative (never
+  auto-ticked), and the def does not cross-feed the ferritin panel.
+
 ## [v3.134.5] — 2026-06-26
 
 ### Fix: TSH-only thyroid report not confidently matched to its request
