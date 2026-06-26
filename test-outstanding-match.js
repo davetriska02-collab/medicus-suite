@@ -588,6 +588,65 @@ const withCeiling = M.enrichWithHistory(
 );
 check(withCeiling[0].status === 'outstanding', '11d 3-month ceiling: a result 10 months later is excluded');
 
+// ── 12. HbA1c (the unrecognised-request gap reported on a DM-diagnosis report) ──
+// The outstanding request "Haemoglobin A1C (HbA1C)" resolved to key=null, so an
+// incoming HbA1c result could never be matched to it — it stayed outstanding.
+console.log('HbA1c outstanding match:');
+const HBA1C_LABEL = 'Haemoglobin A1C (HbA1C) (Samantha Thomason • 28 May 2026, 08:56)';
+const hba1cParsed = M.parseRequestLabel(HBA1C_LABEL);
+check(hba1cParsed.name === 'Haemoglobin A1C (HbA1C)', `12 request name keeps the (HbA1C) suffix (${hba1cParsed.name})`);
+const hba1cDef = M.resolveDef(hba1cParsed.name, ['req']);
+check(hba1cDef && hba1cDef.key === 'hba1c', `12 "Haemoglobin A1C (HbA1C)" resolves to key=hba1c (was null)`);
+
+// 12a. An HbA1c report (analyte "HbA1c", as on the DM-diagnosis report) auto-ticks
+// its own request — single-analyte, so one result is a confident match.
+const hba1cReport = {
+  title: 'HBA1C FOR DM DIAGNOSIS',
+  results: [{ name: 'HbA1c', specimen: null, date: '2026-06-25' }],
+};
+const hba1cOut = M.matchOutstanding([HBA1C_LABEL], hba1cReport);
+check(
+  hba1cOut[0].status === 'resulted' && hba1cOut[0].autoTick === true && hba1cOut[0].confidence === 'confident',
+  `12a HbA1c report auto-ticks the HbA1c request (${hba1cOut[0].status}/${hba1cOut[0].autoTick})`
+);
+
+// 12b. An HbA1c report does NOT clear an unrelated outstanding FBC / U&E request,
+// even though the report name shares the "haemoglobin" token with FBC.
+const hba1cMixed = M.matchOutstanding(
+  [
+    HBA1C_LABEL,
+    'Full Blood Count (Dr Natalie Azadian • 04 Feb 2026, 15:03)',
+    'Creatinine + Electrolyte Profile, Blood (Dr Natalie Azadian • 04 Feb 2026, 15:03)',
+  ],
+  hba1cReport
+);
+check(hba1cMixed[0].status === 'resulted', '12b the HbA1c request is resulted');
+check(
+  hba1cMixed[1].status === 'outstanding' && hba1cMixed[2].status === 'outstanding',
+  '12b an HbA1c report leaves FBC and U&E requests outstanding'
+);
+
+// 12c. Lab spelling "Haemoglobin A1c" must NOT feed the FBC analyte signature
+// (it shares the 'haemoglobin' token) — the FBC exclude keeps it out.
+const hba1cNamedReport = { results: [{ name: 'Haemoglobin A1c', specimen: null, date: '2026-06-25' }] };
+const hba1cCov = M.reportCoverage(hba1cNamedReport);
+check(hba1cCov.confident.has('hba1c'), '12c "Haemoglobin A1c" report covers hba1c confidently');
+check(
+  !hba1cCov.confident.has('fbc') && !hba1cCov.tentative.has('fbc'),
+  '12c "Haemoglobin A1c" does NOT feed the FBC signature (exclude holds)'
+);
+
+// 12d. Regression: a genuine FBC report (with a real Haemoglobin result) still matches.
+const fbcRealReport = {
+  results: [
+    { name: 'Haemoglobin', specimen: null, date: '2026-06-25' },
+    { name: 'White cell count', specimen: null, date: '2026-06-25' },
+    { name: 'Platelet count', specimen: null, date: '2026-06-25' },
+  ],
+};
+const fbcRealCov = M.reportCoverage(fbcRealReport);
+check(fbcRealCov.confident.has('fbc'), '12d a real FBC report still covers fbc (exclude did not over-reach)');
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

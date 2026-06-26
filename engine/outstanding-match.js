@@ -137,6 +137,25 @@
       req: ['full blood count', 'fbc'],
       rep: ['fbc', 'full blood count'],
       analytes: ['haemoglobin', 'haematocrit', 'white cell count', 'platelet', 'neutrophil', 'mcv'],
+      // "Haemoglobin A1c" / "Glycated haemoglobin" share the 'haemoglobin' analyte
+      // token but are an HbA1c test, NOT an FBC. Without this exclude an HbA1c result
+      // named "Haemoglobin A1c" would feed the FBC signature and could surface a
+      // genuinely-outstanding FBC as tentatively resulted. (Mirrors the same exclude
+      // on the base-low-haemoglobin result rule in defaults.json.)
+      exclude: ['a1c', 'glycated', 'glycosylated'],
+    },
+    {
+      // HbA1c (glycated haemoglobin) — diabetes diagnosis / monitoring. One HbA1c
+      // result IS the test, so it is single-analyte. Without this def the outstanding
+      // request "Haemoglobin A1C (HbA1C)" resolved to key=null ("not recognised") and
+      // could never be matched to its own incoming result — the request stayed
+      // outstanding forever. Match terms mirror the HbA1c result rules in defaults.json.
+      key: 'hba1c',
+      label: 'HbA1c',
+      req: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      rep: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      analytes: ['hba1c', 'haemoglobin a1c', 'glycated haemoglobin', 'glycosylated haemoglobin'],
+      singleAnalyte: true,
     },
     {
       key: 'lft',

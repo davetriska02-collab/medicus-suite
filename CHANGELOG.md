@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.4] — 2026-06-26
+
+### Fix: HbA1c not matched to its outstanding investigation request
+
+On a "Review Investigation Report" task, the **Outstanding Investigation
+Requests** card matches the incoming report to the requests awaiting a result.
+An HbA1c report was never matched to its own request: the request
+"Haemoglobin A1C (HbA1C)" resolved to no canonical test (`key: null`), so it was
+classed as *"request test not recognised — left for manual review"* and stayed
+outstanding even though the very result that satisfied it was on screen.
+
+Root cause: `engine/outstanding-match.js` `TEST_DEFS` had entries for lipids,
+U&E, FBC, LFT, PSA, TFT, FIT, ferritin, bone and the sex-hormone family, but
+**none for HbA1c** — the same unrecognised-request gap previously fixed for
+FSH/LH.
+
+- `engine/outstanding-match.js` — added an `hba1c` test definition (single-analyte;
+  `req`/`rep`/`analytes` mirror the HbA1c result rules in `defaults.json`:
+  `hba1c`, `haemoglobin a1c`, `glycated haemoglobin`, `glycosylated haemoglobin`).
+  One HbA1c result is now a confident match and auto-ticks its predating request.
+- `engine/outstanding-match.js` — hardened the `fbc` def with
+  `exclude: ['a1c', 'glycated', 'glycosylated']` so a lab spelling like
+  "Haemoglobin A1c" (which shares the `haemoglobin` token) cannot feed the FBC
+  analyte signature and tentatively flag a genuinely-outstanding FBC. Mirrors the
+  same exclude on the `base-low-haemoglobin` result rule. Fail-safe: it only
+  narrows FBC, never widens it, and a real FBC report still matches.
+- `test-outstanding-match.js` — new section 12 guards the fix: the request now
+  resolves to `key=hba1c`, an HbA1c report auto-ticks it, an HbA1c report leaves
+  FBC/U&E outstanding, "Haemoglobin A1c" does not feed the FBC signature, and a
+  genuine FBC report still matches.
+
 ## [v3.134.3] — 2026-06-25
 
 ### Fix: Triage monitor "Invalid UUID" when pasting the inbox URL
