@@ -1155,7 +1155,9 @@ async function appendAlertLog(entry) {
     log.unshift(entry);
     if (log.length > 50) log.length = 50;
     await chrome.storage.local.set({ 'suite.alertLog': log });
-  } catch (_) {}
+  } catch (e) {
+    console.warn('[Suite] appendAlertLog: storage write failed:', e.message);
+  }
 }
 
 // ── Quiet pill ────────────────────────────────────────────────────────────────

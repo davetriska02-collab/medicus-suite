@@ -11,6 +11,8 @@
 (function (global) {
   'use strict';
 
+  const DAYS_PER_MONTH = 30.4375;
+
   // === STATUS RANK (worst-first ordering) ===
   // overdue: actionable, lacks recent data within interval
   // not_met: indicator not achieved
@@ -1164,7 +1166,7 @@
     }
 
     const norm = (s) => String(s || '').toLowerCase();
-    // Window arithmetic uses the average Gregorian month (30.4375 days). This
+    // Window arithmetic uses the average Gregorian month (DAYS_PER_MONTH days). This
     // means "12 months ago" is approximate — not aligned to the calendar date
     // — which keeps event-count and observation-trend consistent with each
     // other but differs from drug-monitoring (which uses calendar daysBetween).
@@ -1173,7 +1175,7 @@
     // breaking the rule. Also reject NaN. Fall through to 12-month default for
     // missing/non-numeric values.
     const wm = Number(rule.windowMonths);
-    const windowMs = (Number.isFinite(wm) && wm > 0 ? wm : 12) * 30.4375 * 24 * 60 * 60 * 1000;
+    const windowMs = (Number.isFinite(wm) && wm > 0 ? wm : 12) * DAYS_PER_MONTH * 24 * 60 * 60 * 1000;
     const nowMs = new Date(now).getTime();
     const cutoffMs = nowMs - windowMs;
     const matchTerms = rule.match || [];
@@ -1350,6 +1352,9 @@
     // evidence panel can show "we looked here, we found X" without re-running
     // the match logic.
     const evidenceCtx = { matchedRegisterProblem: null, matchedObs: null, matchedMed: null, trendSeries: null };
+    const _yearStart = qofYearStart(now);
+    const _yearStartISO = _yearStart.toISOString().slice(0, 10);
+    const _yearLabel = qofYearLabel(now);
 
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
@@ -1490,7 +1495,7 @@
         traceEntry.status = alertStatus;
         traceEntry.chipRef = rule.id;
         traceEntry.matchedObs = evidenceCtx.matchedObs;
-        traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+        traceEntry.qofYearStart = _yearStartISO;
       }
       return [
         {
@@ -1506,8 +1511,8 @@
           valueText: alertValueText,
           dateText: obs.date,
           days: alertDays,
-          qofYear: qofYearLabel(now),
-          qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
+          qofYear: _yearLabel,
+          qofYearStart: _yearStartISO,
           check: rule.check,
           source: rule.source || null,
           notes: rule.notes || null,
@@ -1533,7 +1538,7 @@
         // useQofYearFloor: false on the rule, in which case the rolling
         // check.withinDays window is used instead.
         const _obsDate = new Date(obs.date);
-        const _qofStart = qofYearStart(now);
+        const _qofStart = _yearStart;
         const _useFloor = rule.useQofYearFloor !== false;
         const _withinDays = check.withinDays || 365;
         const _rollingCutoff = new Date(now);
@@ -1597,7 +1602,7 @@
         if (obs.value != null) valueText = String(obs.value).trim();
         // Boundary check — supports useQofYearFloor opt-out (see threshold case above)
         const _obsDate2 = new Date(obs.date);
-        const _qofStart2 = qofYearStart(now);
+        const _qofStart2 = _yearStart;
         const _useFloor2 = rule.useQofYearFloor !== false;
         const _withinDays2 = check.withinDays || 365;
         const _rollingCutoff2 = new Date(now);
@@ -1613,7 +1618,7 @@
       const bundleGroups = check.observations || [];
       const _useFloorB = rule.useQofYearFloor !== false;
       const _withinDaysB = check.withinDays || 365;
-      const _qofStartB = qofYearStart(now);
+      const _qofStartB = _yearStart;
       const _rollingCutoffB = new Date(now);
       _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
       const bundleResults = bundleGroups.map((aliases) => {
@@ -1695,7 +1700,7 @@
 
       if (historyEntry && historyEntry.history && historyEntry.history.length > 0) {
         // Filter history to within check.withinMonths of now
-        const withinMs = (check.withinMonths || 24) * 30.4375 * 24 * 60 * 60 * 1000;
+        const withinMs = (check.withinMonths || 24) * DAYS_PER_MONTH * 24 * 60 * 60 * 1000;
         const nowMs = new Date(now).getTime();
         const cutoffMs = nowMs - withinMs;
         const inWindow = historyEntry.history.filter((pt) => {
@@ -1722,7 +1727,7 @@
             const pNewest = ordered[ordered.length - 1].value;
             const pOldest = ordered[0].value;
             const pSpan = Math.round(
-              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) / (30.4375 * 24 * 60 * 60 * 1000)
+              (new Date(ordered[ordered.length - 1].date) - new Date(ordered[0].date)) / (DAYS_PER_MONTH * 24 * 60 * 60 * 1000)
             );
             evidenceCtx.trendSeries = {
               testName: historyEntry.name,
@@ -1750,7 +1755,7 @@
           const minDelta = check.minDelta != null ? check.minDelta : 0;
           const spanMonths = Math.round(
             (new Date(inWindow[0].date) - new Date(inWindow[inWindow.length - 1].date)) /
-              (30.4375 * 24 * 60 * 60 * 1000)
+              (DAYS_PER_MONTH * 24 * 60 * 60 * 1000)
           );
           const direction = check.direction || 'rising';
           // Trend fires only when delta moves strictly in the named direction AND meets minDelta.
@@ -1804,7 +1809,7 @@
         : null;
       traceEntry.trendSeries = evidenceCtx.trendSeries || null;
       traceEntry.valueText = valueText;
-      traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
+      traceEntry.qofYearStart = _yearStartISO;
     }
 
     return [
@@ -1821,8 +1826,8 @@
         valueText,
         dateText,
         days,
-        qofYear: qofYearLabel(now), // e.g. "2025/26" — used by UI for context
-        qofYearStart: qofYearStart(now).toISOString().slice(0, 10),
+        qofYear: _yearLabel, // e.g. "2025/26" — used by UI for context
+        qofYearStart: _yearStartISO,
         check: rule.check,
         source: rule.source || null,
         notes: rule.notes || null,

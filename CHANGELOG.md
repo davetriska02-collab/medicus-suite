@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.7] — 2026-06-27
+
+### Chore: audit-driven code quality improvements
+
+Batch of best-practice fixes following a repo audit. No behavioural changes;
+all 114 tests continue to pass.
+
+- **`shared/medicus-api.js`** — Added `_CACHE_MAX = 200` LRU eviction cap on the
+  in-memory scheduling-data cache to prevent unbounded memory growth.
+- **`shared/api-diag.js`** — Gated success `console.log` behind `ch-debug`
+  localStorage flag; only failures emit unconditional `console.warn`.
+- **`service-worker.js`** — Added `_SW_DEBUG = false` guard; gated four noisy
+  startup `console.log` calls so they only fire in local debug mode.
+- **`eslint.config.mjs`** — Changed `reportUnusedDisableDirectives` from `false`
+  to `'warn'`; scoped `no-func-assign: off` to `sentinel-options/options.js` only
+  (was incorrectly applied globally).
+- **`shared/io/suite-envelope.js`** — Changed stale `EXTENSION_VERSION = '2.5.0'`
+  to a sentinel `'0.0.0-test'`; real version is now passed at call sites in
+  `options/options.js`.
+- **`options/options.js`** — Five fixes:
+  1. Practice code format validated (`/^[a-f0-9]{4,8}$/`) before storage write;
+     invalid codes now show a user-facing alert.
+  2. Probe URLs and network error messages escaped before insertion into `innerHTML`.
+  3. `releaseUrl` validated as a `github.com` URL before `chrome.tabs.create`.
+  4. Medicus tab URLs in the debug clipboard scrubbed to practice-code prefix only
+     (avoids leaking patient-context path segments).
+  5. Both `SuiteEnvelope.wrap()` calls now pass `chrome.runtime.getManifest().version`
+     as the `extensionVersion` argument instead of falling back to the sentinel.
+- **`pop-out/pop-out.js`** — Fixed `makeDraggable` `dragend` handler to add
+  `nav-tab-just-dragged` class (was missing, causing ghost drag styling).
+- **`side-panel/panel.js`** — Changed silent `catch (_) {}` in `appendAlertLog`
+  to `console.warn` so storage write failures are visible in developer tools.
+- **`engine/rules-engine.js`** — Added `DAYS_PER_MONTH = 30.4375` module-scope
+  constant; replaced four inline magic literals. Pre-computed `_yearStart`,
+  `_yearStartISO`, and `_yearLabel` at the top of `evaluateQofIndicatorRule` to
+  eliminate seven repeated `qofYearStart(now)` / `qofYearLabel(now)` calls.
+- **`package.json`** — Added `playwright@1.61.0` to `devDependencies` (was
+  installed ephemerally via `--no-save` in CI).
+- **`.github/workflows/test.yml`** — Syntax-check extended to `service-worker.js`,
+  `options/options.js`, and `visualiser-core.js`; lint and visualiser CI jobs now
+  use `npm ci` instead of `npm install`; Playwright installed from devDeps via
+  `npm ci` rather than a separate `--no-save` install step.
+
 ## [v3.134.6] — 2026-06-26
 
 ### Fix: "B12 / Folate" not matched to its outstanding request

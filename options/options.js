@@ -154,6 +154,10 @@ const testConnectionResult = document.getElementById('testConnectionResult');
 saveSuiteBtn?.addEventListener('click', async () => {
   if (!practiceCodeInput) return;
   const code = practiceCodeInput.value.trim().toLowerCase();
+  if (code && !/^[a-f0-9]{4,8}$/.test(code)) {
+    alert('Practice code must be 4–8 hexadecimal characters (e.g. a1b2c3d4).');
+    return;
+  }
   const { 'submissions.config': existingSubConfig = {} } = await chrome.storage.local.get('submissions.config');
   await chrome.storage.local.set({
     'suite.practiceCode': code,
@@ -551,7 +555,7 @@ async function doFullExport() {
     knowledge,
     notifications,
     suite,
-  });
+  }, chrome.runtime.getManifest().version);
 }
 
 async function doModuleExport(scope) {
@@ -572,7 +576,7 @@ async function doModuleExport(scope) {
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
-  return window.SuiteEnvelope.wrap(scope, { [scope]: data });
+  return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
 }
 
 async function applyEnvelope(envelope) {
@@ -1469,7 +1473,10 @@ async function buildDebugState() {
       }
     }
     lines.push(`Open Medicus tabs: ${tabs.length}`);
-    tabs.forEach((t) => lines.push(`  - ${t.url}`));
+    tabs.forEach((t) => {
+      const m = t.url && t.url.match(/^(https:\/\/[a-f0-9]{4,8}\.[^/]+\/[a-f0-9]{4,8}\/)/i);
+      lines.push(`  - ${m ? m[1] + '...' : '(url redacted)'}`);
+    });
   } catch (e) {
     lines.push(`chrome.tabs.query failed: ${e.message}`);
   }
@@ -1580,9 +1587,11 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
       const r = await fetch(p.url, { credentials: 'include' });
       const dur = Date.now() - t0;
       const colour = r.ok ? '#4ade80' : '#f87171';
-      line = `<div style="color:${colour}"><strong>${p.name}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${p.url}</span></div>`;
+      const safeUrl = p.url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      line = `<div style="color:${colour}"><strong>${p.name}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${safeUrl}</span></div>`;
     } catch (e) {
-      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${e.message}</div>`;
+      const safeMsg = e.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${safeMsg}</div>`;
     }
     results.innerHTML += line;
   }
@@ -2325,7 +2334,9 @@ rmSaveBtn?.addEventListener('click', async () => {
     // Buttons
     document.getElementById('updateBannerOpenBtn')?.addEventListener('click', async () => {
       const state = await window.UpdateChecker.getState();
-      if (state.releaseUrl) chrome.tabs.create({ url: state.releaseUrl });
+      if (state.releaseUrl && /^https:\/\/github\.com\//.test(state.releaseUrl)) {
+        chrome.tabs.create({ url: state.releaseUrl });
+      }
     });
 
     document.getElementById('updateBannerNotesBtn')?.addEventListener('click', async () => {

@@ -28,7 +28,7 @@
 
 const FORMAT = 'medicus-suite-backup';
 const FORMAT_VERSION = 1;
-const EXTENSION_VERSION = '2.5.0';
+const EXTENSION_VERSION = '0.0.0-test'; // sentinel: real version injected at call sites in options.js
 
 // ── Payload integrity digest ──────────────────────────────────────────────────
 //

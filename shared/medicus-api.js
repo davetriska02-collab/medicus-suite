@@ -7,6 +7,7 @@
 
 const _cache = new Map(); // dateISO -> { data, fetchedAt }
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const _CACHE_MAX = 200;
 
 // F8: Practice code format guard — must match the same 4–8 hex-char pattern as
 // practice-code.js (SITE_CODE_RE). Defined here as a local constant because
@@ -39,6 +40,7 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
   }
   const data = await r.json();
   _cache.set(cacheKey, { data, fetchedAt: Date.now() });
+  if (_cache.size > _CACHE_MAX) _cache.delete(_cache.keys().next().value);
   return data;
 }
 

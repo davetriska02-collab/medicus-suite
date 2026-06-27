@@ -282,6 +282,7 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
 
     tab.addEventListener('dragend', () => {
       tab.dataset.dragged = '1';
+      tab.classList.add('nav-tab-just-dragged');
       setTimeout(() => {
         delete tab.dataset.dragged;
       }, 0);

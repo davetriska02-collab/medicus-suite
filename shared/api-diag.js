@@ -34,7 +34,8 @@
     if (_entries.length > MAX_ENTRIES) _entries.length = MAX_ENTRIES;
     if (typeof console !== 'undefined') {
       const tag = `[Medicus Suite/${e.module}]`;
-      if (e.ok) console.log(`${tag} ${e.status} ← ${e.url}`);
+      const _dbg = typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1';
+      if (e.ok) { if (_dbg) console.log(`${tag} ${e.status} ← ${e.url}`); }
       else console.warn(`${tag} ${e.status || 'ERR'} ← ${e.url}`, e.error || '');
     }
     _listeners.forEach(cb => { try { cb(e); } catch (_) {} });

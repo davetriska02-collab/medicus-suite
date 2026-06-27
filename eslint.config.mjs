@@ -9,7 +9,7 @@ export default [
   { ignores: ['vendor/**', 'node_modules/**', '_skill/**', '*.zip'] },
   // Suppress warnings about eslint-disable directives that reference rules not in
   // this config (e.g. the no-new-func directive in test-triage-defaults.js).
-  { linterOptions: { reportUnusedDisableDirectives: false } },
+  { linterOptions: { reportUnusedDisableDirectives: 'warn' } },
   js.configs.recommended,
   {
     // Default: classic browser scripts (engine/, content-scripts/, shared/,

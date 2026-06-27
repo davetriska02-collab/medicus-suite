@@ -4,6 +4,8 @@
 
 'use strict';
 
+const _SW_DEBUG = false; // set true locally to enable verbose SW logging
+
 // ── Click the toolbar icon → open the side panel ──────────────────────────────
 // Chrome's native mechanism. One line implements the whole feature: with
 // side_panel.default_path in the manifest and no default_popup, this makes a
@@ -273,7 +275,7 @@ async function _attemptPoliteReload(version) {
   } catch (_) {}
 
   if (idleState === 'idle' || idleState === 'locked') {
-    console.log('[Suite] Reloading for update to', version, '(machine is', idleState + ')');
+    if (_SW_DEBUG) console.log('[Suite] Reloading for update to', version, '(machine is', idleState + ')');
     chrome.runtime.reload();
     return;
   }
@@ -385,7 +387,7 @@ async function initialiseTriage() {
     const url = chrome.runtime.getURL('defaults.json');
     const defaults = await fetch(url).then((r) => r.json());
     await chrome.storage.local.set({ 'triagelens.config': defaults });
-    console.log('[Suite] Triage Lens config initialised from defaults.json');
+    if (_SW_DEBUG) console.log('[Suite] Triage Lens config initialised from defaults.json');
   } catch (e) {
     console.error('[Suite] Triage Lens config init failed:', e.message);
   }
@@ -411,7 +413,7 @@ async function migrateTriageLensConfig() {
     if (!legacy.practiceCode) {
       await chrome.storage.local.remove('config');
     }
-    console.log('[Suite] Triage Lens config migrated: config -> triagelens.config');
+    if (_SW_DEBUG) console.log('[Suite] Triage Lens config migrated: config -> triagelens.config');
   } catch (e) {
     console.error('[Suite] Triage Lens config migration failed:', e.message);
   }
@@ -482,7 +484,7 @@ async function runMigration() {
 
   if (needsMigration) {
     await chrome.storage.local.set(toSet);
-    console.log('[Suite] Storage migration applied:', Object.keys(toSet));
+    if (_SW_DEBUG) console.log('[Suite] Storage migration applied:', Object.keys(toSet));
   }
 }
 
