@@ -359,6 +359,62 @@ Custom indicators are not QOF indicators. They do not constitute QOF achievement
 The hotfix in v1.2.0 removes a developer-side hardcoded practice code that was preventing the extension from working correctly on practices other than the developer's own. The fix is data hygiene only. It does not alter the intended purpose, the clinical behaviour, or any data-handling characteristic of the software. The user's practice code, configured through the Options page, is the sole source for API endpoint selection. No practice code is preconfigured.
 
 
+--- v3.132.0 addendum ---
+
+This addendum records the state of the software at Medicus Suite v3.134.6 and covers the
+new administrative write-path capabilities introduced across v3.131.2–v3.132.0. In each
+case the capability remains within the intended purpose at section 3, interpreted as
+including administrative scheduling and workflow support activities that are a normal part
+of GP practice operation. The addendum does not alter the nature of the core software, its
+regulatory status, or its clinical-data-handling characteristics as set out above.
+
+The intended purpose at section 3 states that the software "does not write to the patient
+record". The following capabilities write to the Medicus workflow and scheduling systems
+(administrative records), not to any patient clinical record (notes, consultations,
+problem list, medication list, coded observations, diagnoses, or prescriptions). The
+prohibition on writing to the clinical patient record is unchanged.
+
+Routine-Rx button (v3.131.2). The one-click "send to routine prescriptions" button is
+injected into Medicus prescription-routing task views. When activated it drives the real
+Medicus UI (clicking the same controls a clinician would) to route the on-screen
+prescription task to the practice's routine requests task list. This is an administrative
+task-routing action within Medicus's own controlled workflow; Medicus's own validation,
+access control, and audit trail fire as normal. In the default confirm mode the button
+names the destination team before committing; in manual mode the clinician clicks the
+final "Send to routine list" control themselves. Full-automation mode is an opt-in. The
+user must: (a) ensure the correct task is on screen before pressing the button; (b) verify
+the named destination team is correct in the confirmation dialog; (c) understand that
+Medicus's own task-audit trail records this action.
+
+Embedded appointment booking panel (v3.132.0). The collapsible booking panel in the Slots
+module makes direct credentialed API calls to the Medicus scheduling service to:
+  - fetch the practice's available appointment types and slots;
+  - reserve a slot (this broadcasts "booking in progress" to other receptionists — the
+    reservation is released on Back, panel-close, or module teardown);
+  - create a booked appointment.
+Patient SMS/email notifications are sent automatically as configured in the Medicus
+create-appointment form when the appointment is confirmed. No patient clinical record is
+modified; the appointment is recorded in Medicus's scheduling system. The user must:
+(a) confirm they are booking for the correct patient (the patient name and NHS number as
+identified by the extension are shown at the confirmation step); (b) verify the
+appointment type, date, time, and slot are appropriate before confirming; (c) be aware
+that confirming triggers an immediate patient notification.
+
+Inline create-task widget (v3.132.x). The collapsible widget injected on task and patient
+overview pages makes direct credentialed API calls to create a general patient task in
+Medicus. The user selects an assignee (team or staff member drawn from Medicus's own
+assignee list), enters a description, and optionally selects a priority, before submitting.
+No patient clinical record is modified; the task is recorded in Medicus's patient-workflow
+system. The user must: (a) confirm they are creating a task for the correct patient
+(patient identity is resolved from the current page URL); (b) verify the description
+content before submitting, as a created task is immediately visible to the assignee.
+
+As with all prior capabilities, all three features remain supplementary administrative
+tools. The user retains full professional responsibility for every action taken on every
+patient. The obligations in sections 5–7 of this disclaimer apply without modification to
+the use of these features.
+
+
 --- v3.26.4 addendum ---
 
 This addendum records the state of the software at Medicus Suite v3.26.4. The
