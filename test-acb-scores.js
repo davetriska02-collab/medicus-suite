@@ -142,6 +142,21 @@ console.log('\n--- UK brand names ---');
   assert(r.perDrug[0].score === 3, 'Ditropan scores 3');
 }
 
+// ── Piriton (chlorphenamine brand, Keeper 2026-06-27) ────────────────────
+console.log('\n--- Piriton / chlorphenamine brand (ACB score 3) ---');
+{
+  const r = computeACB(['Piriton 4mg tablets']);
+  assert(r.perDrug.length === 1, 'Piriton yields one entry');
+  assert(r.perDrug[0].score === 3, 'Piriton scores 3 (chlorphenamine brand)');
+  assert(r.perDrug[0].matchedTerm === 'piriton', 'Piriton matchedTerm is "piriton"');
+}
+{
+  // chlorphenamine already matched before adding Piriton — regression guard
+  const r = computeACB(['chlorphenamine maleate 4mg']);
+  assert(r.perDrug.length === 1, 'chlorphenamine maleate still yields 1 entry after Piriton addition (no double count)');
+  assert(r.total === 3, 'chlorphenamine maleate total still = 3');
+}
+
 // ── Levomepromazine / methotrimeprazine / Nozinan (Keeper follow-up) ──────
 console.log('\n--- Levomepromazine (ACB score 3) ---');
 {

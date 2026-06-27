@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-17",
+  "lastUpdated": "2026-06-27",
   "specVersion": "JCVI/UKHSA 2026/27 season (2026-06-17 CSO-approved: RSV 75+/care-home expansion, flu homelessness cohort, pneumococcal PCV20 relabel — verify against source letters; applied this run without page-verification due to WebFetch 403)",
   "notes": "Seasonal rules (flu, COVID) use schedule+season for campaign-window suppression. One-off lifetime rules (pneumococcal, shingles, RSV) use schedule:once. INTENTIONAL OMISSIONS: pertussis-in-pregnancy and RSV-in-pregnancy are not encoded — the engine has no per-pregnancy episode gate or gestational-age gate; a lifetime lookback cannot distinguish doses given in prior pregnancies.",
   "rules": [
@@ -104,6 +104,26 @@
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy"],
         "declined": ["rsv vaccination declined", "rsv vaccine declined", "respiratory syncytial virus vaccination declined", "rsv vaccination not given"]
+      }
+    }
+    ,
+    {
+      "id": "vax-menb-university-2026",
+      "type": "vaccine",
+      "enabled": false,
+      "vaccine": "MenB",
+      "displayName": "MenB vaccine (university/college cohort 2026)",
+      "schedule": "once",
+      "needs_engine_change": true,
+      "source": "UKHSA/JCVI MenB university programme autumn 2026 — routine 2-dose offer (Bexsero) for Year 13 school leavers (born 1 Sept 2007–31 Aug 2008) and under-25s starting higher education or residential further education for the first time in autumn 2026. First dose by 31 Dec 2026; second dose (min 28 days later) by 31 Mar 2027. Delivery: community pharmacy (NHS-commissioned), NOT GP primary care. Corroborated via UKHSA/NHS England announcement June 2026; primary source letter pending page-verification.",
+      "notes": "INTENTIONALLY DISABLED — current engine cannot encode this rule: (1) no campaign_window field supporting a fixed-end-date one-off campaign vs a season; (2) eligibility requires birth-date band (born 1 Sept 2007–31 Aug 2008 for the Year 13 cohort) OR first-time HE/FE student status (not detectable from GP coded records). This placeholder documents the programme for manual awareness. CSO review required before enabling. Encoded 2026-06-27 Keeper.",
+      "eligibility": { "anyOf": [
+        { "kind": "age", "ageMin": 17, "ageMax": 17, "bornOnOrAfter": "2007-09-01", "bornBefore": "2008-09-01", "label": "Year 13 (born 1 Sept 2007–31 Aug 2008)" },
+        { "kind": "age", "ageMin": 18, "ageMax": 24, "label": "Under-25 starting HE/residential FE (not detectable — manual only)" }
+      ] },
+      "statusTerms": {
+        "given": ["meningococcal b vaccin", "menb vaccin", "bexsero", "meningitis b vaccin"],
+        "declined": ["meningococcal b vaccination declined", "menb vaccination declined", "meningitis b vaccination declined"]
       }
     }
   ]

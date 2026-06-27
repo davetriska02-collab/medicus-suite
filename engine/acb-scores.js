@@ -72,6 +72,7 @@
     { term: 'atropine', score: 3 },
     // ── Score 3: First-generation antihistamines ─────────────────────────────
     { term: 'chlorphenamine', score: 3 },
+    { term: 'piriton', score: 3, note: 'brand: chlorphenamine (Haleon); UK OTC brand — may appear in GP medication lists' },
     { term: 'promethazine', score: 3 },
     { term: 'hydroxyzine', score: 3 },
     { term: 'diphenhydramine', score: 3 },

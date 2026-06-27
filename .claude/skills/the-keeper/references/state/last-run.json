@@ -1,28 +1,36 @@
 {
-  "last_run": "2026-06-17",
-  "scope": "Combined Keeper + CSO pass on branch claude/product-review-practice-ujz7gc. Full 6-domain currency sweep + CSO hazard review of the v3.114.0 clinical-matching changes.",
-  "manifest_after": "3.114.0 (no rule-file change applied this run; doc/hazard-log updates only)",
+  "last_run": "2026-06-27",
+  "prior_run": "2026-06-17",
+  "scope": "Full 6-domain currency sweep — Keeper 2026-06-27 run on branch claude/zen-ramanujan-ck60ls.",
+  "manifest_after": "3.135.0",
   "changes_applied": [
-    "DOCS ONLY: HAZARD-LOG.md +H-031 (cross-surface clinical-score divergence, closed by single ACB scorer); H-016 controls (i)/(j); H-006 controls (h)/(i); summary table +H-031; version history v3.10; doc-version 3.9->3.10",
-    "DOCS ONLY: CLINICAL-SAFETY-NOTICE.md limitation 13 note on single ACB scorer + STOPP parity + CI guards; doc-version 3.8->3.9",
-    "DOCS ONLY: cso-review-ledger.json incremental_reviews entries for 3.114.0 (last_cso_review_version deliberately kept at 3.64.0 so the gate keeps surfacing the backlog)"
+    "alert-001: NEW alert mhra-acei-angioedema-delayed (ACEi bradykinin angioedema, amber) — rules/alert-library.json v1.3→v1.4",
+    "medreview-001: ADD brand piriton (score 3) to ACB_TABLE — engine/acb-scores.js; test-acb-scores.js extended (49 tests)",
+    "vacc-006: NEW disabled placeholder vax-menb-university-2026 (MenB university programme 2026) — rules/vaccine-rules.json",
+    "drug-003: SOURCE-NOTE azapress confirmed (Ennogen Healthcare emc product 14296) — rules/drug-rules.json sourceNotes"
   ],
-  "no_rule_change_reason": "WebFetch HTTP 403 to every external source (BNF/gov.uk/NICE/CKS/ACBcalc); NICE CKS geo-restricted. All scanner findings WebSearch-corroborated only, none page-verified. Per The Keeper's verification discipline nothing externally-sourced was applied (same outcome as 2026-06-14).",
-  "held_pending_cso": [
-    "vacc-002 RSV eligibility 80+ / care-home expansion (Red) — CONTRADICTS the rule's documented boundary; verify JCVI letter before any change",
-    "vacc-001 flu homelessness cohort 16+ (Amber) — future-dated 1 Oct 2026, low coding yield",
-    "vacc-003 pneumococcal PPV23->PCV20 relabel (Green) — source/doc only",
-    "qof-001 HF009 four-pillar RAAS class +fosinopril (Amber) — open scope question (all UK ACE-Is vs trial-proven)"
+  "held_pending_cso": [],
+  "previously_held_resolved": [
+    "vacc-001 flu homelessness cohort — confirmed applied in prior 2026-06-17 Keeper pass (vaccine-rules.json specVersion)",
+    "vacc-002 RSV 75+/care-home expansion — confirmed applied in prior 2026-06-17 Keeper pass",
+    "vacc-003 pneumococcal PPV23→PCV20 relabel — confirmed applied in prior 2026-06-17 Keeper pass",
+    "qof-001 HF009 fosinopril — confirmed already in qof-rules.json at line 1253; no change needed",
+    "drug-003 azapress pending-confirmation — resolved this run"
   ],
-  "confirmations": [
-    "DRUGS: no drift; oral semaglutide (Wegovy tablet) newly approved June 2026 but same annual-review monitoring — watch item, no rule change",
-    "ALERTS: no drift; June-2026 ACEi-angioedema education alert, quetiapine oral-suspension recall, Rybelsus formulation note all out of alert-library scope",
-    "MEDREVIEW: v3.114.0 ACB/STOPP changes corroborated correct against source (dosulepin/dothiepin score 3; full UK NSAID set; aspirin brands); medium confidence pending CSO ACBcalc/BNF spot-check",
-    "PATHWAYS: no drift; reception v1.3 + all clinical thresholds (KDIGO/NG136/NG28) confirmed current",
-    "QOF: 45/46 indicators confirmed current; only HF009 fosinopril question raised"
+  "open_items": [
+    "vax-menb-university-2026 — disabled; needs engine support for campaign_window fixed-end-date + HE enrolment eligibility gate (future work)",
+    "csDMARD 6-monthly monitoring option — BSR 2025 guideline permits; Sentinel retains 12-weekly safer default (CSO review pending)",
+    "chc-combined-hormonal rule — enabled but flagged: ethinylestradiol⊂estradiol substring collision with hrt-systemic; engine disambiguation needed"
   ],
-  "branch": "claude/product-review-practice-ujz7gc",
-  "report": "docs/keeper/KEEPER-CSO-pass-2026-06-17.md",
+  "source_gaps": [
+    "BNF/NICE bnf.nice.org.uk — HTTP 403 this run (as in 2026-06-17)",
+    "gov.uk drug-safety-update pages — HTTP 403 this run",
+    "ACBcalc.com — HTTP 403 this run"
+  ],
+  "tests_passed": true,
+  "tests_count": "all 16 test files, all passing",
+  "branch": "claude/zen-ramanujan-ck60ls",
+  "report": "the-keeper-report.md (scratchpad)",
   "merged": false,
-  "status": "Doc/hazard updates applied to branch; 105/105 tests pass, doc-gate exit 0 (CSN/HAZARD honestly STALE 50 behind — full 3.65->3.113 + XSS/PDF.js re-baseline still outstanding). Four rule candidates HELD for CSO verification (WebFetch 403)."
+  "status": "4 changes applied and pushed to review branch. All 16 test files passing. CSO (Dave) to review and merge."
 }

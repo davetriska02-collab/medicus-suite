@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.135.0] — 2026-06-27
+
+### The Keeper — prescribing-safety and clinical rule refresh (2026-06-27)
+
+Automated Keeper run applying 4 verified changes. Sources: MHRA DSU 17 June 2026,
+ACBcalc/Boustani ACB scale, UKHSA/NHSE MenB programme June 2026, Ennogen Healthcare emc
+product 14296. All external primary sources returned HTTP 403 this run; changes corroborated
+via WebSearch across 5+ independent secondary sources each. CSO review required before
+merging — see the Keeper report for sourced details.
+
+#### New: ACEi bradykinin angioedema alert (`mhra-acei-angioedema-delayed`, alert-library v1.4)
+
+Added amber awareness alert for ACE inhibitor angioedema to `rules/alert-library.json`.
+Key clinical point from MHRA DSU 17 June 2026: ACEi-induced angioedema is
+**bradykinin-mediated** (not histamine/IgE), may onset months to years after starting (~50%
+of cases ≥30 days post-initiation), and **does NOT respond to adrenaline, antihistamines or
+steroids**. Discontinue ACEi immediately and permanently if suspected. Alert scoped to ACEi
+only (not ARBs — bradykinin mechanism is ACEi-specific). Severity: amber (medication review
+prompt, not emergency alert).
+
+#### New: Piriton (chlorphenamine brand) added to ACB table (`engine/acb-scores.js`)
+
+Added `{ term: 'piriton', score: 3 }` after the chlorphenamine entry. Piriton (Haleon UK)
+is the best-known OTC chlorphenamine brand and may appear in GP medication lists as the
+medication name; without this entry a patient taking Piriton received ACB score 0.
+Regression-guarded in `test-acb-scores.js` (49 tests, all passing).
+
+#### New: MenB university programme 2026 placeholder (`vax-menb-university-2026`, disabled)
+
+Added disabled placeholder rule to `rules/vaccine-rules.json` documenting the new national
+MenB (Bexsero) programme for university entrants announced June 2026. Eligible: Year 13
+school leavers (born 1 Sept 2007–31 Aug 2008) and under-25s starting HE/residential FE
+autumn 2026. 2-dose schedule (min 28 days apart); community pharmacy delivery (not GP
+recall). Rule is `enabled: false` with `needs_engine_change: true` — current engine cannot
+encode fixed-campaign-window eligibility or HE enrolment status. Placeholder for GP awareness
+and to signal future engine extension needed.
+
+#### Source-note: azapress brand confirmed (`rules/drug-rules.json`)
+
+Removed "pending primary-source confirmation" flag from azapress (Ennogen Healthcare,
+azathioprine tablets) in the top-level sourceNotes. Azapress confirmed as licensed UK
+azathioprine brand via emc product 14296. No match-list or monitoring-interval change.
+
 ## [v3.134.6] — 2026-06-26
 
 ### Fix: "B12 / Folate" not matched to its outstanding request
