@@ -40,12 +40,35 @@ export function ragBadge(level) {
 // title= tooltip, never a code/filter string. Reads as human prose, e.g.
 //   "Patients on the active list with a coded lithium Rx in the last 6 months,
 //    as at 09:14 on 3 Jun 2026 · source: drug-rules v12 · interval: 6-monthly".
+// Map developer-facing source identifiers (file paths, function names, schema/spec
+// tags) to plain English. The panel's partner/GP read "source: rules/drug-rules.json"
+// and "assessRuleCurrency over rules/*.json" as leaked plumbing on an inspector page.
+function humaniseSource(s) {
+  let t = String(s || '').trim();
+  if (!t) return '';
+  // Strip a trailing "(specVersion …)" / "(schema …)" parenthetical.
+  t = t.replace(/\s*\((?:spec|schema)[^)]*\)\s*$/i, '').trim();
+  const MAP = [
+    [/rules\/drug-rules\.json/i, 'Sentinel drug-monitoring rules'],
+    [/rules\/qof-rules\.json/i, 'QOF indicator rules'],
+    [/rules\/vaccine-rules\.json/i, 'vaccine surveillance rules'],
+    [/rules\/alert-library\.json/i, 'prescribing-safety alert library'],
+    [/shared\/rule-currency\.js.*$/i, 'rule-currency check'],
+    [/engine\/[\w-]+\.js/gi, 'the suite engine'],
+  ];
+  for (const [re, label] of MAP) t = t.replace(re, label);
+  // Drop any residual bare file path / code token.
+  t = t.replace(/\b[\w/.-]+\.(?:js|json)\b/gi, '').replace(/\s{2,}/g, ' ').replace(/\(\s*\)/g, '').trim();
+  return t.replace(/[·,;\s]+$/, '').trim();
+}
+
 export function provenanceLine(provenance) {
   const p = provenance || {};
   const parts = [];
   if (p.denominator) parts.push(esc(p.denominator));
   if (p.asAt) parts.push(`as at ${esc(p.asAt)}`);
-  if (p.source) parts.push(`source: ${esc(p.source)}`);
+  const src = humaniseSource(p.source);
+  if (src) parts.push(`source: ${esc(src)}`);
   if (p.intervalApplied) parts.push(`interval: ${esc(p.intervalApplied)}`);
   if (!parts.length) return '';
   return `<span class="cqc-prov">${parts.join(' · ')}</span>`;
@@ -97,7 +120,9 @@ function renderCover(readiness, mode) {
   const modeTag =
     mode === 'export'
       ? `<span class="cqc-mode-tag cqc-mode-export">Evidence export</span>`
-      : `<span class="cqc-mode-tag cqc-mode-readiness">Readiness check (internal)</span>`;
+      : mode === 'clinician'
+        ? `<span class="cqc-mode-tag cqc-mode-clinician">Clinician view</span>`
+        : `<span class="cqc-mode-tag cqc-mode-readiness">Readiness check (internal)</span>`;
   return (
     `<header class="cqc-cover">` +
     `<div class="cqc-cover-row"><h1>${esc(title)}</h1>${modeTag}</div>` +
@@ -110,22 +135,93 @@ function renderCover(readiness, mode) {
 
 // ── Readiness banner + aggregated "what to fix" (readiness mode only) ───────────
 
-function renderReadinessBanner(readiness) {
-  const overall = readiness.currency?.overall || 'na';
-  // Lead with the WORD; the verb ("you need to…") is internal-only and dropped in export.
-  const verb =
+// Plain-English headline verdict — the FIRST thing on the page in both modes
+// (the panel's universal ask: "tell me the answer before the detail"). Leads with
+// the RAG WORD, an honest one-line summary with a count, a legend so a reader sees
+// what amber/red mean even on an all-green run, and a "how to use this page" line
+// that points at the reconciliation worksheet. Framed as MONITORING-SYSTEM
+// readiness, never "the practice is compliant".
+function renderHeadlineVerdict(readiness, mode) {
+  const overall = String(readiness.currency?.overall || 'na').toLowerCase();
+  const files = Array.isArray(readiness.currency?.files) ? readiness.currency.files : [];
+  const total = files.length;
+  const attention = files.filter((f) => {
+    const l = String(f.level || '').toLowerCase();
+    return l === 'amber' || l === 'red';
+  }).length;
+
+  const plain =
     overall === 'green'
-      ? 'You appear inspection-ready on the evidence below — keep the rule sets current.'
+      ? `All ${total || ''} safety rule set${total === 1 ? '' : 's'} are current.`.replace('  ', ' ')
       : overall === 'amber'
-        ? 'You need to address the items below before CQC arrives.'
+        ? `${attention} of ${total} rule set${total === 1 ? '' : 's'} need${attention === 1 ? 's' : ''} review soon.`
         : overall === 'red'
-          ? 'You need to act on the items below now — rule currency is out of date.'
+          ? `${attention} of ${total} rule set${total === 1 ? '' : 's'} ${attention === 1 ? 'is' : 'are'} out of date.`
           : 'Readiness could not be rated from the available data.';
-  const asAt = readiness.generatedAt ? ` <span class="cqc-banner-asat">as at ${esc(readiness.generatedAt)}</span>` : '';
+
+  // The internal action verb is readiness-mode only — dropped from the inspector export.
+  const verb =
+    mode === 'export'
+      ? ''
+      : overall === 'green'
+        ? ' Keep the rule sets current.'
+        : overall === 'amber'
+          ? ' Address the items below before CQC arrives.'
+          : overall === 'red'
+            ? ' Act on the items below now.'
+            : '';
+
+  const asAt = readiness.generatedAt
+    ? ` <span class="cqc-verdict-asat">as at ${esc(readiness.generatedAt)}</span>`
+    : '';
+
+  // Clinician view is a fast glance — drop the legend + stacked caveat boxes; a
+  // single muted footnote carries the boundary so the green verdict isn't wrapped in
+  // four hedging paragraphs (Tom). The other modes keep the full guidance.
+  if (mode === 'clinician') {
+    const foot =
+      `<p class="cqc-verdict-foot">Monitoring-<strong>system</strong> rating only &mdash; not patient-level, ` +
+      `not proof of compliance. For the inspector pack and the patient-count worksheet, use ` +
+      `<em>Readiness check</em> or <em>Evidence export</em>.</p>`;
+    return (
+      `<section class="cqc-card cqc-verdict cqc-verdict-${esc(overall)}">` +
+      `<div class="cqc-verdict-head">` +
+      `<span class="cqc-verdict-label">Monitoring-system readiness</span>${ragBadge(overall)}${asAt}` +
+      `</div>` +
+      `<p class="cqc-verdict-plain">${esc(plain)}${esc(verb)}</p>` +
+      foot +
+      `</section>`
+    );
+  }
+
+  const legend =
+    `<p class="cqc-rag-legend"><span class="cqc-rag-legend-label">What the ratings mean:</span> ` +
+    `${ragBadge('green')} current &middot; ${ragBadge('amber')} review soon &middot; ${ragBadge('red')} out of date</p>`;
+
+  // Separate "rules current" from "patients monitored" — the panel's sharpest
+  // clinical-safety point: a green here must never be misread as "every patient
+  // has been monitored". State the boundary in the verdict itself. (Clinician mode
+  // returned early above with its own one-line footnote.)
+  const meaning =
+    `<p class="cqc-verdict-means">This rates the monitoring <strong>system</strong>: whether the practice's ` +
+    `clinical-safety rules are current. It does <strong>not</strong> confirm that any individual patient has ` +
+    `been monitored &mdash; use the Reconciliation worksheet below for patient-level checks.</p>`;
+
+  const howTo =
+    `<p class="cqc-verdict-howto"><strong>How to use this page.</strong> Read the rating, run the searches in the ` +
+    `<em>Reconciliation worksheet</em> below to fill in your own patient numbers, then use <em>Print / PDF</em> for ` +
+    `your evidence folder. Supporting evidence for the Safe and Well-led key questions &mdash; <strong>not</strong> ` +
+    `proof of compliance.</p>`;
+
   return (
-    `<section class="cqc-banner cqc-banner-${esc(String(overall).toLowerCase())}">` +
-    `<div class="cqc-banner-head"><span class="cqc-banner-label">Overall readiness</span>${ragBadge(overall)}${asAt}</div>` +
-    `<p class="cqc-banner-verb">${esc(verb)}</p>` +
+    `<section class="cqc-card cqc-verdict cqc-verdict-${esc(overall)}">` +
+    `<div class="cqc-verdict-head">` +
+    `<span class="cqc-verdict-label">Monitoring-system readiness</span>${ragBadge(overall)}${asAt}` +
+    `</div>` +
+    `<p class="cqc-verdict-plain">${esc(plain)}${esc(verb)}</p>` +
+    legend +
+    meaning +
+    howTo +
     `</section>`
   );
 }
@@ -159,11 +255,27 @@ function renderWhatToFix(readiness) {
 
 // ── Coverage manifest (TOP of the surface — both modes; A2 + A5) ────────────────
 
+// Rule-file spec/version fields carry long developer/governance provenance notes
+// (e.g. "...applied this run without page-verification due to WebFetch 403"). Those
+// are for maintainers, never for an inspector-facing page — show only a clean
+// leading label and hard-stop on any residual code/HTTP noise. (The panel flagged
+// "WebFetch 403", "schema 2" and "CQC-P0-COHORT-SPIKE" leaking into the document.)
+function cleanSpec(s) {
+  let t = String(s || '').trim();
+  if (!t) return '';
+  // Drop parenthetical notes and anything after a dash/em-dash — the dev log tail.
+  t = t.replace(/\s*[([].*$/s, '').replace(/\s+[—–-]\s.*$/s, '').trim();
+  // Hard stop on any residual HTTP-status / fetch noise.
+  if (/\bhttp|webfetch|\b\d{3}\b/i.test(t)) t = t.split(/[,;:]/)[0].trim();
+  return t.length > 56 ? `${t.slice(0, 53).trim()}…` : t;
+}
+
 function renderRulesetTile(label, rs) {
   if (!rs) return '';
   const subParts = [];
-  if (rs.specVersion) subParts.push(`spec ${rs.specVersion}`);
-  if (rs.schemaVersion) subParts.push(`schema ${rs.schemaVersion}`);
+  // schemaVersion ("schema 2") is pure plumbing — dropped from the user-facing tile.
+  const spec = cleanSpec(rs.specVersion);
+  if (spec) subParts.push(`spec ${spec}`);
   if (rs.lastUpdated) subParts.push(`reviewed ${rs.lastUpdated}`);
   const count =
     rs.ruleCount != null
@@ -174,7 +286,13 @@ function renderRulesetTile(label, rs) {
   return statTile(label, count, subParts.join(' · '));
 }
 
-function renderMatchedTerms(terms) {
+// The matched-term list is long (every coded drug string the tool recognises). It
+// was rendered inline at the TOP and became a multi-screen wall that buried the
+// verdict (the panel's #1 friction). Collapse it into a counted <details> so the
+// count stays visible but the wall is one click away. Opened by default in export
+// mode so the inspector PDF still prints the full list; a print rule also force-
+// expands it for any open-state edge case.
+function renderMatchedTerms(terms, mode) {
   const list = Array.isArray(terms) ? terms.filter((t) => t != null && t !== '') : [];
   if (!list.length) {
     return (
@@ -182,15 +300,25 @@ function renderMatchedTerms(terms) {
       `<p class="cqc-note">No matched terms reported.</p></div>`
     );
   }
+  // Collapsed on screen in BOTH modes (an always-open export read as "a wall the
+  // length of a bus"); a beforeprint handler force-opens all <details> so the
+  // printed inspector pack still carries the full list.
   const chips = list.map((t) => `<li class="cqc-term">${esc(t)}</li>`).join('');
+  // The "grouped per drug" pointer only applies where the worksheet is shown — the
+  // clinician view hides it, so don't send the reader to a section that isn't there.
+  const groupedPointer =
+    mode === 'clinician'
+      ? `Switch to the <strong>Readiness check</strong> for the same coverage grouped per drug.`
+      : `For the same coverage <strong>grouped per drug</strong> (easier to scan), see the Reconciliation worksheet below.`;
   return (
-    `<div class="cqc-matched"><h3>Matched drug terms (${list.length})</h3>` +
-    `<p class="cqc-note">The raw coded drug-name strings the tool matched — eyeball this for completeness (e.g. missing slow-release or brand forms).</p>` +
-    `<ul class="cqc-term-list">${chips}</ul></div>`
+    `<details class="cqc-matched">` +
+    `<summary class="cqc-matched-summary">Matched drug names &mdash; ${list.length} term${list.length === 1 ? '' : 's'} <span class="cqc-matched-hint">(expand to check for missing brands or slow-release forms)</span></summary>` +
+    `<p class="cqc-note">The full alphabetical list the tool matches. ${groupedPointer}</p>` +
+    `<ul class="cqc-term-list">${chips}</ul></details>`
   );
 }
 
-function renderCoverageManifest(readiness) {
+function renderCoverageManifest(readiness, mode) {
   const cov = readiness.coverage || {};
   const qof = cov.qof || {};
   const qofSub = [];
@@ -222,12 +350,16 @@ function renderCoverageManifest(readiness) {
     `<p class="cqc-note">These are the rule sets the practice runs — counts are rules and indicators, ` +
     `<strong>not patient numbers</strong>. Patient-level figures are a later phase.</p>`;
 
-  // A5/F4: coded-data + undercount caveat as one prominent callout — counts are a floor, not a ceiling.
-  const codedLine = cov.codedDataOnly
-    ? `<strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted. `
-    : '';
-  const undercount = cov.undercountCaveat ? esc(cov.undercountCaveat) : '';
-  const callout = codedLine || undercount ? `<p class="cqc-callout" role="note">${codedLine}${undercount}</p>` : '';
+  // A5/F4: ONE prominent coded-data/undercount callout — counts are a floor, not a
+  // ceiling. Previously this stacked codedLine + undercountCaveat, which restated
+  // "coded data only" twice in the same box and read as the page hedging (Margaret).
+  // Prefer the fuller undercount caveat; fall back to the short coded-data line.
+  const undercount = cov.undercountCaveat
+    ? esc(cov.undercountCaveat) // self-contained — already opens "Counts are derived from coded data only…"
+    : cov.codedDataOnly
+      ? `<strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted; treat figures as a floor, not a ceiling.`
+      : '';
+  const callout = undercount ? `<p class="cqc-callout" role="note">${undercount}</p>` : '';
   const keeper = cov.keeperProvenance ? `<p class="cqc-note cqc-keeper">${esc(cov.keeperProvenance)}</p>` : '';
 
   return (
@@ -236,7 +368,7 @@ function renderCoverageManifest(readiness) {
     `<p class="cqc-note">What this readiness check covers — rule sets, versions and dates — so completeness can be judged before any figure is trusted.</p>` +
     systemNote +
     `<div class="cqc-grid cqc-grid-4">${tiles}</div>` +
-    renderMatchedTerms(cov.drug && cov.drug.matchedTerms) +
+    renderMatchedTerms(cov.drug && cov.drug.matchedTerms, mode) +
     callout +
     keeper +
     `</section>`
@@ -313,7 +445,9 @@ function renderQualityStatement(qs, mode) {
     `<section class="cqc-card cqc-qs" data-key="${esc(qs.key || '')}">` +
     `<div class="cqc-qs-head">` +
     `<h2>${subhead}</h2>` +
-    `<div class="cqc-qs-tags">${cat}${ragBadge(qs.rag)}</div>` +
+    // Label the badge "System currency" so a green is read as "the rule is current",
+    // never as a pass/fail of the practice (the manager's misread-as-a-scorecard risk).
+    `<div class="cqc-qs-tags">${cat}<span class="cqc-qs-ragcontext">System currency:</span>${ragBadge(qs.rag)}</div>` +
     `</div>` +
     summary +
     provHtml +
@@ -337,12 +471,21 @@ function renderQualityStatements(readiness, mode) {
     if (!groups.has(kq)) groups.set(kq, []);
     groups.get(kq).push(qs);
   }
+  // Plain-English gloss for CQC's key-question jargon — the technophobe floor could
+  // not say what "Safe"/"Well-led"/"Processes" meant. One line per key question.
+  const KQ_GLOSS = {
+    Safe: 'CQC key question. The evidence below shows the safety systems the practice runs (it is "Processes" evidence, not patient outcomes).',
+    'Well-led':
+      'CQC key question. The evidence below shows how the practice keeps its clinical-safety rules current and governed.',
+    Effective: 'CQC key question. The evidence below shows the clinical rule sets the practice has in use.',
+  };
   const blocks = [];
   for (const [kq, list] of groups) {
     const cards = list.map((qs) => renderQualityStatement(qs, mode)).join('');
+    const gloss = KQ_GLOSS[kq] ? `<p class="cqc-keyq-note">${esc(KQ_GLOSS[kq])}</p>` : '';
     blocks.push(
       `<div class="cqc-keyq" data-keyq="${esc(kq)}">` +
-        `<h2 class="cqc-keyq-head">Key question: ${esc(kq)}</h2>${cards}</div>`
+        `<h2 class="cqc-keyq-head">Key question: ${esc(kq)}</h2>${gloss}${cards}</div>`
     );
   }
   return blocks.join('');
@@ -393,20 +536,59 @@ function renderSignoff() {
 //     coded-data-only; the suite's caveat applies to any figure the practice records.
 //   - There is NO numeric patient count anywhere in this section.
 
-function renderReconciliation(readiness) {
+// Render the excluded (dropped) terms for one reconciliation entry, each with its
+// clinical reason (Eileen). Terms that share a reason are grouped onto one line so the
+// rationale shows once per family, not once per term.
+function renderExcludeDetails(entry) {
+  const details = Array.isArray(entry.excludeDetails) ? entry.excludeDetails : [];
+  // Back-compat: fall back to bare excludeTerms (no reason) if details absent.
+  if (!details.length) {
+    const terms = Array.isArray(entry.excludeTerms) ? entry.excludeTerms : [];
+    if (!terms.length) return '';
+    return (
+      `<div class="cqc-recon-excl"><span class="cqc-recon-excl-label">Excluded (dropped):</span> ` +
+      `${terms.map((t) => `<span class="cqc-term cqc-term-excl">${esc(t)}</span>`).join(' ')}</div>`
+    );
+  }
+  // Group terms by reason, preserving first-seen order.
+  const byReason = new Map();
+  for (const d of details) {
+    const reason = d.reason || '';
+    if (!byReason.has(reason)) byReason.set(reason, []);
+    byReason.get(reason).push(d.term);
+  }
+  const groups = Array.from(byReason.entries())
+    .map(
+      ([reason, terms]) =>
+        `<li class="cqc-recon-excl-item">` +
+        `${terms.map((t) => `<span class="cqc-term cqc-term-excl">${esc(t)}</span>`).join(' ')} ` +
+        `<span class="cqc-recon-excl-reason">&mdash; ${esc(reason)}</span></li>`
+    )
+    .join('');
+  return (
+    `<div class="cqc-recon-excl"><span class="cqc-recon-excl-label">Excluded (dropped):</span>` +
+    `<ul class="cqc-recon-excl-list">${groups}</ul></div>`
+  );
+}
+
+function renderReconciliation(readiness, mode) {
   const recon = readiness.reconciliation;
   if (!recon || !Array.isArray(recon.entries) || !recon.entries.length) return '';
 
   const entries = recon.entries;
 
-  // Prominent honest-framing callout — the whole point of this section.
+  // Prominent honest-framing callout — the whole point of this section. The blank
+  // "your count" cells are DELIBERATE: the suite cannot count patients read-only, so
+  // it supplies the reproducible definition and the practice supplies the number.
+  // Say so explicitly, so an exported pack with empty cells is never misread as
+  // "nothing to report" (the manager/partner recoiled at "unfinished homework").
   const honestFraming =
     `<div class="cqc-recon-notice" role="note">` +
-    `<strong>The suite supplies the definition — your Medicus search supplies the number.</strong> ` +
-    `The Medicus Suite cannot enumerate patients read-only (a true population query is not ` +
-    `reachable via the API available to this extension — see spike CQC-P0-COHORT-SPIKE). ` +
-    `Run each query below in Medicus's own search or QOF reporting tool, enter the count ` +
-    `you get, and attach this page to your evidence pack.` +
+    `<strong>This is a worksheet — the blank "your count" cells are filled in by you, not the suite.</strong> ` +
+    `The Medicus Suite cannot count patients read-only (a true population query is not reachable via the API ` +
+    `available to this extension; this is a deliberate safety boundary, not a fault). Run each query below in ` +
+    `Medicus's own search or QOF reporting tool, enter the count you get, and attach the completed page to your ` +
+    `evidence pack.` +
     `</div>`;
 
   const caveat = recon.caveat
@@ -423,11 +605,30 @@ function renderReconciliation(readiness) {
         `</td>` +
         `<td class="cqc-recon-defn">${esc(e.definition)}</td>` +
         `<td class="cqc-recon-terms"><span class="cqc-recon-terms-label">Coded terms:</span> ` +
-        `${e.matchTerms.map((t) => `<span class="cqc-term">${esc(t)}</span>`).join(' ')}</td>` +
-        `<td class="cqc-recon-count"><span class="cqc-recon-blank">your count: ____</span></td>` +
+        `${e.matchTerms.map((t) => `<span class="cqc-term">${esc(t)}</span>`).join(' ')}` +
+        // Disclose excludes inline WITH a reason per exclude (grouped by reason so a
+        // family of 13 vaginal-oestrogen terms shows its rationale once, not 13×).
+        renderExcludeDetails(e) +
+        `</td>` +
+        // Editable, persistable count cell (Janet): the practice types its own Medicus
+        // count here and it prints with the pack. The suite still supplies no number.
+        `<td class="cqc-recon-count">` +
+        `<label class="cqc-recon-countlabel">your count: ` +
+        `<input type="text" inputmode="numeric" class="cqc-recon-input" data-recon-key="${esc(e.ruleId)}" ` +
+        `value="" placeholder="____" aria-label="Your count for ${esc(e.drugName)}, from your own Medicus search" />` +
+        `</label></td>` +
         `</tr>`
     )
     .join('');
+
+  // Live total of the typed counts (Janet — a sum she can reconcile and sign).
+  // Computed by the controller from the inputs; summing the practice's OWN figures
+  // is not a fabricated count.
+  const totalRow =
+    `<tfoot><tr class="cqc-recon-totalrow">` +
+    `<td colspan="3" class="cqc-recon-totallabel">Total of your counts</td>` +
+    `<td class="cqc-recon-count"><output class="cqc-recon-total" aria-live="polite">0</output></td>` +
+    `</tr></tfoot>`;
 
   const table =
     `<table class="cqc-table cqc-recon-table">` +
@@ -438,13 +639,33 @@ function renderReconciliation(readiness) {
     `<th>Your count</th>` +
     `</tr></thead>` +
     `<tbody>${rows}</tbody>` +
+    totalRow +
     `</table>`;
+
+  // Audit-trail line (Janet): who completed the worksheet and when, so a typed figure
+  // carries provenance. Blank fields the practice fills (consistent with the worksheet).
+  const completion =
+    `<div class="cqc-recon-completion">` +
+    `<span class="cqc-recon-completion-field">Counts entered by <span class="cqc-recon-rule"></span></span>` +
+    `<span class="cqc-recon-completion-field">Date <span class="cqc-recon-rule"></span></span>` +
+    `<span class="cqc-recon-completion-field">Source: practice Medicus search / QOF reporting tool</span>` +
+    `</div>`;
+
+  // The full table is long; collapse it so the Safe/Well-led evidence above stays
+  // the focus. Opened in export mode (and force-opened in print) so the worksheet
+  // still appears in the inspector pack.
+  const collapsibleTable =
+    `<details class="cqc-recon-details">` +
+    `<summary class="cqc-recon-summary">Worksheet &mdash; ${entries.length} cohort definition${entries.length === 1 ? '' : 's'} to run in Medicus <span class="cqc-matched-hint">(expand to complete)</span></summary>` +
+    table +
+    completion +
+    `</details>`;
 
   return (
     `<section class="cqc-card cqc-card-recon">` +
-    `<h2>Reconciliation — run these in Medicus to get the numbers</h2>` +
+    `<h2>Reconciliation worksheet — counts to complete in Medicus</h2>` +
     `<p class="cqc-note">` +
-    `For each high-risk monitored drug the suite covers, the table below gives a reproducible ` +
+    `For each high-risk monitored drug the suite covers, the worksheet below gives a reproducible ` +
     `cohort definition. Run it in Medicus's own search or QOF tool, note the count in the ` +
     `"Your count" column, and use the completed table as supporting evidence for your CQC pack. ` +
     `The suite provides the rigour (the definition + coverage caveat); your validated clinical ` +
@@ -452,13 +673,45 @@ function renderReconciliation(readiness) {
     `</p>` +
     honestFraming +
     caveat +
-    table +
+    collapsibleTable +
     `<p class="cqc-note cqc-recon-foot">` +
     `Definitions are derived deterministically from the suite's active drug-monitoring rules. ` +
     `If a rule is disabled in Options it will not appear here. The "coded terms" column lists ` +
     `every drug name the rule matches — check it for gaps (e.g. a missing slow-release brand).` +
     `</p>` +
+    // Eileen: an exclude with no reason sends a nurse to the phone. Explain WHY excludes
+    // exist and prompt the safety check, since a per-exclude reason is not in the data.
+    `<p class="cqc-note cqc-recon-foot">` +
+    `<strong class="cqc-recon-excl-label">Excluded (dropped)</strong> terms are deliberate suppressions of known ` +
+    `false-positives (typically a different formulation or an unrelated drug sharing a name fragment). They are ` +
+    `listed so you can sense-check each one: if an exclude could drop a real patient who <em>needs</em> this ` +
+    `monitoring, raise it — an over-broad exclude is a silent gap.` +
+    `</p>` +
     `</section>`
+  );
+}
+
+// Name each clinical method's published version/source (Raj) so an inspector or
+// pharmacist can map it to the authority. PINCER is part of the rule-currency RAG;
+// ACB and STOPP/START are engine methods (Visualiser / Triage-lens) — said plainly
+// so the page never implies they sit inside the rule-currency dates above.
+function renderClinicalMethods(readiness) {
+  const methods = Array.isArray(readiness.clinicalMethods) ? readiness.clinicalMethods : [];
+  if (!methods.length) return '';
+  const rows = methods
+    .map(
+      (m) =>
+        `<tr><td><strong>${esc(m.name)}</strong>${m.detail ? `<br><span class="cqc-recon-class">${esc(m.detail)}</span>` : ''}</td>` +
+        `<td>${esc(m.version)}</td><td>${esc(m.source)}</td>` +
+        `<td>${m.inCurrency ? 'Yes — in the rule-currency check above' : 'Engine method (Visualiser / Triage-lens)'}</td></tr>`
+    )
+    .join('');
+  return (
+    `<section class="cqc-card cqc-card-methods"><h2>Clinical methods &amp; sources</h2>` +
+    `<p class="cqc-note">The published version of every clinical set the suite implements, named to its source so it can be checked against the authority. ` +
+    `Sets marked "Engine method" are computed in the Visualiser / Triage-lens and are NOT part of the rule-currency dates above.</p>` +
+    `<table class="cqc-table cqc-methods-table"><thead><tr><th>Method</th><th>Version</th><th>Source</th><th>In rule-currency check?</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table></section>`
   );
 }
 
@@ -467,25 +720,52 @@ function renderReconciliation(readiness) {
 export function buildReadinessHtml(readiness, { mode = 'readiness' } = {}) {
   const r = readiness || {};
   const isExport = mode === 'export';
+  // Clinician view (Tom): verdict + drug-coverage + methods only — the Safe/Well-led
+  // scaffolding, worksheet and sign-off are for whoever assembles the pack, not the
+  // clinician confirming "is the safety net current" in one glance.
+  const isClinician = mode === 'clinician';
 
   const parts = [
     renderCover(r, mode),
-    disclaimerStrip(r),
-    // Coverage manifest is ALWAYS at the top, in both modes.
-    renderCoverageManifest(r),
+    // Clinician view drops the top disclaimer strip (its verdict footnote + the page
+    // footer both carry "not proof of compliance") to keep the glance uncluttered.
+    isClinician ? '' : disclaimerStrip(r),
+    // Lead with the answer: the plain-English verdict is FIRST in every mode.
+    renderHeadlineVerdict(r, mode),
+    // Coverage manifest (concise — the long matched-term list is collapsed).
+    renderCoverageManifest(r, mode),
   ];
 
+  // Named clinical-method versions/sources. In clinician view this reference table is
+  // collapsed behind a toggle so the glance is verdict + coverage tiles (Tom); the
+  // amber coded-data/undercount safety caveat in the manifest stays visible — a
+  // clinical-safety message is never hidden behind a click.
+  const methodsBlock = renderClinicalMethods(r);
+  if (methodsBlock) {
+    parts.push(
+      isClinician
+        ? `<details class="cqc-methods-collapse"><summary class="cqc-matched-summary">Clinical methods &amp; sources <span class="cqc-matched-hint">(named versions — expand)</span></summary>${methodsBlock}</details>`
+        : methodsBlock
+    );
+  }
+
+  if (isClinician) {
+    parts.push(disclaimerFooter(r));
+    return `<div class="cqc-surface cqc-surface-clinician">${parts.filter(Boolean).join('')}</div>`;
+  }
+
   if (!isExport) {
-    // Readiness mode: RAG-led banner + aggregated "what to fix".
-    parts.push(renderReadinessBanner(r));
+    // Readiness mode: aggregated "what to fix" (the verdict already carries the RAG).
     parts.push(renderWhatToFix(r));
   }
 
+  // Safe/Well-led summaries lead the evidence; the reconciliation WORKSHEET follows
+  // (collapsed). Promoting the worksheet above the summaries made a table of blank
+  // "your count" boxes the centrepiece and read as "unfinished homework" to the
+  // manager/partner — so it sits after the actual evidence, clearly framed as a
+  // worksheet to complete, not a result.
   parts.push(renderQualityStatements(r, mode));
-  // Reconciliation section: always present in both modes.
-  // In readiness mode it aids internal audit prep; in export mode it becomes the
-  // printable "run these searches, fill in the count" page of the evidence pack.
-  parts.push(renderReconciliation(r));
+  parts.push(renderReconciliation(r, mode));
   parts.push(renderDelta(r));
 
   if (isExport) parts.push(renderSignoff());
@@ -511,6 +791,16 @@ export function buildReadinessCsv(readiness) {
       title: 'Rule currency',
       header: ['file', 'lastUpdated', 'ageDays', 'level'],
       rows: files.map((f) => [f.id ?? '', f.lastUpdated ?? '', f.ageDays ?? '', f.level ?? '']),
+    });
+  }
+
+  // ── Clinical methods & sources (named versions — Raj) ─────────────────────
+  const methods = Array.isArray(r.clinicalMethods) ? r.clinicalMethods : [];
+  if (methods.length) {
+    sections.push({
+      title: 'Clinical methods and sources',
+      header: ['method', 'version', 'source', 'inRuleCurrency'],
+      rows: methods.map((m) => [m.name ?? '', m.version ?? '', m.source ?? '', m.inCurrency ? 'yes' : 'no']),
     });
   }
 

@@ -577,7 +577,10 @@
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ──────────────
-  const api = { computeStoppStart };
+  // SPEC is the published identifier of the criteria set implemented here. Read by
+  // the CQC readiness disclosure so the named version cannot drift from the engine.
+  const SPEC = { name: 'STOPP/START', version: 'v3 (2023)', source: "O'Mahony et al., Age and Ageing 2023" };
+  const api = { computeStoppStart, SPEC };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

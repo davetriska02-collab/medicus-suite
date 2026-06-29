@@ -167,7 +167,10 @@
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ───────────────
-  const api = { computeACB, ACB_TABLE };
+  // SPEC is the published identifier of the scale implemented here. Read by the CQC
+  // readiness disclosure so the named version cannot drift from the engine.
+  const SPEC = { name: 'Anticholinergic burden', version: 'Boustani ACB scale (ACBcalc.com)', source: 'Boustani et al. 2008' };
+  const api = { computeACB, ACB_TABLE, SPEC };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

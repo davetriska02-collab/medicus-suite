@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.137.0] — 2026-06-29
+
+### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view
+
+A full practice-panel-driven overhaul of the CQC Inspection Readiness surface
+(`cqc-readiness.{html,js,css}`, `cqc-render.js`, `engine/cqc-evidence.js`). Wording,
+layout and disclosure only — no clinical-rule or threshold changes, and the
+read-only / no-cohort-enumeration honesty boundary is unchanged (the suite never
+fabricates a patient count). Consolidates the iterative work previously numbered
+v3.135.0–v3.136.2 on the development branch, renumbered to avoid collision with the
+OIR changes that shipped on main as v3.135.0/v3.136.0.
+
+- **Answer-first layout.** A plain-English headline verdict ("Monitoring-system
+  readiness: GREEN — all rule sets current") leads the page; the multi-screen
+  alphabetical matched-term wall is collapsed behind a counted toggle; the
+  Safe/Well-led evidence and the reconciliation worksheet follow in a sensible
+  hierarchy.
+- **Honesty hardening.** "Verified {date} against BNF/NICE/MHRA via The Keeper"
+  wording; the coded-data "floor not a ceiling" caveat is prominent and de-duplicated;
+  vaccines labelled "surveillance"; developer/spec noise removed from the
+  inspector-facing document.
+- **Fixed the dead CSV export** (the button silently produced nothing — object-vs-string
+  return mismatch), now serialises the `{suffix, sections}` shape correctly.
+- **Per-exclude clinical reasons.** Each disclosed `drug.exclude` term shows why it is
+  dropped (grouped by family), so a pharmacist/nurse can sense-check a silent
+  false-negative line-by-line.
+- **Clinical methods & sources block.** Names the published version of each clinical
+  set — PINCER (Avery et al., BMJ 2012), Boustani ACB scale (ACBcalc.com), STOPP/START
+  v3 (2023) — read from drift-safe `SPEC` constants newly exported by
+  `engine/acb-scores.js` and `engine/stopp-start.js`; engine-method sets flagged as NOT
+  part of the rule-currency check.
+- **Clinician view (new third mode).** Verdict + coverage + collapsed methods only,
+  for a fast clinical glance; the amber coded-data safety caveat stays visible.
+- **Fillable reconciliation worksheet.** The "your count" cells are editable inputs the
+  practice types its own Medicus count into (persisted to `cqc.recon.counts`, printed
+  with the pack), with a live total and a "counts entered by / date / source" provenance
+  line. The suite still supplies no patient number.
+
+Tests: new coverage in `test-cqc-evidence.js` and `test-cqc-render.js`; full suite
+114/114. Method validated by a synthetic practice panel (six personas), recorded in
+`docs/appraisal/PRACTICE-cqc-readiness-2026-06-29.md`.
+
 ## [v3.136.0] — 2026-06-29
 
 ### Feature: nine new built-in OIR test definitions
