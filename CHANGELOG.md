@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.140.0] — 2026-06-29
+
+### Referrals: 2WW / Faster-Diagnosis safety-net worklist
+
+NHS Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+of cancer-delay negligence claims, and the Faster Diagnosis Standard rises to 80%
+(March 2026). The Referrals module already pulled outbound NHS referrals with
+priority and status, but only as aggregate charts — there was no worklist of the
+suspected-cancer referrals that have gone quiet.
+
+- **New pure helpers** `buildSafetyNet()` and `referralAgeDays()`
+  (`shared/referrals-api.js`) classify the already-fetched referrals: an "open
+  loop" is a `TwoWeekWait` referral still showing `displayStatus: Incomplete`
+  (no confirmed outcome). Returns the open rows oldest-first with calendar-day
+  ages and a severity (watch ≥ 14d, overdue ≥ 21d — heuristic, configurable).
+- **New worklist card** at the top of the Referrals view: open 2WW loops with
+  age, patient, service and clinician, plus overdue/watch badges. Reads the RAW
+  referrals, so the priority/status filter chips can never hide an open loop.
+- **No new endpoint** — reuses the outbound-referrals data the module already
+  fetches; no patient-identifiable data leaves the page. Thresholds are labelled
+  as a guide, not a clinical standard.
+- New regression test `test-referrals-safety-net.js` (19 checks).
+
 ## [v3.139.0] — 2026-06-29
 
 ### Sweep: QOF points-at-risk prioritiser (CVD-prevention income lens)
