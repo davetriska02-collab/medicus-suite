@@ -174,6 +174,14 @@
     if (p.requireRangeForAll !== undefined && typeof p.requireRangeForAll !== 'boolean') {
       errs.push('requireRangeForAll must be a boolean.');
     }
+    if (p.trend !== undefined) {
+      if (!p.trend || typeof p.trend !== 'object' || Array.isArray(p.trend)) errs.push('trend must be an object.');
+      else if (!isUnset(p.trend.maxDeltaPct) && (!Number.isFinite(Number(p.trend.maxDeltaPct)) || Number(p.trend.maxDeltaPct) < 0)) {
+        errs.push('trend.maxDeltaPct must be a non-negative number.');
+      }
+    }
+    if (p.excludeIfMeds !== undefined && !strArrOk(p.excludeIfMeds)) errs.push('excludeIfMeds must be an array of strings.');
+    if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText)) errs.push('suppressIfText must be an array of strings.');
 
     if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
       errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
@@ -250,6 +258,18 @@
         fieldText: clamp(m && m.fieldText, LF_LIMITS.control),
         template: clamp(m && m.template, LF_LIMITS.template),
       },
+      // Trend guard: block filing when a result has moved more than maxDeltaPct vs
+      // its previous value (a "normal" snapshot can hide a rising creatinine / falling
+      // eGFR). 0/absent = off.
+      trend: {
+        maxDeltaPct: numOrNull((p.trend && p.trend.maxDeltaPct) ?? null),
+      },
+      // Don't auto-offer if the patient is on any of these drugs (substring match
+      // against the medication list) — monitored drugs need a human to close the loop.
+      excludeIfMeds: sanitiseStrArr(p.excludeIfMeds, LF_LIMITS.matchItem, LF_LIMITS.match),
+      // Don't auto-offer if the report/task text contains any of these phrases
+      // (e.g. "telephone result", "call patient") — a contact was promised.
+      suppressIfText: sanitiseStrArr(p.suppressIfText, LF_LIMITS.matchItem, LF_LIMITS.match),
       commitMode: LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual',
       source: LF_SOURCES.includes(p.source) ? p.source : 'manual',
       reviewed: p.reviewed === true,
@@ -413,6 +433,98 @@
     return Array.from(new Set(reasons));
   }
 
+  // The previous value + delta for a result, from its history (newest-first). Returns
+  // { prev, date, delta, deltaPct, dir } or null if there's no comparable previous.
+  function analyteTrend(result) {
+    if (!result || typeof result !== 'object') return null;
+    const cur = Number(result.value);
+    const hist = Array.isArray(result.history) ? result.history : [];
+    let prevEntry = null;
+    for (const h of hist) {
+      if (h && Number.isFinite(Number(h.value))) {
+        prevEntry = h;
+        break;
+      }
+    }
+    if (!prevEntry || !Number.isFinite(cur)) return null;
+    const prev = Number(prevEntry.value);
+    const delta = cur - prev;
+    const deltaPct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : null;
+    return { prev, date: prevEntry.date || null, delta, deltaPct, dir: delta > 0 ? 'up' : delta < 0 ? 'down' : 'same' };
+  }
+
+  // Reasons a report fails the profile's TREND guard: any analyte that has moved more
+  // than trend.maxDeltaPct vs its previous value — even if the current value is "in
+  // range". This is what catches a creeping creatinine / falling eGFR. [] when off or OK.
+  function trendBlockers(report, profile) {
+    const reasons = [];
+    const maxPct = profile && profile.trend ? numOrNull(profile.trend.maxDeltaPct) : null;
+    if (!report || !Array.isArray(report.results) || maxPct == null || maxPct <= 0) return reasons;
+    for (const r of report.results) {
+      const t = analyteTrend(r);
+      if (t && t.deltaPct != null && Math.abs(t.deltaPct) > maxPct) {
+        const name = isStr(r.name) ? r.name : 'a result';
+        reasons.push(`${name} has changed ${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}% since last (${t.prev} → ${r.value})`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // Reasons the patient's medications exclude auto-filing (monitored drugs need a
+  // human to close the loop). `meds` is an array of strings or {name} objects.
+  function medExclusionBlockers(meds, profile) {
+    const reasons = [];
+    const ex = profile && Array.isArray(profile.excludeIfMeds) ? profile.excludeIfMeds : [];
+    if (!ex.length || !Array.isArray(meds)) return reasons;
+    const names = meds.map((m) => (isStr(m) ? m : m && isStr(m.name) ? m.name : '')).filter(Boolean).map((s) => s.toLowerCase());
+    for (const drug of ex) {
+      if (!isStr(drug) || !drug.trim()) continue;
+      const d = drug.trim().toLowerCase();
+      if (names.some((n) => n.includes(d))) reasons.push(`patient is on a monitored drug (${drug}) — file manually after review`);
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // Reasons the patient is on the machine-local "never auto-file" list.
+  function suppressedBlockers(report, suppressList) {
+    const reasons = [];
+    const uuid = report && isStr(report.patientUuid) ? report.patientUuid : null;
+    if (!uuid || !Array.isArray(suppressList)) return reasons;
+    const hit = suppressList.find((s) => s && (s === uuid || s.uuid === uuid));
+    if (hit) reasons.push('this patient is on your “never auto-file” list');
+    return reasons;
+  }
+
+  // Reasons the report/task text contains a phrase that should suppress filing
+  // (e.g. "telephone result" — a contact was promised). `extraText` lets the macro
+  // pass page text it scraped beyond the report itself.
+  function textSuppressBlockers(report, profile, extraText) {
+    const reasons = [];
+    const phrases = profile && Array.isArray(profile.suppressIfText) ? profile.suppressIfText : [];
+    if (!phrases.length) return reasons;
+    const parts = [];
+    if (report && Array.isArray(report.results)) report.results.forEach((r) => r && isStr(r.text) && parts.push(r.text));
+    if (isStr(extraText)) parts.push(extraText);
+    const hay = parts.join(' • ').toLowerCase();
+    for (const ph of phrases) {
+      if (isStr(ph) && ph.trim() && hay.includes(ph.trim().toLowerCase())) {
+        reasons.push(`the result mentions “${ph}” — review/contact may be expected`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // CSV of audit entries for export. Header + one row per entry; values quoted.
+  function auditCsv(entries) {
+    const cols = ['ts', 'profile', 'taskUuid', 'patientUuid', 'severity', 'analytes', 'marked', 'filed', 'completed', 'messagePrepared'];
+    const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const rows = [cols.join(',')];
+    for (const e of Array.isArray(entries) ? entries : []) {
+      rows.push(cols.map((c) => esc(e ? e[c] : '')).join(','));
+    }
+    return rows.join('\n');
+  }
+
   // Reasons this report must NOT be offered for one-click filing, even though it
   // may score level:'none'. The numeric severity gate is necessary but NOT
   // sufficient — it reads the lab's own numeric flags and cannot reason about
@@ -459,14 +571,34 @@
   // undone. Deliberately does NOT claim it "confirmed every parameter normal" — it
   // checked numeric values against the profile's ranges; the clinician judges.
   function buildFilingConfirmMessage(report, profile, mode) {
-    const names = [];
-    if (report && Array.isArray(report.results)) {
-      for (const r of report.results) {
-        if (r && isStr(r.name) && r.name.trim()) names.push(r.name.trim());
-      }
-    }
-    const n = names.length;
-    const list = names.length ? names.map((x) => ` • ${x}`).join('\n') : ' • (no individual analytes detected)';
+    const params = profile && Array.isArray(profile.parameters) ? profile.parameters : [];
+    const results = report && Array.isArray(report.results) ? report.results : [];
+    // One line per analyte: name, value+unit, the limit it was checked against, and
+    // the trend vs the previous result — so the clinician READS the numbers, not just
+    // a green "all normal", and sees a creeping value before confirming.
+    const lines = results
+      .filter((r) => r && (isStr(r.name) || r.value != null))
+      .map((r) => {
+        const name = isStr(r.name) && r.name.trim() ? r.name.trim() : 'result';
+        const unit = isStr(r.unit) && r.unit ? ' ' + r.unit : '';
+        const valStr = r.value === 0 || r.value ? `${r.value}${unit}` : '—';
+        const param = findParamFor(name, params);
+        let limit = '';
+        if (param && (param.low != null || param.high != null)) {
+          limit = ` [${param.low != null ? '≥' + param.low : ''}${param.low != null && param.high != null ? ' ' : ''}${param.high != null ? '≤' + param.high : ''}]`;
+        } else if (r.low != null || r.high != null) {
+          limit = ` [${r.low != null ? r.low : ''}–${r.high != null ? r.high : ''}]`;
+        }
+        const t = analyteTrend(r);
+        let trend = '';
+        if (t && t.deltaPct != null) {
+          const arrow = t.dir === 'up' ? '↑' : t.dir === 'down' ? '↓' : '→';
+          trend = `  (prev ${t.prev}${t.date ? ' ' + t.date : ''}, ${arrow}${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}%)`;
+        }
+        return ` • ${name}: ${valStr}${limit}${trend}`;
+      });
+    const n = lines.length;
+    const list = n ? lines.join('\n') : ' • (no individual analytes detected)';
     const profName = profile && isStr(profile.name) ? profile.name : 'this profile';
     const normalOpt =
       profile && profile.filing && isStr(profile.filing.normalOptionText) ? profile.filing.normalOptionText : 'normal';
@@ -475,10 +607,10 @@
     return (
       `File this result as NORMAL?\n\n` +
       modeLine +
-      `Every numeric value below is within this lab's reference range, and each will be marked "${normalOpt}" using "${profName}":\n\n` +
+      `Each value below was checked against the limit shown, and will be marked "${normalOpt}" using "${profName}":\n\n` +
       list +
       `\n\n` +
-      `The suite checks numeric values only — it cannot judge free text, trends over time, or whether this is the right patient. Read the values yourself before confirming.\n\n` +
+      `The suite checks numeric values only — it cannot judge free text or whether this is the right patient. Read the values and any trend (prev → now) yourself before confirming.\n\n` +
       `Filing writes to Medicus and removes this from the worklist. This cannot be undone from here.\n\n` +
       `OK = file ${n > 1 ? 'them all as normal' : 'as normal'}    Cancel = leave for manual review`
     );
@@ -530,6 +662,9 @@
 - "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
 - "parameters" — array of clinician-set normal ranges, one per analyte, checked IN ADDITION to the lab's own flags. Each: { "analyte": "<name>", "low": <number or null>, "high": <number or null>, "unit": "<unit>" }. Read the reference range from the screenshot where shown. CRUCIAL for analytes the lab shows with NO reference range (e.g. HbA1c): set the practice's own normal limit, e.g. { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" }. Use low and/or high (omit/null the bound that doesn't apply). A result outside its set range blocks one-click filing.
 - "requireRangeForAll" — boolean. If true, the button is suppressed unless EVERY numeric result has either a lab reference range or a parameter here — so an un-ranged analyte (like HbA1c) can never be filed until a parameter is set. Default false.
+- "trend" — { "maxDeltaPct": <number> }. If set, blocks filing when any result has moved more than this percentage vs the patient's previous value (catches a creeping creatinine / falling eGFR even when still "in range"). Omit to disable.
+- "excludeIfMeds" — array of drug-name substrings; if the patient is on any (e.g. ["methotrexate","lithium","amiodarone"]), filing is not offered (monitored drugs need a human). Omit if not applicable.
+- "suppressIfText" — array of phrases (e.g. ["telephone result","call patient"]); if the report text contains any, filing is not offered (a contact was promised). Omit if not applicable.
 - "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id. On Medicus, filing is done at WHOLE-REPORT level (not per analyte): there is one button/note that marks the report normal, then a file button.
     - "normalOptionText" (required) — the exact visible text of the control that marks the report as normal / no-action. On Medicus this is the filing-note link "Normal result, no action required".
     - "nextStepText" — if the screen has a "Next Steps" choice (radio/option), the exact visible text of the NO-FURTHER-ACTION option, so the macro selects it explicitly and never files down a "message patient" or "reassign" path. On Medicus this is "File results with no further action". OMIT only if there is no such choice.
@@ -604,6 +739,12 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     matchProfile,
     fileabilityBlockers,
     profileParamBlockers,
+    analyteTrend,
+    trendBlockers,
+    medExclusionBlockers,
+    suppressedBlockers,
+    textSuppressBlockers,
+    auditCsv,
     extractFirstName,
     fillTemplate,
     buildFilingConfirmMessage,

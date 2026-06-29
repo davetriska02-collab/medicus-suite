@@ -25,6 +25,7 @@ let _profiles = [];
 let _config = {};
 let _audit = [];
 let _resultRules = [];
+let _suppress = [];
 
 let _editingId = null; // null | 'new' | profile id
 let _formSource = null; // 'llm' when the open form was filled from LLM JSON
@@ -87,6 +88,7 @@ export async function init(el) {
       !changes['labfiling.profiles'] &&
       !changes['labfiling.config'] &&
       !changes['labfiling.auditLog'] &&
+      !changes['labfiling.suppress'] &&
       !changes['triagelens.config']
     )
       return;
@@ -126,11 +128,13 @@ async function loadState() {
     'labfiling.profiles',
     'labfiling.config',
     'labfiling.auditLog',
+    'labfiling.suppress',
     'triagelens.config',
   ]);
   _profiles = Array.isArray(r['labfiling.profiles']) ? r['labfiling.profiles'] : [];
   _config = r['labfiling.config'] && typeof r['labfiling.config'] === 'object' ? r['labfiling.config'] : {};
   _audit = Array.isArray(r['labfiling.auditLog']) ? r['labfiling.auditLog'] : [];
+  _suppress = Array.isArray(r['labfiling.suppress']) ? r['labfiling.suppress'] : [];
   const tc = r['triagelens.config'];
   _resultRules = tc && Array.isArray(tc.resultRules) ? tc.resultRules : [];
 }
@@ -142,6 +146,10 @@ async function persistProfiles() {
 async function persistConfig() {
   _ignoreNextChange = true;
   await chrome.storage.local.set({ 'labfiling.config': _config });
+}
+async function persistSuppress() {
+  _ignoreNextChange = true;
+  await chrome.storage.local.set({ 'labfiling.suppress': _suppress });
 }
 
 function noticeAcknowledged() {
@@ -157,9 +165,14 @@ function render() {
     body.innerHTML = `<div class="lf-empty">Lab-filing utilities failed to load. Reload the panel.</div>`;
     return;
   }
-  body.innerHTML = [renderNotice(), renderToolbar(), _editingId ? renderForm() : '', renderList(), renderAudit()].join(
-    ''
-  );
+  body.innerHTML = [
+    renderNotice(),
+    renderToolbar(),
+    _editingId ? renderForm() : '',
+    renderList(),
+    renderSuppress(),
+    renderAudit(),
+  ].join('');
 }
 
 function renderNotice() {
@@ -176,10 +189,17 @@ function renderNotice() {
 function renderToolbar() {
   const n = _profiles.length;
   const enabled = _profiles.filter((p) => p && p.enabled).length;
+  const killed = _config && _config.killSwitch === true;
   return `
     <div class="lf-toolbar">
       <div class="lf-count">${n} profile${n === 1 ? '' : 's'}${n ? ` · ${enabled} enabled` : ''}</div>
       <button class="lf-btn" data-act="add-new">+ Add filing profile</button>
+    </div>
+    <div class="lf-killswitch${killed ? ' lf-killswitch-on' : ''}">
+      <label class="lf-check">
+        <input type="checkbox" data-act="toggle-kill" ${killed ? 'checked' : ''}>
+        <span><strong>Pause all auto-filing</strong> — practice kill switch. Hides the in-Medicus button everywhere instantly, without changing any profile.</span>
+      </label>
     </div>`;
 }
 
@@ -211,6 +231,17 @@ function renderCard(p) {
   const mode = LF.LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual';
   const matchStr =
     (p.match || []).map(esc).join(', ') || '<span class="lf-muted">no match terms — won’t auto-offer</span>';
+  // Provenance + how often this profile has actually filed (from the local audit) —
+  // so a clinician (esp. a locum) can see what they're trusting without opening Edit.
+  const fired = _audit.filter((a) => a && a.profile === p.name && a.filed).length;
+  const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : null;
+  const guards = [];
+  if (p.trend && (p.trend.maxDeltaPct === 0 || p.trend.maxDeltaPct)) guards.push(`trend >${p.trend.maxDeltaPct}%`);
+  if (Array.isArray(p.excludeIfMeds) && p.excludeIfMeds.length)
+    guards.push(`${p.excludeIfMeds.length} drug exclusion${p.excludeIfMeds.length === 1 ? '' : 's'}`);
+  if (Array.isArray(p.suppressIfText) && p.suppressIfText.length)
+    guards.push(`${p.suppressIfText.length} text rule${p.suppressIfText.length === 1 ? '' : 's'}`);
+  if (p.requireRangeForAll) guards.push('range required for all');
   return `
     <div class="lf-card${p.enabled ? ' lf-card-on' : ''}">
       <div class="lf-card-top">
@@ -223,9 +254,12 @@ function renderCard(p) {
       <div class="lf-badges">${reviewedBadge}${srcBadge}${msgBadge}<span class="lf-badge">${mode === 'confirm' ? 'Confirm, then file' : 'Pre-fill, I file'}</span></div>
       <div class="lf-card-row"><span class="lf-k">Applies to</span><span class="lf-v">${matchStr}</span></div>
       <div class="lf-card-row"><span class="lf-k">Marks normal as</span><span class="lf-v">${esc(p.filing && p.filing.normalOptionText)} → ${esc(p.filing && p.filing.fileButtonText)}${p.filing && p.filing.completeButtonText ? ' → ' + esc(p.filing.completeButtonText) : ''}</span></div>
+      ${guards.length ? `<div class="lf-card-row"><span class="lf-k">Guards</span><span class="lf-v">${guards.map(esc).join(' · ')}</span></div>` : ''}
+      <div class="lf-card-prov">${updated ? `Last edited ${esc(updated)}` : 'Not yet saved'} · filed ${fired}× on this device</div>
       <div class="lf-card-actions">
         ${p.reviewed ? '' : `<button class="lf-btn lf-btn-sm" data-act="mark-reviewed" data-id="${esc(p.id)}">Mark reviewed</button>`}
         <button class="lf-btn lf-btn-sm" data-act="edit" data-id="${esc(p.id)}">Edit</button>
+        <button class="lf-btn lf-btn-sm" data-act="copy-profile" data-id="${esc(p.id)}" title="Copy this profile as JSON to share with a colleague (arrives disabled).">Copy JSON</button>
         <button class="lf-btn lf-btn-sm lf-btn-danger" data-act="delete" data-id="${esc(p.id)}">Delete</button>
       </div>
     </div>`;
@@ -242,6 +276,9 @@ function renderForm() {
   const m = p.patientMessage || {};
   const v = (x) => esc(x || '');
   const mode = LF.LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual';
+  // requireRangeForAll defaults ON for a brand-new profile (P10 safety default);
+  // for an existing profile it reflects the saved value.
+  const reqAllDefault = _editingId === 'new' ? p.requireRangeForAll !== false : p.requireRangeForAll === true;
   return `
     <div class="lf-form">
       <div class="lf-form-head">${_editingId === 'new' ? 'New filing profile' : 'Edit filing profile'}</div>
@@ -275,7 +312,21 @@ function renderForm() {
         <small class="lf-help" style="margin:-2px 0 8px">Checked on top of the lab’s own flags. <strong>Essential for analytes the lab shows with no range (e.g. HbA1c)</strong> — set the limit here and a result outside it blocks one-click filing. Leave a box blank if only one bound applies.</small>
         <div id="lfParams" class="lf-params">${(p.parameters || []).map(paramRowHtml).join('') || paramRowHtml({})}</div>
         <button class="lf-btn lf-btn-sm" data-act="add-param" type="button">+ Add parameter</button>
-        <label class="lf-check" style="margin-top:10px"><input type="checkbox" id="lfRequireAll" ${p.requireRangeForAll ? 'checked' : ''}> Don’t offer filing unless every result has a range (lab’s or one set here)</label>
+        <label class="lf-check" style="margin-top:10px"><input type="checkbox" id="lfRequireAll" ${reqAllDefault ? 'checked' : ''}> Don’t offer filing unless every result has a range (lab’s or one set here)</label>
+      </div>
+
+      <div class="lf-fieldset">
+        <div class="lf-fieldset-title">Safety guards (optional)</div>
+        <small class="lf-help" style="margin:-2px 0 8px">Extra reasons to <strong>not</strong> auto-offer filing, even when every value is in range — so a “normal” snapshot can’t bury a moving result, a monitored drug, or a promised contact.</small>
+        <label class="lf-field"><span>Block if a result moved more than this % vs last time</span>
+          <input id="lfTrend" class="lf-input" value="${v(p.trend && (p.trend.maxDeltaPct === 0 || p.trend.maxDeltaPct) ? String(p.trend.maxDeltaPct) : '')}" placeholder="e.g. 20 — catches a creeping creatinine / falling eGFR" inputmode="decimal">
+          <small class="lf-help">Leave blank to disable. Uses the previous value from the patient’s history.</small></label>
+        <label class="lf-field"><span>Don’t offer if patient is on any of these drugs (comma-separated)</span>
+          <input id="lfExMeds" class="lf-input" value="${v((p.excludeIfMeds || []).join(', '))}" placeholder="methotrexate, lithium, amiodarone, azathioprine">
+          <small class="lf-help">Monitored drugs need a human to close the loop. Matched as a substring against the current medication list.</small></label>
+        <label class="lf-field"><span>Don’t offer if the result text contains any of these phrases (comma-separated)</span>
+          <input id="lfSuppressText" class="lf-input" value="${v((p.suppressIfText || []).join(', '))}" placeholder="telephone result, call patient, discuss with GP">
+          <small class="lf-help">Use when a contact may have been promised on the report.</small></label>
       </div>
 
       <div class="lf-fieldset">
@@ -324,6 +375,24 @@ function renderForm() {
     </div>`;
 }
 
+function renderSuppress() {
+  if (_editingId || !_suppress.length) return '';
+  const rows = _suppress
+    .map((s) => {
+      const uuid = s && s.uuid ? s.uuid : s;
+      const label = s && s.label ? s.label : uuid;
+      const when = s && s.ts ? ` · added ${new Date(s.ts).toLocaleDateString()}` : '';
+      return `<div class="lf-audit-row"><span class="lf-audit-what">${esc(String(label))}${esc(when)}</span><button class="lf-btn lf-btn-sm" data-act="unsuppress" data-uuid="${esc(String(uuid))}">Remove</button></div>`;
+    })
+    .join('');
+  return `
+    <div class="lf-audit">
+      <div class="lf-audit-head">Never auto-file these patients (this device)</div>
+      <small class="lf-help" style="margin:-2px 0 8px">Added from the “Never auto-file this patient” link on the Medicus result screen. Auto-filing is blocked for them on every profile.</small>
+      ${rows}
+    </div>`;
+}
+
 function renderAudit() {
   if (_editingId || !_audit.length) return '';
   const rows = _audit
@@ -336,7 +405,9 @@ function renderAudit() {
     .join('');
   return `
     <div class="lf-audit">
-      <div class="lf-audit-head">Recent filings (this device)</div>
+      <div class="lf-audit-head">Recent filings (this device)
+        <button class="lf-btn lf-btn-sm" data-act="export-audit" title="Download the full local audit log as CSV.">Export CSV</button>
+      </div>
       ${rows}
     </div>`;
 }
@@ -407,7 +478,59 @@ async function onClick(ev) {
     case 'toggle-enabled':
       await toggleEnabled(actEl.dataset.id, actEl.checked);
       break;
+    case 'toggle-kill':
+      _config.killSwitch = !!actEl.checked;
+      await persistConfig();
+      render();
+      break;
+    case 'copy-profile':
+      copyProfileJson(actEl.dataset.id, actEl);
+      break;
+    case 'export-audit':
+      exportAuditCsv();
+      break;
+    case 'unsuppress':
+      await unsuppress(actEl.dataset.uuid);
+      break;
   }
+}
+
+// Copy a single profile as shareable JSON (P8). Strips runtime state so the
+// recipient's import path forces it inert (lockForReview on import).
+function copyProfileJson(id, btnEl) {
+  const p = _profiles.find((x) => x && x.id === id);
+  if (!p) return;
+  const share = LF.sanitiseProfile(p);
+  delete share.id;
+  delete share.updatedAt;
+  share.enabled = false;
+  share.reviewed = false;
+  copyText(JSON.stringify(share, null, 2), btnEl);
+}
+
+// Export the local audit log as CSV (P6/P8).
+function exportAuditCsv() {
+  const csv = LF.auditCsv(_audit);
+  try {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lab-filing-audit.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+async function unsuppress(uuid) {
+  if (!uuid) return;
+  _suppress = _suppress.filter((s) => (s && s.uuid ? s.uuid : s) !== uuid);
+  await persistSuppress();
+  render();
 }
 
 function seedAnalytes() {
@@ -445,12 +568,16 @@ function readForm() {
       .map((x) => x.trim())
       .filter(Boolean);
   const modeEl = container.querySelector('input[name="lfMode"]:checked');
+  const trendRaw = get('lfTrend');
   return {
     name: get('lfName'),
     match: splitList(get('lfMatch')),
     analytes: splitList(get('lfAnalytes')),
     parameters: readParams(),
     requireRangeForAll: checked('lfRequireAll'),
+    trend: { maxDeltaPct: trendRaw === '' ? null : trendRaw },
+    excludeIfMeds: splitList(get('lfExMeds')),
+    suppressIfText: splitList(get('lfSuppressText')),
     filing: {
       normalOptionText: get('lfNormalOpt'),
       nextStepText: get('lfNextStep'),
@@ -512,6 +639,12 @@ function fillFromLlm() {
   set('lfRowSel', clean.filing.rowSelector);
   set('lfMsgTemplate', clean.patientMessage.template);
   set('lfMsgField', clean.patientMessage.fieldText);
+  set(
+    'lfTrend',
+    clean.trend && (clean.trend.maxDeltaPct === 0 || clean.trend.maxDeltaPct) ? String(clean.trend.maxDeltaPct) : ''
+  );
+  set('lfExMeds', (clean.excludeIfMeds || []).join(', '));
+  set('lfSuppressText', (clean.suppressIfText || []).join(', '));
   // Rebuild the parameter rows from the parsed profile.
   const paramsBox = container.querySelector('#lfParams');
   if (paramsBox) {

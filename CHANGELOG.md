@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.142.0] — 2026-06-29
+
+### Lab filing: GP-panel wishlist — trend, drug/text/patient guards, governance
+
+Acts on the 11-persona GP review (`docs/appraisal/GP-PANEL-labfiling-2026-06-29.md`).
+The panel's single biggest clinical-safety concern was "the tool judges a snapshot, not
+a trajectory" — addressed here, alongside the rest of the prioritised wishlist. Every
+new gate fails **closed**. Full rationale (incl. what's deferred and why) in
+`docs/appraisal/GP-WISHLIST-RESPONSE-labfiling-2026-06-29.md`.
+
+- **Trend / previous value (P1).** The confirm dialog now shows each analyte's
+  `prev → now (↑+N%)` from its history, and a per-profile **trend guard**
+  (`trend.maxDeltaPct`) blocks the offer when any result has moved more than the set %
+  vs last time — catches a creeping creatinine / falling eGFR even when still in range.
+  New `analyteTrend()` / `trendBlockers()`.
+- **Values + thresholds at confirm (P2).** The confirm dialog enumerates
+  `name: value unit [limit]` per analyte (profile range if set, else the lab's), states
+  the gate is numeric-only, and no longer over-claims "every parameter confirmed normal".
+- **Drug-monitoring exclusion (P3, quick-win).** Per-profile `excludeIfMeds`; the macro
+  fetches the medication regimen only when a profile sets exclusions and **fails closed**
+  if the fetch errors. New `medExclusionBlockers()`.
+- **Per-patient "never auto-file" list (P5).** A link on the in-Medicus button adds the
+  patient to a machine-local suppress list (`labfiling.suppress`, patient UUID only);
+  the module lists them with Remove. Never exported/imported (holds identifiers). New
+  `suppressedBlockers()`.
+- **Text safety-net (P9).** Per-profile `suppressIfText` blocks the offer when the report
+  text contains a phrase like "telephone result" / "call patient". New
+  `textSuppressBlockers()`.
+- **Governance (P6/P8).** Audit **Export CSV** (`auditCsv()`); the profile card now shows
+  the guards in force, last-edited date, and **fire-count on this device**; **Copy JSON**
+  shares a profile (arrives disabled).
+- **Kill switch + safer default (P10).** A practice **kill switch** (`config.killSwitch`)
+  hides the in-Medicus button everywhere instantly without touching profiles;
+  `requireRangeForAll` now **defaults ON** for new profiles. LLM profiles remain badged
+  "Auto-suggested".
+- Schema/validation/sanitisation extended for `trend` / `excludeIfMeds` / `suppressIfText`;
+  backup IO round-trips `killSwitch`. Tests: utils 116 checks, IO 24, macro 37 — suite green.
+
 ## [v3.141.0] — 2026-06-29
 
 ### Lab filing: per-analyte parameters (clinician-set normal ranges)

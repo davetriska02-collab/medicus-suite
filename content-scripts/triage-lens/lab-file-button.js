@@ -382,6 +382,7 @@
 
   const STORE_PROFILES = 'labfiling.profiles';
   const STORE_CONFIG = 'labfiling.config';
+  const STORE_SUPPRESS = 'labfiling.suppress';
   const AUDIT_KEY = 'labfiling.auditLog';
   const TRIAGE_CONFIG = 'triagelens.config';
 
@@ -397,16 +398,19 @@
   let profiles = [];
   let config = { commitMode: 'manual' };
   let resultRules = [];
+  let suppress = []; // machine-local "never auto-file" patient list (uuids or {uuid})
   const sevCache = new Map(); // taskUuid → { report, severity, ts }
+  const medsCache = new Map(); // patientUuid → { meds, ts }
   const SEV_TTL = 60000;
 
   function loadConfig() {
     return new Promise((resolve) => {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return resolve();
-      chrome.storage.local.get([STORE_PROFILES, STORE_CONFIG, TRIAGE_CONFIG], (r) => {
+      chrome.storage.local.get([STORE_PROFILES, STORE_CONFIG, STORE_SUPPRESS, TRIAGE_CONFIG], (r) => {
         profiles = Array.isArray(r[STORE_PROFILES]) ? r[STORE_PROFILES] : [];
         const c = r[STORE_CONFIG];
         config = c && typeof c === 'object' ? c : { commitMode: 'manual' };
+        suppress = Array.isArray(r[STORE_SUPPRESS]) ? r[STORE_SUPPRESS] : [];
         const tc = r[TRIAGE_CONFIG];
         resultRules = tc && Array.isArray(tc.resultRules) ? tc.resultRules.filter((x) => x && x.enabled !== false) : [];
         resolve();
@@ -443,6 +447,50 @@
     const entry = { report, severity, blockers, ts: now, taskUuid: ctx.taskUuid };
     sevCache.set(ctx.taskUuid, entry);
     return entry;
+  }
+
+  // Fetch + normalise the patient's current medications for the drug-exclusion gate.
+  // Cached per patientUuid (TTL). Returns an array of {name} or null on failure —
+  // callers treat null as "could not check meds" and fail CLOSED.
+  async function loadMeds(patientUuid) {
+    if (!API || !NORM || !patientUuid) return null;
+    const ctx = API.detectMedicusContext(location.href);
+    if (!ctx || !ctx.apiBase) return null;
+    const now = Date.now();
+    const cached = medsCache.get(patientUuid);
+    if (cached && now - cached.ts < SEV_TTL) return cached.meds;
+    try {
+      const raw = await API.fetchMedicationRegimen(ctx.apiBase, patientUuid);
+      const meds = NORM.normaliseMedications(raw);
+      medsCache.set(patientUuid, { meds: Array.isArray(meds) ? meds : [], ts: now });
+      return Array.isArray(meds) ? meds : [];
+    } catch (e) {
+      return null; // fail closed at the caller
+    }
+  }
+
+  // Combine every per-profile blocker — the clinician-set parameters, the trend
+  // guard, the per-patient suppress list, the text-suppress phrases, and (when the
+  // profile names monitored drugs) the medication-exclusion check. Async because
+  // the meds check needs a fetch. Fails CLOSED: a meds fetch that errors blocks
+  // rather than silently letting a monitored-drug patient through.
+  async function computeProfileBlockers(rs, profile) {
+    if (!LF || !rs) return ['utilities not loaded'];
+    const report = rs.report;
+    const blockers = []
+      .concat(LF.profileParamBlockers(report, profile))
+      .concat(LF.trendBlockers(report, profile))
+      .concat(LF.suppressedBlockers(report, suppress))
+      .concat(LF.textSuppressBlockers(report, profile, document.body ? document.body.textContent : ''));
+    if (Array.isArray(profile.excludeIfMeds) && profile.excludeIfMeds.length) {
+      const meds = await loadMeds(report && report.patientUuid);
+      if (meds === null) {
+        blockers.push('could not check this patient’s medications — file manually');
+      } else {
+        blockers.push(...LF.medExclusionBlockers(meds, profile));
+      }
+    }
+    return Array.from(new Set(blockers));
   }
 
   function readPatientBanner() {
@@ -485,8 +533,10 @@
   let host = null;
   let btn = null;
   let msgBtn = null;
+  let suppressLink = null;
   let busy = false;
   let currentProfile = null;
+  let currentReport = null;
 
   function buildUI() {
     if (host) return;
@@ -499,12 +549,41 @@
     msgBtn = document.createElement('button');
     msgBtn.className = 'chlf-btn chlf-msg chlf-hidden';
     msgBtn.onclick = () => onAction('fileAndMessage');
+    // Per-patient opt-out: add this patient to the machine-local "never auto-file"
+    // list (P5). Shown whenever a profile fits this screen.
+    suppressLink = document.createElement('button');
+    suppressLink.className = 'chlf-link chlf-hidden';
+    suppressLink.textContent = 'Never auto-file this patient';
+    suppressLink.onclick = () => suppressCurrentPatient();
     host.appendChild(btn);
     host.appendChild(msgBtn);
+    host.appendChild(suppressLink);
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
     document.body.appendChild(host);
+  }
+
+  // Add the open report's patient to the machine-local suppress list. Stores the
+  // uuid + a timestamp; never stores name/PHI. Re-evaluates the gate after.
+  function suppressCurrentPatient() {
+    const uuid = currentReport && currentReport.patientUuid;
+    if (!uuid) {
+      toast('Couldn’t identify the patient on this screen.', 'err');
+      return;
+    }
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+    chrome.storage.local.get(STORE_SUPPRESS, (r) => {
+      const arr = Array.isArray(r[STORE_SUPPRESS]) ? r[STORE_SUPPRESS] : [];
+      if (arr.some((s) => (s && s.uuid ? s.uuid : s) === uuid)) {
+        toast('This patient is already on your “never auto-file” list.', 'warn');
+        return;
+      }
+      arr.push({ uuid, ts: new Date().toISOString() });
+      chrome.storage.local.set({ [STORE_SUPPRESS]: arr }, () => {
+        toast('Added — auto-filing is now blocked for this patient on every profile.', 'ok');
+      });
+    });
   }
 
   function messagingEnabled(profile) {
@@ -538,6 +617,7 @@
     } else {
       msgBtn.classList.add('chlf-hidden');
     }
+    if (suppressLink) suppressLink.classList.remove('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
   // A non-actionable note shown when a profile fits but the result has something
@@ -550,12 +630,15 @@
     btn.textContent = 'Auto-file not offered — review manually';
     btn.title = 'This result was not offered for one-click filing because: ' + (blockers || []).join('; ') + '.';
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
+    // Still allow opting this patient out, even on the blocked-hint state.
+    if (suppressLink) suppressLink.classList.remove('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
   function hideButton() {
     currentProfile = null;
     if (host) host.classList.add('chlf-hidden');
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
+    if (suppressLink) suppressLink.classList.add('chlf-hidden');
   }
 
   function toast(msg, kind) {
@@ -594,7 +677,7 @@
       const rs = await loadReportSeverity(true);
       const profile = currentProfile;
       const blockers = rs
-        ? (rs.blockers || []).concat(LF ? LF.profileParamBlockers(rs.report, profile) : [])
+        ? (rs.blockers || []).concat(await computeProfileBlockers(rs, profile))
         : ['could not read the result'];
       if (!rs || blockers.length) {
         toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
@@ -691,6 +774,12 @@
 
   async function evaluateGate() {
     if (!host) return;
+    // Practice kill switch — one config flag disables every offer instantly,
+    // without touching individual profiles. The escape hatch a practice can pull.
+    if (config && config.killSwitch === true) {
+      hideButton();
+      return;
+    }
     if (!FILING_URL_RE.test(location.pathname)) {
       hideButton();
       return;
@@ -704,6 +793,7 @@
       hideButton();
       return;
     }
+    currentReport = rs.report;
     const profile = LF && LF.matchProfile(profiles, rs.report);
     if (!profile) {
       hideButton();
@@ -726,7 +816,7 @@
     // one). Otherwise show the action button. The profile's OWN per-analyte
     // parameters (clinician-set ranges, incl. un-ranged analytes like HbA1c) are
     // checked here on top of the generic blockers.
-    const blockers = (rs.blockers || []).concat(LF ? LF.profileParamBlockers(rs.report, profile) : []);
+    const blockers = (rs.blockers || []).concat(await computeProfileBlockers(rs, profile));
     if (blockers.length) {
       showBlockedHint(blockers);
       return;
@@ -744,6 +834,8 @@
     '.chlf-btn.chlf-hidden{display:none}',
     '.chlf-btn.chlf-msg{background:#5b3fb0;font-size:12px;padding:9px 14px}.chlf-btn.chlf-msg:hover{background:#4a3393}',
     '.chlf-btn.chlf-note{background:#92400e;cursor:default}.chlf-btn.chlf-note:hover{background:#92400e}',
+    '.chlf-link{background:transparent;color:#fff;border:0;padding:2px 6px;cursor:pointer;font:500 11px/1.2 system-ui;opacity:.85;text-decoration:underline;text-underline-offset:2px}',
+    '.chlf-link:hover{opacity:1}.chlf-link.chlf-hidden{display:none}',
     '.chlf-toast{position:fixed;right:18px;bottom:74px;z-index:2147483000;max-width:360px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',
     '.chlf-toast.chlf-show{opacity:1;transform:none}',
@@ -766,7 +858,7 @@
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
-        if (changes[STORE_PROFILES] || changes[STORE_CONFIG] || changes[TRIAGE_CONFIG]) {
+        if (changes[STORE_PROFILES] || changes[STORE_CONFIG] || changes[STORE_SUPPRESS] || changes[TRIAGE_CONFIG]) {
           loadConfig().then(scheduleEval);
         }
       });

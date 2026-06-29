@@ -111,6 +111,14 @@ async function throws(fn) {
   check(imp.commitMode === 'manual', "commitMode 'auto' clamped to 'manual' on import");
   check(imp.enabled === false, 'enabled forced false even when backup says true');
   check(store['labfiling.config'].commitMode === 'manual', "config commitMode 'auto' clamped to 'manual'");
+
+  // killSwitch round-trips; the per-patient suppress list is never exported/imported.
+  reset();
+  await labfilingImport({ config: { commitMode: 'confirm', killSwitch: true } });
+  check(store['labfiling.config'].killSwitch === true, 'config killSwitch round-trips on import');
+  reset();
+  await labfilingImport({ config: { commitMode: 'manual' } });
+  check(store['labfiling.config'].killSwitch === undefined, 'killSwitch absent when not set in backup');
   check(typeof imp.id === 'string' && imp.id.length > 0, 'missing id generated on import');
 
   reset();

@@ -13,6 +13,10 @@
 // governance record of what was filed on this device (same rule as the OIR audit
 // log). config.noticeAcknowledgedAt is also NOT imported: acknowledging the
 // "verify before clinical use" notice is a per-install attestation.
+//
+// labfiling.suppress (the per-patient "never auto-file" list) is NOT exported or
+// imported at all: it holds patient UUIDs (identifiers), so it must never leave the
+// device in a config backup — same doctrine as the audit log.
 
 'use strict';
 
@@ -95,9 +99,12 @@ async function labfilingImport(data) {
   if (data.config !== undefined) {
     const c = data.config;
     if (!c || typeof c !== 'object' || Array.isArray(c)) throw new Error('labfiling.config must be an object.');
-    // Only commitMode round-trips; noticeAcknowledgedAt is a per-install attestation.
+    // commitMode + killSwitch round-trip; noticeAcknowledgedAt is a per-install
+    // attestation and is deliberately not imported.
     const commitMode = LF.LF_COMMIT_MODES.includes(c.commitMode) ? c.commitMode : 'manual';
-    toSet['labfiling.config'] = { commitMode };
+    const out = { commitMode };
+    if (c.killSwitch === true) out.killSwitch = true;
+    toSet['labfiling.config'] = out;
   }
 
   if (Object.keys(toSet).length) await chrome.storage.local.set(toSet);

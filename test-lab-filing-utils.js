@@ -354,5 +354,112 @@ check(
   'no confirm-mode line for manual'
 );
 
+// ── trend guard (P1) ────────────────────────────────────────────────────────────
+console.log('\n--- analyteTrend / trendBlockers ---');
+const trendResult = { name: 'Creatinine', value: 96, history: [{ value: 60, date: '2025-01-01' }] };
+const t = LF.analyteTrend(trendResult);
+check(t && t.prev === 60 && t.delta === 36 && t.dir === 'up', 'analyteTrend computes prev/delta/dir');
+check(t && Math.round(t.deltaPct) === 60, 'analyteTrend computes deltaPct vs previous');
+check(LF.analyteTrend({ value: 96, history: [] }) === null, 'analyteTrend null with no history');
+const trendRep = { results: [trendResult] };
+check(
+  LF.trendBlockers(trendRep, { trend: { maxDeltaPct: 20 } }).some((r) => /changed \+60%/.test(r)),
+  'trendBlockers blocks a >maxDeltaPct rise'
+);
+check(LF.trendBlockers(trendRep, { trend: { maxDeltaPct: 80 } }).length === 0, 'trendBlockers passes within threshold');
+check(LF.trendBlockers(trendRep, {}).length === 0, 'trendBlockers off when no trend configured');
+check(LF.trendBlockers(trendRep, { trend: { maxDeltaPct: 0 } }).length === 0, 'trendBlockers off when maxDeltaPct 0');
+
+// ── med-exclusion (P3) ────────────────────────────────────────────────────────────
+console.log('\n--- medExclusionBlockers ---');
+const meds = [{ name: 'Methotrexate 2.5mg tablets' }, { name: 'Folic acid 5mg tablets' }];
+check(
+  LF.medExclusionBlockers(meds, { excludeIfMeds: ['methotrexate'] }).some((r) => /monitored drug/.test(r)),
+  'medExclusionBlockers fires on a monitored drug (substring, case-insensitive)'
+);
+check(
+  LF.medExclusionBlockers(meds, { excludeIfMeds: ['lithium'] }).length === 0,
+  'medExclusionBlockers clear when not on the drug'
+);
+check(
+  LF.medExclusionBlockers(['Amiodarone 100mg'], { excludeIfMeds: ['amiodarone'] }).length === 1,
+  'medExclusionBlockers accepts plain strings'
+);
+check(LF.medExclusionBlockers(meds, {}).length === 0, 'medExclusionBlockers off when no exclusions set');
+
+// ── per-patient suppress (P5) ─────────────────────────────────────────────────────
+console.log('\n--- suppressedBlockers ---');
+const suppRep = { patientUuid: 'abc-123', results: [] };
+check(LF.suppressedBlockers(suppRep, ['abc-123']).length === 1, 'suppressedBlockers fires on a plain-uuid match');
+check(
+  LF.suppressedBlockers(suppRep, [{ uuid: 'abc-123' }]).length === 1,
+  'suppressedBlockers fires on an object-uuid match'
+);
+check(LF.suppressedBlockers(suppRep, ['other']).length === 0, 'suppressedBlockers clear for a different patient');
+check(
+  LF.suppressedBlockers({ results: [] }, ['abc-123']).length === 0,
+  'suppressedBlockers clear when report has no uuid'
+);
+
+// ── text-suppress (P9) ────────────────────────────────────────────────────────────
+console.log('\n--- textSuppressBlockers ---');
+const txtRep = { results: [{ name: 'Note', value: NaN, text: 'Telephone result to patient' }] };
+check(
+  LF.textSuppressBlockers(txtRep, { suppressIfText: ['telephone result'] }).some((r) => /telephone result/.test(r)),
+  'textSuppressBlockers fires on a phrase in the report text'
+);
+check(
+  LF.textSuppressBlockers({ results: [] }, { suppressIfText: ['call patient'] }, 'please call patient back').length ===
+    1,
+  'textSuppressBlockers checks the extra page text too'
+);
+check(LF.textSuppressBlockers(txtRep, {}).length === 0, 'textSuppressBlockers off when no phrases set');
+
+// ── audit CSV (P6) ────────────────────────────────────────────────────────────────
+console.log('\n--- auditCsv ---');
+const csv = LF.auditCsv([{ ts: '2026-06-29T10:00:00Z', profile: 'FBC', filed: true, marked: 3 }]);
+check(/^ts,profile,taskUuid/.test(csv), 'auditCsv emits a header row');
+check(/"FBC"/.test(csv) && /"3"/.test(csv), 'auditCsv quotes values');
+check(LF.auditCsv([{ profile: 'has "quote"' }]).includes('"has ""quote"""'), 'auditCsv escapes embedded quotes');
+check(LF.auditCsv([]).split('\n').length === 1, 'auditCsv of empty list is header-only');
+
+// ── schema: trend / excludeIfMeds / suppressIfText (P1/P3/P9) ──────────────────────
+console.log('\n--- schema: guards ---');
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { trend: { maxDeltaPct: 20 } })).length === 0,
+  'valid trend accepted'
+);
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { trend: { maxDeltaPct: -5 } })).some((e) =>
+    /non-negative/.test(e)
+  ),
+  'negative trend.maxDeltaPct rejected'
+);
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { excludeIfMeds: 'methotrexate' })).some((e) =>
+    /excludeIfMeds/.test(e)
+  ),
+  'non-array excludeIfMeds rejected'
+);
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { suppressIfText: [42] })).some((e) =>
+    /suppressIfText/.test(e)
+  ),
+  'non-string suppressIfText entry rejected'
+);
+const guardSp = LF.sanitiseProfile(
+  withParams([{ analyte: 'k', high: 5 }], {
+    trend: { maxDeltaPct: '20' },
+    excludeIfMeds: ['  Methotrexate  ', ''],
+    suppressIfText: ['telephone result'],
+  })
+);
+check(guardSp.trend.maxDeltaPct === 20, 'sanitise coerces trend.maxDeltaPct to a number');
+check(
+  guardSp.excludeIfMeds.length === 1 && guardSp.excludeIfMeds[0] === 'Methotrexate',
+  'sanitise trims and drops empty excludeIfMeds'
+);
+check(guardSp.suppressIfText[0] === 'telephone result', 'sanitise preserves suppressIfText');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
