@@ -150,12 +150,41 @@ async function saveBaseline() {
 }
 
 // ── CSV download (Blob, like practice-report.js) ──────────────────────────────
+
+// RFC-4180 cell quoting: wrap in quotes and double any embedded quote when the
+// value contains a comma, quote or newline.
+function csvCell(v) {
+  const s = String(v ?? '');
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Serialise buildReadinessCsv's { suffix, sections:[{title,header,rows}] } shape
+// into CSV text. (Previously downloadCsvFile read a non-existent `csv.text`, so the
+// button silently produced nothing — the export was dead.)
+function serialiseReadinessCsv(built) {
+  if (!built || !Array.isArray(built.sections)) return '';
+  return built.sections
+    .map((sec) => {
+      const lines = [];
+      if (sec.title) lines.push(csvCell(sec.title));
+      if (Array.isArray(sec.header)) lines.push(sec.header.map(csvCell).join(','));
+      for (const row of sec.rows || []) lines.push((Array.isArray(row) ? row : [row]).map(csvCell).join(','));
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
 function downloadCsvFile() {
   if (!_lastReadiness || !exportAllowed()) return;
-  const csv = buildReadinessCsv(_lastReadiness);
-  const text = typeof csv === 'string' ? csv : (csv && csv.text) || '';
+  const built = buildReadinessCsv(_lastReadiness);
+  const text = typeof built === 'string' ? built : serialiseReadinessCsv(built);
   if (!text) return;
-  const stamp = (_lastReadiness.asAt && String(_lastReadiness.asAt).slice(0, 10)) || localISO();
+  // Engine emits `generatedAt` (not `asAt`); buildReadinessCsv already derives a
+  // dated `suffix` from it — prefer that, then fall back to today.
+  const stamp =
+    (built && built.suffix && /^\d{4}-\d{2}-\d{2}$/.test(built.suffix) ? built.suffix : null) ||
+    (_lastReadiness.generatedAt && String(_lastReadiness.generatedAt).slice(0, 10)) ||
+    localISO();
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

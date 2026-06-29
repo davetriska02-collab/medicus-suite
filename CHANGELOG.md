@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.135.0] — 2026-06-29
+
+### CQC Inspection Readiness: answer-first layout, honesty hardening, CSV fix
+
+Reworked the readiness surface in response to a synthetic practice-panel appraisal
+(`docs/appraisal/PRACTICE-cqc-readiness-2026-06-29.md`). No clinical-rule or
+threshold changes — layout, wording, disclosure and a bug fix only.
+
+- **Lead with the answer.** A plain-English headline verdict now renders first in
+  both modes ("Monitoring-system readiness: GREEN — all rule sets current"), with a
+  RAG legend (so a reader sees what amber/red mean on an all-green run) and a
+  "how to use this page" line. The multi-screen alphabetical matched-term list that
+  used to dominate the top is collapsed into a counted `<details>` (open in export /
+  print so the inspector pack still shows it).
+- **System ≠ patients.** The verdict states explicitly that it rates whether the
+  monitoring *rules* are current and does **not** confirm any individual patient has
+  been monitored — directing patient-level checks to the reconciliation worksheet.
+- **Reconciliation reframed.** The cohort-definition table is demoted below the
+  Safe/Well-led evidence, collapsed, and relabelled a "worksheet"; the blank
+  "your count" cells are explicitly stated to be by-design (the suite cannot count
+  patients read-only), so an exported pack with empty cells is not misread as
+  "nothing to report".
+- **No developer noise in the document.** Rule-file spec strings are sanitised for
+  display (the vaccine spec leaked "…WebFetch 403"; tiles dropped "schema 2"; the
+  internal "CQC-P0-COHORT-SPIKE" code reference is gone).
+- **Fix: Download CSV was dead.** `downloadCsvFile` read a non-existent `csv.text`
+  while `buildReadinessCsv` returns `{ suffix, sections }`, so the button silently
+  produced nothing; it now serialises the sections to RFC-4180 CSV and stamps the
+  filename from `generatedAt` (was a non-existent `asAt`).
+- Plain-language glosses for the CQC key-question jargon; coverage stat tiles styled
+  (were an unstyled text dump); helper hints on the disabled Print/CSV buttons and a
+  gentler confirm-gate note for non-clinician staff.
+- `test-cqc-render.js`: +19 assertions (CSV shape, headline verdict, collapsed
+  worksheet, ordering, no-developer-noise invariant).
+
 ## [v3.134.7] — 2026-06-29
 
 ### Fix: newly-issued LNG-IUS under its generic name not recognised as HRT endometrial cover

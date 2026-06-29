@@ -116,10 +116,10 @@ const path = require('path');
   // The readiness fixture has a drug rule with methotrexate → the reconciliation section
   // must appear with the honest framing and no fabricated patient count.
   check(/Reconciliation/i.test(html), 'reconciliation section heading present');
-  check(/run these in Medicus/i.test(html), 'reconciliation section carries "run these in Medicus" framing');
+  check(/in Medicus(?:'s)? own search/i.test(html), 'reconciliation section carries "run in Medicus own search" framing');
   check(
-    /suite supplies the definition/i.test(html) || /suite cannot enumerate/i.test(html),
-    'reconciliation carries explicit "suite cannot enumerate" or "suite supplies the definition" honesty statement'
+    /cannot count patients read-only/i.test(html) || /cannot enumerate patients/i.test(html),
+    'reconciliation carries explicit "suite cannot count patients read-only" honesty statement'
   );
   check(
     /your count.*____/i.test(html),
@@ -146,6 +146,52 @@ const path = require('path');
     // Strip the "your count: ____" blank (it has no digit), then check no N patients pattern.
     check(!/\b\d+\s+patient/i.test(reconHtml), 'reconciliation card contains no "N patients" fabricated count');
   }
+
+  console.log('\n--- CSV export contract (downloadCsvFile depends on this shape) ---');
+  // The page controller serialises { suffix, sections:[{title,header,rows}] }. A
+  // regression here previously made the CSV button silently produce nothing.
+  const csv = render.buildReadinessCsv(readiness);
+  check(csv && typeof csv === 'object' && Array.isArray(csv.sections), 'buildReadinessCsv returns { sections: [] }');
+  check(/^\d{4}-\d{2}-\d{2}$/.test(csv.suffix || ''), 'buildReadinessCsv suffix is a YYYY-MM-DD date');
+  check(csv.sections.length > 0, 'CSV has at least one section');
+  check(
+    csv.sections.every((s) => Array.isArray(s.header) && Array.isArray(s.rows)),
+    'every CSV section has header[] and rows[]'
+  );
+  const coverageSection = csv.sections.find((s) => s.title === 'Coverage');
+  check(coverageSection && coverageSection.rows.length > 0, 'CSV Coverage section has data rows');
+  const termsSection = csv.sections.find((s) => s.title === 'Matched drug terms');
+  check(
+    termsSection && termsSection.rows.some((r) => String(r[0]).includes('methotrexate')),
+    'CSV Matched-terms section lists the fixture drug'
+  );
+
+  console.log('\n--- headline verdict (answer-first) + collapsed term wall ---');
+  check(/Monitoring-system readiness/i.test(html), 'headline verdict renders as the lead block');
+  check(/What the ratings mean/i.test(html), 'RAG legend present (amber/red meaning shown on a green run)');
+  check(/How to use this page/i.test(html), 'plain-language "how to use" guidance present');
+  check(/<details[^>]*class="cqc-matched"/.test(html), 'matched-term list is collapsed into <details> (no wall)');
+  check(/class="cqc-matched"[^>]* open/.test(exportHtml), 'matched-term <details> is OPEN in export mode (stays printable)');
+  // Verdict must precede the quality-statement detail (answer before the long read).
+  check(
+    html.indexOf('Monitoring-system readiness') < html.indexOf('Key question:'),
+    'verdict appears before the quality statements'
+  );
+  // Safe/Well-led summaries lead; the reconciliation WORKSHEET follows them and is
+  // collapsed + reframed as "blank by design" (promoting it above made a wall of
+  // empty "your count" boxes the centrepiece — the manager/partner recoiled).
+  check(
+    html.indexOf('class="cqc-keyq"') !== -1 &&
+      html.indexOf('class="cqc-keyq"') < html.indexOf('cqc-card-recon'),
+    'quality statements lead; reconciliation worksheet follows them'
+  );
+  check(/Reconciliation worksheet/i.test(html), 'reconciliation is framed as a "worksheet"');
+  check(/<details class="cqc-recon-details"/.test(html), 'reconciliation table is collapsed into <details>');
+  check(/blank "your count" cells are filled in by you/i.test(html), 'worksheet states the blank cells are by-design');
+  check(/does <strong>not<\/strong> confirm that any individual patient/i.test(html), 'verdict separates "rules current" from "patients monitored"');
+  // Dev/plumbing noise must not leak into the rendered output.
+  check(!/WebFetch|COHORT-SPIKE/i.test(html), 'no developer noise (WebFetch / spike code) in the output');
+  check(!/schema \d/i.test(html), 'no "schema N" plumbing in the coverage tiles');
 
   console.log(`\n${passed} passed, ${failed} failed`);
 })();

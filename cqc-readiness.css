@@ -128,6 +128,24 @@ body {
   height: 16px;
   flex: none;
 }
+.cqc-gate-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+.cqc-controls-hint {
+  max-width: 900px;
+  margin: 8px auto 0;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+@media print {
+  .cqc-controls-hint {
+    display: none !important;
+  }
+}
 
 /* ── Output ───────────────────────────────────────────────────────────────── */
 .cqc-output {
@@ -515,6 +533,181 @@ body {
 }
 @media print {
   .cqc-callout {
+    background: #fff;
+  }
+}
+
+/* ── Headline verdict (the answer-first block, both modes) ─────────────────── */
+.cqc-verdict {
+  border-top: 4px solid var(--nhs-blue);
+}
+.cqc-verdict-green {
+  border-top-color: var(--green);
+}
+.cqc-verdict-amber {
+  border-top-color: var(--amber);
+}
+.cqc-verdict-red {
+  border-top-color: var(--red);
+}
+.cqc-verdict-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cqc-verdict-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+.cqc-verdict-asat {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text2);
+}
+.cqc-verdict-plain {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cqc-rag-legend {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cqc-rag-legend-label {
+  font-weight: 600;
+  color: var(--text2);
+}
+.cqc-verdict-means {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: rgba(180, 83, 9, 0.08);
+  border-left: 3px solid var(--amber);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.cqc-verdict-howto {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-left: 3px solid var(--nhs-blue);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ── Reconciliation worksheet (collapsed; demoted below Safe/Well-led) ─────── */
+.cqc-recon-details {
+  margin-top: 12px;
+}
+.cqc-recon-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nhs-dark);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+/* ── Collapsed matched-term list (kills the wall; stays printable) ─────────── */
+.cqc-matched {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 8px 12px;
+}
+.cqc-matched-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--nhs-dark);
+  font-size: 13px;
+  list-style-position: inside;
+}
+.cqc-matched-hint {
+  font-weight: 400;
+  color: var(--text3);
+  font-size: 12px;
+}
+.cqc-term-list {
+  list-style: none;
+  margin: 10px 0 2px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cqc-term {
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+/* ── Coverage stat tiles (were unstyled — rendered as a plain text dump) ───── */
+.cqc-grid {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.cqc-grid-4 {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.cqc-stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.cqc-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--nhs-dark);
+}
+.cqc-stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+.cqc-stat-sub {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* ── Key-question plain-language gloss ────────────────────────────────────── */
+.cqc-keyq-note {
+  margin: 2px 0 12px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media print {
+  /* Force any collapsed list open so the inspector PDF shows the full evidence. */
+  .cqc-matched > *,
+  .cqc-recon-details > * {
+    display: revert !important;
+  }
+  details.cqc-matched {
+    border: 1px solid #999;
+  }
+  .cqc-verdict-howto,
+  .cqc-verdict-means {
     background: #fff;
   }
 }

@@ -17,10 +17,14 @@
           <button data-mode="export">Evidence export</button>
         </div>
         <button class="cqc-btn cqc-btn-primary" id="cqcGenerate">Generate</button>
-        <button class="cqc-btn" id="cqcPrint" disabled>Print / PDF</button>
-        <button class="cqc-btn" id="cqcCsv" disabled>Download CSV</button>
-        <button class="cqc-btn" id="cqcBaseline" disabled>Save as baseline</button>
+        <button class="cqc-btn" id="cqcPrint" disabled title="Press Generate first">Print / PDF</button>
+        <button class="cqc-btn" id="cqcCsv" disabled title="Press Generate first">Download CSV</button>
+        <button class="cqc-btn" id="cqcBaseline" disabled title="Press Generate first">Save as baseline</button>
       </div>
+      <p class="cqc-controls-hint" id="cqcHint">
+        Press <strong>Generate</strong> to build the report. Print / PDF and Download become available once it appears.
+        To print the inspector copy, switch to <strong>Evidence export</strong> first.
+      </p>
       <!-- Evidence-export gate (R-A): the inspector document is never auto-produced.
            Print/PDF + the export rendering stay disabled until this is ticked. -->
       <div class="cqc-gate" id="cqcGate" hidden>
@@ -28,6 +32,10 @@
           <input type="checkbox" id="cqcConfirm" />
           <span>I have reviewed these figures and confirm they are accurate</span>
         </label>
+        <p class="cqc-gate-hint">
+          A clinician or practice manager should review and tick this before the pack is shared. If you are only
+          printing it, ask them to confirm first.
+        </p>
       </div>
     </div>
 
