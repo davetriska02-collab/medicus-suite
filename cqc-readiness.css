@@ -751,3 +751,65 @@ body {
     background: #fff;
   }
 }
+
+/* ── Editable reconciliation count (Janet: fillable + printable worksheet) ─── */
+.cqc-recon-countlabel {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.cqc-recon-input {
+  width: 64px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  text-align: right;
+}
+.cqc-recon-input:focus {
+  outline: 2px solid var(--nhs-blue);
+  outline-offset: 0;
+}
+
+/* ── Per-exclude reasons grouped by rationale (Eileen) ────────────────────── */
+.cqc-recon-excl-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cqc-recon-excl-item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cqc-recon-excl-reason {
+  color: var(--text2);
+}
+
+/* ── Clinical methods & sources (Raj: named versions) ─────────────────────── */
+.cqc-card-methods {
+  border-top: 3px solid var(--nhs-blue);
+}
+.cqc-methods-table td:first-child {
+  white-space: nowrap;
+}
+
+/* ── Clinician-view mode tag ──────────────────────────────────────────────── */
+.cqc-mode-clinician {
+  background: var(--green);
+}
+
+@media print {
+  /* Print the typed worksheet value as plain underlined text, no input chrome. */
+  .cqc-recon-input {
+    border: 0;
+    border-bottom: 1px solid #000;
+    border-radius: 0;
+    background: transparent;
+  }
+}

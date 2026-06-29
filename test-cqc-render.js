@@ -196,5 +196,33 @@ const path = require('path');
   check(!/WebFetch|COHORT-SPIKE/i.test(html), 'no developer noise (WebFetch / spike code) in the output');
   check(!/schema \d/i.test(html), 'no "schema N" plumbing in the coverage tiles');
 
+  console.log('\n--- 9-item additions: methods block, clinician view, editable count, exclude reasons ---');
+  const readiness2 = engine.buildReadiness(ruleFiles, {
+    todayISO: '2026-06-16',
+    currency,
+    clinicalMethods: {
+      acb: { name: 'Anticholinergic burden', version: 'Boustani ACB scale (ACBcalc.com)', source: 'Boustani 2008' },
+      stoppStart: { name: 'STOPP/START', version: 'v3 (2023)', source: 'OMahony 2023' },
+    },
+  });
+  const html2 = render.buildReadinessHtml(readiness2, { mode: 'readiness' });
+  check(/Clinical methods/i.test(html2), 'clinical methods & sources block renders');
+  check(/STOPP\/START/.test(html2) && /v3 \(2023\)/.test(html2), 'STOPP/START version named in the rendered block');
+  check(/Boustani/.test(html2), 'ACB (Boustani) scale named in the rendered block');
+  check(/Engine method/i.test(html2), 'engine-method sets flagged as NOT in rule-currency');
+  check(
+    /class="cqc-recon-input"[^>]*data-recon-key=/.test(html2),
+    'reconciliation count is an editable input keyed by rule (Janet)'
+  );
+  check(!/your count:\s*\d/.test(html2), 'editable count cell still carries no fabricated number');
+
+  // Clinician view (Tom): verdict + coverage + methods only — no scaffolding/worksheet.
+  const clinHtml = render.buildReadinessHtml(readiness2, { mode: 'clinician' });
+  check(/Monitoring-system readiness/i.test(clinHtml), 'clinician view keeps the verdict');
+  check(/Clinical methods/i.test(clinHtml), 'clinician view keeps the methods block');
+  check(/Clinician view/.test(clinHtml), 'clinician view carries its own mode tag');
+  check(!/Key question:/.test(clinHtml), 'clinician view DROPS the Safe/Well-led quality statements');
+  check(!/Reconciliation worksheet/i.test(clinHtml), 'clinician view DROPS the reconciliation worksheet');
+
   console.log(`\n${passed} passed, ${failed} failed`);
 })();

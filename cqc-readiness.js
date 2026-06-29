@@ -64,7 +64,9 @@ function gatePlaceholder() {
 
 // ── Mode toggle ───────────────────────────────────────────────────────────────
 function setMode(mode) {
-  _mode = mode === 'export' ? 'export' : 'readiness';
+  // Three modes: readiness (default, internal), export (inspector pack, gated),
+  // clinician (verdict + drug-coverage only — the fast clinical glance).
+  _mode = mode === 'export' || mode === 'clinician' ? mode : 'readiness';
   $('cqcMode')
     .querySelectorAll('button')
     .forEach((b) => b.classList.toggle('active', b.dataset.mode === _mode));
@@ -95,7 +97,41 @@ function renderCurrent() {
     return;
   }
   out.innerHTML = buildReadinessHtml(_lastReadiness, { mode: _mode });
+  hydrateReconCounts();
   syncButtons(true);
+}
+
+// ── Reconciliation worksheet counts (Janet) ───────────────────────────────────
+// The "your count" cells are editable inputs the practice fills from its own
+// Medicus search. We persist them per-rule so they survive a regenerate/reopen and
+// print with the pack. The suite still supplies NO number — only the typed value.
+const COUNTS_KEY = 'cqc.recon.counts';
+let _reconCounts = {};
+
+async function loadReconCounts() {
+  try {
+    const r = await chrome.storage.local.get(COUNTS_KEY);
+    _reconCounts = r[COUNTS_KEY] || {};
+  } catch {
+    _reconCounts = {};
+  }
+}
+
+function hydrateReconCounts() {
+  document.querySelectorAll('#cqcOutput .cqc-recon-input').forEach((inp) => {
+    const key = inp.dataset.reconKey;
+    if (key && _reconCounts[key] != null) inp.value = _reconCounts[key];
+    inp.addEventListener('input', () => {
+      const k = inp.dataset.reconKey;
+      if (!k) return;
+      _reconCounts[k] = inp.value;
+      try {
+        chrome.storage.local.set({ [COUNTS_KEY]: _reconCounts });
+      } catch {
+        /* persistence is best-effort */
+      }
+    });
+  });
 }
 
 // Print/PDF + CSV are enabled only when a document is actually rendered and (for
@@ -111,6 +147,9 @@ async function generate() {
   const out = $('cqcOutput');
   out.innerHTML = '<div class="cqc-placeholder">Assembling readiness…</div>';
   syncButtons(false);
+
+  // Load any saved worksheet counts so they re-hydrate into the rebuilt inputs.
+  await loadReconCounts();
 
   // The anchor is the user's deliberately-saved previous run (A7), used for the delta.
   let anchor = null;
@@ -253,7 +292,7 @@ function init() {
   // Honour ?mode= from the launcher.
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');
-  if (mode === 'export' || mode === 'readiness') setMode(mode);
+  if (mode === 'export' || mode === 'readiness' || mode === 'clinician') setMode(mode);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -172,6 +172,27 @@
    * @param {object|null} drugFile  parsed drug-rules.json.
    * @returns {{entries:Array<{ruleId,drugClass,drugName,definition,matchTerms}>, caveat:string}}
    */
+  // Per-exclude clinical rationale (Eileen: a dropped term with no reason sends a
+  // nurse to the phone). Curated in the CQC-disclosure layer — NOT in the matching
+  // rule file — so it cannot affect drugMatchesRule. Keyed by rule + term family.
+  // Falls back to a safe generic line so a NEW exclude is never shown reason-less.
+  function excludeReason(ruleId, term) {
+    const t = String(term || '').toLowerCase();
+    if (ruleId === 'antipsychotic' && t === 'clozapine') {
+      return 'Clozapine has its own dedicated FBC / clozapine-monitoring rule; excluded here so it is not double-counted under the general antipsychotic rule.';
+    }
+    if (ruleId === 'hrt-systemic') {
+      if (['ethinylestradiol', 'ethinyloestradiol', 'qlaira', 'zoely'].includes(t)) {
+        return 'Combined hormonal contraceptive, not HRT — monitored under the contraception rule instead.';
+      }
+      return 'Local vaginal oestrogen — negligible systemic absorption, so systemic-HRT monitoring does not apply.';
+    }
+    if (ruleId === 'chc-combined-hormonal') {
+      return 'Progestogen-only pill, not combined hormonal contraception — no CHC blood-pressure / VTE monitoring applies.';
+    }
+    return 'Deliberate suppression of a known false-positive — sense-check it could not drop a patient who needs this monitoring.';
+  }
+
   function buildReconciliation(drugFile) {
     const entries = [];
     if (!drugFile || !Array.isArray(drugFile.rules)) {
@@ -202,10 +223,50 @@
         // An over-broad exclude is the classic invisible false negative (a valid
         // parenteral-methotrexate patient excluded by "injection", etc.).
         excludeTerms: excludeTerms.slice(),
+        // Each exclude paired with a plain-English reason (Eileen) so a dropped term
+        // is auditable line-by-line, not a red word with no story.
+        excludeDetails: excludeTerms.map((term) => ({ term, reason: excludeReason(rule.id || '', term) })),
       });
     }
 
     return { entries, caveat: RECONCILIATION_CAVEAT };
+  }
+
+  // Name the published identifier/version of each clinical method the suite implements
+  // (Raj). PINCER comes from the alert rule file (which IS in the currency RAG above);
+  // ACB and STOPP/START are engine methods (Visualiser / Triage-lens), their SPECs
+  // injected from the engine globals so the named version cannot drift. PURE.
+  function buildClinicalMethods(alertFile, injected) {
+    const methods = [];
+    if (alertFile) {
+      const lib = Array.isArray(alertFile.library) ? alertFile.library : [];
+      const pincerCount = lib.filter((a) => a && /pincer/i.test(String((a && (a.source || a.libId)) || ''))).length;
+      methods.push({
+        name: 'Prescribing-safety alerts (PINCER)',
+        version:
+          alertFile.specVersion || (alertFile.version ? 'library v' + alertFile.version : '') || 'version not stated',
+        source: 'PINCER indicators (Avery et al., BMJ 2012; doi:10.1136/bmj.e6501)',
+        detail: pincerCount ? pincerCount + ' PINCER-derived indicators implemented' : '',
+        inCurrency: true,
+      });
+    }
+    if (injected.acb) {
+      methods.push({
+        name: injected.acb.name || 'Anticholinergic burden',
+        version: injected.acb.version || 'version not stated',
+        source: injected.acb.source || '',
+        inCurrency: false,
+      });
+    }
+    if (injected.stoppStart) {
+      methods.push({
+        name: injected.stoppStart.name || 'STOPP/START',
+        version: injected.stoppStart.version || 'version not stated',
+        source: injected.stoppStart.source || '',
+        inCurrency: false,
+      });
+    }
+    return methods;
   }
 
   // ── buildReadiness (PURE) ────────────────────────────────────────────────────
@@ -373,6 +434,9 @@
     // count. The suite supplies the definition + caveat; it does NOT supply a patient count.
     const reconciliation = buildReconciliation(drug);
 
+    // ── Clinical methods & sources (Raj: name the published version of each set) ──
+    const clinicalMethods = buildClinicalMethods(alert, o.clinicalMethods || {});
+
     const readiness = {
       generatedAt,
       coverage,
@@ -383,6 +447,7 @@
       },
       qualityStatements,
       reconciliation,
+      clinicalMethods,
       delta: null, // filled below
       disclaimer: DISCLAIMER,
     };
@@ -528,7 +593,17 @@
       ? RC.assessRuleCurrency(currencyInput, todayISO)
       : { overall: 'amber', files: [], warnings: ['Rule currency helper not available.'] };
 
-    return buildReadiness(ruleFiles, { todayISO, currency, anchor });
+    // Inject the engine SPECs (Raj: name each clinical set's published version). Read
+    // from the engine globals so the disclosed version can never drift from the code.
+    /* eslint-disable no-undef */
+    const W = typeof window !== 'undefined' ? window : {};
+    const clinicalMethods = {
+      acb: W.ACBScores && W.ACBScores.SPEC ? W.ACBScores.SPEC : null,
+      stoppStart: W.StoppStart && W.StoppStart.SPEC ? W.StoppStart.SPEC : null,
+    };
+    /* eslint-enable no-undef */
+
+    return buildReadiness(ruleFiles, { todayISO, currency, anchor, clinicalMethods });
   }
 
   // ── Dual export (browser global + Node test harness) ─────────────────────────

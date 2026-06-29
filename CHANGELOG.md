@@ -2,6 +2,39 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.136.0] — 2026-06-29
+
+### CQC Inspection Readiness: clinician view, named clinical sources, per-exclude reasons, fillable worksheet
+
+The four "push to 9" asks from the practice-panel loop, all honesty-preserving
+(no fabricated patient counts, no clinical-rule changes).
+
+- **Clinician view (new third mode).** A fast clinical glance — verdict + drug
+  coverage + clinical-methods only — with the Safe/Well-led scaffolding, worksheet
+  and sign-off hidden (they are for whoever assembles the pack). `?mode=clinician`
+  and a toolbar toggle; the verdict's "how to use" and coverage pointers adapt so
+  they never reference a section the clinician view hides.
+- **Clinical methods & sources block.** Names the published version of every
+  clinical set the suite implements — PINCER (Avery et al., BMJ 2012), the Boustani
+  ACB scale (ACBcalc.com), STOPP/START v3 (2023) — each flagged for whether it is
+  part of the rule-currency check (PINCER) or an engine method computed in the
+  Visualiser / Triage-lens (ACB, STOPP/START). Versions are read from drift-safe
+  `SPEC` constants newly exported by `engine/acb-scores.js` and `engine/stopp-start.js`,
+  so the disclosed version can never diverge from the code. Also added to the CSV.
+- **Per-exclude reasons.** Each disclosed `drug.exclude` term now shows a plain
+  clinical rationale (clozapine has its own monitoring; local vaginal oestrogen has
+  negligible systemic absorption; POPs are not combined contraception), grouped by
+  family so a 13-term set states its reason once. Curated in the CQC-disclosure
+  layer — it cannot affect `drugMatchesRule`.
+- **Fillable, persistable worksheet.** The "your count" cells are now inputs the
+  practice types its own Medicus count into; values persist (`cqc.recon.counts`) and
+  print with the pack. The suite still supplies no number — the read-only/no-cohort
+  honesty boundary is unchanged.
+
+New tests in `test-cqc-evidence.js` (exclude reasons, clinical-methods shape) and
+`test-cqc-render.js` (methods block, clinician-view stripping, editable count). Full
+suite 114/114.
+
 ## [v3.135.2] — 2026-06-29
 
 ### CQC Inspection Readiness: clearer print path, exclude rationale, caveat de-dup

@@ -14,6 +14,7 @@
         <span class="cqc-controls-title">CQC Inspection Readiness</span>
         <div class="cqc-seg" id="cqcMode" role="group" aria-label="Mode">
           <button data-mode="readiness" class="active">Readiness check</button>
+          <button data-mode="clinician">Clinician view</button>
           <button data-mode="export">Evidence export</button>
         </div>
         <button class="cqc-btn cqc-btn-primary" id="cqcGenerate">Generate</button>
@@ -53,6 +54,10 @@
 
     <!-- Classic scripts first: expose window.RuleCurrency + window.CqcEvidence. -->
     <script src="shared/rule-currency.js"></script>
+    <!-- Engine SPEC constants only — read by cqc-evidence to name the published
+         version of each clinical method (ACB, STOPP/START) without drift. -->
+    <script src="engine/acb-scores.js"></script>
+    <script src="engine/stopp-start.js"></script>
     <script src="engine/cqc-evidence.js"></script>
     <script type="module" src="cqc-readiness.js"></script>
   </body>
