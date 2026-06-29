@@ -138,18 +138,26 @@
             // capture carries no patient numbers.
             groups: g.slice(0, 12).map((x) => ({
               title: x.groupName || x.name || x.title || null,
-              results: (x.results || []).slice(0, 40).map((y) => ({
-                name: y.description,
-                unit: y.resultUnit,
-                isAbove: y.isAboveReferenceRange,
-                isBelow: y.isBelowReferenceRange,
-                urgent: y.requiresUrgentReview,
-                hasComment: !!(
-                  y.resultText ||
-                  (y.resultPerformerComments || []).length ||
-                  (y.filingComments || []).length
-                ),
-              })),
+              results: (x.results || []).slice(0, 40).map((y) => {
+                const rr = (y.referenceRanges && y.referenceRanges[0]) || {};
+                return {
+                  name: y.description,
+                  unit: y.resultUnit,
+                  // Reference RANGE only (the lab's normal limits) — NOT the patient's
+                  // value — so this can pre-seed profile parameters. null where the lab
+                  // shows no range (e.g. HbA1c → set a parameter manually).
+                  low: rr.lowerReferenceLimit ?? null,
+                  high: rr.upperReferenceLimit ?? null,
+                  isAbove: y.isAboveReferenceRange,
+                  isBelow: y.isBelowReferenceRange,
+                  urgent: y.requiresUrgentReview,
+                  hasComment: !!(
+                    y.resultText ||
+                    (y.resultPerformerComments || []).length ||
+                    (y.filingComments || []).length
+                  ),
+                };
+              }),
             })),
           };
         } catch (e) {

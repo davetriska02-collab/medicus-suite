@@ -272,6 +272,23 @@ textarea.lf-input {
   color: var(--text-2);
   margin-bottom: 8px;
 }
+
+/* ── Parameter rows ── */
+.lf-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lf-param-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 64px 72px auto;
+  gap: 6px;
+  align-items: center;
+}
+.lf-param-row .lf-input {
+  padding: 6px 8px;
+}
 .lf-check,
 .lf-radio {
   display: flex;

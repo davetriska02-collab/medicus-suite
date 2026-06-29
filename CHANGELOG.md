@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.141.0] — 2026-06-29
+
+### Lab filing: per-analyte parameters (clinician-set normal ranges)
+
+The all-normal gate previously trusted only the lab's own flags — so an analyte the
+lab shows with no reference range (e.g. HbA1c) sailed through as "normal". Profiles
+can now carry **per-analyte parameters** the clinician sets, checked on top of the
+lab's flags:
+
+- New `parameters` on a profile: rows of `{ analyte, low, high, unit }`. A result
+  outside its set range **blocks one-click filing** (new `profileParamBlockers()` in
+  `shared/lab-filing-utils.js`, folded into the macro gate). Essential for HbA1c and
+  any un-ranged analyte — the clinician supplies the limit.
+- New `requireRangeForAll` toggle: when on, the button is suppressed unless **every**
+  numeric result has either a lab reference range or a parameter set here — so an
+  un-ranged analyte can never be filed until a parameter exists.
+- Parameters can be **detected** from the screen capture (the capture script now
+  surfaces each analyte's lab reference range — range only, never patient values —
+  so the LLM/seed can pre-fill them), or set **manually**.
+- Authoring UI: a Parameters editor (add/remove analyte rows with min/max/unit) in
+  the profile form; the LLM prompt/example now include `parameters` with HbA1c as the
+  worked example. Validation rejects malformed rows (no bound, low>high, non-numeric);
+  sanitisation coerces and whitelist-rebuilds them.
+- Tests cover validate/sanitise of parameters and `profileParamBlockers` (in-range
+  fileable, out-of-range blocked, HbA1c with no lab range, requireRangeForAll).
+
 ## [v3.140.0] — 2026-06-29
 
 ### Lab filing: optional "+ message patient" action (prepare-only handoff)

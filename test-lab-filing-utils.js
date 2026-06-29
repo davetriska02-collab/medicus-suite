@@ -233,6 +233,73 @@ check(
 );
 check(LF.fillTemplate('Dear {firstName} {firstName}.', 'Jane Doe') === 'Dear Jane Jane.', 'fills repeated placeholder');
 
+// ── parameters: validate + sanitise ──────────────────────────────────────────
+console.log('\n--- parameters validate/sanitise ---');
+const withParams = (params, extra) =>
+  Object.assign({ name: 'x', filing: validFiling, parameters: params }, extra || {});
+check(
+  LF.validateProfile(withParams([{ analyte: 'hba1c', high: 47, unit: 'mmol/mol' }])).length === 0,
+  'valid parameter row passes'
+);
+check(LF.validateProfile(withParams([{ analyte: 'hba1c' }])).length > 0, 'parameter with no low/high rejected');
+check(LF.validateProfile(withParams([{ analyte: 'k', low: 5, high: 3 }])).length > 0, 'low > high rejected');
+check(LF.validateProfile(withParams([{ analyte: 'k', high: 'NaN-ish' }])).length > 0, 'non-numeric bound rejected');
+check(LF.validateProfile(withParams('nope')).length > 0, 'non-array parameters rejected');
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { requireRangeForAll: 'yes' })).length > 0,
+  'non-boolean requireRangeForAll rejected'
+);
+const sp = LF.sanitiseProfile(
+  withParams(
+    [
+      { analyte: ' HbA1c ', low: '', high: '47', unit: 'mmol/mol', junk: 1 },
+      { analyte: '', high: 5 }, // dropped — no analyte
+      { analyte: 'x' }, // dropped — no bound
+    ],
+    { requireRangeForAll: true }
+  )
+);
+check(sp.parameters.length === 1, 'sanitise drops rows with no analyte or no bound');
+check(
+  sp.parameters[0].analyte === 'HbA1c' && sp.parameters[0].low === null && sp.parameters[0].high === 47,
+  'sanitise trims analyte, coerces numeric strings, blanks → null'
+);
+check(!('junk' in sp.parameters[0]), 'sanitise whitelists parameter fields');
+check(sp.requireRangeForAll === true, 'requireRangeForAll preserved');
+
+// ── profileParamBlockers (clinician-set ranges, incl. un-ranged analytes) ─────
+console.log('\n--- profileParamBlockers ---');
+const hba1cProfile = { parameters: [{ analyte: 'hba1c', high: 47, unit: 'mmol/mol' }] };
+const rep = (name, value, low, high) => ({ results: [{ name, value, low: low ?? null, high: high ?? null }] });
+check(LF.profileParamBlockers(rep('HbA1c (IFCC)', 42), hba1cProfile).length === 0, 'HbA1c within set max → fileable');
+check(
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 53), hba1cProfile).some((r) => /above your set maximum/.test(r)),
+  'HbA1c above set max → blocked (lab gave no range)'
+);
+check(
+  LF.profileParamBlockers(rep('eGFR', 55), { parameters: [{ analyte: 'egfr', low: 60 }] }).some((r) =>
+    /below your set minimum/.test(r)
+  ),
+  'eGFR below set min → blocked'
+);
+check(
+  LF.profileParamBlockers(rep('Sodium', 140), hba1cProfile).length === 0,
+  'analyte with no parameter is not blocked by params'
+);
+check(
+  LF.profileParamBlockers(rep('HbA1c', 60, 20, 42), {}).length === 0,
+  'no parameters and no requireRangeForAll → no param blockers'
+);
+// requireRangeForAll: a numeric result with no lab range and no parameter blocks
+check(
+  LF.profileParamBlockers(rep('HbA1c', 60), { requireRangeForAll: true }).some((r) => /no reference range/.test(r)),
+  'requireRangeForAll blocks an un-ranged, un-parameterised result'
+);
+check(
+  LF.profileParamBlockers(rep('Sodium', 140, 133, 146), { requireRangeForAll: true }).length === 0,
+  'requireRangeForAll allows a result that has a lab reference range'
+);
+
 // ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
 console.log('\n--- fileabilityBlockers ---');
 const okReport = { unmatched: false, results: [{ name: 'Haemoglobin', value: 130, text: 'Haemoglobin 130' }] };

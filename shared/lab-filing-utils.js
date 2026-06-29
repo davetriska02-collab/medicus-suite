@@ -57,7 +57,16 @@
     comment: 500,
     template: 500,
     notes: 1000,
+    params: 200, // max per-analyte parameter rows
+    unit: 24,
   };
+
+  const isUnset = (v) => v === undefined || v === null || v === '';
+  function numOrNull(v) {
+    if (isUnset(v)) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
 
   // ── Validation ────────────────────────────────────────────────────────────────
 
@@ -135,6 +144,37 @@
       }
     }
 
+    // parameters — per-analyte normal ranges the CLINICIAN sets, used by the gate
+    // in addition to the lab's own flags. Essential for analytes the lab leaves
+    // un-ranged (e.g. HbA1c): the clinician supplies the normal limit.
+    if (p.parameters !== undefined) {
+      if (!Array.isArray(p.parameters)) errs.push('parameters must be an array.');
+      else if (p.parameters.length > LF_LIMITS.params)
+        errs.push(`parameters may have at most ${LF_LIMITS.params} entries.`);
+      else
+        p.parameters.forEach((pr, i) => {
+          if (!pr || typeof pr !== 'object' || Array.isArray(pr)) {
+            errs.push(`parameters[${i}] must be an object.`);
+            return;
+          }
+          if (!isStr(pr.analyte) || !pr.analyte.trim()) errs.push(`parameters[${i}].analyte is required.`);
+          else if (pr.analyte.length > LF_LIMITS.analyteItem)
+            errs.push(`parameters[${i}].analyte must be ${LF_LIMITS.analyteItem} characters or fewer.`);
+          ['low', 'high'].forEach((k) => {
+            if (!isUnset(pr[k]) && !Number.isFinite(Number(pr[k])))
+              errs.push(`parameters[${i}].${k} must be a number.`);
+          });
+          if (pr.unit !== undefined && !isStr(pr.unit)) errs.push(`parameters[${i}].unit must be a string.`);
+          if (isUnset(pr.low) && isUnset(pr.high)) errs.push(`parameters[${i}] needs a low and/or a high value.`);
+          if (!isUnset(pr.low) && !isUnset(pr.high) && Number(pr.low) > Number(pr.high)) {
+            errs.push(`parameters[${i}] low must not exceed high.`);
+          }
+        });
+    }
+    if (p.requireRangeForAll !== undefined && typeof p.requireRangeForAll !== 'boolean') {
+      errs.push('requireRangeForAll must be a boolean.');
+    }
+
     if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
       errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
     }
@@ -167,6 +207,22 @@
       .slice(0, listMax);
   }
 
+  // Whitelist-rebuild the per-analyte parameter rows. Drops rows with no analyte
+  // or no bound; coerces low/high to finite numbers or null; clamps strings.
+  function sanitiseParams(arr) {
+    return (Array.isArray(arr) ? arr : [])
+      .map((pr) => {
+        if (!pr || typeof pr !== 'object') return null;
+        const analyte = clamp(pr.analyte, LF_LIMITS.analyteItem);
+        const low = numOrNull(pr.low);
+        const high = numOrNull(pr.high);
+        if (!analyte || (low === null && high === null)) return null;
+        return { analyte, low, high, unit: clamp(pr.unit, LF_LIMITS.unit) };
+      })
+      .filter(Boolean)
+      .slice(0, LF_LIMITS.params);
+  }
+
   function sanitiseProfile(p) {
     const f = p.filing && typeof p.filing === 'object' ? p.filing : {};
     const m = p.patientMessage && typeof p.patientMessage === 'object' ? p.patientMessage : null;
@@ -176,6 +232,8 @@
       name: clamp(p.name, LF_LIMITS.name),
       match: sanitiseStrArr(p.match, LF_LIMITS.matchItem, LF_LIMITS.match),
       analytes: sanitiseStrArr(p.analytes, LF_LIMITS.analyteItem, LF_LIMITS.analytes),
+      parameters: sanitiseParams(p.parameters),
+      requireRangeForAll: p.requireRangeForAll === true,
       filing: {
         rowSelector: clamp(f.rowSelector, LF_LIMITS.selector),
         openControlText: clamp(f.openControlText, LF_LIMITS.control),
@@ -307,6 +365,54 @@
     return template.replace(/\{firstName\}/g, extractFirstName(patient));
   }
 
+  // Match a profile parameter row to a result by analyte name (case-insensitive,
+  // substring either way — e.g. param "haemoglobin" matches result "Haemoglobin",
+  // param "hba1c" matches "HbA1c (IFCC)").
+  function findParamFor(name, params) {
+    const n = String(name || '').toLowerCase();
+    if (!n) return null;
+    for (const pr of Array.isArray(params) ? params : []) {
+      if (!pr || !isStr(pr.analyte)) continue;
+      const a = pr.analyte.toLowerCase();
+      if (a && (n.includes(a) || a.includes(n))) return pr;
+    }
+    return null;
+  }
+
+  // Reasons a report fails the profile's OWN per-analyte parameters — the clinician-
+  // set normal ranges. Used IN ADDITION to the lab's flags, so it catches analytes
+  // the lab leaves un-ranged (e.g. HbA1c). Returns [] when all set parameters pass.
+  // With requireRangeForAll, also blocks any numeric result that has neither a lab
+  // reference range NOR a profile parameter — so nothing un-checked is ever filed.
+  function profileParamBlockers(report, profile) {
+    const reasons = [];
+    if (!report || !Array.isArray(report.results) || !profile) return reasons;
+    const params = Array.isArray(profile.parameters) ? profile.parameters : [];
+    const requireAll = profile.requireRangeForAll === true;
+    if (!params.length && !requireAll) return reasons;
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const name = isStr(r.name) ? r.name : '';
+      const val = Number(r.value);
+      const param = findParamFor(name, params);
+      if (param) {
+        if (Number.isFinite(val)) {
+          const unit = param.unit ? ' ' + param.unit : '';
+          if (param.low != null && val < param.low) {
+            reasons.push(`${name || 'a result'} (${r.value}${unit}) is below your set minimum of ${param.low}`);
+          } else if (param.high != null && val > param.high) {
+            reasons.push(`${name || 'a result'} (${r.value}${unit}) is above your set maximum of ${param.high}`);
+          }
+        }
+        continue; // covered by a parameter
+      }
+      if (requireAll && Number.isFinite(val) && r.low == null && r.high == null) {
+        reasons.push(`${name || 'a result'} has no reference range — set a parameter for it before filing`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
   // Reasons this report must NOT be offered for one-click filing, even though it
   // may score level:'none'. The numeric severity gate is necessary but NOT
   // sufficient — it reads the lab's own numeric flags and cannot reason about
@@ -422,6 +528,8 @@
 - "name"   (required) — short label for this lab/report layout, e.g. "Routine bloods — normal, no action".
 - "match"  — array of lowercase substrings that identify reports this profile applies to. Medicus reports often have NO panel/section title, so match against the ANALYTE NAMES that appear on the report (e.g. ["haemoglobin","platelets","white cell","mcv"] for an FBC, or ["sodium","potassium","creatinine"] for U&E). Leave [] if unsure. At least one must appear in the report for the button to be offered.
 - "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
+- "parameters" — array of clinician-set normal ranges, one per analyte, checked IN ADDITION to the lab's own flags. Each: { "analyte": "<name>", "low": <number or null>, "high": <number or null>, "unit": "<unit>" }. Read the reference range from the screenshot where shown. CRUCIAL for analytes the lab shows with NO reference range (e.g. HbA1c): set the practice's own normal limit, e.g. { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" }. Use low and/or high (omit/null the bound that doesn't apply). A result outside its set range blocks one-click filing.
+- "requireRangeForAll" — boolean. If true, the button is suppressed unless EVERY numeric result has either a lab reference range or a parameter here — so an un-ranged analyte (like HbA1c) can never be filed until a parameter is set. Default false.
 - "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id. On Medicus, filing is done at WHOLE-REPORT level (not per analyte): there is one button/note that marks the report normal, then a file button.
     - "normalOptionText" (required) — the exact visible text of the control that marks the report as normal / no-action. On Medicus this is the filing-note link "Normal result, no action required".
     - "nextStepText" — if the screen has a "Next Steps" choice (radio/option), the exact visible text of the NO-FURTHER-ACTION option, so the macro selects it explicitly and never files down a "message patient" or "reassign" path. On Medicus this is "File results with no further action". OMIT only if there is no such choice.
@@ -459,6 +567,11 @@ ${LF_PROMPT_RULES}
   "name": "Routine bloods — normal, no action (Medicus)",
   "match": ["haemoglobin", "platelets", "white cell", "mcv", "sodium", "potassium", "creatinine"],
   "analytes": ["haemoglobin", "white cell count", "platelets", "rbc", "mcv", "neutrophils", "sodium", "potassium", "creatinine", "egfr"],
+  "parameters": [
+    { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" },
+    { "analyte": "egfr", "low": 60, "unit": "mL/min/1.73m2" }
+  ],
+  "requireRangeForAll": false,
   "filing": {
     "normalOptionText": "Normal result, no action required",
     "nextStepText": "File results with no further action",
@@ -490,6 +603,7 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     reportHaystack,
     matchProfile,
     fileabilityBlockers,
+    profileParamBlockers,
     extractFirstName,
     fillTemplate,
     buildFilingConfirmMessage,

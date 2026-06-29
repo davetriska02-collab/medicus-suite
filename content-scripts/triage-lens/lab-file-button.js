@@ -592,20 +592,22 @@
       // — an irreversible file must act on live data, and must clear every
       // fail-closed blocker, not just numeric severity.
       const rs = await loadReportSeverity(true);
-      const blockers = rs && rs.blockers ? rs.blockers : ['could not read the result'];
+      const profile = currentProfile;
+      const blockers = rs
+        ? (rs.blockers || []).concat(LF ? LF.profileParamBlockers(rs.report, profile) : [])
+        : ['could not read the result'];
       if (!rs || blockers.length) {
         toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
         hideButton();
         return;
       }
-      const profile = currentProfile;
       const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
       const res = await fileAllNormal({
         root: document.body,
         profile,
         action,
         severity: rs.severity,
-        blockers: rs.blockers,
+        blockers,
         report: rs.report,
         patient: readPatientBanner(),
         mode,
@@ -721,8 +723,10 @@
     // cannot judge is present (free text, unmatched, no rules, an abnormal value),
     // explain WHY auto-file is not offered rather than silently hiding (the nurse
     // and locum personas asked to see the not-offered state, not just the success
-    // one). Otherwise show the action button.
-    const blockers = rs.blockers || [];
+    // one). Otherwise show the action button. The profile's OWN per-analyte
+    // parameters (clinician-set ranges, incl. un-ranged analytes like HbA1c) are
+    // checked here on top of the generic blockers.
+    const blockers = (rs.blockers || []).concat(LF ? LF.profileParamBlockers(rs.report, profile) : []);
     if (blockers.length) {
       showBlockedHint(blockers);
       return;

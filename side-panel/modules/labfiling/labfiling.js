@@ -40,6 +40,20 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// One editable parameter row (analyte + low/high + unit + remove). Numbers are
+// rendered as-is; blank means "no bound".
+function paramRowHtml(pr) {
+  pr = pr || {};
+  const num = (x) => (x === 0 || x ? esc(String(x)) : '');
+  return `<div class="lf-param-row">
+    <input class="lf-input lf-p-analyte" value="${esc(pr.analyte || '')}" placeholder="analyte (e.g. hba1c)">
+    <input class="lf-input lf-p-low" value="${num(pr.low)}" placeholder="min" inputmode="decimal">
+    <input class="lf-input lf-p-high" value="${num(pr.high)}" placeholder="max" inputmode="decimal">
+    <input class="lf-input lf-p-unit" value="${esc(pr.unit || '')}" placeholder="unit">
+    <button class="lf-btn lf-btn-sm lf-btn-danger" data-act="remove-param" type="button" title="Remove">✕</button>
+  </div>`;
+}
+
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
 export async function init(el) {
@@ -257,6 +271,14 @@ function renderForm() {
         <small class="lf-help"><button class="lf-link" data-act="seed-analytes" type="button">Seed from known analytes</button> — pulls names from your result rules.</small></label>
 
       <div class="lf-fieldset">
+        <div class="lf-fieldset-title">Parameters — normal ranges you set</div>
+        <small class="lf-help" style="margin:-2px 0 8px">Checked on top of the lab’s own flags. <strong>Essential for analytes the lab shows with no range (e.g. HbA1c)</strong> — set the limit here and a result outside it blocks one-click filing. Leave a box blank if only one bound applies.</small>
+        <div id="lfParams" class="lf-params">${(p.parameters || []).map(paramRowHtml).join('') || paramRowHtml({})}</div>
+        <button class="lf-btn lf-btn-sm" data-act="add-param" type="button">+ Add parameter</button>
+        <label class="lf-check" style="margin-top:10px"><input type="checkbox" id="lfRequireAll" ${p.requireRangeForAll ? 'checked' : ''}> Don’t offer filing unless every result has a range (lab’s or one set here)</label>
+      </div>
+
+      <div class="lf-fieldset">
         <div class="lf-fieldset-title">Filing controls (use the exact on-screen text)</div>
         <small class="lf-help" style="margin:-2px 0 8px">Medicus files the whole report in one step: a button that marks it normal/no-action, then a file button. On a standard Medicus install these are the two defaults shown below.</small>
         <label class="lf-field"><span>“Normal / no action” button text *</span>
@@ -357,6 +379,17 @@ async function onClick(ev) {
     case 'seed-analytes':
       seedAnalytes();
       break;
+    case 'add-param': {
+      // Append a blank row via direct DOM (no re-render, so other field edits survive).
+      const box = container.querySelector('#lfParams');
+      if (box) box.insertAdjacentHTML('beforeend', paramRowHtml({}));
+      break;
+    }
+    case 'remove-param': {
+      const row = actEl.closest('.lf-param-row');
+      if (row) row.remove();
+      break;
+    }
     case 'save':
       await saveForm();
       break;
@@ -389,6 +422,20 @@ function seedAnalytes() {
   input.value = merged.join(', ');
 }
 
+function readParams() {
+  const rows = container.querySelectorAll('#lfParams .lf-param-row');
+  const out = [];
+  rows.forEach((row) => {
+    const val = (sel) => (row.querySelector(sel)?.value ?? '').trim();
+    const analyte = val('.lf-p-analyte');
+    const low = val('.lf-p-low');
+    const high = val('.lf-p-high');
+    if (!analyte || (low === '' && high === '')) return; // skip blank/incomplete rows
+    out.push({ analyte, low, high, unit: val('.lf-p-unit') });
+  });
+  return out;
+}
+
 function readForm() {
   const get = (id) => (container.querySelector('#' + id)?.value ?? '').trim();
   const checked = (id) => !!container.querySelector('#' + id)?.checked;
@@ -402,6 +449,8 @@ function readForm() {
     name: get('lfName'),
     match: splitList(get('lfMatch')),
     analytes: splitList(get('lfAnalytes')),
+    parameters: readParams(),
+    requireRangeForAll: checked('lfRequireAll'),
     filing: {
       normalOptionText: get('lfNormalOpt'),
       nextStepText: get('lfNextStep'),
@@ -463,6 +512,14 @@ function fillFromLlm() {
   set('lfRowSel', clean.filing.rowSelector);
   set('lfMsgTemplate', clean.patientMessage.template);
   set('lfMsgField', clean.patientMessage.fieldText);
+  // Rebuild the parameter rows from the parsed profile.
+  const paramsBox = container.querySelector('#lfParams');
+  if (paramsBox) {
+    const rows = (clean.parameters || []).map(paramRowHtml).join('');
+    paramsBox.innerHTML = rows || paramRowHtml({});
+  }
+  const reqChk = container.querySelector('#lfRequireAll');
+  if (reqChk) reqChk.checked = clean.requireRangeForAll === true;
   // Message stays OFF (lockForReview) — the clinician opts in deliberately.
   const msgChk = container.querySelector('#lfMsgEnabled');
   if (msgChk) msgChk.checked = false;
