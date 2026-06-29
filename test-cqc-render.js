@@ -39,7 +39,7 @@ const path = require('path');
           type: 'drug-monitoring',
           id: 'methotrexate-maintenance',
           drugClass: 'DMARD',
-          drug: { match: ['methotrexate', 'maxtrex'] },
+          drug: { match: ['methotrexate', 'maxtrex'], exclude: ['methotrexate injection'] },
           tests: [
             { name: 'FBC', intervalDays: 84 },
             { name: 'U&E', intervalDays: 84 },
@@ -69,7 +69,8 @@ const path = require('path');
     'statement TITLE renders (qualityStatement, not qs.title)'
   );
   check(html.includes('drug-monitoring rules'), 'statement SUMMARY renders');
-  check(html.includes('rules/drug-rules.json'), 'statement-level inline PROVENANCE renders (A1)');
+  check(html.includes('Sentinel drug-monitoring rules'), 'statement-level inline PROVENANCE renders, humanised (A1)');
+  check(!/rules\/[\w-]+\.json|assessRuleCurrency|\.js\b/.test(html), 'no raw file paths / code identifiers leak into the document');
   check(
     html.includes('Last updated 2 days ago.'),
     'per-file CURRENCY message renders (currencyFiles was dropped before)'
@@ -170,8 +171,8 @@ const path = require('path');
   check(/Monitoring-system readiness/i.test(html), 'headline verdict renders as the lead block');
   check(/What the ratings mean/i.test(html), 'RAG legend present (amber/red meaning shown on a green run)');
   check(/How to use this page/i.test(html), 'plain-language "how to use" guidance present');
-  check(/<details[^>]*class="cqc-matched"/.test(html), 'matched-term list is collapsed into <details> (no wall)');
-  check(/class="cqc-matched"[^>]* open/.test(exportHtml), 'matched-term <details> is OPEN in export mode (stays printable)');
+  check(/<details class="cqc-matched"/.test(html), 'matched-term list is collapsed into <details> (no wall)');
+  check(!/<details class="cqc-matched" open/.test(exportHtml), 'matched-term <details> stays collapsed on screen in export (print handler force-opens it)');
   // Verdict must precede the quality-statement detail (answer before the long read).
   check(
     html.indexOf('Monitoring-system readiness') < html.indexOf('Key question:'),
@@ -189,6 +190,8 @@ const path = require('path');
   check(/<details class="cqc-recon-details"/.test(html), 'reconciliation table is collapsed into <details>');
   check(/blank "your count" cells are filled in by you/i.test(html), 'worksheet states the blank cells are by-design');
   check(/does <strong>not<\/strong> confirm that any individual patient/i.test(html), 'verdict separates "rules current" from "patients monitored"');
+  check(/Excluded \(dropped\)/i.test(html) && /methotrexate injection/i.test(html), 'reconciliation discloses drug.exclude strings (silent-false-negative transparency)');
+  check(/System currency:/i.test(html), 'per-card RAG badge is labelled "System currency" (not a pass/fail)');
   // Dev/plumbing noise must not leak into the rendered output.
   check(!/WebFetch|COHORT-SPIKE/i.test(html), 'no developer noise (WebFetch / spike code) in the output');
   check(!/schema \d/i.test(html), 'no "schema N" plumbing in the coverage tiles');

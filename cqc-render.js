@@ -40,12 +40,35 @@ export function ragBadge(level) {
 // title= tooltip, never a code/filter string. Reads as human prose, e.g.
 //   "Patients on the active list with a coded lithium Rx in the last 6 months,
 //    as at 09:14 on 3 Jun 2026 · source: drug-rules v12 · interval: 6-monthly".
+// Map developer-facing source identifiers (file paths, function names, schema/spec
+// tags) to plain English. The panel's partner/GP read "source: rules/drug-rules.json"
+// and "assessRuleCurrency over rules/*.json" as leaked plumbing on an inspector page.
+function humaniseSource(s) {
+  let t = String(s || '').trim();
+  if (!t) return '';
+  // Strip a trailing "(specVersion …)" / "(schema …)" parenthetical.
+  t = t.replace(/\s*\((?:spec|schema)[^)]*\)\s*$/i, '').trim();
+  const MAP = [
+    [/rules\/drug-rules\.json/i, 'Sentinel drug-monitoring rules'],
+    [/rules\/qof-rules\.json/i, 'QOF indicator rules'],
+    [/rules\/vaccine-rules\.json/i, 'vaccine surveillance rules'],
+    [/rules\/alert-library\.json/i, 'prescribing-safety alert library'],
+    [/shared\/rule-currency\.js.*$/i, 'rule-currency check'],
+    [/engine\/[\w-]+\.js/gi, 'the suite engine'],
+  ];
+  for (const [re, label] of MAP) t = t.replace(re, label);
+  // Drop any residual bare file path / code token.
+  t = t.replace(/\b[\w/.-]+\.(?:js|json)\b/gi, '').replace(/\s{2,}/g, ' ').replace(/\(\s*\)/g, '').trim();
+  return t.replace(/[·,;\s]+$/, '').trim();
+}
+
 export function provenanceLine(provenance) {
   const p = provenance || {};
   const parts = [];
   if (p.denominator) parts.push(esc(p.denominator));
   if (p.asAt) parts.push(`as at ${esc(p.asAt)}`);
-  if (p.source) parts.push(`source: ${esc(p.source)}`);
+  const src = humaniseSource(p.source);
+  if (src) parts.push(`source: ${esc(src)}`);
   if (p.intervalApplied) parts.push(`interval: ${esc(p.intervalApplied)}`);
   if (!parts.length) return '';
   return `<span class="cqc-prov">${parts.join(' · ')}</span>`;
@@ -255,10 +278,12 @@ function renderMatchedTerms(terms, mode) {
       `<p class="cqc-note">No matched terms reported.</p></div>`
     );
   }
-  const open = mode === 'export' ? ' open' : '';
+  // Collapsed on screen in BOTH modes (an always-open export read as "a wall the
+  // length of a bus"); a beforeprint handler force-opens all <details> so the
+  // printed inspector pack still carries the full list.
   const chips = list.map((t) => `<li class="cqc-term">${esc(t)}</li>`).join('');
   return (
-    `<details class="cqc-matched"${open}>` +
+    `<details class="cqc-matched">` +
     `<summary class="cqc-matched-summary">Matched drug terms &mdash; ${list.length} coded string${list.length === 1 ? '' : 's'} <span class="cqc-matched-hint">(expand to check for missing brands or slow-release forms)</span></summary>` +
     `<p class="cqc-note">The raw coded drug-name strings the tool matched — eyeball this for completeness (e.g. missing slow-release or brand forms).</p>` +
     `<ul class="cqc-term-list">${chips}</ul></details>`
@@ -388,7 +413,9 @@ function renderQualityStatement(qs, mode) {
     `<section class="cqc-card cqc-qs" data-key="${esc(qs.key || '')}">` +
     `<div class="cqc-qs-head">` +
     `<h2>${subhead}</h2>` +
-    `<div class="cqc-qs-tags">${cat}${ragBadge(qs.rag)}</div>` +
+    // Label the badge "System currency" so a green is read as "the rule is current",
+    // never as a pass/fail of the practice (the manager's misread-as-a-scorecard risk).
+    `<div class="cqc-qs-tags">${cat}<span class="cqc-qs-ragcontext">System currency:</span>${ragBadge(qs.rag)}</div>` +
     `</div>` +
     summary +
     provHtml +
@@ -511,7 +538,13 @@ function renderReconciliation(readiness, mode) {
         `</td>` +
         `<td class="cqc-recon-defn">${esc(e.definition)}</td>` +
         `<td class="cqc-recon-terms"><span class="cqc-recon-terms-label">Coded terms:</span> ` +
-        `${e.matchTerms.map((t) => `<span class="cqc-term">${esc(t)}</span>`).join(' ')}</td>` +
+        `${e.matchTerms.map((t) => `<span class="cqc-term">${esc(t)}</span>`).join(' ')}` +
+        // Disclose excludes inline — a pharmacist must see what is silently dropped.
+        (Array.isArray(e.excludeTerms) && e.excludeTerms.length
+          ? `<div class="cqc-recon-excl"><span class="cqc-recon-excl-label">Excluded (dropped):</span> ` +
+            `${e.excludeTerms.map((t) => `<span class="cqc-term cqc-term-excl">${esc(t)}</span>`).join(' ')}</div>`
+          : '') +
+        `</td>` +
         `<td class="cqc-recon-count"><span class="cqc-recon-blank">your count: ____</span></td>` +
         `</tr>`
     )
@@ -531,9 +564,8 @@ function renderReconciliation(readiness, mode) {
   // The full table is long; collapse it so the Safe/Well-led evidence above stays
   // the focus. Opened in export mode (and force-opened in print) so the worksheet
   // still appears in the inspector pack.
-  const open = mode === 'export' ? ' open' : '';
   const collapsibleTable =
-    `<details class="cqc-recon-details"${open}>` +
+    `<details class="cqc-recon-details">` +
     `<summary class="cqc-recon-summary">Worksheet &mdash; ${entries.length} cohort definition${entries.length === 1 ? '' : 's'} to run in Medicus <span class="cqc-matched-hint">(expand to complete)</span></summary>` +
     table +
     `</details>`;

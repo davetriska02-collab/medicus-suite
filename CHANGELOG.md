@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.135.1] — 2026-06-29
+
+### CQC Inspection Readiness: exclude disclosure, de-jargoned provenance, print path
+
+Second pass from the iterating practice-panel appraisal. Disclosure and wording
+only — no clinical-rule or threshold changes.
+
+- **Silent-false-negative transparency.** The reconciliation worksheet now discloses
+  each rule's `drug.exclude` strings ("Excluded (dropped): …", in red) alongside the
+  matched terms — so a pharmacist can see what a rule silently drops (an over-broad
+  exclude is the classic invisible false negative).
+- **No leaked plumbing.** Provenance lines are humanised — file paths and code
+  identifiers (`rules/drug-rules.json`, `assessRuleCurrency over rules/*.json`) now
+  render as plain English ("source: Sentinel drug-monitoring rules", "rule-currency
+  check"); a test invariant fails the build if a raw `.json`/`.js` path reaches output.
+- **System ≠ pass.** Each quality-statement RAG badge is labelled "System currency:"
+  so an all-green page is not misread as a compliance pass/fail.
+- **Concise on screen, complete in print.** The matched-term list and reconciliation
+  worksheet stay collapsed on screen in both modes (the export read as "a wall the
+  length of a bus"); a `beforeprint` handler force-opens all collapsed lists so the
+  printed inspector pack still carries the full evidence.
+- **One-click inspector print.** A "Print inspector copy" button switches to export
+  mode and surfaces the confirm gate (it never bypasses the tick) — the admin's
+  switch-mode-then-tick-then-print journey is now one obvious button.
+- Coverage stat tiles styled (were an unstyled text dump).
+- `test-cqc-render.js`: +5 assertions (exclude disclosure, humanised provenance,
+  no-raw-path invariant, system-currency label, collapse-on-screen).
+
 ## [v3.135.0] — 2026-06-29
 
 ### CQC Inspection Readiness: answer-first layout, honesty hardening, CSV fix

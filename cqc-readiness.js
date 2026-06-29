@@ -215,6 +215,41 @@ function init() {
   // The export gate — re-render + re-enable as soon as it's ticked/un-ticked.
   $('cqcConfirm').addEventListener('change', renderCurrent);
 
+  // One-click "Print inspector copy" (R4 — the admin's most-confusing journey was
+  // switch-mode → tick → print). This jumps to export mode and surfaces the gate so
+  // the next step is obvious; it never bypasses the confirm tick (governance).
+  const printCopyBtn = $('cqcPrintCopy');
+  if (printCopyBtn) {
+    printCopyBtn.addEventListener('click', () => {
+      if (_mode !== 'export') setMode('export');
+      if (!_lastReadiness) {
+        generate();
+      }
+      if (!$('cqcConfirm').checked) {
+        $('cqcGate').classList.add('cqc-gate-flash');
+        $('cqcConfirm').focus();
+        setTimeout(() => $('cqcGate').classList.remove('cqc-gate-flash'), 1600);
+      } else if (exportAllowed()) {
+        window.print();
+      }
+    });
+  }
+
+  // Collapsed <details> (matched terms, reconciliation worksheet) are force-opened
+  // for printing so the inspector PDF carries the full evidence, then restored.
+  window.addEventListener('beforeprint', () => {
+    document.querySelectorAll('#cqcOutput details:not([open])').forEach((d) => {
+      d.dataset.printForced = '1';
+      d.open = true;
+    });
+  });
+  window.addEventListener('afterprint', () => {
+    document.querySelectorAll('#cqcOutput details[data-print-forced]').forEach((d) => {
+      d.open = false;
+      delete d.dataset.printForced;
+    });
+  });
+
   // Honour ?mode= from the launcher.
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');

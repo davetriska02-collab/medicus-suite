@@ -187,6 +187,7 @@
       if (!definition) continue;
 
       const drugTerms = rule.drug && Array.isArray(rule.drug.match) ? rule.drug.match : [];
+      const excludeTerms = rule.drug && Array.isArray(rule.drug.exclude) ? rule.drug.exclude : [];
       const leadTerm = drugTerms[0] || '';
 
       entries.push({
@@ -197,6 +198,10 @@
         definition,
         // The full match list so the practice knows which coded terms are covered.
         matchTerms: drugTerms.slice(),
+        // The exclude list — surfaced so a pharmacist can see what is SILENTLY DROPPED.
+        // An over-broad exclude is the classic invisible false negative (a valid
+        // parenteral-methotrexate patient excluded by "injection", etc.).
+        excludeTerms: excludeTerms.slice(),
       });
     }
 
