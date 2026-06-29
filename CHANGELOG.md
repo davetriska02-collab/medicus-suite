@@ -2,151 +2,106 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.136.2] — 2026-06-29
+## [v3.137.0] — 2026-06-29
 
-### CQC Inspection Readiness: clinician view collapses the methods table
+### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view
 
-In Clinician view the "Clinical methods & sources" reference table now sits behind
-a single expand toggle, so the glance is the verdict plus the four coverage tiles
-(Tom). The amber coded-data / "floor not a ceiling" caveat stays visible — a
-clinical-safety message is never hidden behind a click. Readiness/Export modes are
-unchanged (full methods table inline).
+A full practice-panel-driven overhaul of the CQC Inspection Readiness surface
+(`cqc-readiness.{html,js,css}`, `cqc-render.js`, `engine/cqc-evidence.js`). Wording,
+layout and disclosure only — no clinical-rule or threshold changes, and the
+read-only / no-cohort-enumeration honesty boundary is unchanged (the suite never
+fabricates a patient count). Consolidates the iterative work previously numbered
+v3.135.0–v3.136.2 on the development branch, renumbered to avoid collision with the
+OIR changes that shipped on main as v3.135.0/v3.136.0.
 
-## [v3.136.1] — 2026-06-29
+- **Answer-first layout.** A plain-English headline verdict ("Monitoring-system
+  readiness: GREEN — all rule sets current") leads the page; the multi-screen
+  alphabetical matched-term wall is collapsed behind a counted toggle; the
+  Safe/Well-led evidence and the reconciliation worksheet follow in a sensible
+  hierarchy.
+- **Honesty hardening.** "Verified {date} against BNF/NICE/MHRA via The Keeper"
+  wording; the coded-data "floor not a ceiling" caveat is prominent and de-duplicated;
+  vaccines labelled "surveillance"; developer/spec noise removed from the
+  inspector-facing document.
+- **Fixed the dead CSV export** (the button silently produced nothing — object-vs-string
+  return mismatch), now serialises the `{suffix, sections}` shape correctly.
+- **Per-exclude clinical reasons.** Each disclosed `drug.exclude` term shows why it is
+  dropped (grouped by family), so a pharmacist/nurse can sense-check a silent
+  false-negative line-by-line.
+- **Clinical methods & sources block.** Names the published version of each clinical
+  set — PINCER (Avery et al., BMJ 2012), Boustani ACB scale (ACBcalc.com), STOPP/START
+  v3 (2023) — read from drift-safe `SPEC` constants newly exported by
+  `engine/acb-scores.js` and `engine/stopp-start.js`; engine-method sets flagged as NOT
+  part of the rule-currency check.
+- **Clinician view (new third mode).** Verdict + coverage + collapsed methods only,
+  for a fast clinical glance; the amber coded-data safety caveat stays visible.
+- **Fillable reconciliation worksheet.** The "your count" cells are editable inputs the
+  practice types its own Medicus count into (persisted to `cqc.recon.counts`, printed
+  with the pack), with a live total and a "counts entered by / date / source" provenance
+  line. The suite still supplies no patient number.
 
-### CQC Inspection Readiness: clinician-view density, worksheet provenance, PINCER count reconciled
-
-Follow-up polish from the 9-confirmation panel round.
-
-- **Clinician view slimmed (Tom).** The verdict's stacked caveat boxes (legend +
-  "system not patient" + how-to) collapse to a single muted footnote, the redundant
-  top disclaimer strip is dropped (the footnote and page footer still carry "not
-  proof of compliance"), and the Generate/Print-inspector toolbar hint is hidden in
-  this mode — so the green verdict and the coverage manifest carry the glance.
-- **Worksheet provenance + total (Janet).** The reconciliation worksheet now has a
-  live "Total of your counts" row (summed from the practice's own typed figures —
-  not a suite-supplied number) and a "Counts entered by / Date / Source" line, so a
-  typed count carries who-and-when for the audit trail.
-- **PINCER count reconciled (Raj).** The methods table now reads "N of M alert rules
-  are PINCER-derived indicators" (instead of a bare indicator count that mismatched
-  the Alerts coverage tile) and labels the version explicitly as the suite's library
-  bundle, not a PINCER release.
+Tests: new coverage in `test-cqc-evidence.js` and `test-cqc-render.js`; full suite
+114/114. Method validated by a synthetic practice panel (six personas), recorded in
+`docs/appraisal/PRACTICE-cqc-readiness-2026-06-29.md`.
 
 ## [v3.136.0] — 2026-06-29
 
-### CQC Inspection Readiness: clinician view, named clinical sources, per-exclude reasons, fillable worksheet
+### Feature: nine new built-in OIR test definitions
 
-The four "push to 9" asks from the practice-panel loop, all honesty-preserving
-(no fabricated patient counts, no clinical-rule changes).
+Expanded `TEST_DEFS` in `engine/outstanding-match.js` with nine new entries,
+promoted from practice-level custom tests after clinical review. All are
+`singleAnalyte: true` (one result completes the test). Terms are kept to generic
+forms; lab-specific display strings belong in the planned lab database.
 
-- **Clinician view (new third mode).** A fast clinical glance — verdict + drug
-  coverage + clinical-methods only — with the Safe/Well-led scaffolding, worksheet
-  and sign-off hidden (they are for whoever assembles the pack). `?mode=clinician`
-  and a toolbar toggle; the verdict's "how to use" and coverage pointers adapt so
-  they never reference a section the clinician view hides.
-- **Clinical methods & sources block.** Names the published version of every
-  clinical set the suite implements — PINCER (Avery et al., BMJ 2012), the Boustani
-  ACB scale (ACBcalc.com), STOPP/START v3 (2023) — each flagged for whether it is
-  part of the rule-currency check (PINCER) or an engine method computed in the
-  Visualiser / Triage-lens (ACB, STOPP/START). Versions are read from drift-safe
-  `SPEC` constants newly exported by `engine/acb-scores.js` and `engine/stopp-start.js`,
-  so the disclosed version can never diverge from the code. Also added to the CSV.
-- **Per-exclude reasons.** Each disclosed `drug.exclude` term now shows a plain
-  clinical rationale (clozapine has its own monitoring; local vaginal oestrogen has
-  negligible systemic absorption; POPs are not combined contraception), grouped by
-  family so a 13-term set states its reason once. Curated in the CQC-disclosure
-  layer — it cannot affect `drugMatchesRule`.
-- **Fillable, persistable worksheet.** The "your count" cells are now inputs the
-  practice types its own Medicus count into; values persist (`cqc.recon.counts`) and
-  print with the pack. The suite still supplies no number — the read-only/no-cohort
-  honesty boundary is unchanged.
+New tests: **rheumatoid factor**, **HIV** (combined Ag/Ab screen), **vitamin D**
+(25-hydroxy), **urate** (+ uric acid synonym), **CRP** (+ c reactive protein),
+**hepatitis C**, **hepatitis B surface antigen** (surface-antigen-specific;
+core-antibody requests intentionally uncovered), **syphilis** (+ treponema),
+**faecal calprotectin**.
 
-New tests in `test-cqc-evidence.js` (exclude reasons, clinical-methods shape) and
-`test-cqc-render.js` (methods block, clinician-view stripping, editable count). Full
-suite 114/114.
+Safety notes:
+- `"RF"` deliberately not a req synonym (too short; anti-CCP is a different marker
+  and intentionally stays unrecognised so an RF result can never clear it).
+- Hep B def is narrow by design — `"Hepatitis B"` alone does not resolve to it,
+  preventing an HBsAg result from clearing a co-requested core-antibody request.
+- HIV bare `"hiv"` req term added for card-name resolution only, not in analytes
+  (avoids an HIV viral-load analyte row wrongly auto-ticking an Ab-screen request).
+- Cervical screening and histology deliberately excluded (see CHANGELOG v3.136.0
+  notes); HSL Analytics-specific vitamin D string deferred to lab database.
 
-## [v3.135.2] — 2026-06-29
-
-### CQC Inspection Readiness: clearer print path, exclude rationale, caveat de-dup
-
-Third practice-panel pass — wording/layout only.
-
-- **Inspector-print path made unambiguous.** The toolbar hint is rewritten as a
-  two-step instruction that points at the "Print inspector copy" button (it no
-  longer contradicts it by also telling the user to switch modes manually), and is
-  restyled so it is no longer the faintest text on the page. The confirm-gate note
-  now reads as a sign-off step, not a barrier ("Anyone may print … just make sure a
-  clinician/manager has reviewed the figures").
-- **Exclude rationale.** The worksheet now explains WHY excludes exist (deliberate
-  false-positive suppression) and prompts the safety sense-check, so a disclosed
-  "Excluded (dropped)" term no longer sends a nurse to the phone.
-- **Less hedging.** The coded-data/undercount caveat no longer double-states "coded
-  data only" in the same callout (it read as the page being unsure of itself); the
-  matched list is relabelled "drug names" (not "coded strings") and points to the
-  per-drug worksheet for a scannable, grouped view.
-
-## [v3.135.1] — 2026-06-29
-
-### CQC Inspection Readiness: exclude disclosure, de-jargoned provenance, print path
-
-Second pass from the iterating practice-panel appraisal. Disclosure and wording
-only — no clinical-rule or threshold changes.
-
-- **Silent-false-negative transparency.** The reconciliation worksheet now discloses
-  each rule's `drug.exclude` strings ("Excluded (dropped): …", in red) alongside the
-  matched terms — so a pharmacist can see what a rule silently drops (an over-broad
-  exclude is the classic invisible false negative).
-- **No leaked plumbing.** Provenance lines are humanised — file paths and code
-  identifiers (`rules/drug-rules.json`, `assessRuleCurrency over rules/*.json`) now
-  render as plain English ("source: Sentinel drug-monitoring rules", "rule-currency
-  check"); a test invariant fails the build if a raw `.json`/`.js` path reaches output.
-- **System ≠ pass.** Each quality-statement RAG badge is labelled "System currency:"
-  so an all-green page is not misread as a compliance pass/fail.
-- **Concise on screen, complete in print.** The matched-term list and reconciliation
-  worksheet stay collapsed on screen in both modes (the export read as "a wall the
-  length of a bus"); a `beforeprint` handler force-opens all collapsed lists so the
-  printed inspector pack still carries the full evidence.
-- **One-click inspector print.** A "Print inspector copy" button switches to export
-  mode and surfaces the confirm gate (it never bypasses the tick) — the admin's
-  switch-mode-then-tick-then-print journey is now one obvious button.
-- Coverage stat tiles styled (were an unstyled text dump).
-- `test-cqc-render.js`: +5 assertions (exclude disclosure, humanised provenance,
-  no-raw-path invariant, system-currency label, collapse-on-screen).
+`test-outstanding-match.js` — new sections 15–23 (resolve + auto-tick + negative
+for each); test 10a rewritten to use coeliac screen as the custom-test example
+(vitamin D is now a built-in; the baseline assertion would otherwise fail). Total:
+132 assertions, all passing.
 
 ## [v3.135.0] — 2026-06-29
 
-### CQC Inspection Readiness: answer-first layout, honesty hardening, CSV fix
+### Feature: OIR test-dictionary merge prompt + alphabetical list
 
-Reworked the readiness surface in response to a synthetic practice-panel appraisal
-(`docs/appraisal/PRACTICE-cqc-readiness-2026-06-29.md`). No clinical-rule or
-threshold changes — layout, wording, disclosure and a bug fix only.
+**Merge prompt on overlapping request terms.** When saving a custom test entry
+in the **Outstanding Requests** test dictionary, the editor now detects whether
+any existing custom entry shares a `req` term (case-insensitive). On conflict, a
+merge dialog is shown rather than silently creating a duplicate:
 
-- **Lead with the answer.** A plain-English headline verdict now renders first in
-  both modes ("Monitoring-system readiness: GREEN — all rule sets current"), with a
-  RAG legend (so a reader sees what amber/red mean on an all-green run) and a
-  "how to use this page" line. The multi-screen alphabetical matched-term list that
-  used to dominate the top is collapsed into a counted `<details>` (open in export /
-  print so the inspector pack still shows it).
-- **System ≠ patients.** The verdict states explicitly that it rates whether the
-  monitoring *rules* are current and does **not** confirm any individual patient has
-  been monitored — directing patient-level checks to the reconciliation worksheet.
-- **Reconciliation reframed.** The cohort-definition table is demoted below the
-  Safe/Well-led evidence, collapsed, and relabelled a "worksheet"; the blank
-  "your count" cells are explicitly stated to be by-design (the suite cannot count
-  patients read-only), so an exported pack with empty cells is not misread as
-  "nothing to report".
-- **No developer noise in the document.** Rule-file spec strings are sanitised for
-  display (the vaccine spec leaked "…WebFetch 403"; tiles dropped "schema 2"; the
-  internal "CQC-P0-COHORT-SPIKE" code reference is gone).
-- **Fix: Download CSV was dead.** `downloadCsvFile` read a non-existent `csv.text`
-  while `buildReadinessCsv` returns `{ suffix, sections }`, so the button silently
-  produced nothing; it now serialises the sections to RFC-4180 CSV and stamps the
-  filename from `generatedAt` (was a non-existent `asAt`).
-- Plain-language glosses for the CQC key-question jargon; coverage stat tiles styled
-  (were an unstyled text dump); helper hints on the disabled Print/CSV buttons and a
-  gentler confirm-gate note for non-clinician staff.
-- `test-cqc-render.js`: +19 assertions (CSV shape, headline verdict, collapsed
-  worksheet, ordering, no-developer-noise invariant).
+- Displays the proposed merged entry — unioned `req` / `rep` / `analyte` terms
+  from all conflicting entries, deduplicated (first-occurrence order preserved).
+- The merged label is editable; combined terms are shown read-only.
+- `singleAnalyte` is derived conservatively (only set if **all** merged entries
+  agree) and shown as a disabled checkbox — display only, not user-overridable.
+- The merged entry's key defaults to whichever conflicting entry matches a
+  built-in panel; otherwise the first existing (older) entry's key is kept.
+- Three choices: **Merge** (replace all conflicting entries with one merged
+  entry), **Save separately** (proceed despite the overlap), **Cancel**.
+
+Safety: the engine's `mergeTestDefs` floor (`engine/outstanding-match.js:381`)
+never copies `singleAnalyte` onto a built-in regardless of what the editor
+sends — the auto-tick threshold on multi-analyte panels cannot be lowered via
+config.
+
+**Alphabetical sort.** The custom test list is now sorted by label for display
+(stored order is unchanged, so the matcher is unaffected).
+
+`content-scripts/triage-lens/options.js`, `options.html`, `options.css`.
 
 ## [v3.134.7] — 2026-06-29
 

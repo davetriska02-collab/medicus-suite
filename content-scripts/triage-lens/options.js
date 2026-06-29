@@ -2979,10 +2979,24 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '_')
             .replace(/^_|_$/g, '');
+        if (!key) {
+          if (statusEl) statusEl.textContent = 'Label must contain at least one letter or number.';
+          return;
+        }
         entry = { key, disabled: false, label: labelVal, req, rep, analytes, singleAnalyte };
       }
 
       if (!Array.isArray(CONFIG.oirTests)) CONFIG.oirTests = [];
+
+      // Conflict check: only for entries that have req terms (not disable-mode).
+      if (mode !== 'disable') {
+        const conflicts = findOirReqConflicts(entry, CONFIG.oirTests, editKey);
+        if (conflicts.length) {
+          showOirMergeDialog(entry, conflicts, editKey);
+          return;
+        }
+      }
+
       const existingIdx = editKey
         ? CONFIG.oirTests.findIndex((t) => t.key === editKey)
         : CONFIG.oirTests.findIndex((t) => t.key === entry.key);
@@ -3048,6 +3062,110 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (analytesRow) analytesRow.style.display = '';
   };
 
+  // Returns custom entries whose req terms overlap with entry's req terms,
+  // excluding the entry itself and the entry being edited (by editKey).
+  const findOirReqConflicts = (entry, tests, editKey) => {
+    const norm = (s) => String(s || '').toLowerCase().trim();
+    const newReq = (entry.req || []).map(norm).filter(Boolean);
+    if (!newReq.length) return [];
+    return (tests || []).filter((t) => {
+      if (!t || t.key === entry.key) return false;
+      if (editKey && t.key === editKey) return false;
+      return (t.req || []).map(norm).some((r) => newReq.includes(r));
+    });
+  };
+
+  // Builds a merged entry from a new entry and one or more conflicting existing entries.
+  // Key/label: taken from the entry whose key matches a built-in (if any), otherwise the
+  // first conflict (existing entry). singleAnalyte only if all merged entries agree.
+  const buildMergedOirEntry = (newEntry, conflicts) => {
+    const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
+    const newIsBuiltin = (defs || []).some((d) => d.key === newEntry.key);
+    const conflictIsBuiltin = !newIsBuiltin && conflicts.some((c) => (defs || []).some((d) => d.key === c.key));
+    const base = newIsBuiltin ? newEntry : conflictIsBuiltin ? conflicts.find((c) => (defs || []).some((d) => d.key === c.key)) : conflicts[0];
+    const all = [newEntry, ...conflicts];
+    const unionArr = (field) => {
+      const seen = new Set();
+      const out = [];
+      for (const e of all) {
+        for (const t of e[field] || []) {
+          const k = String(t).toLowerCase().trim();
+          if (k && !seen.has(k)) { seen.add(k); out.push(t); }
+        }
+      }
+      return out;
+    };
+    return {
+      key: base.key,
+      label: base.label || base.key,
+      req: unionArr('req'),
+      rep: unionArr('rep'),
+      analytes: unionArr('analytes'),
+      singleAnalyte: all.every((e) => !!e.singleAnalyte),
+      disabled: false,
+    };
+  };
+
+  // Shows the merge dialog. Replaces button nodes to avoid stale listener accumulation.
+  const showOirMergeDialog = (newEntry, conflicts, editKey) => {
+    const overlay = $('#oirMergeOverlay');
+    if (!overlay) return;
+    const merged = buildMergedOirEntry(newEntry, conflicts);
+    const conflictNames = conflicts.map((c) => `"${c.label || c.key}"`).join(', ');
+    $('#oirMergeDesc').textContent =
+      `Request term(s) overlap with ${conflictNames}. Merge combines all terms into one entry, or save as a separate entry.`;
+    $('#oirMergeLabel').value = merged.label;
+    $('#oirMergeReq').value = merged.req.join('\n');
+    $('#oirMergeRep').value = merged.rep.join('\n');
+    $('#oirMergeAnalytes').value = merged.analytes.join('\n');
+    $('#oirMergeSingle').checked = merged.singleAnalyte;
+    overlay.style.display = 'flex';
+
+    const hide = () => { overlay.style.display = 'none'; };
+
+    const replaceBtn = (id, listener) => {
+      const old = $(`#${id}`);
+      if (!old) return;
+      const fresh = old.cloneNode(true);
+      old.parentNode.replaceChild(fresh, old);
+      fresh.addEventListener('click', listener);
+    };
+
+    replaceBtn('btnOirMergeConfirm', async () => {
+      hide();
+      const label = ($('#oirMergeLabel').value || '').trim() || merged.label;
+      const finalEntry = { ...merged, label };
+      // Remove the conflicting entries and any prior entry for the merged key
+      const keysToRemove = new Set([finalEntry.key, ...conflicts.map((c) => c.key)]);
+      if (editKey) keysToRemove.add(editKey);
+      CONFIG.oirTests = (CONFIG.oirTests || []).filter((t) => !keysToRemove.has(t.key));
+      CONFIG.oirTests.push(finalEntry);
+      await saveConfig(CONFIG);
+      flash('Entries merged and saved');
+      resetOirForm();
+      renderOirTests();
+    });
+
+    replaceBtn('btnOirMergeSeparate', async () => {
+      hide();
+      if (!Array.isArray(CONFIG.oirTests)) CONFIG.oirTests = [];
+      const existingIdx = editKey
+        ? CONFIG.oirTests.findIndex((t) => t.key === editKey)
+        : CONFIG.oirTests.findIndex((t) => t.key === newEntry.key);
+      if (existingIdx >= 0) {
+        CONFIG.oirTests[existingIdx] = newEntry;
+      } else {
+        CONFIG.oirTests.push(newEntry);
+      }
+      await saveConfig(CONFIG);
+      flash('Test saved');
+      resetOirForm();
+      renderOirTests();
+    });
+
+    replaceBtn('btnOirMergeCancel', hide);
+  };
+
   const renderOirTests = () => {
     const container = $('#oirTestList');
     const emptyEl = $('#oirTestListEmpty');
@@ -3060,7 +3178,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
     if (emptyEl) emptyEl.style.display = 'none';
     const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
-    for (const t of tests) {
+    const sorted = [...tests].sort((a, b) => (a.label || a.key).localeCompare(b.label || b.key));
+    for (const t of sorted) {
       const isBuiltinKey = (defs || []).some((d) => d.key === t.key);
       let typeLabel;
       if (t.disabled) {

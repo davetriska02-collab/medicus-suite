@@ -483,28 +483,30 @@ check(fshEnriched[0].elsewhereDate === '2026-06-16', 'FSH elsewhere date surface
 console.log('user test dictionary:');
 
 // 10a. A brand-new custom test is recognised once merged in.
+// (Vitamin D is now a built-in, so coeliac screen — deliberately uncovered — is
+// the example. The mechanism under test is mergeTestDefs, not the specific test.)
 const customDefs = M.mergeTestDefs(M.TEST_DEFS, [
   {
-    key: 'vitd',
-    label: 'Vitamin D',
-    req: ['vitamin d', '25-oh vit d'],
-    rep: ['vitamin d'],
-    analytes: ['vitamin d', '25 hydroxyvitamin d'],
+    key: 'coeliac',
+    label: 'Coeliac screen',
+    req: ['coeliac', 'tissue transglutaminase', 'ttg'],
+    rep: ['coeliac', 'tissue transglutaminase'],
+    analytes: ['tissue transglutaminase', 'endomysial antibody'],
     singleAnalyte: true,
   },
 ]);
-check(M.resolveDef('Vitamin D Level', ['req']) === null, '10a built-in defs do NOT know Vitamin D (baseline)');
+check(M.resolveDef('Coeliac Screen', ['req']) === null, '10a built-in defs do NOT know Coeliac screen (baseline)');
 check(
-  M.resolveDef('Vitamin D Level', ['req'], customDefs) &&
-    M.resolveDef('Vitamin D Level', ['req'], customDefs).key === 'vitd',
-  '10a merged defs DO resolve a custom Vitamin D test'
+  M.resolveDef('Coeliac Screen', ['req'], customDefs) &&
+    M.resolveDef('Coeliac Screen', ['req'], customDefs).key === 'coeliac',
+  '10a merged defs DO resolve a custom Coeliac test'
 );
-const vitdReport = {
-  title: 'Vitamin D',
-  results: [{ name: '25 hydroxyvitamin D', specimen: 'Vitamin D', date: '2026-05-01' }],
+const coeliacReport = {
+  title: 'Coeliac screen',
+  results: [{ name: 'Tissue transglutaminase IgA', specimen: 'Coeliac screen', date: '2026-05-01' }],
 };
-const vitdOut = M.matchOutstanding(['Vitamin D (Dr X • 01 Apr 2026, 09:00)'], vitdReport, { testDefs: customDefs });
-check(vitdOut[0].status === 'resulted' && vitdOut[0].autoTick === true, '10a custom test auto-ticks via opts.testDefs');
+const coeliacOut = M.matchOutstanding(['Coeliac Screen (Dr X • 01 Apr 2026, 09:00)'], coeliacReport, { testDefs: customDefs });
+check(coeliacOut[0].status === 'resulted' && coeliacOut[0].autoTick === true, '10a custom test auto-ticks via opts.testDefs');
 
 // 10b. Extending a built-in with a local lab synonym (append-only).
 const extDefs = M.mergeTestDefs(M.TEST_DEFS, [{ key: 'ue', req: ['euc', 'renal screen'] }]);
@@ -731,6 +733,123 @@ check(
   !ferritinOnly.confident.has('b12folate') && !ferritinOnly.tentative.has('b12folate'),
   '14c a ferritin report does not feed b12folate'
 );
+
+// ── 15. Rheumatoid factor ─────────────────────────────────────────────────────
+console.log('rheumatoid factor:');
+const rfDef = M.resolveDef('Rheumatoid Factor', ['req']);
+check(rfDef && rfDef.key === 'rheumatoid_factor', '15 "Rheumatoid Factor" resolves to key=rheumatoid_factor');
+const rfReport = {
+  title: 'Rheumatoid factor',
+  results: [{ name: 'Rheumatoid factor', specimen: 'Rheumatoid factor', date: '2026-06-25' }],
+};
+const rfOut = M.matchOutstanding([{ name: 'Rheumatoid Factor', requestedDate: '2026-06-01' }], rfReport);
+check(
+  rfOut[0].status === 'resulted' && rfOut[0].autoTick === true && rfOut[0].confidence === 'confident',
+  '15a an RF report auto-ticks the RF request'
+);
+const rfNeg = M.matchOutstanding([{ name: 'Rheumatoid Factor', requestedDate: '2026-06-01' }], lipidReport);
+check(rfNeg[0].status === 'outstanding' && rfNeg[0].autoTick === false, '15b an unrelated report leaves RF outstanding');
+check(
+  M.resolveDef('Anti-CCP antibody', ['req']) === null,
+  '15c anti-CCP is NOT recognised — never cleared by an RF report (fail-safe)'
+);
+
+// ── 16. HIV combined antigen/antibody screen ───────────────────────────────────
+console.log('HIV Ag/Ab screen:');
+const hivDef = M.resolveDef('HIV 1 and 2 antibody / p24Ag', ['req']);
+check(hivDef && hivDef.key === 'hiv', '16 HIV request resolves to key=hiv');
+check(
+  M.resolveDef('HIV screen', ['req']) && M.resolveDef('HIV screen', ['req']).key === 'hiv',
+  '16 bare "hiv" req synonym resolves "HIV screen"'
+);
+const hivReport = { results: [{ name: 'HIV 1 & 2 ANTIGEN/ANTIBODY', specimen: null, date: '2026-06-25' }] };
+const hivOut = M.matchOutstanding([{ name: 'HIV 1 and 2 antibody / p24Ag', requestedDate: '2026-06-01' }], hivReport);
+check(hivOut[0].status === 'resulted' && hivOut[0].autoTick === true, '16a HIV Ag/Ab result auto-ticks the HIV request');
+const hivReport2 = { results: [{ name: 'HIV 1&2 ANTIGEN/ANTIBODY', specimen: null, date: '2026-06-25' }] };
+const hivOut2 = M.matchOutstanding([{ name: 'HIV screen', requestedDate: '2026-06-01' }], hivReport2);
+check(hivOut2[0].status === 'resulted' && hivOut2[0].autoTick === true, '16b the unspaced "1&2" report form also auto-ticks');
+const hivNeg = M.matchOutstanding([{ name: 'HIV screen', requestedDate: '2026-06-01' }], lipidReport);
+check(hivNeg[0].status === 'outstanding', '16c an unrelated report leaves the HIV request outstanding');
+
+// ── 17. Vitamin D (25-hydroxy) ────────────────────────────────────────────────
+console.log('vitamin D:');
+const vitDDef = M.resolveDef('Vitamin D', ['req']);
+check(vitDDef && vitDDef.key === 'vitamin_d', '17 "Vitamin D" resolves to key=vitamin_d');
+const vitDReport = { results: [{ name: '25 hydroxyvitamin D', specimen: null, date: '2026-06-25' }] };
+const vitDOut = M.matchOutstanding([{ name: 'Vitamin D', requestedDate: '2026-06-01' }], vitDReport);
+check(vitDOut[0].status === 'resulted' && vitDOut[0].autoTick === true, '17a a 25-hydroxyvitamin D result auto-ticks the request');
+const vitDNeg = M.matchOutstanding([{ name: 'Vitamin D', requestedDate: '2026-06-01' }], lipidReport);
+check(vitDNeg[0].status === 'outstanding', '17b an unrelated report leaves the Vitamin D request outstanding');
+
+// ── 18. Urate / uric acid ─────────────────────────────────────────────────────
+console.log('urate:');
+const urateDef = M.resolveDef('Urate, Blood', ['req']);
+check(urateDef && urateDef.key === 'urate', '18 "Urate, Blood" resolves to key=urate');
+check(
+  M.resolveDef('Serum uric acid', ['req']) && M.resolveDef('Serum uric acid', ['req']).key === 'urate',
+  '18 "uric acid" synonym resolves to key=urate'
+);
+const urateReport = { results: [{ name: 'Urate', specimen: null, date: '2026-06-25' }] };
+const urateOut = M.matchOutstanding([{ name: 'Urate, Blood', requestedDate: '2026-06-01' }], urateReport);
+check(urateOut[0].status === 'resulted' && urateOut[0].autoTick === true, '18a a urate result auto-ticks the urate request');
+const urateNeg = M.matchOutstanding([{ name: 'Urate, Blood', requestedDate: '2026-06-01' }], lipidReport);
+check(urateNeg[0].status === 'outstanding', '18b an unrelated report leaves the urate request outstanding');
+
+// ── 19. C-reactive protein ────────────────────────────────────────────────────
+console.log('CRP:');
+const crpDef = M.resolveDef('C-Reactive Protein, Blood', ['req']);
+check(crpDef && crpDef.key === 'crp', '19 "C-Reactive Protein, Blood" resolves to key=crp');
+const crpReport = { results: [{ name: 'CRP', specimen: null, date: '2026-06-25' }] };
+const crpOut = M.matchOutstanding([{ name: 'C-Reactive Protein, Blood', requestedDate: '2026-06-01' }], crpReport);
+check(crpOut[0].status === 'resulted' && crpOut[0].autoTick === true, '19a a CRP result auto-ticks the CRP request');
+const crpNeg = M.matchOutstanding([{ name: 'C-Reactive Protein, Blood', requestedDate: '2026-06-01' }], lipidReport);
+check(crpNeg[0].status === 'outstanding', '19b an unrelated report leaves the CRP request outstanding');
+
+// ── 20. Hepatitis C antibody ───────────────────────────────────────────────────
+console.log('hepatitis C:');
+const hepCDef = M.resolveDef('Hepatitis C IgG', ['req']);
+check(hepCDef && hepCDef.key === 'hepatitis_c', '20 "Hepatitis C IgG" resolves to key=hepatitis_c');
+const hepCReport = { results: [{ name: 'Hepatitis C IgG level', specimen: null, date: '2026-06-25' }] };
+const hepCOut = M.matchOutstanding([{ name: 'Hepatitis C IgG', requestedDate: '2026-06-01' }], hepCReport);
+check(hepCOut[0].status === 'resulted' && hepCOut[0].autoTick === true, '20a a Hep C result auto-ticks the Hep C request');
+const hepBReportForC = { results: [{ name: 'Hepatitis B surface antigen', specimen: null, date: '2026-06-25' }] };
+const hepCvsB = M.matchOutstanding([{ name: 'Hepatitis C IgG', requestedDate: '2026-06-01' }], hepBReportForC);
+check(hepCvsB[0].status === 'outstanding', '20b a Hep B report leaves the Hep C request outstanding (distinct markers)');
+
+// ── 21. Hepatitis B surface antigen ───────────────────────────────────────────
+console.log('hepatitis B surface antigen:');
+const hepBDef = M.resolveDef('Hepatitis B surface antigen', ['req']);
+check(hepBDef && hepBDef.key === 'hepatitis_b', '21 "Hepatitis B surface antigen" resolves to key=hepatitis_b');
+const hepBReport = { results: [{ name: 'Hep B surface antigen level', specimen: null, date: '2026-06-25' }] };
+const hepBOut = M.matchOutstanding([{ name: 'Hepatitis B surface antigen', requestedDate: '2026-06-01' }], hepBReport);
+check(hepBOut[0].status === 'resulted' && hepBOut[0].autoTick === true, '21a an HBsAg result auto-ticks the HBsAg request');
+check(
+  M.resolveDef('Hepatitis B core antibody', ['req']) === null,
+  '21b a Hep B core-antibody request does NOT resolve to the HBsAg def (fail-safe)'
+);
+const hepBNeg = M.matchOutstanding([{ name: 'Hepatitis B surface antigen', requestedDate: '2026-06-01' }], lipidReport);
+check(hepBNeg[0].status === 'outstanding', '21c an unrelated report leaves the HBsAg request outstanding');
+
+// ── 22. Syphilis serology ─────────────────────────────────────────────────────
+console.log('syphilis:');
+const syphDef = M.resolveDef('Syphilis Serology, Blood', ['req']);
+check(syphDef && syphDef.key === 'syphilis', '22 "Syphilis Serology, Blood" resolves to key=syphilis');
+const syphReport = { results: [{ name: 'Syphilis Total Antibody Screen', specimen: null, date: '2026-06-25' }] };
+const syphOut = M.matchOutstanding([{ name: 'Syphilis Serology, Blood', requestedDate: '2026-06-01' }], syphReport);
+check(syphOut[0].status === 'resulted' && syphOut[0].autoTick === true, '22a a syphilis screen result auto-ticks the request');
+const syphNeg = M.matchOutstanding([{ name: 'Syphilis Serology, Blood', requestedDate: '2026-06-01' }], lipidReport);
+check(syphNeg[0].status === 'outstanding', '22b an unrelated report leaves the syphilis request outstanding');
+
+// ── 23. Faecal calprotectin ───────────────────────────────────────────────────
+console.log('faecal calprotectin:');
+const calproDef = M.resolveDef('Faecal Calprotectin', ['req']);
+check(calproDef && calproDef.key === 'calprotectin', '23 "Faecal Calprotectin" resolves to key=calprotectin');
+const calproReport = { results: [{ name: 'Faecal calprotectin', specimen: null, date: '2026-06-25' }] };
+const calproOut = M.matchOutstanding([{ name: 'Faecal Calprotectin', requestedDate: '2026-06-01' }], calproReport);
+check(calproOut[0].status === 'resulted' && calproOut[0].autoTick === true, '23a a calprotectin result auto-ticks the request');
+const fitForCalpro = { results: [{ name: 'Faecal haemoglobin', specimen: null, date: '2026-06-25' }] };
+const calproVsFit = M.matchOutstanding([{ name: 'Faecal Calprotectin', requestedDate: '2026-06-01' }], fitForCalpro);
+check(calproVsFit[0].status === 'outstanding', '23b a FIT report leaves the calprotectin request outstanding (no faecal cross-clear)');
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);
