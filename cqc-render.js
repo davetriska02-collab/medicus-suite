@@ -284,8 +284,8 @@ function renderMatchedTerms(terms, mode) {
   const chips = list.map((t) => `<li class="cqc-term">${esc(t)}</li>`).join('');
   return (
     `<details class="cqc-matched">` +
-    `<summary class="cqc-matched-summary">Matched drug terms &mdash; ${list.length} coded string${list.length === 1 ? '' : 's'} <span class="cqc-matched-hint">(expand to check for missing brands or slow-release forms)</span></summary>` +
-    `<p class="cqc-note">The raw coded drug-name strings the tool matched — eyeball this for completeness (e.g. missing slow-release or brand forms).</p>` +
+    `<summary class="cqc-matched-summary">Matched drug names &mdash; ${list.length} term${list.length === 1 ? '' : 's'} <span class="cqc-matched-hint">(expand to check for missing brands or slow-release forms)</span></summary>` +
+    `<p class="cqc-note">The full alphabetical list the tool matches. For the same coverage <strong>grouped per drug</strong> (easier to scan), see the Reconciliation worksheet below.</p>` +
     `<ul class="cqc-term-list">${chips}</ul></details>`
   );
 }
@@ -322,12 +322,16 @@ function renderCoverageManifest(readiness, mode) {
     `<p class="cqc-note">These are the rule sets the practice runs — counts are rules and indicators, ` +
     `<strong>not patient numbers</strong>. Patient-level figures are a later phase.</p>`;
 
-  // A5/F4: coded-data + undercount caveat as one prominent callout — counts are a floor, not a ceiling.
-  const codedLine = cov.codedDataOnly
-    ? `<strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted. `
-    : '';
-  const undercount = cov.undercountCaveat ? esc(cov.undercountCaveat) : '';
-  const callout = codedLine || undercount ? `<p class="cqc-callout" role="note">${codedLine}${undercount}</p>` : '';
+  // A5/F4: ONE prominent coded-data/undercount callout — counts are a floor, not a
+  // ceiling. Previously this stacked codedLine + undercountCaveat, which restated
+  // "coded data only" twice in the same box and read as the page hedging (Margaret).
+  // Prefer the fuller undercount caveat; fall back to the short coded-data line.
+  const undercount = cov.undercountCaveat
+    ? esc(cov.undercountCaveat) // self-contained — already opens "Counts are derived from coded data only…"
+    : cov.codedDataOnly
+      ? `<strong>Coded data only.</strong> Results filed as scanned letters or free text are not counted; treat figures as a floor, not a ceiling.`
+      : '';
+  const callout = undercount ? `<p class="cqc-callout" role="note">${undercount}</p>` : '';
   const keeper = cov.keeperProvenance ? `<p class="cqc-note cqc-keeper">${esc(cov.keeperProvenance)}</p>` : '';
 
   return (
@@ -587,6 +591,14 @@ function renderReconciliation(readiness, mode) {
     `Definitions are derived deterministically from the suite's active drug-monitoring rules. ` +
     `If a rule is disabled in Options it will not appear here. The "coded terms" column lists ` +
     `every drug name the rule matches — check it for gaps (e.g. a missing slow-release brand).` +
+    `</p>` +
+    // Eileen: an exclude with no reason sends a nurse to the phone. Explain WHY excludes
+    // exist and prompt the safety check, since a per-exclude reason is not in the data.
+    `<p class="cqc-note cqc-recon-foot">` +
+    `<strong class="cqc-recon-excl-label">Excluded (dropped)</strong> terms are deliberate suppressions of known ` +
+    `false-positives (typically a different formulation or an unrelated drug sharing a name fragment). They are ` +
+    `listed so you can sense-check each one: if an exclude could drop a real patient who <em>needs</em> this ` +
+    `monitoring, raise it — an over-broad exclude is a silent gap.` +
     `</p>` +
     `</section>`
   );

@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.135.2] — 2026-06-29
+
+### CQC Inspection Readiness: clearer print path, exclude rationale, caveat de-dup
+
+Third practice-panel pass — wording/layout only.
+
+- **Inspector-print path made unambiguous.** The toolbar hint is rewritten as a
+  two-step instruction that points at the "Print inspector copy" button (it no
+  longer contradicts it by also telling the user to switch modes manually), and is
+  restyled so it is no longer the faintest text on the page. The confirm-gate note
+  now reads as a sign-off step, not a barrier ("Anyone may print … just make sure a
+  clinician/manager has reviewed the figures").
+- **Exclude rationale.** The worksheet now explains WHY excludes exist (deliberate
+  false-positive suppression) and prompts the safety sense-check, so a disclosed
+  "Excluded (dropped)" term no longer sends a nurse to the phone.
+- **Less hedging.** The coded-data/undercount caveat no longer double-states "coded
+  data only" in the same callout (it read as the page being unsure of itself); the
+  matched list is relabelled "drug names" (not "coded strings") and points to the
+  per-drug worksheet for a scannable, grouped view.
+
 ## [v3.135.1] — 2026-06-29
 
 ### CQC Inspection Readiness: exclude disclosure, de-jargoned provenance, print path

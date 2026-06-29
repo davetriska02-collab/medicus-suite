@@ -137,9 +137,13 @@ body {
 .cqc-controls-hint {
   max-width: 900px;
   margin: 8px auto 0;
-  font-size: 12px;
-  color: var(--text2);
-  line-height: 1.5;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.55;
+  background: rgba(0, 94, 184, 0.06);
+  border-left: 3px solid var(--nhs-blue);
+  border-radius: 4px;
+  padding: 8px 12px;
 }
 @media print {
   .cqc-controls-hint {
