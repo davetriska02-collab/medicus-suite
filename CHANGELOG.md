@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.139.1] — 2026-06-29
+
+### Lab filing: corrected to the real Medicus filing model (from live console capture)
+
+A read-only console capture of an actual Medicus investigation-report filing screen
+showed the filing model differs from the initial placeholder assumptions, so the
+profile schema, LLM prompt/example, form labels and macro are corrected to match:
+
+- Medicus files at **whole-report level**, not per analyte: a "Normal result, no
+  action required" filing-note link, a **"Next Steps" radio group** (File results
+  with no further action / File results and message patient / Reassign task), and a
+  "File results" button.
+- New `filing.nextStepText` field: the macro now **explicitly selects the
+  no-further-action Next Step** before filing, and **aborts** if a profile names one
+  that isn't on screen — so it can never file while "message patient" or "reassign"
+  is selected. Regression test mirrors the captured screen.
+- `match` guidance corrected: Medicus reports often have no panel/section title, so
+  match terms are tested against the **analyte names**; example/placeholder updated.
+- Prompt, example JSON and form placeholders updated to the real Medicus labels.
+- Patient messaging on Medicus is a **native path** ("File results and message
+  patient" opens a Medicus dialog). Auto-driving that dialog is deferred until it is
+  captured; for now the feature files via the no-further-action path only.
+
 ## [v3.139.0] — 2026-06-29
 
 ### Lab filing: fail-closed gate, honest wording, hardening (red-team + Practice follow-up)

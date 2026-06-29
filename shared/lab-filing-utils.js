@@ -106,7 +106,7 @@
       } else if (f.fileButtonText.length > LF_LIMITS.control) {
         errs.push(`filing.fileButtonText must be ${LF_LIMITS.control} characters or fewer.`);
       }
-      ['openControlText', 'completeButtonText'].forEach((k) => {
+      ['openControlText', 'completeButtonText', 'nextStepText'].forEach((k) => {
         if (f[k] !== undefined && !isStr(f[k])) errs.push(`filing.${k} must be a string.`);
         else if (isStr(f[k]) && f[k].length > LF_LIMITS.control)
           errs.push(`filing.${k} must be ${LF_LIMITS.control} characters or fewer.`);
@@ -180,6 +180,7 @@
         rowSelector: clamp(f.rowSelector, LF_LIMITS.selector),
         openControlText: clamp(f.openControlText, LF_LIMITS.control),
         normalOptionText: clamp(f.normalOptionText, LF_LIMITS.control),
+        nextStepText: clamp(f.nextStepText, LF_LIMITS.control),
         fileButtonText: clamp(f.fileButtonText, LF_LIMITS.control),
         completeButtonText: clamp(f.completeButtonText, LF_LIMITS.control),
         filingComment: clamp(f.filingComment, LF_LIMITS.comment),
@@ -417,16 +418,17 @@
   // test-lab-filing-utils.js).
 
   const LF_PROMPT_SCHEMA = `FILING-PROFILE SCHEMA (output a single JSON object):
-- "name"   (required) — short label for this lab/report layout, e.g. "City Hospital — U&E / FBC".
-- "match"  — array of lowercase substrings that identify reports this profile applies to, matched against the report/specimen title (e.g. ["full blood count","u&e","liver function"]). Leave [] if unsure.
-- "analytes" — array of the analyte/subheading names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
-- "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id:
-    - "normalOptionText" (required) — the exact visible text of the option that marks a subheading as normal / no-action, e.g. "No action required" or "Normal — file".
-    - "openControlText"  — if each subheading's options are behind a menu/dropdown, the visible text/label that opens it; else omit.
-    - "rowSelector"      — optional CSS selector that matches each subheading row, if you can infer it from the screenshots; else omit.
-    - "fileButtonText"   (required) — the exact visible text of the button that files the result, e.g. "File".
-    - "completeButtonText" — the exact visible text of the button that completes/closes the task, e.g. "Complete"; omit if filing also completes.
-    - "filingComment"    — optional short free-text comment to record on filing, e.g. "All results within normal limits."
+- "name"   (required) — short label for this lab/report layout, e.g. "Routine bloods — normal, no action".
+- "match"  — array of lowercase substrings that identify reports this profile applies to. Medicus reports often have NO panel/section title, so match against the ANALYTE NAMES that appear on the report (e.g. ["haemoglobin","platelets","white cell","mcv"] for an FBC, or ["sodium","potassium","creatinine"] for U&E). Leave [] if unsure. At least one must appear in the report for the button to be offered.
+- "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
+- "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id. On Medicus, filing is done at WHOLE-REPORT level (not per analyte): there is one button/note that marks the report normal, then a file button.
+    - "normalOptionText" (required) — the exact visible text of the control that marks the report as normal / no-action. On Medicus this is the filing-note link "Normal result, no action required".
+    - "nextStepText" — if the screen has a "Next Steps" choice (radio/option), the exact visible text of the NO-FURTHER-ACTION option, so the macro selects it explicitly and never files down a "message patient" or "reassign" path. On Medicus this is "File results with no further action". OMIT only if there is no such choice.
+    - "fileButtonText"   (required) — the exact visible text of the button that files the result. On Medicus this is "File results".
+    - "completeButtonText" — only if a SEPARATE button completes/closes the task after filing; OMIT if the file button is the final step (Medicus files in one step, so leave this out).
+    - "openControlText"  — only if the normal option is hidden behind a menu you must open first; OMIT otherwise (Medicus shows it directly).
+    - "rowSelector"      — leave out; Medicus files at report level, not per row.
+    - "filingComment"    — usually unnecessary on Medicus (the "Add filing note…" button already records the note). Omit unless your lab needs an extra free-text comment.
 - "patientMessage" — optional. The macro only PREPARES a draft; the clinician sends it.
     - "template" — the message body, e.g. "Dear {firstName}, your recent blood test results are all normal. No action is needed...". Use {firstName} as the only placeholder.
     - "triggerText"/"fieldText" — visible text of the control that opens the message and the message field, if you can see them on the screenshots; else omit.
@@ -439,7 +441,7 @@ Do NOT include "id", "source", "reviewed", "enabled" or "updatedAt" — the exte
 4. The patient message must say results are normal/no action needed in plain, reassuring English (reading age ~9–11). Never imply a result that needs action is normal.`;
 
   function filingProfilePrompt() {
-    return `You are helping a UK NHS GP configure a "lab results auto-filing" profile for the Medicus clinical system. The clinician will paste SCREENSHOTS of their lab-result FILING screen (the page where each subheading of a blood test is marked normal/abnormal and the result is filed). Your job is to turn those screenshots into ONE JSON filing profile that tells a browser macro exactly which on-screen controls to use to file an all-normal result.
+    return `You are helping a UK NHS GP configure a "lab results auto-filing" profile for the Medicus clinical system. The clinician will paste SCREENSHOTS of their lab-result FILING screen (the investigation-report task where the whole report is marked normal/no-action and filed). Your job is to turn those screenshots into ONE JSON filing profile that tells a browser macro exactly which on-screen controls to use to file an all-normal result. NOTE: Medicus files the WHOLE report in one step — there is a button to mark it normal/no-action and a button to file; there are usually no per-analyte controls.
 
 This profile is used ONLY when the suite has already confirmed every parameter in the result is within normal limits. It must drive the SAME controls a clinician would click — never invent a shortcut.
 
@@ -452,20 +454,13 @@ ${LF_PROMPT_RULES}
 
 --- EXAMPLE JSON ---
 {
-  "name": "Example Hospital — routine bloods (FBC / U&E / LFT)",
-  "match": ["full blood count", "u&e", "urea and electrolytes", "liver function"],
-  "analytes": ["haemoglobin", "white cell count", "platelets", "sodium", "potassium", "creatinine", "egfr", "alt", "bilirubin"],
+  "name": "Routine bloods — normal, no action (Medicus)",
+  "match": ["haemoglobin", "platelets", "white cell", "mcv", "sodium", "potassium", "creatinine"],
+  "analytes": ["haemoglobin", "white cell count", "platelets", "rbc", "mcv", "neutrophils", "sodium", "potassium", "creatinine", "egfr"],
   "filing": {
-    "normalOptionText": "No action required",
-    "openControlText": "Select action",
-    "fileButtonText": "File",
-    "completeButtonText": "Complete",
-    "filingComment": "All results within normal limits, no action needed."
-  },
-  "patientMessage": {
-    "template": "Dear {firstName}, your recent blood test results are all normal and no action is needed. Thank you.",
-    "triggerText": "Send message",
-    "fieldText": "Message"
+    "normalOptionText": "Normal result, no action required",
+    "nextStepText": "File results with no further action",
+    "fileButtonText": "File results"
   }
 }
 --- END EXAMPLE ---

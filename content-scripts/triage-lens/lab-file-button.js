@@ -253,6 +253,19 @@
     }
     result.marked = marked;
 
+    // STEP 1c — if the screen has a "Next Steps" choice, EXPLICITLY select the
+    // no-further-action option named by the profile. This is a hard safety step:
+    // it guarantees we never file while "message patient" or "reassign" is the
+    // selected next step. If the profile names one and it isn't on screen, abort.
+    if (f.nextStepText) {
+      const step = findByText(root, ['[role="radio"]', '.q-radio', 'label', 'div', 'span'], f.nextStepText, vis);
+      if (!step) {
+        result.reason = 'no-next-step';
+        return result;
+      }
+      if (!(step.getAttribute && step.getAttribute('aria-checked') === 'true')) click(step);
+    }
+
     // STEP 2 — optional filing comment (best-effort; never aborts).
     if (f.filingComment) {
       const field = queryAll(root, ['textarea', 'input[type="text"]']).find((el) => {

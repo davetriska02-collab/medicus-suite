@@ -246,11 +246,11 @@ function renderForm() {
       </details>
 
       <label class="lf-field"><span>Profile name</span>
-        <input id="lfName" class="lf-input" value="${v(p.name)}" placeholder="e.g. City Hospital — routine bloods"></label>
+        <input id="lfName" class="lf-input" value="${v(p.name)}" placeholder="e.g. Routine bloods — normal, no action"></label>
 
       <label class="lf-field"><span>Applies to (match terms, comma-separated)</span>
-        <input id="lfMatch" class="lf-input" value="${v((p.match || []).join(', '))}" placeholder="full blood count, u&e, liver function">
-        <small class="lf-help">Substrings matched against the report/specimen titles. The button only auto-offers on reports that match.</small></label>
+        <input id="lfMatch" class="lf-input" value="${v((p.match || []).join(', '))}" placeholder="haemoglobin, platelets, white cell, sodium, potassium, creatinine">
+        <small class="lf-help">Matched against the report’s <strong>analyte names</strong> (Medicus reports often have no panel title). The button only auto-offers when at least one term appears.</small></label>
 
       <label class="lf-field"><span>Analyte names on this lab’s reports (comma-separated)</span>
         <input id="lfAnalytes" class="lf-input" value="${v((p.analytes || []).join(', '))}" placeholder="haemoglobin, sodium, potassium, creatinine">
@@ -258,18 +258,22 @@ function renderForm() {
 
       <div class="lf-fieldset">
         <div class="lf-fieldset-title">Filing controls (use the exact on-screen text)</div>
-        <label class="lf-field"><span>“Normal / no action” option text *</span>
-          <input id="lfNormalOpt" class="lf-input" value="${v(f.normalOptionText)}" placeholder="No action required"></label>
-        <label class="lf-field"><span>Per-subheading menu opener (optional)</span>
-          <input id="lfOpenCtl" class="lf-input" value="${v(f.openControlText)}" placeholder="Select action"></label>
+        <small class="lf-help" style="margin:-2px 0 8px">Medicus files the whole report in one step: a button that marks it normal/no-action, then a file button. On a standard Medicus install these are the two defaults shown below.</small>
+        <label class="lf-field"><span>“Normal / no action” button text *</span>
+          <input id="lfNormalOpt" class="lf-input" value="${v(f.normalOptionText)}" placeholder="Normal result, no action required"></label>
+        <label class="lf-field"><span>“Next step: no further action” option text</span>
+          <input id="lfNextStep" class="lf-input" value="${v(f.nextStepText)}" placeholder="File results with no further action">
+          <small class="lf-help">If the screen has a Next Steps choice, the macro selects this one explicitly so it can never file down a “message patient” or “reassign” path.</small></label>
         <label class="lf-field"><span>File button text *</span>
-          <input id="lfFileBtn" class="lf-input" value="${v(f.fileButtonText)}" placeholder="File"></label>
+          <input id="lfFileBtn" class="lf-input" value="${v(f.fileButtonText)}" placeholder="File results"></label>
         <label class="lf-field"><span>Complete button text (optional)</span>
-          <input id="lfCompleteBtn" class="lf-input" value="${v(f.completeButtonText)}" placeholder="Complete"></label>
+          <input id="lfCompleteBtn" class="lf-input" value="${v(f.completeButtonText)}" placeholder="leave blank — File results is the final step on Medicus"></label>
+        <label class="lf-field"><span>“Open menu first” button text (optional)</span>
+          <input id="lfOpenCtl" class="lf-input" value="${v(f.openControlText)}" placeholder="leave blank unless the normal option is behind a menu"></label>
         <label class="lf-field"><span>Filing comment (optional)</span>
-          <input id="lfComment" class="lf-input" value="${v(f.filingComment)}" placeholder="All results within normal limits, no action needed."></label>
+          <input id="lfComment" class="lf-input" value="${v(f.filingComment)}" placeholder="usually blank — the note button already records one"></label>
         <label class="lf-field"><span>Row CSS selector (advanced, optional)</span>
-          <input id="lfRowSel" class="lf-input" value="${v(f.rowSelector)}" placeholder="leave blank unless you know it"></label>
+          <input id="lfRowSel" class="lf-input" value="${v(f.rowSelector)}" placeholder="leave blank — Medicus files at report level"></label>
       </div>
 
       <div class="lf-fieldset">
@@ -398,6 +402,7 @@ function readForm() {
     analytes: splitList(get('lfAnalytes')),
     filing: {
       normalOptionText: get('lfNormalOpt'),
+      nextStepText: get('lfNextStep'),
       openControlText: get('lfOpenCtl'),
       fileButtonText: get('lfFileBtn'),
       completeButtonText: get('lfCompleteBtn'),
@@ -446,6 +451,7 @@ function fillFromLlm() {
   set('lfMatch', (clean.match || []).join(', '));
   set('lfAnalytes', (clean.analytes || []).join(', '));
   set('lfNormalOpt', clean.filing.normalOptionText);
+  set('lfNextStep', clean.filing.nextStepText);
   set('lfOpenCtl', clean.filing.openControlText);
   set('lfFileBtn', clean.filing.fileButtonText);
   set('lfCompleteBtn', clean.filing.completeButtonText);

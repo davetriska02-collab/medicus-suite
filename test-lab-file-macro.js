@@ -220,6 +220,54 @@ function normalScreen() {
   check(msgField.value === 'Dear John, all normal.', 'pre-fills the named message field');
   check(res.filed === true, 'still files the result alongside preparing the message');
 
+  // 9. REAL Medicus screen (from live console captures, 2026-06-29): filing is
+  //    report-level — a "Normal result, no action required" filing-note link, a
+  //    "Next Steps" radio group, and a "File results" button. No per-subheading
+  //    option controls, no separate Complete button.
+  console.log('\n--- real Medicus report-level filing (captured) ---');
+  CLICKS = [];
+  const medicusProfile = {
+    name: 'Routine bloods — normal, no action (Medicus)',
+    match: ['haemoglobin', 'platelets'],
+    filing: {
+      normalOptionText: 'Normal result, no action required',
+      nextStepText: 'File results with no further action',
+      fileButtonText: 'File results',
+    },
+    patientMessage: { enabled: false },
+    commitMode: 'confirm',
+  };
+  const medicusScreen = () => [
+    new El({ tag: 'button', text: 'Normal result, no action required', label: 'NoteBtn' }),
+    new El({ role: 'radio', text: 'File results with no further action', label: 'StepNoAction' }),
+    new El({ role: 'radio', text: 'File results and message patient', label: 'StepMessage' }),
+    new El({ role: 'radio', text: 'Reassign task', label: 'StepReassign' }),
+    new El({ tag: 'button', text: 'File results', label: 'FileResultsBtn' }),
+    new El({ tag: 'button', text: 'Create task', label: 'CreateTask' }),
+    new El({ tag: 'button', text: 'Haemoglobin', label: 'Hb' }),
+  ];
+  res = await fileAllNormal(baseOpts({ root: new Root(medicusScreen()), profile: medicusProfile }));
+  check(res.filed === true && res.marked === 1, 'files the report after clicking the normal-note link');
+  check(res.completed === false, 'no Complete step (File results is the commit)');
+  check(CLICKS.indexOf('StepNoAction') !== -1, 'explicitly selects the "no further action" Next Step');
+  check(
+    CLICKS.indexOf('StepMessage') === -1 && CLICKS.indexOf('StepReassign') === -1,
+    'never selects the message/reassign Next Steps'
+  );
+  check(
+    CLICKS.indexOf('FileResultsBtn') > CLICKS.indexOf('StepNoAction'),
+    'File results clicked AFTER selecting the next step'
+  );
+  check(CLICKS.indexOf('Hb') === -1 && CLICKS.indexOf('CreateTask') === -1, 'analyte/other buttons never clicked');
+
+  // 9b. if the named Next Step option is absent, ABORT (never file with the wrong step selected)
+  console.log('\n--- next-step option missing → abort ---');
+  CLICKS = [];
+  const noStep = medicusScreen().filter((e) => e.label !== 'StepNoAction');
+  res = await fileAllNormal(baseOpts({ root: new Root(noStep), profile: medicusProfile }));
+  check(res.reason === 'no-next-step' && res.filed === false, 'aborts when the no-further-action option is not found');
+  check(CLICKS.indexOf('FileResultsBtn') === -1, 'does not file when the next step could not be selected');
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();
