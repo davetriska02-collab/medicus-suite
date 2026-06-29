@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.140.0] — 2026-06-29
+
+### Lab filing: optional "+ message patient" action (prepare-only handoff)
+
+A console capture of the Medicus filing screen showed messaging is a native Next
+Step ("File results and message patient") that opens an inline compose area and
+relabels/disables the commit button. So the feature now offers the clinician BOTH
+actions at the point of use, without ever sending:
+
+- **Two buttons** when a profile enables messaging: **"File all normal"**
+  (no-further-action path) and **"✉ + message patient"**. The first files as
+  before. The second selects Medicus's "File results and message patient" Next
+  Step, drops the profile's **custom message** (with `{firstName}` filled) on the
+  clipboard and into the compose field if it can find it, then **stops** — the
+  clinician checks the recipient and message in Medicus and presses send. The macro
+  **never selects a recipient and never sends.**
+- New `filing.nextStepMessageText` field (default "File results and message
+  patient"); the message action aborts if it can't find that option.
+- The no-further-action path no longer prepares a message at all — messaging is now
+  a separate, explicit action, so the patient's name never lands on the clipboard
+  unless the clinician chose the message action.
+- Schema/prompt/example and the authoring form updated; new macro tests cover the
+  handoff (selects the message step, fills the custom message, never files/sends)
+  and the abort when no message step is configured.
+
 ## [v3.139.1] — 2026-06-29
 
 ### Lab filing: corrected to the real Medicus filing model (from live console capture)

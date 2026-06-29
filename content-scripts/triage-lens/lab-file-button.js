@@ -253,18 +253,7 @@
     }
     result.marked = marked;
 
-    // STEP 1c — if the screen has a "Next Steps" choice, EXPLICITLY select the
-    // no-further-action option named by the profile. This is a hard safety step:
-    // it guarantees we never file while "message patient" or "reassign" is the
-    // selected next step. If the profile names one and it isn't on screen, abort.
-    if (f.nextStepText) {
-      const step = findByText(root, ['[role="radio"]', '.q-radio', 'label', 'div', 'span'], f.nextStepText, vis);
-      if (!step) {
-        result.reason = 'no-next-step';
-        return result;
-      }
-      if (!(step.getAttribute && step.getAttribute('aria-checked') === 'true')) click(step);
-    }
+    const STEP_RADIO_SELECTORS = ['[role="radio"]', '.q-radio', '.q-item', 'label', 'div', 'span'];
 
     // STEP 2 — optional filing comment (best-effort; never aborts).
     if (f.filingComment) {
@@ -276,22 +265,59 @@
       if (field) setValue(field, f.filingComment);
     }
 
-    // STEP 3 — prepare (never send) the patient message.
-    if (profile.patientMessage && profile.patientMessage.enabled && profile.patientMessage.template) {
-      const text = o.buildMessage
-        ? o.buildMessage(profile.patientMessage.template, o.patient)
-        : profile.patientMessage.template;
-      result.preparedMessage = text;
-      // Best-effort pre-fill of a visible message field if the profile named one.
-      if (profile.patientMessage.fieldText) {
-        const msgField = findByText(
-          root,
-          ['textarea', 'input[type="text"]', '[contenteditable="true"]'],
-          profile.patientMessage.fieldText,
-          vis
-        );
-        if (msgField) setValue(msgField, text);
+    // ─────────────────────────────────────────────────────────────────────────
+    // ACTION: 'fileAndMessage' — PREPARE-ONLY HANDOFF. Select the "message patient"
+    // Next Step (which opens Medicus's inline message compose), drop the custom
+    // message on the clipboard / into the body field if we can find it, then STOP.
+    // The macro NEVER presses the send/commit button and NEVER picks a recipient —
+    // the clinician reviews the recipient and message in Medicus and sends. This is
+    // the safe handoff for an outbound patient communication.
+    // ─────────────────────────────────────────────────────────────────────────
+    if (o.action === 'fileAndMessage') {
+      if (!f.nextStepMessageText) {
+        result.reason = 'message-not-configured';
+        return result;
       }
+      const msgStep = findByText(root, STEP_RADIO_SELECTORS, f.nextStepMessageText, vis);
+      if (!msgStep) {
+        result.reason = 'no-message-step';
+        return result;
+      }
+      if (!(msgStep.getAttribute && msgStep.getAttribute('aria-checked') === 'true')) click(msgStep);
+
+      const m = profile.patientMessage || {};
+      if (m.template) {
+        const text = o.buildMessage ? o.buildMessage(m.template, o.patient) : m.template;
+        result.preparedMessage = text;
+        if (m.fieldText) {
+          const body = findByText(
+            root,
+            ['textarea', 'input[type="text"]', '[contenteditable="true"]'],
+            m.fieldText,
+            vis
+          );
+          if (body) setValue(body, text);
+        }
+      }
+      result.ok = true;
+      result.reason = 'message-ready'; // caller copies the message + highlights Medicus's send button
+      return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ACTION: 'fileNoAction' (default) — file with no further action.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // STEP 1c — EXPLICITLY select the no-further-action Next Step. Hard safety
+    // step: it guarantees we never file while "message patient" or "reassign" is
+    // the selected next step. If the profile names one and it isn't on screen, abort.
+    if (f.nextStepText) {
+      const step = findByText(root, STEP_RADIO_SELECTORS, f.nextStepText, vis);
+      if (!step) {
+        result.reason = 'no-next-step';
+        return result;
+      }
+      if (!(step.getAttribute && step.getAttribute('aria-checked') === 'true')) click(step);
     }
 
     // STEP 4 — commit gate. A human always presses the final button.
@@ -458,6 +484,7 @@
   // ── floating button UI ───────────────────────────────────────────────────────
   let host = null;
   let btn = null;
+  let msgBtn = null;
   let busy = false;
   let currentProfile = null;
 
@@ -467,12 +494,27 @@
     host.className = 'chlf-host chlf-hidden';
     btn = document.createElement('button');
     btn.className = 'chlf-btn';
-    btn.onclick = onClick;
+    btn.onclick = () => onAction('fileNoAction');
+    // Optional second action — only shown when the profile enables messaging.
+    msgBtn = document.createElement('button');
+    msgBtn.className = 'chlf-btn chlf-msg chlf-hidden';
+    msgBtn.onclick = () => onAction('fileAndMessage');
     host.appendChild(btn);
+    host.appendChild(msgBtn);
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
     document.body.appendChild(host);
+  }
+
+  function messagingEnabled(profile) {
+    return !!(
+      profile &&
+      profile.patientMessage &&
+      profile.patientMessage.enabled &&
+      profile.filing &&
+      profile.filing.nextStepMessageText
+    );
   }
 
   function showButton(profile) {
@@ -486,22 +528,34 @@
       (mode === 'manual'
         ? 'Pre-fills the normal options for you to review and File.'
         : 'Asks you to confirm, then files this result as normal. Irreversible.');
+    // Second action: file + message patient (prepares Medicus's message, never sends).
+    if (messagingEnabled(profile)) {
+      msgBtn.disabled = false;
+      msgBtn.textContent = '✉ + message patient';
+      msgBtn.title =
+        'Selects Medicus’s “message patient” option and drops your message ready to send — you review the recipient and message and press send. It never sends for you.';
+      msgBtn.classList.remove('chlf-hidden');
+    } else {
+      msgBtn.classList.add('chlf-hidden');
+    }
     host.classList.remove('chlf-hidden');
   }
   // A non-actionable note shown when a profile fits but the result has something
   // the gate cannot judge — so the clinician knows the feature saw the result and
   // deliberately did NOT offer to file it (and why), rather than seeing nothing.
   function showBlockedHint(blockers) {
-    currentProfile = null; // not fileable — onClick early-returns
+    currentProfile = null; // not fileable — onAction early-returns
     btn.className = 'chlf-btn chlf-note';
     btn.disabled = true;
     btn.textContent = 'Auto-file not offered — review manually';
     btn.title = 'This result was not offered for one-click filing because: ' + (blockers || []).join('; ') + '.';
+    if (msgBtn) msgBtn.classList.add('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
   function hideButton() {
     currentProfile = null;
     if (host) host.classList.add('chlf-hidden');
+    if (msgBtn) msgBtn.classList.add('chlf-hidden');
   }
 
   function toast(msg, kind) {
@@ -528,10 +582,11 @@
     }
   }
 
-  async function onClick() {
+  async function onAction(action) {
     if (busy || !currentProfile) return;
     busy = true;
     btn.disabled = true;
+    if (msgBtn) msgBtn.disabled = true;
     try {
       // Re-verify at click time with a FRESH fetch (force=true bypasses the cache)
       // — an irreversible file must act on live data, and must clear every
@@ -548,6 +603,7 @@
       const res = await fileAllNormal({
         root: document.body,
         profile,
+        action,
         severity: rs.severity,
         blockers: rs.blockers,
         report: rs.report,
@@ -561,15 +617,45 @@
         buildConfirm: LF && LF.buildFilingConfirmMessage,
       });
 
-      if (res.reason === 'no-normal-controls' || res.reason === 'no-file-button') {
+      if (res.reason === 'no-normal-controls' || res.reason === 'no-file-button' || res.reason === 'no-next-step') {
         toast(
           'Couldn’t find the filing controls this profile describes — nothing was changed. Check the profile’s labels.',
           'err'
         );
         return;
       }
+      if (res.reason === 'no-message-step' || res.reason === 'message-not-configured') {
+        toast('Couldn’t find the “message patient” option for this profile — nothing was changed.', 'err');
+        return;
+      }
       if (res.reason === 'cancelled') {
         toast('Cancelled — nothing was filed. The normal options are pre-filled.', 'warn');
+        return;
+      }
+      if (res.reason === 'message-ready') {
+        // PREPARE-ONLY handoff: copy the custom message and highlight Medicus's own
+        // send button. We never press it and never choose the recipient.
+        if (res.preparedMessage) {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText)
+              navigator.clipboard.writeText(res.preparedMessage);
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        const sendBtn = findByText(
+          document.body,
+          ['button', '[role="button"]', 'input[type="submit"]'],
+          profile.filing.nextStepMessageText
+        );
+        if (sendBtn) highlight(sendBtn);
+        toast(
+          'Marked normal and selected “message patient”.' +
+            (res.preparedMessage ? ' Your message is on the clipboard.' : '') +
+            ' Check the recipient and message in Medicus, then send — the macro never sends for you.',
+          'ok'
+        );
+        // hand off; leave the button visible in case the clinician changes their mind
         return;
       }
       if (res.reason === 'manual-ready') {
@@ -578,21 +664,7 @@
         toast('Marked ' + res.marked + ' subheading(s) normal. Review, then click File.', 'ok');
       } else if (res.filed) {
         recordAudit(profile, res, rs);
-        let m = 'Filed as normal (' + res.marked + ' subheading(s))' + (res.completed ? ' and completed.' : '.');
-        // Prepare-only patient message: copy to clipboard ONLY after a successful
-        // file — never in manual/cancel paths (the message carries the patient's
-        // first name and the clipboard can be observed on a shared screen).
-        if (res.preparedMessage) {
-          try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(res.preparedMessage);
-            }
-          } catch (e) {
-            /* ignore */
-          }
-          m += ' Patient message copied to clipboard — paste and send if appropriate.';
-        }
-        toast(m, 'ok');
+        toast('Filed as normal (' + res.marked + ' subheading(s))' + (res.completed ? ' and completed.' : '.'), 'ok');
         hideButton();
       } else {
         toast('Could not complete filing (' + (res.reason || 'unknown') + '). Nothing was completed.', 'err');
@@ -600,6 +672,7 @@
     } finally {
       busy = false;
       btn.disabled = false;
+      if (msgBtn) msgBtn.disabled = false;
     }
   }
 
@@ -658,12 +731,14 @@
   }
 
   const CSS = [
-    '.chlf-host{position:fixed;right:18px;bottom:18px;z-index:2147483000}',
+    '.chlf-host{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;flex-direction:column;gap:8px;align-items:flex-end}',
     '.chlf-host.chlf-hidden{display:none}',
     '.chlf-btn{background:#0d6e5e;color:#fff;border:0;padding:11px 16px;border-radius:10px;cursor:pointer;',
     'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22);max-width:340px;',
     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.chlf-btn:hover{background:#0a5a4d}.chlf-btn:disabled{opacity:.6;cursor:default}',
+    '.chlf-btn.chlf-hidden{display:none}',
+    '.chlf-btn.chlf-msg{background:#5b3fb0;font-size:12px;padding:9px 14px}.chlf-btn.chlf-msg:hover{background:#4a3393}',
     '.chlf-btn.chlf-note{background:#92400e;cursor:default}.chlf-btn.chlf-note:hover{background:#92400e}',
     '.chlf-toast{position:fixed;right:18px;bottom:74px;z-index:2147483000;max-width:360px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',

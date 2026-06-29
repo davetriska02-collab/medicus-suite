@@ -106,7 +106,7 @@
       } else if (f.fileButtonText.length > LF_LIMITS.control) {
         errs.push(`filing.fileButtonText must be ${LF_LIMITS.control} characters or fewer.`);
       }
-      ['openControlText', 'completeButtonText', 'nextStepText'].forEach((k) => {
+      ['openControlText', 'completeButtonText', 'nextStepText', 'nextStepMessageText'].forEach((k) => {
         if (f[k] !== undefined && !isStr(f[k])) errs.push(`filing.${k} must be a string.`);
         else if (isStr(f[k]) && f[k].length > LF_LIMITS.control)
           errs.push(`filing.${k} must be ${LF_LIMITS.control} characters or fewer.`);
@@ -181,6 +181,7 @@
         openControlText: clamp(f.openControlText, LF_LIMITS.control),
         normalOptionText: clamp(f.normalOptionText, LF_LIMITS.control),
         nextStepText: clamp(f.nextStepText, LF_LIMITS.control),
+        nextStepMessageText: clamp(f.nextStepMessageText, LF_LIMITS.control),
         fileButtonText: clamp(f.fileButtonText, LF_LIMITS.control),
         completeButtonText: clamp(f.completeButtonText, LF_LIMITS.control),
         filingComment: clamp(f.filingComment, LF_LIMITS.comment),
@@ -424,7 +425,8 @@
 - "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id. On Medicus, filing is done at WHOLE-REPORT level (not per analyte): there is one button/note that marks the report normal, then a file button.
     - "normalOptionText" (required) — the exact visible text of the control that marks the report as normal / no-action. On Medicus this is the filing-note link "Normal result, no action required".
     - "nextStepText" — if the screen has a "Next Steps" choice (radio/option), the exact visible text of the NO-FURTHER-ACTION option, so the macro selects it explicitly and never files down a "message patient" or "reassign" path. On Medicus this is "File results with no further action". OMIT only if there is no such choice.
-    - "fileButtonText"   (required) — the exact visible text of the button that files the result. On Medicus this is "File results".
+    - "nextStepMessageText" — optional: the exact visible text of the "file AND message the patient" Next Step option, e.g. "File results and message patient". Only used when the clinician chooses the "+ message patient" action; the macro selects it and prepares the message but NEVER sends — the clinician sends in the lab system. OMIT if the lab has no messaging step.
+    - "fileButtonText"   (required) — the exact visible text of the button that files the result (no-action path). On Medicus this is "File results".
     - "completeButtonText" — only if a SEPARATE button completes/closes the task after filing; OMIT if the file button is the final step (Medicus files in one step, so leave this out).
     - "openControlText"  — only if the normal option is hidden behind a menu you must open first; OMIT otherwise (Medicus shows it directly).
     - "rowSelector"      — leave out; Medicus files at report level, not per row.
@@ -460,7 +462,11 @@ ${LF_PROMPT_RULES}
   "filing": {
     "normalOptionText": "Normal result, no action required",
     "nextStepText": "File results with no further action",
+    "nextStepMessageText": "File results and message patient",
     "fileButtonText": "File results"
+  },
+  "patientMessage": {
+    "template": "Dear {firstName}, your recent blood test results are all normal and no action is needed. Thank you."
   }
 }
 --- END EXAMPLE ---

@@ -204,8 +204,9 @@ function normalScreen() {
   check(res.marked === 2 && res.filed === true, 'opens each per-row menu and selects the normal option');
   check(CLICKS.indexOf('menu1') !== -1 && CLICKS.indexOf('menu2') !== -1, 'clicked each row menu opener');
 
-  // 8. patient message prepared, never sent
-  console.log('\n--- patient message (prepare only) ---');
+  // 8. the no-action (default) path does NOT prepare/send a message, even if the
+  //    profile has one — messaging is a separate, explicit action (scenario 10).
+  console.log('\n--- no-action path never touches the message ---');
   CLICKS = [];
   const msgProfile = {
     name: 'Msg profile',
@@ -216,9 +217,9 @@ function normalScreen() {
   const msgField = new El({ tag: 'textarea', ariaLabel: 'Message', label: 'msgField' });
   const msgScreen = normalScreen().concat([msgField]);
   res = await fileAllNormal(baseOpts({ root: new Root(msgScreen), profile: msgProfile }));
-  check(res.preparedMessage === 'Dear John, all normal.', 'prepares message with {firstName} filled');
-  check(msgField.value === 'Dear John, all normal.', 'pre-fills the named message field');
-  check(res.filed === true, 'still files the result alongside preparing the message');
+  check(res.filed === true, 'no-action path files the result');
+  check(!res.preparedMessage, 'no-action path does NOT prepare a patient message');
+  check(msgField.value === '', 'no-action path does NOT touch the message field');
 
   // 9. REAL Medicus screen (from live console captures, 2026-06-29): filing is
   //    report-level — a "Normal result, no action required" filing-note link, a
@@ -267,6 +268,45 @@ function normalScreen() {
   res = await fileAllNormal(baseOpts({ root: new Root(noStep), profile: medicusProfile }));
   check(res.reason === 'no-next-step' && res.filed === false, 'aborts when the no-further-action option is not found');
   check(CLICKS.indexOf('FileResultsBtn') === -1, 'does not file when the next step could not be selected');
+
+  // 10. fileAndMessage action: PREPARE-ONLY handoff — selects the message Next Step,
+  //     fills the custom message, and STOPS without sending or filing.
+  console.log('\n--- fileAndMessage: prepare-only handoff ---');
+  CLICKS = [];
+  const msgProfile2 = {
+    name: 'Routine bloods — normal + message',
+    match: ['haemoglobin'],
+    filing: {
+      normalOptionText: 'Normal result, no action required',
+      nextStepText: 'File results with no further action',
+      nextStepMessageText: 'File results and message patient',
+      fileButtonText: 'File results',
+    },
+    patientMessage: { enabled: true, template: 'Dear {firstName}, your results are all normal.', fieldText: 'Message' },
+    commitMode: 'confirm',
+  };
+  const msgBody = new El({ tag: 'textarea', ariaLabel: 'Message', label: 'MsgBody' });
+  const msgScreen2 = medicusScreen().concat([msgBody]);
+  res = await fileAllNormal(baseOpts({ root: new Root(msgScreen2), profile: msgProfile2, action: 'fileAndMessage' }));
+  check(res.reason === 'message-ready' && res.filed === false, 'message action prepares but never files/sends');
+  check(CLICKS.indexOf('StepMessage') !== -1, 'selects the "File results and message patient" Next Step');
+  check(res.preparedMessage === 'Dear John, your results are all normal.', 'fills the custom message with {firstName}');
+  check(msgBody.value === 'Dear John, your results are all normal.', 'pre-fills the message field when named');
+  check(
+    CLICKS.indexOf('FileResultsBtn') === -1 && CLICKS.indexOf('StepNoAction') === -1,
+    'never clicks File results or the no-action step'
+  );
+
+  // 10b. message action but profile has no message step configured → abort
+  console.log('\n--- fileAndMessage without a message step → abort ---');
+  CLICKS = [];
+  res = await fileAllNormal(
+    baseOpts({ root: new Root(medicusScreen()), profile: medicusProfile, action: 'fileAndMessage' })
+  );
+  check(
+    res.reason === 'message-not-configured' && res.filed === false,
+    'aborts message action when no message step configured'
+  );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

@@ -278,12 +278,14 @@ function renderForm() {
 
       <div class="lf-fieldset">
         <div class="lf-fieldset-title">Patient message (prepared only — you send it)</div>
-        <label class="lf-check"><input type="checkbox" id="lfMsgEnabled" ${m.enabled ? 'checked' : ''}> Prepare a “results normal” message on filing</label>
-        <label class="lf-field"><span>Message template ({firstName} allowed)</span>
+        <label class="lf-check"><input type="checkbox" id="lfMsgEnabled" ${m.enabled ? 'checked' : ''}> Offer a “+ message patient” action when filing</label>
+        <small class="lf-help" style="margin:-2px 0 8px">Adds a second button. It selects the lab’s “message patient” option and drops your message ready to send — you check the recipient and message and press send. <strong>It never sends for you.</strong></small>
+        <label class="lf-field"><span>“File &amp; message patient” option text</span>
+          <input id="lfNextStepMsg" class="lf-input" value="${v(f.nextStepMessageText)}" placeholder="File results and message patient"></label>
+        <label class="lf-field"><span>Your custom message ({firstName} allowed)</span>
           <textarea id="lfMsgTemplate" class="lf-input" rows="3" placeholder="Dear {firstName}, your recent blood test results are all normal and no action is needed.">${v(m.template)}</textarea></label>
         <label class="lf-field"><span>Message field label (optional)</span>
-          <input id="lfMsgField" class="lf-input" value="${v(m.fieldText)}" placeholder="Message"></label>
-        <small class="lf-help">The macro copies this to your clipboard and (if the field is named) pre-fills it. It never sends.</small>
+          <input id="lfMsgField" class="lf-input" value="${v(m.fieldText)}" placeholder="leave blank if unsure — the message is copied to your clipboard to paste"></label>
       </div>
 
       <div class="lf-fieldset">
@@ -403,6 +405,7 @@ function readForm() {
     filing: {
       normalOptionText: get('lfNormalOpt'),
       nextStepText: get('lfNextStep'),
+      nextStepMessageText: get('lfNextStepMsg'),
       openControlText: get('lfOpenCtl'),
       fileButtonText: get('lfFileBtn'),
       completeButtonText: get('lfCompleteBtn'),
@@ -452,6 +455,7 @@ function fillFromLlm() {
   set('lfAnalytes', (clean.analytes || []).join(', '));
   set('lfNormalOpt', clean.filing.normalOptionText);
   set('lfNextStep', clean.filing.nextStepText);
+  set('lfNextStepMsg', clean.filing.nextStepMessageText);
   set('lfOpenCtl', clean.filing.openControlText);
   set('lfFileBtn', clean.filing.fileButtonText);
   set('lfCompleteBtn', clean.filing.completeButtonText);
