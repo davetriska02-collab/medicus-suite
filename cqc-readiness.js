@@ -73,6 +73,10 @@ function setMode(mode) {
   // The confirm gate only exists in export mode.
   $('cqcGate').hidden = _mode !== 'export';
   if (_mode !== 'export') $('cqcConfirm').checked = false;
+  // The Generate/Print-inspector toolbar hint is inspector-pack workflow — noise in
+  // the clinician glance (Tom), so hide it there.
+  const hint = $('cqcHint');
+  if (hint) hint.hidden = _mode === 'clinician';
   // Re-render whatever we have under the new mode + gate state.
   renderCurrent();
 }
@@ -123,15 +127,35 @@ function hydrateReconCounts() {
     if (key && _reconCounts[key] != null) inp.value = _reconCounts[key];
     inp.addEventListener('input', () => {
       const k = inp.dataset.reconKey;
-      if (!k) return;
-      _reconCounts[k] = inp.value;
-      try {
-        chrome.storage.local.set({ [COUNTS_KEY]: _reconCounts });
-      } catch {
-        /* persistence is best-effort */
+      if (k) {
+        _reconCounts[k] = inp.value;
+        try {
+          chrome.storage.local.set({ [COUNTS_KEY]: _reconCounts });
+        } catch {
+          /* persistence is best-effort */
+        }
       }
+      updateReconTotal();
     });
   });
+  updateReconTotal();
+}
+
+// Live total of the practice's own typed counts (Janet). Summing the user's own
+// figures is not a fabricated count — the suite still supplies no number.
+function updateReconTotal() {
+  const out = document.querySelector('#cqcOutput .cqc-recon-total');
+  if (!out) return;
+  let sum = 0;
+  let any = false;
+  document.querySelectorAll('#cqcOutput .cqc-recon-input').forEach((inp) => {
+    const n = parseInt(String(inp.value).replace(/[^0-9-]/g, ''), 10);
+    if (!Number.isNaN(n)) {
+      sum += n;
+      any = true;
+    }
+  });
+  out.textContent = any ? String(sum) : '0';
 }
 
 // Print/PDF + CSV are enabled only when a document is actually rendered and (for

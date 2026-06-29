@@ -241,12 +241,16 @@
     if (alertFile) {
       const lib = Array.isArray(alertFile.library) ? alertFile.library : [];
       const pincerCount = lib.filter((a) => a && /pincer/i.test(String((a && (a.source || a.libId)) || ''))).length;
+      // Reconcile the count against the Alerts coverage tile (Raj: "13 indicators" vs
+      // "26 rules" reads as sloppy) and make clear the version is the SUITE's library
+      // bundle, not a PINCER release identifier.
       methods.push({
         name: 'Prescribing-safety alerts (PINCER)',
         version:
-          alertFile.specVersion || (alertFile.version ? 'library v' + alertFile.version : '') || 'version not stated',
+          (alertFile.specVersion || (alertFile.version ? 'library v' + alertFile.version : '') || 'version not stated') +
+          ' — suite library bundle',
         source: 'PINCER indicators (Avery et al., BMJ 2012; doi:10.1136/bmj.e6501)',
-        detail: pincerCount ? pincerCount + ' PINCER-derived indicators implemented' : '',
+        detail: pincerCount ? pincerCount + ' of ' + lib.length + ' alert rules are PINCER-derived indicators' : '',
         inCurrency: true,
       });
     }

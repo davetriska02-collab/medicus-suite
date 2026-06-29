@@ -175,32 +175,43 @@ function renderHeadlineVerdict(readiness, mode) {
     ? ` <span class="cqc-verdict-asat">as at ${esc(readiness.generatedAt)}</span>`
     : '';
 
+  // Clinician view is a fast glance — drop the legend + stacked caveat boxes; a
+  // single muted footnote carries the boundary so the green verdict isn't wrapped in
+  // four hedging paragraphs (Tom). The other modes keep the full guidance.
+  if (mode === 'clinician') {
+    const foot =
+      `<p class="cqc-verdict-foot">Monitoring-<strong>system</strong> rating only &mdash; not patient-level, ` +
+      `not proof of compliance. For the inspector pack and the patient-count worksheet, use ` +
+      `<em>Readiness check</em> or <em>Evidence export</em>.</p>`;
+    return (
+      `<section class="cqc-card cqc-verdict cqc-verdict-${esc(overall)}">` +
+      `<div class="cqc-verdict-head">` +
+      `<span class="cqc-verdict-label">Monitoring-system readiness</span>${ragBadge(overall)}${asAt}` +
+      `</div>` +
+      `<p class="cqc-verdict-plain">${esc(plain)}${esc(verb)}</p>` +
+      foot +
+      `</section>`
+    );
+  }
+
   const legend =
     `<p class="cqc-rag-legend"><span class="cqc-rag-legend-label">What the ratings mean:</span> ` +
     `${ragBadge('green')} current &middot; ${ragBadge('amber')} review soon &middot; ${ragBadge('red')} out of date</p>`;
 
   // Separate "rules current" from "patients monitored" — the panel's sharpest
   // clinical-safety point: a green here must never be misread as "every patient
-  // has been monitored". State the boundary in the verdict itself. The pointer to
-  // the worksheet is suppressed in clinician view (where the worksheet is hidden).
-  const patientCheckPointer =
-    mode === 'clinician'
-      ? 'switch to the Readiness check for the patient-level worksheet'
-      : 'use the Reconciliation worksheet below for patient-level checks';
+  // has been monitored". State the boundary in the verdict itself. (Clinician mode
+  // returned early above with its own one-line footnote.)
   const meaning =
     `<p class="cqc-verdict-means">This rates the monitoring <strong>system</strong>: whether the practice's ` +
     `clinical-safety rules are current. It does <strong>not</strong> confirm that any individual patient has ` +
-    `been monitored &mdash; ${patientCheckPointer}.</p>`;
+    `been monitored &mdash; use the Reconciliation worksheet below for patient-level checks.</p>`;
 
   const howTo =
-    mode === 'clinician'
-      ? `<p class="cqc-verdict-howto"><strong>Clinician view.</strong> A fast glance: the rating, plus which drugs and ` +
-        `rules the safety net covers. For the inspector pack and the patient-count worksheet, use <em>Readiness ` +
-        `check</em> or <em>Evidence export</em>. Supporting evidence &mdash; <strong>not</strong> proof of compliance.</p>`
-      : `<p class="cqc-verdict-howto"><strong>How to use this page.</strong> Read the rating, run the searches in the ` +
-        `<em>Reconciliation worksheet</em> below to fill in your own patient numbers, then use <em>Print / PDF</em> for ` +
-        `your evidence folder. Supporting evidence for the Safe and Well-led key questions &mdash; <strong>not</strong> ` +
-        `proof of compliance.</p>`;
+    `<p class="cqc-verdict-howto"><strong>How to use this page.</strong> Read the rating, run the searches in the ` +
+    `<em>Reconciliation worksheet</em> below to fill in your own patient numbers, then use <em>Print / PDF</em> for ` +
+    `your evidence folder. Supporting evidence for the Safe and Well-led key questions &mdash; <strong>not</strong> ` +
+    `proof of compliance.</p>`;
 
   return (
     `<section class="cqc-card cqc-verdict cqc-verdict-${esc(overall)}">` +
@@ -610,6 +621,15 @@ function renderReconciliation(readiness, mode) {
     )
     .join('');
 
+  // Live total of the typed counts (Janet — a sum she can reconcile and sign).
+  // Computed by the controller from the inputs; summing the practice's OWN figures
+  // is not a fabricated count.
+  const totalRow =
+    `<tfoot><tr class="cqc-recon-totalrow">` +
+    `<td colspan="3" class="cqc-recon-totallabel">Total of your counts</td>` +
+    `<td class="cqc-recon-count"><output class="cqc-recon-total" aria-live="polite">0</output></td>` +
+    `</tr></tfoot>`;
+
   const table =
     `<table class="cqc-table cqc-recon-table">` +
     `<thead><tr>` +
@@ -619,7 +639,17 @@ function renderReconciliation(readiness, mode) {
     `<th>Your count</th>` +
     `</tr></thead>` +
     `<tbody>${rows}</tbody>` +
+    totalRow +
     `</table>`;
+
+  // Audit-trail line (Janet): who completed the worksheet and when, so a typed figure
+  // carries provenance. Blank fields the practice fills (consistent with the worksheet).
+  const completion =
+    `<div class="cqc-recon-completion">` +
+    `<span class="cqc-recon-completion-field">Counts entered by <span class="cqc-recon-rule"></span></span>` +
+    `<span class="cqc-recon-completion-field">Date <span class="cqc-recon-rule"></span></span>` +
+    `<span class="cqc-recon-completion-field">Source: practice Medicus search / QOF reporting tool</span>` +
+    `</div>`;
 
   // The full table is long; collapse it so the Safe/Well-led evidence above stays
   // the focus. Opened in export mode (and force-opened in print) so the worksheet
@@ -628,6 +658,7 @@ function renderReconciliation(readiness, mode) {
     `<details class="cqc-recon-details">` +
     `<summary class="cqc-recon-summary">Worksheet &mdash; ${entries.length} cohort definition${entries.length === 1 ? '' : 's'} to run in Medicus <span class="cqc-matched-hint">(expand to complete)</span></summary>` +
     table +
+    completion +
     `</details>`;
 
   return (
@@ -696,7 +727,9 @@ export function buildReadinessHtml(readiness, { mode = 'readiness' } = {}) {
 
   const parts = [
     renderCover(r, mode),
-    disclaimerStrip(r),
+    // Clinician view drops the top disclaimer strip (its verdict footnote + the page
+    // footer both carry "not proof of compliance") to keep the glance uncluttered.
+    isClinician ? '' : disclaimerStrip(r),
     // Lead with the answer: the plain-English verdict is FIRST in every mode.
     renderHeadlineVerdict(r, mode),
     // Coverage manifest (concise — the long matched-term list is collapsed).

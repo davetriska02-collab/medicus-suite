@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.136.1] — 2026-06-29
+
+### CQC Inspection Readiness: clinician-view density, worksheet provenance, PINCER count reconciled
+
+Follow-up polish from the 9-confirmation panel round.
+
+- **Clinician view slimmed (Tom).** The verdict's stacked caveat boxes (legend +
+  "system not patient" + how-to) collapse to a single muted footnote, the redundant
+  top disclaimer strip is dropped (the footnote and page footer still carry "not
+  proof of compliance"), and the Generate/Print-inspector toolbar hint is hidden in
+  this mode — so the green verdict and the coverage manifest carry the glance.
+- **Worksheet provenance + total (Janet).** The reconciliation worksheet now has a
+  live "Total of your counts" row (summed from the practice's own typed figures —
+  not a suite-supplied number) and a "Counts entered by / Date / Source" line, so a
+  typed count carries who-and-when for the audit trail.
+- **PINCER count reconciled (Raj).** The methods table now reads "N of M alert rules
+  are PINCER-derived indicators" (instead of a bare indicator count that mismatched
+  the Alerts coverage tile) and labels the version explicitly as the suite's library
+  bundle, not a PINCER release.
+
 ## [v3.136.0] — 2026-06-29
 
 ### CQC Inspection Readiness: clinician view, named clinical sources, per-exclude reasons, fillable worksheet

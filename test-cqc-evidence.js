@@ -370,6 +370,10 @@
     check(cm.some((m) => /STOPP\/START/.test(m.name) && /v3 \(2023\)/.test(m.version)), 'STOPP/START version named');
     check(cm.some((m) => /Boustani/.test(m.version)), 'ACB (Boustani) scale named');
     check(cm.some((m) => /PINCER/i.test(m.name) && m.inCurrency === true), 'PINCER named + flagged in rule-currency');
+    check(
+      cm.some((m) => /PINCER/i.test(m.name) && /\d+ of \d+ alert rules are PINCER-derived/.test(m.detail || '')),
+      'PINCER detail reconciles count against total alert rules (Raj)'
+    );
     check(cm.some((m) => /STOPP/.test(m.name) && m.inCurrency === false), 'engine methods flagged NOT in rule-currency');
   }
 

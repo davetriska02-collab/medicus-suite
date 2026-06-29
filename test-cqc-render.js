@@ -223,6 +223,9 @@ const path = require('path');
   check(/Clinician view/.test(clinHtml), 'clinician view carries its own mode tag');
   check(!/Key question:/.test(clinHtml), 'clinician view DROPS the Safe/Well-led quality statements');
   check(!/Reconciliation worksheet/i.test(clinHtml), 'clinician view DROPS the reconciliation worksheet');
+  check(/cqc-verdict-foot/.test(clinHtml) && !/cqc-rag-legend/.test(clinHtml), 'clinician verdict is slimmed (one footnote, no legend)');
+  check(/cqc-recon-total/.test(html2), 'reconciliation worksheet has a live total row (Janet)');
+  check(/Counts entered by/.test(html2), 'worksheet carries a counted-by / date provenance line (Janet)');
 
   console.log(`\n${passed} passed, ${failed} failed`);
 })();
