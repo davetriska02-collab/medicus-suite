@@ -24,6 +24,24 @@ const _LabFilingUtils =
 
 const LABFILING_KEYS = ['labfiling.profiles', 'labfiling.config', 'labfiling.auditLog'];
 
+const _DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+// Shallow clone of own enumerable keys only, skipping prototype-pollution keys.
+// Never assigns to "__proto__", so the JS engine's prototype setter is never
+// triggered (which is what taints a {...p}/Object.assign clone of a JSON-parsed
+// object carrying an own "__proto__" key). Nested objects are kept by reference —
+// safe here because validateProfile/sanitiseProfile read nested fields by name and
+// never copy a nested object wholesale.
+function _safeClone(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
+  const out = {};
+  for (const k of Object.keys(o)) {
+    if (_DANGEROUS_KEYS.has(k)) continue;
+    out[k] = o[k];
+  }
+  return out;
+}
+
 async function labfilingExport() {
   const r = await chrome.storage.local.get(LABFILING_KEYS);
   return {
@@ -44,15 +62,21 @@ async function labfilingImport(data) {
     const cleaned = [];
     const taken = new Set();
     for (const p of data.profiles) {
-      // Work on a shallow copy so we never mutate the caller's backup, and clamp
-      // an out-of-range commitMode rather than failing the whole restore — a
+      // Work on an OWN-KEYS-ONLY clone so we never mutate the caller's backup and
+      // never carry attacker-controlled prototype pollution. A JSON-parsed backup
+      // can have an own "__proto__" key; Object.assign/{...p} would invoke its
+      // setter and taint the clone's prototype, so enabled/reviewed could read true
+      // via inheritance. _safeClone copies only own enumerable keys, skipping
+      // __proto__/constructor/prototype, and never triggers the prototype setter.
+      const pre = _safeClone(p);
+      // Clamp an out-of-range commitMode rather than failing the whole restore — a
       // backup must never arm full-auto, but one stray value shouldn't abort a
-      // suite-wide restore (sanitise defaults the dropped field to 'manual').
-      const pre = p && typeof p === 'object' && !Array.isArray(p) ? Object.assign({}, p) : p;
+      // suite-wide restore (sanitise defaults the dropped field to 'manual'). After
+      // _safeClone, commitMode (if present) is an OWN key, so delete is effective.
       if (
         pre &&
         typeof pre === 'object' &&
-        pre.commitMode !== undefined &&
+        Object.prototype.hasOwnProperty.call(pre, 'commitMode') &&
         !LF.LF_COMMIT_MODES.includes(pre.commitMode)
       ) {
         delete pre.commitMode;

@@ -183,6 +183,13 @@
       result.reason = 'not-normal';
       return result;
     }
+    // GATE 1b — fail closed on anything the numeric gate cannot judge (free text,
+    // cultures, unmatched report, missing rules). The caller computes these, but
+    // the core re-checks so it is safe to call directly (and in tests).
+    if (Array.isArray(o.blockers) && o.blockers.length) {
+      result.reason = 'blocked';
+      return result;
+    }
 
     const f = profile.filing;
     const click = o.clickFn || realClick;
@@ -200,18 +207,18 @@
 
     // STEP 1 — mark each subheading as the configured normal option.
     let marked = 0;
+    // Selector sets are restricted to INTERACTIVE control roles (no bare div/span):
+    // on a compromised Medicus page a hostile <div> whose text merely contains the
+    // normal-option label could otherwise be clicked during marking. Real Quasar
+    // controls carry a role/q-* class or are a label/button, so this keeps the live
+    // app working while shrinking the hostile-match surface.
     if (f.openControlText) {
       // Per-row menu: open each, then click the normal option it reveals.
-      const openers = findAllByText(
-        root,
-        ['button', '[role="button"]', '.q-field', 'div', 'span'],
-        f.openControlText,
-        vis
-      );
+      const openers = findAllByText(root, ['button', '[role="button"]', '.q-field'], f.openControlText, vis);
       for (const opener of openers) {
         click(opener);
         const opt = await wait(() =>
-          findByText(root, ['[role="option"]', 'li', '.q-item', 'div', 'span', 'label'], f.normalOptionText, vis)
+          findByText(root, ['[role="option"]', 'li[role="option"]', '.q-item', 'label'], f.normalOptionText, vis)
         );
         if (opt) {
           click(opt);
@@ -224,7 +231,7 @@
         ? findAllByText(root, [f.rowSelector], f.normalOptionText, vis)
         : findAllByText(
             root,
-            ['[role="radio"]', '.q-radio', '.q-checkbox', 'label', 'button', 'div', 'span'],
+            ['[role="radio"]', '[role="option"]', '.q-radio', '.q-checkbox', '.q-item', 'label', 'button'],
             f.normalOptionText,
             vis
           );
@@ -282,7 +289,7 @@
     }
     // 'confirm' (and any unexpected value, defensively): require explicit OK.
     const msg = o.buildConfirm
-      ? o.buildConfirm(report(o), profile)
+      ? o.buildConfirm(report(o), profile, o.mode)
       : 'File this result as normal? This cannot be undone.';
     const ok = typeof o.confirmFn === 'function' ? o.confirmFn(msg) : false;
     if (!ok) {
@@ -368,14 +375,17 @@
     });
   }
 
-  // Fetch + normalise + score the open task's report. Cached per taskUuid (TTL).
-  async function loadReportSeverity() {
+  // Fetch + normalise + score the open task's report. Cached per taskUuid (TTL)
+  // for the cheap gate poll; pass force=true to BYPASS the cache and re-fetch live
+  // — used at click time so an irreversible file always acts on fresh data, never a
+  // result that was amended in the up-to-60s since the button appeared.
+  async function loadReportSeverity(force) {
     if (!API || !NORM || !SEV) return null;
     const ctx = API.detectMedicusContext(location.href);
     if (!ctx || !ctx.apiBase || !ctx.taskUuid || !ctx.taskTypeSlug) return null;
     const now = Date.now();
     const cached = sevCache.get(ctx.taskUuid);
-    if (cached && now - cached.ts < SEV_TTL) return cached;
+    if (!force && cached && now - cached.ts < SEV_TTL) return cached;
     const overviewURL = `/tasks/data/${ctx.taskTypeSlug}/overview/${ctx.taskUuid}`;
     let report = null;
     try {
@@ -388,7 +398,10 @@
     // resultRules escalate-only — passing the user's rules makes this gate match
     // the queue chips exactly (a culture needing review will NOT be level:'none').
     const severity = SEV.evaluateReportSeverity(report, { priorityDisplay: '', resultRules, problems: [] });
-    const entry = { report, severity, ts: now, taskUuid: ctx.taskUuid };
+    // Beyond numeric severity, fail CLOSED on anything the gate cannot judge
+    // (free-text/cultures, unmatched reports, missing result rules).
+    const blockers = LF ? LF.fileabilityBlockers(report, severity, resultRules) : ['utilities not loaded'];
+    const entry = { report, severity, blockers, ts: now, taskUuid: ctx.taskUuid };
     sevCache.set(ctx.taskUuid, entry);
     return entry;
   }
@@ -401,12 +414,19 @@
     return el ? el.textContent : '';
   }
 
-  function recordAudit(profile, res) {
+  function recordAudit(profile, res, rs) {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+      const report = rs && rs.report;
       const entry = {
         ts: new Date().toISOString(),
         profile: profile && profile.name,
+        // Identity + severity so a filing is attributable for governance/diagnosis
+        // (machine-local only — this log is never exported or backed up).
+        taskUuid: (rs && rs.taskUuid) || null,
+        patientUuid: (report && report.patientUuid) || null,
+        severity: rs && rs.severity ? rs.severity.level : null,
+        analytes: report && Array.isArray(report.results) ? report.results.length : 0,
         marked: res.marked,
         filed: res.filed,
         completed: res.completed,
@@ -445,12 +465,25 @@
   function showButton(profile) {
     currentProfile = profile;
     const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
+    btn.className = 'chlf-btn';
+    btn.disabled = false;
     btn.textContent = (mode === 'manual' ? '✎ ' : '✓ ') + 'File all normal — ' + (profile.name || 'profile');
     btn.title =
       'All results are within normal limits. ' +
       (mode === 'manual'
         ? 'Pre-fills the normal options for you to review and File.'
         : 'Asks you to confirm, then files this result as normal. Irreversible.');
+    host.classList.remove('chlf-hidden');
+  }
+  // A non-actionable note shown when a profile fits but the result has something
+  // the gate cannot judge — so the clinician knows the feature saw the result and
+  // deliberately did NOT offer to file it (and why), rather than seeing nothing.
+  function showBlockedHint(blockers) {
+    currentProfile = null; // not fileable — onClick early-returns
+    btn.className = 'chlf-btn chlf-note';
+    btn.disabled = true;
+    btn.textContent = 'Auto-file not offered — review manually';
+    btn.title = 'This result was not offered for one-click filing because: ' + (blockers || []).join('; ') + '.';
     host.classList.remove('chlf-hidden');
   }
   function hideButton() {
@@ -487,10 +520,13 @@
     busy = true;
     btn.disabled = true;
     try {
-      // Re-verify severity at click time (the cache may have refreshed).
-      const rs = await loadReportSeverity();
-      if (!rs || rs.severity.level !== 'none') {
-        toast('Not filing — these results are no longer all-normal. Review manually.', 'err');
+      // Re-verify at click time with a FRESH fetch (force=true bypasses the cache)
+      // — an irreversible file must act on live data, and must clear every
+      // fail-closed blocker, not just numeric severity.
+      const rs = await loadReportSeverity(true);
+      const blockers = rs && rs.blockers ? rs.blockers : ['could not read the result'];
+      if (!rs || blockers.length) {
+        toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
         hideButton();
         return;
       }
@@ -500,6 +536,7 @@
         root: document.body,
         profile,
         severity: rs.severity,
+        blockers: rs.blockers,
         report: rs.report,
         patient: readPatientBanner(),
         mode,
@@ -527,22 +564,25 @@
         if (fileBtn) highlight(fileBtn);
         toast('Marked ' + res.marked + ' subheading(s) normal. Review, then click File.', 'ok');
       } else if (res.filed) {
-        recordAudit(profile, res);
+        recordAudit(profile, res, rs);
         let m = 'Filed as normal (' + res.marked + ' subheading(s))' + (res.completed ? ' and completed.' : '.');
-        if (res.preparedMessage) m += ' Patient message copied to clipboard — paste and send if appropriate.';
+        // Prepare-only patient message: copy to clipboard ONLY after a successful
+        // file — never in manual/cancel paths (the message carries the patient's
+        // first name and the clipboard can be observed on a shared screen).
+        if (res.preparedMessage) {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(res.preparedMessage);
+            }
+          } catch (e) {
+            /* ignore */
+          }
+          m += ' Patient message copied to clipboard — paste and send if appropriate.';
+        }
         toast(m, 'ok');
         hideButton();
       } else {
         toast('Could not complete filing (' + (res.reason || 'unknown') + '). Nothing was completed.', 'err');
-      }
-
-      // Prepare-only message: copy to clipboard so the clinician can paste & send.
-      if (res.preparedMessage) {
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.preparedMessage);
-        } catch (e) {
-          /* ignore */
-        }
       }
     } finally {
       busy = false;
@@ -572,7 +612,7 @@
       return;
     }
     const rs = await loadReportSeverity();
-    if (!rs || rs.severity.level !== 'none') {
+    if (!rs) {
       hideButton();
       return;
     }
@@ -591,6 +631,16 @@
       hideButton();
       return;
     }
+    // A profile fits and the screen is a filing screen — but if anything the gate
+    // cannot judge is present (free text, unmatched, no rules, an abnormal value),
+    // explain WHY auto-file is not offered rather than silently hiding (the nurse
+    // and locum personas asked to see the not-offered state, not just the success
+    // one). Otherwise show the action button.
+    const blockers = rs.blockers || [];
+    if (blockers.length) {
+      showBlockedHint(blockers);
+      return;
+    }
     showButton(profile);
   }
 
@@ -601,6 +651,7 @@
     'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22);max-width:340px;',
     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.chlf-btn:hover{background:#0a5a4d}.chlf-btn:disabled{opacity:.6;cursor:default}',
+    '.chlf-btn.chlf-note{background:#92400e;cursor:default}.chlf-btn.chlf-note:hover{background:#92400e}',
     '.chlf-toast{position:fixed;right:18px;bottom:74px;z-index:2147483000;max-width:360px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',
     '.chlf-toast.chlf-show{opacity:1;transform:none}',

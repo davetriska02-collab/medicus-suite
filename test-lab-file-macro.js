@@ -132,6 +132,15 @@ function normalScreen() {
   check(res.ok === false && res.reason === 'not-normal', 'refuses when severity is not none');
   check(CLICKS.length === 0, 'nothing clicked when not all-normal');
 
+  // 1b. fail-closed blockers (free text / unmatched / no rules) — even at level none
+  console.log('\n--- fail-closed blockers ---');
+  CLICKS = [];
+  res = await fileAllNormal(
+    baseOpts({ root: new Root(normalScreen()), profile, blockers: ['contains a free-text result'] })
+  );
+  check(res.ok === false && res.reason === 'blocked', 'refuses when fail-closed blockers are present');
+  check(CLICKS.length === 0, 'nothing clicked when blocked');
+
   // 2. happy path, confirm = OK
   console.log('\n--- confirm mode, all normal ---');
   CLICKS = [];

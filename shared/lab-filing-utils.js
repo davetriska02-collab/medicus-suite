@@ -85,23 +85,38 @@
     }
 
     if (p.analytes !== undefined && !strArrOk(p.analytes)) errs.push('analytes must be an array of strings.');
+    else if (Array.isArray(p.analytes) && p.analytes.length > LF_LIMITS.analytes) {
+      errs.push(`analytes may have at most ${LF_LIMITS.analytes} entries.`);
+    }
 
-    // filing block
+    // filing block. Control-text fields are matched against on-screen labels, so an
+    // over-long value is rejected (not silently truncated) — a truncated label
+    // could match an unintended control.
     if (p.filing === undefined || p.filing === null || typeof p.filing !== 'object' || Array.isArray(p.filing)) {
       errs.push('filing is required and must be an object.');
     } else {
       const f = p.filing;
       if (!isStr(f.normalOptionText) || !f.normalOptionText.trim()) {
         errs.push('filing.normalOptionText is required — the visible text of the "normal" option on each subheading.');
+      } else if (f.normalOptionText.length > LF_LIMITS.control) {
+        errs.push(`filing.normalOptionText must be ${LF_LIMITS.control} characters or fewer.`);
       }
       if (!isStr(f.fileButtonText) || !f.fileButtonText.trim()) {
         errs.push('filing.fileButtonText is required — the visible text of the File button.');
+      } else if (f.fileButtonText.length > LF_LIMITS.control) {
+        errs.push(`filing.fileButtonText must be ${LF_LIMITS.control} characters or fewer.`);
       }
       ['openControlText', 'completeButtonText'].forEach((k) => {
         if (f[k] !== undefined && !isStr(f[k])) errs.push(`filing.${k} must be a string.`);
+        else if (isStr(f[k]) && f[k].length > LF_LIMITS.control)
+          errs.push(`filing.${k} must be ${LF_LIMITS.control} characters or fewer.`);
       });
       if (f.rowSelector !== undefined && !isStr(f.rowSelector)) errs.push('filing.rowSelector must be a string.');
+      else if (isStr(f.rowSelector) && f.rowSelector.length > LF_LIMITS.selector)
+        errs.push(`filing.rowSelector must be ${LF_LIMITS.selector} characters or fewer.`);
       if (f.filingComment !== undefined && !isStr(f.filingComment)) errs.push('filing.filingComment must be a string.');
+      else if (isStr(f.filingComment) && f.filingComment.length > LF_LIMITS.comment)
+        errs.push(`filing.filingComment must be ${LF_LIMITS.comment} characters or fewer.`);
     }
 
     // patientMessage block (optional)
@@ -290,10 +305,52 @@
     return template.replace(/\{firstName\}/g, extractFirstName(patient));
   }
 
+  // Reasons this report must NOT be offered for one-click filing, even though it
+  // may score level:'none'. The numeric severity gate is necessary but NOT
+  // sufficient — it reads the lab's own numeric flags and cannot reason about
+  // free text, cultures, trends, or whether the report is even the right patient.
+  // So we fail CLOSED on anything it cannot judge. Returns [] when fileable, else
+  // a list of short human-readable reasons (shown to the clinician). Pure.
+  //
+  // Discriminator for "the gate can't judge this result": a result with no finite
+  // numeric value but with free-text content (cultures, histology, "abnormal film"
+  // comments). Normal numeric results have a finite value and are unaffected.
+  function fileabilityBlockers(report, severity, resultRules) {
+    const reasons = [];
+    if (!report || !Array.isArray(report.results) || report.results.length === 0) {
+      reasons.push('no results could be read from this report');
+      return reasons;
+    }
+    if (!severity || severity.level !== 'none') reasons.push('not every result is within normal limits');
+    if ((severity && severity.unmatched) || report.unmatched) reasons.push('this report is not matched to a patient');
+    // Without result rules the suite cannot flag cultures or apply threshold
+    // escalations, so an abnormal culture could read as normal — fail closed.
+    if (!Array.isArray(resultRules) || resultRules.length === 0) {
+      reasons.push('result rules are not loaded, so cultures and thresholds cannot be checked');
+    }
+    const freeText = [];
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const hasText = isStr(r.text) && r.text.trim().length > 0;
+      if (!Number.isFinite(r.value) && hasText)
+        freeText.push(isStr(r.name) && r.name.trim() ? r.name.trim() : 'unnamed');
+    }
+    if (freeText.length) {
+      const shown = freeText.slice(0, 3).join(', ');
+      reasons.push(
+        `contains a free-text / non-numeric result the suite cannot score: ${shown}${freeText.length > 3 ? '…' : ''}`
+      );
+    }
+    // De-duplicate (unmatched can be reported by both severity and report).
+    return Array.from(new Set(reasons));
+  }
+
   // The enumerated irreversible-action confirm text — mirrors confirmBulkTickOff in
-  // content.js. Lists each analyte being filed as normal, names the action, and
-  // warns it cannot be undone.
-  function buildFilingConfirmMessage(report, profile) {
+  // content.js. Lists each analyte being filed, states accurately WHAT the suite
+  // checked (and what it could not), names the commit mode, and warns it cannot be
+  // undone. Deliberately does NOT claim it "confirmed every parameter normal" — it
+  // checked numeric values against the profile's ranges; the clinician judges.
+  function buildFilingConfirmMessage(report, profile, mode) {
     const names = [];
     if (report && Array.isArray(report.results)) {
       for (const r of report.results) {
@@ -303,13 +360,18 @@
     const n = names.length;
     const list = names.length ? names.map((x) => ` • ${x}`).join('\n') : ' • (no individual analytes detected)';
     const profName = profile && isStr(profile.name) ? profile.name : 'this profile';
+    const normalOpt =
+      profile && profile.filing && isStr(profile.filing.normalOptionText) ? profile.filing.normalOptionText : 'normal';
+    const modeLine =
+      mode === 'confirm' ? `You are in "ask, then file" mode — clicking OK files this result now.\n\n` : '';
     return (
       `File this result as NORMAL?\n\n` +
-      `The suite has confirmed every parameter below is within normal limits, and will mark each as "${profile && profile.filing ? profile.filing.normalOptionText : 'normal'}" using "${profName}":\n\n` +
+      modeLine +
+      `Every numeric value below is within this lab's reference range, and each will be marked "${normalOpt}" using "${profName}":\n\n` +
       list +
       `\n\n` +
-      `Filing writes to Medicus and removes this from the worklist. This cannot be undone from here. ` +
-      `Confirm only if you are satisfied every result has been seen and is genuinely normal.\n\n` +
+      `The suite checks numeric values only — it cannot judge free text, trends over time, or whether this is the right patient. Read the values yourself before confirming.\n\n` +
+      `Filing writes to Medicus and removes this from the worklist. This cannot be undone from here.\n\n` +
       `OK = file ${n > 1 ? 'them all as normal' : 'as normal'}    Cancel = leave for manual review`
     );
   }
@@ -426,6 +488,7 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     filingProfilePrompt,
     reportHaystack,
     matchProfile,
+    fileabilityBlockers,
     extractFirstName,
     fillTemplate,
     buildFilingConfirmMessage,

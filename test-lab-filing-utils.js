@@ -85,8 +85,36 @@ check(clean.commitMode === 'manual', "unknown/'auto' commitMode clamps to 'manua
 check(clean.source === 'manual', 'unknown source → manual');
 check(clean.enabled === false && clean.reviewed === false, 'non-boolean enabled/reviewed → false');
 check(clean.filing.normalOptionText === 'No action', 'filing.normalOptionText trimmed');
-check({}.polluted === undefined, 'no prototype pollution from __proto__ key');
 check(typeof clean.updatedAt === 'string' && clean.updatedAt.includes('T'), 'updatedAt stamped');
+
+// Prototype pollution via the REAL attack shape: JSON.parse creates an OWN
+// enumerable "__proto__" key (an object-literal __proto__ would just set the
+// prototype and prove nothing). Assert the whitelist rebuild leaves the global
+// prototype clean and copies no dangerous key.
+const jsonEvil = JSON.parse(
+  '{"name":"x","filing":{"normalOptionText":"a","fileButtonText":"b","__proto__":{"pwn":1}},"__proto__":{"enabled":true,"reviewed":true,"pwn":1},"constructor":{"prototype":{"pwn":1}}}'
+);
+const jsonClean = LF.sanitiseProfile(jsonEvil);
+check({}.pwn === undefined, 'JSON-parsed __proto__ does not pollute Object.prototype via sanitiseProfile');
+check(
+  jsonClean.enabled === false && jsonClean.reviewed === false,
+  'inherited enabled/reviewed from __proto__ not adopted'
+);
+check(!Object.prototype.hasOwnProperty.call(jsonClean, '__proto__'), 'clean has no own __proto__ key');
+
+// Over-length fields are REJECTED at validation, not silently truncated.
+check(
+  LF.validateProfile({ name: 'x', filing: { normalOptionText: 'a'.repeat(200), fileButtonText: 'File' } }).length > 0,
+  'over-long normalOptionText rejected'
+);
+check(
+  LF.validateProfile({ name: 'x', filing: { normalOptionText: 'a', fileButtonText: 'b'.repeat(200) } }).length > 0,
+  'over-long fileButtonText rejected'
+);
+check(
+  LF.validateProfile({ name: 'x', filing: validFiling, analytes: Array(400).fill('a') }).length > 0,
+  'over-long analytes array rejected'
+);
 
 // ── lockForReview ─────────────────────────────────────────────────────────────
 console.log('\n--- lockForReview ---');
@@ -205,12 +233,59 @@ check(
 );
 check(LF.fillTemplate('Dear {firstName} {firstName}.', 'Jane Doe') === 'Dear Jane Jane.', 'fills repeated placeholder');
 
+// ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
+console.log('\n--- fileabilityBlockers ---');
+const okReport = { unmatched: false, results: [{ name: 'Haemoglobin', value: 130, text: 'Haemoglobin 130' }] };
+const someRules = [{ id: 'r', enabled: true }];
+check(
+  LF.fileabilityBlockers(okReport, { level: 'none' }, someRules).length === 0,
+  'all-numeric-normal matched report is fileable'
+);
+check(
+  LF.fileabilityBlockers(okReport, { level: 'amber' }, someRules).some((r) => /within normal/.test(r)),
+  'amber severity blocks'
+);
+check(
+  LF.fileabilityBlockers({ unmatched: true, results: okReport.results }, { level: 'none' }, someRules).some((r) =>
+    /matched to a patient/.test(r)
+  ),
+  'unmatched report blocks'
+);
+check(
+  LF.fileabilityBlockers(okReport, { level: 'none' }, []).some((r) => /result rules/.test(r)),
+  'empty resultRules blocks (cultures/thresholds uncheckable)'
+);
+const freeTextReport = {
+  unmatched: false,
+  results: [
+    { name: 'Haemoglobin', value: 130, text: 'Hb 130' },
+    { name: 'Blood film', value: NaN, text: 'Abnormal film - blast cells noted' },
+  ],
+};
+check(
+  LF.fileabilityBlockers(freeTextReport, { level: 'none' }, someRules).some(
+    (r) => /free-text/.test(r) && /Blood film/.test(r)
+  ),
+  'free-text/non-numeric result blocks and is named'
+);
+check(LF.fileabilityBlockers({ results: [] }, { level: 'none' }, someRules).length > 0, 'empty results blocks');
+
 // ── buildFilingConfirmMessage ──────────────────────────────────────────────────
 console.log('\n--- buildFilingConfirmMessage ---');
-const cmsg = LF.buildFilingConfirmMessage(fbcReport, profiles[1]);
+const cmsg = LF.buildFilingConfirmMessage(fbcReport, profiles[1], 'confirm');
 check(/cannot be undone/i.test(cmsg), 'confirm message warns action cannot be undone');
 check(/Haemoglobin/.test(cmsg) && /Sodium/.test(cmsg), 'confirm message enumerates each analyte');
 check(/NORMAL/.test(cmsg), 'confirm message states results are being filed as normal');
+check(!/confirmed every parameter/i.test(cmsg), 'does NOT over-claim "confirmed every parameter normal"');
+check(
+  /numeric value/i.test(cmsg) && /free text|trends|right patient/i.test(cmsg),
+  'states the gate is numeric-only and names its blind spots'
+);
+check(/ask, then file/i.test(cmsg), "names the commit mode when in 'confirm' mode");
+check(
+  !/ask, then file/i.test(LF.buildFilingConfirmMessage(fbcReport, profiles[1], 'manual')),
+  'no confirm-mode line for manual'
+);
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

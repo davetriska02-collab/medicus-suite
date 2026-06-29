@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.139.0] — 2026-06-29
+
+### Lab filing: fail-closed gate, honest wording, hardening (red-team + Practice follow-up)
+
+Acts on the consolidated findings of the red-team security audit and The Practice
+usability appraisal of the Lab filing feature. No change to the core safety model
+(disabled-by-default, manual default, no full-auto, abort-on-missing-control).
+
+- **Fail closed on anything the numeric gate cannot judge** (the headline finding,
+  reached independently by the red-team from code and the pharmacist persona from
+  screenshots). New `fileabilityBlockers()` (`shared/lab-filing-utils.js`) suppresses
+  the "File all normal" button — and the macro core refuses — when a report is
+  **unmatched to a patient**, contains a **free-text / non-numeric result** (cultures,
+  "abnormal film" comments), or when **result rules are not loaded** (so cultures and
+  thresholds cannot be checked). The injected button now shows a visible "Auto-file
+  not offered — review manually" note with the reason, instead of silently hiding
+  (nurse + locum personas asked to see the not-offered state).
+- **Confirm dialog no longer over-claims.** It said "the suite has confirmed every
+  parameter is within normal limits"; it now states accurately that only numeric
+  values were checked against the profile's ranges, names its blind spots (free text,
+  trends, wrong patient), and shows the active commit mode. Prevents the slow erosion
+  of clinician vigilance.
+- **Click-time re-verify is now a live fetch** (bypasses the 60s severity cache) so an
+  irreversible file never acts on a result amended since the button appeared.
+- **Patient message copied to clipboard only after a successful file** (not in
+  manual/cancel paths) — it carries the patient's first name and the clipboard is
+  observable on a shared screen.
+- **Marking step restricted to interactive control roles** (no bare `div`/`span`) so a
+  compromised page element merely containing the normal-option label can't be clicked.
+- **Audit entries now capture** task/patient identity, severity and analyte count for
+  attributability (machine-local; never exported).
+- **Import hardening:** own-keys-only safe clone before validation (a JSON-parsed
+  `__proto__` can no longer taint the clone's prototype), `hasOwnProperty` guard on the
+  `commitMode` clamp, and over-length control-text / analytes fields are now **rejected**
+  at validation rather than silently truncated. Prototype-pollution test strengthened to
+  use the real JSON-parsed attack shape.
+- **Plainer language:** "Create from a screenshot with an LLM" → "Build it automatically
+  from a screenshot (optional)"; "AI-drafted" badge → "Auto-suggested"; a real cold-start
+  empty state explaining a profile is set up once by the regular GP and pointing to the
+  Options backup for sharing.
+
 ## [v3.138.1] — 2026-06-29
 
 ### Fix: Lab filing utils global-scope collision broke the module

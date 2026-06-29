@@ -172,7 +172,11 @@ function renderToolbar() {
 function renderList() {
   if (_editingId) return '';
   if (!_profiles.length) {
-    return `<div class="lf-empty">No filing profiles yet. Add one for your lab — you can build it from a screenshot using the “Create from a screenshot with an LLM” helper inside the form.</div>`;
+    return `<div class="lf-empty">
+      <p>No filing profiles yet — so nothing can be auto-filed. A profile is usually set up once by your practice's regular GP, not a locum, and describes how your lab's results screen looks.</p>
+      <p>Add one with <strong>+ Add filing profile</strong> (you can build it from a screenshot — no technical knowledge needed). New profiles stay off until reviewed and switched on.</p>
+      <p class="lf-help">Profiles can be backed up or shared with a colleague from Options → Suite backup (Lab filing).</p>
+    </div>`;
   }
   return `<div class="lf-list">${_profiles.map(renderCard).join('')}</div>`;
 }
@@ -181,7 +185,7 @@ function renderCard(p) {
   const canEnable = p.reviewed === true && noticeAcknowledged();
   const srcBadge =
     p.source === 'llm'
-      ? `<span class="lf-badge lf-badge-llm">AI-drafted</span>`
+      ? `<span class="lf-badge lf-badge-llm" title="Built from a screenshot with an outside assistant — check every field against your real screen before enabling.">Auto-suggested</span>`
       : p.source === 'import'
         ? `<span class="lf-badge">Imported</span>`
         : '';
@@ -229,9 +233,9 @@ function renderForm() {
       <div class="lf-form-head">${_editingId === 'new' ? 'New filing profile' : 'Edit filing profile'}</div>
 
       <details class="lf-llm">
-        <summary>Create from a screenshot with an LLM…</summary>
+        <summary>Build it automatically from a screenshot (optional)…</summary>
         <div class="lf-llm-inner">
-          <p class="lf-help">Copy this prompt, paste it into any LLM (ChatGPT, Claude, etc.), then paste <strong>screenshots of your lab filing screen</strong>. The LLM returns JSON describing the on-screen controls. Paste that JSON below to fill the form. Nothing is saved until you review and click Save — and the profile arrives disabled.</p>
+          <p class="lf-help">Don't want to fill this in by hand? Press <strong>Copy prompt</strong>, then open a chat assistant (such as ChatGPT or Claude), paste the prompt, and add <strong>screenshots of your lab's results-filing screen</strong>. It replies with a block of text (JSON) describing the on-screen buttons. Paste that reply below and press “Fill form from JSON”. Nothing is saved until you review it and click Save, and the profile stays switched off until you enable it.</p>
           <button class="lf-btn lf-btn-sm" data-act="copy-llm-prompt">Copy prompt</button>
           <textarea id="lfLlmJson" class="lf-input" rows="4" placeholder="Paste the JSON reply from the LLM here…"></textarea>
           <div class="lf-llm-row">
