@@ -2,6 +2,51 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.138.0] — 2026-06-29
+
+### Lab Results Auto-Filing — one-click filing of all-normal results (opt-in, fail-safe)
+
+A new **Lab filing** tab and an injected **"File all normal"** button that let a
+clinician file a blood result in one click — but only when the suite has confirmed
+*every* parameter is within normal limits, and only behind a human-pressed gate.
+This is the suite's first irreversible write to a result-review task; it is built to
+fail safe at every step.
+
+- **Decision gate reuses the existing engine.** The button only appears when
+  `engine/result-severity.js` `evaluateReportSeverity()` returns `level: 'none'` (no
+  urgent, no out-of-range, no culture needing review), scored with the user's own
+  `resultRules` so it matches the queue chips exactly. Severity is re-verified at
+  click time.
+- **Per-area "filing profiles."** Because lab layouts differ area-to-area, the
+  clinician describes their filing screen in a profile — the visible text of the
+  "normal" option, the File/Complete controls, an optional filing comment — by hand
+  or by **building it from a screenshot via the external-LLM round-trip** (copy
+  prompt → paste screenshots into any LLM → paste the JSON back). New module
+  `side-panel/modules/labfiling/`; pure logic + the LLM prompt in
+  `shared/lab-filing-utils.js` (`window.LabFilingUtils`).
+- **Drives the real Medicus UI** (`content-scripts/triage-lens/lab-file-button.js`,
+  cloned from `routine-rx-button.js`) so Medicus stays the system of record. Controls
+  are matched by VISIBLE TEXT, never per-session ids; if any control the profile names
+  is missing, the macro **aborts and clicks nothing**.
+- **Fail-safe by construction.** Profiles arrive **disabled** and cannot be enabled
+  until reviewed *and* the safety notice is acknowledged. `commitMode` is `manual`
+  (pre-fill, you click File) or `confirm` (enumerated irreversible-action dialog, then
+  file) — **there is no full-auto mode**. The optional "your results are normal"
+  patient message is **prepared only** (copied / pre-filled); the macro never sends it.
+  Every filing run is written to a machine-local audit ring buffer
+  (`labfiling.auditLog`).
+- **Backup IO** (`shared/io/labfiling-io.js`): profiles round-trip through suite/module
+  backups but arrive **inert on import** (disabled, unreviewed, message off,
+  `commitMode` clamped to manual|confirm) and are validated + whitelist-sanitised; the
+  audit log and the per-install notice acknowledgement are never imported.
+- Tests: `test-lab-filing-utils.js`, `test-labfiling-io.js`, `test-lab-file-macro.js`
+  (fake-DOM harness asserting the severity gate, abort-on-missing-control,
+  manual-vs-confirm, and prepare-not-send message behaviour).
+
+> Note: the live Medicus filing-screen DOM is supplied by the user's filing profile
+> (it is not hard-coded), so the on-page execution must be verified against a real
+> filing screen in the user's environment before relying on it.
+
 ## [v3.137.0] — 2026-06-29
 
 ### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view

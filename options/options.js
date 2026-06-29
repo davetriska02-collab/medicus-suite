@@ -519,6 +519,7 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
+    labfiling,
     notifications,
   ] = await Promise.all([
     sentinelExport(),
@@ -533,6 +534,7 @@ async function doFullExport() {
     condorExport(),
     receptionExport(),
     knowledgeExport(),
+    labfilingExport(),
     notificationsExport(),
   ]);
   const suite = await suiteExport();
@@ -549,6 +551,7 @@ async function doFullExport() {
     condor,
     reception,
     knowledge,
+    labfiling,
     notifications,
     suite,
   });
@@ -568,6 +571,7 @@ async function doModuleExport(scope) {
     condor: () => condorExport(),
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
+    labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
@@ -601,6 +605,7 @@ async function applyEnvelope(envelope) {
     mods.condor && (() => condorImport(mods.condor)),
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
+    mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);

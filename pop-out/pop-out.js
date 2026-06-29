@@ -55,6 +55,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
     css: '../side-panel/modules/knowledge/knowledge.css',
   },
+  labfiling: {
+    js: () => import('../side-panel/modules/labfiling/labfiling.js'),
+    css: '../side-panel/modules/labfiling/labfiling.css',
+  },
   record: {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',
@@ -124,6 +128,11 @@ const TAB_HELP = {
     title: 'Knowledge',
     what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
     firstStep: 'Type a keyword to find the relevant practice note.',
+  },
+  labfiling: {
+    title: 'Lab filing',
+    what: 'Set up per-lab “filing profiles” so normal blood results can be filed in one click — only when every parameter is within range, behind a confirm.',
+    firstStep: 'Add a filing profile for your lab (you can build it from a screenshot with an LLM), then review and enable it.',
   },
 };
 

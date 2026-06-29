@@ -118,6 +118,7 @@ const MODULES = {
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  labfiling: { js: () => import('./modules/labfiling/labfiling.js'), css: './modules/labfiling/labfiling.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
   about: null,
 };
@@ -188,6 +189,12 @@ const TAB_HELP = {
     title: 'Knowledge',
     what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
     firstStep: 'Type a keyword to find the relevant practice note.',
+  },
+  labfiling: {
+    title: 'Lab filing',
+    what: 'Set up per-lab “filing profiles” so normal blood results can be filed in one click — only when every parameter is within range, behind a confirm.',
+    firstStep:
+      'Add a filing profile for your lab (you can build it from a screenshot with an LLM), then review and enable it.',
   },
 };
 
