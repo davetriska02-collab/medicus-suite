@@ -130,8 +130,8 @@ body {
 }
 .cqc-gate-hint {
   margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--text2);
+  font-size: 13px;
+  color: var(--text);
   line-height: 1.5;
 }
 .cqc-controls-hint {

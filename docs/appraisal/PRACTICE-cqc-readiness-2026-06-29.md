@@ -61,5 +61,45 @@ UX items → route through `design-crit` for this single surface. Clinical-discl
 - **Demote proposal E (Effective/QOF statement) out of the inspector pack.** I proposed it; the panel's primary user (Janet) actively pushed back and the clinicians were indifferent. *Reverse by:* adding a single Effective statement **internal-readiness-only**, scoped "rule-set in use, not achievement", never in the export. Worth revisiting only if a future user explicitly asks to evidence Effective.
 - **Colourblind severity downgraded.** Badges carry text labels, so not colour-only. Open check: the standalone page's `applyTheme` honours only dark theme, so confirm the suite's colourblind display mode actually propagates here. *Low severity.*
 
+## 5b · Iterate-to-8 loop (2026-06-29)
+
+The panel was then run as a closed loop on Opus: implement → re-render → re-appraise,
+until every persona scored the surface ≥ 8/10. Five iterations, shipped as
+v3.135.0 → v3.135.2.
+
+| Persona | R1 | R2 | R3 | R4 | R5 |
+|---|---|---|---|---|---|
+| Janet (practice manager) | 6 | 5 | 7 | 8 | **8** |
+| Margaret (partner, technophobe) | 3 | 4 | 7 | 8 | **8** |
+| Tom (salaried GP) | 5 | 5 | 7 | 8 | **8** |
+| Raj (clinical pharmacist) | 6 | 7 | 7 | 8 | **8** |
+| Maureen (admin, technophobe) | 6 | 4 | 6 | 7 | **8** |
+| Eileen (practice nurse) | 5 | 6 | 7 | 7.5 | **8** |
+| **Average** | **5.2** | 5.2 | 6.8 | 7.75 | **8.0** |
+
+What each iteration changed:
+- **iter 1 (v3.135.0 part):** answer-first headline verdict + RAG legend; collapsed the
+  matched-term wall; fixed the dead CSV export; plain-language glosses.
+- **iter 2 (appraisal only):** revealed that promoting the blank reconciliation worksheet
+  backfired (manager/partner read empty "your count" cells as "unfinished homework"), and
+  surfaced developer noise leaking into the document ("WebFetch 403").
+- **iter 3 (v3.135.0):** verdict separates "rules current" from "patients monitored";
+  reconciliation demoted below Safe/Well-led + reframed as a by-design worksheet; spec
+  strings sanitised; internal codes removed.
+- **iter 4 (v3.135.1):** disclosed each rule's `drug.exclude` strings (Raj's silent-false-
+  negative trap); humanised provenance (no file paths); per-card "System currency" label;
+  collapse-on-screen / force-open-in-print; one-click "Print inspector copy".
+- **iter 5 (v3.135.2):** unambiguous two-step print hint; de-scared the confirm gate;
+  explained why excludes exist; de-duplicated the coded-data caveat.
+
+Key learning: the deepest blocker (manager/partner demanding auto-populated patient counts)
+was NOT solved by building toward it — it is an architectural honesty boundary (read-only,
+no cohort enumeration). It was resolved by stating that boundary plainly and reframing the
+worksheet as deliberately blank. Honesty, surfaced well, converted the blocker into trust.
+
+Residual "9-item" asks (none blocking 8; out of scope for this pass): per-exclude inline
+reasons (Eileen) and worksheet count pre-fill (Janet) — both need data-model changes; naming
+the PINCER/ACB/STOPP-START source versions (Raj); a dedicated clinician-view toggle (Tom).
+
 ## 6 · Reproduce
 States rendered via `.claude/skills/design-crit/harness.mjs` to `/tmp/the-practice/cqc/`: resting-light, resting-dark, readiness-light, readiness-dark, export-gated, export-confirmed, readiness-colourblind. Panel cast: personas 1, 2, 3, 5, 8, 9 from `.claude/skills/the-practice/PERSONAS.md`.
