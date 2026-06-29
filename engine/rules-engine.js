@@ -111,6 +111,78 @@
     return result;
   }
 
+  // === HIGH-RISK UNMATCHED-MED GUARD ===
+  // The silent-failure mode CLAUDE.md warns about: a high-risk drug under an
+  // odd brand / spelling, or one dropped by an `exclude`, matches NO monitoring
+  // rule, so no overdue-blood chip ever fires and nobody notices for months.
+  // listUnmatchedMedicationsDetailed already surfaces ALL unmatched meds, but it
+  // treats an unmonitored paracetamol the same as an unmonitored amiodarone.
+  // This re-reads that list and elevates the ones whose name looks like a class
+  // that genuinely REQUIRES monitoring (BNF / PINCER / shared-care), so the panel
+  // can promote them from a buried "N unmatched" list into a visible "verify
+  // monitoring is in place" alert. It is a backstop, not a clinical rule: every
+  // med it flags is — by construction — one that already passed through every
+  // enabled rule unmatched, so when the matching rules are complete this fires on
+  // nothing (the common drugs here all already carry rules; see drug-rules.json).
+  //
+  // Stems are class/generic terms matched case-insensitively as substrings, the
+  // SAME contract as drugMatchesRule — so "lithium" covers all lithium salts and
+  // "valproate" covers "sodium valproate". Brand-only names that contain no
+  // generic stem are the known limit (they cannot be classified from the name
+  // alone); this is still strictly more than today's flat list.
+  const HIGH_RISK_UNMATCHED_CLASSES = [
+    {
+      label: 'DMARD / immunosuppressant',
+      stems: [
+        'methotrexate', 'azathioprine', 'mercaptopurine', 'leflunomide', 'sulfasalazine',
+        'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
+        'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
+      ],
+    },
+    { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
+    { label: 'Lithium', stems: ['lithium'] },
+    { label: 'Antiarrhythmic', stems: ['amiodarone', 'dronedarone', 'digoxin'] },
+    {
+      label: 'Oral anticoagulant',
+      stems: ['warfarin', 'acenocoumarol', 'phenindione', 'apixaban', 'rivaroxaban', 'edoxaban', 'dabigatran'],
+    },
+    { label: 'Antithyroid', stems: ['carbimazole', 'propylthiouracil'] },
+    { label: 'Aldosterone antagonist (potassium)', stems: ['spironolactone', 'eplerenone'] },
+    {
+      label: 'Antiepileptic (level / marrow / hepatic monitoring)',
+      stems: ['valproate', 'valproic', 'carbamazepine', 'phenytoin'],
+    },
+    { label: 'Antipsychotic (clozapine)', stems: ['clozapine'] },
+  ];
+
+  // Returns the subset of an unmatched-detail list (the listUnmatchedMedicationsDetailed
+  // shape: [{ name, reason, excludedBy }]) whose name matches a high-risk class,
+  // annotated with { riskClass, matchedStem } and carrying the original reason /
+  // excludedBy through so the UI can explain WHY it was missed (no rule vs excluded).
+  function flagHighRiskUnmatched(unmatchedDetailed) {
+    const list = Array.isArray(unmatchedDetailed) ? unmatchedDetailed : [];
+    const out = [];
+    for (const item of list) {
+      const name = item && item.name;
+      if (!name) continue;
+      const norm = normaliseDrugString(name);
+      for (const cls of HIGH_RISK_UNMATCHED_CLASSES) {
+        const matchedStem = cls.stems.find((stem) => norm.includes(normaliseDrugString(stem)));
+        if (matchedStem) {
+          out.push({
+            name,
+            riskClass: cls.label,
+            matchedStem,
+            reason: (item && item.reason) || null,
+            excludedBy: (item && item.excludedBy) || null,
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   // === DATE HELPERS ===
   function daysBetween(isoA, isoB) {
     const a = new Date(isoA);
@@ -2294,6 +2366,8 @@
     evaluatePatient,
     listUnmatchedMedications,
     listUnmatchedMedicationsDetailed,
+    flagHighRiskUnmatched,
+    HIGH_RISK_UNMATCHED_CLASSES,
     drugMatchesRule,
     drugMatchDetail,
     buildTraceEnvelope,

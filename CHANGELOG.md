@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.138.0] — 2026-06-29
+
+### Sentinel: high-risk "blind-spot" guard for unmonitored drugs
+
+Closes the silent-failure mode the developer guide warns about — a high-risk drug
+under an odd brand, an `exclude`d form, or a disabled rule matches NO monitoring
+rule, so no overdue-blood chip ever fires and nobody notices for months. Sentinel
+already listed every unmatched medicine, but buried in a collapsible "N unmatched"
+list that treated an unmonitored paracetamol the same as an unmonitored amiodarone.
+
+- **New engine helper** `flagHighRiskUnmatched()` (`engine/rules-engine.js`) re-reads
+  the existing `listUnmatchedMedicationsDetailed()` output and elevates the subset
+  whose name matches a monitored high-risk class (DMARDs/immunosuppressants, lithium,
+  amiodarone/digoxin, oral anticoagulants, antithyroids, aldosterone antagonists,
+  level-monitored antiepileptics, clozapine, hydroxychloroquine). Class stems are
+  matched case-insensitively as substrings — the SAME contract as `drugMatchesRule`,
+  so "lithium" covers all salts and "valproate" covers "sodium valproate".
+- **Surfaced** as a red banner near the top of the Sentinel panel (with the other
+  warnings), not hidden in the collapsed list: each drug, its risk class, why it was
+  missed (no rule vs excluded), and "verify monitoring is in place in Medicus".
+- **No new noise:** the flagged set is a strict subset of meds that already passed
+  every enabled rule unmatched. The common drugs here all already carry rules, so on
+  a complete rule set this fires on nothing; it only catches genuine slips.
+- **No clinical-rule, threshold or `defaults.json` change** — pure read of data
+  already in the snapshot. Backstop only, not a monitoring rule.
+- New regression test `test-high-risk-unmatched.js` (18 checks).
+
 ## [v3.137.0] — 2026-06-29
 
 ### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view
