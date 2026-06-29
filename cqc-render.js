@@ -734,9 +734,20 @@ export function buildReadinessHtml(readiness, { mode = 'readiness' } = {}) {
     renderHeadlineVerdict(r, mode),
     // Coverage manifest (concise — the long matched-term list is collapsed).
     renderCoverageManifest(r, mode),
-    // Named clinical-method versions/sources.
-    renderClinicalMethods(r),
   ];
+
+  // Named clinical-method versions/sources. In clinician view this reference table is
+  // collapsed behind a toggle so the glance is verdict + coverage tiles (Tom); the
+  // amber coded-data/undercount safety caveat in the manifest stays visible — a
+  // clinical-safety message is never hidden behind a click.
+  const methodsBlock = renderClinicalMethods(r);
+  if (methodsBlock) {
+    parts.push(
+      isClinician
+        ? `<details class="cqc-methods-collapse"><summary class="cqc-matched-summary">Clinical methods &amp; sources <span class="cqc-matched-hint">(named versions — expand)</span></summary>${methodsBlock}</details>`
+        : methodsBlock
+    );
+  }
 
   if (isClinician) {
     parts.push(disclaimerFooter(r));

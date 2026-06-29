@@ -804,6 +804,18 @@ body {
   background: var(--green);
 }
 
+/* ── Clinician-view collapsed methods table (Tom: keep the glance clean) ───── */
+.cqc-methods-collapse {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px 16px;
+}
+.cqc-methods-collapse .cqc-card-methods {
+  border: 0;
+  padding: 10px 0 0;
+}
+
 /* ── Slim clinician verdict footnote (Tom: one line, not four boxes) ──────── */
 .cqc-verdict-foot {
   margin: 10px 0 0;

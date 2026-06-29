@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.136.2] — 2026-06-29
+
+### CQC Inspection Readiness: clinician view collapses the methods table
+
+In Clinician view the "Clinical methods & sources" reference table now sits behind
+a single expand toggle, so the glance is the verdict plus the four coverage tiles
+(Tom). The amber coded-data / "floor not a ceiling" caveat stays visible — a
+clinical-safety message is never hidden behind a click. Readiness/Export modes are
+unchanged (full methods table inline).
+
 ## [v3.136.1] — 2026-06-29
 
 ### CQC Inspection Readiness: clinician-view density, worksheet provenance, PINCER count reconciled
