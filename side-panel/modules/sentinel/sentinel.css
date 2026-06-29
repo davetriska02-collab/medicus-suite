@@ -291,6 +291,51 @@
   line-height: 1.5;
 }
 
+/* High-risk blind-spot banner — a monitored drug that matched no rule. Red, not
+   amber: this is a patient-safety alert, not advisory drift noise. */
+.sent-hrisk-banner {
+  border-left: 3px solid var(--red);
+  background: var(--red-dim);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.sent-hrisk-head {
+  font-weight: 600;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+.sent-hrisk-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+.sent-hrisk-list strong {
+  color: var(--text-1);
+}
+.sent-hrisk-class {
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+  white-space: nowrap;
+}
+.sent-hrisk-why {
+  color: var(--text-3);
+}
+.sent-hrisk-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
 /* Filter bar */
 .sent-filter-bar {
   display: flex;

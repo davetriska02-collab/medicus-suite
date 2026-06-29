@@ -2,6 +2,159 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.142.1] — 2026-06-29
+
+### Verification fixes for the v3.138–v3.142 feature set
+
+Found while headless-rendering the four new surfaces (light + dark) and running the
+real ESLint gate:
+
+- **`sweep.css`:** the QOF panel body referenced an undefined token `var(--bg-1)`
+  (would have rendered as an unstyled surface — the "white rectangle" failure
+  mode); switched to the defined `var(--bg-elev)`. Also simplified
+  `var(--border-dim, …)` to the defined `var(--border)`.
+- **`eslint.config.mjs`:** registered the new `shared/task-api.js` as an ES module
+  (alongside `shared/medicus-api.js`) so `eslint .` parses it; the project lint now
+  passes clean across the whole tree.
+
+Headless Chromium render confirmed all four surfaces (Sentinel high-risk banner,
+Sweep QOF prioritiser, Sweep recall form, Referrals 2WW safety-net) style correctly
+in both themes with every design token resolving.
+
+## [v3.142.0] — 2026-06-29
+
+### Sentinel: ACE-I/ARB post-initiation U&E check (NICE NG136) — PENDING CSO REVIEW
+
+NICE NG136 requires a U&E within ~1–2 weeks of **starting** (or uptitrating) an
+ACE-I/ARB. The `ace-arb` rule documented this in its notes but only enforced the
+*annual* U&E — so a newly-started patient who had a baseline U&E but no
+post-initiation recheck raised no alert (the annual interval reads "in date" off
+the baseline). This closes that gap.
+
+- **New additive engine mechanism** (`engine/rules-engine.js`): a drug-monitoring
+  test may carry `postInitiationDays` / `postInitiationDueSoonDays`. Unlike the
+  rolling-interval check (where a *missing* test is neutral `no_data`), a
+  post-initiation requirement that is unmet after the grace window is
+  **actionable** — `recently_initiated` (≤14d) → `due_soon` amber (≤21d) →
+  `overdue` red. It is satisfied by any qualifying test recorded **on or after**
+  the drug's start date.
+- **Fail-safe against crying wolf:** it fires ONLY when the drug's start date is
+  known (`med.startDate`, derived from issue history) AND no U&E exists since
+  starting. An established patient whose start date isn't visible never trips it.
+  No change to the existing annual U&E/BP intervals or any other rule.
+- **Rule change** (`rules/drug-rules.json`): added the post-initiation U&E test to
+  `ace-arb`; bumped `lastUpdated` and documented the change in `sourceNotes`.
+- New regression test `test-ace-arb-postinit.js` (14 checks), including the exact
+  NG136 gap (baseline-before-start → overdue while the annual reads in-date) and
+  the no-false-alarm case (unknown start date → neutral).
+- **This is a clinical-rule change and is flagged PENDING CSO (Dr Triska) review**
+  before merge, per the suite's clinical-safety governance.
+
+## [v3.141.0] — 2026-06-29
+
+### Sweep: one-click "Create recall task" — close the detection→action loop
+
+Sweep already found tomorrow's patients with overdue monitoring and QOF gaps, but
+the only output was a printable reception handout — the actual recall task still
+had to be made by hand. This closes the loop: a per-row "Create recall task"
+button writes a real task into Medicus.
+
+- **New shared client** `shared/task-api.js` drives Medicus's OWN general-task
+  endpoints (`GET /patient/data/workflow/general-task/create`,
+  `POST /patient/workflow/general-task/create`) with credentialed fetches — the
+  identical, already-shipping pattern `slots/booking-api.js` uses to create
+  appointments from the side panel (the extension holds `host_permissions` for
+  `*.api.england.medicus.health`). Medicus stays the system of record; its
+  validation, access control and audit fire as normal.
+- **Per-row inline confirm form** (assignee + an editable description prefilled
+  from that patient's gaps via the new pure `buildRecallDescription()` in
+  `sweep-core.js`, reusing the same instruction grouping as the handout). One
+  explicit task per click — there is deliberately **no bulk "create all"**, the
+  Create button is disabled until an assignee is chosen, and it disables after
+  success so a double-click can't double-create.
+- Only offered on action-needed rows when a practice code is set and there is a
+  bookable instruction to recall; the assignee/priority options are fetched once
+  per run and reused.
+- **No `defaults.json`, clinical-rule or storage-key change.** New checks added to
+  `test-sweep-core.js` for `buildRecallDescription`.
+
+## [v3.140.0] — 2026-06-29
+
+### Referrals: 2WW / Faster-Diagnosis safety-net worklist
+
+NHS Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+of cancer-delay negligence claims, and the Faster Diagnosis Standard rises to 80%
+(March 2026). The Referrals module already pulled outbound NHS referrals with
+priority and status, but only as aggregate charts — there was no worklist of the
+suspected-cancer referrals that have gone quiet.
+
+- **New pure helpers** `buildSafetyNet()` and `referralAgeDays()`
+  (`shared/referrals-api.js`) classify the already-fetched referrals: an "open
+  loop" is a `TwoWeekWait` referral still showing `displayStatus: Incomplete`
+  (no confirmed outcome). Returns the open rows oldest-first with calendar-day
+  ages and a severity (watch ≥ 14d, overdue ≥ 21d — heuristic, configurable).
+- **New worklist card** at the top of the Referrals view: open 2WW loops with
+  age, patient, service and clinician, plus overdue/watch badges. Reads the RAW
+  referrals, so the priority/status filter chips can never hide an open loop.
+- **No new endpoint** — reuses the outbound-referrals data the module already
+  fetches; no patient-identifiable data leaves the page. Thresholds are labelled
+  as a guide, not a clinical standard.
+- New regression test `test-referrals-safety-net.js` (19 checks).
+
+## [v3.139.0] — 2026-06-29
+
+### Sweep: QOF points-at-risk prioritiser (CVD-prevention income lens)
+
+QOF 25/26 → 26/27 redirected 141 points into a high-stakes CVD-prevention cluster
+(BP control, lipid lowering, antithrombotics) at 85–90% upper thresholds, where a
+small case-finding shortfall directly loses income. Sweep already evaluated every
+booked patient's QOF gaps but surfaced them one patient at a time, severity-sorted,
+with no sense of which gaps are worth the most.
+
+- **New pure helper** `summariseQofPointsAtRisk()` (`sweep-core.js`) re-reads the
+  SAME action-needed `qof-indicator` chips Sweep already produced and weights each
+  by the indicator's own `points` (from the chip, with a `pointsByCode` override
+  built from the loaded QOF rules as a backstop). Returns cohort totals, a
+  CVD-prevention subtotal, patients ranked by points-at-risk, and a per-indicator
+  breakdown.
+- **New `isCvdQofIndicator()`** classifies the CVD-prevention domain by explicit
+  indicator code (HYP/CHD/STIA/CD/CHOL/AF/PAD + DM006/DM034/DM035/DM036) — not a
+  blunt prefix, so DM036 (BP) counts as CVD but DM020 (HbA1c) does not.
+- **New panel** at the top of the Sweep results: "QOF points at risk: Σ N
+  (CVD-prevention M)", patients ranked highest-value-first, and an indicator
+  breakdown — so a practice works the gaps worth the most money first.
+- **No clinical-rule, threshold or `defaults.json` change** — pure aggregation of
+  chips already evaluated. Income is described in points only (national weights);
+  the panel notes actual £ depends on list size and prevalence.
+- New regression test `test-sweep-qof-points.js` (37 checks).
+
+## [v3.138.0] — 2026-06-29
+
+### Sentinel: high-risk "blind-spot" guard for unmonitored drugs
+
+Closes the silent-failure mode the developer guide warns about — a high-risk drug
+under an odd brand, an `exclude`d form, or a disabled rule matches NO monitoring
+rule, so no overdue-blood chip ever fires and nobody notices for months. Sentinel
+already listed every unmatched medicine, but buried in a collapsible "N unmatched"
+list that treated an unmonitored paracetamol the same as an unmonitored amiodarone.
+
+- **New engine helper** `flagHighRiskUnmatched()` (`engine/rules-engine.js`) re-reads
+  the existing `listUnmatchedMedicationsDetailed()` output and elevates the subset
+  whose name matches a monitored high-risk class (DMARDs/immunosuppressants, lithium,
+  amiodarone/digoxin, oral anticoagulants, antithyroids, aldosterone antagonists,
+  level-monitored antiepileptics, clozapine, hydroxychloroquine). Class stems are
+  matched case-insensitively as substrings — the SAME contract as `drugMatchesRule`,
+  so "lithium" covers all salts and "valproate" covers "sodium valproate".
+- **Surfaced** as a red banner near the top of the Sentinel panel (with the other
+  warnings), not hidden in the collapsed list: each drug, its risk class, why it was
+  missed (no rule vs excluded), and "verify monitoring is in place in Medicus".
+- **No new noise:** the flagged set is a strict subset of meds that already passed
+  every enabled rule unmatched. The common drugs here all already carry rules, so on
+  a complete rule set this fires on nothing; it only catches genuine slips.
+- **No clinical-rule, threshold or `defaults.json` change** — pure read of data
+  already in the snapshot. Backstop only, not a monitoring rule.
+- New regression test `test-high-risk-unmatched.js` (18 checks).
+
 ## [v3.137.0] — 2026-06-29
 
 ### CQC Inspection Readiness: answer-first redesign, honest disclosure, clinician view

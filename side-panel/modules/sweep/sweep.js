@@ -39,11 +39,14 @@ import { fetchSchedulingOverview, todayISO } from '../../../shared/medicus-api.j
 import {
   extractBookedPatients,
   summariseSweep,
+  summariseQofPointsAtRisk,
+  buildRecallDescription,
   isActionNeeded,
   buildHandout,
   MAX_SWEEP_PATIENTS,
 } from './sweep-core.js';
 import { buildBatchPack } from '../shared/action-packs.js';
+import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
 
 // Canonical "no alert ≠ monitoring complete" caveat (shared/provenance.js,
 // loaded as a classic script in panel.html / pop-out.html). Fall back to the
@@ -88,6 +91,12 @@ let _selectedUuids = new Set(); // UUIDs of currently-checked action rows
 // Cached rules (invalidated on storage change, same as sentinel.js)
 let _mergedRulesCache = null;
 let _canonicalRulesCache = null;
+
+// Create-recall-task state. The assignee/priority options are practice-wide, so
+// the form is fetched once per run and reused across rows. _recallApiBase is the
+// API host for the current results render (set in renderResults).
+let _taskFormCache = null;
+let _recallApiBase = '';
 let _storageListener = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -583,6 +592,18 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
        </label>`
     : '';
 
+  // Close-the-loop: a per-row "Create recall task" control that drives Medicus's
+  // own general-task endpoint. Only offered on selectable (action-needed) rows
+  // when we have an API base (practice code set), and only when there is at least
+  // one bookable instruction to recall.
+  const recallable = selectable && apiBase && buildRecallDescription(row.chips || []) !== '';
+  const recallHtml = recallable
+    ? `<div class="sweep-recall">
+         <button class="sweep-recall-btn" type="button" data-uuid="${esc(row.uuid)}" data-name="${esc(row.name)}" title="Create a recall task for this patient in Medicus">+ Create recall task</button>
+         <div class="sweep-recall-slot" data-uuid="${esc(row.uuid)}"></div>
+       </div>`
+    : '';
+
   return `<div class="sweep-row${_selectedUuids.has(row.uuid) ? ' sweep-row-selected' : ''}">
     <div class="sweep-row-head">
       ${checkboxHtml}${timeStr}<span class="sweep-row-name">${name}</span>
@@ -591,7 +612,83 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
     <div class="sweep-row-meta">${clinStr}<a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open record &#8599;</a></div>
     ${chipHtml ? `<div class="sweep-row-chips">${chipHtml}</div>` : ''}
     ${hiddenNote}
+    ${recallHtml}
   </div>`;
+}
+
+// Build an indicatorCode → points map from the rules in memory, so the QOF
+// prioritiser is robust even if a chip didn't carry its own points. Falls back
+// to the chip's own `points` when a code is absent (handled in sweep-core).
+function buildQofPointsByCode(rules) {
+  const map = {};
+  for (const r of rules || []) {
+    if (r && r.type === 'qof-indicator' && r.indicatorCode != null && r.points != null) {
+      map[String(r.indicatorCode).toUpperCase()] = Number(r.points) || 0;
+    }
+  }
+  return map;
+}
+
+// Cohort-level QOF income lens: ranks the QOF gaps Sweep already found by the
+// indicator's own points, so a practice works the highest-value patients first
+// and protects the redirected CVD-prevention domain. Pure read of existing chips.
+function renderQofPointsPanel(summary, siteId) {
+  if (!summary || summary.patientCount === 0 || summary.totalPoints === 0) return '';
+
+  const cvdBadge =
+    summary.cvdPoints > 0
+      ? `<span class="sweep-qof-cvd" title="BP control, lipid/statin and antithrombotic indicators">CVD-prevention ${summary.cvdPoints}</span>`
+      : '';
+
+  const topPatients = summary.byPatient.slice(0, 10);
+  const patientList = topPatients
+    .map((p) => {
+      const timeStr = p.time ? `<span class="sweep-row-time">${formatTime(p.time)}</span>` : '';
+      const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(p.uuid)}/`;
+      const cvd = p.cvdPoints > 0 ? `<span class="sweep-qof-cvd-dot" title="${p.cvdPoints} CVD-prevention points">CVD ${p.cvdPoints}</span>` : '';
+      const codes = esc(p.indicators.map((i) => i.code).join(', '));
+      return `<li class="sweep-qof-prow">
+        <span class="sweep-qof-pts">${p.points}</span>
+        <span class="sweep-qof-pname">${timeStr}${esc(p.name)}</span>
+        ${cvd}
+        <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
+        <span class="sweep-qof-pcodes">${codes}</span>
+      </li>`;
+    })
+    .join('');
+
+  const indicatorList = summary.byIndicator
+    .map((i) => {
+      const cvd = i.isCvd ? `<span class="sweep-qof-itag">CVD</span>` : '';
+      return `<li class="sweep-qof-irow">
+        <span class="sweep-qof-icode">${esc(i.code)}</span>${cvd}
+        <span class="sweep-qof-iname">${esc(i.name)}</span>
+        <span class="sweep-qof-itotal">${i.totalPoints} pts · ${i.patientCount} pt${i.patientCount === 1 ? '' : 's'}</span>
+      </li>`;
+    })
+    .join('');
+
+  return `
+    <details class="sweep-qof-panel" open>
+      <summary class="sweep-qof-summary">
+        QOF points at risk: <strong>${summary.totalPoints}</strong>
+        ${cvdBadge}
+        <span class="sweep-qof-sub">${summary.patientCount} patient${summary.patientCount === 1 ? '' : 's'} with gaps</span>
+      </summary>
+      <div class="sweep-qof-body">
+        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. Points are the national indicator weights; actual income depends on your list size and prevalence.</p>
+        <div class="sweep-qof-cols">
+          <div class="sweep-qof-col">
+            <div class="sweep-qof-col-head">Patients by points at risk</div>
+            <ol class="sweep-qof-plist">${patientList}</ol>
+          </div>
+          <div class="sweep-qof-col">
+            <div class="sweep-qof-col-head">By indicator</div>
+            <ul class="sweep-qof-ilist">${indicatorList}</ul>
+          </div>
+        </div>
+      </div>
+    </details>`;
 }
 
 function renderResults({
@@ -642,8 +739,18 @@ function renderResults({
     batchNote = `<div class="sweep-notice sweep-notice-ok">All ${totalCount} booked patients checked.</div>`;
   }
 
+  // Reset the cached assignee/priority options if the practice (API base) changed.
+  if (_recallApiBase !== apiBase) _taskFormCache = null;
+  _recallApiBase = apiBase;
   const actionHtml = actionRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, true)).join('');
   const errorHtml = errorRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, false)).join('');
+
+  // QOF points-at-risk prioritiser — cohort income lens over the same chips.
+  const qofPoints = summariseQofPointsAtRisk(
+    _cumulativeResults,
+    buildQofPointsByCode(_sweepRules || _canonicalRulesCache || [])
+  );
+  const qofPanelHtml = renderQofPointsPanel(qofPoints, siteIdMatch);
 
   const clearSection =
     clearRows.length > 0
@@ -701,6 +808,8 @@ function renderResults({
 
       ${missingNote}${batchNote}
 
+      ${qofPanelHtml}
+
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
       ${
         actionRows.length > 0
@@ -722,6 +831,8 @@ function renderResults({
     if (handoutBtn) handoutBtn.addEventListener('click', onPrintHandout);
     // Batch selection wiring
     wireBatchSelection(runArea, actionRows);
+    // Create-recall-task wiring
+    wireRecallButtons(runArea);
   }
 
   // Reset Run sweep button
@@ -799,6 +910,128 @@ function wireBatchSelection(runArea, actionRows) {
 
   // Initialise bar state — needed after resume so restored _selectedUuids are reflected
   updateBatchBar();
+}
+
+// ── Create-recall-task wiring ──────────────────────────────────────────────────
+//
+// One careful, explicit task per click — there is deliberately NO bulk "create
+// all". Each row's button opens an inline confirm form (assignee + an editable
+// description prefilled from that patient's gaps); only the Create button writes,
+// via Medicus's own general-task endpoint (shared/task-api.js). Mirrors the
+// proven task-inline.js flow, so Medicus's validation/access/audit fire as normal.
+
+function wireRecallButtons(runArea) {
+  runArea.querySelectorAll('.sweep-recall-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openRecallForm(btn));
+  });
+}
+
+async function ensureTaskForm(patientId) {
+  // Assignee/priority options are practice-wide, so fetch once per run and reuse.
+  if (_taskFormCache) return _taskFormCache;
+  _taskFormCache = await fetchTaskCreateForm(_recallApiBase, patientId);
+  return _taskFormCache;
+}
+
+function recallAssigneeOptionsHtml(form) {
+  const opt = (o) => `<option value="${esc(`${o.type}|${o.value}`)}">${esc(o.label)}</option>`;
+  let html = '<option value="">— select —</option>';
+  if (form.teams && form.teams.length) html += `<optgroup label="Teams">${form.teams.map(opt).join('')}</optgroup>`;
+  if (form.staff && form.staff.length) html += `<optgroup label="Staff">${form.staff.map(opt).join('')}</optgroup>`;
+  return html;
+}
+
+async function openRecallForm(btn) {
+  const uuid = btn.dataset.uuid;
+  const row = _lastActionRows.find((r) => r.uuid === uuid);
+  const slot = btn.parentElement?.querySelector('.sweep-recall-slot');
+  if (!row || !slot) return;
+
+  // Toggle closed if already open (and not already submitted).
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    return;
+  }
+  slot.dataset.open = '1';
+  slot.innerHTML = `<div class="sweep-recall-loading">Loading task form…</div>`;
+
+  let form;
+  try {
+    form = await ensureTaskForm(uuid);
+  } catch (e) {
+    slot.innerHTML = `<div class="sweep-recall-error">${esc(e.message || 'Could not load the task form.')}</div>`;
+    slot.dataset.open = '';
+    return;
+  }
+
+  const desc = buildRecallDescription(row.chips || []);
+  const priorityHtml =
+    form.priorities && form.priorities.length > 1
+      ? `<label class="sweep-recall-lbl">Priority
+           <select class="sweep-recall-priority">${form.priorities
+             .map((p) => `<option value="${esc(p.value)}">${esc(p.label)}</option>`)
+             .join('')}</select>
+         </label>`
+      : '';
+  slot.innerHTML = `
+    <div class="sweep-recall-form">
+      <label class="sweep-recall-lbl">Assign to
+        <select class="sweep-recall-assignee">${recallAssigneeOptionsHtml(form)}</select>
+      </label>
+      <label class="sweep-recall-lbl">Details
+        <textarea class="sweep-recall-desc" rows="3" maxlength="2000">${esc(desc)}</textarea>
+      </label>
+      ${priorityHtml}
+      <div class="sweep-recall-actions">
+        <button class="sweep-recall-create" type="button" disabled>Create task</button>
+        <button class="sweep-recall-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sweep-recall-status" role="status"></div>
+    </div>`;
+
+  const assigneeSel = slot.querySelector('.sweep-recall-assignee');
+  const descEl = slot.querySelector('.sweep-recall-desc');
+  const createBtn = slot.querySelector('.sweep-recall-create');
+  const updateEnabled = () => {
+    createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
+  };
+  assigneeSel.addEventListener('change', updateEnabled);
+  descEl.addEventListener('input', updateEnabled);
+  slot.querySelector('.sweep-recall-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+  });
+  createBtn.addEventListener('click', () => submitRecall(slot));
+}
+
+async function submitRecall(slot) {
+  const btn = slot.closest('.sweep-recall')?.querySelector('.sweep-recall-btn');
+  const patientId = btn?.dataset.uuid;
+  const assigneeSel = slot.querySelector('.sweep-recall-assignee');
+  const assignee = assigneeSel?.value || '';
+  const description = slot.querySelector('.sweep-recall-desc')?.value || '';
+  const priority = slot.querySelector('.sweep-recall-priority')?.value ?? 0;
+  const createBtn = slot.querySelector('.sweep-recall-create');
+  const statusEl = slot.querySelector('.sweep-recall-status');
+  if (!patientId || !assignee || !description.trim()) return;
+
+  // Capture the assignee label before we tear the form down on success.
+  const assigneeLabel = assigneeSel.selectedOptions?.[0]?.textContent?.trim() || '';
+  createBtn.disabled = true;
+  createBtn.textContent = 'Creating…';
+  if (statusEl) statusEl.textContent = '';
+  try {
+    await createGeneralTask(_recallApiBase, { patientId, assignee, description, priority });
+    slot.innerHTML = `<div class="sweep-recall-done">&#10003; Recall task created${
+      assigneeLabel ? ` — assigned to ${esc(assigneeLabel)}` : ''
+    }.</div>`;
+    slot.dataset.open = 'done';
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span class="sweep-recall-error">${esc(e.message || 'Failed to create the task.')}</span>`;
+    createBtn.disabled = false;
+    createBtn.textContent = 'Create task';
+  }
 }
 
 // Build the printable reception handout from the latest results and open it

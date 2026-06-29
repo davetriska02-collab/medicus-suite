@@ -955,3 +955,94 @@
   padding: 16px 0;
   text-align: center;
 }
+
+/* ── 2WW / Faster-Diagnosis safety-net worklist ─────────────────────────────── */
+.ref-sn-card {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-left: 3px solid var(--red);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.ref-sn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.ref-sn-title {
+  font-weight: 600;
+  color: var(--red);
+  font-size: 13px;
+}
+.ref-sn-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+.ref-sn-badge-overdue {
+  color: var(--red);
+  background: var(--bg-elev);
+  border: 1px solid var(--red-line);
+}
+.ref-sn-badge-watch {
+  color: var(--amber);
+  background: var(--bg-elev);
+  border: 1px solid var(--amber-line);
+}
+.ref-sn-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.ref-sn-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ref-sn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+}
+.ref-sn-age {
+  font-family: var(--mono);
+  font-weight: 600;
+  min-width: 34px;
+  text-align: right;
+  color: var(--text-3);
+}
+.ref-sn-overdue .ref-sn-age {
+  color: var(--red);
+}
+.ref-sn-watch .ref-sn-age {
+  color: var(--amber);
+}
+.ref-sn-name {
+  flex: 1;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ref-sn-svc {
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.ref-sn-clin {
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}

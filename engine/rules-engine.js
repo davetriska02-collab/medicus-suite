@@ -111,6 +111,78 @@
     return result;
   }
 
+  // === HIGH-RISK UNMATCHED-MED GUARD ===
+  // The silent-failure mode CLAUDE.md warns about: a high-risk drug under an
+  // odd brand / spelling, or one dropped by an `exclude`, matches NO monitoring
+  // rule, so no overdue-blood chip ever fires and nobody notices for months.
+  // listUnmatchedMedicationsDetailed already surfaces ALL unmatched meds, but it
+  // treats an unmonitored paracetamol the same as an unmonitored amiodarone.
+  // This re-reads that list and elevates the ones whose name looks like a class
+  // that genuinely REQUIRES monitoring (BNF / PINCER / shared-care), so the panel
+  // can promote them from a buried "N unmatched" list into a visible "verify
+  // monitoring is in place" alert. It is a backstop, not a clinical rule: every
+  // med it flags is — by construction — one that already passed through every
+  // enabled rule unmatched, so when the matching rules are complete this fires on
+  // nothing (the common drugs here all already carry rules; see drug-rules.json).
+  //
+  // Stems are class/generic terms matched case-insensitively as substrings, the
+  // SAME contract as drugMatchesRule — so "lithium" covers all lithium salts and
+  // "valproate" covers "sodium valproate". Brand-only names that contain no
+  // generic stem are the known limit (they cannot be classified from the name
+  // alone); this is still strictly more than today's flat list.
+  const HIGH_RISK_UNMATCHED_CLASSES = [
+    {
+      label: 'DMARD / immunosuppressant',
+      stems: [
+        'methotrexate', 'azathioprine', 'mercaptopurine', 'leflunomide', 'sulfasalazine',
+        'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
+        'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
+      ],
+    },
+    { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
+    { label: 'Lithium', stems: ['lithium'] },
+    { label: 'Antiarrhythmic', stems: ['amiodarone', 'dronedarone', 'digoxin'] },
+    {
+      label: 'Oral anticoagulant',
+      stems: ['warfarin', 'acenocoumarol', 'phenindione', 'apixaban', 'rivaroxaban', 'edoxaban', 'dabigatran'],
+    },
+    { label: 'Antithyroid', stems: ['carbimazole', 'propylthiouracil'] },
+    { label: 'Aldosterone antagonist (potassium)', stems: ['spironolactone', 'eplerenone'] },
+    {
+      label: 'Antiepileptic (level / marrow / hepatic monitoring)',
+      stems: ['valproate', 'valproic', 'carbamazepine', 'phenytoin'],
+    },
+    { label: 'Antipsychotic (clozapine)', stems: ['clozapine'] },
+  ];
+
+  // Returns the subset of an unmatched-detail list (the listUnmatchedMedicationsDetailed
+  // shape: [{ name, reason, excludedBy }]) whose name matches a high-risk class,
+  // annotated with { riskClass, matchedStem } and carrying the original reason /
+  // excludedBy through so the UI can explain WHY it was missed (no rule vs excluded).
+  function flagHighRiskUnmatched(unmatchedDetailed) {
+    const list = Array.isArray(unmatchedDetailed) ? unmatchedDetailed : [];
+    const out = [];
+    for (const item of list) {
+      const name = item && item.name;
+      if (!name) continue;
+      const norm = normaliseDrugString(name);
+      for (const cls of HIGH_RISK_UNMATCHED_CLASSES) {
+        const matchedStem = cls.stems.find((stem) => norm.includes(normaliseDrugString(stem)));
+        if (matchedStem) {
+          out.push({
+            name,
+            riskClass: cls.label,
+            matchedStem,
+            reason: (item && item.reason) || null,
+            excludedBy: (item && item.excludedBy) || null,
+          });
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   // === DATE HELPERS ===
   function daysBetween(isoA, isoB) {
     const a = new Date(isoA);
@@ -713,6 +785,44 @@
     return entry;
   }
 
+  // Post-initiation test evaluator (e.g. NICE NG136: a U&E within ~1–2 weeks of
+  // STARTING an ACE-I/ARB). This is the inverse of the ordinary interval check:
+  // an ordinary test with no matching observation is neutral 'no_data', but a
+  // post-initiation requirement that has NOT been met after the grace window is
+  // ACTIONABLE. A test carries this behaviour by setting `postInitiationDays`.
+  //
+  // Fail-safe against crying wolf: it fires ONLY when the drug's start date is
+  // known (med.startDate, derived from issue history) and there is no qualifying
+  // test on or after that start. An established patient whose start date we can't
+  // see, or who has had the test since starting, never trips it.
+  //
+  //   no startDate                          → no_data (neutral; can't assess)
+  //   test recorded on/after startDate       → in_date (requirement met)
+  //   none, ≤ dueSoon window                 → recently_initiated (neutral)
+  //   none, > dueSoon but ≤ postInitiationDays→ due_soon (amber)
+  //   none, > postInitiationDays             → overdue (red)
+  function evalPostInitiationTest(test, obs, startDate, now) {
+    const base = { ...test, latestObs: obs || null, postInitiation: true };
+    if (!startDate) return { ...base, status: 'no_data', days: null };
+    // A qualifying test on or after the start date satisfies the requirement.
+    if (obs && obs.date) {
+      const sinceStartToObs = daysBetween(startDate, obs.date);
+      if (sinceStartToObs != null && sinceStartToObs >= 0) {
+        return { ...base, status: 'in_date', days: daysBetween(obs.date, now) };
+      }
+    }
+    const daysSinceStart = daysBetween(startDate, now);
+    if (daysSinceStart == null) return { ...base, status: 'no_data', days: null };
+    const overdueAt = test.postInitiationDays || 21;
+    const dueSoonAt =
+      test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
+    let status;
+    if (daysSinceStart <= dueSoonAt) status = 'recently_initiated';
+    else if (daysSinceStart <= overdueAt) status = 'due_soon';
+    else status = 'overdue';
+    return { ...base, status, days: daysSinceStart };
+  }
+
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
     const traceEntry = _traceBase(data, rule);
@@ -751,6 +861,11 @@
     return matchedMeds.map((med, idx) => {
       const testEvaluations = (rule.tests || []).map((test) => {
         const obs = findLatestObservation(data.observations, test);
+        // Post-initiation requirement (fires if missing after the drug was
+        // started) — evaluated against med.startDate, not the rolling interval.
+        if (test.postInitiationDays != null) {
+          return evalPostInitiationTest(test, obs, med.startDate, now);
+        }
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
@@ -2294,6 +2409,8 @@
     evaluatePatient,
     listUnmatchedMedications,
     listUnmatchedMedicationsDetailed,
+    flagHighRiskUnmatched,
+    HIGH_RISK_UNMATCHED_CLASSES,
     drugMatchesRule,
     drugMatchDetail,
     buildTraceEnvelope,

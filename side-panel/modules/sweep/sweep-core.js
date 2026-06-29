@@ -397,6 +397,129 @@ export function buildHandout(actionRows, meta) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// QOF points-at-risk prioritiser
+//
+// QOF 25/26 → 26/27 redirected 141 points into a high-stakes CVD-prevention
+// cluster (BP control, lipid lowering, antithrombotics) at 85–90% upper
+// thresholds. A small case-finding shortfall there directly loses money, but
+// Sweep today surfaces QOF gaps one patient at a time, severity-sorted, with no
+// sense of which gaps are worth the most. This re-reads the SAME action-needed
+// qof-indicator chips Sweep already evaluated and weights them by the rule's
+// own `points`, so the cohort can be worked highest-value-first.
+//
+// Pure: no DOM, no chrome APIs, no fetch. Points come from the chip's own
+// `points` (the standard indicator path stamps rule.points onto the chip) with
+// an optional pointsByCode override map for completeness; unknown → 0 (the gap
+// is still listed, just unweighted).
+// ---------------------------------------------------------------------------
+
+// The CVD-prevention domain, classified by explicit indicator code — NOT a blunt
+// prefix, because e.g. DM036 (BP) is CVD-prevention but DM020 (HbA1c) is
+// glycaemic. Covers BP control, lipid/statin, and antithrombotic indicators.
+const CVD_PREVENTION_PREFIXES = ['HYP', 'CHD', 'STIA', 'CD', 'CHOL', 'AF', 'PAD'];
+const CVD_PREVENTION_CODES = new Set(['DM006', 'DM034', 'DM035', 'DM036']);
+
+export function isCvdQofIndicator(indicatorCode) {
+  const code = String(indicatorCode || '').toUpperCase();
+  if (!code) return false;
+  if (CVD_PREVENTION_CODES.has(code)) return true;
+  return CVD_PREVENTION_PREFIXES.some((p) => code.startsWith(p));
+}
+
+function qofChipPoints(chip, pointsByCode) {
+  const code = String(chip.indicatorCode || '').toUpperCase();
+  if (pointsByCode && code && pointsByCode[code] != null) return Number(pointsByCode[code]) || 0;
+  return Number(chip.points) || 0;
+}
+
+// summariseQofPointsAtRisk(perPatientResults, pointsByCode?)
+//   → { totalPoints, cvdPoints, patientCount, byPatient[], byIndicator[] }
+// byPatient: [{ uuid, name, time, clinician, points, cvdPoints, indicators:[{code,name,points,isCvd}] }] desc by points
+// byIndicator: [{ code, name, eachPoints, patientCount, totalPoints, isCvd }] desc by totalPoints
+export function summariseQofPointsAtRisk(perPatientResults, pointsByCode) {
+  let totalPoints = 0;
+  let cvdPoints = 0;
+  const byPatient = [];
+  const byIndicator = new Map(); // code → { code, name, eachPoints, patientCount, totalPoints, isCvd }
+
+  for (const r of perPatientResults || []) {
+    if (!r || r.error || !Array.isArray(r.chips)) continue;
+    const indicators = [];
+    let pts = 0;
+    let cvdPts = 0;
+    for (const chip of r.chips) {
+      if (!chip || chip.type !== 'qof-indicator') continue;
+      if (!isActionNeeded(chip.status)) continue;
+      const code = String(chip.indicatorCode || '').toUpperCase();
+      const points = qofChipPoints(chip, pointsByCode);
+      const isCvd = isCvdQofIndicator(code);
+      const name = chip.indicatorName || chip.displayName || '';
+      indicators.push({ code: chip.indicatorCode || code, name, points, isCvd, status: chip.status });
+      pts += points;
+      if (isCvd) cvdPts += points;
+
+      const key = code || name;
+      const agg = byIndicator.get(key) || {
+        code: chip.indicatorCode || code,
+        name,
+        eachPoints: points,
+        patientCount: 0,
+        totalPoints: 0,
+        isCvd,
+      };
+      agg.patientCount += 1;
+      agg.totalPoints += points;
+      byIndicator.set(key, agg);
+    }
+    if (indicators.length === 0) continue;
+    // Worst-value-first within a patient so the headline indicators read first.
+    indicators.sort((a, b) => b.points - a.points);
+    totalPoints += pts;
+    cvdPoints += cvdPts;
+    byPatient.push({
+      uuid: r.uuid,
+      name: r.name,
+      time: r.time,
+      clinician: r.clinician || null,
+      points: pts,
+      cvdPoints: cvdPts,
+      indicators,
+    });
+  }
+
+  // Rank patients by points at risk (CVD as the tiebreak — the money domain),
+  // then by name for a stable order.
+  byPatient.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.cvdPoints !== a.cvdPoints) return b.cvdPoints - a.cvdPoints;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  const byIndicatorArr = Array.from(byIndicator.values()).sort((a, b) => {
+    if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    return (a.code || '').localeCompare(b.code || '');
+  });
+
+  return { totalPoints, cvdPoints, patientCount: byPatient.length, byPatient, byIndicator: byIndicatorArr };
+}
+
+// buildRecallDescription(chips)
+// Build a plain-English task body from a patient's action-needed chips, reusing
+// the SAME instruction grouping as the printable handout (so a patient with
+// several gaps that resolve to one booking reads as one line, not three). Used
+// to prefill the "Create recall task" form so the loop from detection → a real
+// Medicus task is one click + a confirm. Pure: no DOM, no fetch.
+export function buildRecallDescription(chips) {
+  const groups = groupInstructionsByAction(chips || [], chipInstruction);
+  if (!groups.length) return '';
+  const lines = groups.map(({ action, details }) => {
+    const d = (details || []).filter(Boolean).join('; ');
+    return d ? `${action}: ${d}` : action;
+  });
+  return `Recall (from Sweep): ${lines.join(' | ')}`;
+}
+
 export function summariseSweep(perPatientResults) {
   const actionRows = [];
   const clearRows = [];
