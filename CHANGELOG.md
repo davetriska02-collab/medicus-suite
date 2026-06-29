@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.139.0] — 2026-06-29
+
+### Sweep: QOF points-at-risk prioritiser (CVD-prevention income lens)
+
+QOF 25/26 → 26/27 redirected 141 points into a high-stakes CVD-prevention cluster
+(BP control, lipid lowering, antithrombotics) at 85–90% upper thresholds, where a
+small case-finding shortfall directly loses income. Sweep already evaluated every
+booked patient's QOF gaps but surfaced them one patient at a time, severity-sorted,
+with no sense of which gaps are worth the most.
+
+- **New pure helper** `summariseQofPointsAtRisk()` (`sweep-core.js`) re-reads the
+  SAME action-needed `qof-indicator` chips Sweep already produced and weights each
+  by the indicator's own `points` (from the chip, with a `pointsByCode` override
+  built from the loaded QOF rules as a backstop). Returns cohort totals, a
+  CVD-prevention subtotal, patients ranked by points-at-risk, and a per-indicator
+  breakdown.
+- **New `isCvdQofIndicator()`** classifies the CVD-prevention domain by explicit
+  indicator code (HYP/CHD/STIA/CD/CHOL/AF/PAD + DM006/DM034/DM035/DM036) — not a
+  blunt prefix, so DM036 (BP) counts as CVD but DM020 (HbA1c) does not.
+- **New panel** at the top of the Sweep results: "QOF points at risk: Σ N
+  (CVD-prevention M)", patients ranked highest-value-first, and an indicator
+  breakdown — so a practice works the gaps worth the most money first.
+- **No clinical-rule, threshold or `defaults.json` change** — pure aggregation of
+  chips already evaluated. Income is described in points only (national weights);
+  the panel notes actual £ depends on list size and prevalence.
+- New regression test `test-sweep-qof-points.js` (37 checks).
+
 ## [v3.138.0] — 2026-06-29
 
 ### Sentinel: high-risk "blind-spot" guard for unmonitored drugs

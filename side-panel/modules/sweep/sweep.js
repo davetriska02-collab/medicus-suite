@@ -39,6 +39,7 @@ import { fetchSchedulingOverview, todayISO } from '../../../shared/medicus-api.j
 import {
   extractBookedPatients,
   summariseSweep,
+  summariseQofPointsAtRisk,
   isActionNeeded,
   buildHandout,
   MAX_SWEEP_PATIENTS,
@@ -594,6 +595,81 @@ function patientRowHtml(row, apiBase, siteId, selectable) {
   </div>`;
 }
 
+// Build an indicatorCode → points map from the rules in memory, so the QOF
+// prioritiser is robust even if a chip didn't carry its own points. Falls back
+// to the chip's own `points` when a code is absent (handled in sweep-core).
+function buildQofPointsByCode(rules) {
+  const map = {};
+  for (const r of rules || []) {
+    if (r && r.type === 'qof-indicator' && r.indicatorCode != null && r.points != null) {
+      map[String(r.indicatorCode).toUpperCase()] = Number(r.points) || 0;
+    }
+  }
+  return map;
+}
+
+// Cohort-level QOF income lens: ranks the QOF gaps Sweep already found by the
+// indicator's own points, so a practice works the highest-value patients first
+// and protects the redirected CVD-prevention domain. Pure read of existing chips.
+function renderQofPointsPanel(summary, siteId) {
+  if (!summary || summary.patientCount === 0 || summary.totalPoints === 0) return '';
+
+  const cvdBadge =
+    summary.cvdPoints > 0
+      ? `<span class="sweep-qof-cvd" title="BP control, lipid/statin and antithrombotic indicators">CVD-prevention ${summary.cvdPoints}</span>`
+      : '';
+
+  const topPatients = summary.byPatient.slice(0, 10);
+  const patientList = topPatients
+    .map((p) => {
+      const timeStr = p.time ? `<span class="sweep-row-time">${formatTime(p.time)}</span>` : '';
+      const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(p.uuid)}/`;
+      const cvd = p.cvdPoints > 0 ? `<span class="sweep-qof-cvd-dot" title="${p.cvdPoints} CVD-prevention points">CVD ${p.cvdPoints}</span>` : '';
+      const codes = esc(p.indicators.map((i) => i.code).join(', '));
+      return `<li class="sweep-qof-prow">
+        <span class="sweep-qof-pts">${p.points}</span>
+        <span class="sweep-qof-pname">${timeStr}${esc(p.name)}</span>
+        ${cvd}
+        <a class="sweep-open-record" href="${recUrl}" target="_blank" rel="noopener noreferrer" title="Open record">Open &#8599;</a>
+        <span class="sweep-qof-pcodes">${codes}</span>
+      </li>`;
+    })
+    .join('');
+
+  const indicatorList = summary.byIndicator
+    .map((i) => {
+      const cvd = i.isCvd ? `<span class="sweep-qof-itag">CVD</span>` : '';
+      return `<li class="sweep-qof-irow">
+        <span class="sweep-qof-icode">${esc(i.code)}</span>${cvd}
+        <span class="sweep-qof-iname">${esc(i.name)}</span>
+        <span class="sweep-qof-itotal">${i.totalPoints} pts · ${i.patientCount} pt${i.patientCount === 1 ? '' : 's'}</span>
+      </li>`;
+    })
+    .join('');
+
+  return `
+    <details class="sweep-qof-panel" open>
+      <summary class="sweep-qof-summary">
+        QOF points at risk: <strong>${summary.totalPoints}</strong>
+        ${cvdBadge}
+        <span class="sweep-qof-sub">${summary.patientCount} patient${summary.patientCount === 1 ? '' : 's'} with gaps</span>
+      </summary>
+      <div class="sweep-qof-body">
+        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. Points are the national indicator weights; actual income depends on your list size and prevalence.</p>
+        <div class="sweep-qof-cols">
+          <div class="sweep-qof-col">
+            <div class="sweep-qof-col-head">Patients by points at risk</div>
+            <ol class="sweep-qof-plist">${patientList}</ol>
+          </div>
+          <div class="sweep-qof-col">
+            <div class="sweep-qof-col-head">By indicator</div>
+            <ul class="sweep-qof-ilist">${indicatorList}</ul>
+          </div>
+        </div>
+      </div>
+    </details>`;
+}
+
 function renderResults({
   actionRows,
   clearRows,
@@ -644,6 +720,13 @@ function renderResults({
 
   const actionHtml = actionRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, true)).join('');
   const errorHtml = errorRows.map((r) => patientRowHtml(r, apiBase, siteIdMatch, false)).join('');
+
+  // QOF points-at-risk prioritiser — cohort income lens over the same chips.
+  const qofPoints = summariseQofPointsAtRisk(
+    _cumulativeResults,
+    buildQofPointsByCode(_sweepRules || _canonicalRulesCache || [])
+  );
+  const qofPanelHtml = renderQofPointsPanel(qofPoints, siteIdMatch);
 
   const clearSection =
     clearRows.length > 0
@@ -700,6 +783,8 @@ function renderResults({
       </div>
 
       ${missingNote}${batchNote}
+
+      ${qofPanelHtml}
 
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
       ${
