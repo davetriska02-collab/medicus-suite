@@ -878,6 +878,39 @@
           </div>
         </div>
 
+        <!-- OIR merge-conflict dialog -->
+        <div id="oirMergeOverlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="oirMergeTitle">
+          <div id="oirMergeDialog">
+            <h3 id="oirMergeTitle" style="margin:0 0 6px">Merge overlapping entries?</h3>
+            <p id="oirMergeDesc" style="margin:0 0 14px; font-size:12px; color:var(--text-2)"></p>
+            <div class="tl-field">
+              <span>Merged label</span>
+              <input type="text" id="oirMergeLabel" maxlength="80" />
+            </div>
+            <div class="tl-field" style="margin-top:8px">
+              <span>Request terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeReq" rows="3" readonly></textarea>
+            </div>
+            <div class="tl-field" style="margin-top:8px">
+              <span>Report terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeRep" rows="3" readonly></textarea>
+            </div>
+            <div class="tl-field" style="margin-top:8px">
+              <span>Analyte terms <small>(combined — read-only)</small></span>
+              <textarea id="oirMergeAnalytes" rows="3" readonly></textarea>
+            </div>
+            <label class="tl-field tl-field-inline" style="margin-top:8px">
+              <input type="checkbox" id="oirMergeSingle" disabled />
+              <span>Single-analyte test <small>(only set when all merged entries agree)</small></span>
+            </label>
+            <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap">
+              <button class="tl-btn tl-btn-primary" id="btnOirMergeConfirm">Merge</button>
+              <button class="tl-btn" id="btnOirMergeSeparate">Save separately</button>
+              <button class="tl-btn tl-btn-ghost" id="btnOirMergeCancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+
         <h3 style="margin-top: 24px">Audit trail</h3>
         <div id="oirAuditList"></div>
         <div style="margin-top: 10px">

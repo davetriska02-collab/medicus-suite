@@ -232,6 +232,92 @@
       rep: ['bone profile'],
       analytes: ['phosphate', 'adjusted calcium', 'corrected calcium'],
     },
+    // ── Discrete single-result tests (one result IS the test) ──────────────────
+    // Each below is singleAnalyte: a lone result confidently completes the request.
+    // Terms are kept to GENERIC forms; lab-specific display strings (e.g. HSL's
+    // "Serum 25-HO vit D3 level") belong in the lab database, not here.
+    {
+      key: 'rheumatoid_factor',
+      label: 'Rheumatoid factor',
+      // "RF" deliberately NOT a req synonym — too short, would whole-token match a
+      // stray "rf". Anti-CCP is a DIFFERENT marker and intentionally uncovered, so
+      // an RF report can never clear a co-requested CCP antibody (fail-safe).
+      req: ['rheumatoid factor'],
+      rep: ['rheumatoid factor'],
+      analytes: ['rheumatoid factor'],
+      singleAnalyte: true,
+    },
+    {
+      // HIV combined antigen/antibody screen. norm() keeps '&' but spacing differs,
+      // so "1 & 2" and "1&2" normalise to DIFFERENT tokens and BOTH must be listed.
+      // Bare "hiv" lives in req only (broadens which CARDS resolve) — NOT in analytes,
+      // where it could let an HIV RNA/viral-load row wrongly auto-tick an Ab screen.
+      key: 'hiv',
+      label: 'HIV',
+      req: ['hiv'],
+      rep: ['hiv 1 & 2 antigen antibody', 'hiv 1&2 antigen antibody'],
+      analytes: ['hiv 1 & 2 antigen antibody', 'hiv 1&2 antigen antibody'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'vitamin_d',
+      label: 'Vitamin D',
+      req: ['vitamin d', '25 hydroxyvitamin d', '25 oh vitamin d'],
+      rep: ['vitamin d', '25 hydroxyvitamin d'],
+      analytes: ['vitamin d', '25 hydroxyvitamin d', '25 oh vitamin d'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'urate',
+      label: 'Urate',
+      req: ['urate', 'uric acid'],
+      rep: ['urate', 'uric acid'],
+      analytes: ['urate', 'uric acid'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'crp',
+      label: 'C-reactive protein',
+      req: ['c reactive protein', 'crp'],
+      rep: ['crp', 'c reactive protein'],
+      analytes: ['crp', 'c reactive protein'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'hepatitis_c',
+      label: 'Hepatitis C',
+      req: ['hepatitis c', 'hep c'],
+      rep: ['hepatitis c', 'hep c'],
+      analytes: ['hepatitis c', 'hep c'],
+      singleAnalyte: true,
+    },
+    {
+      // Surface-antigen-specific on purpose: a bare "Hepatitis B" or core-antibody
+      // request must NOT resolve here and be cleared by an HBsAg result (different
+      // marker). Narrow = fail-safe under-clear.
+      key: 'hepatitis_b',
+      label: 'Hepatitis B surface antigen',
+      req: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      rep: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      analytes: ['hepatitis b surface antigen', 'hep b surface antigen', 'hbsag'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'syphilis',
+      label: 'Syphilis',
+      req: ['syphilis'],
+      rep: ['syphilis', 'treponema'],
+      analytes: ['syphilis', 'treponema'],
+      singleAnalyte: true,
+    },
+    {
+      key: 'calprotectin',
+      label: 'Faecal calprotectin',
+      req: ['faecal calprotectin', 'calprotectin'],
+      rep: ['faecal calprotectin', 'calprotectin'],
+      analytes: ['faecal calprotectin', 'calprotectin'],
+      singleAnalyte: true,
+    },
     // Reproductive / sex-hormone profile — each is its own single-analyte test
     // (one result IS the test). These are commonly co-requested on a fertility /
     // amenorrhoea / menopause work-up, so they are added as a family: a request

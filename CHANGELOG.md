@@ -2,6 +2,65 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.136.0] — 2026-06-29
+
+### Feature: nine new built-in OIR test definitions
+
+Expanded `TEST_DEFS` in `engine/outstanding-match.js` with nine new entries,
+promoted from practice-level custom tests after clinical review. All are
+`singleAnalyte: true` (one result completes the test). Terms are kept to generic
+forms; lab-specific display strings belong in the planned lab database.
+
+New tests: **rheumatoid factor**, **HIV** (combined Ag/Ab screen), **vitamin D**
+(25-hydroxy), **urate** (+ uric acid synonym), **CRP** (+ c reactive protein),
+**hepatitis C**, **hepatitis B surface antigen** (surface-antigen-specific;
+core-antibody requests intentionally uncovered), **syphilis** (+ treponema),
+**faecal calprotectin**.
+
+Safety notes:
+- `"RF"` deliberately not a req synonym (too short; anti-CCP is a different marker
+  and intentionally stays unrecognised so an RF result can never clear it).
+- Hep B def is narrow by design — `"Hepatitis B"` alone does not resolve to it,
+  preventing an HBsAg result from clearing a co-requested core-antibody request.
+- HIV bare `"hiv"` req term added for card-name resolution only, not in analytes
+  (avoids an HIV viral-load analyte row wrongly auto-ticking an Ab-screen request).
+- Cervical screening and histology deliberately excluded (see CHANGELOG v3.136.0
+  notes); HSL Analytics-specific vitamin D string deferred to lab database.
+
+`test-outstanding-match.js` — new sections 15–23 (resolve + auto-tick + negative
+for each); test 10a rewritten to use coeliac screen as the custom-test example
+(vitamin D is now a built-in; the baseline assertion would otherwise fail). Total:
+132 assertions, all passing.
+
+## [v3.135.0] — 2026-06-29
+
+### Feature: OIR test-dictionary merge prompt + alphabetical list
+
+**Merge prompt on overlapping request terms.** When saving a custom test entry
+in the **Outstanding Requests** test dictionary, the editor now detects whether
+any existing custom entry shares a `req` term (case-insensitive). On conflict, a
+merge dialog is shown rather than silently creating a duplicate:
+
+- Displays the proposed merged entry — unioned `req` / `rep` / `analyte` terms
+  from all conflicting entries, deduplicated (first-occurrence order preserved).
+- The merged label is editable; combined terms are shown read-only.
+- `singleAnalyte` is derived conservatively (only set if **all** merged entries
+  agree) and shown as a disabled checkbox — display only, not user-overridable.
+- The merged entry's key defaults to whichever conflicting entry matches a
+  built-in panel; otherwise the first existing (older) entry's key is kept.
+- Three choices: **Merge** (replace all conflicting entries with one merged
+  entry), **Save separately** (proceed despite the overlap), **Cancel**.
+
+Safety: the engine's `mergeTestDefs` floor (`engine/outstanding-match.js:381`)
+never copies `singleAnalyte` onto a built-in regardless of what the editor
+sends — the auto-tick threshold on multi-analyte panels cannot be lowered via
+config.
+
+**Alphabetical sort.** The custom test list is now sorted by label for display
+(stored order is unchanged, so the matcher is unaffected).
+
+`content-scripts/triage-lens/options.js`, `options.html`, `options.css`.
+
 ## [v3.134.7] — 2026-06-29
 
 ### Fix: newly-issued LNG-IUS under its generic name not recognised as HRT endometrial cover
