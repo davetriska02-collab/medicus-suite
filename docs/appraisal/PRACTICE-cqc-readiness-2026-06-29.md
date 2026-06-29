@@ -101,5 +101,31 @@ Residual "9-item" asks (none blocking 8; out of scope for this pass): per-exclud
 reasons (Eileen) and worksheet count pre-fill (Janet) — both need data-model changes; naming
 the PINCER/ACB/STOPP-START source versions (Raj); a dedicated clinician-view toggle (Tom).
 
+## 5c · The 9-items (push from 8 → 9), 2026-06-29
+
+After the loop hit 8.0, the four personas who had named a "what would make it a 9"
+item were re-engaged on Opus until each rated their item ≥ 9. Shipped v3.136.0 →
+v3.136.2.
+
+| 9-item | Persona | Final |
+|---|---|---|
+| Per-exclude clinical reasons (each dropped term shows why) | Eileen | **9** |
+| Named clinical-source versions — PINCER (Avery 2012), ACB (Boustani/ACBcalc), STOPP/START v3 (2023) | Raj | **9** |
+| Clinician view (verdict + coverage only) | Tom | **9** |
+| Fillable / persistable worksheet counts + live total + provenance line | Janet | **9** |
+
+Honesty boundaries held throughout: no fabricated patient counts (the worksheet
+sums only the practice's own typed figures), no clinical-rule or threshold changes
+(disclosure surfaces what the rule files already contain), engine-method sets
+(ACB, STOPP/START) flagged as NOT part of the rule-currency check, and the amber
+"coded data only — floor not a ceiling" safety caveat kept visible even where a
+clinician asked to collapse it (Tom endorsed this on review).
+
+Residual 10-items (genuine, but out of scope for this pass): fillable+dated
+"entered by" fields with a last-saved stamp (Janet); a "last reviewed against
+source" date on the engine-method rows (Raj); clicking "monitored under the X
+rule" to jump there (Eileen); folding the two grey page footers into the
+collapsed tail (Tom).
+
 ## 6 · Reproduce
 States rendered via `.claude/skills/design-crit/harness.mjs` to `/tmp/the-practice/cqc/`: resting-light, resting-dark, readiness-light, readiness-dark, export-gated, export-confirmed, readiness-colourblind. Panel cast: personas 1, 2, 3, 5, 8, 9 from `.claude/skills/the-practice/PERSONAS.md`.
