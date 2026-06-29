@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.138.1] — 2026-06-29
+
+### Fix: Lab filing utils global-scope collision broke the module
+
+`shared/lab-filing-utils.js` declared top-level `const NHS_NUMBER_RE` / `DOB_RE`,
+the same identifiers `shared/knowledge-utils.js` already declares. Both load as
+classic `<script>`s in `panel.html` / `pop-out.html` / `options.html`, so the
+second to parse threw "Identifier already declared" — killing `lab-filing-utils.js`
+and leaving `window.LabFilingUtils` undefined, so the Lab filing module rendered
+"utilities failed to load". Node `require()` module-scopes the file, which is why
+the unit tests never caught it; a headless render of the real module surfaced it.
+Fix: wrap the file body in an IIFE so none of its identifiers leak into the shared
+page global scope.
+
 ## [v3.138.0] — 2026-06-29
 
 ### Lab Results Auto-Filing — one-click filing of all-normal results (opt-in, fail-safe)
