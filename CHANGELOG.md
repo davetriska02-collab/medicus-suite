@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.141.0] — 2026-06-29
+
+### Sweep: one-click "Create recall task" — close the detection→action loop
+
+Sweep already found tomorrow's patients with overdue monitoring and QOF gaps, but
+the only output was a printable reception handout — the actual recall task still
+had to be made by hand. This closes the loop: a per-row "Create recall task"
+button writes a real task into Medicus.
+
+- **New shared client** `shared/task-api.js` drives Medicus's OWN general-task
+  endpoints (`GET /patient/data/workflow/general-task/create`,
+  `POST /patient/workflow/general-task/create`) with credentialed fetches — the
+  identical, already-shipping pattern `slots/booking-api.js` uses to create
+  appointments from the side panel (the extension holds `host_permissions` for
+  `*.api.england.medicus.health`). Medicus stays the system of record; its
+  validation, access control and audit fire as normal.
+- **Per-row inline confirm form** (assignee + an editable description prefilled
+  from that patient's gaps via the new pure `buildRecallDescription()` in
+  `sweep-core.js`, reusing the same instruction grouping as the handout). One
+  explicit task per click — there is deliberately **no bulk "create all"**, the
+  Create button is disabled until an assignee is chosen, and it disables after
+  success so a double-click can't double-create.
+- Only offered on action-needed rows when a practice code is set and there is a
+  bookable instruction to recall; the assignee/priority options are fetched once
+  per run and reused.
+- **No `defaults.json`, clinical-rule or storage-key change.** New checks added to
+  `test-sweep-core.js` for `buildRecallDescription`.
+
 ## [v3.140.0] — 2026-06-29
 
 ### Referrals: 2WW / Faster-Diagnosis safety-net worklist

@@ -504,6 +504,22 @@ export function summariseQofPointsAtRisk(perPatientResults, pointsByCode) {
   return { totalPoints, cvdPoints, patientCount: byPatient.length, byPatient, byIndicator: byIndicatorArr };
 }
 
+// buildRecallDescription(chips)
+// Build a plain-English task body from a patient's action-needed chips, reusing
+// the SAME instruction grouping as the printable handout (so a patient with
+// several gaps that resolve to one booking reads as one line, not three). Used
+// to prefill the "Create recall task" form so the loop from detection → a real
+// Medicus task is one click + a confirm. Pure: no DOM, no fetch.
+export function buildRecallDescription(chips) {
+  const groups = groupInstructionsByAction(chips || [], chipInstruction);
+  if (!groups.length) return '';
+  const lines = groups.map(({ action, details }) => {
+    const d = (details || []).filter(Boolean).join('; ');
+    return d ? `${action}: ${d}` : action;
+  });
+  return `Recall (from Sweep): ${lines.join(' | ')}`;
+}
+
 export function summariseSweep(perPatientResults) {
   const actionRows = [];
   const clearRows = [];

@@ -30,7 +30,7 @@ const path = require('path');
   ).href;
 
   let extractBookedPatients, summariseSweep, isActionNeeded, MAX_SWEEP_PATIENTS, ACTION_COLOURS,
-      chipInstruction, buildHandout;
+      chipInstruction, buildHandout, buildRecallDescription;
   try {
     const mod = await import(sweepCorePath);
     extractBookedPatients = mod.extractBookedPatients;
@@ -40,6 +40,7 @@ const path = require('path');
     ACTION_COLOURS        = mod.ACTION_COLOURS;
     chipInstruction       = mod.chipInstruction;
     buildHandout          = mod.buildHandout;
+    buildRecallDescription = mod.buildRecallDescription;
   } catch (e) {
     console.error('FATAL: could not import sweep-core.js:', e.message);
     process.exit(1);
@@ -496,6 +497,30 @@ const path = require('path');
 
   h = buildHandout(oneRow, { clinician: 'Dr Z' });
   check(h.clinicians.join(',') === 'Dr Z' && h.clinician === 'Dr Z', 'single-string clinician meta normalised into array (back-compat)');
+
+  // ── buildRecallDescription ────────────────────────────────────────────────────
+  console.log('\n--- buildRecallDescription ---');
+  check(typeof buildRecallDescription === 'function', 'buildRecallDescription is a function');
+  {
+    const drugChip = {
+      type: 'drug-monitoring',
+      drugName: 'Methotrexate',
+      status: 'overdue',
+      tests: [{ name: 'FBC', status: 'overdue' }, { name: 'U&E', status: 'overdue' }],
+    };
+    const qofChip = { type: 'qof-indicator', indicatorCode: 'DM020', indicatorName: 'HbA1c', status: 'not_met' };
+    const desc = buildRecallDescription([drugChip, qofChip]);
+    check(desc.startsWith('Recall (from Sweep): '), 'description is prefixed "Recall (from Sweep): "');
+    check(/Methotrexate|FBC|U&E/.test(desc), 'description mentions the overdue drug-monitoring detail');
+    check(/DM020/.test(desc), 'description mentions the QOF indicator code');
+  }
+  {
+    // No action-needed chips → empty description (nothing to recall).
+    const clearChip = { type: 'qof-indicator', indicatorCode: 'HYP010', status: 'achieved' };
+    check(buildRecallDescription([clearChip]) === '', 'no action-needed chips → empty description');
+    check(buildRecallDescription([]) === '', 'empty chips → empty description');
+    check(buildRecallDescription(null) === '', 'null chips → empty description');
+  }
 
   // ── Final results ─────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
