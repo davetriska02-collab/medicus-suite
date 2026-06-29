@@ -742,7 +742,7 @@
 .sweep-qof-body {
   padding: 8px 10px 10px;
   border-top: 1px solid var(--accent-line);
-  background: var(--bg-1);
+  background: var(--bg-elev);
 }
 .sweep-qof-note {
   margin: 0 0 8px;
@@ -779,7 +779,7 @@
   gap: 6px;
   padding: 3px 0;
   font-size: 12px;
-  border-bottom: 1px solid var(--border-dim, var(--border));
+  border-bottom: 1px solid var(--border);
 }
 .sweep-qof-pts {
   font-weight: 600;
@@ -820,7 +820,7 @@
   gap: 6px;
   padding: 3px 0;
   font-size: 12px;
-  border-bottom: 1px solid var(--border-dim, var(--border));
+  border-bottom: 1px solid var(--border);
 }
 .sweep-qof-icode {
   font-family: var(--mono);

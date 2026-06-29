@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.142.1] — 2026-06-29
+
+### Verification fixes for the v3.138–v3.142 feature set
+
+Found while headless-rendering the four new surfaces (light + dark) and running the
+real ESLint gate:
+
+- **`sweep.css`:** the QOF panel body referenced an undefined token `var(--bg-1)`
+  (would have rendered as an unstyled surface — the "white rectangle" failure
+  mode); switched to the defined `var(--bg-elev)`. Also simplified
+  `var(--border-dim, …)` to the defined `var(--border)`.
+- **`eslint.config.mjs`:** registered the new `shared/task-api.js` as an ES module
+  (alongside `shared/medicus-api.js`) so `eslint .` parses it; the project lint now
+  passes clean across the whole tree.
+
+Headless Chromium render confirmed all four surfaces (Sentinel high-risk banner,
+Sweep QOF prioritiser, Sweep recall form, Referrals 2WW safety-net) style correctly
+in both themes with every design token resolving.
+
 ## [v3.142.0] — 2026-06-29
 
 ### Sentinel: ACE-I/ARB post-initiation U&E check (NICE NG136) — PENDING CSO REVIEW

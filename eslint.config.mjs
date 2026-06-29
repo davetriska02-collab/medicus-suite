@@ -39,8 +39,9 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
-    // shared/medicus-api.js is an ES module (uses export keyword)
-    files: ['shared/medicus-api.js'],
+    // shared/medicus-api.js and shared/task-api.js are ES modules (export keyword),
+    // imported by side-panel modules rather than loaded as classic scripts.
+    files: ['shared/medicus-api.js', 'shared/task-api.js'],
     languageOptions: { sourceType: 'module' },
   },
   {
