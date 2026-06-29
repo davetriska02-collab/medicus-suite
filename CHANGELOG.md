@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.142.0] — 2026-06-29
+
+### Sentinel: ACE-I/ARB post-initiation U&E check (NICE NG136) — PENDING CSO REVIEW
+
+NICE NG136 requires a U&E within ~1–2 weeks of **starting** (or uptitrating) an
+ACE-I/ARB. The `ace-arb` rule documented this in its notes but only enforced the
+*annual* U&E — so a newly-started patient who had a baseline U&E but no
+post-initiation recheck raised no alert (the annual interval reads "in date" off
+the baseline). This closes that gap.
+
+- **New additive engine mechanism** (`engine/rules-engine.js`): a drug-monitoring
+  test may carry `postInitiationDays` / `postInitiationDueSoonDays`. Unlike the
+  rolling-interval check (where a *missing* test is neutral `no_data`), a
+  post-initiation requirement that is unmet after the grace window is
+  **actionable** — `recently_initiated` (≤14d) → `due_soon` amber (≤21d) →
+  `overdue` red. It is satisfied by any qualifying test recorded **on or after**
+  the drug's start date.
+- **Fail-safe against crying wolf:** it fires ONLY when the drug's start date is
+  known (`med.startDate`, derived from issue history) AND no U&E exists since
+  starting. An established patient whose start date isn't visible never trips it.
+  No change to the existing annual U&E/BP intervals or any other rule.
+- **Rule change** (`rules/drug-rules.json`): added the post-initiation U&E test to
+  `ace-arb`; bumped `lastUpdated` and documented the change in `sourceNotes`.
+- New regression test `test-ace-arb-postinit.js` (14 checks), including the exact
+  NG136 gap (baseline-before-start → overdue while the annual reads in-date) and
+  the no-false-alarm case (unknown start date → neutral).
+- **This is a clinical-rule change and is flagged PENDING CSO (Dr Triska) review**
+  before merge, per the suite's clinical-safety governance.
+
 ## [v3.141.0] — 2026-06-29
 
 ### Sweep: one-click "Create recall task" — close the detection→action loop

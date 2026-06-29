@@ -785,6 +785,44 @@
     return entry;
   }
 
+  // Post-initiation test evaluator (e.g. NICE NG136: a U&E within ~1–2 weeks of
+  // STARTING an ACE-I/ARB). This is the inverse of the ordinary interval check:
+  // an ordinary test with no matching observation is neutral 'no_data', but a
+  // post-initiation requirement that has NOT been met after the grace window is
+  // ACTIONABLE. A test carries this behaviour by setting `postInitiationDays`.
+  //
+  // Fail-safe against crying wolf: it fires ONLY when the drug's start date is
+  // known (med.startDate, derived from issue history) and there is no qualifying
+  // test on or after that start. An established patient whose start date we can't
+  // see, or who has had the test since starting, never trips it.
+  //
+  //   no startDate                          → no_data (neutral; can't assess)
+  //   test recorded on/after startDate       → in_date (requirement met)
+  //   none, ≤ dueSoon window                 → recently_initiated (neutral)
+  //   none, > dueSoon but ≤ postInitiationDays→ due_soon (amber)
+  //   none, > postInitiationDays             → overdue (red)
+  function evalPostInitiationTest(test, obs, startDate, now) {
+    const base = { ...test, latestObs: obs || null, postInitiation: true };
+    if (!startDate) return { ...base, status: 'no_data', days: null };
+    // A qualifying test on or after the start date satisfies the requirement.
+    if (obs && obs.date) {
+      const sinceStartToObs = daysBetween(startDate, obs.date);
+      if (sinceStartToObs != null && sinceStartToObs >= 0) {
+        return { ...base, status: 'in_date', days: daysBetween(obs.date, now) };
+      }
+    }
+    const daysSinceStart = daysBetween(startDate, now);
+    if (daysSinceStart == null) return { ...base, status: 'no_data', days: null };
+    const overdueAt = test.postInitiationDays || 21;
+    const dueSoonAt =
+      test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
+    let status;
+    if (daysSinceStart <= dueSoonAt) status = 'recently_initiated';
+    else if (daysSinceStart <= overdueAt) status = 'due_soon';
+    else status = 'overdue';
+    return { ...base, status, days: daysSinceStart };
+  }
+
   // Drug-monitoring rule evaluator
   function evaluateDrugRule(rule, data, now) {
     const traceEntry = _traceBase(data, rule);
@@ -823,6 +861,11 @@
     return matchedMeds.map((med, idx) => {
       const testEvaluations = (rule.tests || []).map((test) => {
         const obs = findLatestObservation(data.observations, test);
+        // Post-initiation requirement (fires if missing after the drug was
+        // started) — evaluated against med.startDate, not the rolling interval.
+        if (test.postInitiationDays != null) {
+          return evalPostInitiationTest(test, obs, med.startDate, now);
+        }
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
         }
