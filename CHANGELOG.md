@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.134.7] — 2026-06-29
+
+### Fix: newly-issued LNG-IUS under its generic name not recognised as HRT endometrial cover
+
+An HRT (estradiol) chip showed *"IUS expired (>5y) — endometrial cover not
+confirmed"* on a patient who had just had a new Mirena issued — the freshly
+fitted device was not picked up, so the chip fell through to a stale,
+out-of-window coil problem code still on the record.
+
+Root cause: `buildHrtContext` matched `iusTerms` by bare lowercase substring.
+Medicus lists a freshly-issued LNG-IUS under its generic VTM name
+**"Levonorgestrel (Intrauterine device)"**, and the `(` defeated the
+`"levonorgestrel intrauterine"` term (the string stayed
+`levonorgestrel (intrauterine device)`), while `"mirena"` appears only on the
+product sub-line. No `iusTerm` matched → `iusMed` was null → the expired
+problem-coded coil won.
+
+- `engine/rules-engine.js` — the context matcher now collapses any run of
+  non-alphanumerics to a single space before substring matching, so bracketed
+  and hyphenated generic name forms match their space-separated terms. Durable
+  against `(Intrauterine device)`, `-releasing`, etc. without loosening which
+  drugs are recognised.
+- `test-qof-indicator-filters.js` — F11 now covers the reported case: a new
+  "Levonorgestrel (Intrauterine device)" on the medication list counts as cover
+  even with a stale 2017 coil problem still present.
+
 ## [v3.134.6] — 2026-06-26
 
 ### Fix: "B12 / Folate" not matched to its outstanding request

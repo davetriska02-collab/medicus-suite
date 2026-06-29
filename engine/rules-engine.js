@@ -343,7 +343,19 @@
   // a hysterectomy, an IUS, or oral progestogen — so the clinician can see
   // at a glance whether progestogen coverage is documented or missing.
   function buildHrtContext(hrtConfig, data, now) {
-    const norm = (s) => String(s || '').toLowerCase();
+    // Punctuation-tolerant: collapse any run of non-alphanumerics to a single
+    // space so a bracketed/hyphenated generic name matches a space-separated
+    // term. Medicus shows a freshly-issued LNG-IUS under its generic VTM name
+    // "Levonorgestrel (Intrauterine device)" — the "(" would otherwise defeat
+    // the "levonorgestrel intrauterine" iusTerm (bare .toLowerCase() leaves
+    // "levonorgestrel (intrauterine device)"), so a new Mirena on the
+    // medication list was missed and the chip fell through to a stale
+    // problem-coded coil ("IUS expired — endometrial cover not confirmed").
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
     const meds = data.medications || [];
     const problems = data.problems || [];
     // Hysterectomy may be coded as a past/ended problem — check both active and past

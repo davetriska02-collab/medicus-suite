@@ -204,6 +204,19 @@ const hrtCtx = (meds, problems) =>
   const ctx = hrtCtx([{ name: 'Oestrogel pump' }, { name: 'Mirena 52mg IUS' }], []);
   check(ctx.iusMed && !ctx.iusExpired, 'LNG-IUS on the medication list counts as cover');
 }
+// A newly-issued LNG-IUS shown under its generic VTM name "Levonorgestrel
+// (Intrauterine device)" — the bracket must not defeat the iusTerm match, even
+// when a stale >5y coil problem is still on the record (the reported case).
+{
+  const ctx = hrtCtx(
+    [{ name: 'Estradiol 0.06% transdermal gel' }, { name: 'Levonorgestrel (Intrauterine device)' }],
+    [{ label: 'Insertion of hormone releasing intrauterine system', codedDate: '2017-05-01' }]
+  );
+  check(
+    ctx.iusMed && !ctx.iusExpired,
+    'new "Levonorgestrel (Intrauterine device)" on med list counts as cover despite a stale 2017 coil problem'
+  );
+}
 // Undated coil problem → cannot confirm currency → treated as expired (safe).
 {
   const ctx = hrtCtx(
