@@ -1,11 +1,11 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.137.0
+**Version:** v3.142.1
 **Generated:** 2026-06-29 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome browser extension for UK GP practices that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional on-page overlays that surface monitoring alerts, demand data, appointment capacity, investigation result triage, and clinical reference directly within the Medicus interface. All processing happens locally in the browser; no patient data is transmitted to any external service, no record is written to, and no clinical inference is performed — everything shown is derived from data already present in Medicus.
+Medicus Suite is a Chrome browser extension for UK GP practices that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional on-page overlays that surface monitoring alerts, demand data, appointment capacity, investigation result triage, and clinical reference directly within the Medicus interface. All processing happens locally in the browser; no patient data is transmitted to any external service and no clinical inference is performed — everything shown is derived from data already present in Medicus. The only writes are explicit, user-initiated actions carried out through Medicus's own API endpoints (booking an appointment, creating a task, re-assigning a prescription request); Medicus remains the system of record and nothing is ever written automatically.
 
 ## At a glance
 
@@ -183,6 +183,7 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Recent additions (last 4 weeks)
 
+- **v3.138.0–142.1 (2026-06-29)** — GP-pressures feature set: Sentinel high-risk "blind-spot" banner for monitored drugs that match no rule (DMARDs, lithium, amiodarone, anticoagulants, etc. surfaced from the unmatched list instead of buried); Sweep QOF points-at-risk prioritiser ranking gaps by indicator points with a CVD-prevention subtotal; Referrals 2WW / Faster-Diagnosis safety-net worklist (suspected-cancer referrals still showing Incomplete, oldest-first with day-ages and watch/overdue severity); Sweep one-click "Create recall task" that writes a task via Medicus's own general-task endpoint (explicit per-patient confirm, no bulk create); and a NICE NG136 ACE-I/ARB post-initiation U&E check via a new additive engine mechanism that fires only when the drug's start date is known and no U&E has been recorded since starting (cannot cry wolf on an established patient; clinical-rule change, pending CSO sign-off)
 - **v3.134.4–6 (2026-06-26)** — Outstanding investigation matching: HbA1c, TSH-only thyroid reports, and combined B12/Folate requests now correctly matched to their outstanding requests and auto-ticked on result; triage monitor UUID field now accepts the full Medicus inbox URL (UUID extracted automatically)
 - **v3.134.0–2 (2026-06-23)** — New inline "Create task for this patient" widget on task overview pages (prescribing, medical, admin): drives the Medicus task API directly with assignee, priority, description and snooze; inline booking widget now also appears on prescribing overviews (universal fallback anchor); slot-reservation keepalive prevents abandoned bookings from locking slots
 - **v3.131.0–133.5 (2026-06-21–23)** — One-click "send to routine prescriptions" button on prescription-request overviews (drives Medicus's own re-assign UI; configurable team/commit mode; H-035 hazard logged); inline "Book appointment for patient" widget injected into Medicus task pages; shared DOM-observer hub cuts per-feature observer count from 3 to 1 (performance); observer fast-paths eliminate reflow storms on idle SPA re-renders
@@ -196,4 +197,4 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Safety posture
 
-Medicus Suite is a passive display tool. It reads data already present in Medicus and presents it in the browser — it writes to no patient record, performs no AI inference, transmits no patient data to any external service, and makes no clinical decisions. All computation happens locally in the extension. See INTENDED-PURPOSE.md.
+Medicus Suite is primarily a passive display tool: it reads data already present in Medicus and presents it in the browser. It performs no AI inference, transmits no patient data to any external service, and makes no clinical decisions. The only writes are explicit, user-initiated actions performed through Medicus's own API endpoints (booking an appointment, creating a task, re-assigning a prescription request) — Medicus stays the system of record and nothing is written automatically. All computation happens locally in the extension. See INTENDED-PURPOSE.md.
