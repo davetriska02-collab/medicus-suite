@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.143.0] — 2026-06-30
+
+### Lab Results Auto-Filing — one-click filing of all-normal results
+
+A confirm-gated, fail-closed "File all normal" action that appears in Medicus only
+when the suite has confirmed every value on an investigation-report task is within
+normal limits. It drives Medicus's own filing controls (marks each panel "Normal
+result, no action required", selects the no-further-action Next Step, files) — never
+full-auto, with Medicus performing its own validation and audit. **This is the suite's
+first feature that drives a clinical-record write**, so it is gated accordingly.
+
+(Developed across the branch as 3.138–3.146; consolidated here as one entry landing
+above the v3.138–v3.142.1 GP-pressures set that merged to main in parallel.)
+
+- **All-normal gate, fail-closed.** Offers only when severity is `none` and nothing the
+  gate can't judge is present (free text/cultures, unmatched report, missing result
+  rules). Clinician-set **per-analyte parameters** cover analytes the lab leaves
+  un-ranged (HbA1c, Calcium); an opt-in **"my range wins"** override accepts a value
+  inside your set range even when the lab over-flags it (e.g. eGFR 89 vs a 90–120 lab
+  range), shown loudly in the confirm dialog and never overriding an urgent flag.
+- **Trend / drug / text / patient guards.** Blocks on a significant move vs the previous
+  value, a monitored drug (meds fetched only when configured, fail-closed on error), a
+  promised-contact phrase, or a per-patient "never auto-file" list.
+- **Multi-panel (combined bloods).** A task carrying Bone + U&E + LFT under one report
+  with one shared File button is handled by merging every matching profile into one
+  effective profile (union of parameters/guards, strictest trend, confirm-wins).
+- **Admin-only configuration.** The authoring/management UI lives in **Options → Lab
+  Filing** (not a side-panel tab — practice-level config, not a per-user tweak), with
+  optional **starter profiles** (FBC/U&E/Bone/LFT) that load **disabled** for review.
+  Every profile arrives disabled until reviewed and the safety notice acknowledged.
+- **In-Medicus card** — one calm card titled to the matched profile, positioned by the
+  filing controls; reasons shown inline when filing is not offered.
+- **Prepare-only patient message**, external-LLM profile builder, per-install **kill
+  switch**, machine-local **audit log** + CSV export, and full backup/restore.
+- Fixes a pre-existing global-scope collision (`_DANGEROUS_KEYS` in `labfiling-io.js`
+  vs `sentinel-io.js`) that was silently breaking lab-filing backup in Options.
+- Tests: `test-lab-filing-utils.js`, `test-labfiling-io.js`, `test-lab-file-macro.js`
+  (fake-DOM harness). Full suite green.
+
+> **Pending CSO review:** as the suite's first record-writing feature, the formal
+> safety docs (INTENDED-PURPOSE, HAZARD-LOG, CLINICAL-SAFETY-NOTICE) warrant a CSO
+> review for Lab Filing. The CSO-review ledger was deliberately not advanced here.
+
 ## [v3.142.1] — 2026-06-29
 
 ### Verification fixes for the v3.138–v3.142 feature set

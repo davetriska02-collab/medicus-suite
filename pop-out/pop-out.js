@@ -118,7 +118,8 @@ const TAB_HELP = {
   record: {
     title: 'Record',
     what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
+    firstStep:
+      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   knowledge: {
     title: 'Knowledge',

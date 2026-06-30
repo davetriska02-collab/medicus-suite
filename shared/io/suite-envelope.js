@@ -98,6 +98,7 @@ const VALID_SCOPES = [
   'condor',
   'reception',
   'knowledge',
+  'labfiling',
   'notifications',
 ];
 
@@ -370,6 +371,24 @@ function previewEnvelope(envelope) {
     }
   } else {
     const m = missing('Knowledge');
+    if (m) lines.push(m);
+  }
+
+  if (mods.labfiling) {
+    const profiles = mods.labfiling.profiles || [];
+    lines.push(`Lab filing: ${profiles.length} filing profile${profiles.length === 1 ? '' : 's'}`);
+    // Profiles always arrive disabled on import, but surface their backed-up state
+    // so a reviewer sees what was armed on the source machine.
+    const armed = profiles.filter((p) => p && p.enabled === true).length;
+    const withMsg = profiles.filter((p) => p && p.patientMessage && p.patientMessage.enabled === true).length;
+    lines.push(`NOTE: all imported filing profiles arrive DISABLED — review and enable each before it can file.`);
+    if (armed > 0 || withMsg > 0) {
+      lines.push(
+        `(On the source machine: ${armed} enabled, ${withMsg} with a patient message — both reset to off here.)`
+      );
+    }
+  } else {
+    const m = missing('Lab filing');
     if (m) lines.push(m);
   }
 

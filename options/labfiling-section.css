@@ -1,0 +1,437 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Lab Results Auto-Filing module */
+
+.lf-module {
+  padding: 14px 14px 24px;
+}
+.lf-head {
+  margin-bottom: 12px;
+}
+.lf-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.lf-subtitle {
+  display: block;
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* ── Safety notice ── */
+.lf-notice {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-lg);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.lf-notice-title {
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.lf-notice p {
+  margin: 0 0 8px;
+}
+
+/* ── Toolbar ── */
+.lf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lf-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+/* ── Buttons ── */
+.lf-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.lf-btn:hover {
+  border-color: var(--border-hi);
+}
+.lf-btn-sm {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.lf-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-deep);
+  font-weight: 600;
+}
+.lf-btn-primary:hover {
+  filter: brightness(1.05);
+}
+.lf-btn-danger {
+  color: var(--red);
+}
+.lf-btn-danger:hover {
+  border-color: var(--red-line);
+}
+.lf-link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* ── Empty state ── */
+.lf-empty {
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  padding: 18px 16px;
+  font-size: 12px;
+  color: var(--text-4);
+  line-height: 1.5;
+}
+
+/* ── Profile cards ── */
+.lf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lf-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+  padding: 11px 13px;
+}
+.lf-card-on {
+  border-left-color: var(--green);
+}
+.lf-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lf-card-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.lf-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0;
+}
+.lf-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+.lf-badge-ok {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+  color: var(--green);
+}
+.lf-badge-warn {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+.lf-badge-llm {
+  background: var(--violet-dim);
+  border-color: var(--violet-line);
+  color: var(--violet);
+}
+.lf-card-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.lf-k {
+  flex: 0 0 96px;
+  color: var(--text-4);
+}
+.lf-v {
+  color: var(--text-2);
+  min-width: 0;
+}
+.lf-muted {
+  color: var(--text-4);
+  font-style: italic;
+}
+.lf-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* ── Toggle ── */
+.lf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.lf-toggle-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Form ── */
+.lf-form {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px;
+}
+.lf-form-head {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-1);
+  margin-bottom: 10px;
+}
+.lf-field {
+  display: block;
+  margin-bottom: 10px;
+}
+.lf-field > span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.lf-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: var(--sans);
+  transition: border-color var(--fast) var(--ease);
+}
+.lf-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+textarea.lf-input {
+  resize: vertical;
+}
+.lf-help {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+.lf-fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin: 12px 0;
+}
+.lf-fieldset-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+/* ── Parameter rows ── */
+.lf-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lf-param-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 64px 72px auto;
+  gap: 6px;
+  align-items: center;
+}
+.lf-param-row .lf-input {
+  padding: 6px 8px;
+}
+.lf-check,
+.lf-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 7px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.lf-check input,
+.lf-radio input {
+  margin-top: 2px;
+}
+.lf-form-error {
+  color: var(--red);
+  font-size: 11.5px;
+  min-height: 16px;
+  margin: 4px 0;
+}
+.lf-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ── LLM round-trip pane ── */
+.lf-llm {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  margin-bottom: 12px;
+}
+.lf-llm > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.lf-llm-inner {
+  margin-top: 8px;
+}
+.lf-llm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.lf-llm-status {
+  font-size: 11px;
+  color: var(--text-4);
+}
+.lf-llm-status-ok {
+  color: var(--green);
+}
+.lf-llm-status-warn {
+  color: var(--amber);
+}
+.lf-llm-status-err {
+  color: var(--red);
+}
+
+/* ── Audit ── */
+.lf-audit {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.lf-audit-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.lf-audit-row {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  padding: 3px 0;
+  line-height: 1.4;
+}
+.lf-audit-when {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  color: var(--text-4);
+}
+.lf-audit-what {
+  color: var(--text-3);
+}
+.lf-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── Kill switch ── */
+.lf-killswitch {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-elev);
+}
+.lf-killswitch .lf-check {
+  margin-bottom: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.lf-killswitch-on {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+.lf-killswitch-on .lf-check {
+  color: var(--text-1);
+}
+
+/* ── Card provenance ── */
+.lf-card-prov {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin-top: 7px;
+  font-family: var(--mono);
+}
+
+/* ── Toolbar buttons + transient toast (Options section) ── */
+.lf-toolbar-btns {
+  display: flex;
+  gap: 8px;
+}
+.lf-toast {
+  display: none;
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.lf-toast.lf-toast-show {
+  display: block;
+}

@@ -1,0 +1,922 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Medicus Suite — Lab Results Auto-Filing utilities (pure logic, no chrome APIs, no DOM)
+//
+// Shared by the Lab Filing side-panel module, the injected execution macro
+// (content-scripts/triage-lens/lab-file-button.js) and shared/io/labfiling-io.js.
+// Loaded as a plain script in extension pages (window.LabFilingUtils) and via
+// require() in node tests.
+//
+// A "filing profile" describes — for ONE lab / area / report layout — how to file
+// a NORMAL result on the live Medicus filing screen: the visible text of the
+// "normal" option to pick on each subheading, the file/complete controls, and an
+// optional (prepare-only) patient message. Because lab layouts differ area-to-area,
+// the clinician authors the profile (assisted by the external-LLM workflow), the
+// suite never guesses the live DOM. Everything is matched by VISIBLE TEXT, never by
+// per-session ids — the same safety doctrine as routine-rx-button.js.
+//
+// SAFETY INVARIANTS encoded here:
+//   • A profile is INERT until a clinician reviews and enables it. Author/import
+//     paths force enabled:false, reviewed:false (use lockForReview()).
+//   • The patient message is PREPARE-ONLY — the macro pre-fills a draft and stops;
+//     the clinician sends. patientMessage.enabled is forced false on author/import.
+//   • commitMode is 'manual' (default) or 'confirm' ONLY. There is no full-auto
+//     mode for an irreversible patient-record write — a human always presses the
+//     final button. Any other value clamps to 'manual'.
+//
+// Exported functions:
+//   validateProfile(p)                     — schema errors array ([] = valid)
+//   sanitiseProfile(p)                     — whitelist-rebuild a validated profile
+//   lockForReview(p, source)               — force enabled/reviewed/message off
+//   generateProfileId(name, takenIds)      — slug id, collision-suffixed
+//   seedAnalytesFromResultRules(rules)     — derive known analyte names from resultRules
+//   phiWarnings(profiles)                  — heuristic patient-identifier warnings
+//   filingProfilePrompt()                  — copy-paste prompt for external LLMs
+
+'use strict';
+
+// Wrapped in an IIFE so its top-level identifiers (helper regexes like
+// NHS_NUMBER_RE, generic helpers like clamp/isStr) never leak into the shared
+// global scope of the extension pages, where this file is loaded as a CLASSIC
+// <script> alongside knowledge-utils.js et al. Without this, `const NHS_NUMBER_RE`
+// here collides with the same global in knowledge-utils.js and throws
+// "Identifier already declared", killing this whole script (and the Lab filing
+// module with it). node require() module-scopes the file, so tests never saw it.
+(function () {
+  const LF_ID_RE = /^[a-z0-9][a-z0-9-]{0,49}$/i;
+  const LF_SOURCES = ['manual', 'llm', 'import'];
+  const LF_COMMIT_MODES = ['manual', 'confirm']; // NB: no 'auto' — see header.
+
+  const LF_LIMITS = {
+    name: 120,
+    matchItem: 80,
+    match: 30,
+    analyteItem: 80,
+    analytes: 300,
+    control: 120, // visible-text / aria-label of a control
+    selector: 200, // CSS selector hint
+    comment: 500,
+    template: 500,
+    notes: 1000,
+    params: 200, // max per-analyte parameter rows
+    unit: 24,
+  };
+
+  const isUnset = (v) => v === undefined || v === null || v === '';
+  function numOrNull(v) {
+    if (isUnset(v)) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ── Validation ────────────────────────────────────────────────────────────────
+
+  function isStr(v) {
+    return typeof v === 'string';
+  }
+  function strArrOk(v) {
+    return Array.isArray(v) && v.every((x) => typeof x === 'string');
+  }
+
+  function validateProfile(p) {
+    const errs = [];
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return ['Profile must be an object.'];
+
+    if (!isStr(p.name) || !p.name.trim()) errs.push('name is required.');
+    else if (p.name.trim().length > LF_LIMITS.name) errs.push(`name must be ${LF_LIMITS.name} characters or fewer.`);
+
+    if (p.id !== undefined && (!isStr(p.id) || !LF_ID_RE.test(p.id))) {
+      errs.push('id must match [a-z0-9][a-z0-9-]{0,49}.');
+    }
+
+    if (p.match !== undefined && !strArrOk(p.match)) errs.push('match must be an array of strings.');
+    else if (Array.isArray(p.match) && p.match.length > LF_LIMITS.match) {
+      errs.push(`match may have at most ${LF_LIMITS.match} entries.`);
+    }
+
+    if (p.analytes !== undefined && !strArrOk(p.analytes)) errs.push('analytes must be an array of strings.');
+    else if (Array.isArray(p.analytes) && p.analytes.length > LF_LIMITS.analytes) {
+      errs.push(`analytes may have at most ${LF_LIMITS.analytes} entries.`);
+    }
+
+    // filing block. Control-text fields are matched against on-screen labels, so an
+    // over-long value is rejected (not silently truncated) — a truncated label
+    // could match an unintended control.
+    if (p.filing === undefined || p.filing === null || typeof p.filing !== 'object' || Array.isArray(p.filing)) {
+      errs.push('filing is required and must be an object.');
+    } else {
+      const f = p.filing;
+      if (!isStr(f.normalOptionText) || !f.normalOptionText.trim()) {
+        errs.push('filing.normalOptionText is required — the visible text of the "normal" option on each subheading.');
+      } else if (f.normalOptionText.length > LF_LIMITS.control) {
+        errs.push(`filing.normalOptionText must be ${LF_LIMITS.control} characters or fewer.`);
+      }
+      if (!isStr(f.fileButtonText) || !f.fileButtonText.trim()) {
+        errs.push('filing.fileButtonText is required — the visible text of the File button.');
+      } else if (f.fileButtonText.length > LF_LIMITS.control) {
+        errs.push(`filing.fileButtonText must be ${LF_LIMITS.control} characters or fewer.`);
+      }
+      ['openControlText', 'completeButtonText', 'nextStepText', 'nextStepMessageText'].forEach((k) => {
+        if (f[k] !== undefined && !isStr(f[k])) errs.push(`filing.${k} must be a string.`);
+        else if (isStr(f[k]) && f[k].length > LF_LIMITS.control)
+          errs.push(`filing.${k} must be ${LF_LIMITS.control} characters or fewer.`);
+      });
+      if (f.rowSelector !== undefined && !isStr(f.rowSelector)) errs.push('filing.rowSelector must be a string.');
+      else if (isStr(f.rowSelector) && f.rowSelector.length > LF_LIMITS.selector)
+        errs.push(`filing.rowSelector must be ${LF_LIMITS.selector} characters or fewer.`);
+      if (f.filingComment !== undefined && !isStr(f.filingComment)) errs.push('filing.filingComment must be a string.');
+      else if (isStr(f.filingComment) && f.filingComment.length > LF_LIMITS.comment)
+        errs.push(`filing.filingComment must be ${LF_LIMITS.comment} characters or fewer.`);
+    }
+
+    // patientMessage block (optional)
+    if (p.patientMessage !== undefined) {
+      const m = p.patientMessage;
+      if (!m || typeof m !== 'object' || Array.isArray(m)) errs.push('patientMessage must be an object.');
+      else {
+        if (m.enabled !== undefined && typeof m.enabled !== 'boolean')
+          errs.push('patientMessage.enabled must be a boolean.');
+        ['triggerText', 'fieldText', 'template'].forEach((k) => {
+          if (m[k] !== undefined && !isStr(m[k])) errs.push(`patientMessage.${k} must be a string.`);
+        });
+        if (isStr(m.template) && m.template.length > LF_LIMITS.template) {
+          errs.push(`patientMessage.template must be ${LF_LIMITS.template} characters or fewer.`);
+        }
+      }
+    }
+
+    // parameters — per-analyte normal ranges the CLINICIAN sets, used by the gate
+    // in addition to the lab's own flags. Essential for analytes the lab leaves
+    // un-ranged (e.g. HbA1c): the clinician supplies the normal limit.
+    if (p.parameters !== undefined) {
+      if (!Array.isArray(p.parameters)) errs.push('parameters must be an array.');
+      else if (p.parameters.length > LF_LIMITS.params)
+        errs.push(`parameters may have at most ${LF_LIMITS.params} entries.`);
+      else
+        p.parameters.forEach((pr, i) => {
+          if (!pr || typeof pr !== 'object' || Array.isArray(pr)) {
+            errs.push(`parameters[${i}] must be an object.`);
+            return;
+          }
+          if (!isStr(pr.analyte) || !pr.analyte.trim()) errs.push(`parameters[${i}].analyte is required.`);
+          else if (pr.analyte.length > LF_LIMITS.analyteItem)
+            errs.push(`parameters[${i}].analyte must be ${LF_LIMITS.analyteItem} characters or fewer.`);
+          ['low', 'high'].forEach((k) => {
+            if (!isUnset(pr[k]) && !Number.isFinite(Number(pr[k])))
+              errs.push(`parameters[${i}].${k} must be a number.`);
+          });
+          if (pr.unit !== undefined && !isStr(pr.unit)) errs.push(`parameters[${i}].unit must be a string.`);
+          if (isUnset(pr.low) && isUnset(pr.high)) errs.push(`parameters[${i}] needs a low and/or a high value.`);
+          if (!isUnset(pr.low) && !isUnset(pr.high) && Number(pr.low) > Number(pr.high)) {
+            errs.push(`parameters[${i}] low must not exceed high.`);
+          }
+        });
+    }
+    if (p.requireRangeForAll !== undefined && typeof p.requireRangeForAll !== 'boolean') {
+      errs.push('requireRangeForAll must be a boolean.');
+    }
+    if (p.paramsOverrideLabFlags !== undefined && typeof p.paramsOverrideLabFlags !== 'boolean') {
+      errs.push('paramsOverrideLabFlags must be a boolean.');
+    }
+    if (p.trend !== undefined) {
+      if (!p.trend || typeof p.trend !== 'object' || Array.isArray(p.trend)) errs.push('trend must be an object.');
+      else if (
+        !isUnset(p.trend.maxDeltaPct) &&
+        (!Number.isFinite(Number(p.trend.maxDeltaPct)) || Number(p.trend.maxDeltaPct) < 0)
+      ) {
+        errs.push('trend.maxDeltaPct must be a non-negative number.');
+      }
+    }
+    if (p.excludeIfMeds !== undefined && !strArrOk(p.excludeIfMeds))
+      errs.push('excludeIfMeds must be an array of strings.');
+    if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText))
+      errs.push('suppressIfText must be an array of strings.');
+
+    if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
+      errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
+    }
+    if (p.source !== undefined && !LF_SOURCES.includes(p.source)) {
+      errs.push(`source must be one of: ${LF_SOURCES.join(', ')}.`);
+    }
+    if (p.enabled !== undefined && typeof p.enabled !== 'boolean') errs.push('enabled must be a boolean.');
+    if (p.reviewed !== undefined && typeof p.reviewed !== 'boolean') errs.push('reviewed must be a boolean.');
+    if (p.notes !== undefined && !isStr(p.notes)) errs.push('notes must be a string.');
+
+    return errs;
+  }
+
+  // ── Sanitisation ────────────────────────────────────────────────────────────────
+  // Whitelist rebuild — never copies unknown fields (incl. __proto__/constructor),
+  // clamps lengths, clamps commitMode. Run validateProfile first; this assumes a
+  // structurally valid profile. Faithfully reflects enabled/reviewed/message.enabled
+  // as given — the AUTHOR/IMPORT paths call lockForReview() to force them off.
+
+  function clamp(s, n) {
+    return String(s ?? '')
+      .trim()
+      .slice(0, n);
+  }
+
+  function sanitiseStrArr(arr, itemMax, listMax) {
+    return (Array.isArray(arr) ? arr : [])
+      .map((s) => clamp(s, itemMax))
+      .filter(Boolean)
+      .slice(0, listMax);
+  }
+
+  // Whitelist-rebuild the per-analyte parameter rows. Drops rows with no analyte
+  // or no bound; coerces low/high to finite numbers or null; clamps strings.
+  function sanitiseParams(arr) {
+    return (Array.isArray(arr) ? arr : [])
+      .map((pr) => {
+        if (!pr || typeof pr !== 'object') return null;
+        const analyte = clamp(pr.analyte, LF_LIMITS.analyteItem);
+        const low = numOrNull(pr.low);
+        const high = numOrNull(pr.high);
+        if (!analyte || (low === null && high === null)) return null;
+        return { analyte, low, high, unit: clamp(pr.unit, LF_LIMITS.unit) };
+      })
+      .filter(Boolean)
+      .slice(0, LF_LIMITS.params);
+  }
+
+  function sanitiseProfile(p) {
+    const f = p.filing && typeof p.filing === 'object' ? p.filing : {};
+    const m = p.patientMessage && typeof p.patientMessage === 'object' ? p.patientMessage : null;
+
+    const out = {
+      id: isStr(p.id) && LF_ID_RE.test(p.id) ? p.id.toLowerCase() : undefined,
+      name: clamp(p.name, LF_LIMITS.name),
+      match: sanitiseStrArr(p.match, LF_LIMITS.matchItem, LF_LIMITS.match),
+      analytes: sanitiseStrArr(p.analytes, LF_LIMITS.analyteItem, LF_LIMITS.analytes),
+      parameters: sanitiseParams(p.parameters),
+      requireRangeForAll: p.requireRangeForAll === true,
+      // When true, a result that is within the clinician's set parameter range counts
+      // as normal for the all-normal gate EVEN IF the lab flagged it out-of-range
+      // (e.g. eGFR 89 with a clinician floor of 60, where the lab's range is 90–120).
+      // Bounded to analytes that have an explicit parameter; never overrides an
+      // urgent/requires-review flag. Off by default (the lab flag stays authoritative).
+      paramsOverrideLabFlags: p.paramsOverrideLabFlags === true,
+      filing: {
+        rowSelector: clamp(f.rowSelector, LF_LIMITS.selector),
+        openControlText: clamp(f.openControlText, LF_LIMITS.control),
+        normalOptionText: clamp(f.normalOptionText, LF_LIMITS.control),
+        nextStepText: clamp(f.nextStepText, LF_LIMITS.control),
+        nextStepMessageText: clamp(f.nextStepMessageText, LF_LIMITS.control),
+        fileButtonText: clamp(f.fileButtonText, LF_LIMITS.control),
+        completeButtonText: clamp(f.completeButtonText, LF_LIMITS.control),
+        filingComment: clamp(f.filingComment, LF_LIMITS.comment),
+      },
+      patientMessage: {
+        enabled: m ? m.enabled === true : false,
+        triggerText: clamp(m && m.triggerText, LF_LIMITS.control),
+        fieldText: clamp(m && m.fieldText, LF_LIMITS.control),
+        template: clamp(m && m.template, LF_LIMITS.template),
+      },
+      // Trend guard: block filing when a result has moved more than maxDeltaPct vs
+      // its previous value (a "normal" snapshot can hide a rising creatinine / falling
+      // eGFR). 0/absent = off.
+      trend: {
+        maxDeltaPct: numOrNull((p.trend && p.trend.maxDeltaPct) ?? null),
+      },
+      // Don't auto-offer if the patient is on any of these drugs (substring match
+      // against the medication list) — monitored drugs need a human to close the loop.
+      excludeIfMeds: sanitiseStrArr(p.excludeIfMeds, LF_LIMITS.matchItem, LF_LIMITS.match),
+      // Don't auto-offer if the report/task text contains any of these phrases
+      // (e.g. "telephone result", "call patient") — a contact was promised.
+      suppressIfText: sanitiseStrArr(p.suppressIfText, LF_LIMITS.matchItem, LF_LIMITS.match),
+      commitMode: LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual',
+      source: LF_SOURCES.includes(p.source) ? p.source : 'manual',
+      reviewed: p.reviewed === true,
+      enabled: p.enabled === true,
+      notes: clamp(p.notes, LF_LIMITS.notes),
+      updatedAt: isStr(p.updatedAt) && p.updatedAt ? p.updatedAt : new Date().toISOString(),
+    };
+    return out;
+  }
+
+  // Force a profile inert pending clinician review. Used by the LLM-paste path and
+  // by backup import — a profile must never arrive enabled, reviewed, or with the
+  // patient message switched on. `source` records provenance ('llm' | 'import').
+  function lockForReview(p, source) {
+    const clean = sanitiseProfile(p);
+    clean.enabled = false;
+    clean.reviewed = false;
+    clean.patientMessage.enabled = false;
+    clean.source = LF_SOURCES.includes(source) ? source : clean.source;
+    return clean;
+  }
+
+  function generateProfileId(name, takenIds) {
+    const taken = takenIds instanceof Set ? takenIds : new Set(takenIds || []);
+    let slug = String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    if (!slug || !LF_ID_RE.test(slug)) slug = 'profile';
+    let id = slug;
+    let n = 2;
+    while (taken.has(id)) id = `${slug}-${n++}`;
+    return id;
+  }
+
+  // Derive a deduplicated, sorted list of known analyte names from the suite's
+  // shipped/saved resultRules — used to pre-seed a new profile's `analytes` so the
+  // clinician isn't typing every test name from scratch. Pure: pass CONFIG.resultRules.
+  function seedAnalytesFromResultRules(resultRules) {
+    const names = new Set();
+    for (const rule of Array.isArray(resultRules) ? resultRules : []) {
+      if (!rule || typeof rule !== 'object') continue;
+      const collect = (a) => {
+        if (a && Array.isArray(a.match))
+          a.match.forEach((m) => isStr(m) && m.trim() && names.add(m.trim().toLowerCase()));
+      };
+      if (rule.analyte) collect(rule.analyte);
+      if (Array.isArray(rule.conditions)) rule.conditions.forEach((c) => c && collect(c.analyte || c));
+    }
+    return Array.from(names).sort();
+  }
+
+  // ── Runtime helpers (pure — used by the execution macro) ──────────────────────
+  // These are DOM-free so they can be unit-tested without a browser; the macro
+  // (content-scripts/triage-lens/lab-file-button.js) calls them via window.LabFilingUtils.
+
+  // Build a lowercase haystack of everything identifying a normalised report — the
+  // analyte names and their specimen/group headers — so a profile's match[]
+  // substrings can be tested against it.
+  function reportHaystack(report) {
+    if (!report || !Array.isArray(report.results)) return '';
+    const parts = [];
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      if (isStr(r.name)) parts.push(r.name);
+      if (isStr(r.specimen)) parts.push(r.specimen);
+    }
+    return parts.join(' • ').toLowerCase();
+  }
+
+  // Pick the ENABLED profile that best fits this report. A profile fits when at
+  // least one of its match[] substrings appears in the report haystack. The best
+  // fit is the one with the most matching substrings (most specific). Returns the
+  // profile object, or null. A profile with an empty match[] never auto-fits — it
+  // must be selected deliberately, never fired on a guess.
+  function matchProfile(profiles, report) {
+    const hay = reportHaystack(report);
+    if (!hay) return null;
+    let best = null;
+    let bestScore = 0;
+    for (const p of Array.isArray(profiles) ? profiles : []) {
+      if (!p || p.enabled !== true || !Array.isArray(p.match) || p.match.length === 0) continue;
+      let score = 0;
+      for (const sub of p.match) {
+        if (isStr(sub) && sub.trim() && hay.includes(sub.trim().toLowerCase())) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  // ALL enabled profiles that fit this report (≥1 match term hits), most-specific
+  // first. A single Medicus task can carry several panels (Bone + U&E + LFT) under
+  // one report and ONE shared "File results" button — so several per-panel profiles
+  // legitimately apply at once. Returns [] when none fit.
+  function matchProfiles(profiles, report) {
+    const hay = reportHaystack(report);
+    if (!hay) return [];
+    const scored = [];
+    for (const p of Array.isArray(profiles) ? profiles : []) {
+      if (!p || p.enabled !== true || !Array.isArray(p.match) || p.match.length === 0) continue;
+      let score = 0;
+      for (const sub of p.match) {
+        if (isStr(sub) && sub.trim() && hay.includes(sub.trim().toLowerCase())) score++;
+      }
+      if (score > 0) scored.push({ p, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.p);
+  }
+
+  // Merge every profile that fits this report into ONE "effective" profile the gate
+  // and macro can act on as a unit — because a combined-bloods task files as a single
+  // whole-task action, so all matched panels must pass together. Semantics, each chosen
+  // to be the SAFER of the inputs:
+  //   • parameters    — union (every panel's clinician-set ranges apply)
+  //   • requireRangeForAll / paramsOverrideLabFlags — true if ANY matched profile sets it
+  //   • trend.maxDeltaPct — the STRICTEST (smallest positive) across matched profiles
+  //   • excludeIfMeds / suppressIfText — union (any guard from any panel blocks)
+  //   • commitMode    — 'confirm' if ANY matched profile is 'confirm' (a human confirms)
+  //   • filing / patientMessage — the primary (highest-scoring) profile's, since the
+  //     filing controls are screen-level (one shared File button), not per-panel.
+  // Returns { effective, matched } or null when nothing fits. `effective` carries
+  // _matchedNames / _matchedCount so the card can show exactly which profiles combined.
+  function mergeProfilesForReport(profiles, report) {
+    const matched = matchProfiles(profiles, report);
+    if (!matched.length) return null;
+    const primary = matched[0];
+    let strictestTrend = null;
+    for (const p of matched) {
+      const v = p.trend ? numOrNull(p.trend.maxDeltaPct) : null;
+      if (v != null && v > 0 && (strictestTrend == null || v < strictestTrend)) strictestTrend = v;
+    }
+    const uniq = (arr) => {
+      const seen = new Set();
+      const out = [];
+      for (const s of arr) {
+        const k = isStr(s) ? s.toLowerCase() : '';
+        if (k && !seen.has(k)) {
+          seen.add(k);
+          out.push(s);
+        }
+      }
+      return out;
+    };
+    const names = matched.map((p) => p.name).filter(isStr);
+    const effective = {
+      id: '__merged__',
+      name: matched.length === 1 ? primary.name : `${matched.length} profiles matched`,
+      match: [],
+      analytes: [],
+      parameters: matched.flatMap((p) => (Array.isArray(p.parameters) ? p.parameters : [])),
+      requireRangeForAll: matched.some((p) => p.requireRangeForAll === true),
+      paramsOverrideLabFlags: matched.some((p) => p.paramsOverrideLabFlags === true),
+      trend: { maxDeltaPct: strictestTrend },
+      excludeIfMeds: uniq(matched.flatMap((p) => (Array.isArray(p.excludeIfMeds) ? p.excludeIfMeds : []))),
+      suppressIfText: uniq(matched.flatMap((p) => (Array.isArray(p.suppressIfText) ? p.suppressIfText : []))),
+      filing: primary.filing,
+      patientMessage: primary.patientMessage,
+      commitMode: matched.some((p) => p.commitMode === 'confirm') ? 'confirm' : 'manual',
+      source: 'manual',
+      reviewed: true,
+      enabled: true,
+      _matchedNames: names,
+      _matchedCount: matched.length,
+    };
+    return { effective, matched };
+  }
+
+  // Extract a first name from a Medicus patient banner string. Handles the UK
+  // "Surname, Firstname" order and plain "Firstname Surname"; falls back to "there".
+  function extractFirstName(patient) {
+    const name = isStr(patient) ? patient.trim() : isStr(patient && patient.name) ? patient.name.trim() : '';
+    if (!name) return 'there';
+    if (name.includes(',')) {
+      const after = name.split(',')[1] || '';
+      const first = after.trim().split(/\s+/)[0];
+      if (first) return first;
+    }
+    const first = name.split(/\s+/)[0];
+    return first || 'there';
+  }
+
+  // Fill the only supported placeholder, {firstName}. Never throws.
+  function fillTemplate(template, patient) {
+    if (!isStr(template)) return '';
+    return template.replace(/\{firstName\}/g, extractFirstName(patient));
+  }
+
+  // Match a profile parameter row to a result by analyte name (case-insensitive,
+  // substring either way — e.g. param "haemoglobin" matches result "Haemoglobin",
+  // param "hba1c" matches "HbA1c (IFCC)").
+  function findParamFor(name, params) {
+    const n = String(name || '').toLowerCase();
+    if (!n) return null;
+    for (const pr of Array.isArray(params) ? params : []) {
+      if (!pr || !isStr(pr.analyte)) continue;
+      const a = pr.analyte.toLowerCase();
+      if (a && (n.includes(a) || a.includes(n))) return pr;
+    }
+    return null;
+  }
+
+  // Reasons a report fails the profile's OWN per-analyte parameters — the clinician-
+  // set normal ranges. Used IN ADDITION to the lab's flags, so it catches analytes
+  // the lab leaves un-ranged (e.g. HbA1c). Returns [] when all set parameters pass.
+  // With requireRangeForAll, also blocks any numeric result that has neither a lab
+  // reference range NOR a profile parameter — so nothing un-checked is ever filed.
+  function profileParamBlockers(report, profile) {
+    const reasons = [];
+    if (!report || !Array.isArray(report.results) || !profile) return reasons;
+    const params = Array.isArray(profile.parameters) ? profile.parameters : [];
+    const requireAll = profile.requireRangeForAll === true;
+    if (!params.length && !requireAll) return reasons;
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const name = isStr(r.name) ? r.name : '';
+      const val = Number(r.value);
+      const param = findParamFor(name, params);
+      if (param) {
+        if (Number.isFinite(val)) {
+          const unit = param.unit ? ' ' + param.unit : '';
+          if (param.low != null && val < param.low) {
+            reasons.push(`${name || 'a result'} (${r.value}${unit}) is below your set minimum of ${param.low}`);
+          } else if (param.high != null && val > param.high) {
+            reasons.push(`${name || 'a result'} (${r.value}${unit}) is above your set maximum of ${param.high}`);
+          }
+        }
+        continue; // covered by a parameter
+      }
+      if (requireAll && Number.isFinite(val) && r.low == null && r.high == null) {
+        reasons.push(`${name || 'a result'} has no reference range — set a parameter for it before filing`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // Return a report whose lab out-of-range flags (isAbove/isBelow) have been CLEARED
+  // for any analyte that (a) the profile sets an explicit parameter for and (b) whose
+  // value falls within that clinician-set range. This is the "my range wins" override:
+  // the clinician has declared the normal limit for that analyte, so a lab reference
+  // range that flags it (e.g. eGFR's over-sensitive 90–120) is superseded FOR THE
+  // ALL-NORMAL DETERMINATION. Safety bounds, all hard:
+  //   • opt-in only — does nothing unless profile.paramsOverrideLabFlags === true;
+  //   • an `urgent` (requires-urgent-review) flag is NEVER cleared;
+  //   • only analytes with a matching parameter are touched; everything else is left
+  //     exactly as the lab reported it;
+  //   • a value OUTSIDE the clinician's range keeps its lab flag (and is also caught by
+  //     profileParamBlockers), so the override can only ever ACCEPT, never hide a value
+  //     the clinician themselves called abnormal;
+  //   • a non-numeric value keeps its flag (we can't judge it).
+  // Returns a NEW report object (results shallow-cloned); the input is never mutated.
+  // The cleared results carry `_labFlagOverridden: true` so the confirm dialog can be loud.
+  function applyParamOverrides(report, profile) {
+    if (!report || !Array.isArray(report.results)) return report;
+    if (!profile || profile.paramsOverrideLabFlags !== true) return report;
+    const params = Array.isArray(profile.parameters) ? profile.parameters : [];
+    if (!params.length) return report;
+    const results = report.results.map((r) => {
+      if (!r || typeof r !== 'object') return r;
+      if (r.urgent) return r; // never override an urgent flag
+      if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
+      const param = findParamFor(isStr(r.name) ? r.name : '', params);
+      if (!param) return r;
+      const val = Number(r.value);
+      if (!Number.isFinite(val)) return r; // can't judge → keep the lab flag
+      const withinLow = param.low == null || val >= param.low;
+      const withinHigh = param.high == null || val <= param.high;
+      if (withinLow && withinHigh) return { ...r, isAbove: false, isBelow: false, _labFlagOverridden: true };
+      return r;
+    });
+    return { ...report, results };
+  }
+
+  // The previous value + delta for a result, from its history (newest-first). Returns
+  // { prev, date, delta, deltaPct, dir } or null if there's no comparable previous.
+  function analyteTrend(result) {
+    if (!result || typeof result !== 'object') return null;
+    const cur = Number(result.value);
+    const hist = Array.isArray(result.history) ? result.history : [];
+    let prevEntry = null;
+    for (const h of hist) {
+      if (h && Number.isFinite(Number(h.value))) {
+        prevEntry = h;
+        break;
+      }
+    }
+    if (!prevEntry || !Number.isFinite(cur)) return null;
+    const prev = Number(prevEntry.value);
+    const delta = cur - prev;
+    const deltaPct = prev !== 0 ? (delta / Math.abs(prev)) * 100 : null;
+    return { prev, date: prevEntry.date || null, delta, deltaPct, dir: delta > 0 ? 'up' : delta < 0 ? 'down' : 'same' };
+  }
+
+  // Reasons a report fails the profile's TREND guard: any analyte that has moved more
+  // than trend.maxDeltaPct vs its previous value — even if the current value is "in
+  // range". This is what catches a creeping creatinine / falling eGFR. [] when off or OK.
+  function trendBlockers(report, profile) {
+    const reasons = [];
+    const maxPct = profile && profile.trend ? numOrNull(profile.trend.maxDeltaPct) : null;
+    if (!report || !Array.isArray(report.results) || maxPct == null || maxPct <= 0) return reasons;
+    for (const r of report.results) {
+      const t = analyteTrend(r);
+      if (t && t.deltaPct != null && Math.abs(t.deltaPct) > maxPct) {
+        const name = isStr(r.name) ? r.name : 'a result';
+        reasons.push(
+          `${name} has changed ${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}% since last (${t.prev} → ${r.value})`
+        );
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // Reasons the patient's medications exclude auto-filing (monitored drugs need a
+  // human to close the loop). `meds` is an array of strings or {name} objects.
+  function medExclusionBlockers(meds, profile) {
+    const reasons = [];
+    const ex = profile && Array.isArray(profile.excludeIfMeds) ? profile.excludeIfMeds : [];
+    if (!ex.length || !Array.isArray(meds)) return reasons;
+    const names = meds
+      .map((m) => (isStr(m) ? m : m && isStr(m.name) ? m.name : ''))
+      .filter(Boolean)
+      .map((s) => s.toLowerCase());
+    for (const drug of ex) {
+      if (!isStr(drug) || !drug.trim()) continue;
+      const d = drug.trim().toLowerCase();
+      if (names.some((n) => n.includes(d)))
+        reasons.push(`patient is on a monitored drug (${drug}) — file manually after review`);
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // Reasons the patient is on the machine-local "never auto-file" list.
+  function suppressedBlockers(report, suppressList) {
+    const reasons = [];
+    const uuid = report && isStr(report.patientUuid) ? report.patientUuid : null;
+    if (!uuid || !Array.isArray(suppressList)) return reasons;
+    const hit = suppressList.find((s) => s && (s === uuid || s.uuid === uuid));
+    if (hit) reasons.push('this patient is on your “never auto-file” list');
+    return reasons;
+  }
+
+  // Reasons the report/task text contains a phrase that should suppress filing
+  // (e.g. "telephone result" — a contact was promised). `extraText` lets the macro
+  // pass page text it scraped beyond the report itself.
+  function textSuppressBlockers(report, profile, extraText) {
+    const reasons = [];
+    const phrases = profile && Array.isArray(profile.suppressIfText) ? profile.suppressIfText : [];
+    if (!phrases.length) return reasons;
+    const parts = [];
+    if (report && Array.isArray(report.results))
+      report.results.forEach((r) => r && isStr(r.text) && parts.push(r.text));
+    if (isStr(extraText)) parts.push(extraText);
+    const hay = parts.join(' • ').toLowerCase();
+    for (const ph of phrases) {
+      if (isStr(ph) && ph.trim() && hay.includes(ph.trim().toLowerCase())) {
+        reasons.push(`the result mentions “${ph}” — review/contact may be expected`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // CSV of audit entries for export. Header + one row per entry; values quoted.
+  function auditCsv(entries) {
+    const cols = [
+      'ts',
+      'profile',
+      'taskUuid',
+      'patientUuid',
+      'severity',
+      'analytes',
+      'marked',
+      'filed',
+      'completed',
+      'messagePrepared',
+    ];
+    const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const rows = [cols.join(',')];
+    for (const e of Array.isArray(entries) ? entries : []) {
+      rows.push(cols.map((c) => esc(e ? e[c] : '')).join(','));
+    }
+    return rows.join('\n');
+  }
+
+  // Reasons this report must NOT be offered for one-click filing, even though it
+  // may score level:'none'. The numeric severity gate is necessary but NOT
+  // sufficient — it reads the lab's own numeric flags and cannot reason about
+  // free text, cultures, trends, or whether the report is even the right patient.
+  // So we fail CLOSED on anything it cannot judge. Returns [] when fileable, else
+  // a list of short human-readable reasons (shown to the clinician). Pure.
+  //
+  // Discriminator for "the gate can't judge this result": a result with no finite
+  // numeric value but with free-text content (cultures, histology, "abnormal film"
+  // comments). Normal numeric results have a finite value and are unaffected.
+  function fileabilityBlockers(report, severity, resultRules) {
+    const reasons = [];
+    if (!report || !Array.isArray(report.results) || report.results.length === 0) {
+      reasons.push('no results could be read from this report');
+      return reasons;
+    }
+    if (!severity || severity.level !== 'none') reasons.push('not every result is within normal limits');
+    if ((severity && severity.unmatched) || report.unmatched) reasons.push('this report is not matched to a patient');
+    // Without result rules the suite cannot flag cultures or apply threshold
+    // escalations, so an abnormal culture could read as normal — fail closed.
+    if (!Array.isArray(resultRules) || resultRules.length === 0) {
+      reasons.push('result rules are not loaded, so cultures and thresholds cannot be checked');
+    }
+    const freeText = [];
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const hasText = isStr(r.text) && r.text.trim().length > 0;
+      if (!Number.isFinite(r.value) && hasText)
+        freeText.push(isStr(r.name) && r.name.trim() ? r.name.trim() : 'unnamed');
+    }
+    if (freeText.length) {
+      const shown = freeText.slice(0, 3).join(', ');
+      reasons.push(
+        `contains a free-text / non-numeric result the suite cannot score: ${shown}${freeText.length > 3 ? '…' : ''}`
+      );
+    }
+    // De-duplicate (unmatched can be reported by both severity and report).
+    return Array.from(new Set(reasons));
+  }
+
+  // The enumerated irreversible-action confirm text — mirrors confirmBulkTickOff in
+  // content.js. Lists each analyte being filed, states accurately WHAT the suite
+  // checked (and what it could not), names the commit mode, and warns it cannot be
+  // undone. Deliberately does NOT claim it "confirmed every parameter normal" — it
+  // checked numeric values against the profile's ranges; the clinician judges.
+  function buildFilingConfirmMessage(report, profile, mode) {
+    const params = profile && Array.isArray(profile.parameters) ? profile.parameters : [];
+    const results = report && Array.isArray(report.results) ? report.results : [];
+    // One line per analyte: name, value+unit, the limit it was checked against, and
+    // the trend vs the previous result — so the clinician READS the numbers, not just
+    // a green "all normal", and sees a creeping value before confirming.
+    const lines = results
+      .filter((r) => r && (isStr(r.name) || r.value != null))
+      .map((r) => {
+        const name = isStr(r.name) && r.name.trim() ? r.name.trim() : 'result';
+        const unit = isStr(r.unit) && r.unit ? ' ' + r.unit : '';
+        const valStr = r.value === 0 || r.value ? `${r.value}${unit}` : '—';
+        const param = findParamFor(name, params);
+        let limit = '';
+        if (param && (param.low != null || param.high != null)) {
+          limit = ` [${param.low != null ? '≥' + param.low : ''}${param.low != null && param.high != null ? ' ' : ''}${param.high != null ? '≤' + param.high : ''}]`;
+        } else if (r.low != null || r.high != null) {
+          limit = ` [${r.low != null ? r.low : ''}–${r.high != null ? r.high : ''}]`;
+        }
+        const t = analyteTrend(r);
+        let trend = '';
+        if (t && t.deltaPct != null) {
+          const arrow = t.dir === 'up' ? '↑' : t.dir === 'down' ? '↓' : '→';
+          trend = `  (prev ${t.prev}${t.date ? ' ' + t.date : ''}, ${arrow}${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}%)`;
+        }
+        // Loud note when the lab flagged this analyte out-of-range but the clinician's
+        // own parameter accepted it — the clinician must SEE that they are overriding a
+        // lab flag, on which analyte, before confirming.
+        let override = '';
+        if (profile && profile.paramsOverrideLabFlags === true && param && (r.isAbove || r.isBelow)) {
+          const val = Number(r.value);
+          const within =
+            Number.isFinite(val) &&
+            (param.low == null || val >= param.low) &&
+            (param.high == null || val <= param.high);
+          if (within) override = `  ⚠ lab flagged ${r.isBelow ? 'low' : 'high'} — accepted by your set range`;
+        }
+        return ` • ${name}: ${valStr}${limit}${trend}${override}`;
+      });
+    const n = lines.length;
+    const list = n ? lines.join('\n') : ' • (no individual analytes detected)';
+    const profName = profile && isStr(profile.name) ? profile.name : 'this profile';
+    const normalOpt =
+      profile && profile.filing && isStr(profile.filing.normalOptionText) ? profile.filing.normalOptionText : 'normal';
+    const modeLine =
+      mode === 'confirm' ? `You are in "ask, then file" mode — clicking OK files this result now.\n\n` : '';
+    return (
+      `File this result as NORMAL?\n\n` +
+      modeLine +
+      `Each value below was checked against the limit shown, and will be marked "${normalOpt}" using "${profName}":\n\n` +
+      list +
+      `\n\n` +
+      `The suite checks numeric values only — it cannot judge free text or whether this is the right patient. Read the values and any trend (prev → now) yourself before confirming.\n\n` +
+      `Filing writes to Medicus and removes this from the worklist. This cannot be undone from here.\n\n` +
+      `OK = file ${n > 1 ? 'them all as normal' : 'as normal'}    Cancel = leave for manual review`
+    );
+  }
+
+  // ── PHI heuristics ──────────────────────────────────────────────────────────────
+  // A filing profile is configuration — it must never carry patient data. These
+  // checks are a warning net for accidental pastes (e.g. a message template copied
+  // with a real name/NHS number in it), not a guarantee.
+
+  const NHS_NUMBER_RE = /\b\d{3}[ -]?\d{3}[ -]?\d{4}\b/;
+  const DOB_RE = /\b(dob|date of birth)\b/i;
+
+  function profileText(p) {
+    if (!p || typeof p !== 'object') return '';
+    const m = p.patientMessage || {};
+    const f = p.filing || {};
+    return [p.name, p.notes, m.template, f.filingComment, ...(Array.isArray(p.match) ? p.match : [])]
+      .filter(isStr)
+      .join('\n');
+  }
+
+  function phiWarnings(profiles) {
+    const warnings = [];
+    for (const p of Array.isArray(profiles) ? profiles : []) {
+      const text = profileText(p);
+      if (NHS_NUMBER_RE.test(text)) {
+        warnings.push(
+          `"${p && p.name}": contains a 10-digit number formatted like an NHS number — check no patient identifier has been pasted in.`
+        );
+      }
+      if (DOB_RE.test(text)) {
+        warnings.push(`"${p && p.name}": mentions a date of birth — check no patient details have been pasted in.`);
+      }
+    }
+    return warnings;
+  }
+
+  // ── LLM prompt ────────────────────────────────────────────────────────────────
+  // Same convention as kbSingleEntryPrompt() / resultRuleSchemaPrompt(): one
+  // self-contained prompt the clinician copies into any external LLM, alongside
+  // SCREENSHOTS of the Medicus filing screen, with the example JSON delimited by
+  // --- EXAMPLE JSON --- markers (extracted and round-trip-validated by
+  // test-lab-filing-utils.js).
+
+  const LF_PROMPT_SCHEMA = `FILING-PROFILE SCHEMA (output a single JSON object):
+- "name"   (required) — short label for this lab/report layout, e.g. "Routine bloods — normal, no action".
+- "match"  — array of lowercase substrings that identify reports this profile applies to. Medicus reports often have NO panel/section title, so match against the ANALYTE NAMES that appear on the report (e.g. ["haemoglobin","platelets","white cell","mcv"] for an FBC, or ["sodium","potassium","creatinine"] for U&E). Leave [] if unsure. At least one must appear in the report for the button to be offered.
+- "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
+- "parameters" — array of clinician-set normal ranges, one per analyte, checked IN ADDITION to the lab's own flags. Each: { "analyte": "<name>", "low": <number or null>, "high": <number or null>, "unit": "<unit>" }. Read the reference range from the screenshot where shown. CRUCIAL for analytes the lab shows with NO reference range (e.g. HbA1c): set the practice's own normal limit, e.g. { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" }. Use low and/or high (omit/null the bound that doesn't apply). A result outside its set range blocks one-click filing.
+- "requireRangeForAll" — boolean. If true, the button is suppressed unless EVERY numeric result has either a lab reference range or a parameter here — so an un-ranged analyte (like HbA1c) can never be filed until a parameter is set. Default false.
+- "paramsOverrideLabFlags" — boolean. If true, a result within a parameter range you set here counts as normal EVEN IF the lab flagged it out-of-range — for analytes where the lab's reference range is over-sensitive (e.g. eGFR flagged low at 89 against a 90–120 lab range, when your floor is 60). Only ever applies to analytes you give a parameter, never overrides an urgent flag, and is shown loudly in the confirm dialog. Default false. Set true only when you have deliberately set the clinically-correct range for that analyte.
+- "trend" — { "maxDeltaPct": <number> }. If set, blocks filing when any result has moved more than this percentage vs the patient's previous value (catches a creeping creatinine / falling eGFR even when still "in range"). Omit to disable.
+- "excludeIfMeds" — array of drug-name substrings; if the patient is on any (e.g. ["methotrexate","lithium","amiodarone"]), filing is not offered (monitored drugs need a human). Omit if not applicable.
+- "suppressIfText" — array of phrases (e.g. ["telephone result","call patient"]); if the report text contains any, filing is not offered (a contact was promised). Omit if not applicable.
+- "filing" (required) — how to file a NORMAL result by DRIVING THE SCREEN. Use the VISIBLE TEXT / button label exactly as it appears, never an internal id. On Medicus, filing is done at WHOLE-REPORT level (not per analyte): there is one button/note that marks the report normal, then a file button.
+    - "normalOptionText" (required) — the exact visible text of the control that marks the report as normal / no-action. On Medicus this is the filing-note link "Normal result, no action required".
+    - "nextStepText" — if the screen has a "Next Steps" choice (radio/option), the exact visible text of the NO-FURTHER-ACTION option, so the macro selects it explicitly and never files down a "message patient" or "reassign" path. On Medicus this is "File results with no further action". OMIT only if there is no such choice.
+    - "nextStepMessageText" — optional: the exact visible text of the "file AND message the patient" Next Step option, e.g. "File results and message patient". Only used when the clinician chooses the "+ message patient" action; the macro selects it and prepares the message but NEVER sends — the clinician sends in the lab system. OMIT if the lab has no messaging step.
+    - "fileButtonText"   (required) — the exact visible text of the button that files the result (no-action path). On Medicus this is "File results".
+    - "completeButtonText" — only if a SEPARATE button completes/closes the task after filing; OMIT if the file button is the final step (Medicus files in one step, so leave this out).
+    - "openControlText"  — only if the normal option is hidden behind a menu you must open first; OMIT otherwise (Medicus shows it directly).
+    - "rowSelector"      — leave out; Medicus files at report level, not per row.
+    - "filingComment"    — usually unnecessary on Medicus (the "Add filing note…" button already records the note). Omit unless your lab needs an extra free-text comment.
+- "patientMessage" — optional. The macro only PREPARES a draft; the clinician sends it.
+    - "template" — the message body, e.g. "Dear {firstName}, your recent blood test results are all normal. No action is needed...". Use {firstName} as the only placeholder.
+    - "triggerText"/"fieldText" — visible text of the control that opens the message and the message field, if you can see them on the screenshots; else omit.
+
+Do NOT include "id", "source", "reviewed", "enabled" or "updatedAt" — the extension sets those, and the profile always arrives DISABLED until a clinician reviews and enables it.`;
+
+  const LF_PROMPT_RULES = `1. Read everything off the SCREENSHOTS the clinician pastes. Match controls by their VISIBLE TEXT exactly (including capitalisation of words, punctuation like "U&E").
+2. If you cannot see a control's exact text on the screenshots, OMIT that field rather than guessing — a wrong label makes the macro abort safely, but a guessed-wrong label that happens to match the wrong control is dangerous.
+3. NEVER include any patient details, real or invented, anywhere — not in the message template, not in comments, not in examples. Use {firstName} as the only placeholder.
+4. The patient message must say results are normal/no action needed in plain, reassuring English (reading age ~9–11). Never imply a result that needs action is normal.`;
+
+  function filingProfilePrompt() {
+    return `You are helping a UK NHS GP configure a "lab results auto-filing" profile for the Medicus clinical system. The clinician will paste SCREENSHOTS of their lab-result FILING screen (the investigation-report task where the whole report is marked normal/no-action and filed). Your job is to turn those screenshots into ONE JSON filing profile that tells a browser macro exactly which on-screen controls to use to file an all-normal result. NOTE: Medicus files the WHOLE report in one step — there is a button to mark it normal/no-action and a button to file; there are usually no per-analyte controls.
+
+This profile is used ONLY when the suite has already confirmed every parameter in the result is within normal limits. It must drive the SAME controls a clinician would click — never invent a shortcut.
+
+Output ONLY a single valid JSON object for one profile — no markdown fences, no commentary.
+
+${LF_PROMPT_SCHEMA}
+
+INSTRUCTIONS:
+${LF_PROMPT_RULES}
+
+--- EXAMPLE JSON ---
+{
+  "name": "Routine bloods — normal, no action (Medicus)",
+  "match": ["haemoglobin", "platelets", "white cell", "mcv", "sodium", "potassium", "creatinine"],
+  "analytes": ["haemoglobin", "white cell count", "platelets", "rbc", "mcv", "neutrophils", "sodium", "potassium", "creatinine", "egfr"],
+  "parameters": [
+    { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" },
+    { "analyte": "egfr", "low": 60, "unit": "mL/min/1.73m2" }
+  ],
+  "requireRangeForAll": false,
+  "filing": {
+    "normalOptionText": "Normal result, no action required",
+    "nextStepText": "File results with no further action",
+    "nextStepMessageText": "File results and message patient",
+    "fileButtonText": "File results"
+  },
+  "patientMessage": {
+    "template": "Dear {firstName}, your recent blood test results are all normal and no action is needed. Thank you."
+  }
+}
+--- END EXAMPLE ---
+
+After this line, the clinician pastes screenshots of the filing screen (and may describe the exact button labels):
+`;
+  }
+
+  const LabFilingUtilsApi = {
+    LF_ID_RE,
+    LF_SOURCES,
+    LF_COMMIT_MODES,
+    LF_LIMITS,
+    validateProfile,
+    sanitiseProfile,
+    lockForReview,
+    generateProfileId,
+    seedAnalytesFromResultRules,
+    phiWarnings,
+    filingProfilePrompt,
+    reportHaystack,
+    matchProfile,
+    matchProfiles,
+    mergeProfilesForReport,
+    fileabilityBlockers,
+    profileParamBlockers,
+    applyParamOverrides,
+    analyteTrend,
+    trendBlockers,
+    medExclusionBlockers,
+    suppressedBlockers,
+    textSuppressBlockers,
+    auditCsv,
+    extractFirstName,
+    fillTemplate,
+    buildFilingConfirmMessage,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = LabFilingUtilsApi;
+  } else if (typeof self !== 'undefined') {
+    // Works in both extension pages (window === self) and service workers (no window).
+    self.LabFilingUtils = LabFilingUtilsApi;
+  }
+})();
