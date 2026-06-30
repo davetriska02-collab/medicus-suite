@@ -1,16 +1,16 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.137.0
-**Generated:** 2026-06-29 (automated)
+**Version:** v3.146.0
+**Generated:** 2026-06-30 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome browser extension for UK GP practices that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional on-page overlays that surface monitoring alerts, demand data, appointment capacity, investigation result triage, and clinical reference directly within the Medicus interface. All processing happens locally in the browser; no patient data is transmitted to any external service, no record is written to, and no clinical inference is performed — everything shown is derived from data already present in Medicus.
+Medicus Suite is a Chrome browser extension for UK GP practices that runs alongside the Medicus electronic patient record system (Medicus Health Ltd / Doctolib). It adds a side panel and optional on-page overlays that surface monitoring alerts, demand data, appointment capacity, investigation result triage, and clinical reference directly within the Medicus interface. All processing happens locally in the browser; no patient data is transmitted to any external service and no clinical inference is performed — everything shown is derived from data already present in Medicus. The suite is predominantly a passive display tool; a small number of opt-in workflow actions (e.g. create-task, re-assign, book, and — newest — Lab Results Auto-Filing) drive Medicus's _own_ controls on the clinician's behalf, always behind an explicit confirmation and never automatically.
 
 ## At a glance
 
 - 13 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, and the live patient record
-- 6 in-page content-script features (on-screen overlays, workflow buttons, and relays)
+- 7 in-page content-script features (on-screen overlays, workflow buttons, and relays — incl. the Lab Results Auto-Filing button)
 - 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
 - 7 rule types in the alert engine
 - 27 drug-monitoring rules, 52 QOF indicators, 13 QOF registers, 5 vaccine rules, 35 bundled investigation result rules, and 26 starter alerts in the prescribing-safety library
@@ -178,11 +178,12 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 - **Choose your tabs**: pick which side-panel tabs appear and in what order — discoverable in Options, and surfaced for managed installs so a Practice Profile can ship a tailored tab set per seat
 - **Backup / restore**: full suite-wide envelope export and import covering all modules and rule sets. All backups contain configuration only — no patient-identifiable data is ever included
 - **Display preferences**: theme (light/dark/auto), size (compact/medium/large), and colourblind mode
-- **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live result inspector that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, and QOF submission thresholds
+- **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live result inspector that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, QOF submission thresholds, and **Lab Filing** (admin-only authoring of the all-normal filing profiles, with optional disabled-by-default starter profiles)
 - **Glossary tooltips**: clinical codes, jargon, and pressure indices carry click-to-explain inline tooltips across the Condor, Reception, and Sentinel modules
 
 ## Recent additions (last 4 weeks)
 
+- **v3.140.0–146.1 (2026-06-29–30)** — **Lab Results Auto-Filing**: a one-click "File all normal" action that appears in Medicus only when the suite has confirmed every value on an investigation-report task is within normal limits. It drives Medicus's own filing controls behind a confirmation (no full-auto), with an all-normal gate that fails closed on free text/cultures, unmatched reports, significant trends vs the previous value, monitored drugs, promised-contact phrases and a per-patient never-file list; clinician-set per-analyte ranges (incl. an opt-in override of over-sensitive lab reference ranges such as eGFR); multi-panel (combined-bloods) tasks via profile union; a prepare-only patient message; per-install kill switch; and a local audit log. **This is the suite's first feature that drives a clinical-record write** (filing a result), so it is admin-configured in Options → Lab Filing (not a side-panel tab), every profile arrives disabled until reviewed, and optional starter profiles (FBC/U&E/Bone/LFT) load disabled
 - **v3.134.4–6 (2026-06-26)** — Outstanding investigation matching: HbA1c, TSH-only thyroid reports, and combined B12/Folate requests now correctly matched to their outstanding requests and auto-ticked on result; triage monitor UUID field now accepts the full Medicus inbox URL (UUID extracted automatically)
 - **v3.134.0–2 (2026-06-23)** — New inline "Create task for this patient" widget on task overview pages (prescribing, medical, admin): drives the Medicus task API directly with assignee, priority, description and snooze; inline booking widget now also appears on prescribing overviews (universal fallback anchor); slot-reservation keepalive prevents abandoned bookings from locking slots
 - **v3.131.0–133.5 (2026-06-21–23)** — One-click "send to routine prescriptions" button on prescription-request overviews (drives Medicus's own re-assign UI; configurable team/commit mode; H-035 hazard logged); inline "Book appointment for patient" widget injected into Medicus task pages; shared DOM-observer hub cuts per-feature observer count from 3 to 1 (performance); observer fast-paths eliminate reflow storms on idle SPA re-renders
@@ -196,4 +197,4 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 
 ## Safety posture
 
-Medicus Suite is a passive display tool. It reads data already present in Medicus and presents it in the browser — it writes to no patient record, performs no AI inference, transmits no patient data to any external service, and makes no clinical decisions. All computation happens locally in the extension. See INTENDED-PURPOSE.md.
+Medicus Suite is predominantly a passive display tool: it reads data already present in Medicus and presents it in the browser, performs no AI inference, transmits no patient data to any external service, and makes no clinical decisions. A small number of opt-in workflow actions (create-task, re-assign-to-routine, booking, and Lab Results Auto-Filing) drive Medicus's own UI controls on the clinician's behalf — always behind an explicit confirmation, never automatically, with Medicus performing its own validation and audit. Lab Results Auto-Filing is the most safety-significant of these (it files an investigation result) and is correspondingly gated: admin-only configuration, disabled-until-reviewed profiles, an all-normal fail-closed gate, and a per-install kill switch. All computation happens locally in the extension. See INTENDED-PURPOSE.md, HAZARD-LOG.md and CLINICAL-SAFETY-NOTICE.md.
