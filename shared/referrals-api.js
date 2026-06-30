@@ -436,11 +436,70 @@
     }
   }
 
+  // ── 2WW / Faster-Diagnosis safety-net ──────────────────────────────────────
+  // An "open loop" is a suspected-cancer (TwoWeekWait) referral still showing
+  // displayStatus 'Incomplete' — no confirmed outcome has come back. NHS
+  // Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+  // of cancer-delay negligence claims, and the Faster Diagnosis Standard (80% by
+  // Mar 2026) makes the open window a target as well as a medicolegal risk.
+  //
+  // Pure: classifies and ages the rows the Referrals module already fetched. No
+  // new endpoint. Ages are calendar days since referralDate; thresholds are
+  // heuristic and surfaced in the UI as such.
+  const SAFETY_NET_OPEN_STATUS = 'Incomplete';
+
+  function referralAgeDays(referralDate, nowISO) {
+    if (!referralDate) return null;
+    const start = new Date(String(referralDate).slice(0, 10) + 'T00:00:00');
+    const now = nowISO ? new Date(nowISO) : new Date();
+    if (isNaN(start.getTime()) || isNaN(now.getTime())) return null;
+    return Math.floor((now.getTime() - start.getTime()) / 86400000);
+  }
+
+  // buildSafetyNet(rawReferrals, { nowISO, watchDays=14, overdueDays=21, priorities=['TwoWeekWait'] })
+  //   → { rows: [{ ...referral, ageDays, severity }], counts:{ total, overdue, watch }, watchDays, overdueDays }
+  // rows = the OPEN loops (displayStatus Incomplete) for the chosen priorities,
+  // sorted oldest-first. severity: 'overdue' (≥ overdueDays), 'watch' (≥ watchDays), else 'open'.
+  function buildSafetyNet(rawReferrals, opts) {
+    const o = opts || {};
+    const watchDays = o.watchDays != null ? o.watchDays : 14;
+    const overdueDays = o.overdueDays != null ? o.overdueDays : 21;
+    const prioritySet = new Set(
+      (o.priorities && o.priorities.length ? o.priorities : ['TwoWeekWait']).map((p) => normalisePriority(p))
+    );
+    const rows = [];
+    let overdue = 0;
+    let watch = 0;
+    for (const r of rawReferrals || []) {
+      if (!r) continue;
+      if ((r.displayStatus || '') !== SAFETY_NET_OPEN_STATUS) continue;
+      if (!prioritySet.has(normalisePriority(r.priority || ''))) continue;
+      const ageDays = referralAgeDays(r.referralDate, o.nowISO);
+      let severity = 'open';
+      if (ageDays != null && ageDays >= overdueDays) {
+        severity = 'overdue';
+        overdue++;
+      } else if (ageDays != null && ageDays >= watchDays) {
+        severity = 'watch';
+        watch++;
+      }
+      rows.push({ ...r, ageDays, severity });
+    }
+    rows.sort((a, b) => {
+      const aa = a.ageDays == null ? -1 : a.ageDays;
+      const bb = b.ageDays == null ? -1 : b.ageDays;
+      return bb - aa; // oldest first
+    });
+    return { rows, counts: { total: rows.length, overdue, watch }, watchDays, overdueDays };
+  }
+
   const api = {
     PRIORITY_COLOURS,
     STATUS_COLOURS,
     ALL_PRIORITIES,
     ALL_STATUSES,
+    referralAgeDays,
+    buildSafetyNet,
     buildApiUrl,
     buildUrlFromTemplate,
     extractBaseUrl,

@@ -688,3 +688,261 @@
 .sweep-resume-discard:active {
   opacity: 0.7;
 }
+
+/* ── QOF points-at-risk prioritiser ─────────────────────────────────────────── */
+.sweep-qof-panel {
+  margin: 8px 0;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--accent-dim);
+}
+.sweep-qof-summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sweep-qof-summary::-webkit-details-marker {
+  display: none;
+}
+.sweep-qof-summary::before {
+  content: '\25B6\0020';
+  font-size: 9px;
+  color: var(--accent);
+}
+.sweep-qof-panel[open] .sweep-qof-summary::before {
+  content: '\25BC\0020';
+}
+.sweep-qof-summary strong {
+  color: var(--accent);
+  font-size: 14px;
+}
+.sweep-qof-cvd {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: var(--bg-mid);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+}
+.sweep-qof-sub {
+  color: var(--text-4);
+  font-size: 11px;
+  margin-left: auto;
+}
+.sweep-qof-body {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--accent-line);
+  background: var(--bg-elev);
+}
+.sweep-qof-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.sweep-qof-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 460px) {
+  .sweep-qof-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.sweep-qof-col-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-4);
+  margin-bottom: 4px;
+}
+.sweep-qof-plist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sweep-qof-prow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sweep-qof-pts {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 22px;
+  text-align: right;
+}
+.sweep-qof-pname {
+  flex: 1;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sweep-qof-pcodes {
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  padding-left: 28px;
+}
+.sweep-qof-cvd-dot {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+}
+.sweep-qof-ilist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sweep-qof-irow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sweep-qof-icode {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  min-width: 56px;
+}
+.sweep-qof-itag {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent);
+}
+.sweep-qof-iname {
+  flex: 1;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sweep-qof-itotal {
+  color: var(--text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ── Create recall task (close-the-loop) ────────────────────────────────────── */
+.sweep-recall {
+  margin-top: 6px;
+}
+.sweep-recall-btn {
+  font-size: 11px;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.sweep-recall-btn:hover {
+  background: var(--accent-dim);
+}
+.sweep-recall-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sweep-recall-slot {
+  margin-top: 6px;
+}
+.sweep-recall-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sweep-recall-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.sweep-recall-assignee,
+.sweep-recall-priority,
+.sweep-recall-desc {
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+.sweep-recall-desc {
+  resize: vertical;
+  line-height: 1.4;
+}
+.sweep-recall-actions {
+  display: flex;
+  gap: 6px;
+}
+.sweep-recall-create {
+  font-size: 12px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sweep-recall-create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sweep-recall-cancel {
+  font-size: 12px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.sweep-recall-loading {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 4px 0;
+}
+.sweep-recall-status {
+  min-height: 0;
+}
+.sweep-recall-error {
+  font-size: 11px;
+  color: var(--red);
+}
+.sweep-recall-done {
+  font-size: 12px;
+  color: var(--green);
+  padding: 4px 0;
+}

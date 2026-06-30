@@ -519,9 +519,55 @@ function renderDiagnostics() {
   `;
 }
 
+// 2WW / Faster-Diagnosis safety-net worklist: suspected-cancer referrals still
+// showing Incomplete, oldest-first, with calendar-day ages. Reads raw referrals
+// (the module already fetched them) — no new endpoint, no patient UUID needed.
+function renderSafetyNet() {
+  const api = ApiNs();
+  if (!api || !api.buildSafetyNet || !Array.isArray(state.rawReferrals)) return '';
+  const sn = api.buildSafetyNet(state.rawReferrals, {});
+  if (!sn.rows.length) return '';
+
+  const rowsHtml = sn.rows
+    .map((r) => {
+      const name = [r.patientGivenName, r.patientFamilyName].filter(Boolean).join(' ') || 'Patient';
+      const age = r.ageDays == null ? '—' : `${r.ageDays}d`;
+      const sevClass =
+        r.severity === 'overdue' ? 'ref-sn-overdue' : r.severity === 'watch' ? 'ref-sn-watch' : 'ref-sn-open';
+      const svc = r.referralService ? `<span class="ref-sn-svc">${escHtml(r.referralService)}</span>` : '';
+      const clin = r.referringClinician ? `<span class="ref-sn-clin">${escHtml(r.referringClinician)}</span>` : '';
+      return `<div class="ref-sn-row ${sevClass}">
+        <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
+        <span class="ref-sn-name">${escHtml(name)}</span>
+        ${svc}${clin}
+      </div>`;
+    })
+    .join('');
+
+  const overdueBadge = sn.counts.overdue
+    ? `<span class="ref-sn-badge ref-sn-badge-overdue">${sn.counts.overdue} &ge; ${sn.overdueDays}d</span>`
+    : '';
+  const watchBadge = sn.counts.watch
+    ? `<span class="ref-sn-badge ref-sn-badge-watch">${sn.counts.watch} &ge; ${sn.watchDays}d</span>`
+    : '';
+
+  return `
+    <div class="ref-sn-card">
+      <div class="ref-sn-head">
+        <span class="ref-sn-title">&#9888; Open 2WW safety-net (${sn.counts.total})</span>
+        ${overdueBadge}${watchBadge}
+      </div>
+      <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard.</p>
+      <div class="ref-sn-rows">${rowsHtml}</div>
+    </div>`;
+}
+
 function renderData() {
+  // The 2WW safety-net reads RAW referrals (not the chip-filtered view) so a
+  // clinician filtering to e.g. "Completed" can never hide an open 2WW loop.
+  const safetyNet = renderSafetyNet();
   const a = getFilteredAggregated() || state.aggregated;
-  if (!a || a.total === 0) return `<div class="ref-empty">No referrals in this date range.</div>`;
+  if (!a || a.total === 0) return safetyNet + `<div class="ref-empty">No referrals in this date range.</div>`;
 
   const total = a.total;
   const dbTotal = state.totalCount;
@@ -533,6 +579,8 @@ function renderData() {
       : `${formatDateLabel(state.startDate)} → ${formatDateLabel(state.endDate)}`;
 
   return `
+    ${safetyNet}
+
     ${dbTotal > shown ? renderPageNotice(shown, dbTotal) : ''}
 
     <div class="ref-summary-card">

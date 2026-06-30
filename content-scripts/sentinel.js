@@ -1209,6 +1209,11 @@
             ? window.SentinelRules.listUnmatchedMedicationsDetailed(data.medications || [], rules)
             : [];
           const unmatchedMeds = unmatchedMedsDetailed.map((u) => u.name);
+          // Elevate any high-risk drug that slipped through unmatched (odd brand,
+          // exclude, or disabled rule) — a silent monitoring blind spot.
+          const unmatchedHighRisk = window.SentinelRules.flagHighRiskUnmatched
+            ? window.SentinelRules.flagHighRiskUnmatched(unmatchedMedsDetailed)
+            : [];
           // Stamp rule file metadata onto the trace envelope (captured once at loadRules time).
           let trace = rawTrace;
           if (trace && trace.ruleset) {
@@ -1224,7 +1229,7 @@
           // Assess extraction drift (best-effort — never blocks chip publication).
           const drift = await recordAndAssessDrift(data);
           if (gen !== _evalGen) return; // navigation superseded us during drift assess
-          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift, _journalAugmentFailed, _journalAugmentError);
+          publishSnapshot(chips, data.patientContext, health, data, unmatchedMeds, unmatchedMedsDetailed, trace, drift, _journalAugmentFailed, _journalAugmentError, unmatchedHighRisk);
         })
         .catch(() => {
           if (gen === _evalGen) invalidateSnapshot();
@@ -1351,7 +1356,7 @@
   // with the triage-lens HUD (content.js:1448, 2092), which evaluates a
   // drug-rules-only set and would otherwise clobber the QOF chips on every
   // record/route tick (e.g. when searching the journal).
-  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift, journalAugmentFailed, journalAugmentError) {
+  function publishSnapshot(chips, pc, health, rawData, unmatchedMeds, unmatchedMedsDetailed, trace, drift, journalAugmentFailed, journalAugmentError, unmatchedHighRisk) {
     // Remember the patient we just evaluated so the nav watcher can recognise
     // same-patient sub-navigation and avoid blanking these chips.
     if (pc && pc.patientUuid) _lastPatientUuid = pc.patientUuid;
@@ -1364,6 +1369,7 @@
       modules: (health && health.modules) || null,
       unmatchedMeds: unmatchedMeds || [],
       unmatchedMedsDetailed: unmatchedMedsDetailed || [],
+      unmatchedHighRisk: unmatchedHighRisk || [],
       // trace is in-memory only — never written to chrome.storage.local.
       // It is invalidated with the snapshot on navigation (invalidateSnapshot).
       trace: trace || null,

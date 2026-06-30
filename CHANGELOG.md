@@ -2,327 +2,201 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.146.1] — 2026-06-30
-
-### Lab filing: move the in-Medicus card to the bottom-left
-
-The action card was pinned bottom-right while all the filing controls (the
-"Normal result, no action required" notes and the File button) live down the
-left content pane — so the eye had to cross the whole screen. Moved the card to
-the bottom-left, beside the action; the transient toast moved to the bottom-right
-so the two never overlap.
-
-## [v3.146.0] — 2026-06-30
-
-### Lab filing moved to Options (admin-only) + optional starter profiles
-
-- **Relocated from the side panel to the Options page.** Filing rules drive an
-  irreversible patient-record write and are practice-level configuration, not
-  something an individual user should casually tweak — so the authoring/management
-  UI now lives in Options → **Lab Filing** (alongside Result Rules, Monitoring,
-  Backup), not as a side-panel tab. Removed the side-panel module registration
-  (panel.js/panel.html, pop-out, tab-catalog, tour step); the module moved to
-  `options/labfiling-section.js` and self-mounts there. The in-Medicus filing
-  button and all gate logic are unchanged — only the config surface moved.
-- **Optional starter profiles** for England Medicus (FBC, U&E, Bone profile, LFTs),
-  with the filing-control labels confirmed from a live capture. Baked in but
-  **never auto-installed**: an "Add starter profiles" button loads them, and they
-  arrive **disabled** for review (not every practice uses the same lab/layout, so
-  they're opt-in and must be checked against the real screen and switched on
-  deliberately). Parameters are set only where the lab gives none (Calcium) or its
-  range is over-sensitive (eGFR ≥60 with lab-flag override); everything else leans
-  on the lab's own ranges plus require-range-for-all.
-- **Bug fix (pre-existing):** `shared/io/labfiling-io.js` declared a top-level
-  `const _DANGEROUS_KEYS` that collided with the identical const in
-  `sentinel-io.js` when both load as classic scripts in options.html — the second
-  silently failed to execute, breaking lab-filing backup/restore. Namespaced to
-  `_LF_DANGEROUS_KEYS` (caught by a headless render of the Options page). TOUR_VERSION
-  tracks back to 5 (the removed lab-filing step was the only v6 step).
-
-## [v3.145.0] — 2026-06-30
-
-### Lab filing: multi-panel (combined-bloods) tasks
-
-A live capture confirmed one investigation-report task can carry several panels
-(e.g. Bone profile + U&E + LFTs) under a single report, each with its own
-"Normal result, no action required" filing note but ONE shared "File results"
-button — so filing is a whole-task action. Previously only the single best-matching
-profile was used, so a U&E profile (with require-range-for-all) blocked the whole
-task on a Bone analyte like Calcium that it didn't cover.
-
-- New `matchProfiles()` / `mergeProfilesForReport()`: every enabled profile that fits
-  the report is merged into one effective profile — **union** of parameters and
-  med/text guards, the **strictest** trend threshold, require-range / lab-flag-override
-  on if **any** matched profile sets it, and **confirm** mode if any does. So you author
-  a Bone, U&E, LFT, FBC profile once each and they combine automatically on whatever
-  combined report a task carries.
-- The macro now marks **every** panel's "Normal result, no action required" note (it
-  already clicked all matches) and files the whole task in the one shared action.
-- The card names the coverage on a combined task ("3 profiles matched · Covers: U&E,
-  Bone, LFTs") so you can see every panel is accounted for before filing.
-- Tests: matchProfiles/merge semantics (union params, strictest trend, confirm-wins,
-  names for the card) — full suite green.
-
-## [v3.144.0] — 2026-06-30
-
-### Lab filing: in-Medicus button redesigned as one cohesive card
-
-The injected control was three mismatched saturated pills (green/purple/brown)
-floating bottom-right with the critical text truncated ("…U&E / Creatinine & e…"),
-emoji in the chrome, and a tiny afterthought link. Redesigned to the suite's card
-doctrine: a single calm white card with a hairline border + soft shadow, one
-left-accent stripe carrying the state colour, a status dot, a "Lab filing" eyebrow,
-and — crucially — **the matched profile name as the card title**, so you can see at a
-glance *which* rule fired (the previous chip gave no clear indicator).
-
-- **Ready state:** green stripe/dot, profile name, a one-line reassurance, a clear
-  primary "Review & file all normal" / "File all normal…" button, an optional quiet
-  "+ message patient" secondary, and a footer "Never auto-file this patient" link.
-- **Not-offered state:** amber stripe/dot, "<profile> — not auto-filed", and the
-  reasons shown **inline** (no longer hover-tooltip-only).
-- No emoji in chrome; full profile text wraps instead of truncating; `:focus-visible`
-  rings on every control; toast moved to bottom-left so it never overlaps the card.
-- Pure styling/markup of the injected card — the filing logic, gates and macro core
-  (and their 37 DOM tests) are untouched.
-
 ## [v3.143.0] — 2026-06-30
 
-### Lab filing: "my range wins" lab-flag override + a visible not-offered indicator
+### Lab Results Auto-Filing — one-click filing of all-normal results
 
-Two fixes prompted by a real U&E filing screen where the button silently declined.
+A confirm-gated, fail-closed "File all normal" action that appears in Medicus only
+when the suite has confirmed every value on an investigation-report task is within
+normal limits. It drives Medicus's own filing controls (marks each panel "Normal
+result, no action required", selects the no-further-action Next Step, files) — never
+full-auto, with Medicus performing its own validation and audit. **This is the suite's
+first feature that drives a clinical-record write**, so it is gated accordingly.
 
-- **Why it declined was invisible.** When a profile matched but the result wasn't
-  offered, the in-Medicus chip just said "Auto-file not offered — review manually" with
-  the reason buried in a hover-tooltip. It now **names the matched profile** ("⚠ U&E —
-  not auto-filed") and shows the **reason(s) inline** (e.g. "eGFR flagged low by the lab
-  (89, range 90–120)"), so you can see the rule ran and judged — not a silent no-op.
-- **Lab reference ranges can be over-sensitive.** An eGFR of 89 is flagged low against a
-  lab range of 90–120, which blocked the whole U&E even though it's clinically normal.
-  Profiles gain an opt-in **"let my ranges override the lab's out-of-range flag"**
-  (`paramsOverrideLabFlags`): a result within a range you've set for that analyte counts
-  as normal for the all-normal gate even if the lab flagged it. Hard safety bounds — it
-  only ever applies to analytes you've explicitly ranged, **never** overrides an
-  urgent/requires-review flag, only ever *accepts* (a value outside your range still
-  blocks, and is still caught by your parameter check), and every overridden analyte is
-  shown **loudly in the confirm dialog** ("eGFR 89 ⚠ lab flagged low — accepted by your
-  set range"). Default off; the lab flag stays authoritative until you opt in per profile.
-- New `applyParamOverrides()` clones the report and clears only the relevant lab flags,
-  then the same severity scorer re-runs — the engine stays oblivious to filing profiles.
-  Schema/validate/sanitise extended; module form gains the toggle; the card shows it as
-  a guard. Tests: utils 129 checks (incl. an integration test proving the eGFR-89 U&E
-  goes amber→none with the override), full suite green.
+(Developed across the branch as 3.138–3.146; consolidated here as one entry landing
+above the v3.138–v3.142.1 GP-pressures set that merged to main in parallel.)
+
+- **All-normal gate, fail-closed.** Offers only when severity is `none` and nothing the
+  gate can't judge is present (free text/cultures, unmatched report, missing result
+  rules). Clinician-set **per-analyte parameters** cover analytes the lab leaves
+  un-ranged (HbA1c, Calcium); an opt-in **"my range wins"** override accepts a value
+  inside your set range even when the lab over-flags it (e.g. eGFR 89 vs a 90–120 lab
+  range), shown loudly in the confirm dialog and never overriding an urgent flag.
+- **Trend / drug / text / patient guards.** Blocks on a significant move vs the previous
+  value, a monitored drug (meds fetched only when configured, fail-closed on error), a
+  promised-contact phrase, or a per-patient "never auto-file" list.
+- **Multi-panel (combined bloods).** A task carrying Bone + U&E + LFT under one report
+  with one shared File button is handled by merging every matching profile into one
+  effective profile (union of parameters/guards, strictest trend, confirm-wins).
+- **Admin-only configuration.** The authoring/management UI lives in **Options → Lab
+  Filing** (not a side-panel tab — practice-level config, not a per-user tweak), with
+  optional **starter profiles** (FBC/U&E/Bone/LFT) that load **disabled** for review.
+  Every profile arrives disabled until reviewed and the safety notice acknowledged.
+- **In-Medicus card** — one calm card titled to the matched profile, positioned by the
+  filing controls; reasons shown inline when filing is not offered.
+- **Prepare-only patient message**, external-LLM profile builder, per-install **kill
+  switch**, machine-local **audit log** + CSV export, and full backup/restore.
+- Fixes a pre-existing global-scope collision (`_DANGEROUS_KEYS` in `labfiling-io.js`
+  vs `sentinel-io.js`) that was silently breaking lab-filing backup in Options.
+- Tests: `test-lab-filing-utils.js`, `test-labfiling-io.js`, `test-lab-file-macro.js`
+  (fake-DOM harness). Full suite green.
+
+> **Pending CSO review:** as the suite's first record-writing feature, the formal
+> safety docs (INTENDED-PURPOSE, HAZARD-LOG, CLINICAL-SAFETY-NOTICE) warrant a CSO
+> review for Lab Filing. The CSO-review ledger was deliberately not advanced here.
+
+## [v3.142.1] — 2026-06-29
+
+### Verification fixes for the v3.138–v3.142 feature set
+
+Found while headless-rendering the four new surfaces (light + dark) and running the
+real ESLint gate:
+
+- **`sweep.css`:** the QOF panel body referenced an undefined token `var(--bg-1)`
+  (would have rendered as an unstyled surface — the "white rectangle" failure
+  mode); switched to the defined `var(--bg-elev)`. Also simplified
+  `var(--border-dim, …)` to the defined `var(--border)`.
+- **`eslint.config.mjs`:** registered the new `shared/task-api.js` as an ES module
+  (alongside `shared/medicus-api.js`) so `eslint .` parses it; the project lint now
+  passes clean across the whole tree.
+
+Headless Chromium render confirmed all four surfaces (Sentinel high-risk banner,
+Sweep QOF prioritiser, Sweep recall form, Referrals 2WW safety-net) style correctly
+in both themes with every design token resolving.
 
 ## [v3.142.0] — 2026-06-29
 
-### Lab filing: GP-panel wishlist — trend, drug/text/patient guards, governance
+### Sentinel: ACE-I/ARB post-initiation U&E check (NICE NG136) — PENDING CSO REVIEW
 
-Acts on the 11-persona GP review (`docs/appraisal/GP-PANEL-labfiling-2026-06-29.md`).
-The panel's single biggest clinical-safety concern was "the tool judges a snapshot, not
-a trajectory" — addressed here, alongside the rest of the prioritised wishlist. Every
-new gate fails **closed**. Full rationale (incl. what's deferred and why) in
-`docs/appraisal/GP-WISHLIST-RESPONSE-labfiling-2026-06-29.md`.
+NICE NG136 requires a U&E within ~1–2 weeks of **starting** (or uptitrating) an
+ACE-I/ARB. The `ace-arb` rule documented this in its notes but only enforced the
+*annual* U&E — so a newly-started patient who had a baseline U&E but no
+post-initiation recheck raised no alert (the annual interval reads "in date" off
+the baseline). This closes that gap.
 
-- **Trend / previous value (P1).** The confirm dialog now shows each analyte's
-  `prev → now (↑+N%)` from its history, and a per-profile **trend guard**
-  (`trend.maxDeltaPct`) blocks the offer when any result has moved more than the set %
-  vs last time — catches a creeping creatinine / falling eGFR even when still in range.
-  New `analyteTrend()` / `trendBlockers()`.
-- **Values + thresholds at confirm (P2).** The confirm dialog enumerates
-  `name: value unit [limit]` per analyte (profile range if set, else the lab's), states
-  the gate is numeric-only, and no longer over-claims "every parameter confirmed normal".
-- **Drug-monitoring exclusion (P3, quick-win).** Per-profile `excludeIfMeds`; the macro
-  fetches the medication regimen only when a profile sets exclusions and **fails closed**
-  if the fetch errors. New `medExclusionBlockers()`.
-- **Per-patient "never auto-file" list (P5).** A link on the in-Medicus button adds the
-  patient to a machine-local suppress list (`labfiling.suppress`, patient UUID only);
-  the module lists them with Remove. Never exported/imported (holds identifiers). New
-  `suppressedBlockers()`.
-- **Text safety-net (P9).** Per-profile `suppressIfText` blocks the offer when the report
-  text contains a phrase like "telephone result" / "call patient". New
-  `textSuppressBlockers()`.
-- **Governance (P6/P8).** Audit **Export CSV** (`auditCsv()`); the profile card now shows
-  the guards in force, last-edited date, and **fire-count on this device**; **Copy JSON**
-  shares a profile (arrives disabled).
-- **Kill switch + safer default (P10).** A practice **kill switch** (`config.killSwitch`)
-  hides the in-Medicus button everywhere instantly without touching profiles;
-  `requireRangeForAll` now **defaults ON** for new profiles. LLM profiles remain badged
-  "Auto-suggested".
-- Schema/validation/sanitisation extended for `trend` / `excludeIfMeds` / `suppressIfText`;
-  backup IO round-trips `killSwitch`. Tests: utils 116 checks, IO 24, macro 37 — suite green.
+- **New additive engine mechanism** (`engine/rules-engine.js`): a drug-monitoring
+  test may carry `postInitiationDays` / `postInitiationDueSoonDays`. Unlike the
+  rolling-interval check (where a *missing* test is neutral `no_data`), a
+  post-initiation requirement that is unmet after the grace window is
+  **actionable** — `recently_initiated` (≤14d) → `due_soon` amber (≤21d) →
+  `overdue` red. It is satisfied by any qualifying test recorded **on or after**
+  the drug's start date.
+- **Fail-safe against crying wolf:** it fires ONLY when the drug's start date is
+  known (`med.startDate`, derived from issue history) AND no U&E exists since
+  starting. An established patient whose start date isn't visible never trips it.
+  No change to the existing annual U&E/BP intervals or any other rule.
+- **Rule change** (`rules/drug-rules.json`): added the post-initiation U&E test to
+  `ace-arb`; bumped `lastUpdated` and documented the change in `sourceNotes`.
+- New regression test `test-ace-arb-postinit.js` (14 checks), including the exact
+  NG136 gap (baseline-before-start → overdue while the annual reads in-date) and
+  the no-false-alarm case (unknown start date → neutral).
+- **This is a clinical-rule change and is flagged PENDING CSO (Dr Triska) review**
+  before merge, per the suite's clinical-safety governance.
 
 ## [v3.141.0] — 2026-06-29
 
-### Lab filing: per-analyte parameters (clinician-set normal ranges)
+### Sweep: one-click "Create recall task" — close the detection→action loop
 
-The all-normal gate previously trusted only the lab's own flags — so an analyte the
-lab shows with no reference range (e.g. HbA1c) sailed through as "normal". Profiles
-can now carry **per-analyte parameters** the clinician sets, checked on top of the
-lab's flags:
+Sweep already found tomorrow's patients with overdue monitoring and QOF gaps, but
+the only output was a printable reception handout — the actual recall task still
+had to be made by hand. This closes the loop: a per-row "Create recall task"
+button writes a real task into Medicus.
 
-- New `parameters` on a profile: rows of `{ analyte, low, high, unit }`. A result
-  outside its set range **blocks one-click filing** (new `profileParamBlockers()` in
-  `shared/lab-filing-utils.js`, folded into the macro gate). Essential for HbA1c and
-  any un-ranged analyte — the clinician supplies the limit.
-- New `requireRangeForAll` toggle: when on, the button is suppressed unless **every**
-  numeric result has either a lab reference range or a parameter set here — so an
-  un-ranged analyte can never be filed until a parameter exists.
-- Parameters can be **detected** from the screen capture (the capture script now
-  surfaces each analyte's lab reference range — range only, never patient values —
-  so the LLM/seed can pre-fill them), or set **manually**.
-- Authoring UI: a Parameters editor (add/remove analyte rows with min/max/unit) in
-  the profile form; the LLM prompt/example now include `parameters` with HbA1c as the
-  worked example. Validation rejects malformed rows (no bound, low>high, non-numeric);
-  sanitisation coerces and whitelist-rebuilds them.
-- Tests cover validate/sanitise of parameters and `profileParamBlockers` (in-range
-  fileable, out-of-range blocked, HbA1c with no lab range, requireRangeForAll).
+- **New shared client** `shared/task-api.js` drives Medicus's OWN general-task
+  endpoints (`GET /patient/data/workflow/general-task/create`,
+  `POST /patient/workflow/general-task/create`) with credentialed fetches — the
+  identical, already-shipping pattern `slots/booking-api.js` uses to create
+  appointments from the side panel (the extension holds `host_permissions` for
+  `*.api.england.medicus.health`). Medicus stays the system of record; its
+  validation, access control and audit fire as normal.
+- **Per-row inline confirm form** (assignee + an editable description prefilled
+  from that patient's gaps via the new pure `buildRecallDescription()` in
+  `sweep-core.js`, reusing the same instruction grouping as the handout). One
+  explicit task per click — there is deliberately **no bulk "create all"**, the
+  Create button is disabled until an assignee is chosen, and it disables after
+  success so a double-click can't double-create.
+- Only offered on action-needed rows when a practice code is set and there is a
+  bookable instruction to recall; the assignee/priority options are fetched once
+  per run and reused.
+- **No `defaults.json`, clinical-rule or storage-key change.** New checks added to
+  `test-sweep-core.js` for `buildRecallDescription`.
 
 ## [v3.140.0] — 2026-06-29
 
-### Lab filing: optional "+ message patient" action (prepare-only handoff)
+### Referrals: 2WW / Faster-Diagnosis safety-net worklist
 
-A console capture of the Medicus filing screen showed messaging is a native Next
-Step ("File results and message patient") that opens an inline compose area and
-relabels/disables the commit button. So the feature now offers the clinician BOTH
-actions at the point of use, without ever sending:
+NHS Resolution repeatedly cites absent safety-netting/follow-up as the root cause
+of cancer-delay negligence claims, and the Faster Diagnosis Standard rises to 80%
+(March 2026). The Referrals module already pulled outbound NHS referrals with
+priority and status, but only as aggregate charts — there was no worklist of the
+suspected-cancer referrals that have gone quiet.
 
-- **Two buttons** when a profile enables messaging: **"File all normal"**
-  (no-further-action path) and **"✉ + message patient"**. The first files as
-  before. The second selects Medicus's "File results and message patient" Next
-  Step, drops the profile's **custom message** (with `{firstName}` filled) on the
-  clipboard and into the compose field if it can find it, then **stops** — the
-  clinician checks the recipient and message in Medicus and presses send. The macro
-  **never selects a recipient and never sends.**
-- New `filing.nextStepMessageText` field (default "File results and message
-  patient"); the message action aborts if it can't find that option.
-- The no-further-action path no longer prepares a message at all — messaging is now
-  a separate, explicit action, so the patient's name never lands on the clipboard
-  unless the clinician chose the message action.
-- Schema/prompt/example and the authoring form updated; new macro tests cover the
-  handoff (selects the message step, fills the custom message, never files/sends)
-  and the abort when no message step is configured.
-
-## [v3.139.1] — 2026-06-29
-
-### Lab filing: corrected to the real Medicus filing model (from live console capture)
-
-A read-only console capture of an actual Medicus investigation-report filing screen
-showed the filing model differs from the initial placeholder assumptions, so the
-profile schema, LLM prompt/example, form labels and macro are corrected to match:
-
-- Medicus files at **whole-report level**, not per analyte: a "Normal result, no
-  action required" filing-note link, a **"Next Steps" radio group** (File results
-  with no further action / File results and message patient / Reassign task), and a
-  "File results" button.
-- New `filing.nextStepText` field: the macro now **explicitly selects the
-  no-further-action Next Step** before filing, and **aborts** if a profile names one
-  that isn't on screen — so it can never file while "message patient" or "reassign"
-  is selected. Regression test mirrors the captured screen.
-- `match` guidance corrected: Medicus reports often have no panel/section title, so
-  match terms are tested against the **analyte names**; example/placeholder updated.
-- Prompt, example JSON and form placeholders updated to the real Medicus labels.
-- Patient messaging on Medicus is a **native path** ("File results and message
-  patient" opens a Medicus dialog). Auto-driving that dialog is deferred until it is
-  captured; for now the feature files via the no-further-action path only.
+- **New pure helpers** `buildSafetyNet()` and `referralAgeDays()`
+  (`shared/referrals-api.js`) classify the already-fetched referrals: an "open
+  loop" is a `TwoWeekWait` referral still showing `displayStatus: Incomplete`
+  (no confirmed outcome). Returns the open rows oldest-first with calendar-day
+  ages and a severity (watch ≥ 14d, overdue ≥ 21d — heuristic, configurable).
+- **New worklist card** at the top of the Referrals view: open 2WW loops with
+  age, patient, service and clinician, plus overdue/watch badges. Reads the RAW
+  referrals, so the priority/status filter chips can never hide an open loop.
+- **No new endpoint** — reuses the outbound-referrals data the module already
+  fetches; no patient-identifiable data leaves the page. Thresholds are labelled
+  as a guide, not a clinical standard.
+- New regression test `test-referrals-safety-net.js` (19 checks).
 
 ## [v3.139.0] — 2026-06-29
 
-### Lab filing: fail-closed gate, honest wording, hardening (red-team + Practice follow-up)
+### Sweep: QOF points-at-risk prioritiser (CVD-prevention income lens)
 
-Acts on the consolidated findings of the red-team security audit and The Practice
-usability appraisal of the Lab filing feature. No change to the core safety model
-(disabled-by-default, manual default, no full-auto, abort-on-missing-control).
+QOF 25/26 → 26/27 redirected 141 points into a high-stakes CVD-prevention cluster
+(BP control, lipid lowering, antithrombotics) at 85–90% upper thresholds, where a
+small case-finding shortfall directly loses income. Sweep already evaluated every
+booked patient's QOF gaps but surfaced them one patient at a time, severity-sorted,
+with no sense of which gaps are worth the most.
 
-- **Fail closed on anything the numeric gate cannot judge** (the headline finding,
-  reached independently by the red-team from code and the pharmacist persona from
-  screenshots). New `fileabilityBlockers()` (`shared/lab-filing-utils.js`) suppresses
-  the "File all normal" button — and the macro core refuses — when a report is
-  **unmatched to a patient**, contains a **free-text / non-numeric result** (cultures,
-  "abnormal film" comments), or when **result rules are not loaded** (so cultures and
-  thresholds cannot be checked). The injected button now shows a visible "Auto-file
-  not offered — review manually" note with the reason, instead of silently hiding
-  (nurse + locum personas asked to see the not-offered state).
-- **Confirm dialog no longer over-claims.** It said "the suite has confirmed every
-  parameter is within normal limits"; it now states accurately that only numeric
-  values were checked against the profile's ranges, names its blind spots (free text,
-  trends, wrong patient), and shows the active commit mode. Prevents the slow erosion
-  of clinician vigilance.
-- **Click-time re-verify is now a live fetch** (bypasses the 60s severity cache) so an
-  irreversible file never acts on a result amended since the button appeared.
-- **Patient message copied to clipboard only after a successful file** (not in
-  manual/cancel paths) — it carries the patient's first name and the clipboard is
-  observable on a shared screen.
-- **Marking step restricted to interactive control roles** (no bare `div`/`span`) so a
-  compromised page element merely containing the normal-option label can't be clicked.
-- **Audit entries now capture** task/patient identity, severity and analyte count for
-  attributability (machine-local; never exported).
-- **Import hardening:** own-keys-only safe clone before validation (a JSON-parsed
-  `__proto__` can no longer taint the clone's prototype), `hasOwnProperty` guard on the
-  `commitMode` clamp, and over-length control-text / analytes fields are now **rejected**
-  at validation rather than silently truncated. Prototype-pollution test strengthened to
-  use the real JSON-parsed attack shape.
-- **Plainer language:** "Create from a screenshot with an LLM" → "Build it automatically
-  from a screenshot (optional)"; "AI-drafted" badge → "Auto-suggested"; a real cold-start
-  empty state explaining a profile is set up once by the regular GP and pointing to the
-  Options backup for sharing.
-
-## [v3.138.1] — 2026-06-29
-
-### Fix: Lab filing utils global-scope collision broke the module
-
-`shared/lab-filing-utils.js` declared top-level `const NHS_NUMBER_RE` / `DOB_RE`,
-the same identifiers `shared/knowledge-utils.js` already declares. Both load as
-classic `<script>`s in `panel.html` / `pop-out.html` / `options.html`, so the
-second to parse threw "Identifier already declared" — killing `lab-filing-utils.js`
-and leaving `window.LabFilingUtils` undefined, so the Lab filing module rendered
-"utilities failed to load". Node `require()` module-scopes the file, which is why
-the unit tests never caught it; a headless render of the real module surfaced it.
-Fix: wrap the file body in an IIFE so none of its identifiers leak into the shared
-page global scope.
+- **New pure helper** `summariseQofPointsAtRisk()` (`sweep-core.js`) re-reads the
+  SAME action-needed `qof-indicator` chips Sweep already produced and weights each
+  by the indicator's own `points` (from the chip, with a `pointsByCode` override
+  built from the loaded QOF rules as a backstop). Returns cohort totals, a
+  CVD-prevention subtotal, patients ranked by points-at-risk, and a per-indicator
+  breakdown.
+- **New `isCvdQofIndicator()`** classifies the CVD-prevention domain by explicit
+  indicator code (HYP/CHD/STIA/CD/CHOL/AF/PAD + DM006/DM034/DM035/DM036) — not a
+  blunt prefix, so DM036 (BP) counts as CVD but DM020 (HbA1c) does not.
+- **New panel** at the top of the Sweep results: "QOF points at risk: Σ N
+  (CVD-prevention M)", patients ranked highest-value-first, and an indicator
+  breakdown — so a practice works the gaps worth the most money first.
+- **No clinical-rule, threshold or `defaults.json` change** — pure aggregation of
+  chips already evaluated. Income is described in points only (national weights);
+  the panel notes actual £ depends on list size and prevalence.
+- New regression test `test-sweep-qof-points.js` (37 checks).
 
 ## [v3.138.0] — 2026-06-29
 
-### Lab Results Auto-Filing — one-click filing of all-normal results (opt-in, fail-safe)
+### Sentinel: high-risk "blind-spot" guard for unmonitored drugs
 
-A new **Lab filing** tab and an injected **"File all normal"** button that let a
-clinician file a blood result in one click — but only when the suite has confirmed
-*every* parameter is within normal limits, and only behind a human-pressed gate.
-This is the suite's first irreversible write to a result-review task; it is built to
-fail safe at every step.
+Closes the silent-failure mode the developer guide warns about — a high-risk drug
+under an odd brand, an `exclude`d form, or a disabled rule matches NO monitoring
+rule, so no overdue-blood chip ever fires and nobody notices for months. Sentinel
+already listed every unmatched medicine, but buried in a collapsible "N unmatched"
+list that treated an unmonitored paracetamol the same as an unmonitored amiodarone.
 
-- **Decision gate reuses the existing engine.** The button only appears when
-  `engine/result-severity.js` `evaluateReportSeverity()` returns `level: 'none'` (no
-  urgent, no out-of-range, no culture needing review), scored with the user's own
-  `resultRules` so it matches the queue chips exactly. Severity is re-verified at
-  click time.
-- **Per-area "filing profiles."** Because lab layouts differ area-to-area, the
-  clinician describes their filing screen in a profile — the visible text of the
-  "normal" option, the File/Complete controls, an optional filing comment — by hand
-  or by **building it from a screenshot via the external-LLM round-trip** (copy
-  prompt → paste screenshots into any LLM → paste the JSON back). New module
-  `side-panel/modules/labfiling/`; pure logic + the LLM prompt in
-  `shared/lab-filing-utils.js` (`window.LabFilingUtils`).
-- **Drives the real Medicus UI** (`content-scripts/triage-lens/lab-file-button.js`,
-  cloned from `routine-rx-button.js`) so Medicus stays the system of record. Controls
-  are matched by VISIBLE TEXT, never per-session ids; if any control the profile names
-  is missing, the macro **aborts and clicks nothing**.
-- **Fail-safe by construction.** Profiles arrive **disabled** and cannot be enabled
-  until reviewed *and* the safety notice is acknowledged. `commitMode` is `manual`
-  (pre-fill, you click File) or `confirm` (enumerated irreversible-action dialog, then
-  file) — **there is no full-auto mode**. The optional "your results are normal"
-  patient message is **prepared only** (copied / pre-filled); the macro never sends it.
-  Every filing run is written to a machine-local audit ring buffer
-  (`labfiling.auditLog`).
-- **Backup IO** (`shared/io/labfiling-io.js`): profiles round-trip through suite/module
-  backups but arrive **inert on import** (disabled, unreviewed, message off,
-  `commitMode` clamped to manual|confirm) and are validated + whitelist-sanitised; the
-  audit log and the per-install notice acknowledgement are never imported.
-- Tests: `test-lab-filing-utils.js`, `test-labfiling-io.js`, `test-lab-file-macro.js`
-  (fake-DOM harness asserting the severity gate, abort-on-missing-control,
-  manual-vs-confirm, and prepare-not-send message behaviour).
-
-> Note: the live Medicus filing-screen DOM is supplied by the user's filing profile
-> (it is not hard-coded), so the on-page execution must be verified against a real
-> filing screen in the user's environment before relying on it.
+- **New engine helper** `flagHighRiskUnmatched()` (`engine/rules-engine.js`) re-reads
+  the existing `listUnmatchedMedicationsDetailed()` output and elevates the subset
+  whose name matches a monitored high-risk class (DMARDs/immunosuppressants, lithium,
+  amiodarone/digoxin, oral anticoagulants, antithyroids, aldosterone antagonists,
+  level-monitored antiepileptics, clozapine, hydroxychloroquine). Class stems are
+  matched case-insensitively as substrings — the SAME contract as `drugMatchesRule`,
+  so "lithium" covers all salts and "valproate" covers "sodium valproate".
+- **Surfaced** as a red banner near the top of the Sentinel panel (with the other
+  warnings), not hidden in the collapsed list: each drug, its risk class, why it was
+  missed (no rule vs excluded), and "verify monitoring is in place in Medicus".
+- **No new noise:** the flagged set is a strict subset of meds that already passed
+  every enabled rule unmatched. The common drugs here all already carry rules, so on
+  a complete rule set this fires on nothing; it only catches genuine slips.
+- **No clinical-rule, threshold or `defaults.json` change** — pure read of data
+  already in the snapshot. Backstop only, not a monitoring rule.
+- New regression test `test-high-risk-unmatched.js` (18 checks).
 
 ## [v3.137.0] — 2026-06-29
 

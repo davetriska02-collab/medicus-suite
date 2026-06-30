@@ -1035,6 +1035,7 @@ function render(payload) {
     modules,
     unmatchedMeds,
     unmatchedMedsDetailed,
+    unmatchedHighRisk,
     trace,
     drift,
     journalAugmentFailed,
@@ -1234,6 +1235,12 @@ function render(payload) {
   const unmatchedHtml = renderUnmatchedMedsSection(unmatchedMeds, unmatchedMedsDetailed);
   const _unmatchedWasOpen = container.querySelector('.sent-unmatched-section')?.open ?? false;
 
+  // High-risk blind-spot banner — a drug that genuinely needs monitoring but
+  // matched NO rule (odd brand / exclude / disabled rule), so no overdue chip
+  // could ever fire for it. Rendered prominently near the top (with the other
+  // warnings), not buried in the collapsible unmatched list below.
+  const highRiskUnmatchedHtml = renderHighRiskUnmatchedBanner(unmatchedHighRisk);
+
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
   // evidence (AST007, COPD010, HF007, etc.) may show no_data incorrectly.
@@ -1298,6 +1305,7 @@ function render(payload) {
     patientHtml +
       headlineHtml +
       driftHtml +
+      highRiskUnmatchedHtml +
       filterHtml +
       groupsHtml +
       emptyMsg +
@@ -2012,6 +2020,34 @@ function ensureFeedbackEmailLoaded() {
 // SHOULD have matched a monitoring rule but didn't. A "Report a possible missing
 // brand" mailto link is included when a feedback email address is configured.
 // When unmatchedDetailed is provided, excluded meds are annotated in amber.
+// Blind-spot guard: a prominent red banner for high-risk drugs that matched no
+// monitoring rule, so no overdue-blood chip could ever fire for them. The list
+// is a strict subset of the unmatched-meds section below; this just stops the
+// dangerous ones from hiding inside a collapsed "N unmatched" list.
+function renderHighRiskUnmatchedBanner(highRisk) {
+  if (!Array.isArray(highRisk) || highRisk.length === 0) return '';
+  const items = highRisk
+    .map((h) => {
+      const why =
+        h.reason === 'excluded' && h.excludedBy
+          ? `excluded by &lsquo;${escHtml(h.excludedBy.term)}&rsquo; (rule ${escHtml(h.excludedBy.ruleId)})`
+          : 'no monitoring rule matched';
+      return (
+        `<li><strong>${escHtml(h.name)}</strong> ` +
+        `<span class="sent-hrisk-class">${escHtml(h.riskClass)}</span> ` +
+        `<span class="sent-hrisk-why">&mdash; ${why}</span></li>`
+      );
+    })
+    .join('');
+  const n = highRisk.length;
+  return `
+    <div class="sent-hrisk-banner" role="alert">
+      <div class="sent-hrisk-head">&#9888; ${n} high-risk medicine${n === 1 ? '' : 's'} with no monitoring rule</div>
+      <ul class="sent-hrisk-list">${items}</ul>
+      <p class="sent-hrisk-note">These drugs normally require monitoring but matched no active rule, so Sentinel cannot track their bloods &mdash; <strong>verify monitoring is in place in Medicus</strong> and consider adding the brand to the rule set. ${escHtml(NO_ALERT_CAVEAT)}</p>
+    </div>`;
+}
+
 function renderUnmatchedMedsSection(meds, unmatchedDetailed) {
   ensureFeedbackEmailLoaded();
   if (!meds || meds.length === 0) return '';
