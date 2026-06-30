@@ -545,42 +545,62 @@
     }
   }
 
-  // ── floating button UI ───────────────────────────────────────────────────────
+  // ── floating card UI ─────────────────────────────────────────────────────────
+  // One cohesive card (not a pile of pills): an eyebrow + a status dot, the matched
+  // profile name as the title (so the clinician SEES which rule fired), a reassurance/
+  // reason line, then the actions and a quiet footer. Calm white surface, a single
+  // left-accent stripe carrying the state colour — mirrors the suite's card doctrine.
   let host = null;
+  let titleEl = null;
+  let subEl = null;
   let btn = null;
   let msgBtn = null;
   let suppressLink = null;
-  let hintEl = null;
   let busy = false;
   let currentProfile = null;
   let currentReport = null;
 
+  function el(tag, className, text) {
+    const n = document.createElement(tag);
+    if (className) n.className = className;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
   function buildUI() {
     if (host) return;
-    host = document.createElement('div');
-    host.className = 'chlf-host chlf-hidden';
-    btn = document.createElement('button');
-    btn.className = 'chlf-btn';
+    host = el('div', 'chlf-card chlf-hidden');
+
+    const head = el('div', 'chlf-head');
+    head.appendChild(el('span', 'chlf-dot'));
+    head.appendChild(el('span', 'chlf-eyebrow', 'Lab filing'));
+
+    titleEl = el('div', 'chlf-title');
+    subEl = el('div', 'chlf-sub');
+
+    const actions = el('div', 'chlf-actions');
+    btn = el('button', 'chlf-primary');
     btn.onclick = () => onAction('fileNoAction');
     // Optional second action — only shown when the profile enables messaging.
-    msgBtn = document.createElement('button');
-    msgBtn.className = 'chlf-btn chlf-msg chlf-hidden';
+    msgBtn = el('button', 'chlf-secondary chlf-hidden');
     msgBtn.onclick = () => onAction('fileAndMessage');
+    actions.appendChild(btn);
+    actions.appendChild(msgBtn);
+
+    const foot = el('div', 'chlf-foot');
     // Per-patient opt-out: add this patient to the machine-local "never auto-file"
     // list (P5). Shown whenever a profile fits this screen.
-    suppressLink = document.createElement('button');
-    suppressLink.className = 'chlf-link chlf-hidden';
-    suppressLink.textContent = 'Never auto-file this patient';
+    suppressLink = el('button', 'chlf-link', 'Never auto-file this patient');
     suppressLink.onclick = () => suppressCurrentPatient();
-    // Visible reason line for the blocked state (not a hover tooltip) — names why
-    // auto-file was declined so the clinician can SEE the rule ran and judged.
-    hintEl = document.createElement('div');
-    hintEl.className = 'chlf-hint chlf-hidden';
-    host.appendChild(btn);
-    host.appendChild(hintEl);
-    host.appendChild(msgBtn);
-    host.appendChild(suppressLink);
-    const style = document.createElement('style');
+    foot.appendChild(suppressLink);
+
+    host.appendChild(head);
+    host.appendChild(titleEl);
+    host.appendChild(subEl);
+    host.appendChild(actions);
+    host.appendChild(foot);
+
+    const style = el('style');
     style.textContent = CSS;
     document.head.appendChild(style);
     document.body.appendChild(host);
@@ -621,18 +641,20 @@
   function showButton(profile) {
     currentProfile = profile;
     const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
-    btn.className = 'chlf-btn';
+    host.className = 'chlf-card chlf-ready';
+    // Title = the matched profile, so the clinician can SEE which rule fired.
+    titleEl.textContent = profile.name || 'Filing profile';
+    subEl.textContent =
+      mode === 'manual'
+        ? 'Every value is within your normal limits. Pre-fills the normal options for you to review and file.'
+        : 'Every value is within your normal limits. Asks you to confirm, then files. Irreversible.';
+    btn.classList.remove('chlf-hidden');
     btn.disabled = false;
-    btn.textContent = (mode === 'manual' ? '✎ ' : '✓ ') + 'File all normal — ' + (profile.name || 'profile');
-    btn.title =
-      'All results are within normal limits. ' +
-      (mode === 'manual'
-        ? 'Pre-fills the normal options for you to review and File.'
-        : 'Asks you to confirm, then files this result as normal. Irreversible.');
+    btn.textContent = mode === 'manual' ? 'Review & file all normal' : 'File all normal…';
     // Second action: file + message patient (prepares Medicus's message, never sends).
     if (messagingEnabled(profile)) {
       msgBtn.disabled = false;
-      msgBtn.textContent = '✉ + message patient';
+      msgBtn.textContent = '+ message patient';
       msgBtn.title =
         'Selects Medicus’s “message patient” option and drops your message ready to send — you review the recipient and message and press send. It never sends for you.';
       msgBtn.classList.remove('chlf-hidden');
@@ -640,40 +662,33 @@
       msgBtn.classList.add('chlf-hidden');
     }
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
-    if (hintEl) hintEl.classList.add('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
-  // A non-actionable note shown when a profile fits but the result has something
-  // the gate cannot judge — so the clinician knows the feature saw the result and
-  // deliberately did NOT offer to file it (and why), rather than seeing nothing.
+  // The not-offered state: a profile fits but the result has something the gate
+  // cannot pass (out-of-range, free text, a guard tripped). The card NAMES the rule
+  // and shows WHY inline — so the clinician sees the feature ran and deliberately
+  // declined, rather than seeing nothing or a silent no-op.
   function showBlockedHint(blockers, profile) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
-    const name = profile && profile.name ? profile.name : 'profile';
-    btn.className = 'chlf-btn chlf-note';
-    btn.disabled = true;
-    // Name the matched profile so the clinician can SEE the rule ran (not a silent no-op).
-    btn.textContent = '⚠ ' + name + ' — not auto-filed';
-    btn.title = 'The “' + name + '” profile matched this result but did not offer one-click filing.';
-    if (hintEl) {
-      // Show the reason(s) INLINE, not in a tooltip. First two, then a count.
-      const shown = reasons.slice(0, 2).join(' · ');
-      const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
-      hintEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
-      hintEl.title = reasons.join('\n');
-      hintEl.classList.remove('chlf-hidden');
-    }
+    host.className = 'chlf-card chlf-blocked';
+    titleEl.textContent = (profile && profile.name ? profile.name : 'Filing profile') + ' — not auto-filed';
+    const shown = reasons.slice(0, 2).join(' · ');
+    const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
+    subEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
+    subEl.title = reasons.join('\n');
+    if (btn) btn.classList.add('chlf-hidden');
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
-    // Still allow opting this patient out, even on the blocked-hint state.
+    // Still allow opting this patient out, even on the not-offered state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
   function hideButton() {
     currentProfile = null;
     if (host) host.classList.add('chlf-hidden');
+    if (subEl) subEl.title = '';
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
-    if (hintEl) hintEl.classList.add('chlf-hidden');
   }
 
   function toast(msg, kind) {
@@ -863,23 +878,44 @@
     showButton(profile);
   }
 
+  // Injected into the Medicus page (no access to the suite's CSS tokens), so values
+  // are hardcoded but mirror the suite doctrine: calm white --bg-elev card, hairline
+  // border + soft shadow (elevation = both), one left-accent stripe carrying the
+  // state colour, sentence-case sans headers, no emoji in chrome, a single spent accent.
+  const FONT = 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   const CSS = [
-    '.chlf-host{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;flex-direction:column;gap:8px;align-items:flex-end}',
-    '.chlf-host.chlf-hidden{display:none}',
-    '.chlf-btn{background:#0d6e5e;color:#fff;border:0;padding:11px 16px;border-radius:10px;cursor:pointer;',
-    'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.22);max-width:340px;',
-    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.chlf-btn:hover{background:#0a5a4d}.chlf-btn:disabled{opacity:.6;cursor:default}',
-    '.chlf-btn.chlf-hidden{display:none}',
-    '.chlf-btn.chlf-msg{background:#5b3fb0;font-size:12px;padding:9px 14px}.chlf-btn.chlf-msg:hover{background:#4a3393}',
-    '.chlf-btn.chlf-note{background:#92400e;cursor:default}.chlf-btn.chlf-note:hover{background:#92400e}',
-    '.chlf-link{background:transparent;color:#fff;border:0;padding:2px 6px;cursor:pointer;font:500 11px/1.2 system-ui;opacity:.85;text-decoration:underline;text-underline-offset:2px}',
-    '.chlf-link:hover{opacity:1}.chlf-link.chlf-hidden{display:none}',
-    '.chlf-hint{max-width:340px;background:#92400e;color:#fff;border-radius:8px;padding:7px 12px;',
-    'font:500 11px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}',
-    '.chlf-hint.chlf-hidden{display:none}',
-    '.chlf-toast{position:fixed;right:18px;bottom:74px;z-index:2147483000;max-width:360px;padding:11px 14px;border-radius:8px;',
-    'color:#fff;font:500 13px/1.4 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',
+    '.chlf-card{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:312px;box-sizing:border-box;',
+    'background:#fff;border:1px solid #e3e8ee;border-left:4px solid #94a3b8;border-radius:10px;',
+    'box-shadow:0 8px 28px rgba(15,23,42,.16);padding:13px 15px;color:#0f172a;font-family:' + FONT + '}',
+    '.chlf-card.chlf-hidden{display:none}',
+    '.chlf-card.chlf-ready{border-left-color:#0d6e5e}',
+    '.chlf-card.chlf-blocked{border-left-color:#b45309}',
+    '.chlf-head{display:flex;align-items:center;gap:7px;margin-bottom:7px}',
+    '.chlf-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:0 0 auto}',
+    '.chlf-ready .chlf-dot{background:#16a34a}.chlf-blocked .chlf-dot{background:#b45309}',
+    '.chlf-eyebrow{font:700 10px/1 ' + FONT + ';letter-spacing:.07em;text-transform:uppercase;color:#475569}',
+    '.chlf-title{font:600 13px/1.35 ' + FONT + ';color:#0f172a;margin:0 0 3px;word-break:break-word}',
+    '.chlf-sub{font:400 11.5px/1.45 ' + FONT + ';color:#475569;margin:0}',
+    '.chlf-actions{display:flex;flex-direction:column;gap:7px;margin-top:11px}',
+    '.chlf-primary{appearance:none;border:0;border-radius:8px;background:#0d6e5e;color:#fff;',
+    'font:600 13px/1.2 ' + FONT + ';padding:10px 12px;cursor:pointer;text-align:center}',
+    '.chlf-primary:hover{background:#0a5a4d}.chlf-primary:disabled{opacity:.55;cursor:default}',
+    '.chlf-primary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
+    '.chlf-primary.chlf-hidden{display:none}',
+    '.chlf-secondary{appearance:none;background:#fff;border:1px solid #cbd5e1;border-radius:8px;color:#0d6e5e;',
+    'font:600 12px/1.2 ' + FONT + ';padding:8px 12px;cursor:pointer}',
+    '.chlf-secondary:hover{border-color:#0d6e5e;background:#f0fdfa}',
+    '.chlf-secondary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
+    '.chlf-secondary.chlf-hidden{display:none}',
+    '.chlf-foot{display:flex;justify-content:flex-end;margin-top:9px}',
+    '.chlf-link{background:none;border:0;color:#64748b;font:500 11px/1.2 ' + FONT + ';cursor:pointer;',
+    'padding:2px;text-decoration:underline;text-underline-offset:2px}',
+    '.chlf-link:hover{color:#334155}.chlf-link:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
+    '.chlf-link.chlf-hidden{display:none}',
+    '.chlf-toast{position:fixed;left:18px;bottom:18px;z-index:2147483001;max-width:340px;padding:11px 14px;border-radius:8px;',
+    'color:#fff;font:500 13px/1.4 ' +
+      FONT +
+      ';box-shadow:0 8px 28px rgba(15,23,42,.22);opacity:0;transform:translateY(8px);transition:.28s}',
     '.chlf-toast.chlf-show{opacity:1;transform:none}',
     '.chlf-toast.chlf-ok{background:#0d6e5e}.chlf-toast.chlf-warn{background:#b45309}.chlf-toast.chlf-err{background:#b42318}',
   ].join('');

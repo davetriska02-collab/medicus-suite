@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.144.0] — 2026-06-30
+
+### Lab filing: in-Medicus button redesigned as one cohesive card
+
+The injected control was three mismatched saturated pills (green/purple/brown)
+floating bottom-right with the critical text truncated ("…U&E / Creatinine & e…"),
+emoji in the chrome, and a tiny afterthought link. Redesigned to the suite's card
+doctrine: a single calm white card with a hairline border + soft shadow, one
+left-accent stripe carrying the state colour, a status dot, a "Lab filing" eyebrow,
+and — crucially — **the matched profile name as the card title**, so you can see at a
+glance *which* rule fired (the previous chip gave no clear indicator).
+
+- **Ready state:** green stripe/dot, profile name, a one-line reassurance, a clear
+  primary "Review & file all normal" / "File all normal…" button, an optional quiet
+  "+ message patient" secondary, and a footer "Never auto-file this patient" link.
+- **Not-offered state:** amber stripe/dot, "<profile> — not auto-filed", and the
+  reasons shown **inline** (no longer hover-tooltip-only).
+- No emoji in chrome; full profile text wraps instead of truncating; `:focus-visible`
+  rings on every control; toast moved to bottom-left so it never overlaps the card.
+- Pure styling/markup of the injected card — the filing logic, gates and macro core
+  (and their 37 DOM tests) are untouched.
+
 ## [v3.143.0] — 2026-06-30
 
 ### Lab filing: "my range wins" lab-flag override + a visible not-offered indicator
