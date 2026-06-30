@@ -2331,17 +2331,33 @@
     }
   };
 
-  // Read the outstanding-request rows from the card. Each Quasar checkbox carries
-  // aria-labelledby → the label element holding "{Test} (Dr X • DD Mon YYYY, HH:MM)".
-  // Returns [{ box, label }] in DOM order (index is the stable request id).
+  // Read the outstanding-request rows from the card.
+  // Supports both the current Medicus native-checkbox markup (label.m-checkbox >
+  // input.m-checkbox__native + span.checkbox-label) and the legacy Quasar markup
+  // (.q-checkbox with aria-labelledby). Returns [{ box, label, labelEl }] in DOM
+  // order; index is the stable request id used throughout the match pipeline.
   const readOutstandingRows = (card) => {
     const rows = [];
+
+    // Current Medicus component (replaces Quasar from ~v3.143)
+    const mCheckboxes = card.querySelectorAll('label.m-checkbox');
+    if (mCheckboxes.length) {
+      mCheckboxes.forEach((labelEl) => {
+        const box = labelEl.querySelector('input.m-checkbox__native');
+        if (!box) return;
+        const spanEl = labelEl.querySelector('.checkbox-label');
+        const label = (spanEl ? spanEl.textContent : labelEl.textContent).replace(/\s+/g, ' ').trim();
+        rows.push({ box, label, labelEl: spanEl || labelEl });
+      });
+      return rows;
+    }
+
+    // Legacy Quasar component (.q-checkbox with aria-labelledby)
     card.querySelectorAll('.q-checkbox').forEach((box) => {
       let label = '';
-      let labelEl = null; // last resolved label element — the per-row badge anchor
+      let labelEl = null;
       const id = box.getAttribute('aria-labelledby');
       if (id) {
-        // aria-labelledby may list several ids; concatenate their text.
         id.split(/\s+/).forEach((one) => {
           const el = one && document.getElementById(one);
           if (el) {
@@ -2356,14 +2372,16 @@
     return rows;
   };
 
-  // Staggered Quasar tick of one or more rows (Vue reactivity is async — a tight
-  // loop drops most updates). Mirrors the proven mechanism from the old select-all.
+  // Staggered tick of one or more rows. Handles both native checkboxes (.checked)
+  // and legacy Quasar checkboxes (aria-checked). Vue reactivity is async — a tight
+  // loop drops most updates, hence the 30 ms stagger.
   const tickRows = (boxes) => {
     let i = 0;
     const next = () => {
       if (i >= boxes.length) return;
       const b = boxes[i++];
-      if (b && b.getAttribute('aria-checked') !== 'true') b.click();
+      const isChecked = b ? (b.type === 'checkbox' ? b.checked : b.getAttribute('aria-checked') === 'true') : true;
+      if (b && !isChecked) b.click();
       setTimeout(next, 30);
     };
     next();
@@ -2413,7 +2431,7 @@
   const annotateOutstandingRow = (rowMeta, verdict, patientUuid) => {
     const box = rowMeta.box;
     // Per-row anchor: insert the badge right after the row's own label element.
-    const anchor = rowMeta.labelEl || box.closest('.q-checkbox') || box;
+    const anchor = rowMeta.labelEl || box.closest('.q-checkbox, label.m-checkbox') || box;
     const scope = anchor.parentElement || anchor;
     const rowKey = String(verdict.id != null ? verdict.id : '');
     let badge = scope.querySelector(`:scope > .ch-oir-flag[data-oir-row="${rowKey}"]`);
@@ -2482,7 +2500,8 @@
     let bar = card.querySelector('.ch-oir-bulk');
     const pending = foundVerdicts.filter((v) => {
       const box = rows[v.id] && rows[v.id].box;
-      return box && box.getAttribute('aria-checked') !== 'true';
+      if (!box) return false;
+      return box.type === 'checkbox' ? !box.checked : box.getAttribute('aria-checked') !== 'true';
     });
     if (!pending.length) {
       if (bar) bar.remove();

@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.143.1] — 2026-06-30
+
+### Fix: OIR matching restored after Medicus checkbox component change
+
+Medicus replaced their Quasar checkboxes (`.q-checkbox` / `aria-labelledby`) with
+native HTML checkboxes (`label.m-checkbox` > `input.m-checkbox__native` +
+`span.checkbox-label`). This silently broke the entire Outstanding Investigation
+Requests matching pipeline — auto-tick and the "Tick off results found in record"
+button both disappeared.
+
+- `readOutstandingRows` now detects the new `label.m-checkbox` markup first and
+  falls back to legacy `.q-checkbox`, keeping compatibility with older Medicus
+  instances
+- `tickRows` and `updateBulkBar` updated to check `input.checked` for native
+  checkboxes (rather than `aria-checked`); the don't-untick safety guard is
+  preserved in both paths
+- Badge anchor fallback in `annotateOutstandingRow` extended to cover both
+  component types
+
 ## [v3.143.0] — 2026-06-30
 
 ### Lab Results Auto-Filing — one-click filing of all-normal results
