@@ -28,11 +28,6 @@ export const TAB_CATALOG = [
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
   {
-    id: 'labfiling',
-    name: 'Lab filing',
-    blurb: 'One-click filing for all-normal blood results — set up a profile per lab, behind a confirm.',
-  },
-  {
     id: 'record',
     name: 'Record',
     blurb: 'Live snapshot of the open patient — problems, meds, results, safety prompts. No PDF needed.',
@@ -47,7 +42,7 @@ export const ROLE_PRESETS = [
   {
     id: 'gp',
     label: 'GP / clinician',
-    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'labfiling', 'visualiser', 'about'],
+    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'visualiser', 'about'],
   },
   {
     id: 'reception',

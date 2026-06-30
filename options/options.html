@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>Medicus Suite — Settings</title>
+    <link rel="stylesheet" href="labfiling-section.css" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -817,6 +818,7 @@
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="triage">Triage Lens</button>
         <button class="nav-item" data-section="result-rules">Result Rules</button>
+        <button class="nav-item" data-section="labfiling">Lab Filing</button>
         <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
@@ -1459,6 +1461,19 @@
               title="Result rules settings"
             ></iframe>
           </div>
+        </section>
+
+        <!-- Lab Filing section — admin-only; rendered by labfiling-section.js (module) -->
+        <section class="opt-section" id="sect-labfiling">
+          <h1>Lab Filing <span class="module-badge">one-click normal filing</span></h1>
+          <p class="section-desc">
+            One-click filing for investigation results the suite has confirmed are <strong>all-normal</strong>. This is
+            <strong>practice-level configuration</strong> — kept here in Options, not in the side panel, so it isn't
+            casually changed: filing writes to the patient record and cannot be undone. Every profile arrives
+            <strong>disabled</strong> and must be reviewed against your real filing screen, and the safety notice
+            acknowledged, before it can file.
+          </p>
+          <div id="lfMount"></div>
         </section>
 
         <!-- Outstanding Requests section — deep-links into the Triage Lens OIR editor -->
@@ -2459,5 +2474,6 @@
     <script src="../shared/display-prefs.js"></script>
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>
+    <script type="module" src="labfiling-section.js"></script>
   </body>
 </html>

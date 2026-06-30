@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.146.0] — 2026-06-30
+
+### Lab filing moved to Options (admin-only) + optional starter profiles
+
+- **Relocated from the side panel to the Options page.** Filing rules drive an
+  irreversible patient-record write and are practice-level configuration, not
+  something an individual user should casually tweak — so the authoring/management
+  UI now lives in Options → **Lab Filing** (alongside Result Rules, Monitoring,
+  Backup), not as a side-panel tab. Removed the side-panel module registration
+  (panel.js/panel.html, pop-out, tab-catalog, tour step); the module moved to
+  `options/labfiling-section.js` and self-mounts there. The in-Medicus filing
+  button and all gate logic are unchanged — only the config surface moved.
+- **Optional starter profiles** for England Medicus (FBC, U&E, Bone profile, LFTs),
+  with the filing-control labels confirmed from a live capture. Baked in but
+  **never auto-installed**: an "Add starter profiles" button loads them, and they
+  arrive **disabled** for review (not every practice uses the same lab/layout, so
+  they're opt-in and must be checked against the real screen and switched on
+  deliberately). Parameters are set only where the lab gives none (Calcium) or its
+  range is over-sensitive (eGFR ≥60 with lab-flag override); everything else leans
+  on the lab's own ranges plus require-range-for-all.
+- **Bug fix (pre-existing):** `shared/io/labfiling-io.js` declared a top-level
+  `const _DANGEROUS_KEYS` that collided with the identical const in
+  `sentinel-io.js` when both load as classic scripts in options.html — the second
+  silently failed to execute, breaking lab-filing backup/restore. Namespaced to
+  `_LF_DANGEROUS_KEYS` (caught by a headless render of the Options page). TOUR_VERSION
+  tracks back to 5 (the removed lab-filing step was the only v6 step).
+
 ## [v3.145.0] — 2026-06-30
 
 ### Lab filing: multi-panel (combined-bloods) tasks

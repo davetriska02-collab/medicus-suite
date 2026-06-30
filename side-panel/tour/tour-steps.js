@@ -25,7 +25,7 @@
 
 'use strict';
 
-export const TOUR_VERSION = 6;
+export const TOUR_VERSION = 5;
 
 export const TOUR_STEPS = [
   {
@@ -117,15 +117,6 @@ export const TOUR_STEPS = [
     centerFallback: true,
     title: 'Meds without a monitoring rule',
     body: 'Most medicines need no routine monitoring. Scan this list for brand names that should have matched a rule but didn’t — and report any you spot.',
-  },
-  {
-    id: 'labfiling',
-    addedIn: 6,
-    module: 'labfiling',
-    target: ['.lf-module'],
-    centerFallback: true,
-    title: 'Lab filing — file normal results in one click',
-    body: 'Set up a profile for your lab, then when the suite confirms a result is all-normal a “File all normal” button appears in Medicus. It only ever files behind your confirmation — never automatically.',
   },
   {
     id: 'palette',

@@ -415,3 +415,23 @@ textarea.lf-input {
   margin-top: 7px;
   font-family: var(--mono);
 }
+
+/* ── Toolbar buttons + transient toast (Options section) ── */
+.lf-toolbar-btns {
+  display: flex;
+  gap: 8px;
+}
+.lf-toast {
+  display: none;
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+  color: var(--text-1);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.lf-toast.lf-toast-show {
+  display: block;
+}

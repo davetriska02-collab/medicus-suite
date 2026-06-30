@@ -55,10 +55,6 @@ const MODULES = {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
     css: '../side-panel/modules/knowledge/knowledge.css',
   },
-  labfiling: {
-    js: () => import('../side-panel/modules/labfiling/labfiling.js'),
-    css: '../side-panel/modules/labfiling/labfiling.css',
-  },
   record: {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',
@@ -122,17 +118,13 @@ const TAB_HELP = {
   record: {
     title: 'Record',
     what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep: 'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
+    firstStep:
+      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
   },
   knowledge: {
     title: 'Knowledge',
     what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
     firstStep: 'Type a keyword to find the relevant practice note.',
-  },
-  labfiling: {
-    title: 'Lab filing',
-    what: 'Set up per-lab “filing profiles” so normal blood results can be filed in one click — only when every parameter is within range, behind a confirm.',
-    firstStep: 'Add a filing profile for your lab (you can build it from a screenshot with an LLM), then review and enable it.',
   },
 };
 

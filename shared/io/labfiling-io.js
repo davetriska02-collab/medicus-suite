@@ -28,7 +28,12 @@ const _LabFilingUtils =
 
 const LABFILING_KEYS = ['labfiling.profiles', 'labfiling.config', 'labfiling.auditLog'];
 
-const _DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+// Namespaced (_LF_) because this file is loaded as a CLASSIC script alongside the
+// other IO files in options.html — a bare `_DANGEROUS_KEYS` collides with the same
+// top-level const in sentinel-io.js ("Identifier already declared"), which silently
+// kills whichever loads second and breaks its backup/restore. (Same global-collision
+// class as the lab-filing-utils.js IIFE fix.)
+const _LF_DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 // Shallow clone of own enumerable keys only, skipping prototype-pollution keys.
 // Never assigns to "__proto__", so the JS engine's prototype setter is never
@@ -40,7 +45,7 @@ function _safeClone(o) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
   const out = {};
   for (const k of Object.keys(o)) {
-    if (_DANGEROUS_KEYS.has(k)) continue;
+    if (_LF_DANGEROUS_KEYS.has(k)) continue;
     out[k] = o[k];
   }
   return out;

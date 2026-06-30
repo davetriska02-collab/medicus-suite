@@ -1,5 +1,5 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — Lab Results Auto-Filing module
+// Medicus Suite — Lab Results Auto-Filing — OPTIONS section (admin-only)
 //
 // Authors and manages the per-lab "filing profiles" that the injected
 // "File all normal" macro (content-scripts/triage-lens/lab-file-button.js) uses
@@ -7,15 +7,20 @@
 // area-to-area, the clinician describes the screen here — by hand, or by building
 // a profile from a screenshot via the external-LLM round-trip.
 //
-// Storage: labfiling.profiles, labfiling.config, labfiling.auditLog
+// DELIBERATELY lives in the OPTIONS page, NOT as a side-panel tab: filing rules
+// drive an irreversible patient-record write and are practice-level configuration
+// a single user should not casually tweak. Options is the admin/governance surface
+// (same home as Result Rules, Monitoring, Backup). Loaded as <script type="module">
+// from options.html; it self-mounts into #sect-labfiling on load (mirrors
+// tabs-section.js) — there is no side-panel registration.
+//
+// Storage: labfiling.profiles, labfiling.config, labfiling.auditLog, labfiling.suppress
 // Pure logic (schema, validation, sanitisation, the LLM prompt) lives in
-// shared/lab-filing-utils.js (window.LabFilingUtils, loaded by panel.html /
-// pop-out.html). Profiles arrive DISABLED and must be reviewed + the safety
+// shared/lab-filing-utils.js (window.LabFilingUtils, loaded as a classic script
+// before this module). Profiles arrive DISABLED and must be reviewed + the safety
 // notice acknowledged before they can file.
 
 'use strict';
-
-import { loadUiState, saveUiState } from '../shared/ui-state.js';
 
 let container = null;
 let _storageListener = null;
@@ -32,6 +37,58 @@ let _formSource = null; // 'llm' when the open form was filled from LLM JSON
 let _uiTimer = null;
 
 const LF = typeof window !== 'undefined' ? window.LabFilingUtils : null;
+
+// Optional starter profiles for England Medicus (the filing-control labels were
+// confirmed from a live console capture). Baked in but NEVER auto-installed — a
+// practice loads them with one button, and they arrive DISABLED for review (not
+// every practice uses the same lab/layout, so they must be opted into, checked
+// against the real screen, and switched on deliberately). Ranges are supplied by
+// the lab per-result, so parameters are set ONLY where the lab gives none (Calcium)
+// or its range is over-sensitive (eGFR); everything else leans on the lab's range
+// plus require-range-for-all. Stable ids so re-loading never duplicates.
+const STARTER_FILING = {
+  normalOptionText: 'Normal result, no action required',
+  nextStepText: 'File results with no further action',
+  nextStepMessageText: 'File results and message patient',
+  fileButtonText: 'File results',
+};
+const STARTER_PROFILES = [
+  {
+    id: 'starter-fbc',
+    name: 'FBC — normal, no action (starter)',
+    match: ['haemoglobin', 'white cell', 'platelets', 'mcv', 'neutrophils', 'lymphocytes'],
+    analytes: ['haemoglobin', 'white cell count', 'platelets', 'mcv', 'mch', 'neutrophils', 'lymphocytes'],
+    requireRangeForAll: true,
+    filing: STARTER_FILING,
+  },
+  {
+    id: 'starter-ue',
+    name: 'U&E / Creatinine & electrolytes — normal, no action (starter)',
+    match: ['sodium', 'potassium', 'creatinine', 'egfr'],
+    analytes: ['sodium', 'potassium', 'creatinine', 'egfr'],
+    parameters: [{ analyte: 'egfr', low: 60, unit: 'mL/min' }],
+    requireRangeForAll: true,
+    paramsOverrideLabFlags: true, // accept eGFR 60–89 the lab over-flags against its 90–120 range
+    filing: STARTER_FILING,
+  },
+  {
+    id: 'starter-bone',
+    name: 'Bone profile — normal, no action (starter)',
+    match: ['calcium', 'phosphate', 'adjusted calcium', 'alp', 'albumin'],
+    analytes: ['calcium', 'adjusted calcium', 'phosphate', 'alp', 'albumin'],
+    parameters: [{ analyte: 'calcium', low: 2.2, high: 2.6, unit: 'mmol/L' }], // lab gives unadjusted calcium no range
+    requireRangeForAll: true,
+    filing: STARTER_FILING,
+  },
+  {
+    id: 'starter-lft',
+    name: 'LFTs — normal, no action (starter)',
+    match: ['bilirubin', 'alt', 'ast', 'ggt', 'alkaline phosphatase'],
+    analytes: ['total bilirubin', 'alt', 'ast', 'ggt'],
+    requireRangeForAll: true,
+    filing: STARTER_FILING,
+  },
+];
 
 function esc(s) {
   return String(s ?? '')
@@ -57,24 +114,12 @@ function paramRowHtml(pr) {
 
 // ── Init / cleanup ────────────────────────────────────────────────────────────
 
-export async function init(el) {
+async function init(el) {
   container = el;
   _editingId = null;
   _formSource = null;
 
-  const savedUi = await loadUiState('labfiling');
-  if (savedUi && (savedUi._editingId === 'new' || typeof savedUi._editingId === 'string')) {
-    // Don't auto-reopen an edit form across sessions; only remember "new" intent off.
-  }
-
-  container.innerHTML = `
-    <div class="lf-module">
-      <div class="lf-head">
-        <h2 class="lf-title">Lab filing</h2>
-        <span class="lf-subtitle">One-click filing for results the suite has confirmed are all-normal. You stay in control — review every profile before it can file.</span>
-      </div>
-      <div id="lfBody"></div>
-    </div>`;
+  container.innerHTML = `<div id="lfBody"></div>`;
 
   await loadState();
   render();
@@ -101,27 +146,12 @@ export async function init(el) {
     });
   };
   chrome.storage.onChanged.addListener(_storageListener);
-
-  return cleanup;
 }
 
-function cleanup() {
-  if (_storageListener) {
-    chrome.storage.onChanged.removeListener(_storageListener);
-    _storageListener = null;
-  }
-  if (_uiTimer) {
-    clearTimeout(_uiTimer);
-    _uiTimer = null;
-  }
-  if (container) {
-    container.removeEventListener('click', onClick);
-    container.removeEventListener('input', onInput);
-  }
-  container = null;
-}
-
-export { cleanup };
+// Self-mount into the Options "Lab filing" section. Modules are deferred, so the
+// DOM is parsed by the time this runs. Bail quietly if the section isn't present.
+const _mount = document.getElementById('lfMount');
+if (_mount) init(_mount);
 
 async function loadState() {
   const r = await chrome.storage.local.get([
@@ -193,7 +223,10 @@ function renderToolbar() {
   return `
     <div class="lf-toolbar">
       <div class="lf-count">${n} profile${n === 1 ? '' : 's'}${n ? ` · ${enabled} enabled` : ''}</div>
-      <button class="lf-btn" data-act="add-new">+ Add filing profile</button>
+      <div class="lf-toolbar-btns">
+        <button class="lf-btn" data-act="load-starters" title="Add ready-made starter profiles for England Medicus (FBC, U&E, Bone, LFTs). They arrive disabled — review each against your screen, then switch on the ones you want.">Add starter profiles</button>
+        <button class="lf-btn" data-act="add-new">+ Add filing profile</button>
+      </div>
     </div>
     <div class="lf-killswitch${killed ? ' lf-killswitch-on' : ''}">
       <label class="lf-check">
@@ -439,6 +472,9 @@ async function onClick(ev) {
       _formSource = null;
       render();
       break;
+    case 'load-starters':
+      await loadStarters();
+      break;
     case 'cancel-form':
       _editingId = null;
       _formSource = null;
@@ -546,6 +582,52 @@ function seedAnalytes() {
     .filter(Boolean);
   const merged = Array.from(new Set(existing.concat(seeded)));
   input.value = merged.join(', ');
+}
+
+// Add the baked-in starter profiles a practice hasn't already got. Each is
+// validated + forced inert (lockForReview → disabled, unreviewed, message off) so
+// it arrives exactly like any imported profile: switched OFF, to be checked against
+// the real screen and enabled deliberately. Keyed by stable id so re-clicking never
+// duplicates; skips any whose id is already present.
+async function loadStarters() {
+  if (!LF) return;
+  const have = new Set(_profiles.map((p) => p && p.id));
+  let added = 0;
+  for (const starter of STARTER_PROFILES) {
+    if (have.has(starter.id)) continue;
+    const errs = LF.validateProfile(starter);
+    if (errs.length) continue; // a malformed starter is skipped, never blocks the rest
+    const clean = LF.lockForReview(starter, 'import');
+    clean.id = starter.id; // keep the stable id (lockForReview preserves it; be explicit)
+    _profiles.push(clean);
+    added++;
+  }
+  if (!added) {
+    toast('All starter profiles are already in your list — switch on the ones you want.');
+    return;
+  }
+  await persistProfiles();
+  render();
+  toast(
+    `Added ${added} starter profile${added === 1 ? '' : 's'} — disabled. Review each against your screen, then switch it on.`
+  );
+}
+
+// Lightweight transient notice (the options page has no global toast helper here).
+function toast(msg) {
+  const body = container && container.querySelector('#lfBody');
+  if (!body) return;
+  let t = container.querySelector('#lfToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'lfToast';
+    t.className = 'lf-toast';
+    body.prepend(t);
+  }
+  t.textContent = msg;
+  t.classList.add('lf-toast-show');
+  clearTimeout(_uiTimer);
+  _uiTimer = setTimeout(() => t && t.classList.remove('lf-toast-show'), 4000);
 }
 
 function readParams() {
