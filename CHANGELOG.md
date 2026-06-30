@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.145.0] — 2026-06-30
+
+### Lab filing: multi-panel (combined-bloods) tasks
+
+A live capture confirmed one investigation-report task can carry several panels
+(e.g. Bone profile + U&E + LFTs) under a single report, each with its own
+"Normal result, no action required" filing note but ONE shared "File results"
+button — so filing is a whole-task action. Previously only the single best-matching
+profile was used, so a U&E profile (with require-range-for-all) blocked the whole
+task on a Bone analyte like Calcium that it didn't cover.
+
+- New `matchProfiles()` / `mergeProfilesForReport()`: every enabled profile that fits
+  the report is merged into one effective profile — **union** of parameters and
+  med/text guards, the **strictest** trend threshold, require-range / lab-flag-override
+  on if **any** matched profile sets it, and **confirm** mode if any does. So you author
+  a Bone, U&E, LFT, FBC profile once each and they combine automatically on whatever
+  combined report a task carries.
+- The macro now marks **every** panel's "Normal result, no action required" note (it
+  already clicked all matches) and files the whole task in the one shared action.
+- The card names the coverage on a combined task ("3 profiles matched · Covers: U&E,
+  Bone, LFTs") so you can see every panel is accounted for before filing.
+- Tests: matchProfiles/merge semantics (union params, strictest trend, confirm-wins,
+  names for the card) — full suite green.
+
 ## [v3.144.0] — 2026-06-30
 
 ### Lab filing: in-Medicus button redesigned as one cohesive card

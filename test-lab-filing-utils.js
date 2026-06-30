@@ -222,6 +222,67 @@ check(
 );
 check(LF.matchProfile(profiles, null) === null, 'no report → no match');
 
+// ── matchProfiles / mergeProfilesForReport (multi-panel combined report) ──────
+console.log('\n--- matchProfiles / mergeProfilesForReport ---');
+// One task carrying three panels (Bone + U&E + LFT) under a single report.
+const comboReport = {
+  results: [
+    { name: 'Calcium', value: 2.35 },
+    { name: 'Phosphate', value: 1.2 },
+    { name: 'Sodium', value: 140 },
+    { name: 'Potassium', value: 4.1 },
+    { name: 'Creatinine', value: 76 },
+    { name: 'ALT', value: 20 },
+  ],
+};
+const bone = {
+  name: 'Bone',
+  enabled: true,
+  match: ['calcium', 'phosphate'],
+  filing: validFiling,
+  parameters: [{ analyte: 'calcium', low: 2.2, high: 2.6 }],
+  requireRangeForAll: true,
+  commitMode: 'confirm',
+  trend: { maxDeltaPct: 30 },
+  excludeIfMeds: ['lithium'],
+};
+const ue = {
+  name: 'U&E',
+  enabled: true,
+  match: ['sodium', 'potassium', 'creatinine'],
+  filing: validFiling,
+  parameters: [{ analyte: 'creatinine', low: 49, high: 90 }],
+  trend: { maxDeltaPct: 15 },
+  excludeIfMeds: ['ramipril'],
+};
+const lft = { name: 'LFT', enabled: true, match: ['alt', 'bilirubin'], filing: validFiling, commitMode: 'manual' };
+const all3 = [bone, ue, lft];
+check(LF.matchProfiles(all3, comboReport).length === 3, 'matchProfiles returns every fitting profile');
+check(LF.matchProfiles(all3, comboReport)[0].name === 'U&E', 'matchProfiles is most-specific-first (U&E: 3 hits)');
+const merged = LF.mergeProfilesForReport(all3, comboReport);
+check(merged && merged.effective._matchedCount === 3, 'merge records the matched count');
+check(merged.effective.parameters.length === 2, 'merge unions every panel’s parameters');
+check(merged.effective.requireRangeForAll === true, 'merge requireRangeForAll true if ANY matched profile sets it');
+check(merged.effective.commitMode === 'confirm', 'merge commitMode is confirm if ANY matched profile is confirm');
+check(merged.effective.trend.maxDeltaPct === 15, 'merge trend takes the STRICTEST (smallest positive) threshold');
+check(
+  merged.effective.excludeIfMeds.includes('lithium') && merged.effective.excludeIfMeds.includes('ramipril'),
+  'merge unions excludeIfMeds across panels'
+);
+check(/3 profiles matched/.test(merged.effective.name), 'merged name reflects multi-panel');
+check(
+  merged.effective._matchedNames.join(',') === 'U&E,Bone,LFT',
+  'merged carries the matched profile names (most-specific first) for the card'
+);
+// A single matched profile keeps its own name (not the "N profiles" label).
+const single = LF.mergeProfilesForReport([ue], comboReport);
+check(single.effective.name === 'U&E' && single.effective._matchedCount === 1, 'single match keeps its own name');
+check(LF.mergeProfilesForReport([], comboReport) === null, 'no profiles → null merge');
+check(
+  LF.mergeProfilesForReport([{ name: 'x', enabled: false, match: ['sodium'] }], comboReport) === null,
+  'disabled-only → null merge'
+);
+
 // ── extractFirstName / fillTemplate ───────────────────────────────────────────
 console.log('\n--- extractFirstName / fillTemplate ---');
 check(LF.extractFirstName('Smith, John') === 'John', 'handles "Surname, Firstname"');

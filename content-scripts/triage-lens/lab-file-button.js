@@ -642,12 +642,16 @@
     currentProfile = profile;
     const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
     host.className = 'chlf-card chlf-ready';
-    // Title = the matched profile, so the clinician can SEE which rule fired.
+    // Title = the matched profile, so the clinician can SEE which rule fired. For a
+    // combined task, name every profile that contributed so coverage is visible.
+    const multi = profile._matchedCount > 1;
     titleEl.textContent = profile.name || 'Filing profile';
+    const coverage = multi && profile._matchedNames ? 'Covers: ' + profile._matchedNames.join(', ') + '. ' : '';
     subEl.textContent =
-      mode === 'manual'
+      coverage +
+      (mode === 'manual'
         ? 'Every value is within your normal limits. Pre-fills the normal options for you to review and file.'
-        : 'Every value is within your normal limits. Asks you to confirm, then files. Irreversible.';
+        : 'Every value is within your normal limits. Asks you to confirm, then files. Irreversible.');
     btn.classList.remove('chlf-hidden');
     btn.disabled = false;
     btn.textContent = mode === 'manual' ? 'Review & file all normal' : 'File all normal…';
@@ -847,7 +851,11 @@
       return;
     }
     currentReport = rs.report;
-    const profile = LF && LF.matchProfile(profiles, rs.report);
+    // A combined task can carry several panels (Bone + U&E + LFT) under one report
+    // and ONE shared File button — so merge EVERY matching profile into one effective
+    // profile (union of parameters/guards) and act on the whole task as a unit.
+    const merge = LF && LF.mergeProfilesForReport(profiles, rs.report);
+    const profile = merge && merge.effective;
     if (!profile) {
       hideButton();
       return;

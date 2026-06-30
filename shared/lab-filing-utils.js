@@ -379,6 +379,84 @@
     return best;
   }
 
+  // ALL enabled profiles that fit this report (≥1 match term hits), most-specific
+  // first. A single Medicus task can carry several panels (Bone + U&E + LFT) under
+  // one report and ONE shared "File results" button — so several per-panel profiles
+  // legitimately apply at once. Returns [] when none fit.
+  function matchProfiles(profiles, report) {
+    const hay = reportHaystack(report);
+    if (!hay) return [];
+    const scored = [];
+    for (const p of Array.isArray(profiles) ? profiles : []) {
+      if (!p || p.enabled !== true || !Array.isArray(p.match) || p.match.length === 0) continue;
+      let score = 0;
+      for (const sub of p.match) {
+        if (isStr(sub) && sub.trim() && hay.includes(sub.trim().toLowerCase())) score++;
+      }
+      if (score > 0) scored.push({ p, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.p);
+  }
+
+  // Merge every profile that fits this report into ONE "effective" profile the gate
+  // and macro can act on as a unit — because a combined-bloods task files as a single
+  // whole-task action, so all matched panels must pass together. Semantics, each chosen
+  // to be the SAFER of the inputs:
+  //   • parameters    — union (every panel's clinician-set ranges apply)
+  //   • requireRangeForAll / paramsOverrideLabFlags — true if ANY matched profile sets it
+  //   • trend.maxDeltaPct — the STRICTEST (smallest positive) across matched profiles
+  //   • excludeIfMeds / suppressIfText — union (any guard from any panel blocks)
+  //   • commitMode    — 'confirm' if ANY matched profile is 'confirm' (a human confirms)
+  //   • filing / patientMessage — the primary (highest-scoring) profile's, since the
+  //     filing controls are screen-level (one shared File button), not per-panel.
+  // Returns { effective, matched } or null when nothing fits. `effective` carries
+  // _matchedNames / _matchedCount so the card can show exactly which profiles combined.
+  function mergeProfilesForReport(profiles, report) {
+    const matched = matchProfiles(profiles, report);
+    if (!matched.length) return null;
+    const primary = matched[0];
+    let strictestTrend = null;
+    for (const p of matched) {
+      const v = p.trend ? numOrNull(p.trend.maxDeltaPct) : null;
+      if (v != null && v > 0 && (strictestTrend == null || v < strictestTrend)) strictestTrend = v;
+    }
+    const uniq = (arr) => {
+      const seen = new Set();
+      const out = [];
+      for (const s of arr) {
+        const k = isStr(s) ? s.toLowerCase() : '';
+        if (k && !seen.has(k)) {
+          seen.add(k);
+          out.push(s);
+        }
+      }
+      return out;
+    };
+    const names = matched.map((p) => p.name).filter(isStr);
+    const effective = {
+      id: '__merged__',
+      name: matched.length === 1 ? primary.name : `${matched.length} profiles matched`,
+      match: [],
+      analytes: [],
+      parameters: matched.flatMap((p) => (Array.isArray(p.parameters) ? p.parameters : [])),
+      requireRangeForAll: matched.some((p) => p.requireRangeForAll === true),
+      paramsOverrideLabFlags: matched.some((p) => p.paramsOverrideLabFlags === true),
+      trend: { maxDeltaPct: strictestTrend },
+      excludeIfMeds: uniq(matched.flatMap((p) => (Array.isArray(p.excludeIfMeds) ? p.excludeIfMeds : []))),
+      suppressIfText: uniq(matched.flatMap((p) => (Array.isArray(p.suppressIfText) ? p.suppressIfText : []))),
+      filing: primary.filing,
+      patientMessage: primary.patientMessage,
+      commitMode: matched.some((p) => p.commitMode === 'confirm') ? 'confirm' : 'manual',
+      source: 'manual',
+      reviewed: true,
+      enabled: true,
+      _matchedNames: names,
+      _matchedCount: matched.length,
+    };
+    return { effective, matched };
+  }
+
   // Extract a first name from a Medicus patient banner string. Handles the UK
   // "Surname, Firstname" order and plain "Firstname Surname"; falls back to "there".
   function extractFirstName(patient) {
@@ -819,6 +897,8 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     filingProfilePrompt,
     reportHaystack,
     matchProfile,
+    matchProfiles,
+    mergeProfilesForReport,
     fileabilityBlockers,
     profileParamBlockers,
     applyParamOverrides,
