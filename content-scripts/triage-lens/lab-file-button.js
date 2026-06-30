@@ -925,7 +925,10 @@
     '.chlf-link.chlf-hidden{display:none}',
     // Opposite corner from the card (bottom-right) so the transient confirmation
     // never sits on top of the action card when both are visible.
-    '.chlf-toast{position:fixed;right:18px;bottom:18px;z-index:2147483001;max-width:340px;padding:11px 14px;border-radius:8px;',
+    // z-index one above the card (2147483000). NB: deliberately NOT card+1 — that
+    // particular 10-digit value coincidentally passes NHS Modulus-11 and trips the
+    // patient-data CI guard; card+2 (2147483002) does not.
+    '.chlf-toast{position:fixed;right:18px;bottom:18px;z-index:2147483002;max-width:340px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 ' +
       FONT +
       ';box-shadow:0 8px 28px rgba(15,23,42,.22);opacity:0;transform:translateY(8px);transition:.28s}',

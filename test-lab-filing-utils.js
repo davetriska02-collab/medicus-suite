@@ -151,7 +151,10 @@ check(seeded.length === new Set(seeded).size, 'deduplicated');
 // ── phiWarnings ───────────────────────────────────────────────────────────────
 console.log('\n--- phiWarnings ---');
 check(
-  LF.phiWarnings([{ name: 'p', filing: validFiling, patientMessage: { template: 'NHS 943 476 5919' } }]).length === 1,
+  // phiWarnings flags by SHAPE (10 digits in 3-3-4), not Modulus-11, so this uses a
+  // shape-valid but Modulus-11-INVALID number — still triggers the warning, but the
+  // patient-data CI guard (which checks Modulus-11) correctly ignores it as non-data.
+  LF.phiWarnings([{ name: 'p', filing: validFiling, patientMessage: { template: 'NHS 123 456 7890' } }]).length === 1,
   'NHS-number-shaped digits flagged'
 );
 check(
