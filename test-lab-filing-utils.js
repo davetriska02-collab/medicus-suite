@@ -300,6 +300,72 @@ check(
   'requireRangeForAll allows a result that has a lab reference range'
 );
 
+// ── applyParamOverrides ("my range wins" lab-flag override) ───────────────────
+console.log('\n--- applyParamOverrides ---');
+const egfrFlagged = () => ({
+  results: [{ name: 'eGFRcreat (CKD-EPI)/1.73 m*2', value: 89, low: 90, high: 120, isBelow: true, isAbove: false }],
+});
+const egfrProfileOn = { paramsOverrideLabFlags: true, parameters: [{ analyte: 'egfr', low: 60 }] };
+const egfrProfileOff = { paramsOverrideLabFlags: false, parameters: [{ analyte: 'egfr', low: 60 }] };
+check(
+  LF.applyParamOverrides(egfrFlagged(), egfrProfileOff).results[0].isBelow === true,
+  'override OFF leaves the lab flag'
+);
+const adj = LF.applyParamOverrides(egfrFlagged(), egfrProfileOn);
+check(adj.results[0].isBelow === false, 'override ON clears the lab below-flag for an in-your-range analyte');
+check(adj.results[0]._labFlagOverridden === true, 'overridden result is marked for the confirm dialog');
+check(egfrFlagged().results[0].isBelow === true, 'original report is not mutated by applyParamOverrides');
+// urgent is sacrosanct
+const urgentRep = { results: [{ name: 'egfr', value: 89, low: 90, isBelow: true, urgent: true }] };
+check(
+  LF.applyParamOverrides(urgentRep, egfrProfileOn).results[0].isBelow === true,
+  'override NEVER clears an urgent result'
+);
+// value outside the clinician range keeps the flag
+const egfrLow = { results: [{ name: 'egfr', value: 40, low: 90, isBelow: true }] };
+check(
+  LF.applyParamOverrides(egfrLow, egfrProfileOn).results[0].isBelow === true,
+  'value outside your range keeps the lab flag'
+);
+// analyte with no parameter is untouched
+const naFlagged = { results: [{ name: 'Sodium', value: 150, high: 146, isAbove: true }] };
+check(
+  LF.applyParamOverrides(naFlagged, egfrProfileOn).results[0].isAbove === true,
+  'analyte with no parameter is left as the lab reported'
+);
+
+// Integration: the override + the real severity scorer → an eGFR-89 U&E becomes all-normal.
+const SEV = require('./engine/result-severity.js');
+const ueReport = {
+  results: [
+    { name: 'Sodium', value: 143, low: 133, high: 146, isAbove: false, isBelow: false },
+    { name: 'Potassium', value: 3.8, low: 3.5, high: 5.3, isAbove: false, isBelow: false },
+    { name: 'Creatinine', value: 62, low: 49, high: 90, isAbove: false, isBelow: false },
+    { name: 'eGFRcreat (CKD-EPI)/1.73 m*2', value: 89, low: 90, high: 120, isBelow: true, isAbove: false },
+  ],
+};
+const someRule = [{ analyte: { match: ['xyz'] }, comparator: 'above', amber: 999 }];
+check(
+  SEV.evaluateReportSeverity(ueReport, { resultRules: someRule }).level === 'amber',
+  'raw U&E with eGFR 89 scores amber (lab flag) — would NOT be offered'
+);
+check(
+  SEV.evaluateReportSeverity(LF.applyParamOverrides(ueReport, egfrProfileOn), { resultRules: someRule }).level ===
+    'none',
+  'with override, the same U&E scores none — now offerable'
+);
+// Confirm dialog is loud about the override.
+const ovrMsg = LF.buildFilingConfirmMessage(ueReport, {
+  name: 'U&E',
+  paramsOverrideLabFlags: true,
+  parameters: [{ analyte: 'egfr', low: 60 }],
+  filing: { normalOptionText: 'Normal' },
+});
+check(
+  /lab flagged low — accepted by your set range/.test(ovrMsg),
+  'confirm dialog flags the lab-overridden analyte loudly'
+);
+
 // ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
 console.log('\n--- fileabilityBlockers ---');
 const okReport = { unmatched: false, results: [{ name: 'Haemoglobin', value: 130, text: 'Haemoglobin 130' }] };
@@ -460,6 +526,21 @@ check(
   'sanitise trims and drops empty excludeIfMeds'
 );
 check(guardSp.suppressIfText[0] === 'telephone result', 'sanitise preserves suppressIfText');
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { paramsOverrideLabFlags: 'yes' })).some((e) =>
+    /paramsOverrideLabFlags/.test(e)
+  ),
+  'non-boolean paramsOverrideLabFlags rejected'
+);
+check(
+  LF.sanitiseProfile(withParams([{ analyte: 'k', high: 5 }], { paramsOverrideLabFlags: true }))
+    .paramsOverrideLabFlags === true,
+  'sanitise preserves paramsOverrideLabFlags'
+);
+check(
+  LF.sanitiseProfile(withParams([{ analyte: 'k', high: 5 }], {})).paramsOverrideLabFlags === false,
+  'paramsOverrideLabFlags defaults false'
+);
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

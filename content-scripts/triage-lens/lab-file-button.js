@@ -469,6 +469,22 @@
     }
   }
 
+  // Apply the matched profile's "my range wins" lab-flag override (if opted in) and
+  // RE-SCORE: returns the effective severity + fileability blockers the all-normal gate
+  // should use. Without an override-enabled profile this is exactly rs's raw values, so
+  // the default path is unchanged. The engine stays oblivious to lab-filing profiles —
+  // the override is applied to a cloned report here, then re-scored by the same scorer.
+  function effectiveScore(rs, profile) {
+    if (!rs) return { severity: null, report: null, fileBlockers: ['could not read the result'] };
+    if (!LF || !SEV || !profile || profile.paramsOverrideLabFlags !== true) {
+      return { severity: rs.severity, report: rs.report, fileBlockers: rs.blockers || [] };
+    }
+    const adj = LF.applyParamOverrides(rs.report, profile);
+    const severity = SEV.evaluateReportSeverity(adj, { priorityDisplay: '', resultRules, problems: [] });
+    const fileBlockers = LF.fileabilityBlockers(adj, severity, resultRules);
+    return { severity, report: adj, fileBlockers };
+  }
+
   // Combine every per-profile blocker — the clinician-set parameters, the trend
   // guard, the per-patient suppress list, the text-suppress phrases, and (when the
   // profile names monitored drugs) the medication-exclusion check. Async because
@@ -534,6 +550,7 @@
   let btn = null;
   let msgBtn = null;
   let suppressLink = null;
+  let hintEl = null;
   let busy = false;
   let currentProfile = null;
   let currentReport = null;
@@ -555,7 +572,12 @@
     suppressLink.className = 'chlf-link chlf-hidden';
     suppressLink.textContent = 'Never auto-file this patient';
     suppressLink.onclick = () => suppressCurrentPatient();
+    // Visible reason line for the blocked state (not a hover tooltip) — names why
+    // auto-file was declined so the clinician can SEE the rule ran and judged.
+    hintEl = document.createElement('div');
+    hintEl.className = 'chlf-hint chlf-hidden';
     host.appendChild(btn);
+    host.appendChild(hintEl);
     host.appendChild(msgBtn);
     host.appendChild(suppressLink);
     const style = document.createElement('style');
@@ -618,17 +640,29 @@
       msgBtn.classList.add('chlf-hidden');
     }
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
+    if (hintEl) hintEl.classList.add('chlf-hidden');
     host.classList.remove('chlf-hidden');
   }
   // A non-actionable note shown when a profile fits but the result has something
   // the gate cannot judge — so the clinician knows the feature saw the result and
   // deliberately did NOT offer to file it (and why), rather than seeing nothing.
-  function showBlockedHint(blockers) {
+  function showBlockedHint(blockers, profile) {
     currentProfile = null; // not fileable — onAction early-returns
+    const reasons = (blockers || []).filter(Boolean);
+    const name = profile && profile.name ? profile.name : 'profile';
     btn.className = 'chlf-btn chlf-note';
     btn.disabled = true;
-    btn.textContent = 'Auto-file not offered — review manually';
-    btn.title = 'This result was not offered for one-click filing because: ' + (blockers || []).join('; ') + '.';
+    // Name the matched profile so the clinician can SEE the rule ran (not a silent no-op).
+    btn.textContent = '⚠ ' + name + ' — not auto-filed';
+    btn.title = 'The “' + name + '” profile matched this result but did not offer one-click filing.';
+    if (hintEl) {
+      // Show the reason(s) INLINE, not in a tooltip. First two, then a count.
+      const shown = reasons.slice(0, 2).join(' · ');
+      const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
+      hintEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
+      hintEl.title = reasons.join('\n');
+      hintEl.classList.remove('chlf-hidden');
+    }
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     // Still allow opting this patient out, even on the blocked-hint state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
@@ -639,6 +673,7 @@
     if (host) host.classList.add('chlf-hidden');
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
+    if (hintEl) hintEl.classList.add('chlf-hidden');
   }
 
   function toast(msg, kind) {
@@ -676,8 +711,9 @@
       // fail-closed blocker, not just numeric severity.
       const rs = await loadReportSeverity(true);
       const profile = currentProfile;
+      const eff = effectiveScore(rs, profile);
       const blockers = rs
-        ? (rs.blockers || []).concat(await computeProfileBlockers(rs, profile))
+        ? (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile))
         : ['could not read the result'];
       if (!rs || blockers.length) {
         toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
@@ -689,8 +725,10 @@
         root: document.body,
         profile,
         action,
-        severity: rs.severity,
+        severity: eff.severity,
         blockers,
+        // Confirm dialog gets the ORIGINAL report so it shows the real lab flags AND the
+        // "accepted by your set range" note — the clinician sees what they're overriding.
         report: rs.report,
         patient: readPatientBanner(),
         mode,
@@ -816,9 +854,10 @@
     // one). Otherwise show the action button. The profile's OWN per-analyte
     // parameters (clinician-set ranges, incl. un-ranged analytes like HbA1c) are
     // checked here on top of the generic blockers.
-    const blockers = (rs.blockers || []).concat(await computeProfileBlockers(rs, profile));
+    const eff = effectiveScore(rs, profile);
+    const blockers = (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile));
     if (blockers.length) {
-      showBlockedHint(blockers);
+      showBlockedHint(blockers, profile);
       return;
     }
     showButton(profile);
@@ -836,6 +875,9 @@
     '.chlf-btn.chlf-note{background:#92400e;cursor:default}.chlf-btn.chlf-note:hover{background:#92400e}',
     '.chlf-link{background:transparent;color:#fff;border:0;padding:2px 6px;cursor:pointer;font:500 11px/1.2 system-ui;opacity:.85;text-decoration:underline;text-underline-offset:2px}',
     '.chlf-link:hover{opacity:1}.chlf-link.chlf-hidden{display:none}',
+    '.chlf-hint{max-width:340px;background:#92400e;color:#fff;border-radius:8px;padding:7px 12px;',
+    'font:500 11px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}',
+    '.chlf-hint.chlf-hidden{display:none}',
     '.chlf-toast{position:fixed;right:18px;bottom:74px;z-index:2147483000;max-width:360px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',
     '.chlf-toast.chlf-show{opacity:1;transform:none}',

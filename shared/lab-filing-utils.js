@@ -174,14 +174,22 @@
     if (p.requireRangeForAll !== undefined && typeof p.requireRangeForAll !== 'boolean') {
       errs.push('requireRangeForAll must be a boolean.');
     }
+    if (p.paramsOverrideLabFlags !== undefined && typeof p.paramsOverrideLabFlags !== 'boolean') {
+      errs.push('paramsOverrideLabFlags must be a boolean.');
+    }
     if (p.trend !== undefined) {
       if (!p.trend || typeof p.trend !== 'object' || Array.isArray(p.trend)) errs.push('trend must be an object.');
-      else if (!isUnset(p.trend.maxDeltaPct) && (!Number.isFinite(Number(p.trend.maxDeltaPct)) || Number(p.trend.maxDeltaPct) < 0)) {
+      else if (
+        !isUnset(p.trend.maxDeltaPct) &&
+        (!Number.isFinite(Number(p.trend.maxDeltaPct)) || Number(p.trend.maxDeltaPct) < 0)
+      ) {
         errs.push('trend.maxDeltaPct must be a non-negative number.');
       }
     }
-    if (p.excludeIfMeds !== undefined && !strArrOk(p.excludeIfMeds)) errs.push('excludeIfMeds must be an array of strings.');
-    if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText)) errs.push('suppressIfText must be an array of strings.');
+    if (p.excludeIfMeds !== undefined && !strArrOk(p.excludeIfMeds))
+      errs.push('excludeIfMeds must be an array of strings.');
+    if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText))
+      errs.push('suppressIfText must be an array of strings.');
 
     if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
       errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
@@ -242,6 +250,12 @@
       analytes: sanitiseStrArr(p.analytes, LF_LIMITS.analyteItem, LF_LIMITS.analytes),
       parameters: sanitiseParams(p.parameters),
       requireRangeForAll: p.requireRangeForAll === true,
+      // When true, a result that is within the clinician's set parameter range counts
+      // as normal for the all-normal gate EVEN IF the lab flagged it out-of-range
+      // (e.g. eGFR 89 with a clinician floor of 60, where the lab's range is 90–120).
+      // Bounded to analytes that have an explicit parameter; never overrides an
+      // urgent/requires-review flag. Off by default (the lab flag stays authoritative).
+      paramsOverrideLabFlags: p.paramsOverrideLabFlags === true,
       filing: {
         rowSelector: clamp(f.rowSelector, LF_LIMITS.selector),
         openControlText: clamp(f.openControlText, LF_LIMITS.control),
@@ -433,6 +447,43 @@
     return Array.from(new Set(reasons));
   }
 
+  // Return a report whose lab out-of-range flags (isAbove/isBelow) have been CLEARED
+  // for any analyte that (a) the profile sets an explicit parameter for and (b) whose
+  // value falls within that clinician-set range. This is the "my range wins" override:
+  // the clinician has declared the normal limit for that analyte, so a lab reference
+  // range that flags it (e.g. eGFR's over-sensitive 90–120) is superseded FOR THE
+  // ALL-NORMAL DETERMINATION. Safety bounds, all hard:
+  //   • opt-in only — does nothing unless profile.paramsOverrideLabFlags === true;
+  //   • an `urgent` (requires-urgent-review) flag is NEVER cleared;
+  //   • only analytes with a matching parameter are touched; everything else is left
+  //     exactly as the lab reported it;
+  //   • a value OUTSIDE the clinician's range keeps its lab flag (and is also caught by
+  //     profileParamBlockers), so the override can only ever ACCEPT, never hide a value
+  //     the clinician themselves called abnormal;
+  //   • a non-numeric value keeps its flag (we can't judge it).
+  // Returns a NEW report object (results shallow-cloned); the input is never mutated.
+  // The cleared results carry `_labFlagOverridden: true` so the confirm dialog can be loud.
+  function applyParamOverrides(report, profile) {
+    if (!report || !Array.isArray(report.results)) return report;
+    if (!profile || profile.paramsOverrideLabFlags !== true) return report;
+    const params = Array.isArray(profile.parameters) ? profile.parameters : [];
+    if (!params.length) return report;
+    const results = report.results.map((r) => {
+      if (!r || typeof r !== 'object') return r;
+      if (r.urgent) return r; // never override an urgent flag
+      if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
+      const param = findParamFor(isStr(r.name) ? r.name : '', params);
+      if (!param) return r;
+      const val = Number(r.value);
+      if (!Number.isFinite(val)) return r; // can't judge → keep the lab flag
+      const withinLow = param.low == null || val >= param.low;
+      const withinHigh = param.high == null || val <= param.high;
+      if (withinLow && withinHigh) return { ...r, isAbove: false, isBelow: false, _labFlagOverridden: true };
+      return r;
+    });
+    return { ...report, results };
+  }
+
   // The previous value + delta for a result, from its history (newest-first). Returns
   // { prev, date, delta, deltaPct, dir } or null if there's no comparable previous.
   function analyteTrend(result) {
@@ -464,7 +515,9 @@
       const t = analyteTrend(r);
       if (t && t.deltaPct != null && Math.abs(t.deltaPct) > maxPct) {
         const name = isStr(r.name) ? r.name : 'a result';
-        reasons.push(`${name} has changed ${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}% since last (${t.prev} → ${r.value})`);
+        reasons.push(
+          `${name} has changed ${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}% since last (${t.prev} → ${r.value})`
+        );
       }
     }
     return Array.from(new Set(reasons));
@@ -476,11 +529,15 @@
     const reasons = [];
     const ex = profile && Array.isArray(profile.excludeIfMeds) ? profile.excludeIfMeds : [];
     if (!ex.length || !Array.isArray(meds)) return reasons;
-    const names = meds.map((m) => (isStr(m) ? m : m && isStr(m.name) ? m.name : '')).filter(Boolean).map((s) => s.toLowerCase());
+    const names = meds
+      .map((m) => (isStr(m) ? m : m && isStr(m.name) ? m.name : ''))
+      .filter(Boolean)
+      .map((s) => s.toLowerCase());
     for (const drug of ex) {
       if (!isStr(drug) || !drug.trim()) continue;
       const d = drug.trim().toLowerCase();
-      if (names.some((n) => n.includes(d))) reasons.push(`patient is on a monitored drug (${drug}) — file manually after review`);
+      if (names.some((n) => n.includes(d)))
+        reasons.push(`patient is on a monitored drug (${drug}) — file manually after review`);
     }
     return Array.from(new Set(reasons));
   }
@@ -503,7 +560,8 @@
     const phrases = profile && Array.isArray(profile.suppressIfText) ? profile.suppressIfText : [];
     if (!phrases.length) return reasons;
     const parts = [];
-    if (report && Array.isArray(report.results)) report.results.forEach((r) => r && isStr(r.text) && parts.push(r.text));
+    if (report && Array.isArray(report.results))
+      report.results.forEach((r) => r && isStr(r.text) && parts.push(r.text));
     if (isStr(extraText)) parts.push(extraText);
     const hay = parts.join(' • ').toLowerCase();
     for (const ph of phrases) {
@@ -516,7 +574,18 @@
 
   // CSV of audit entries for export. Header + one row per entry; values quoted.
   function auditCsv(entries) {
-    const cols = ['ts', 'profile', 'taskUuid', 'patientUuid', 'severity', 'analytes', 'marked', 'filed', 'completed', 'messagePrepared'];
+    const cols = [
+      'ts',
+      'profile',
+      'taskUuid',
+      'patientUuid',
+      'severity',
+      'analytes',
+      'marked',
+      'filed',
+      'completed',
+      'messagePrepared',
+    ];
     const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const rows = [cols.join(',')];
     for (const e of Array.isArray(entries) ? entries : []) {
@@ -595,7 +664,19 @@
           const arrow = t.dir === 'up' ? '↑' : t.dir === 'down' ? '↓' : '→';
           trend = `  (prev ${t.prev}${t.date ? ' ' + t.date : ''}, ${arrow}${t.delta > 0 ? '+' : ''}${Math.round(t.deltaPct)}%)`;
         }
-        return ` • ${name}: ${valStr}${limit}${trend}`;
+        // Loud note when the lab flagged this analyte out-of-range but the clinician's
+        // own parameter accepted it — the clinician must SEE that they are overriding a
+        // lab flag, on which analyte, before confirming.
+        let override = '';
+        if (profile && profile.paramsOverrideLabFlags === true && param && (r.isAbove || r.isBelow)) {
+          const val = Number(r.value);
+          const within =
+            Number.isFinite(val) &&
+            (param.low == null || val >= param.low) &&
+            (param.high == null || val <= param.high);
+          if (within) override = `  ⚠ lab flagged ${r.isBelow ? 'low' : 'high'} — accepted by your set range`;
+        }
+        return ` • ${name}: ${valStr}${limit}${trend}${override}`;
       });
     const n = lines.length;
     const list = n ? lines.join('\n') : ' • (no individual analytes detected)';
@@ -662,6 +743,7 @@
 - "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
 - "parameters" — array of clinician-set normal ranges, one per analyte, checked IN ADDITION to the lab's own flags. Each: { "analyte": "<name>", "low": <number or null>, "high": <number or null>, "unit": "<unit>" }. Read the reference range from the screenshot where shown. CRUCIAL for analytes the lab shows with NO reference range (e.g. HbA1c): set the practice's own normal limit, e.g. { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" }. Use low and/or high (omit/null the bound that doesn't apply). A result outside its set range blocks one-click filing.
 - "requireRangeForAll" — boolean. If true, the button is suppressed unless EVERY numeric result has either a lab reference range or a parameter here — so an un-ranged analyte (like HbA1c) can never be filed until a parameter is set. Default false.
+- "paramsOverrideLabFlags" — boolean. If true, a result within a parameter range you set here counts as normal EVEN IF the lab flagged it out-of-range — for analytes where the lab's reference range is over-sensitive (e.g. eGFR flagged low at 89 against a 90–120 lab range, when your floor is 60). Only ever applies to analytes you give a parameter, never overrides an urgent flag, and is shown loudly in the confirm dialog. Default false. Set true only when you have deliberately set the clinically-correct range for that analyte.
 - "trend" — { "maxDeltaPct": <number> }. If set, blocks filing when any result has moved more than this percentage vs the patient's previous value (catches a creeping creatinine / falling eGFR even when still "in range"). Omit to disable.
 - "excludeIfMeds" — array of drug-name substrings; if the patient is on any (e.g. ["methotrexate","lithium","amiodarone"]), filing is not offered (monitored drugs need a human). Omit if not applicable.
 - "suppressIfText" — array of phrases (e.g. ["telephone result","call patient"]); if the report text contains any, filing is not offered (a contact was promised). Omit if not applicable.
@@ -739,6 +821,7 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     matchProfile,
     fileabilityBlockers,
     profileParamBlockers,
+    applyParamOverrides,
     analyteTrend,
     trendBlockers,
     medExclusionBlockers,

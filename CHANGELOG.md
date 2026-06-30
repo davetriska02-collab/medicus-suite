@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.143.0] — 2026-06-30
+
+### Lab filing: "my range wins" lab-flag override + a visible not-offered indicator
+
+Two fixes prompted by a real U&E filing screen where the button silently declined.
+
+- **Why it declined was invisible.** When a profile matched but the result wasn't
+  offered, the in-Medicus chip just said "Auto-file not offered — review manually" with
+  the reason buried in a hover-tooltip. It now **names the matched profile** ("⚠ U&E —
+  not auto-filed") and shows the **reason(s) inline** (e.g. "eGFR flagged low by the lab
+  (89, range 90–120)"), so you can see the rule ran and judged — not a silent no-op.
+- **Lab reference ranges can be over-sensitive.** An eGFR of 89 is flagged low against a
+  lab range of 90–120, which blocked the whole U&E even though it's clinically normal.
+  Profiles gain an opt-in **"let my ranges override the lab's out-of-range flag"**
+  (`paramsOverrideLabFlags`): a result within a range you've set for that analyte counts
+  as normal for the all-normal gate even if the lab flagged it. Hard safety bounds — it
+  only ever applies to analytes you've explicitly ranged, **never** overrides an
+  urgent/requires-review flag, only ever *accepts* (a value outside your range still
+  blocks, and is still caught by your parameter check), and every overridden analyte is
+  shown **loudly in the confirm dialog** ("eGFR 89 ⚠ lab flagged low — accepted by your
+  set range"). Default off; the lab flag stays authoritative until you opt in per profile.
+- New `applyParamOverrides()` clones the report and clears only the relevant lab flags,
+  then the same severity scorer re-runs — the engine stays oblivious to filing profiles.
+  Schema/validate/sanitise extended; module form gains the toggle; the card shows it as
+  a guard. Tests: utils 129 checks (incl. an integration test proving the eGFR-89 U&E
+  goes amber→none with the override), full suite green.
+
 ## [v3.142.0] — 2026-06-29
 
 ### Lab filing: GP-panel wishlist — trend, drug/text/patient guards, governance

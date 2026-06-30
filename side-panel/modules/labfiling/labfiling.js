@@ -242,6 +242,7 @@ function renderCard(p) {
   if (Array.isArray(p.suppressIfText) && p.suppressIfText.length)
     guards.push(`${p.suppressIfText.length} text rule${p.suppressIfText.length === 1 ? '' : 's'}`);
   if (p.requireRangeForAll) guards.push('range required for all');
+  if (p.paramsOverrideLabFlags) guards.push('my ranges override lab flags');
   return `
     <div class="lf-card${p.enabled ? ' lf-card-on' : ''}">
       <div class="lf-card-top">
@@ -313,6 +314,8 @@ function renderForm() {
         <div id="lfParams" class="lf-params">${(p.parameters || []).map(paramRowHtml).join('') || paramRowHtml({})}</div>
         <button class="lf-btn lf-btn-sm" data-act="add-param" type="button">+ Add parameter</button>
         <label class="lf-check" style="margin-top:10px"><input type="checkbox" id="lfRequireAll" ${reqAllDefault ? 'checked' : ''}> Don’t offer filing unless every result has a range (lab’s or one set here)</label>
+        <label class="lf-check"><input type="checkbox" id="lfParamsOverride" ${p.paramsOverrideLabFlags ? 'checked' : ''}> Let my ranges override the lab’s out-of-range flag (e.g. accept eGFR 89 when your floor is 60)</label>
+        <small class="lf-help" style="margin:-4px 0 0">Only for analytes you’ve given a range above, never an urgent flag, and shown loudly in the confirm dialog. Use when the lab’s reference range is over-sensitive.</small>
       </div>
 
       <div class="lf-fieldset">
@@ -575,6 +578,7 @@ function readForm() {
     analytes: splitList(get('lfAnalytes')),
     parameters: readParams(),
     requireRangeForAll: checked('lfRequireAll'),
+    paramsOverrideLabFlags: checked('lfParamsOverride'),
     trend: { maxDeltaPct: trendRaw === '' ? null : trendRaw },
     excludeIfMeds: splitList(get('lfExMeds')),
     suppressIfText: splitList(get('lfSuppressText')),
@@ -653,6 +657,8 @@ function fillFromLlm() {
   }
   const reqChk = container.querySelector('#lfRequireAll');
   if (reqChk) reqChk.checked = clean.requireRangeForAll === true;
+  const ovrChk = container.querySelector('#lfParamsOverride');
+  if (ovrChk) ovrChk.checked = clean.paramsOverrideLabFlags === true;
   // Message stays OFF (lockForReview) — the clinician opts in deliberately.
   const msgChk = container.querySelector('#lfMsgEnabled');
   if (msgChk) msgChk.checked = false;
