@@ -150,6 +150,95 @@ console.log('\n--- end-to-end: listUnmatchedMedicationsDetailed → flagHighRisk
   );
 }
 
+// ── 8. W1: possibleDuplicateOf cross-reference against matched meds ───────────
+
+console.log('\n--- W1: possibleDuplicateOf cross-reference ---');
+
+{
+  // The duplicate-form case the GP panel converged on: an odd lithium SALT whose
+  // name still carries the "lithium" stem goes unmatched (the rule only lists
+  // carbonate) while a generic lithium IS matched on the same patient. With the
+  // matched-med list passed, the flag must point at the sibling.
+  // (NB: a brand with NO generic stem in its name — Priadel, Camcolit — cannot
+  // be classified at all; that is the documented brand-only limit, tested below.)
+  const rules = [{ id: 'li-001', type: 'drug-monitoring', drug: { match: ['lithium carbonate'] }, tests: [] }];
+  const meds = [
+    { name: 'Lithium carbonate 400mg tablets' }, // matched
+    { name: 'Lithium citrate 520mg/5ml oral solution' }, // unmatched + high-risk (stem 'lithium')
+  ];
+  const unmatchedDetailed = listUnmatchedMedicationsDetailed(meds, rules);
+  const flagged = flagHighRiskUnmatched(
+    unmatchedDetailed,
+    meds.map((m) => m.name)
+  );
+  check(
+    flagged.length === 1 && /lithium citrate/i.test(flagged[0].name),
+    'unmatched lithium citrate (carrying the lithium stem) is flagged high-risk'
+  );
+  check(
+    flagged[0].possibleDuplicateOf === 'Lithium carbonate 400mg tablets',
+    'possibleDuplicateOf points at the matched lithium carbonate sibling'
+  );
+}
+
+{
+  // The methotrexate-injection case: a parenteral MTX dropped by an injectable
+  // exclude still carries the 'methotrexate' stem, so it is high-risk-classed,
+  // and an oral MTX matched on the same patient is the likely sibling.
+  const rules = [
+    {
+      id: 'mtx-oral',
+      type: 'drug-monitoring',
+      drug: { match: ['methotrexate'], exclude: ['injection'] },
+      tests: [],
+    },
+  ];
+  const meds = [
+    { name: 'Methotrexate 2.5mg tablets' }, // matched
+    { name: 'Methotrexate 10mg/0.2ml injection' }, // excluded → unmatched + high-risk
+  ];
+  const unmatchedDetailed = listUnmatchedMedicationsDetailed(meds, rules);
+  const flagged = flagHighRiskUnmatched(
+    unmatchedDetailed,
+    meds.map((m) => m.name)
+  );
+  check(
+    flagged.length === 1 && flagged[0].reason === 'excluded',
+    'excluded MTX injection is flagged high-risk and carries reason=excluded'
+  );
+  check(
+    flagged[0].possibleDuplicateOf === 'Methotrexate 2.5mg tablets',
+    'possibleDuplicateOf points at the matched oral methotrexate sibling'
+  );
+}
+
+{
+  // No sibling: a genuinely lone unmonitored high-risk drug must NOT claim a
+  // duplicate (the alert must stay loud, not be softened into a false reassurance).
+  const rules = [{ id: 'mtx-001', type: 'drug-monitoring', drug: { match: ['methotrexate'] }, tests: [] }];
+  const meds = [{ name: 'Amiodarone 100mg tablets' }, { name: 'Methotrexate 2.5mg tablets' }];
+  const unmatchedDetailed = listUnmatchedMedicationsDetailed(meds, rules);
+  const flagged = flagHighRiskUnmatched(
+    unmatchedDetailed,
+    meds.map((m) => m.name)
+  );
+  check(
+    flagged.length === 1 && /amiodarone/i.test(flagged[0].name) && flagged[0].possibleDuplicateOf === null,
+    'a lone unmonitored amiodarone has possibleDuplicateOf === null'
+  );
+}
+
+{
+  // Backward compatibility: called WITHOUT the matched-med list, possibleDuplicateOf
+  // must be null (and the rest of the shape unchanged) so existing callers are safe.
+  const detailed = [detail('Amiodarone 100mg tablets')];
+  const flagged = flagHighRiskUnmatched(detailed);
+  check(
+    flagged.length === 1 && flagged[0].possibleDuplicateOf === null,
+    'omitting allMedNames keeps possibleDuplicateOf null (back-compat)'
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

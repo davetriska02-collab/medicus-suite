@@ -329,6 +329,13 @@
 .sent-hrisk-why {
   color: var(--text-3);
 }
+.sent-hrisk-dup {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .sent-hrisk-note {
   margin: 0;
   font-size: 11px;

@@ -1212,7 +1212,10 @@
           // Elevate any high-risk drug that slipped through unmatched (odd brand,
           // exclude, or disabled rule) — a silent monitoring blind spot.
           const unmatchedHighRisk = window.SentinelRules.flagHighRiskUnmatched
-            ? window.SentinelRules.flagHighRiskUnmatched(unmatchedMedsDetailed)
+            ? window.SentinelRules.flagHighRiskUnmatched(
+                unmatchedMedsDetailed,
+                (data.medications || []).map((m) => m && m.name)
+              )
             : [];
           // Stamp rule file metadata onto the trace envelope (captured once at loadRules time).
           let trace = rawTrace;

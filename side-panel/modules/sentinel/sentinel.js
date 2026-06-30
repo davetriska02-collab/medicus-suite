@@ -6,6 +6,7 @@
 
 import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentinel-core.js';
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
+import { downloadCsv } from '../shared/export-util.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
 import { startTour } from '../../tour/tour.js';
@@ -1126,6 +1127,7 @@ function render(payload) {
       <button class="sent-filter-btn${currentFilter === 'all' ? ' active' : ''}" data-filter="all" aria-pressed="${currentFilter === 'all'}">All (${chips.length})</button>
       <button class="sent-filter-btn${currentFilter === 'action' ? ' active action' : ''}" data-filter="action" aria-pressed="${currentFilter === 'action'}">Needs action (${actionCount})</button>
       <button class="sent-filter-btn${currentFilter === 'clear' ? ' active clear' : ''}" data-filter="clear" aria-pressed="${currentFilter === 'clear'}">In date (${clearCount})</button>
+      <button class="sent-filter-btn sent-export-btn" id="sentExportCsv" title="Export this patient's monitoring to CSV (stays on your device)">&#8595; CSV</button>
     </div>`;
 
   const typeOrder = [
@@ -1349,13 +1351,17 @@ function render(payload) {
 
   // #sentRefreshBtn is handled by the persistent delegated click handler wired in
   // init() (_refreshBtnHandler); no per-render listener here (would double-fire).
-  container.querySelectorAll('.sent-filter-btn').forEach((btn) => {
+  container.querySelectorAll('.sent-filter-btn[data-filter]').forEach((btn) => {
     btn.addEventListener('click', () => {
       currentFilter = btn.dataset.filter;
       _openEvidenceKey = null; // filter change closes any open panel
       render(payload); // re-render with new filter
     });
   });
+
+  // W7a: CSV export of the current patient's monitoring (parity with Referrals/
+  // Trends). Client-side download only — no data leaves the browser.
+  container.querySelector('#sentExportCsv')?.addEventListener('click', exportSentinelCsv);
 
   // Restore the evidence panel that was open before this re-render, if its chip
   // still exists in the new snapshot.
@@ -2024,6 +2030,43 @@ function ensureFeedbackEmailLoaded() {
 // monitoring rule, so no overdue-blood chip could ever fire for them. The list
 // is a strict subset of the unmatched-meds section below; this just stops the
 // dangerous ones from hiding inside a collapsed "N unmatched" list.
+// W7a: flatten the current snapshot's chips into a CSV the clinician can keep
+// (e.g. a weekly overdue-monitoring list). One row per drug-test, one per other
+// chip. Client-side only — uses the shared downloadCsv helper, nothing leaves
+// the browser. The patient name is included exactly as Referrals' CSV does, and
+// only on the clinician's own explicit download.
+function exportSentinelCsv() {
+  const snap = _currentSnapshot;
+  if (!snap || !Array.isArray(snap.chips) || snap.chips.length === 0) return;
+  const pc = snap.patientContext || {};
+  const patient =
+    [pc.firstName || pc.givenName, pc.lastName || pc.familyName].filter(Boolean).join(' ') || pc.name || '';
+  const header = ['Patient', 'Category', 'Item', 'Test', 'Status', 'Value', 'Last result', 'Due'];
+  const rows = [];
+  for (const c of snap.chips) {
+    if (!c) continue;
+    const category = c.type || '';
+    const item = c.drugName || c.indicatorName || c.name || c.ruleId || '';
+    if (c.type === 'drug-monitoring' && Array.isArray(c.tests) && c.tests.length) {
+      for (const t of c.tests) {
+        const last = t.latestObs && t.latestObs.date ? t.latestObs.date : '';
+        let due = '';
+        if (t.latestObs && t.latestObs.date && t.intervalDays) {
+          const base = new Date(t.latestObs.date);
+          if (!isNaN(base.getTime())) due = new Date(base.getTime() + t.intervalDays * 86400000).toISOString().slice(0, 10);
+        }
+        const value = t.latestObs && t.latestObs.value != null ? String(t.latestObs.value).trim() : '';
+        rows.push([patient, category, item, t.testName || t.name || '', t.status || '', value, last, due]);
+      }
+    } else {
+      rows.push([patient, category, item, '', c.status || '', '', c.dateText || '', '']);
+    }
+  }
+  if (!rows.length) return;
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(`sentinel-${stamp}.csv`, header, rows);
+}
+
 function renderHighRiskUnmatchedBanner(highRisk) {
   if (!Array.isArray(highRisk) || highRisk.length === 0) return '';
   const items = highRisk
@@ -2032,10 +2075,18 @@ function renderHighRiskUnmatchedBanner(highRisk) {
         h.reason === 'excluded' && h.excludedBy
           ? `excluded by &lsquo;${escHtml(h.excludedBy.term)}&rsquo; (rule ${escHtml(h.excludedBy.ruleId)})`
           : 'no monitoring rule matched';
+      // W1: if a different, already-monitored med on this same patient shares
+      // the risk stem, say so — most likely a brand/duplicate of a drug that IS
+      // being tracked under another name, not a second unmonitored course.
+      const dupHtml = h.possibleDuplicateOf
+        ? ` <span class="sent-hrisk-dup">&mdash; possibly the same as <strong>${escHtml(
+            h.possibleDuplicateOf
+          )}</strong> monitored below; check for a duplicate repeat in Medicus</span>`
+        : '';
       return (
         `<li><strong>${escHtml(h.name)}</strong> ` +
         `<span class="sent-hrisk-class">${escHtml(h.riskClass)}</span> ` +
-        `<span class="sent-hrisk-why">&mdash; ${why}</span></li>`
+        `<span class="sent-hrisk-why">&mdash; ${why}</span>${dupHtml}</li>`
       );
     })
     .join('');

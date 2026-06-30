@@ -4,13 +4,17 @@
 (function(global) {
   'use strict';
 
-  // Both keys are valid live storage keys but only referrals.config is exported.
+  // Three valid live storage keys but only referrals.config is exported.
   // referrals.discovery is live-only — intentionally NOT exported (PHI containment,
   // audit M1; see practice-profile.js:639). It is rediscovered automatically when
   // the user visits the referrals page.
+  // referrals.chaseLog (W2b) is ALSO live-only and NOT exported: its fallback keys
+  // can embed patient names, so it must never land in a backup file. The 2WW
+  // "chased" ticks are a transient local convenience, safe to lose on restore.
   const REFERRALS_KEYS = [
     'referrals.discovery',
     'referrals.config',
+    'referrals.chaseLog',
   ];
 
   async function referralsExport() {

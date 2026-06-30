@@ -19,6 +19,13 @@ const TOP_N = 15;
 const STALE_MS = 30 * 60 * 1000;
 const DISCOVERY_KEY = 'referrals.discovery';
 const CONFIG_KEY = 'referrals.config';
+// W2b (GP-panel 2026-06-30): a SUITE-LOCAL "chased" annotation on 2WW
+// safety-net rows. The Medicus referral audit exposes no patient UUID, so the
+// suite cannot (and by its read-only design must not) write a chase task into
+// Medicus — this records, per referralId, that a clinician has actioned the
+// open loop, so the worklist visibly closes. Machine-local only; clearly
+// labelled as such in the UI.
+const CHASE_KEY = 'referrals.chaseLog';
 
 let container = null;
 let stalenessTimer = null;
@@ -32,6 +39,7 @@ let state = {
   startDate: null,
   endDate: null,
   rawReferrals: null,
+  chaseLog: {},
   totalCount: 0,
   aggregated: null,
   loading: false,
@@ -118,8 +126,9 @@ export async function init(el) {
     }
   }
 
-  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY]);
+  const stored = await chrome.storage.local.get([DISCOVERY_KEY, CONFIG_KEY, CHASE_KEY]);
   const r = resolveStored(stored);
+  state.chaseLog = stored[CHASE_KEY] && typeof stored[CHASE_KEY] === 'object' ? stored[CHASE_KEY] : {};
   state.discoveryUrl = r.discoveryUrl;
   state.configUrl = r.configUrl;
   state.configPriorities = r.priorities;
@@ -519,6 +528,29 @@ function renderDiagnostics() {
   `;
 }
 
+// W2b helpers — a stable key per open-loop row and a short date for the tick.
+function safetyNetRowKey(r) {
+  if (r && r.referralId) return String(r.referralId);
+  // Fallback for rows without a referralId: compose from the stable fields.
+  return [r.patientFamilyName, r.patientGivenName, r.referralDate, r.referralService]
+    .filter(Boolean)
+    .join('|');
+}
+
+function formatChaseDate(ts) {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+async function setChased(key, on) {
+  if (!key) return;
+  if (on) state.chaseLog[key] = { ts: Date.now() };
+  else delete state.chaseLog[key];
+  await chrome.storage.local.set({ [CHASE_KEY]: state.chaseLog });
+  render();
+}
+
 // 2WW / Faster-Diagnosis safety-net worklist: suspected-cancer referrals still
 // showing Incomplete, oldest-first, with calendar-day ages. Reads raw referrals
 // (the module already fetched them) — no new endpoint, no patient UUID needed.
@@ -536,10 +568,21 @@ function renderSafetyNet() {
         r.severity === 'overdue' ? 'ref-sn-overdue' : r.severity === 'watch' ? 'ref-sn-watch' : 'ref-sn-open';
       const svc = r.referralService ? `<span class="ref-sn-svc">${escHtml(r.referralService)}</span>` : '';
       const clin = r.referringClinician ? `<span class="ref-sn-clin">${escHtml(r.referringClinician)}</span>` : '';
+      // W2b: per-row "chased" annotation. Keyed by referralId (falling back to a
+      // composite) so the tick survives re-fetch. Suite-local, no Medicus write.
+      const key = safetyNetRowKey(r);
+      const chased = state.chaseLog[key];
+      const chaseHtml = chased
+        ? `<span class="ref-sn-chased" title="Marked chased locally on ${escHtml(
+            formatChaseDate(chased.ts)
+          )}">&#10003; chased ${escHtml(formatChaseDate(chased.ts))}
+             <button class="ref-sn-unchase" data-chase-key="${escHtml(key)}" title="Undo">undo</button></span>`
+        : `<button class="ref-sn-chase" data-chase-key="${escHtml(key)}" title="Record locally that you have chased this open loop">Mark chased</button>`;
       return `<div class="ref-sn-row ${sevClass}">
         <span class="ref-sn-age" title="calendar days since referral">${escHtml(age)}</span>
         <span class="ref-sn-name">${escHtml(name)}</span>
         ${svc}${clin}
+        ${chaseHtml}
       </div>`;
     })
     .join('');
@@ -557,7 +600,7 @@ function renderSafetyNet() {
         <span class="ref-sn-title">&#9888; Open 2WW safety-net (${sn.counts.total})</span>
         ${overdueBadge}${watchBadge}
       </div>
-      <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard.</p>
+      <p class="ref-sn-note">Suspected-cancer (2WW) referrals still showing <strong>Incomplete</strong> — no confirmed outcome yet. Check each has been received and an appointment booked; absent safety-netting/follow-up is the top root cause of cancer-delay claims. Ages are calendar days since referral; thresholds are a guide, not a clinical standard. <strong>Mark chased</strong> records, on this device only, that you have actioned a loop — it does not write to Medicus.</p>
       <div class="ref-sn-rows">${rowsHtml}</div>
     </div>`;
 }
@@ -886,6 +929,14 @@ function wireControls() {
   container.querySelector('#refRefresh')?.addEventListener('click', fetchAndRender);
   container.querySelector('#refTsRefresh')?.addEventListener('click', fetchAndRender);
   container.querySelector('#refCsvBtn')?.addEventListener('click', downloadCSV);
+
+  // W2b: 2WW safety-net "chased" toggles (suite-local annotation).
+  container.querySelectorAll('.ref-sn-chase').forEach((btn) => {
+    btn.addEventListener('click', () => setChased(btn.dataset.chaseKey, true));
+  });
+  container.querySelectorAll('.ref-sn-unchase').forEach((btn) => {
+    btn.addEventListener('click', () => setChased(btn.dataset.chaseKey, false));
+  });
 
   container.querySelectorAll('.ref-chart-tab').forEach((btn) => {
     btn.addEventListener('click', () => {

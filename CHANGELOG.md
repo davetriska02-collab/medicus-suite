@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.144.0] — 2026-06-30
+
+### GP-panel feedback build — eight roadmap items from the 20-GP appraisal
+
+Implements the convergent asks from the synthetic 20-GP whole-suite appraisal
+(`docs/appraisal/GP-PANEL-whole-suite-2026-06-30.md`). All read-only/engine/UI;
+no `defaults.json`, clinical-rule or migration-propagated change.
+
+- **W1 — high-risk-unmatched cross-reference (Sentinel).** `flagHighRiskUnmatched()`
+  now takes the patient's full med list and tags `possibleDuplicateOf` when an
+  unmatched high-risk drug shares a stem with an already-matched medicine on the
+  same record; the banner says "possibly the same as X below — check for a
+  duplicate repeat in Medicus" instead of leaving two unrelated-looking facts.
+  Back-compatible (omit the arg → null). New tests in `test-high-risk-unmatched.js`.
+- **W2a — 2WW cancer safety-net global strip.** A fourth global alert strip
+  (`#twwStrip`) surfaces aging open suspected-cancer (2WW) loops on every screen,
+  reusing `ReferralsApi.buildSafetyNet` and the existing strip/roll-up pattern.
+  Fires only on watch/overdue loops; 5-min poll (gentle on patchy broadband).
+- **W2b — close-the-loop "chased" annotation (Referrals).** A suite-local
+  per-row "Mark chased" tick on the 2WW worklist (keyed by referralId). The
+  referral audit exposes no patient UUID, so this records action locally and
+  does NOT write to Medicus (read-only boundary preserved); live-only, never
+  exported (fallback keys can embed names).
+- **W3a — recall task reference (Sweep).** The recall confirmation now shows the
+  Medicus task reference when the create response carries one, so the GP has
+  proof the task landed.
+- **W3b — batch recall tasks (Sweep).** A review-then-create batch path: tick
+  several action-needed patients, pick one assignee, see every patient and the
+  exact description that will be filed, then one explicit confirm. NOT
+  fire-and-forget — the long-standing "no blind bulk create" intent is preserved.
+- **W4 — QOF points-at-risk context (Sweep).** The headline is anchored to the
+  QOF year and states scope plainly (only the patients with gaps in this sweep —
+  not practice-total or achievement %, which a read-only sweep cannot compute).
+- **W5 — "What needs you" priorities card (Today).** A new first card ranks the
+  action-needed patients from the last sweep (red before amber); explicit that
+  the 2WW strip and the open patient's Sentinel flags are separate signals.
+- **W6a — absolute due-dates (Sentinel chips).** Monitoring test rows show the
+  absolute due-date (last result + effective interval) next to the relative day
+  count, only when both are present. Guarded in `test-chip-contract.js`.
+- **W7a — CSV export parity (Sentinel + Today).** Export buttons on Sentinel
+  (per-patient monitoring) and Today (snapshot), via the existing shared
+  `export-util.js`. Client-side only.
+- **W7b — blind-spot register (Sweep).** Each swept patient's high-risk drugs
+  with no monitoring rule are aggregated into a cohort register panel, so the
+  practice sees every unmonitored high-risk medicine in one place.
+
+**Held for explicit sign-off (NOT in this build): W3 auto-run Sweep.** Running a
+clinical evaluation unattended, before any clinician opens the panel, steps
+beyond the frozen INTENDED-PURPOSE posture ("for the patient or session the
+clinician is actively viewing"). This is a regulatory-posture judgement for the
+author/CSO, not a freehand dev change — deferred pending that decision.
+W7c (exclude-term transparency) was already shipped in the CQC Inspection
+Readiness page (v3.137.0, `engine/cqc-evidence.js` `excludeReason`/`excludeDetails`)
+and is not duplicated here.
+
+Full suite green (121 files). ESLint clean repo-wide.
+
 ## [v3.143.1] — 2026-06-30
 
 ### Fix: OIR matching restored after Medicus checkbox component change

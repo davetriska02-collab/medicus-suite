@@ -870,7 +870,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 });
 
 // ── Alert roll-up (groups elevated demand strips into one summary bar) ────────
-// Three strips (#wrStrip, #rmStrip, #subRagStrip) each render independently below
+// Four strips (#wrStrip, #rmStrip, #subRagStrip, #twwStrip) each render
+// independently below
 // the nav. When two or more are in an ELEVATED (amber/red) state they stack and
 // compete for the same scarce vertical space, so a single severity-ordered roll-up
 // bar replaces the stack: one line at max severity with a pill per elevated channel,
@@ -884,7 +885,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // only ever appears when there is genuinely more than one elevated signal.
 const alertRollupEl = document.getElementById('alertRollup');
 const alertStackEl = document.getElementById('alertStack');
-const alertBus = { waiting: null, triage: null, demand: null };
+const alertBus = { waiting: null, triage: null, demand: null, cancer: null };
 let _rollupExpanded = null; // null = use default (red→open, amber→closed); else session choice
 
 // Persistent "keep the roll-up expanded" preference (suite.rollup.alwaysExpanded).
@@ -904,7 +905,7 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
-const ALERT_CHANNELS = ['waiting', 'triage', 'demand'];
+const ALERT_CHANNELS = ['waiting', 'triage', 'demand', 'cancer'];
 
 function reportAlert(channel, state) {
   // state = { level, label, count, meta?, title? } or null when inactive.
@@ -1585,12 +1586,126 @@ async function fetchAndRenderSubRagStrip() {
 
 let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-rag-strip').start();
 
-// Refresh all three strips immediately when the panel becomes visible again
+// ── 2WW cancer safety-net strip (global) ──────────────────────────────────────
+// GP-panel 2026-06-30 (W2): the Referrals 2WW open-loop worklist was the single
+// most-praised feature AND the loudest "make it harder to miss" ask — a
+// suspected-cancer referral going quiet is the catastrophic-miss category, and
+// it should not be one tab-click away. This surfaces the AGING open loops
+// (watch/overdue) as a fourth global alert strip, reusing the exact poller
+// pattern of the WR/demand strips and ReferralsApi.buildSafetyNet — no new
+// endpoint, same data the Referrals module already fetches. It only fires on
+// aging loops (not every fresh open 2WW) so it stays an alert, not a fixture.
+// Polled slowly (cancer-referral status does not change minute-to-minute, and a
+// 5-min cadence is gentler on patchy-broadband single-handers).
+const twwStripEl = document.getElementById('twwStrip');
+const TWW_POLL_MS = 5 * 60 * 1000;
+const TWW_LOOKBACK_DAYS = 180;
+let _twwPrevLevel = null;
+
+async function fetchAndRenderTwwStrip() {
+  if (document.visibilityState !== 'visible') return true;
+  if (!twwStripEl) return true;
+  const RApi = window.ReferralsApi;
+  if (!RApi || !RApi.fetchReferrals || !RApi.buildSafetyNet) return true;
+
+  function hide() {
+    twwStripEl.className = 'tww-strip tww-strip-hidden';
+    twwStripEl.innerHTML = '';
+    _twwPrevLevel = null;
+    reportAlert('cancer', null);
+  }
+
+  const { code, source } = await window.PracticeCode.resolve();
+  if (!code) {
+    hide();
+    return true;
+  }
+
+  // Need the discovered Referrals report URL to fetch; try storage, then a
+  // best-effort discovery. Without it the strip stays hidden (no error noise) —
+  // it lights up once the user has opened the Referrals report once.
+  let templateUrl = null;
+  try {
+    const stored = await chrome.storage.local.get('referrals.discovery');
+    templateUrl = stored['referrals.discovery']?.url || null;
+    if (!templateUrl && RApi.ensureReferralsDiscovery) {
+      templateUrl = await RApi.ensureReferralsDiscovery(code);
+    }
+  } catch (_) {
+    /* fall through to hidden */
+  }
+  if (!templateUrl) {
+    hide();
+    return true;
+  }
+
+  const end = new Date();
+  const start = new Date(end.getTime() - TWW_LOOKBACK_DAYS * 86400000);
+  const iso = (d) => d.toISOString().slice(0, 10);
+
+  let result;
+  try {
+    result = await RApi.fetchReferrals(code, iso(start), iso(end), {
+      templateUrl,
+      fetch: (url, init) =>
+        window.ApiDiag.fetch({ module: 'panel-tww-strip', url, code, codeSource: source, init }),
+    });
+  } catch (e) {
+    // A stale/expired discovery URL or transient error: hide rather than shout,
+    // and count it as a poll failure so the poller backs off.
+    hide();
+    return false;
+  }
+
+  const sn = RApi.buildSafetyNet(result.referrals || [], {});
+  const { overdue, watch } = sn.counts;
+  // Only the AGING loops elevate the strip; fresh open 2WW referrals are normal.
+  const aging = overdue + watch;
+  if (aging === 0) {
+    hide();
+    return true;
+  }
+  const maxLevel = overdue > 0 ? 'red' : 'amber';
+
+  if (maxLevel !== _twwPrevLevel) {
+    appendAlertLog({
+      ts: Date.now(),
+      channel: 'tww',
+      level: maxLevel,
+      label: `2WW safety-net: ${overdue} overdue, ${watch} watch`,
+    });
+  }
+  _twwPrevLevel = maxLevel;
+
+  const pills =
+    (overdue > 0 ? `<span class="tww-pill tww-pill--red">Overdue: ${overdue}</span>` : '') +
+    (watch > 0 ? `<span class="tww-pill tww-pill--amber">Watch: ${watch}</span>` : '');
+  twwStripEl.className = `tww-strip tww-strip--${maxLevel}`;
+  twwStripEl.innerHTML = `
+    <span class="tww-icon">&#9888;</span>
+    <span class="tww-label">2WW safety-net:</span>
+    ${pills}
+    <button class="tww-goto" title="Go to Referrals">Referrals &rarr;</button>
+  `;
+  twwStripEl.querySelector('.tww-goto')?.addEventListener('click', () => switchModule('referrals'));
+  reportAlert('cancer', {
+    level: maxLevel,
+    label: '2WW',
+    count: aging,
+    title: `Open suspected-cancer (2WW) referrals with no confirmed outcome: ${overdue} overdue (≥${sn.overdueDays}d), ${watch} watch (≥${sn.watchDays}d). Verify each has an appointment booked.`,
+  });
+  return true;
+}
+
+let twwPoller = makePoller(fetchAndRenderTwwStrip, TWW_POLL_MS, 'tww-strip').start();
+
+// Refresh all strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
+    fetchAndRenderTwwStrip();
   }
 });
 
@@ -1615,6 +1730,7 @@ window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
+  if (twwPoller) twwPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

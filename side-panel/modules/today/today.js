@@ -14,6 +14,8 @@
 
 'use strict';
 
+import { downloadCsv } from '../shared/export-util.js';
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WR_POLL_MS = 30 * 1000;
@@ -269,6 +271,8 @@ async function fetchSweep() {
   renderCard('sweep');
   // Recent Alerts borrows sweep provenance for its empty state — keep it in sync.
   renderCard('alerts');
+  // W5: the priorities list is derived from the same sweep run.
+  renderCard('priorities');
 }
 
 // ── Fetch: Alert log ─────────────────────────────────────────────────────────
@@ -298,6 +302,9 @@ function renderCard(which) {
   if (!body) return;
 
   switch (which) {
+    case 'priorities':
+      body.innerHTML = buildPrioritiesBody();
+      break;
     case 'wr':
       body.innerHTML = buildWrBody();
       break;
@@ -508,6 +515,63 @@ function sweepProvenance() {
   return { timeStr, actionNeeded, checked, lastRun };
 }
 
+// W5 (GP-panel 2026-06-30): the floor-band's "one place that tells me what
+// needs me today" ask. Rather than a new module (Sentinel flags are per-open-
+// patient and cannot be cross-aggregated, and the 2WW loops are already a global
+// alert strip), this surfaces the action-needed patients from the last
+// pre-clinic sweep, ranked red-before-amber, as the FIRST card on the landing
+// screen. It is explicit that the 2WW strip and the open patient's Sentinel
+// flags are separate signals — no false "this is everything" impression.
+const PRIO_RED = ['overdue', 'not_met', 'alert'];
+const PRIO_AMBER = ['due_soon', 'recently_initiated'];
+
+function chipLabel(c) {
+  if (!c) return 'action needed';
+  return c.drugName || c.indicatorName || c.name || c.label || c.indicatorCode || c.ruleId || 'action needed';
+}
+
+function buildPrioritiesBody() {
+  const prov = sweepProvenance();
+  if (!prov) {
+    return `<div class="today-prio-empty">Run the pre-clinic sweep to see who needs action, ranked by urgency.</div>`;
+  }
+  const results = Array.isArray(prov.lastRun.results) ? prov.lastRun.results : [];
+  const items = [];
+  for (const r of results) {
+    if (!r || !Array.isArray(r.chips)) continue;
+    const red = r.chips.filter((c) => c && PRIO_RED.includes(c.status));
+    const amber = r.chips.filter((c) => c && PRIO_AMBER.includes(c.status));
+    if (!red.length && !amber.length) continue;
+    items.push({
+      name: r.name || 'Patient',
+      sev: red.length ? 'red' : 'amber',
+      reason: chipLabel(red[0] || amber[0]),
+      count: red.length + amber.length,
+    });
+  }
+  // Red before amber; within a band, more gaps first.
+  items.sort((a, b) => (a.sev === b.sev ? b.count - a.count : a.sev === 'red' ? -1 : 1));
+  if (!items.length) {
+    return `<div class="today-prio-clear">No action-needed patients in the last sweep ✓</div>`;
+  }
+  const top = items.slice(0, 6);
+  const overflow = items.length - top.length;
+  const rowsHtml = top
+    .map(
+      (it) =>
+        `<li class="today-prio-row today-prio-row--${it.sev}">
+          <span class="today-prio-dot" aria-hidden="true"></span>
+          <span class="today-prio-name">${esc(it.name)}</span>
+          <span class="today-prio-reason">${esc(it.reason)}${it.count > 1 ? ` +${it.count - 1}` : ''}</span>
+        </li>`
+    )
+    .join('');
+  const more = overflow > 0 ? `<li class="today-prio-more">+${overflow} more — open Sweep →</li>` : '';
+  return `
+    <ul class="today-prio-list">${rowsHtml}${more}</ul>
+    <div class="today-prio-note">Ranked by urgency from your last sweep. The 2WW cancer safety-net (alert strip) and the open patient's Sentinel flags are separate.</div>`;
+}
+
 function buildSweepBody() {
   if (!_sweepData) return '<span class="today-loading">Loading…</span>';
 
@@ -643,6 +707,14 @@ function renderScaffold() {
 
   const cards = [
     {
+      id: 'priorities',
+      label: 'What needs you',
+      navModule: 'sweep',
+      tipKey: 'priorities',
+      tipText:
+        "The action-needed patients from your last pre-clinic sweep, ranked by urgency. The 2WW cancer safety-net is the alert strip above; the open patient's monitoring is in Sentinel.",
+    },
+    {
       id: 'wr',
       label: 'Waiting Room',
       navModule: 'sentinel',
@@ -694,10 +766,30 @@ function renderScaffold() {
           )
           .join('')}
       </div>
+      <div class="today-foot">
+        <button class="today-export" id="todayExportCsv" title="Export this snapshot to CSV (stays on your device)">&#8595; CSV</button>
+      </div>
     </div>
   `;
 
   wireCardInteractions();
+  // W7a: CSV export of the current Today snapshot (parity with Referrals/Trends).
+  container.querySelector('#todayExportCsv')?.addEventListener('click', exportTodayCsv);
+}
+
+// W7a: flatten the live Today cards into a small Metric/Value snapshot CSV the
+// GP or manager can keep. Client-side only via the shared downloadCsv helper.
+function exportTodayCsv() {
+  const rows = [];
+  const wr = (_wrData && _wrData.patients) || [];
+  rows.push(['Waiting room — arrived', wr.length]);
+  if (wr.length) rows.push(['Waiting room — longest wait (min)', Math.max(...wr.map((p) => p.mins ?? 0))]);
+  if (_demandData && _demandData.medical != null) rows.push(['Demand — medical requests today', _demandData.medical]);
+  if (_demandData && _demandData.admin != null) rows.push(['Demand — admin requests today', _demandData.admin]);
+  if (_slotsData && _slotsData.count != null) rows.push(['Free slots remaining today', _slotsData.count]);
+  wr.forEach((p) => rows.push([`Waiting: ${p.name}`, p.mins != null ? `${p.mins}m` : '']));
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(`today-${stamp}.csv`, ['Metric', 'Value'], rows);
 }
 
 // ── Pollers ───────────────────────────────────────────────────────────────────

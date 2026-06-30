@@ -159,8 +159,27 @@
   // shape: [{ name, reason, excludedBy }]) whose name matches a high-risk class,
   // annotated with { riskClass, matchedStem } and carrying the original reason /
   // excludedBy through so the UI can explain WHY it was missed (no rule vs excluded).
-  function flagHighRiskUnmatched(unmatchedDetailed) {
+  //
+  // W1 (GP-panel 2026-06-30): when the SAME patient has a different medicine
+  // that DID match a monitoring rule and shares this risk stem, the unmatched
+  // flag is most likely a duplicate/alternate form of a drug already being
+  // monitored under another name (e.g. an unlisted "lithium citrate" or an
+  // excluded "methotrexate injection" sitting next to a matched oral form).
+  // This only fires when the unmatched drug's NAME carries a classifiable stem;
+  // a brand with no generic stem (Priadel, Cordarone) cannot be classified at
+  // all — the documented limit. Pass `allMedNames` (every med name on the
+  // record) and each result carries `possibleDuplicateOf` so the UI can say so
+  // inline rather than leaving two unrelated-looking facts on the page. The arg
+  // is optional — omitted, `possibleDuplicateOf` is always null and behaviour is
+  // unchanged.
+  function flagHighRiskUnmatched(unmatchedDetailed, allMedNames) {
     const list = Array.isArray(unmatchedDetailed) ? unmatchedDetailed : [];
+    // Matched meds = every med name on the record NOT in the unmatched set
+    // (deduped on the same normalised key the matcher uses).
+    const unmatchedNorm = new Set(list.map((i) => normaliseDrugString(i && i.name)));
+    const matchedNames = (Array.isArray(allMedNames) ? allMedNames : []).filter(
+      (n) => n && !unmatchedNorm.has(normaliseDrugString(n))
+    );
     const out = [];
     for (const item of list) {
       const name = item && item.name;
@@ -169,12 +188,20 @@
       for (const cls of HIGH_RISK_UNMATCHED_CLASSES) {
         const matchedStem = cls.stems.find((stem) => norm.includes(normaliseDrugString(stem)));
         if (matchedStem) {
+          const stemNorm = normaliseDrugString(matchedStem);
+          // A different (not the same string) already-matched med carrying the
+          // same risk stem is the likely sibling.
+          const possibleDuplicateOf =
+            matchedNames.find(
+              (mn) => normaliseDrugString(mn).includes(stemNorm) && normaliseDrugString(mn) !== norm
+            ) || null;
           out.push({
             name,
             riskClass: cls.label,
             matchedStem,
             reason: (item && item.reason) || null,
             excludedBy: (item && item.excludedBy) || null,
+            possibleDuplicateOf,
           });
           break;
         }

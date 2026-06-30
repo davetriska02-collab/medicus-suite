@@ -732,3 +732,91 @@
   white-space: nowrap;
   min-width: 0;
 }
+
+/* W7a: Today CSV export footer */
+.today-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.today-export {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.today-export:hover {
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+
+/* W5: "What needs you" priorities card */
+.today-prio-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.today-prio-row {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+}
+.today-prio-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  align-self: center;
+}
+.today-prio-row--red .today-prio-dot {
+  background: var(--red);
+}
+.today-prio-row--amber .today-prio-dot {
+  background: var(--amber);
+}
+.today-prio-name {
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 45%;
+}
+.today-prio-reason {
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.today-prio-more {
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+.today-prio-note {
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-4);
+}
+.today-prio-empty,
+.today-prio-clear {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.today-prio-clear {
+  color: var(--green);
+}

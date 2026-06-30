@@ -175,6 +175,7 @@ function serialiseResults(results) {
     time: r.time,
     clinician: r.clinician,
     chips: r.chips,
+    unmatchedHighRisk: r.unmatchedHighRisk || [],
     error: r.error,
     hiddenRuleIds: r.hiddenRuleIds ? Array.from(r.hiddenRuleIds) : [],
   }));
@@ -189,6 +190,7 @@ function deserialiseResults(results) {
     time: r.time,
     clinician: r.clinician,
     chips: r.chips,
+    unmatchedHighRisk: Array.isArray(r.unmatchedHighRisk) ? r.unmatchedHighRisk : [],
     error: r.error,
     hiddenRuleIds: new Set(Array.isArray(r.hiddenRuleIds) ? r.hiddenRuleIds : []),
   }));
@@ -325,7 +327,24 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     observationHistory: data.observationHistory || [],
   });
 
-  return chips;
+  // W7b (GP-panel 2026-06-30): also surface this patient's high-risk drugs that
+  // matched NO monitoring rule — the silent blind spot. Aggregated across the
+  // swept cohort into a register panel, so the practice can see every unmonitored
+  // high-risk medicine in one place rather than only when a record is opened.
+  let unmatchedHighRisk = [];
+  try {
+    if (rulesEngine.listUnmatchedMedicationsDetailed && rulesEngine.flagHighRiskUnmatched) {
+      const detailed = rulesEngine.listUnmatchedMedicationsDetailed(data.medications || [], rules);
+      unmatchedHighRisk = rulesEngine.flagHighRiskUnmatched(
+        detailed,
+        (data.medications || []).map((m) => m && m.name)
+      );
+    }
+  } catch (_) {
+    /* never let the blind-spot read break a sweep */
+  }
+
+  return { chips, unmatchedHighRisk };
 }
 
 // ── Clinician pre-population ──────────────────────────────────────────────────
@@ -477,9 +496,12 @@ async function runNextBatch() {
     setProgress(`Checking ${overallPos}/${total} — ${patient.name}…`);
 
     let chips = null;
+    let unmatchedHighRisk = [];
     let error = null;
     try {
-      chips = await evaluatePatient(_sweepApiBase, patient.uuid, _sweepRules);
+      const ev = await evaluatePatient(_sweepApiBase, patient.uuid, _sweepRules);
+      chips = ev.chips;
+      unmatchedHighRisk = ev.unmatchedHighRisk || [];
     } catch (e) {
       error = e.message || String(e);
     }
@@ -499,6 +521,7 @@ async function runNextBatch() {
       time: patient.time,
       clinician: patient.clinician,
       chips,
+      unmatchedHighRisk,
       error,
       hiddenRuleIds,
     });
@@ -629,6 +652,59 @@ function buildQofPointsByCode(rules) {
   return map;
 }
 
+// QOF year (1 Apr – 31 Mar) label for the current date, e.g. "2026/27". Local
+// helper so the panel does not have to depend on the rules-engine global.
+function currentQofYearLabel() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const startYear = d.getMonth() >= 3 ? y : y - 1; // April = month index 3
+  return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')}`;
+}
+
+// W7b: cohort blind-spot register — flatten every swept patient's
+// unmatched-high-risk drugs into one list, so a practice sees every unmonitored
+// high-risk medicine at once (the patient-safety register the domain personas
+// asked for), not only when a single record is opened. Pure read of the per-
+// patient flags already computed in evaluatePatient.
+function renderBlindSpotPanel(results, siteId) {
+  const rows = [];
+  for (const r of results || []) {
+    if (!r || !Array.isArray(r.unmatchedHighRisk) || !r.unmatchedHighRisk.length) continue;
+    const recUrl = `https://england.medicus.health/${esc(siteId)}/patient/${esc(r.uuid)}/`;
+    for (const h of r.unmatchedHighRisk) {
+      rows.push({ patient: r.name || 'Patient', recUrl, drug: h.name, riskClass: h.riskClass, reason: h.reason });
+    }
+  }
+  if (!rows.length) return '';
+  const patientCount = new Set(rows.map((x) => x.patient)).size;
+  const items = rows
+    .map(
+      (x) =>
+        `<li class="sweep-blind-row">
+          <a class="sweep-open-record" href="${x.recUrl}" target="_blank" rel="noopener noreferrer">${esc(
+            x.patient
+          )} &#8599;</a>
+          <span class="sweep-blind-drug">${esc(x.drug)}</span>
+          <span class="sweep-blind-class">${esc(x.riskClass)}</span>
+          <span class="sweep-blind-why">${x.reason === 'excluded' ? 'excluded by a rule' : 'no rule matched'}</span>
+        </li>`
+    )
+    .join('');
+  return `
+    <details class="sweep-blind-panel" open>
+      <summary class="sweep-blind-summary">
+        &#9888; Blind-spot register: <strong>${rows.length}</strong> high-risk medicine${
+          rows.length === 1 ? '' : 's'
+        } with no monitoring rule
+        <span class="sweep-blind-sub">${patientCount} patient${patientCount === 1 ? '' : 's'}</span>
+      </summary>
+      <div class="sweep-blind-body">
+        <p class="sweep-blind-note">These swept patients are on a high-risk drug (DMARD, lithium, anticoagulant, etc.) that matched no active monitoring rule, so no overdue-blood chip can fire for it. Verify monitoring is in place in Medicus for each, and consider adding the brand to the rule set. Absence of a chip is not evidence of safe monitoring.</p>
+        <ul class="sweep-blind-list">${items}</ul>
+      </div>
+    </details>`;
+}
+
 // Cohort-level QOF income lens: ranks the QOF gaps Sweep already found by the
 // indicator's own points, so a practice works the highest-value patients first
 // and protects the redirected CVD-prevention domain. Pure read of existing chips.
@@ -668,15 +744,22 @@ function renderQofPointsPanel(summary, siteId) {
     })
     .join('');
 
+  // W4 (GP-panel 2026-06-30): anchor the headline to the QOF YEAR so the number
+  // reads as "exposure this year", not "must fix today" (Yusuf's ask), and state
+  // the scope plainly — a pre-clinic sweep sees only the booked patients, so this
+  // is NOT the practice's total achievable points or current achievement %
+  // (which the suite cannot compute read-only). Honest scope over a fabricated
+  // denominator, consistent with the suite's "floor not ceiling" posture.
+  const yearLabel = currentQofYearLabel();
   return `
     <details class="sweep-qof-panel" open>
       <summary class="sweep-qof-summary">
-        QOF points at risk: <strong>${summary.totalPoints}</strong>
+        QOF points at risk <span class="sweep-qof-year">(${yearLabel})</span>: <strong>${summary.totalPoints}</strong>
         ${cvdBadge}
         <span class="sweep-qof-sub">${summary.patientCount} patient${summary.patientCount === 1 ? '' : 's'} with gaps</span>
       </summary>
       <div class="sweep-qof-body">
-        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. Points are the national indicator weights; actual income depends on your list size and prevalence.</p>
+        <p class="sweep-qof-note">QOF indicator gaps in the patients checked, weighted by each indicator's points — work the highest-value first. <strong>Scope:</strong> this counts only the ${summary.patientCount} patient${summary.patientCount === 1 ? '' : 's'} with gaps among those checked in this sweep — it is not your practice's total achievable points or current achievement %. <strong>Horizon:</strong> points recoverable in the ${yearLabel} QOF year (to 31 Mar) if these gaps are closed. Points are the national indicator weights; actual income depends on your list size and prevalence.</p>
         <div class="sweep-qof-cols">
           <div class="sweep-qof-col">
             <div class="sweep-qof-col-head">Patients by points at risk</div>
@@ -752,6 +835,10 @@ function renderResults({
   );
   const qofPanelHtml = renderQofPointsPanel(qofPoints, siteIdMatch);
 
+  // W7b: blind-spot register — every swept patient on a high-risk drug that
+  // matched NO monitoring rule, aggregated from the cohort.
+  const blindSpotPanelHtml = renderBlindSpotPanel(_cumulativeResults, siteIdMatch);
+
   const clearSection =
     clearRows.length > 0
       ? `<details class="sweep-clear-section">
@@ -785,7 +872,11 @@ function renderResults({
       ? `<button class="sweep-print-btn" type="button" title="Open a printable to-do list for reception">Print reception handout</button>`
       : '';
 
-  // Batch toolbar — only shown when there are action rows to select
+  // Batch toolbar — only shown when there are action rows to select. The recall
+  // batch button is only offered when a practice code is set (can write tasks).
+  const batchRecallBtn = apiBase
+    ? `<button class="sweep-batch-btn sweep-batch-recall-launch" id="sweepBatchRecallBtn" type="button" disabled title="Create a recall task for every selected patient — review the list before confirming">Create recall tasks</button>`
+    : '';
   const batchToolbar =
     actionCount > 0
       ? `<div class="sweep-batch-toolbar" id="sweepBatchToolbar">
@@ -795,6 +886,7 @@ function renderResults({
          </label>
          <span class="sweep-batch-count" id="sweepBatchCount">0 selected</span>
          <button class="sweep-batch-btn" id="sweepBatchBtn" type="button" disabled>Generate batch</button>
+         ${batchRecallBtn}
        </div>`
       : '';
 
@@ -808,12 +900,14 @@ function renderResults({
 
       ${missingNote}${batchNote}
 
+      ${blindSpotPanelHtml}
+
       ${qofPanelHtml}
 
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
       ${
         actionRows.length > 0
-          ? `<div class="sweep-section-head sweep-section-head-action-wrap">${`<span>Action needed (${actionCount})</span>${batchToolbar}`}</div>${actionHtml}`
+          ? `<div class="sweep-section-head sweep-section-head-action-wrap">${`<span>Action needed (${actionCount})</span>${batchToolbar}`}</div><div id="sweepBatchRecallSlot" class="sweep-batch-recall-slot"></div>${actionHtml}`
           : ''
       }
       ${clearSection}
@@ -850,6 +944,7 @@ function wireBatchSelection(runArea, actionRows) {
   const selectAllCb = runArea.querySelector('#sweepSelectAll');
   const batchCountEl = runArea.querySelector('#sweepBatchCount');
   const batchBtn = runArea.querySelector('#sweepBatchBtn');
+  const batchRecallBtn = runArea.querySelector('#sweepBatchRecallBtn');
 
   if (!selectAllCb || !batchCountEl || !batchBtn) return;
 
@@ -857,6 +952,7 @@ function wireBatchSelection(runArea, actionRows) {
     const count = _selectedUuids.size;
     batchCountEl.textContent = count === 1 ? '1 selected' : `${count} selected`;
     batchBtn.disabled = count === 0;
+    if (batchRecallBtn) batchRecallBtn.disabled = count === 0;
     // Update select-all indeterminate state
     const total = actionRows.length;
     if (count === 0) {
@@ -905,20 +1001,191 @@ function wireBatchSelection(runArea, actionRows) {
     persistSelectedUuids();
   });
 
-  // Generate batch
+  // Generate batch (printable reception/SMS pack)
   batchBtn.addEventListener('click', onGenerateBatch);
+
+  // W3b: batch recall-task creation. Opens an explicit confirm list (NOT
+  // fire-and-forget) — honouring the per-row design's "careful and explicit"
+  // intent while granting the batch efficiency the GP panel asked for.
+  if (batchRecallBtn) batchRecallBtn.addEventListener('click', () => onBatchRecall(runArea));
 
   // Initialise bar state — needed after resume so restored _selectedUuids are reflected
   updateBatchBar();
 }
 
+// W3b: review-then-create batch recall tasks. Renders a confirm panel listing
+// every selected patient with the gap-derived description that will be filed for
+// them, under ONE shared assignee chosen once. Nothing is written until the
+// explicit "Create N tasks" click; each task is created via the same
+// per-patient createGeneralTask path, with per-row success/failure reported.
+async function onBatchRecall(runArea) {
+  const slot = runArea.querySelector('#sweepBatchRecallSlot');
+  if (!slot) return;
+
+  // Toggle closed if already open and not mid-create.
+  if (slot.dataset.open === '1') {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+    return;
+  }
+
+  // Only selected action rows that actually have something to recall.
+  const rows = _lastActionRows
+    .filter((r) => _selectedUuids.has(r.uuid))
+    .map((r) => ({ ...r, desc: buildRecallDescription(r.chips || []) }))
+    .filter((r) => r.desc !== '');
+
+  if (rows.length === 0) {
+    slot.dataset.open = '1';
+    slot.innerHTML = `<div class="sweep-batch-recall-panel"><div class="sweep-recall-error">None of the selected patients have a bookable instruction to recall.</div></div>`;
+    return;
+  }
+
+  slot.dataset.open = '1';
+  slot.innerHTML = `<div class="sweep-batch-recall-panel"><div class="sweep-recall-loading">Loading task form…</div></div>`;
+
+  let form;
+  try {
+    form = await ensureTaskForm(rows[0].uuid);
+  } catch (e) {
+    slot.innerHTML = `<div class="sweep-batch-recall-panel"><div class="sweep-recall-error">${esc(
+      e.message || 'Could not load the task form.'
+    )}</div></div>`;
+    slot.dataset.open = '';
+    return;
+  }
+
+  const priorityHtml =
+    form.priorities && form.priorities.length > 1
+      ? `<label class="sweep-recall-lbl">Priority
+           <select class="sweep-batch-recall-priority">${form.priorities
+             .map((p) => `<option value="${esc(p.value)}">${esc(p.label)}</option>`)
+             .join('')}</select>
+         </label>`
+      : '';
+
+  const listHtml = rows
+    .map(
+      (r) =>
+        `<li class="sweep-batch-recall-item" data-uuid="${esc(r.uuid)}">
+           <span class="sweep-batch-recall-name">${esc(r.name)}</span>
+           <span class="sweep-batch-recall-desc">${esc(r.desc)}</span>
+           <span class="sweep-batch-recall-state" data-uuid="${esc(r.uuid)}"></span>
+         </li>`
+    )
+    .join('');
+
+  slot.innerHTML = `
+    <div class="sweep-batch-recall-panel">
+      <div class="sweep-batch-recall-head">Create ${rows.length} recall task${
+        rows.length === 1 ? '' : 's'
+      } — one per patient, assigned to:</div>
+      <div class="sweep-batch-recall-controls">
+        <label class="sweep-recall-lbl">Assign to
+          <select class="sweep-batch-recall-assignee">${recallAssigneeOptionsHtml(form)}</select>
+        </label>
+        ${priorityHtml}
+      </div>
+      <p class="sweep-batch-recall-note">Each task uses that patient's own gap details (shown below). Nothing is written until you press Create.</p>
+      <ul class="sweep-batch-recall-list">${listHtml}</ul>
+      <div class="sweep-recall-actions">
+        <button class="sweep-recall-create sweep-batch-recall-create" type="button" disabled>Create ${rows.length} task${
+          rows.length === 1 ? '' : 's'
+        }</button>
+        <button class="sweep-recall-cancel sweep-batch-recall-cancel" type="button">Cancel</button>
+      </div>
+      <div class="sweep-batch-recall-status" role="status"></div>
+    </div>`;
+
+  const assigneeSel = slot.querySelector('.sweep-batch-recall-assignee');
+  const createBtn = slot.querySelector('.sweep-batch-recall-create');
+  assigneeSel.addEventListener('change', () => {
+    createBtn.disabled = !assigneeSel.value;
+  });
+  slot.querySelector('.sweep-batch-recall-cancel').addEventListener('click', () => {
+    slot.innerHTML = '';
+    slot.dataset.open = '';
+  });
+  createBtn.addEventListener('click', () => runBatchRecall(slot, rows));
+}
+
+async function runBatchRecall(slot, rows) {
+  const assigneeSel = slot.querySelector('.sweep-batch-recall-assignee');
+  const assignee = assigneeSel?.value || '';
+  const priority = slot.querySelector('.sweep-batch-recall-priority')?.value ?? 0;
+  const createBtn = slot.querySelector('.sweep-batch-recall-create');
+  const cancelBtn = slot.querySelector('.sweep-batch-recall-cancel');
+  const statusEl = slot.querySelector('.sweep-batch-recall-status');
+  if (!assignee) return;
+
+  createBtn.disabled = true;
+  if (cancelBtn) cancelBtn.disabled = true;
+  createBtn.textContent = 'Creating…';
+
+  let ok = 0;
+  let fail = 0;
+  // Sequential, not parallel — gentler on the API and keeps a clear per-row
+  // order; one failure never aborts the rest.
+  for (const r of rows) {
+    const stateEl = slot.querySelector(`.sweep-batch-recall-state[data-uuid="${cssEscapeUuid(r.uuid)}"]`);
+    if (stateEl) stateEl.textContent = '…';
+    try {
+      const res = await createGeneralTask(_recallApiBase, {
+        patientId: r.uuid,
+        assignee,
+        description: r.desc,
+        priority,
+      });
+      const ref = pickTaskRef(res);
+      ok++;
+      if (stateEl) {
+        stateEl.textContent = `✓${ref ? ` #${ref}` : ''}`;
+        stateEl.classList.add('sweep-batch-recall-ok');
+      }
+    } catch (e) {
+      fail++;
+      if (stateEl) {
+        stateEl.textContent = `✗ ${e.message || 'failed'}`;
+        stateEl.classList.add('sweep-batch-recall-fail');
+      }
+    }
+  }
+
+  if (statusEl) {
+    statusEl.textContent = `Done — ${ok} created${fail ? `, ${fail} failed (retry individually below)` : ''}.`;
+  }
+  createBtn.textContent = fail ? 'Retry failed individually' : 'Done';
+  // Leave the panel open so the per-row outcomes stay visible; clear selection
+  // for the ones that succeeded so they aren't re-fired by mistake.
+  rows.forEach((r) => {
+    const stateEl = slot.querySelector(`.sweep-batch-recall-state[data-uuid="${cssEscapeUuid(r.uuid)}"]`);
+    if (stateEl && stateEl.classList.contains('sweep-batch-recall-ok')) _selectedUuids.delete(r.uuid);
+  });
+  persistSelectedUuids();
+}
+
+// Minimal CSS.escape shim for the UUID attribute selectors above (UUIDs are
+// hex+hyphen, but guard against anything exotic so querySelector never throws).
+function cssEscapeUuid(uuid) {
+  const s = String(uuid);
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}
+
 // ── Create-recall-task wiring ──────────────────────────────────────────────────
 //
-// One careful, explicit task per click — there is deliberately NO bulk "create
-// all". Each row's button opens an inline confirm form (assignee + an editable
-// description prefilled from that patient's gaps); only the Create button writes,
-// via Medicus's own general-task endpoint (shared/task-api.js). Mirrors the
-// proven task-inline.js flow, so Medicus's validation/access/audit fire as normal.
+// One careful, explicit task per click. Each row's button opens an inline confirm
+// form (assignee + an editable description prefilled from that patient's gaps);
+// only the Create button writes, via Medicus's own general-task endpoint
+// (shared/task-api.js). Mirrors the proven task-inline.js flow, so Medicus's
+// validation/access/audit fire as normal.
+//
+// W3b (GP-panel 2026-06-30) adds a batch path (onBatchRecall) for the
+// "tick several, file once" ask — but it is NOT fire-and-forget: it opens a
+// review list of every patient and the exact description that will be filed,
+// under one assignee, and writes nothing until an explicit confirm. The
+// long-standing "no blind bulk create" intent is preserved (the clinician sees
+// and confirms every task), it is just no longer one-click-per-row.
 
 function wireRecallButtons(runArea) {
   runArea.querySelectorAll('.sweep-recall-btn').forEach((btn) => {
@@ -1005,6 +1272,19 @@ async function openRecallForm(btn) {
   createBtn.addEventListener('click', () => submitRecall(slot));
 }
 
+// Pull a human-quotable task reference out of the create response, without
+// assuming one specific field name (Medicus deployments vary). Returns a short
+// string or null. Only accepts string/number scalars so an object can't leak.
+function pickTaskRef(res) {
+  if (!res || typeof res !== 'object') return null;
+  const candidates = [res.id, res.taskId, res.uuid, res.reference, res.taskReference, res.number];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return String(c);
+    if (typeof c === 'string' && c.trim()) return c.trim().slice(0, 24);
+  }
+  return null;
+}
+
 async function submitRecall(slot) {
   const btn = slot.closest('.sweep-recall')?.querySelector('.sweep-recall-btn');
   const patientId = btn?.dataset.uuid;
@@ -1022,10 +1302,14 @@ async function submitRecall(slot) {
   createBtn.textContent = 'Creating…';
   if (statusEl) statusEl.textContent = '';
   try {
-    await createGeneralTask(_recallApiBase, { patientId, assignee, description, priority });
+    const res = await createGeneralTask(_recallApiBase, { patientId, assignee, description, priority });
+    // W3a: surface the Medicus task reference when the create response carries
+    // one, so the GP has positive proof the task landed (not just that the
+    // button was clicked) — the panel's "did it actually land?" ask.
+    const ref = pickTaskRef(res);
     slot.innerHTML = `<div class="sweep-recall-done">&#10003; Recall task created${
-      assigneeLabel ? ` — assigned to ${esc(assigneeLabel)}` : ''
-    }.</div>`;
+      ref ? ` (#${esc(ref)})` : ''
+    }${assigneeLabel ? ` — assigned to ${esc(assigneeLabel)}` : ''}.</div>`;
     slot.dataset.open = 'done';
   } catch (e) {
     if (statusEl) statusEl.innerHTML = `<span class="sweep-recall-error">${esc(e.message || 'Failed to create the task.')}</span>`;

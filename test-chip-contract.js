@@ -98,6 +98,14 @@ check(drugHtml.includes(CR.STATUS_LABEL[drugChip.status]), 'renderer maps chip.s
 const t0 = drugChip.tests[0];
 check(!!t0, 'engine emitted drugChip.tests[0]');
 check(drugHtml.includes(esc(t0.testName || t0.name)), 'renderer reads tests[].testName/name');
+// W6a: when a test has a last result date AND an effective interval, the renderer
+// shows the absolute due-date (lastDate + intervalDays). Only assert when the
+// engine actually emitted both — the renderer must never invent a date otherwise.
+if (t0 && t0.latestObs && t0.latestObs.date && t0.intervalDays) {
+  const due = new Date(new Date(t0.latestObs.date).getTime() + t0.intervalDays * 86400000);
+  const dueFmt = due.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  check(drugHtml.includes(`due ${dueFmt}`), 'W6a: renderer shows absolute due-date (lastDate + intervalDays)');
+}
 // matchedTerm: engine emits chip.matchedTerm; renderer surfaces it in a data-tip.
 // (Only when it is not a trivial echo of the drug name — methotrexate qualifies.)
 check(typeof drugChip.matchedTerm === 'string' || drugChip.matchedTerm === null, 'engine emits chip.matchedTerm field');

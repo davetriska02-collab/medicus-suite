@@ -1046,3 +1046,43 @@
   font-size: 11px;
   white-space: nowrap;
 }
+/* W2b: suite-local "chased" annotation */
+.ref-sn-chase,
+.ref-sn-unchase {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+.ref-sn-chase:hover {
+  color: var(--text-1);
+  border-color: var(--border-hi);
+}
+.ref-sn-chased {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--ok, var(--text-3));
+  white-space: nowrap;
+}
+.ref-sn-unchase {
+  border-color: transparent;
+  padding: 0 4px;
+  color: var(--text-4);
+}
+.ref-sn-unchase:hover {
+  color: var(--text-2);
+  border-color: var(--border);
+}

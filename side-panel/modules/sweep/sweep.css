@@ -739,6 +739,11 @@
   font-size: 11px;
   margin-left: auto;
 }
+.sweep-qof-year {
+  color: var(--text-4);
+  font-weight: 400;
+  font-size: 11px;
+}
 .sweep-qof-body {
   padding: 8px 10px 10px;
   border-top: 1px solid var(--accent-line);
@@ -945,4 +950,149 @@
   font-size: 12px;
   color: var(--green);
   padding: 4px 0;
+}
+
+/* W3b: batch recall confirm panel */
+.sweep-batch-recall-slot:empty {
+  display: none;
+}
+.sweep-batch-recall-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  margin: 6px 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sweep-batch-recall-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sweep-batch-recall-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sweep-batch-recall-assignee,
+.sweep-batch-recall-priority {
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+.sweep-batch-recall-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.sweep-batch-recall-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.sweep-batch-recall-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  background: var(--bg-mid);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+}
+.sweep-batch-recall-name {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sweep-batch-recall-desc {
+  color: var(--text-3);
+  line-height: 1.35;
+}
+.sweep-batch-recall-state {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+.sweep-batch-recall-state.sweep-batch-recall-ok {
+  color: var(--green);
+}
+.sweep-batch-recall-state.sweep-batch-recall-fail {
+  color: var(--red);
+}
+.sweep-batch-recall-status {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* W7b: blind-spot register panel */
+.sweep-blind-panel {
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-md);
+  background: var(--red-dim);
+  margin-bottom: 8px;
+}
+.sweep-blind-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.sweep-blind-summary strong {
+  color: var(--red);
+}
+.sweep-blind-sub {
+  color: var(--text-4);
+  font-size: 11px;
+  margin-left: auto;
+}
+.sweep-blind-body {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--red-line);
+}
+.sweep-blind-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.sweep-blind-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sweep-blind-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.sweep-blind-drug {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.sweep-blind-class {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.sweep-blind-why {
+  color: var(--red);
+  font-size: 11px;
 }

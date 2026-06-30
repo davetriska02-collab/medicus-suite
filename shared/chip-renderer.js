@@ -101,8 +101,22 @@
           t.latestObs && t.latestObs.value != null
             ? ` · ${escHtml(String(t.latestObs.value).trim().slice(0, 30))}`
             : '';
+        // W6a (GP-panel 2026-06-30): show the ABSOLUTE due-date next to the
+        // relative day-count, so a clinician reads "due 18 Sep 2026" instead of
+        // having to mentally add an interval to a day count. Only for the
+        // standard rolling-interval case (last result + effective interval);
+        // skipped when either is absent so a wrong date is never shown.
+        let dueStr = '';
+        if (t.latestObs && t.latestObs.date && t.intervalDays) {
+          const base = new Date(t.latestObs.date);
+          if (!isNaN(base.getTime())) {
+            const due = new Date(base.getTime() + t.intervalDays * 86400000);
+            const dueFmt = formatDate(due.toISOString().slice(0, 10));
+            if (dueFmt) dueStr = ` · due ${dueFmt}`;
+          }
+        }
         // E: Split into three slots: name / status+value+date / days column
-        const statusText = `${tLbl}${valStr}${dateStr ? ` · ${dateStr}` : ''}`;
+        const statusText = `${tLbl}${valStr}${dateStr ? ` · ${dateStr}` : ''}${dueStr}`;
         const daysText = t.days != null ? `${t.days}d` : '';
         return `<div class="sent-test-row">
         <span class="sent-test-name">${escHtml(t.testName || t.name || '')}</span>
