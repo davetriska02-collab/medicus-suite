@@ -892,7 +892,10 @@
   // state colour, sentence-case sans headers, no emoji in chrome, a single spent accent.
   const FONT = 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
   const CSS = [
-    '.chlf-card{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:312px;box-sizing:border-box;',
+    // Bottom-LEFT: the filing controls (the "Normal result, no action required" notes
+    // and the File button) live down the left content pane, so the card sits beside
+    // the action — not stranded in the far corner where the eye has to cross the screen.
+    '.chlf-card{position:fixed;left:18px;bottom:18px;z-index:2147483000;width:312px;box-sizing:border-box;',
     'background:#fff;border:1px solid #e3e8ee;border-left:4px solid #94a3b8;border-radius:10px;',
     'box-shadow:0 8px 28px rgba(15,23,42,.16);padding:13px 15px;color:#0f172a;font-family:' + FONT + '}',
     '.chlf-card.chlf-hidden{display:none}',
@@ -920,7 +923,9 @@
     'padding:2px;text-decoration:underline;text-underline-offset:2px}',
     '.chlf-link:hover{color:#334155}.chlf-link:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
     '.chlf-link.chlf-hidden{display:none}',
-    '.chlf-toast{position:fixed;left:18px;bottom:18px;z-index:2147483001;max-width:340px;padding:11px 14px;border-radius:8px;',
+    // Opposite corner from the card (bottom-right) so the transient confirmation
+    // never sits on top of the action card when both are visible.
+    '.chlf-toast{position:fixed;right:18px;bottom:18px;z-index:2147483001;max-width:340px;padding:11px 14px;border-radius:8px;',
     'color:#fff;font:500 13px/1.4 ' +
       FONT +
       ';box-shadow:0 8px 28px rgba(15,23,42,.22);opacity:0;transform:translateY(8px);transition:.28s}',

@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.146.1] — 2026-06-30
+
+### Lab filing: move the in-Medicus card to the bottom-left
+
+The action card was pinned bottom-right while all the filing controls (the
+"Normal result, no action required" notes and the File button) live down the
+left content pane — so the eye had to cross the whole screen. Moved the card to
+the bottom-left, beside the action; the transient toast moved to the bottom-right
+so the two never overlap.
+
 ## [v3.146.0] — 2026-06-30
 
 ### Lab filing moved to Options (admin-only) + optional starter profiles
