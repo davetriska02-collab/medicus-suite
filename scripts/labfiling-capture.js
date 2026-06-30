@@ -81,6 +81,50 @@
       options: ctrls(d, '[role="radio"],input[type="radio"],[role="option"],select,option,label,.q-item').slice(0, 40),
     }));
 
+  // ── Filing STRUCTURE probe (multi-panel + commit-button relabel) ──────────────
+  // A single investigation-report TASK can carry several panels (e.g. Bone profile +
+  // U&E + LFTs), EACH with its own "Normal result, no action required" filing-note
+  // link, but (apparently) ONE shared "Next Steps" choice + commit button at the
+  // bottom. To file an all-normal multi-panel report the macro must click EVERY
+  // normal-note link, then select the Next Step, then the commit button — and on
+  // Medicus that commit button is labelled "Reassign task" and only RELABELS to
+  // "File results" (and enables) once a Next Step radio is chosen. This block makes
+  // both facts explicit so a profile can be authored and the "clicking does nothing"
+  // bug diagnosed. To capture the relabel: run this once, then manually click
+  // "File results with no further action", then run it again and compare commitButtons.
+  try {
+    const allBtns = [...document.querySelectorAll('button,[role="button"],input[type="submit"]')].filter(vis);
+    const matchTxt = (re) =>
+      allBtns
+        .filter((el) => re.test(textOf(el).toLowerCase()))
+        .map((el) => ({ text: textOf(el), disabled: !!(el.disabled || el.getAttribute('aria-disabled') === 'true') }));
+    const normalNotes = [...document.querySelectorAll('button,[role="button"],a,label,[role="link"]')]
+      .filter(vis)
+      .filter((el) => /normal result, no action/i.test(textOf(el)))
+      .map((el) => ({ tag: el.tagName.toLowerCase(), text: textOf(el) }));
+    const nextSteps = [...document.querySelectorAll('[role="radio"],input[type="radio"],label,.q-radio,.q-item')]
+      .filter(vis)
+      .filter((el) => /file results|message patient|reassign|no further action/i.test(textOf(el)))
+      .map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        text: textOf(el),
+        ariaChecked: el.getAttribute('aria-checked'),
+        checked: el.checked != null ? !!el.checked : undefined,
+      }));
+    out.filingStructure = {
+      panelCount_normalNoActionLinks: normalNotes.length, // >1 ⇒ multi-panel task
+      normalNoActionLinks: dedupe(normalNotes, (x) => x.text).slice(0, 20),
+      nextStepOptions: dedupe(nextSteps, (x) => x.text).slice(0, 20),
+      commitButtons: matchTxt(/file results|reassign task|complete|file & message|file and message/),
+      note:
+        normalNotes.length > 1
+          ? 'MULTI-PANEL task: ' + normalNotes.length + ' normal-note links share one Next Steps + commit.'
+          : 'Single-panel task.',
+    };
+  } catch (e) {
+    out.filingStructure = { error: String(e) };
+  }
+
   const ctx = out.context || {};
   const dump = () => {
     const old = document.getElementById('__chCapBox');
