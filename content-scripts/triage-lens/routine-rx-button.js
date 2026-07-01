@@ -199,6 +199,30 @@
     }
   }
 
+  // The "Assign to" picker (Medicus's m-simple-select, replacing the old Quasar
+  // q-select) runs a debounced/live server search keyed off real per-keystroke
+  // typing — setting the full value in one shot and firing a single keydown for
+  // the last character (the old approach) never triggers that search, so the
+  // option never renders and the macro times out even though the team exists.
+  // Simulate an actual keystroke-by-keystroke type with a small pause between
+  // characters so the debounce fires the same way it does for a human typing.
+  function typeText(el, text, delay) {
+    delay = delay || 45;
+    return new Promise(function (resolve) {
+      var i = 0;
+      var built = '';
+      (function step() {
+        if (i >= text.length) return resolve();
+        var ch = text[i++];
+        built += ch;
+        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ch }));
+        setNativeValue(el, built);
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ch }));
+        setTimeout(step, delay);
+      })();
+    });
+  }
+
   // The "Assign to" control: an input reachable after the re-assign radio is on.
   function findAssignInput() {
     var inputs = document.querySelectorAll('input');
@@ -246,15 +270,14 @@
       if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?');
       assign.focus();
       realClick(assign);
-      // Filter the list by typing the team name — confirmed to narrow the list
-      // (e.g. "pres" → "Prescribing / Meds Management"). Fire keyboard events too
-      // for comboboxes that only open/filter on keydown.
-      setNativeValue(assign, team);
-      var lastCh = team.slice(-1);
-      assign.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: lastCh }));
-      assign.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: lastCh }));
+      // Filter the list by typing the team name character-by-character — the
+      // picker's search is debounced/server-driven and only fires off real
+      // per-keystroke input (see typeText).
+      setNativeValue(assign, '');
+      await typeText(assign, team);
 
-      // 3. the team option
+      // 3. the team option — extra margin over the old 4s since this now waits
+      // on a real debounce + server round trip, not a local list filter.
       var option = await waitFor(function () {
         var opts = document.querySelectorAll('[id^="select-item-"], [role="option"], li[role="option"]');
         var exact = null,
@@ -269,7 +292,7 @@
           if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
         }
         return exact || partial;
-      }, 4000);
+      }, 6000);
       if (!option)
         return abort(
           'Team “' +
