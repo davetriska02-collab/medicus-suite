@@ -17,6 +17,7 @@
 'use strict';
 
 import { buildHeadline } from './today-headline.js';
+import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ let _timers = [];
 let _wrData = null; // { patients: [], error: null }
 let _rmData = null; // { buckets: {}, configured: bool, error: null }
 let _demandData = null; // { medical: n, admin: n, thresholds: {}, error: null }
-let _slotsData = null; // { count: n, error: null }
+let _slotsData = null; // { count: n, error: null, breaches: [{ typeName, threshold, count, level }] }
 let _sweepData = null; // { lastRun: obj|null }
 let _alertsData = null; // [{ ts, channel, level, label }, ...]
 
@@ -227,36 +228,55 @@ async function fetchDemand() {
 // ── Fetch: Slots ──────────────────────────────────────────────────────────────
 // Lean local implementation against the same embedded-overview endpoint as slots.js.
 // Counts entries where diaryEntryType.value === 'slot' and start is not in the past.
+//
+// Item 9: also reads 'slots.alertRules' — a key OWNED by the Slots module
+// (chrome.storage.local, per-appointment-type "alert if fewer than N left"
+// rules) — read-only, the same pattern this card already uses for other
+// modules' keys. Per-type counts are only bothered with when at least one
+// rule is enabled (hasEnabledRules gate), so a practice with no alert rules
+// configured pays no extra cost on this already-lean poll.
 
 async function fetchSlots() {
   if (document.visibilityState !== 'visible') return;
   try {
     const { code, source } = await window.PracticeCode.resolve();
     if (!code) {
-      _slotsData = { count: null, error: null, noCode: true };
+      _slotsData = { count: null, error: null, noCode: true, breaches: [] };
       renderCard('slots');
+      renderHeadline();
       return;
     }
+    const stored = await chrome.storage.local.get('slots.alertRules');
+    const alertRules = stored['slots.alertRules'] || [];
+    const trackBreaches = hasEnabledRules(alertRules);
+
     const today = todayISO();
     const url = `https://${code}.api.england.medicus.health/scheduling/data/appointment-book/embedded-overview?date=${today}&filterByUsualLocation=false`;
     const r = await window.ApiDiag.fetch({ module: 'today-slots', url, code, codeSource: source });
     const raw = await r.json();
     const now = new Date();
     let count = 0;
+    const byType = trackBreaches ? {} : null;
     for (const staff of raw.staffSchedules || []) {
       for (const session of staff.schedule || []) {
         for (const entry of session.entries || []) {
           if (entry.diaryEntryType?.value !== 'slot') continue;
           if (entry.startDateTime && new Date(entry.startDateTime) < now) continue;
           count++;
+          if (byType) {
+            const type = entry.appointmentType?.name || 'Unknown';
+            byType[type] = (byType[type] || 0) + 1;
+          }
         }
       }
     }
-    _slotsData = { count, error: null };
+    const breaches = byType ? buildBreaches(alertRules, byType) : [];
+    _slotsData = { count, error: null, breaches };
   } catch (e) {
-    _slotsData = { count: null, error: e.message || 'Fetch failed' };
+    _slotsData = { count: null, error: e.message || 'Fetch failed', breaches: [] };
   }
   renderCard('slots');
+  renderHeadline();
 }
 
 // ── Fetch: Sweep last run ─────────────────────────────────────────────────────
@@ -318,6 +338,7 @@ function renderHeadline() {
     wrData: _wrData,
     rmData: _rmData,
     demandData: _demandData,
+    slotsData: _slotsData,
     sweepData: _sweepData,
     oldestUnansweredMs,
     formatProvenance: window.Provenance?.formatProvenance,
@@ -522,11 +543,29 @@ function buildSlotsBody() {
   const count = _slotsData.count ?? '—';
   const errLine = _slotsData.error ? errMsgInline(_slotsData.error) : '';
 
+  // Item 9: surface a breach of the Slots module's own alert rules here too —
+  // same threshold data, same amber/red convention as the Slots tab's ribbon
+  // and pills, so a clinician sees it before ever opening that tab.
+  const breaches = _slotsData.breaches || [];
+  const topLevel = breaches.some((b) => b.level === 'red') ? 'red' : breaches.length ? 'amber' : null;
+  const countCls = topLevel ? ` today-hero-count--${topLevel}` : '';
+  const breachLines = breaches.length
+    ? `<div class="today-slots-breaches">
+        ${breaches
+          .map(
+            (b) =>
+              `<span class="today-slots-breach today-slots-breach--${b.level}">${esc(b.typeName)}: ${b.count}</span>`
+          )
+          .join('')}
+      </div>`
+    : '';
+
   return `
     <div class="today-hero-row">
-      <span class="today-hero-count">${count}</span>
+      <span class="today-hero-count${countCls}">${count}</span>
       <span class="today-hero-label">open today</span>
     </div>
+    ${breachLines}
     ${errLine}
   `;
 }
@@ -758,6 +797,9 @@ function onStorageChange(changes) {
   if (changes['submissions.thresholds']) fetchDemand();
   if (changes['sweep.lastRun']) fetchSweep();
   if (changes['suite.alertLog']) fetchAlerts();
+  // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
+  // reflect on the Slots Today card / headline without waiting for the next poll.
+  if (changes['slots.alertRules']) fetchSlots();
 }
 
 // ── Init / Cleanup ────────────────────────────────────────────────────────────

@@ -189,10 +189,16 @@ function renderCurrentSnapshot(report) {
     s.bandFloored && typeof s.ppi === 'number'
       ? `<p class="pr-floor-reason">Showing AMBER: the practice is over capacity — the weighted index alone is ${s.ppi}.</p>`
       : '';
-  // (1) Scale hint kept as secondary pr-note.
+  // (1) Scale hint kept as secondary pr-note. Uses the ACTUAL band thresholds
+  // captured on the snapshot (item 8 — these may differ from the shipped
+  // 40/70 defaults when a custom pressure-index config is active) so the hint
+  // never states a cut-off that isn't the one that was really applied.
+  const amber = s.thresholds?.amber ?? 40;
+  const red = s.thresholds?.red ?? 70;
+  const customNote = s.customWeightings ? ' Custom weightings are active.' : '';
   const scaleHint =
     typeof s.ppi === 'number'
-      ? `<p class="pr-note">GREEN under 40 &middot; AMBER 40&ndash;70 &middot; RED 70 or over.</p>`
+      ? `<p class="pr-note">GREEN under ${amber} &middot; AMBER ${amber}&ndash;${red} &middot; RED ${red} or over.${esc(customNote)}</p>`
       : '';
   return (
     `<section class="pr-card pr-card-live"><h2>Current snapshot ${s.band ? bandBadge(s.band) : ''}` +

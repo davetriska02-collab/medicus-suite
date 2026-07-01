@@ -4,13 +4,24 @@ import { fetchAllStreams } from './condor-data.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { copyText, downloadCsv } from '../shared/export-util.js';
 import { buildSnapshotRow, saveSnapshot, localISO } from './report/report-data.js';
+import {
+  computeIndex as computeIndexCore,
+  normaliseIndexConfig,
+  isCustomConfig,
+  DEFAULT_WEIGHTS,
+  DEFAULT_THRESHOLDS,
+} from './condor-index-core.js';
 // Card renderers loaded dynamically so module works even before card files land
+
+const INDEX_CONFIG_KEY = 'condor.indexConfig';
 
 let _container = null;
 let _pollTimer = null;
 let _stopFresh = null;
 let _lastData = null;
 let _snapshotDate = null; // guards the once-a-day Practice Report snapshot write
+let _indexConfig = null; // raw stored { weights, thresholds } override, or null = defaults
+let _editorOpen = false;
 
 // Capture one Practice Report snapshot per calendar day. The live-only metrics
 // (PPI / waiting room / task age) have no per-day history at the source, so this
@@ -60,64 +71,25 @@ async function loadCards() {
 // demand-vs-capacity reconciliation. Both the headline strip and the copied
 // snapshot read from this so the panel can never contradict itself.
 //
+// The actual index/band math (including the component weightings and the
+// AMBER/RED band thresholds — item 8, user-tunable via the cog on the meter)
+// lives in condor-index-core.js, a pure module shared with ppi.js and
+// practice-report.js so the three can never quietly diverge. This wrapper
+// just threads the module's in-memory _indexConfig (loaded from
+// chrome.storage.local['condor.indexConfig']) through to it.
+//
 // Band-floor (the fix the synthetic GP-practice panel flagged): the raw index
-// weights capacity at only 20% (and 0% when no capacity preset is set), so the
-// gauge could read "GREEN · 25/100" on the same screen as "Over capacity (115
-// requests vs 50 slots)". When demand meets or exceeds the available slots, the
-// *displayed* band is floored to at least AMBER. The numeric ppi is left as-is —
-// only the band (and therefore colour + label) is raised. This only ever RAISES
-// a signal, never lowers one, so no alert salience is lost.
+// weights capacity at only 20% by default (and 0% when no capacity preset is
+// set), so the gauge could read "GREEN · 25/100" on the same screen as "Over
+// capacity (115 requests vs 50 slots)". When demand meets or exceeds the
+// available slots, the *displayed* band is floored to at least AMBER. The
+// numeric ppi is left as-is — only the band (and therefore colour + label) is
+// raised. This only ever RAISES a signal, never lowers one, so no alert
+// salience is lost — and per item 8's hard safety rule, this floor is NOT
+// configurable: it is applied unconditionally inside condor-index-core.js
+// AFTER any custom weightings/thresholds (see test-condor-index-core.js).
 export function computeIndex(data) {
-  const arrivedCount = data.waitingRoom?.arrivedCount ?? 0;
-  const medical = data.submissions?.totals?.medical ?? 0;
-  const admin = data.submissions?.totals?.admin ?? 0;
-  const queueCount = medical + admin;
-  const urgentCount = data.requestMonitor?.urgentCount ?? 0;
-  const remaining = data.slots?.totalRemaining ?? 0;
-  const minimum = data.capacityPreset?.minimum ?? 0;
-
-  const scoreA = Math.min((arrivedCount / 10) * 100, 100);
-  const scoreB = Math.min((queueCount / 40) * 100, 100);
-  const scoreC = Math.min((urgentCount / 5) * 100, 100);
-  let scoreD = 0;
-  if (minimum !== 0) {
-    const deficit = Math.max(0, minimum - remaining);
-    scoreD = Math.min((deficit / minimum) * 100, 100);
-  }
-  const ppi = Math.round(scoreA * 0.3 + scoreB * 0.25 + scoreC * 0.25 + scoreD * 0.2);
-
-  // Capacity-deficit signal — mirrors demand-gap.js exactly (requests vs slots).
-  // "over limit" = demand has met or passed the free slots; "over" (vs "at") at
-  // the 1.5× point matches the card's "Over capacity"/"At capacity" split.
-  let capacityState; // 'none' | 'at' | 'over'
-  if (remaining === 0 && queueCount > 0) {
-    capacityState = 'over'; // no slots left with demand still arriving
-  } else if (remaining > 0) {
-    const ratio = queueCount / remaining;
-    capacityState = ratio >= 1.5 ? 'over' : ratio >= 1.0 ? 'at' : 'none';
-  } else {
-    capacityState = 'none';
-  }
-  const overCapacity = capacityState !== 'none';
-
-  const rawBand = ppi < 40 ? 'GREEN' : ppi < 70 ? 'AMBER' : 'RED';
-  // Floor to at least AMBER when over the capacity limit — never GREEN.
-  const band = overCapacity && rawBand === 'GREEN' ? 'AMBER' : rawBand;
-  const floored = band !== rawBand;
-
-  return {
-    ppi,
-    band,
-    rawBand,
-    floored,
-    demandCount: queueCount,
-    capacityCount: remaining,
-    capacityState,
-    overCapacity,
-    arrivedCount,
-    urgentCount,
-    minimum,
-  };
+  return computeIndexCore(data, _indexConfig);
 }
 
 const CAPACITY_LABEL = { none: 'Within capacity', at: 'At capacity', over: 'Over capacity' };
@@ -131,9 +103,14 @@ function buildSnapshot(data) {
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   const bandText = idx.floored ? `${idx.band} (floored from ${idx.rawBand})` : idx.band;
+  // Item 8: when the user has tuned the component weightings/band thresholds
+  // away from the shipped defaults, the copied figures must say so — a PPI
+  // pasted into a partners' meeting without this note would misleadingly
+  // read as the standard, comparable index.
+  const customNote = idx.isCustom ? ' (custom weightings)' : '';
   return [
     `Condor snapshot — as at ${now}`,
-    `PPI\t${idx.ppi}/100 (${bandText})`,
+    `PPI\t${idx.ppi}/100 (${bandText})${customNote}`,
     `Demand (medical + admin)\t${idx.demandCount}`,
     `Capacity (slots free)\t${idx.capacityCount}\t${CAPACITY_LABEL[idx.capacityState]}`,
     `Waiting room arrived\t${idx.arrivedCount}`,
@@ -149,10 +126,11 @@ function buildSnapshotCsv(data) {
   const submissionsTotal = data.submissions?.totals?.all ?? 0;
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const bandText = idx.floored ? `${idx.band} (floored from ${idx.rawBand})` : idx.band;
+  const ppiNote = idx.isCustom ? `${bandText} — custom weightings` : bandText;
   const header = ['Metric', 'Value', 'Note'];
   const rows = [
     ['Snapshot as at', now, ''],
-    ['PPI', `${idx.ppi}/100`, bandText],
+    ['PPI', `${idx.ppi}/100`, ppiNote],
     ['Demand (medical + admin)', idx.demandCount, ''],
     ['Capacity (slots free)', idx.capacityCount, CAPACITY_LABEL[idx.capacityState]],
     ['Waiting room arrived', idx.arrivedCount, ''],
@@ -177,11 +155,13 @@ function buildHeadlineStrip(data) {
   const flooredNote = idx.floored
     ? ` <span class="condor-headline-note">— band raised to ${esc(idx.band)} by capacity</span>`
     : '';
+  const customNote = idx.isCustom ? ` <span class="condor-headline-note">— custom weightings</span>` : '';
   return (
     `<div class="condor-headline ${cls}">` +
     `<span class="condor-headline-band">${esc(idx.band)}</span>` +
     `<span class="condor-headline-figs">Demand ${esc(idx.demandCount)} <span class="condor-headline-qual">(med + admin)</span> · Capacity ${esc(idx.capacityCount)} · ${esc(capLabel)}</span>` +
     flooredNote +
+    customNote +
     `</div>`
   );
 }
@@ -233,6 +213,131 @@ function clarifyWorkload(html, data) {
     );
 }
 
+// ── Tunable pressure-index weightings & band thresholds (item 8) ────────────
+//
+// A cog on the meter opens an inline editor for the four component weightings
+// (waiting room / queue / urgent / capacity) and the AMBER/RED band
+// thresholds. Defaults are always visible (placeholder text on empty inputs),
+// "Reset to defaults" clears the stored override in one click, and every
+// input is clamped by condor-index-core.js's normaliseIndexConfig — this UI
+// never needs to validate, only pass raw values through. The capacity SAFETY
+// FLOOR itself is not exposed here at all: it is not a configurable field,
+// it is unconditional logic inside condor-index-core.js (see that file's doc
+// comment + test-condor-index-core.js).
+const SVG_COG = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+
+function renderIndexCog() {
+  const custom = isCustomConfig(_indexConfig);
+  return `<button class="condor-index-cog${custom ? ' condor-index-cog--custom' : ''}" id="condorIndexCog"
+    aria-expanded="${_editorOpen}" aria-label="Tune pressure-index weightings and band thresholds"
+    title="${custom ? 'Custom weightings active — tune weightings and band thresholds' : 'Tune weightings and band thresholds'}">
+    ${SVG_COG}${custom ? '<span class="condor-index-cog-dot" aria-hidden="true"></span>' : ''}
+  </button>`;
+}
+
+// Numeric input row: label, a number field pre-filled with the CURRENT
+// (normalised) value, and the shipped default shown alongside so "what was
+// this originally" never requires memory or a second screen.
+function editorRow(id, label, value, defaultValue, { min, max, step } = {}) {
+  return `
+    <div class="condor-idx-row">
+      <label class="condor-idx-label" for="${id}">${esc(label)}</label>
+      <input type="number" id="${id}" class="condor-idx-input" value="${esc(value)}"
+        min="${min}" max="${max}" step="${step ?? 'any'}" />
+      <span class="condor-idx-default">default ${esc(defaultValue)}</span>
+    </div>`;
+}
+
+function renderIndexEditor() {
+  const cfg = normaliseIndexConfig(_indexConfig);
+  const custom = isCustomConfig(_indexConfig);
+  return `
+    <div class="condor-idx-editor" id="condorIndexEditor">
+      <div class="condor-idx-editor-head">
+        <span class="condor-idx-editor-title">Pressure-index weightings</span>
+        <button class="ghost-btn condor-idx-close" id="condorIdxClose" aria-label="Close editor">✕</button>
+      </div>
+      <p class="condor-idx-editor-note">
+        Component weightings should add to 1.0 for the index to stay on a 0–100 scale — they are not
+        forced to, but the numbers stop reading as a "score out of 100" if they don't.
+      </p>
+      <div class="condor-idx-group">
+        ${editorRow('condorIdxWr', 'Waiting room', cfg.weights.waitingRoom, DEFAULT_WEIGHTS.waitingRoom, { min: 0, max: 1, step: 0.05 })}
+        ${editorRow('condorIdxQueue', 'Request queue', cfg.weights.queue, DEFAULT_WEIGHTS.queue, { min: 0, max: 1, step: 0.05 })}
+        ${editorRow('condorIdxUrgent', 'Urgent', cfg.weights.urgent, DEFAULT_WEIGHTS.urgent, { min: 0, max: 1, step: 0.05 })}
+        ${editorRow('condorIdxCapacity', 'Capacity', cfg.weights.capacity, DEFAULT_WEIGHTS.capacity, { min: 0, max: 1, step: 0.05 })}
+      </div>
+      <div class="condor-idx-editor-title condor-idx-editor-title--sub">Band thresholds</div>
+      <div class="condor-idx-group">
+        ${editorRow('condorIdxAmber', 'AMBER from', cfg.thresholds.amber, DEFAULT_THRESHOLDS.amber, { min: 1, max: 99, step: 1 })}
+        ${editorRow('condorIdxRed', 'RED from', cfg.thresholds.red, DEFAULT_THRESHOLDS.red, { min: 1, max: 99, step: 1 })}
+      </div>
+      <p class="condor-idx-editor-safety">
+        The capacity safety floor (never GREEN while over capacity) always applies and is not
+        editable here.
+      </p>
+      <div class="condor-idx-editor-actions">
+        <button class="ghost-btn" id="condorIdxReset"${custom ? '' : ' disabled'}>Reset to defaults</button>
+        <button class="ghost-btn condor-idx-save" id="condorIdxSave">Save</button>
+      </div>
+    </div>`;
+}
+
+function readEditorConfig() {
+  const val = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value : undefined;
+  };
+  return {
+    weights: {
+      waitingRoom: val('condorIdxWr'),
+      queue: val('condorIdxQueue'),
+      urgent: val('condorIdxUrgent'),
+      capacity: val('condorIdxCapacity'),
+    },
+    thresholds: {
+      amber: val('condorIdxAmber'),
+      red: val('condorIdxRed'),
+    },
+  };
+}
+
+async function saveIndexConfig(rawConfig) {
+  // Persist the NORMALISED (clamped, validated) config, not raw input — so a
+  // stray "999" typed into a field never lands in storage un-clamped, and the
+  // stored shape is always exactly what normaliseIndexConfig() will reproduce.
+  const normalised = normaliseIndexConfig(rawConfig);
+  _indexConfig = normalised;
+  await chrome.storage.local.set({ [INDEX_CONFIG_KEY]: normalised });
+}
+
+async function clearIndexConfig() {
+  _indexConfig = null;
+  await chrome.storage.local.remove(INDEX_CONFIG_KEY);
+}
+
+function bindIndexEditor() {
+  if (!_container) return;
+  _container.querySelector('#condorIndexCog')?.addEventListener('click', () => {
+    _editorOpen = !_editorOpen;
+    poll();
+  });
+  _container.querySelector('#condorIdxClose')?.addEventListener('click', () => {
+    _editorOpen = false;
+    poll();
+  });
+  _container.querySelector('#condorIdxSave')?.addEventListener('click', async () => {
+    await saveIndexConfig(readEditorConfig());
+    _editorOpen = false;
+    poll();
+  });
+  _container.querySelector('#condorIdxReset')?.addEventListener('click', async () => {
+    await clearIndexConfig();
+    _editorOpen = false;
+    poll();
+  });
+}
+
 async function poll() {
   if (!_container) return;
   try {
@@ -248,7 +353,11 @@ async function poll() {
     _container.innerHTML = `
       <div class="condor-wrap">
         ${headline}
-        <div class="condor-hero">${cards.renderPpi(data)}</div>
+        <div class="condor-hero">
+          ${cards.renderPpi(data, _indexConfig)}
+          ${renderIndexCog()}
+          ${_editorOpen ? renderIndexEditor() : ''}
+        </div>
         <div class="condor-ts">
           ${freshnessHtml(new Date(), { label: 'Live · updated', staleMs: 90000 })}
           <span class="condor-asat">as at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -270,6 +379,7 @@ async function poll() {
         <div class="condor-footer">${footer}</div>
       </div>
     `;
+    bindIndexEditor();
     cards.saveDayScore(data).catch(() => {});
     captureDailySnapshot(data).catch(() => {});
   } catch (e) {
@@ -279,9 +389,22 @@ async function poll() {
   }
 }
 
+function onIndexConfigChange(changes) {
+  if (!changes[INDEX_CONFIG_KEY] || !_container) return;
+  _indexConfig = changes[INDEX_CONFIG_KEY].newValue ?? null;
+  poll();
+}
+
 export async function init(el) {
   _container = el;
   _container.innerHTML = '<div class="condor-loading">Loading Condor…</div>';
+  _editorOpen = false;
+
+  // Item 8: load the user's custom weightings/thresholds (if any) before the
+  // first poll so the very first render already reflects them.
+  const stored = await chrome.storage.local.get(INDEX_CONFIG_KEY);
+  _indexConfig = stored[INDEX_CONFIG_KEY] ?? null;
+  chrome.storage.onChanged.addListener(onIndexConfigChange);
 
   // Delegated click for "Set up now" buttons rendered inside cards
   _container.addEventListener('click', (e) => {
@@ -343,5 +466,6 @@ export function cleanup() {
     _stopFresh();
     _stopFresh = null;
   }
+  chrome.storage.onChanged.removeListener(onIndexConfigChange);
   _container = null;
 }

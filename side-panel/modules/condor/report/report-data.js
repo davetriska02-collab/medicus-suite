@@ -183,6 +183,12 @@ export function buildSnapshotRow(live, ppi, today = localISO()) {
     // (over capacity floors GREEN→AMBER); otherwise "25/100 AMBER" reads as a bug.
     if (ppi.floored) row.bandFloored = true;
     if (ppi.overCapacity) row.overCapacity = true;
+    // Item 8: carry the custom-weightings disclosure + the actual band
+    // thresholds used, so a report generated while a custom config is active
+    // never shows the hard-coded "GREEN under 40 · AMBER 40-70" hint when the
+    // real cut-offs were different (see renderCurrentSnapshot in report-render.js).
+    if (ppi.isCustom) row.customWeightings = true;
+    if (ppi.config?.thresholds) row.thresholds = ppi.config.thresholds;
   }
   if (live?.submissions?.totals) row.demand = live.submissions.totals.all ?? null;
   if (live?.slots) row.slotsRemaining = live.slots.totalRemaining ?? null;

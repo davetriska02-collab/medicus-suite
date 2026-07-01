@@ -17,9 +17,12 @@
 //   2. Waiting room amber (max wait ≥ amber threshold, default 10m)
 //   3. Demand red (medical or admin over its red threshold)
 //   4. Demand amber (medical or admin over its amber threshold)
-//   5. Oldest unanswered triage request, if any is tracked
-//   6. Sweep not run today
-//   7. Quiet — "Nothing needs you right now — last checked HH:MM"
+//   5. Slots alert-rule breach — red (a type at zero) or amber (at/below threshold)
+//   6. Oldest unanswered triage request, if any is tracked
+//   7. Sweep not run today
+//   8. Quiet — "Nothing needs you right now — last checked HH:MM"
+// Within a severity tier, clauses are pushed in the order above (stable sort),
+// so e.g. a red waiting-room clause always leads a red slots-breach clause.
 // Each clause after the lead clause is appended (", " joined) up to a max of
 // three clauses, so the sentence stays scannable rather than becoming a full
 // re-statement of every card.
@@ -93,6 +96,26 @@ function demandClause(demandData) {
   };
 }
 
+// Build the slots-breach clause (item 9), or null if no alert rule is
+// currently breached / the data hasn't loaded. Mirrors the Slots tab's own
+// amber/red convention: red when a type has hit zero, amber when it's at/
+// below threshold but not yet zero. Names ONLY the worst-hit type (the
+// headline is a single sentence, not a re-statement of the Slots ribbon —
+// the full breach list is already visible on the Slots Today card itself).
+function slotsClause(slotsData) {
+  if (!slotsData || slotsData.noCode || slotsData.error) return null;
+  const breaches = Array.isArray(slotsData.breaches) ? slotsData.breaches : [];
+  if (breaches.length === 0) return null;
+  const worst = breaches[0]; // buildBreaches() already sorts red-first, most-depleted first
+  const severity = worst.level === 'red' ? 'red' : 'amber';
+  const extra = breaches.length > 1 ? ` (+${breaches.length - 1} more)` : '';
+  const text =
+    worst.count === 0
+      ? `no ${worst.typeName} slots left${extra}`
+      : `${worst.typeName} down to ${worst.count} slot${worst.count === 1 ? '' : 's'}${extra}`;
+  return { severity, text };
+}
+
 // Build the oldest-unanswered-triage clause, or null if RM isn't configured,
 // errored, or nothing is tracked as unanswered. Mirrors today.js's own
 // oldestUnanswered() logic but takes the already-computed oldest timestamp
@@ -134,7 +157,7 @@ function quietText(nowMs, formatProvenanceFn) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 //
-// buildHeadline({ wrData, rmData, demandData, sweepData, oldestUnansweredMs, now, formatProvenance })
+// buildHeadline({ wrData, rmData, demandData, slotsData, sweepData, oldestUnansweredMs, now, formatProvenance })
 //   → { text: string, severity: 'red'|'amber'|null }
 //
 // All inputs optional/nullable — a still-loading card (data === null) simply
@@ -144,6 +167,7 @@ export function buildHeadline({
   wrData = null,
   rmData = null,
   demandData = null,
+  slotsData = null,
   sweepData = null,
   oldestUnansweredMs = null,
   now = Date.now(),
@@ -152,12 +176,13 @@ export function buildHeadline({
   const candidates = [
     waitingClause(wrData),
     demandClause(demandData),
+    slotsClause(slotsData),
     triageClause(rmData, oldestUnansweredMs, now),
     sweepClause(sweepData),
   ].filter(Boolean);
 
   // Red leads, then amber, then neutral — stable within each tier (the order
-  // clauses were pushed above: waiting, demand, triage, sweep).
+  // clauses were pushed above: waiting, demand, slots, triage, sweep).
   const rank = { red: 0, amber: 1, null: 2 };
   candidates.sort((a, b) => rank[a.severity] - rank[b.severity]);
 
@@ -177,4 +202,4 @@ function capitalise(s) {
 }
 
 // Exported for tests / reuse — not called internally beyond buildHeadline.
-export { waitingClause, demandClause, triageClause, sweepClause, pluralPatients, pluralRequests };
+export { waitingClause, demandClause, slotsClause, triageClause, sweepClause, pluralPatients, pluralRequests };

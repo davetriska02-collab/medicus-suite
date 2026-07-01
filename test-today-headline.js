@@ -161,6 +161,91 @@ async function runTests() {
     check(rRed.severity === 'red', `medical 65 ≥ red 60 → red (got ${rRed.severity})`);
   }
 
+  // ── 8b. Slots breach clause (item 9) ────────────────────────────────────────
+  console.log('\n--- slots breach clause ---');
+  {
+    const rNone = buildHeadline({ slotsData: { count: 20, error: null, breaches: [] }, now: NOW });
+    check(rNone.severity === null, 'no breaches → no slots clause');
+
+    const rAmber = buildHeadline({
+      slotsData: {
+        count: 20,
+        error: null,
+        breaches: [{ typeName: 'GP Routine', threshold: 3, count: 2, level: 'amber' }],
+      },
+      now: NOW,
+    });
+    check(rAmber.severity === 'amber', `amber breach → amber severity (got ${rAmber.severity})`);
+    check(rAmber.text.includes('GP Routine down to 2 slots'), `amber breach text (got: "${rAmber.text}")`);
+
+    const rRed = buildHeadline({
+      slotsData: { count: 20, error: null, breaches: [{ typeName: 'Nurse', threshold: 0, count: 0, level: 'red' }] },
+      now: NOW,
+    });
+    check(rRed.severity === 'red', `red breach (zero left) → red severity (got ${rRed.severity})`);
+    // Lead clause is capitalised (see "capitalisation" section below), so
+    // this is "No Nurse..." when it's the sentence's first clause.
+    check(/no Nurse slots left/i.test(rRed.text), `red breach text (got: "${rRed.text}")`);
+
+    const rMultiple = buildHeadline({
+      slotsData: {
+        count: 20,
+        error: null,
+        breaches: [
+          { typeName: 'Nurse', threshold: 0, count: 0, level: 'red' },
+          { typeName: 'GP Routine', threshold: 3, count: 1, level: 'amber' },
+        ],
+      },
+      now: NOW,
+    });
+    check(rMultiple.text.includes('+1 more'), `multiple breaches note the extra count (got: "${rMultiple.text}")`);
+
+    const rNoCode = buildHeadline({ slotsData: { count: null, error: null, noCode: true, breaches: [] }, now: NOW });
+    check(rNoCode.severity === null, 'slotsData.noCode → no slots clause');
+
+    const rErr = buildHeadline({ slotsData: { count: null, error: 'boom', breaches: [] }, now: NOW });
+    check(rErr.severity === null, 'slotsData.error → no slots clause (not a false alert)');
+
+    const rNull = buildHeadline({ slotsData: null, now: NOW });
+    check(rNull.severity === null, 'null slotsData (still loading) → no slots clause');
+  }
+
+  // ── 8c. Slots breach ordering vs waiting room / demand ─────────────────────
+  console.log('\n--- slots breach ordering ---');
+  {
+    // Waiting room red should still lead a slots amber breach.
+    const r = buildHeadline({
+      wrData: { patients: [{ name: 'A', mins: 25 }], error: null },
+      slotsData: {
+        count: 20,
+        error: null,
+        breaches: [{ typeName: 'GP Routine', threshold: 3, count: 2, level: 'amber' }],
+      },
+      now: NOW,
+    });
+    check(r.severity === 'red', `waiting red still leads with a slots amber breach present (got ${r.severity})`);
+    check(
+      r.text.indexOf('waiting') < r.text.indexOf('GP Routine'),
+      `red clause ordered before amber slots clause (got: "${r.text}")`
+    );
+
+    // A red slots breach with no other red clause should drive overall severity red.
+    const r2 = buildHeadline({
+      demandData: {
+        medical: 35,
+        admin: 0,
+        thresholds: { medical: { amber: 30, red: 60, enabled: true }, admin: { enabled: false } },
+      },
+      slotsData: { count: 20, error: null, breaches: [{ typeName: 'Nurse', threshold: 0, count: 0, level: 'red' }] },
+      now: NOW,
+    });
+    check(r2.severity === 'red', `red slots breach outranks a demand-amber clause (got ${r2.severity})`);
+    check(
+      r2.text.indexOf('Nurse') < r2.text.indexOf('medical'),
+      `red slots clause ordered before amber demand clause (got: "${r2.text}")`
+    );
+  }
+
   // ── 9. Red leads amber: waiting red + demand amber → red wins, both shown ──
   console.log('\n--- ordering: red leads amber ---');
   {

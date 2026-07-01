@@ -840,6 +840,56 @@
   color: var(--text-2);
 }
 
+/* ── Patient-name search + clinician filter (item 5) ─────────────────────── */
+
+.ref-pc-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ref-pc-search-wrap {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+.ref-pc-search-wrap .ref-search-input {
+  width: 100%;
+}
+
+.ref-clinician-select {
+  flex: 1 1 140px;
+  min-width: 120px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 5px 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  border-radius: var(--r-md);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.ref-clinician-select:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.ref-pc-filter-active {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
 /* ── Show all toggle ──────────────────────────────────────────────────────── */
 
 .ref-show-all {

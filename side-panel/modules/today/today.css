@@ -434,6 +434,36 @@
   letter-spacing: 0.04em;
 }
 
+/* ── Slots alert breaches (item 9) ───────────────────────────────────────────
+   Mirrors the Slots tab's own alert-rule amber/red convention so the same
+   breach reads identically wherever it's seen. */
+.today-slots-breaches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.today-slots-breach {
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.today-slots-breach--amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+}
+
+.today-slots-breach--red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+
 /* ── Triage (RM) pills ───────────────────────────────────────────────────────── */
 
 .today-rm-pills {
