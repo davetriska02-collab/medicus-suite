@@ -90,6 +90,10 @@ export function cleanup() {
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
   _onRuntimeMsg = _onTabChange = _onDelegatedClick = null;
   _lastModel = _lastChips = _lastStamp = null;
+  _preflightOpen = false;
+  _preflightInput = '';
+  _preflightResult = null;
+  _preflightRulesPromise = null;
   container = null;
 }
 
@@ -128,6 +132,16 @@ let _onDelegatedClick = null;
 let _lastModel = null;
 let _lastChips = null;
 let _lastStamp = null;
+
+// ── Pre-flight (what-if safety preview) — module-local state ────────────────
+// Never written to storage; reset on cleanup(). _preflightOpen persists the
+// <details> open/closed state across a re-render (a re-render happens on
+// every patient-change poll, so without this the panel would keep slamming
+// shut while a clinician is mid-check).
+let _preflightOpen = false;
+let _preflightInput = '';
+let _preflightResult = null; // last runPreflightCheck() output, or 'error'
+let _preflightRulesPromise = null; // cached fetch of drug-rules.json + alert-library.json
 
 function wireStaticControls() {
   container.querySelector('#recRefresh')?.addEventListener('click', () => load(true));
@@ -321,8 +335,10 @@ function render(data, chips, errs) {
      ${problemsCard(problems, past)}
      ${medsCard(meds)}
      ${safetyCard(meds, problems, obs, pc, chips)}
+     ${preflightCard()}
      ${resultsCard(obs)}`
   );
+  wirePreflightControls();
 }
 
 // ── Copy summary — plain-text builder ────────────────────────────────────────
@@ -673,6 +689,222 @@ function scoreRow(label, value, cls, tag, detail, tip) {
       </div>
       <div class="rec-score-detail">${detail}</div>
     </div>`;
+}
+
+// ── Pre-flight (what-if safety preview) ──────────────────────────────────────
+//
+// Runs engine/preflight.js's runPreflightCheck over "current meds + one
+// proposed drug", reusing the SAME normalised data this module already holds
+// (no new fetch). See engine/preflight.js header for the composition detail
+// (ACB, STOPP/START, drug-monitoring, drug-combo interaction rules — all
+// existing engines, nothing duplicated here).
+//
+// Rule files (drug-rules.json + alert-library.json) are fetched once per
+// panel session and cached — they ship with the extension and never change
+// at runtime, same assumption sentinel.js's rule-currency footer makes.
+function loadPreflightRuleFiles() {
+  if (_preflightRulesPromise) return _preflightRulesPromise;
+  _preflightRulesPromise = (async () => {
+    const base = chrome.runtime.getURL('rules/');
+    const [drugRules, alertLibrary] = await Promise.all([
+      fetch(base + 'drug-rules.json').then((r) => r.json()),
+      fetch(base + 'alert-library.json').then((r) => r.json()),
+    ]);
+    return { drugRules, alertLibrary };
+  })();
+  return _preflightRulesPromise;
+}
+
+function preflightCard() {
+  const openAttr = _preflightOpen ? ' open' : '';
+  return `
+    <details class="rec-preflight" id="recPreflight"${openAttr}>
+      <summary class="rec-preflight-summary">Pre-flight — check a drug before prescribing</summary>
+      <div class="rec-preflight-body">
+        <p class="rec-preflight-intro">Checks a proposed drug against this patient's current medications and
+          problems using the same engines as the rest of the suite — before it is prescribed.</p>
+        <div class="rec-preflight-row">
+          <input type="text" class="rec-preflight-input" id="recPreflightInput" placeholder="Drug name, e.g. Trimethoprim"
+            value="${esc(_preflightInput)}" autocomplete="off" spellcheck="false" />
+          <button type="button" class="rec-preflight-btn" id="recPreflightCheck">Check</button>
+        </div>
+        <div id="recPreflightResult">${preflightResultHtml()}</div>
+      </div>
+    </details>`;
+}
+
+function preflightResultHtml() {
+  if (_preflightResult === null) return '';
+  if (_preflightResult === 'error') {
+    return `<div class="rec-preflight-empty">Couldn’t load the rule files to run this check. Try again.</div>`;
+  }
+  const r = _preflightResult;
+
+  const sections = [];
+
+  // ACB delta
+  if (r.acb) {
+    const cls = r.acb.escalates ? 'rec-pf-alert' : r.acb.delta > 0 ? 'rec-pf-mid' : 'rec-pf-ok';
+    const bandNote = r.acb.escalates ? ` — moves burden band ${esc(r.acb.currentBand)} → ${esc(r.acb.band)}` : '';
+    sections.push(`
+      <div class="rec-pf-section ${cls}">
+        <div class="rec-pf-section-h">Anticholinergic burden (ACB)</div>
+        <div class="rec-pf-section-body">${r.acb.current} → ${r.acb.projected}${bandNote ? esc(bandNote) : ''} (${r.acb.delta >= 0 ? '+' : ''}${r.acb.delta})</div>
+      </div>`);
+  }
+
+  // STOPP/START — only NEW flags introduced by the addition
+  if (Array.isArray(r.stoppStart)) {
+    if (r.stoppStart.length) {
+      const items = r.stoppStart
+        .map((f) => {
+          const kind = f.kind === 'start' ? 'start' : 'stopp';
+          return `<li><span class="rec-ss-flag rec-ss-${kind}">${kind.toUpperCase()}</span> ${esc(f.criterion || '')}</li>`;
+        })
+        .join('');
+      sections.push(`
+        <div class="rec-pf-section rec-pf-alert">
+          <div class="rec-pf-section-h">STOPP/START prompts this would introduce (${r.stoppStart.length})</div>
+          <ul class="rec-pf-list">${items}</ul>
+        </div>`);
+    } else {
+      sections.push(`
+        <div class="rec-pf-section rec-pf-ok">
+          <div class="rec-pf-section-h">STOPP/START</div>
+          <div class="rec-pf-section-body">No new prompts introduced by this addition.</div>
+        </div>`);
+    }
+  }
+
+  // Interactions with current medications
+  if (r.interactions.length) {
+    const items = r.interactions
+      .map((i) => {
+        const cls = i.status === 'alert' ? 'rec-pf-alert' : i.status === 'caution' ? 'rec-pf-mid' : 'rec-pf-ok';
+        return `
+          <div class="rec-pf-section ${cls}">
+            <div class="rec-pf-section-h">${esc(i.label || i.ruleId)}</div>
+            <div class="rec-pf-section-body">${esc(i.notes || '')}</div>
+            ${i.source ? `<div class="rec-pf-source">${esc(i.source)}</div>` : ''}
+          </div>`;
+      })
+      .join('');
+    sections.push(
+      `<div class="rec-pf-group"><div class="rec-pf-group-h">Interactions with current medications (${r.interactions.length})</div>${items}</div>`
+    );
+  } else {
+    sections.push(`
+      <div class="rec-pf-section rec-pf-ok">
+        <div class="rec-pf-section-h">Interactions with current medications</div>
+        <div class="rec-pf-section-body">No interaction alert against this patient's current medications in local rules.</div>
+      </div>`);
+  }
+
+  // Monitoring this addition would introduce, distinguishing satisfied vs missing
+  if (r.monitoring.length) {
+    const items = r.monitoring
+      .map((m) => {
+        const testItems = m.tests
+          .map((t) => {
+            const cls = t.satisfied ? 'rec-pf-test-ok' : 'rec-pf-test-missing';
+            const detail = t.satisfied
+              ? t.latestResult
+                ? `baseline satisfied — ${esc(t.latestResult.value != null ? String(t.latestResult.value) : '')} on ${esc(fmtDate(t.latestResult.date))}`
+                : 'baseline satisfied'
+              : 'baseline missing — no recent result on file';
+            return `<li class="${cls}"><span class="rec-pf-test-name">${esc(t.name)}</span> — ${detail}</li>`;
+          })
+          .join('');
+        return `
+          <div class="rec-pf-section rec-pf-mid">
+            <div class="rec-pf-section-h">${esc(m.drugClass ? `${m.drugClass} monitoring` : 'Monitoring')}</div>
+            <ul class="rec-pf-list">${testItems}</ul>
+            ${m.sharedCare ? `<div class="rec-pf-source">Shared-care monitoring</div>` : ''}
+            ${m.source ? `<div class="rec-pf-source">${esc(m.source)}</div>` : ''}
+          </div>`;
+      })
+      .join('');
+    sections.push(
+      `<div class="rec-pf-group"><div class="rec-pf-group-h">Monitoring this drug would require (${r.monitoring.length})</div>${items}</div>`
+    );
+  }
+
+  const unknownNote = !r.known
+    ? `<div class="rec-pf-unknown">No local rules mention this drug — this is not evidence of safety.</div>`
+    : '';
+
+  return `
+    ${unknownNote}
+    ${sections.join('')}
+    <p class="rec-pf-caveat">${esc(r.caveat)}</p>`;
+}
+
+function wirePreflightControls() {
+  const details = container?.querySelector('#recPreflight');
+  if (details) {
+    details.addEventListener('toggle', () => {
+      _preflightOpen = details.open;
+    });
+  }
+  const input = container?.querySelector('#recPreflightInput');
+  const btn = container?.querySelector('#recPreflightCheck');
+  const runCheck = () => runPreflight();
+  if (input) {
+    input.addEventListener('input', () => {
+      _preflightInput = input.value;
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runCheck();
+      }
+    });
+  }
+  if (btn) btn.addEventListener('click', runCheck);
+}
+
+async function runPreflight() {
+  const name = (_preflightInput || '').trim();
+  if (!name || !_lastModel) return;
+  _preflightOpen = true;
+
+  const resultEl = container?.querySelector('#recPreflightResult');
+  if (resultEl) resultEl.innerHTML = `<div class="rec-preflight-loading">Checking…</div>`;
+
+  const Preflight = typeof window !== 'undefined' ? window.Preflight : null;
+  if (!Preflight) {
+    _preflightResult = 'error';
+    if (resultEl) resultEl.innerHTML = preflightResultHtml();
+    return;
+  }
+
+  let ruleFiles;
+  try {
+    ruleFiles = await loadPreflightRuleFiles();
+  } catch (_) {
+    _preflightResult = 'error';
+    if (resultEl) resultEl.innerHTML = preflightResultHtml();
+    return;
+  }
+
+  const pc = _lastModel.patientContext || {};
+  const patientContext = {
+    medications: _lastModel.medications || [],
+    problems: _lastModel.problems || [],
+    observations: _lastModel.observations || [],
+    ageYears: pc.ageYears != null ? Number(pc.ageYears) : null,
+    sex: pc.sex || null,
+  };
+
+  try {
+    _preflightResult = Preflight.runPreflightCheck(patientContext, name, ruleFiles);
+  } catch (_) {
+    _preflightResult = 'error';
+  }
+  // Re-render just the result region — the input/button stay untouched so
+  // focus and the typed value are not disturbed by this update.
+  const resultElAfter = container?.querySelector('#recPreflightResult');
+  if (resultElAfter) resultElAfter.innerHTML = preflightResultHtml();
 }
 
 // ── problems ─────────────────────────────────────────────────────────────────
