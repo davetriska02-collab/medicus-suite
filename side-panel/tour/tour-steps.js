@@ -25,10 +25,14 @@
 //   5 — Record tab — live-first patient record
 //   6 — Today "what needs you now" headline; Sentinel rule-coverage
 //       drill-down (v3.144.0)
+//   7 — Record Pre-flight (what-if safety preview) (v3.145.0). Condor Pulse
+//       and Options → Event Ledger deliberately not taught: the 20-step cap
+//       was reached, Condor stays overview-only (nav-tabs step) as before,
+//       and the tour only covers the side panel, not the Options page.
 
 'use strict';
 
-export const TOUR_VERSION = 6;
+export const TOUR_VERSION = 7;
 
 export const TOUR_STEPS = [
   {
@@ -173,6 +177,15 @@ export const TOUR_STEPS = [
     target: ['.rec-root'],
     title: 'Record — the open patient, live',
     body: 'A live snapshot of the patient open in Medicus — problems, medicines, results and safety prompts, no PDF needed. Incomplete by design (no allergies); read the gap-markers and verify the record. The full visualiser opens from the footer.',
+  },
+  {
+    id: 'preflight',
+    addedIn: 7,
+    module: 'record',
+    target: ['#recPreflight'],
+    centerFallback: true,
+    title: 'Pre-flight — check before you prescribe',
+    body: 'Type a drug you’re considering to see how it would change ACB and STOPP/START, any new interactions with current meds, and what monitoring it would need — before it exists in the record. A decision aid, not advice.',
   },
   {
     id: 'finish',

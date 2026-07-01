@@ -2,6 +2,78 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.145.0] — 2026-07-01
+
+### Class-leader features — Prescribing Pre-flight, Clinical Event Ledger, Practice Pulse
+
+Three features chosen for best-of-type differentiation
+(`docs/plans/CLASS-LEADERS-2026-07-01.md`), landed as three batches (`fab7081`,
+`158e30a`, `3395739`). Read-only against the clinical record throughout — no new
+record writes.
+
+- **Prescribing Pre-flight (Record tab).** A collapsible "Pre-flight" section lets you
+  type a drug you're considering and see, before it exists in the record: the ACB
+  delta and any band change, STOPP/START prompts newly triggered by the addition (not
+  ones already true of the current regimen), interactions against current meds, and
+  required monitoring — distinguishing a baseline already satisfied by a recent result
+  from one that's missing. The full alert library (interaction/awareness rules,
+  PINCER combos, etc.) is treated as always-on background knowledge for this what-if
+  check, not just the rules a clinician has opted into live — a deliberate design
+  decision, documented in `engine/preflight.js`. An unknown drug is reported as
+  unknown, never implied safe. Every result carries the caveat "Decision aid, not
+  advice — confirm against the BNF and the full record." New pure module
+  `engine/preflight.js` composes the existing ACB, STOPP/START and drug-monitoring/
+  combo engines — no new drug term lists or interaction pairs were added. Also fixes a
+  real latent bug: `alert-library.json`'s library rules carried no `id` of their own,
+  so de-duplication (used to tell "already firing on current meds" apart from "newly
+  introduced by the proposed drug") collided on `ruleId undefined` and silently
+  dropped interaction alerts; rules are now stamped with their library `libId` as
+  `id`. Tests: `test-preflight.js`.
+- **Clinical Event Ledger.** A machine-local, capped record (5000 events, 90-day
+  retention, pruned on every append) of what the suite displayed or did — answering
+  "did the tool flag this?" with evidence instead of a shrug. Instruments: Sentinel
+  red/amber chips shown (deduped per patient+rule+day so it's evidence, not noise) and
+  dismissals; Sweep run summaries and each "Create recall task"; Record "Copy patient
+  summary" and Pre-flight runs; Lab Filing filings mirrored alongside the existing
+  audit log (mirror, not migrate — the lab-filing log itself is untouched). Writes are
+  fire-and-forget and never break the calling surface on a throwing storage layer.
+  Patient references are the Medicus UUID only — never a name — and shape-validated at
+  write time (`sanitisePatientRef`), rejecting anything that doesn't look like a
+  UUID/hex identifier. Options → Event Ledger adds a card with patient-UUID and
+  date-range filters, CSV export (RFC-4180 quoting plus a spreadsheet
+  formula-injection guard), a typed-CLEAR confirmation to wipe the ledger, and a
+  plain-English disclosure of what it is and isn't (not a clinical record; absence of
+  an event is not evidence nothing was shown). Deliberately **excluded from suite
+  backup**, same doctrine as the lab-filing audit log — restoring an event ledger onto
+  another machine would fabricate a misleading "what was shown here" record. New
+  `shared/event-ledger.js`. Tests: `test-event-ledger.js`.
+- **Practice Pulse (Condor).** Condor's daily snapshots become week-on-week
+  operational intelligence. A new Pulse card shows trend rows — pressure index,
+  demand, slots free, waiting room, urgent tasks, task age — over 7d/30d with inline
+  sparklines and a "based on N of 30 possible snapshots" coverage line; gaps (days the
+  extension wasn't open) are disclosed, never interpolated. Historical pressure-index
+  values are shown exactly as recorded on the day, not recomputed under today's custom
+  weightings — restating history under current settings could silently disagree with
+  what a partner actually saw at the time. The Practice Report's Trends section is
+  rebuilt on the same pure core (`pulse-core.js`) with a prior-period comparison per
+  audience profile, so the panel and the printed report can never quietly diverge.
+  Verified-already-fixed rather than newly fixed: live Condor's capacity figures
+  already honoured the `slots.hiddenTypes` filter, and the Practice Report already
+  used the same filter — both now covered by a regression test
+  (`test-pulse-core.js`) rather than left to silently drift back apart. The snapshot
+  store (`practice.reportSnapshots`) was already capped at 90 days
+  (`pruneSnapshots`/`SNAPSHOT_KEEP_DAYS`) — verified, not newly capped — and is now
+  regression-tested too. Tests: `test-pulse-core.js`.
+- Reference: `docs/plans/CLASS-LEADERS-2026-07-01.md`.
+
+Tour: one new step — Record Pre-flight (`#recPreflight`), `TOUR_VERSION` bumped 6 → 7.
+Condor Pulse and Options → Event Ledger were deliberately not added as dedicated
+steps: the tour's 20-step sanity cap was reached, Condor stays taught by the existing
+nav-tabs overview step (as before), and the guided tour only covers the side panel,
+not the Options page. All existing anchor selectors re-verified against current
+markup (`test-tour-steps.js`). `defaults.json` (both copies) intentionally
+untouched — no migration-propagated content changed this release.
+
 ## [v3.144.0] — 2026-07-01
 
 ### Top-10 user-value set — answer-first Today, discoverability, coverage transparency, filters and tunables
