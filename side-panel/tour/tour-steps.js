@@ -22,10 +22,13 @@
 //       relocated under the pre-consultation brief (v3.58.0)
 //   3 — Command palette (Ctrl+K) step (v3.59.0)
 //   4 — Today tab — morning command centre (v3.60.0)
+//   5 — Record tab — live-first patient record
+//   6 — Today "what needs you now" headline; Sentinel rule-coverage
+//       drill-down (v3.144.0)
 
 'use strict';
 
-export const TOUR_VERSION = 5;
+export const TOUR_VERSION = 6;
 
 export const TOUR_STEPS = [
   {
@@ -59,6 +62,14 @@ export const TOUR_STEPS = [
     body: 'One screen shows waiting patients, triage load, demand counts, available slots and the pre-clinic sweep result so you can start clinic fully briefed.',
   },
   {
+    id: 'today-headline',
+    addedIn: 6,
+    module: 'today',
+    target: ['.today-headline'],
+    title: 'One line: what needs you now',
+    body: 'A plain-English summary of the cards below — worst thing first, quiet when nothing is outstanding — always stamped with when it was last checked.',
+  },
+  {
     id: 'slots',
     addedIn: 2,
     module: 'slots',
@@ -73,6 +84,15 @@ export const TOUR_STEPS = [
     target: ['.sent-header'],
     title: 'Monitoring — the clinical core',
     body: 'Sentinel reads the open patient record and shows drug-monitoring, QOF and vaccine status as colour-ranked chips. Red needs action; click any chip for its evidence.',
+  },
+  {
+    id: 'rule-coverage',
+    addedIn: 6,
+    module: 'sentinel',
+    target: ['#sentRulesToggle'],
+    centerFallback: true,
+    title: 'What the monitoring rules actually cover',
+    body: 'Click the rule-currency line to expand every drug and QOF rule with the terms it matches — so you can check a specific drug is covered, not just that rules exist.',
   },
   {
     id: 'waiting-room',

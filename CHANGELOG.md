@@ -2,6 +2,67 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.144.0] — 2026-07-01
+
+### Top-10 user-value set — answer-first Today, discoverability, coverage transparency, filters and tunables
+
+Ten improvements drawn from the practice-panel appraisals and the Dave-council roadmap
+(`docs/plans/TOP10-USER-VALUE-2026-07-01.md`), landed as three batches
+(`b2d9c81`, `d05ec6a`, `c75b304`). Read-only throughout — no new clinical-record writes.
+
+- **Today: "what needs you now" headline.** A plain-English sentence at the top of
+  Today, rolled up from data the module already polls — red states lead, amber next,
+  and a quiet "nothing needs you right now" state carries a "last checked HH:MM"
+  provenance line when all clear. Pure builder (`today-headline.js`) with a 55-case
+  test. Also fixed a bug in `triageClause` where it read wall-clock `Date.now()`
+  instead of the threaded `now` parameter, which could misjudge triage age against
+  the caller's reference time.
+- **Per-tab "?" help.** The two copies of `TAB_HELP` that had drifted apart between
+  `panel.js` and `pop-out.js` are now one shared source, `shared/tab-help.js`; missing
+  entries for Submissions, Visualiser and About were added. A coverage test fails CI
+  if a new tab ships without help copy.
+- **Trends: self-describing resting state.** The empty/no-patient state now explains
+  its own purpose, shows an inline SVG worked example, and states the first step
+  ("open a patient in Medicus, then pick a metric") instead of showing a blank chart.
+- **Sentinel: rule-coverage drill-down.** The rule-currency footer line is now a
+  toggle that expands into every drug-monitoring rule (with its matched terms) and
+  every QOF indicator covered — read-only, renders without a patient loaded so it can
+  be checked ahead of a clinic. Rule/indicator counts are test-locked against
+  `rules/drug-rules.json` and `rules/qof-rules.json`. (The "N meds checked · M matched
+  · K overdue · P unmatched" audit headline was already shipped in the v3.138.0-era
+  work — verified present, not rebuilt.)
+- **Record: "Copy patient summary".** Verified pre-existing with its own tests
+  (`test-record-summary.js`); not rebuilt.
+- **Command palette: patient-scoped actions.** A new "Patient" command group — copy
+  patient summary (via the Record tab's single formatter path), open visualiser, jump
+  to Record/Trends/Sentinel — appears only when patient context exists, hidden
+  otherwise.
+- **Referrals: search and clinician filter.** Patient-name search plus a clinician
+  dropdown, AND-combined with the existing priority/status chips, filtering the list,
+  chart and the 2WW safety-net worklist together. CSV export respects the active
+  filters and discloses them; CSV-injection hardened so CR/LF characters typed into
+  the search box can no longer forge extra rows in the export.
+- **Condor: tunable pressure-index weightings and thresholds.** Practice Pressure
+  Index maths extracted into one shared pure core (`condor-index-core.js`) used by
+  `condor.js`, `ppi.js` and `practice-report.js`. A new cog editor lets a power user
+  adjust component weightings and the AMBER/RED band thresholds, with visible
+  defaults and one-click reset (`condor.indexConfig`, included in the Condor backup
+  scope). The capacity safety floor is applied unconditionally *after* any custom
+  config — proven by an adversarial fuzz test that no combination of weightings can
+  produce a GREEN result while capacity is over limit. "Custom weightings" is
+  disclosed in Copy Figures, CSV export, the headline and the Practice Report.
+- **Slots: proactive alert thresholds.** Alert-rule evaluation extracted into a pure
+  core (`slots-alert-core.js`); a new in-module cog editor replaces the Options-only
+  configuration; breaches now surface on Today's Slots card and in the Today headline.
+  (Evaluation and storage already existed; this delivers the in-module editor, the
+  pure core, and the Today integration.)
+- Reference: `docs/plans/TOP10-USER-VALUE-2026-07-01.md` is the source plan for all ten
+  items, including what was deliberately excluded from this set.
+
+Tour: two new steps (Today headline, Sentinel rule-coverage drill-down),
+`TOUR_VERSION` bumped 5 → 6 so returning users see a short "what's new" pass. All
+other tour anchors re-verified against the current markup (`test-tour-steps.js`).
+
 ## [v3.143.2] — 2026-07-01
 
 ### Fix: "Send to Prescribing" team picker restored after Medicus dropdown component change
