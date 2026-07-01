@@ -1,9 +1,11 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Today module (morning command centre)
 //
-// Four data cards + one action card give a single-glance answer to
-// "what does today look like?" before clinic starts.
+// A headline sentence + four data cards + one action card give a
+// single-glance answer to "what needs you now?" before clinic starts.
 //
+//  0. Headline      — one plain-English sentence rolled up from the cards
+//                      below (today-headline.js, pure/testable). No new fetch.
 //  1. Waiting Room  — arrived patients, max wait (amber ≥10, red ≥20). Poll 30s.
 //  2. Triage Load   — RequestMonitor bucket counts as pills. Poll 60s.
 //  3. Demand Today  — medical + admin submission counts with threshold washes. Poll 60s.
@@ -13,6 +15,8 @@
 // No new chrome.storage keys — read-only consumers of keys owned by other modules.
 
 'use strict';
+
+import { buildHeadline } from './today-headline.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +116,7 @@ async function fetchWr() {
     if (!code) {
       _wrData = { patients: [], error: null, noCode: true };
       renderCard('wr');
+      renderHeadline();
       return;
     }
     const url = `https://${code}.api.england.medicus.health/scheduling/data/homepage/my-appointments`;
@@ -132,6 +137,7 @@ async function fetchWr() {
     _wrData = { patients: [], error: e.message || 'Fetch failed' };
   }
   renderCard('wr');
+  renderHeadline();
 }
 
 // ── Fetch: Triage / Request Monitor ───────────────────────────────────────────
@@ -142,18 +148,21 @@ async function fetchRm() {
     if (!window.RequestMonitor) {
       _rmData = { configured: false, error: null };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const cfg = await window.RequestMonitor.getConfig();
     if (!cfg.enabled || !cfg.assigneeId) {
       _rmData = { configured: false, error: null };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const { code, source } = await window.PracticeCode.resolve();
     if (!code) {
       _rmData = { configured: true, buckets: {}, error: 'No practice code' };
       renderCard('rm');
+      renderHeadline();
       return;
     }
     const result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
@@ -164,6 +173,7 @@ async function fetchRm() {
     _rmData = { configured: true, buckets: {}, error: e.message || 'Fetch failed' };
   }
   renderCard('rm');
+  renderHeadline();
 }
 
 // ── Fetch: Demand Today ────────────────────────────────────────────────────────
@@ -177,6 +187,7 @@ async function fetchDemand() {
     if (!code) {
       _demandData = { medical: null, admin: null, thresholds, error: null, noCode: true };
       renderCard('demand');
+      renderHeadline();
       return;
     }
     const today = todayISO();
@@ -210,6 +221,7 @@ async function fetchDemand() {
     };
   }
   renderCard('demand');
+  renderHeadline();
 }
 
 // ── Fetch: Slots ──────────────────────────────────────────────────────────────
@@ -269,6 +281,7 @@ async function fetchSweep() {
   renderCard('sweep');
   // Recent Alerts borrows sweep provenance for its empty state — keep it in sync.
   renderCard('alerts');
+  renderHeadline();
 }
 
 // ── Fetch: Alert log ─────────────────────────────────────────────────────────
@@ -285,6 +298,33 @@ async function fetchAlerts() {
     _alertsData = [];
   }
   renderCard('alerts');
+}
+
+// ── Headline ──────────────────────────────────────────────────────────────────
+// "What needs you now" — one sentence rolled up from the cards already on
+// screen (waiting room, demand, triage, sweep). Pure logic lives in
+// today-headline.js; this is just the glue that feeds it the module's own
+// in-memory state and paints the result. Re-rendered after every card fetch
+// that can move the headline (wr/rm/demand/sweep) — never a fetch of its own.
+
+function renderHeadline() {
+  if (!container) return;
+  const el = container.querySelector('.today-headline');
+  if (!el) return;
+
+  const oldestUnansweredMs = _rmData?.configured ? oldestUnanswered(_rmData.buckets) : null;
+
+  const { text, severity } = buildHeadline({
+    wrData: _wrData,
+    rmData: _rmData,
+    demandData: _demandData,
+    sweepData: _sweepData,
+    oldestUnansweredMs,
+    formatProvenance: window.Provenance?.formatProvenance,
+  });
+
+  el.className = `today-headline${severity ? ` today-headline--${severity}` : ' today-headline--quiet'}`;
+  el.textContent = text;
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -679,6 +719,7 @@ function renderScaffold() {
 
   container.innerHTML = `
     <div class="module-wrap today-module">
+      <div class="today-headline today-headline--quiet" aria-live="polite">Working out what needs you…</div>
       <div class="today-cards">
         ${cards
           .map(

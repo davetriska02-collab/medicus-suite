@@ -16,6 +16,40 @@
   padding: 10px 10px 14px;
 }
 
+/* ── Headline ("What needs you now") ───────────────────────────────────────────
+   The hero line: a single plain-English sentence rolled up from the cards
+   below, red-leads/amber-then/quiet. Sits above the card stack so it reads
+   before anything else on the tab — deliberately the loudest text on Today,
+   carried by size + weight, never by a full-bleed alert fill (that is reserved
+   for genuine per-card status, not a summary line). Colour is a supporting
+   cue only — the words already say "waiting", "unread", "not run today" — so
+   this stays legible and honest in both light and dark, and under
+   colour-blind remapping (the triads swap automatically). */
+.today-headline {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 12px 10px 4px;
+  color: var(--text-1);
+}
+
+.today-headline--red {
+  color: var(--red);
+}
+
+.today-headline--amber {
+  color: var(--amber);
+}
+
+/* Quiet / all-clear state — same weight (still the hero line) but pulled back
+   to a calmer ink so "nothing needs you" doesn't compete with a real alert on
+   the same real estate over the course of a session. */
+.today-headline--quiet {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
 /* ── Card ────────────────────────────────────────────────────────────────────── */
 
 .today-card {
