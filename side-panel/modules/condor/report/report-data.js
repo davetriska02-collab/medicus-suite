@@ -365,6 +365,10 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
 
   const allSnapshots = snapshots.status === 'fulfilled' ? snapshots.value : [];
   const rangeSnapshots = allSnapshots.filter((s) => s.date >= range.start && s.date <= range.end);
+  // The FULL (unfiltered) snapshot series, in addition to the range-scoped `snapshotHistory`
+  // below. Pulse (pulse-core.js buildPulseRows) needs the days immediately BEFORE `range` too
+  // (the prior-period window), which a range-filtered slice cannot supply — pass the whole
+  // thing through and let the pure builder do its own windowing, anchored at `range.end`.
 
   // Prior-period comparison: fetch the equal-length window immediately before this
   // range so the report can show an honest like-for-like delta.
@@ -396,6 +400,7 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
     referrals: pick(referralsRes, 'referrals'),
     currentSnapshot: live ? buildSnapshotRow(live, ppi) : null,
     snapshotHistory: rangeSnapshots,
+    snapshotHistoryFull: allSnapshots,
     // Prior period: the equal-length window immediately before this range.
     // `priorRange` carries the explicit ISO dates so the renderer can label them.
     priorRange: prev,

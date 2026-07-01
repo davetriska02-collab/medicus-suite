@@ -3,7 +3,7 @@
 import { fetchAllStreams } from './condor-data.js';
 import { freshnessHtml, attachFreshnessTicker } from '../shared/freshness.js';
 import { copyText, downloadCsv } from '../shared/export-util.js';
-import { buildSnapshotRow, saveSnapshot, localISO } from './report/report-data.js';
+import { buildSnapshotRow, saveSnapshot, loadSnapshots, localISO } from './report/report-data.js';
 import {
   computeIndex as computeIndexCore,
   normaliseIndexConfig,
@@ -22,6 +22,7 @@ let _lastData = null;
 let _snapshotDate = null; // guards the once-a-day Practice Report snapshot write
 let _indexConfig = null; // raw stored { weights, thresholds } override, or null = defaults
 let _editorOpen = false;
+let _pulsePeriod = 7; // Pulse section's 7d/30d toggle — panel-session only, not persisted
 
 // Capture one Practice Report snapshot per calendar day. The live-only metrics
 // (PPI / waiting room / task age) have no per-day history at the source, so this
@@ -52,6 +53,7 @@ async function loadCards() {
     import('./cards/waiting-room.js'),
     import('./cards/day-score.js'),
     import('./cards/activity.js'),
+    import('./cards/pulse.js'),
   ]);
   const get = (m, fn) => (m.status === 'fulfilled' ? m.value[fn] || (() => '') : () => '');
   return {
@@ -64,6 +66,7 @@ async function loadCards() {
     renderDayScore: get(mods[6], 'renderDayScore'),
     saveDayScore: mods[6].status === 'fulfilled' ? mods[6].value.saveDayScore || (async () => {}) : async () => {},
     renderActivity: get(mods[7], 'renderActivity'),
+    renderPulse: get(mods[8], 'renderPulse'),
   };
 }
 
@@ -345,11 +348,16 @@ async function poll() {
     _lastData = data;
     const cards = await loadCards();
     if (!_container) return;
+    // Pulse reads the full forward-accruing snapshot store (independent of today's live
+    // `data`) — reloaded each poll so a newly-captured daily snapshot (captureDailySnapshot,
+    // below) appears without needing a panel reopen.
+    const snapshotHistory = await loadSnapshots();
     const headline = buildHeadlineStrip(data);
     const waitingDemand = demoteOptionalCards(`${cards.renderWaitingRoom(data)}${cards.renderDemandGap(data)}`);
     const velocityAge = demoteOptionalCards(`${cards.renderVelocity(data)}${cards.renderTaskAge(data)}`);
     const workload = clarifyWorkload(demoteOptionalCards(cards.renderWorkload(data)), data);
     const footer = demoteOptionalCards(`${cards.renderDayScore(data)}${cards.renderActivity(data)}`);
+    const pulse = cards.renderPulse(snapshotHistory, _pulsePeriod);
     _container.innerHTML = `
       <div class="condor-wrap">
         ${headline}
@@ -376,7 +384,7 @@ async function poll() {
           <div class="condor-col condor-col-wide">${velocityAge}</div>
           <div class="condor-col">${workload}</div>
         </div>
-        <div class="condor-footer">${footer}</div>
+        <div class="condor-footer">${footer}${pulse}</div>
       </div>
     `;
     bindIndexEditor();
@@ -399,6 +407,7 @@ export async function init(el) {
   _container = el;
   _container.innerHTML = '<div class="condor-loading">Loading Condor…</div>';
   _editorOpen = false;
+  _pulsePeriod = 7;
 
   // Item 8: load the user's custom weightings/thresholds (if any) before the
   // first poll so the very first render already reflects them.
@@ -425,6 +434,17 @@ export async function init(el) {
     chrome.tabs.create({
       url: chrome.runtime.getURL(`practice-report.html?preset=${encodeURIComponent(preset)}`),
     });
+  });
+
+  // Delegated click for the Pulse 7d/30d toggle — wired once here because poll() replaces
+  // innerHTML; re-polls so the toggle also picks up any snapshot captured since page load.
+  _container.addEventListener('click', (e) => {
+    const tb = e.target.closest('[data-pulse-period]');
+    if (!tb) return;
+    const period = Number(tb.dataset.pulsePeriod) === 30 ? 30 : 7;
+    if (period === _pulsePeriod) return;
+    _pulsePeriod = period;
+    poll();
   });
 
   // Delegated click for "Copy figures" — wired once here because poll() replaces innerHTML
