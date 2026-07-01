@@ -67,7 +67,7 @@
         "enabled": true,
         "label": "Aspirin + NSAID concurrent (no PPI)",
         "drugSets": [
-          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","low-dose aspirin","aspirin tablet"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
+          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","aspirin tablet","aspirin dispersible","aspirin gastro","nu-seals","caprin","micropirin"], "exclude": ["aspirin 500","aspirin 600","migraleve","anadin"] },
           { "name": "NSAID", "match": ["ibuprofen","dexibuprofen","naproxen","diclofenac","aceclofenac","celecoxib","etoricoxib","meloxicam","piroxicam","tenoxicam","indomethacin","indometacin","etodolac","flurbiprofen","sulindac","ketoprofen","dexketoprofen","tiaprofenic acid","mefenamic acid","tolfenamic acid","fenoprofen","nabumetone"], "exclude": ["topical","gel","cream","patch","spray"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole","ranitidine","famotidine"],
@@ -187,7 +187,7 @@
         "enabled": true,
         "label": "Dual antiplatelet without PPI",
         "drugSets": [
-          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","aspirin tablet"], "exclude": ["aspirin 500","anadin","migraleve"] },
+          { "name": "Aspirin", "match": ["aspirin 75","aspirin 300","aspirin tablet","aspirin dispersible","aspirin gastro","nu-seals","caprin","micropirin"], "exclude": ["aspirin 500","anadin","migraleve"] },
           { "name": "P2Y12", "match": ["clopidogrel","ticagrelor","prasugrel"] }
         ],
         "mustNotBePresent": ["omeprazole","lansoprazole","esomeprazole","pantoprazole","rabeprazole"],
@@ -310,7 +310,7 @@
         "label": "Triple antithrombotic therapy (≥75)",
         "drugSets": [
           { "name": "Anticoagulant", "match": ["warfarin","acenocoumarol","phenindione","apixaban","rivaroxaban","dabigatran","edoxaban"] },
-          { "name": "Antiplatelet 1", "match": ["aspirin 75","aspirin 300","aspirin tablet"], "exclude": ["aspirin 500","anadin","migraleve"] },
+          { "name": "Antiplatelet 1", "match": ["aspirin 75","aspirin 300","aspirin tablet","aspirin dispersible","aspirin gastro","nu-seals","caprin","micropirin"], "exclude": ["aspirin 500","anadin","migraleve"] },
           { "name": "Antiplatelet 2", "match": ["clopidogrel","ticagrelor","prasugrel"] }
         ],
         "ageRange": { "min": 75 },
@@ -438,7 +438,7 @@
         "sex": "F",
         "requiresProblem": [],
         "excludesProblem": [],
-        "severity": "amber",
+        "severity": "red",
         "notes": "Isotretinoin is highly teratogenic (Category X). The MHRA Pregnancy Prevention Programme requires two forms of contraception and monthly pregnancy tests. Prescribing is via specialist only. GP role: be aware the patient is on isotretinoin and that PPP compliance is being maintained.",
         "source": "MHRA Pregnancy Prevention Programme"
       }

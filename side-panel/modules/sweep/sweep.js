@@ -509,6 +509,13 @@ async function runNextBatch() {
 
   const aborted = _abortFlag;
   _abortFlag = false;
+
+  // If the module was torn down mid-batch (cleanup() sets _abortFlag and wipes
+  // _cumulativeResults/container), do not persist or render — that would
+  // overwrite the last-known-good sweep.lastRun with emptied/invalidated state
+  // while still recording the pre-abort processedCount/totalCount.
+  if (aborted && !container) return;
+
   _sweepOffset = batchStart + processedThisBatch;
 
   // Persist the run before rendering so the resume card is available after a

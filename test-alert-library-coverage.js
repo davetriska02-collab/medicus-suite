@@ -103,7 +103,7 @@ const EXPECTED = {
   },
   'mhra-isotretinoin-ppg': {
     type: 'drug-combo',
-    severity: 'amber',
+    severity: 'red',
     terms: ['isotretinoin', 'roaccutane'],
     ageMin: 12,
     ageMax: 55,

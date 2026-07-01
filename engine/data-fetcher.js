@@ -222,25 +222,84 @@
       };
       const normalised = NORM.normaliseAll(apiResults, urlContext);
       const apiLabel = `api (via ${resolutionSource})`;
+      // Per-field DOM fallback: banner succeeded (checked above), but one or more
+      // of the other three endpoints can still have failed individually while
+      // fetchAll() didn't throw. Left unhandled, a failed medicationRegimen /
+      // problemListing / investigationDashboard normalises to an empty array —
+      // indistinguishable downstream (content.js computeMonitoringChip) from
+      // "patient genuinely has no medications", so a drug-monitoring alert can go
+      // silently missing. Extract that specific field from the DOM (same
+      // extractors fetchFromDom uses) so real data still reaches the evaluator,
+      // and flag it in debug either way so a failure DOM extraction couldn't
+      // recover is surfaced, not swallowed.
+      const errors = apiResults.errors || {};
+      const failedFields = ['medicationRegimen', 'problemListing', 'investigationDashboard'].filter(
+        (key) => errors[key]
+      );
+      let medications = normalised.medications;
+      let problems = normalised.problems;
+      let pastProblems = normalised.pastProblems || [];
+      let observations = normalised.observations;
+      let observationHistory = normalised.observationHistory;
+      const dataFetchFailed = {};
+      if (failedFields.length > 0) {
+        const M = global.SentinelMedications;
+        const O = global.SentinelObservations;
+        const P = global.SentinelProblems;
+        if (failedFields.includes('medicationRegimen')) {
+          const domMeds = M ? M.extract(document) : null;
+          if (domMeds && domMeds.medications && domMeds.medications.length > 0) {
+            medications = domMeds.medications;
+          } else {
+            dataFetchFailed.medications = true;
+          }
+        }
+        if (failedFields.includes('problemListing')) {
+          const domProbs = P ? P.extract(document) : null;
+          if (domProbs && domProbs.problems && domProbs.problems.length > 0) {
+            problems = domProbs.problems;
+            pastProblems = [];
+          } else {
+            dataFetchFailed.problems = true;
+          }
+        }
+        if (failedFields.includes('investigationDashboard')) {
+          const domObs = O ? O.extract(document) : null;
+          if (domObs && domObs.observations && domObs.observations.length > 0) {
+            observations = domObs.observations;
+            observationHistory = [];
+          } else {
+            dataFetchFailed.observations = true;
+            dataFetchFailed.observationHistory = true;
+          }
+        }
+      }
       return {
         mode: 'live',
         patientContext: normalised.patientContext,
-        medications: normalised.medications,
-        observations: normalised.observations,
-        observationHistory: normalised.observationHistory,
-        problems: normalised.problems,
-        pastProblems: normalised.pastProblems || [],
+        medications,
+        observations,
+        observationHistory,
+        problems,
+        pastProblems,
         debug: {
           foundHeadings: [],
           parseFailures: [],
           dataSource: errorCount > 0 ? `${apiLabel} (${errorCount} endpoint failures)` : apiLabel,
           apiErrors: apiResults.errors,
           resolutionSource,
+          // Distinct "data fetch failed" signal (per CLAUDE.md drug-rules silent-
+          // failure caution): set only for a field whose API call errored AND
+          // whose DOM fallback also came up empty, so callers (e.g. content.js
+          // computeMonitoringChip) can suppress the chip / surface an error
+          // state instead of silently rendering an all-clear against data that
+          // never loaded.
+          dataFetchFailed: Object.keys(dataFetchFailed).length > 0 ? dataFetchFailed : null,
           counts: {
-            medications: normalised.medications.length,
-            observations: normalised.observations.length,
-            observationHistory: normalised.observationHistory.length,
-            problems: normalised.problems.length
+            medications: medications.length,
+            observations: observations.length,
+            observationHistory: observationHistory.length,
+            problems: problems.length
           }
         }
       };

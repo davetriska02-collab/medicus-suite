@@ -2,6 +2,70 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.143.2] — 2026-07-01
+
+### Bug bash — 22 fixes across data-fetch, queue chips, drug rules, backup and modules
+
+A full-repo bug bash surfaced 22 verified defects, ranging from a silent drug-monitoring
+gap to several async races and backup/restore coverage gaps. All 22 are fixed in this
+release.
+
+- **`engine/data-fetcher.js`** — `fetchLive()` now falls back to DOM extraction per
+  data type (medications/problems/observations individually), not only when the
+  patient-banner endpoint fails, and surfaces a `debug.dataFetchFailed` flag when a
+  field's API call and its DOM fallback both come up empty
+- **`content-scripts/triage-lens/content.js`** — `computeMonitoringChip` now treats a
+  `dataFetchFailed` medications signal as a genuine failure (leaves any existing chip
+  in place) instead of silently rendering an all-clear; queue monitoring chips
+  (`.ch-q-mon`) gained a durable `_durableRowMap`-driven re-injector matching the
+  result-chip pattern, so they no longer flash-and-vanish on SPA churn
+- **`content-scripts/triage-lens/hud.css`** — added the missing `.ch-q-legend` rule
+  (and token-block scope entry) so the queue safety-disclaimer banner is actually
+  styled on the live page, not just in the PiP window
+- **`rules/alert-library.json`** — PINCER aspirin combo alerts (pincer-3/8/13) now
+  match real UK aspirin brand names (Nu-Seals, Caprin, Micropirin) and dm+d wording,
+  at parity with `engine/stopp-start.js`'s `ASPIRIN_TERMS`; aligned
+  `mhra-isotretinoin-ppg` severity to red to match the comparable valproate PPP alert
+- **`visualiser-core.js`** — fixed the aspirin-antiplatelet detector regex so it
+  matches real "NNmg" dose labels (was silently never matching); `computeEFI`'s
+  polypharmacy deficit now counts only active drugs, not historic/stopped ones
+- **`engine/stopp-start.js`** — a problem coded literally as bare "MI" now matches
+  the post-MI beta-blocker START check and the aspirin primary-prevention CV check,
+  via a narrowly-scoped exact-match helper (not a change to the generic `hasProblem`
+  matcher, which is shared with unrelated term lists)
+- **`scripts/regen-defaults.js`** — `buildEmbeddedLiteral()` now escapes backticks
+  and template-literal interpolation starts, so a stray backtick in `defaults.json`
+  can no longer corrupt the generated `content.js` into a syntax error
+- **`side-panel/panel.js`** — Request Monitor strip fetch now guarded against
+  concurrent invocation, closing a race that could double-fire desktop triage
+  notifications and duplicate alert-log entries
+- **`pop-out/pop-out.html`** — loads `shared/request-monitor.js` (dropped in v3.21.3
+  before the Today tab existed), fixing the pop-out's Triage Load card
+- **`side-panel/modules/reception/reception.js`** — `refreshPatientCard` now guards
+  against out-of-order async responses with a generation counter, so rapid tab
+  switching can no longer show the wrong patient's status
+- **`side-panel/modules/record/record.js`** — "needing attention" chip count now
+  checks `chip.status` via the canonical helper instead of regex-matching the whole
+  chip object's text (was miscounting achieved indicators whose label contained
+  "due")
+- **`side-panel/modules/sweep/sweep.js`** — switching tabs mid-run no longer
+  persists an emptied result set over `sweep.lastRun`
+- **`side-panel/modules/today/today.js`** — Morning Sweep "all clear" check now
+  includes amber action-needed statuses, matching the real Sweep tab
+- **`side-panel/modules/capacity/capacity.js`** — appointment-type cache now
+  invalidates when the practice code changes
+- **`shared/io/condor-io.js`** — `dayScores` now defaults to (and is validated as)
+  an array, not an object, fixing a backup/restore path that could silently break
+  day-score persistence
+- **`shared/io/suite-envelope.js`** — `previewEnvelope()` now summarises Condor
+  content, closing the one module scope that showed no preview before a restore
+- **`shared/io/suite-io.js`** — `suite.practiceProfile.attestations` now round-trips
+  through suite-wide backup/restore
+- **`side-panel/modules/condor/report/report-data.js`** — `saveSnapshot()` now
+  upserts by date, making concurrent panel+pop-out writes safe
+- **`engine/eval-cache.js`** — `rulesSignature()` now hashes each rule's full
+  content, not just id/enabled, so an in-place rule edit correctly busts the cache
+
 ## [v3.143.1] — 2026-06-30
 
 ### Fix: OIR matching restored after Medicus checkbox component change

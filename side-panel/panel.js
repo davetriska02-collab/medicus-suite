@@ -1272,8 +1272,9 @@ function makePoller(fn, baseMs, label) {
 // Listen for Pusher-triggered refresh from service worker
 // F5: Sender guard — only accept messages from intra-extension contexts.
 // Light coalescing: fetchAndRenderStrip / fetchAndRenderRmStrip are already
-// guarded by document.visibilityState and their own fetch-in-flight logic,
-// so duplicate refreshes within the same tick are absorbed naturally.
+// guarded by document.visibilityState and their own fetch-in-flight guard
+// (_rmFetchInFlight for the RM strip), so duplicate refreshes within the same
+// tick are absorbed naturally by awaiting the existing in-flight call.
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
@@ -1292,7 +1293,17 @@ const rmStripEl = document.getElementById('rmStrip');
 let rmPoller = null;
 let rmPollSeconds = 60;
 
+let _rmFetchInFlight = null;
+
 async function fetchAndRenderRmStrip() {
+  if (_rmFetchInFlight) return _rmFetchInFlight;
+  _rmFetchInFlight = _doFetchAndRenderRmStrip().finally(() => {
+    _rmFetchInFlight = null;
+  });
+  return _rmFetchInFlight;
+}
+
+async function _doFetchAndRenderRmStrip() {
   if (document.visibilityState !== 'visible') return true;
   if (!rmStripEl || !window.RequestMonitor) return true;
 

@@ -1646,6 +1646,16 @@
       return null;
     }
     if (!data || data.error) return null;
+    // A real per-field fetch failure (banner OK, but medications/problems/
+    // observations individually errored and DOM fallback also came up empty —
+    // see engine/data-fetcher.js debug.dataFetchFailed) is NOT the same as a
+    // confirmed "patient has no medications". Treating it as all-clear would
+    // silently drop a genuine due-monitoring chip the moment the API blips.
+    // Surface it as a distinguishable failure so the caller can leave any
+    // already-rendered chip in place instead of clearing it.
+    if (data.debug && data.debug.dataFetchFailed && data.debug.dataFetchFailed.medications) {
+      throw new Error('monitoring chip: medications fetch failed, DOM fallback empty');
+    }
     // No usable data → no chip (never a false all-clear).
     if (!Array.isArray(data.medications) || data.medications.length === 0) return null;
     const now = new Date().toISOString();
@@ -3116,6 +3126,33 @@
     if (_queueMonGeneration !== gen) scheduleQueueMonitoring();
   };
 
+  // Durable re-injection of already-cached monitoring chips, mirroring
+  // reinjectCachedResultChips below for result-triage chips (see CLAUDE.md
+  // chip-injection rule #4). runQueue clears _queueRowUuids on every re-entry while
+  // still on the queue page, so gating re-injection on it loses chips whose severity
+  // is still valid in _queueMonCache. This walks the durable rowIndex->taskUuid map
+  // for the rows currently ON SCREEN (AG-Grid virtualises the rest), looks up the
+  // cached result keyed by taskUuid, and re-injects via the row-index path
+  // unconditionally on every refresh. injectQueueMonitoringChip de-dupes via
+  // queueChipHost's marker check, so this is safe to call every time.
+  const reinjectCachedMonitoringChips = () => {
+    let n = 0;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const rowIndex = Number(ri);
+      const taskUuid = _durableRowMap.get(rowIndex);
+      if (!taskUuid) return;
+      const entry = _queueMonCache.get(taskUuid);
+      if (!entry || entry.result === undefined || entry.result === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _MON_CACHE_TTL) return;
+      injectQueueMonitoringChip(rowIndex, entry.result);
+      n++;
+    });
+    if (n) log('queue-mon: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
+  };
+
   // ---- Queue result-triage chips ----
   // Mirror of the monitoring pipeline but for Investigation Results tasks.
   // Uses the engine globals: SentinelApiClient, SentinelNormalisers, SentinelResultSeverity.
@@ -3695,6 +3732,11 @@
     // DOM-driven (like the age chips) so they survive re-renders even when the
     // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
     reinjectCachedResultChips();
+    // Restore monitoring chips synchronously from the per-task cache via the durable
+    // rowIndex->taskUuid map (see reinjectCachedMonitoringChips above) — unconditional,
+    // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
+    // survive the runQueue churn that empties _queueRowUuids (CLAUDE.md rule #4).
+    reinjectCachedMonitoringChips();
     // Re-arm the SAME observer (cheap) after the self-write disconnect above, so we
     // don't leave it disconnected — only rebuild from scratch if the container is
     // actually gone (SPA tore down AG-Grid). Do NOT null out queueObservedContainer
