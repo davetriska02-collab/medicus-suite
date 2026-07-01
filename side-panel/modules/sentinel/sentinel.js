@@ -8,6 +8,7 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
+import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
 
 // Canonical clinical-safety caveats (shared/provenance.js, loaded as a classic
@@ -593,6 +594,12 @@ async function cleanup() {
   _snapshotTabId = null;
   _snapshotTabWindowId = null;
   _ruleCurrencyFooter = null;
+  _coverageView = null;
+  _coverageExpanded = false;
+  if (_coverageToggleHandler) {
+    container?.querySelector('#sentRulesToggle')?.removeEventListener('click', _coverageToggleHandler);
+    _coverageToggleHandler = null;
+  }
   _lastTrendData = null;
   _lastDynamicHtml = null;
   _lastBriefHtml = null;
@@ -606,6 +613,14 @@ async function cleanup() {
 // rule file is stale or has a version mismatch. Uses chrome.runtime.getURL so the
 // fetch works identically in the side-panel and the pop-out window.
 
+// Coverage drill-down state: the pure view built by buildCoverageView() and
+// whether the user has it expanded. Renders WITHOUT a patient loaded — it is
+// derived from the rule files themselves, fetched once alongside the currency
+// check below, and persists for the module's lifetime (rule files don't
+// change mid-session).
+let _coverageView = null;
+let _coverageExpanded = false;
+
 async function loadRuleCurrencyFooter() {
   if (!chrome.runtime?.getURL) return;
   try {
@@ -616,6 +631,9 @@ async function loadRuleCurrencyFooter() {
       fetch(base + 'vaccine-rules.json').then((r) => r.json()),
       fetch(base + 'alert-library.json').then((r) => r.json()),
     ]);
+
+    // Rule-coverage drill-down — built from the same fetch, no extra round trip.
+    _coverageView = buildCoverageView(drug, qof);
 
     const files = [
       { id: 'drug', lastUpdated: drug.lastUpdated, specVersion: drug.specVersion },
@@ -651,21 +669,37 @@ async function loadRuleCurrencyFooter() {
       .filter(Boolean)
       .join(' · ');
 
+    // The whole line is a toggle for the coverage drill-down below (only when
+    // there's something to show — a completely empty/failed fetch degrades to
+    // the old plain-text line rather than an inert-looking button).
+    const toggleAttrs =
+      _coverageView && (_coverageView.drug.rules.length || _coverageView.qof.total)
+        ? ` id="sentRulesToggle" type="button" aria-expanded="${_coverageExpanded}" aria-controls="sentCoverageDrilldown"`
+        : '';
+    const asToggle = (inner) =>
+      toggleAttrs ? `<button class="sent-rules-footer-btn"${toggleAttrs}>${inner}</button>` : inner;
+
     if (result.overall === 'red') {
       _ruleCurrencyFooter =
         `<div class="sent-rules-footer sent-rules-footer-red" title="${escAttr(result.warnings.join(' | '))}">` +
-        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
-        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}` +
+        asToggle(
+          `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+            `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'urgent review needed')}`
+        ) +
         `</div>`;
     } else if (result.overall === 'amber') {
       _ruleCurrencyFooter =
         `<div class="sent-rules-footer sent-rules-footer-amber" title="${escAttr(result.warnings.join(' | '))}">` +
-        `<span class="sent-rules-footer-icon">&#9888;</span> ` +
-        `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}` +
+        asToggle(
+          `<span class="sent-rules-footer-icon">&#9888;</span> ` +
+            `Rules: ${escHtml(summaryText)} — ${escHtml(result.warnings[0] || 'review needed')}`
+        ) +
         `</div>`;
     } else {
       _ruleCurrencyFooter =
-        `<div class="sent-rules-footer sent-rules-footer-green">` + `Rules: ${escHtml(summaryText)}` + `</div>`;
+        `<div class="sent-rules-footer sent-rules-footer-green">` +
+        asToggle(`Rules: ${escHtml(summaryText)}`) +
+        `</div>`;
     }
   } catch (_) {
     // Non-critical: suppress errors in currency footer silently
@@ -674,11 +708,92 @@ async function loadRuleCurrencyFooter() {
   updateRulesSlot();
 }
 
-// Push the rule-currency line into its persistent footer slot. Safe to call
-// any time; no-ops until the scaffold exists / the footer has loaded.
+// Push the rule-currency line into its persistent footer slot, followed by the
+// (collapsed-by-default) coverage drill-down. Safe to call any time; no-ops
+// until the scaffold exists / the footer has loaded.
 function updateRulesSlot() {
   const slot = container?.querySelector('#sentRulesSlot');
-  if (slot) slot.innerHTML = _ruleCurrencyFooter || '';
+  if (!slot) return;
+  slot.innerHTML = (_ruleCurrencyFooter || '') + renderCoverageDrilldown();
+  wireCoverageToggle();
+}
+
+// ── Rule-coverage drill-down ─────────────────────────────────────────────────
+// Read-only, renders WITHOUT a patient loaded (source is the rule files, not a
+// patient snapshot). Lists every drug-monitoring rule with the terms it
+// matches, and every QOF register/indicator, so "is my drug/indicator actually
+// covered?" can be answered by eye instead of by reading JSON. Collapsed by
+// default to keep the calm resting state; the toggle button lives in the rule
+// currency line above (loadRuleCurrencyFooter).
+
+function renderCoverageDrilldown() {
+  if (!_coverageView) return '';
+  const v = _coverageView;
+  if (!v.drug.rules.length && !v.qof.total) return '';
+
+  const drugItems = v.drug.rules
+    .map(
+      (r) => `
+      <li class="sent-cov-rule${r.enabled ? '' : ' sent-cov-rule-disabled'}">
+        <span class="sent-cov-rule-name">${escHtml(r.id)}</span>
+        ${r.drugClass ? `<span class="sent-cov-rule-class">${escHtml(r.drugClass)}</span>` : ''}
+        ${!r.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+        <div class="sent-cov-rule-terms">${r.terms.length ? escHtml(r.terms.join(', ')) : '(no match terms)'}</div>
+      </li>`
+    )
+    .join('');
+
+  const registerItems = v.qof.registers
+    .map(
+      (r) => `
+      <li class="sent-cov-item${r.enabled ? '' : ' sent-cov-item-disabled'}">
+        <span class="sent-cov-item-code">${escHtml(r.registerCode)}</span>
+        <span class="sent-cov-item-name">${escHtml(r.registerName)}</span>
+        ${!r.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+      </li>`
+    )
+    .join('');
+
+  const indicatorItems = v.qof.indicators
+    .map(
+      (i) => `
+      <li class="sent-cov-item${i.enabled ? '' : ' sent-cov-item-disabled'}">
+        <span class="sent-cov-item-code">${escHtml(i.indicatorCode)}</span>
+        <span class="sent-cov-item-name">${escHtml(i.indicatorName)}</span>
+        ${!i.enabled ? `<span class="sent-cov-rule-off">disabled</span>` : ''}
+      </li>`
+    )
+    .join('');
+
+  return `
+    <div class="sent-cov-drilldown" id="sentCoverageDrilldown" ${_coverageExpanded ? '' : 'hidden'}>
+      <p class="sent-cov-note">What Sentinel actually checks — every rule the engine can fire, straight from the rule files. A medicine or QOF area not listed here has no monitoring rule and will never produce a chip.</p>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">Drug-monitoring rules <span class="sent-cov-count">${v.drug.rules.length}</span></h4>
+        <ul class="sent-cov-list">${drugItems || '<li class="sent-cov-empty">No drug-monitoring rules loaded.</li>'}</ul>
+      </section>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">QOF registers <span class="sent-cov-count">${v.qof.registerCount}</span></h4>
+        <ul class="sent-cov-list sent-cov-list-compact">${registerItems || '<li class="sent-cov-empty">No QOF registers loaded.</li>'}</ul>
+      </section>
+      <section class="sent-cov-section">
+        <h4 class="sent-cov-h">QOF indicators <span class="sent-cov-count">${v.qof.indicatorCount}</span></h4>
+        <ul class="sent-cov-list sent-cov-list-compact">${indicatorItems || '<li class="sent-cov-empty">No QOF indicators loaded.</li>'}</ul>
+      </section>
+    </div>`;
+}
+
+let _coverageToggleHandler = null;
+function wireCoverageToggle() {
+  const btn = container?.querySelector('#sentRulesToggle');
+  if (!btn) return;
+  if (_coverageToggleHandler) btn.removeEventListener('click', _coverageToggleHandler);
+  _coverageToggleHandler = () => {
+    _coverageExpanded = !_coverageExpanded;
+    updateRulesSlot();
+    if (_coverageExpanded) container?.querySelector('#sentCoverageDrilldown')?.scrollIntoView({ block: 'nearest' });
+  };
+  btn.addEventListener('click', _coverageToggleHandler);
 }
 
 // ── Waiting room ─────────────────────────────────────────────────────────────
