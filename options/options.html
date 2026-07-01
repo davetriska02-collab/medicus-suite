@@ -800,6 +800,104 @@
         background: var(--bg-mid) !important;
         color: var(--text-2) !important;
       }
+
+      /* ── Event Ledger section (F2) ─────────────────────────────────────── */
+      .ledger-disclosure {
+        border: 1px solid var(--border-hi);
+        border-radius: var(--r-md);
+        background: var(--bg-mid);
+        padding: 14px 16px;
+        font-size: 12px;
+        color: var(--text-3);
+        line-height: 1.55;
+        margin-bottom: 22px;
+      }
+      .ledger-disclosure strong {
+        color: var(--text-2);
+      }
+      .ledger-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .ledger-controls input[type='text'] {
+        width: 300px;
+      }
+      .ledger-controls input[type='date'] {
+        background: var(--bg-mid);
+        border: 1px solid var(--border-hi);
+        border-radius: var(--r-md);
+        color: var(--text-2);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 8px 10px;
+      }
+      .ledger-summary {
+        font-size: 11px;
+        color: var(--text-4);
+        margin-bottom: 10px;
+        font-family: var(--mono);
+      }
+      .ledger-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow-x: auto;
+        margin-bottom: 22px;
+      }
+      .ledger-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      .ledger-table th {
+        text-align: left;
+        padding: 8px 10px;
+        background: var(--bg-mid);
+        color: var(--text-3);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-size: 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .ledger-table td {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        vertical-align: top;
+        white-space: nowrap;
+      }
+      .ledger-table td.ledger-td-label {
+        white-space: normal;
+        max-width: 340px;
+      }
+      .ledger-sev-red {
+        color: var(--red, #e5484d);
+        font-weight: 600;
+      }
+      .ledger-sev-amber {
+        color: var(--amber, #f5a524);
+        font-weight: 600;
+      }
+      .ledger-empty {
+        padding: 18px;
+        font-size: 12px;
+        color: var(--text-4);
+        text-align: center;
+      }
+      .ledger-clear-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 6px;
+      }
+      .ledger-clear-row input[type='text'] {
+        width: 180px;
+      }
     </style>
   </head>
   <body>
@@ -824,6 +922,7 @@
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
+        <button class="nav-item" data-section="ledger">Event Ledger</button>
         <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
         <button class="nav-item" data-section="debug">Debug</button>
       </nav>
@@ -1864,6 +1963,61 @@
           <button class="primary" id="cqcOpenBtn" type="button">Open CQC Inspection Readiness</button>
         </section>
 
+        <!-- Event Ledger section (F2) — machine-local record of what the suite flagged -->
+        <section class="opt-section" id="sect-ledger">
+          <h1>Event ledger <span class="module-badge">machine-local</span></h1>
+          <p class="section-desc">
+            A record of what this extension <strong>displayed or did on this computer</strong> — alerts shown,
+            dismissals, recall tasks created, patient summaries copied, pre-flight checks run, and results filed via
+            Lab Filing. It exists to answer &ldquo;did the tool flag this?&rdquo; with evidence.
+          </p>
+
+          <div class="ledger-disclosure">
+            <strong>What this is:</strong> a machine-local log of what this extension showed and did while it was open
+            on <strong>this machine only</strong>. Patients appear as their Medicus UUID — never by name.
+            <br /><br />
+            <strong>What it is not:</strong> it is <strong>not part of the clinical record</strong> and is no
+            substitute for Medicus&rsquo;s own audit trail. <strong>Absence of an event is not evidence that nothing
+            was shown</strong> — the extension only logs while it is open and running on this machine.
+            <br /><br />
+            <strong>Retention:</strong> capped at 5,000 events and 90 days — older events are pruned automatically. It
+            never leaves this machine and is <strong>deliberately excluded from suite backups</strong> (the same rule
+            as the Lab Filing audit log): restoring it onto another machine would fabricate a misleading record of
+            what was shown there.
+          </div>
+
+          <div class="ledger-controls">
+            <input
+              type="text"
+              id="ledgerFilterPatient"
+              placeholder="Patient UUID (exact or prefix)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <input type="date" id="ledgerFilterFrom" title="From date (inclusive)" />
+            <input type="date" id="ledgerFilterTo" title="To date (inclusive)" />
+            <button class="ghost" id="ledgerResetFilter" type="button">Reset filters</button>
+            <button class="ghost" id="ledgerExportCsv" type="button" title="Download the filtered events as CSV.">
+              Export CSV
+            </button>
+          </div>
+
+          <div class="ledger-summary" id="ledgerSummary"></div>
+          <div class="ledger-table-wrap" id="ledgerTableWrap"></div>
+
+          <div class="ledger-clear-row">
+            <input
+              type="text"
+              id="ledgerClearConfirm"
+              placeholder="Type CLEAR to enable"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="ghost" id="ledgerClearBtn" type="button" disabled>Clear ledger</button>
+            <span class="field-help" style="margin: 0">Deletes every event on this machine. Cannot be undone.</span>
+          </div>
+        </section>
+
         <!-- Backup & Restore section -->
         <section class="opt-section" id="sect-backup">
           <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
@@ -2472,6 +2626,7 @@
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/display-prefs.js"></script>
+    <script src="../shared/event-ledger.js"></script>
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>
     <script type="module" src="labfiling-section.js"></script>

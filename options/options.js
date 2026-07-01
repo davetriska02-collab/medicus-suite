@@ -3147,3 +3147,132 @@ rmSaveBtn?.addEventListener('click', async () => {
     .querySelectorAll('.nav-item[data-section="knowledge"]')
     .forEach((btn) => btn.addEventListener('click', refreshStats));
 })();
+
+// ── Event Ledger section (F2) ─────────────────────────────────────────────────
+// Machine-local record of what the suite flagged — filter/table/CSV-export/clear
+// UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
+// The ledger key (ledger.events) is deliberately EXCLUDED from suite backup —
+// same doctrine as labfiling.auditLog; see the disclosure block in options.html
+// and the ALLOWLIST entry in test-backup-coverage.js.
+(function initLedgerSection() {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const wrap = document.getElementById('ledgerTableWrap');
+  if (!EL || !wrap) return;
+
+  // Rows rendered in the table (newest first). The CSV export always includes
+  // EVERY filtered event — the cap is a render guard, not a data cap.
+  const RENDER_CAP = 200;
+
+  let _events = [];
+
+  const $ = (id) => document.getElementById(id);
+
+  function currentFilter() {
+    return {
+      patientRef: ($('ledgerFilterPatient')?.value || '').trim(),
+      from: $('ledgerFilterFrom')?.value || null,
+      to: $('ledgerFilterTo')?.value || null,
+    };
+  }
+
+  function filteredEvents() {
+    return EL.filterEvents(_events, currentFilter());
+  }
+
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    return isNaN(d.getTime())
+      ? String(ts || '')
+      : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderTable() {
+    const rows = filteredEvents();
+    const summary = $('ledgerSummary');
+    if (summary) {
+      summary.textContent =
+        `${rows.length} of ${_events.length} event${_events.length === 1 ? '' : 's'}` +
+        (rows.length > RENDER_CAP ? ` — showing the newest ${RENDER_CAP}; Export CSV includes all filtered rows` : '');
+    }
+    if (rows.length === 0) {
+      wrap.innerHTML = `<div class="ledger-empty">${
+        _events.length ? 'No events match these filters.' : 'No events recorded yet on this machine.'
+      }</div>`;
+      return;
+    }
+    const body = rows
+      .slice(0, RENDER_CAP)
+      .map((e) => {
+        const sevCls = e.severity === 'red' ? 'ledger-sev-red' : e.severity === 'amber' ? 'ledger-sev-amber' : '';
+        const detail =
+          escHtml(e.ruleId || '') + (e.ruleId && e.label ? ' · ' : '') + escHtml(e.label || '');
+        return `<tr>
+          <td>${escHtml(fmtTs(e.ts))}</td>
+          <td>${escHtml(e.source || '')}</td>
+          <td>${escHtml(e.patientRef || '—')}</td>
+          <td class="${sevCls}">${escHtml(e.severity || '')}</td>
+          <td class="ledger-td-label">${detail}</td>
+          <td>${escHtml(e.action || '')}</td>
+        </tr>`;
+      })
+      .join('');
+    wrap.innerHTML =
+      `<table class="ledger-table"><thead><tr>` +
+      `<th>When</th><th>Source</th><th>Patient (UUID)</th><th>Severity</th><th>Rule / detail</th><th>Action</th>` +
+      `</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  async function refreshLedger() {
+    _events = await EL.getEvents();
+    renderTable();
+  }
+
+  // Filters re-render live (data already in memory — no storage churn).
+  ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+    $(id)?.addEventListener('input', renderTable);
+  });
+  $('ledgerResetFilter')?.addEventListener('click', () => {
+    ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+      const el = $(id);
+      if (el) el.value = '';
+    });
+    renderTable();
+  });
+
+  // CSV export — same client-side Blob pattern as the Lab Filing audit export;
+  // eventsCsv applies quote-escaping AND the spreadsheet formula-injection guard.
+  $('ledgerExportCsv')?.addEventListener('click', () => {
+    const csv = EL.eventsCsv(filteredEvents());
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `event-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Clear ledger — destructive, so behind a TYPED confirmation ("CLEAR"), not
+  // just a click-through confirm dialog.
+  const clearInput = $('ledgerClearConfirm');
+  const clearBtn = $('ledgerClearBtn');
+  clearInput?.addEventListener('input', () => {
+    if (clearBtn) clearBtn.disabled = clearInput.value.trim() !== 'CLEAR';
+  });
+  clearBtn?.addEventListener('click', async () => {
+    if (!clearInput || clearInput.value.trim() !== 'CLEAR') return;
+    await EL.clearLedger();
+    clearInput.value = '';
+    clearBtn.disabled = true;
+    await refreshLedger();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshLedger);
+  } else {
+    refreshLedger();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="ledger"]')
+    .forEach((btn) => btn.addEventListener('click', refreshLedger));
+})();

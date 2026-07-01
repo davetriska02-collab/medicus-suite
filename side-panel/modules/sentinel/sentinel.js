@@ -498,6 +498,19 @@ export async function init(el) {
     hidden[ruleId] = { until, statusAtDismissal, dismissedAt };
     await chrome.storage.local.set({ 'sentinel.hiddenRules': hidden });
     _hiddenRules = hidden;
+    // F2 Clinical Event Ledger — record the dismissal (fire-and-forget; the
+    // ledger swallows its own failures and can never block this handler).
+    if (window.EventLedger) {
+      const pc = _currentSnapshot && _currentSnapshot.patientContext;
+      window.EventLedger.record({
+        source: 'sentinel',
+        patientRef: (pc && (pc.patientUuid || pc.uuid)) || null,
+        severity: STATUS_COLOUR[statusAtDismissal] || null,
+        ruleId,
+        label: until ? `dismissed until ${until}` : 'hidden',
+        action: 'dismissed',
+      });
+    }
     refresh();
   };
   document.addEventListener('click', _dismissHandler, true);
@@ -1376,6 +1389,30 @@ function render(payload) {
   // skipped, so the one-time toolbar/delegated handlers act on current data. ──
 
   _renderCtx = { chips, patient, actionCount, trace };
+
+  // F2 Clinical Event Ledger — record that red/amber chips were SHOWN for this
+  // patient ("did the tool flag this?" evidence). Deduped per patient+rule+day
+  // inside the ledger, so the ~10 s refresh poll cannot spam it. Fire-and-forget:
+  // the ledger swallows its own failures and can never break this render.
+  if (window.EventLedger) {
+    const pRef = (patient && (patient.patientUuid || patient.uuid)) || null;
+    chips.forEach((c) => {
+      const colour = STATUS_COLOUR[c.status];
+      if (colour !== 'red' && colour !== 'amber') return;
+      window.EventLedger.record(
+        {
+          source: 'sentinel',
+          patientRef: pRef,
+          severity: colour,
+          ruleId: c.ruleId || null,
+          label: c.drugName || c.indicatorCode || c.label || c.displayName || null,
+          action: 'shown',
+        },
+        { dedupe: true }
+      );
+    });
+  }
+
   updateToolbarState();
   updateFooterTs(ts);
   updateRulesSlot();

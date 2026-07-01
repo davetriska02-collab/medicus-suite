@@ -540,6 +540,21 @@
         arr.unshift(entry);
         chrome.storage.local.set({ [AUDIT_KEY]: arr.slice(0, 200) });
       });
+      // F2 Clinical Event Ledger — MIRROR this filing into the suite-wide
+      // machine-local ledger (shared/event-ledger.js, loaded alongside this
+      // script via the manifest). The lab-filing audit log above is untouched
+      // and remains this module's own governance record. Fire-and-forget: the
+      // ledger swallows its own failures and can never break the filing flow.
+      if (typeof window !== 'undefined' && window.EventLedger) {
+        window.EventLedger.record({
+          source: 'labfiling',
+          patientRef: entry.patientUuid,
+          severity: entry.severity,
+          ruleId: null,
+          label: entry.profile || null,
+          action: 'filed',
+        });
+      }
     } catch (e) {
       /* ignore */
     }

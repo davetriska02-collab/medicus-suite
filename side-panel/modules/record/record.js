@@ -89,7 +89,7 @@ export function cleanup() {
   }
   if (_onDelegatedClick && container) container.removeEventListener('click', _onDelegatedClick);
   _onRuntimeMsg = _onTabChange = _onDelegatedClick = null;
-  _lastModel = _lastChips = _lastStamp = null;
+  _lastModel = _lastChips = _lastStamp = _lastUuid = null;
   _preflightOpen = false;
   _preflightInput = '';
   _preflightResult = null;
@@ -132,6 +132,10 @@ let _onDelegatedClick = null;
 let _lastModel = null;
 let _lastChips = null;
 let _lastStamp = null;
+// Patient UUID resolved by load() (URL context or content-script fallback) for
+// the rendered model — the ONLY patient identifier the event ledger may
+// receive (never a name). Module-local; never written to storage by this module.
+let _lastUuid = null;
 
 // ── Pre-flight (what-if safety preview) — module-local state ────────────────
 // Never written to storage; reset on cleanup(). _preflightOpen persists the
@@ -162,6 +166,16 @@ function wireStaticControls() {
       const text = buildRecordSummaryText(_lastModel, _lastChips, _lastStamp);
       const ok = await copyText(text);
       if (ok) {
+        // F2 Clinical Event Ledger — record the copy (fire-and-forget; the
+        // ledger swallows its own failures and can never break this button).
+        window.EventLedger?.record({
+          source: 'record',
+          patientRef: _lastUuid,
+          severity: null,
+          ruleId: null,
+          label: 'Copy patient summary',
+          action: 'summary-copied',
+        });
         const prev = copyBtn.textContent;
         copyBtn.textContent = 'Copied';
         copyBtn.classList.add('rec-copy-btn--ok');
@@ -292,6 +306,7 @@ async function load(force) {
   const chips = await liveChips(tab.id);
   if (token !== _runToken) return;
 
+  _lastUuid = uuid;
   render(data, chips, errs);
 }
 
@@ -900,6 +915,35 @@ async function runPreflight() {
     _preflightResult = Preflight.runPreflightCheck(patientContext, name, ruleFiles);
   } catch (_) {
     _preflightResult = 'error';
+  }
+
+  // F2 Clinical Event Ledger — record that a pre-flight check ran. The label
+  // is the MATCHED rule/drug state (matchedTerm / drugClass / ruleId from the
+  // engines), or 'unknown' when no local rule mentions the drug — NEVER the
+  // free-typed input, so arbitrary typed text is never logged. Fire-and-forget.
+  if (window.EventLedger && _preflightResult && _preflightResult !== 'error') {
+    const r = _preflightResult;
+    const mon = r.monitoring[0];
+    const inter = r.interactions[0];
+    const matched =
+      (mon && (mon.matchedTerm || mon.drugClass || mon.ruleId)) ||
+      (inter && (inter.ruleId || inter.label)) ||
+      (r.stoppStart[0] && r.stoppStart[0].id) ||
+      null;
+    const severity =
+      r.interactions.some((i) => i.status === 'alert') || r.stoppStart.length
+        ? 'red'
+        : r.interactions.length || r.monitoring.length || (r.acb && r.acb.escalates)
+          ? 'amber'
+          : null;
+    window.EventLedger.record({
+      source: 'preflight',
+      patientRef: _lastUuid,
+      severity,
+      ruleId: (mon && mon.ruleId) || (inter && inter.ruleId) || null,
+      label: r.known ? matched || 'known drug (ACB-scored)' : 'unknown',
+      action: 'preflight-run',
+    });
   }
   // Re-render just the result region — the input/button stay untouched so
   // focus and the typed value are not disturbed by this update.

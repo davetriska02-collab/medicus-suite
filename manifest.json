@@ -55,6 +55,7 @@
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",
+        "shared/event-ledger.js",
         "content-scripts/triage-lens/lab-file-button.js"
       ],
       "css": ["content-scripts/triage-lens/hud.css"],

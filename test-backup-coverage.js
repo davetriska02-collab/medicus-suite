@@ -98,6 +98,7 @@ const KEY_PREFIXES = [
   'knowledge',
   'sweep',
   'reception',
+  'ledger',
 ];
 
 function hasKeyPrefix(k) {
@@ -258,6 +259,16 @@ const ALLOWLIST = new Set([
   // Mirrors the suite.alertLog rationale. The OIR *config* (oirTests + oir prefs)
   // IS backed up — it rides triagelens.config via triage-io:
   'triagelens.oir.auditLog',
+
+  // F2 Clinical Event Ledger — machine-local ring buffer (cap 5000 events /
+  // 90 days) of what the suite displayed or did on THIS machine
+  // (shared/event-ledger.js; read/export/clear UI in the Options "Event
+  // ledger" card). Deliberately EXCLUDED from suite backup — same doctrine as
+  // labfiling.auditLog and triagelens.oir.auditLog: it contains patient UUIDs,
+  // and restoring an event ledger onto another machine would fabricate a
+  // misleading "what was shown here" record. The exclusion is stated in the
+  // user-facing disclosure block in options.html:
+  'ledger.events',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
