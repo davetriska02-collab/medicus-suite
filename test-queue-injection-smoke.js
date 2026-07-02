@@ -98,11 +98,14 @@ class El {
     const self = this;
     return {
       contains: (c) => self.classes.includes(c),
-      add: (c) => {
-        if (!self.classes.includes(c)) self.classes.push(c);
+      // Real DOM classList.add/remove are variadic (content.js's clearQueueRowTint
+      // calls classList.remove(ROW_TINT_RED, ROW_TINT_AMBER) with two args) — match
+      // that here, not just the single-class shape earlier callers happened to use.
+      add: (...cs) => {
+        for (const c of cs) if (!self.classes.includes(c)) self.classes.push(c);
       },
-      remove: (c) => {
-        self.classes = self.classes.filter((x) => x !== c);
+      remove: (...cs) => {
+        self.classes = self.classes.filter((x) => !cs.includes(x));
       },
     };
   }
@@ -309,6 +312,7 @@ const parts = [
   extract(/const daysAgo = \(d\) => \{[\s\S]*?\n {2}\};/, 'daysAgo'),
   extract(/const TH_DEFAULTS = \{[\s\S]*?\};/, 'TH_DEFAULTS'),
   extract(/const TH = \(k\) => \{[\s\S]*?\n {2}\};/, 'TH'),
+  extract(/const PREF = \(k, dflt\) => \{[\s\S]*?\n {2}\};/, 'PREF'),
   extract(/const QUEUE_DECORATED_KEY = .*;/, 'QUEUE_DECORATED_KEY'),
   extract(/function selectResultChips\(sev\) \{[\s\S]*?\n {2}\}/, 'selectResultChips'),
   extract(/const renderSystemChipHtmlMemo = \(id, vars\) => \{[\s\S]*?\n {2}\};/, 'renderSystemChipHtmlMemo'),
@@ -321,6 +325,11 @@ const parts = [
   extract(/const reinjectCachedResultChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedResultChips'),
   extract(/const injectQueueMonitoringChip = \(rowIndex, result\) => \{[\s\S]*?\n {2}\};/, 'injectQueueMonitoringChip'),
   extract(/const reinjectCachedMonitoringChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedMonitoringChips'),
+  // Item 1.3 — severity row tint (docs/plans/TRIAGE-LENS-2026-07-02.md).
+  extract(/const ROW_TINT_RED = .*;/, 'ROW_TINT_RED'),
+  extract(/const ROW_TINT_AMBER = .*;/, 'ROW_TINT_AMBER'),
+  extract(/const clearQueueRowTint = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueRowTint'),
+  extract(/const reapplyQueueRowTint = \(\) => \{[\s\S]*?\n {2}\};/, 'reapplyQueueRowTint'),
 ];
 
 const EXPOSE = [
@@ -336,6 +345,8 @@ const EXPOSE = [
   'reinjectCachedResultChips',
   'injectQueueMonitoringChip',
   'reinjectCachedMonitoringChips',
+  'clearQueueRowTint',
+  'reapplyQueueRowTint',
 ];
 
 let sandbox = null;
@@ -389,6 +400,8 @@ if (!parts.some((p) => !p)) {
       typeof sandbox.reinjectCachedMonitoringChips === 'function',
       'reinjectCachedMonitoringChips compiled and callable'
     );
+    check(typeof sandbox.clearQueueRowTint === 'function', 'clearQueueRowTint compiled and callable');
+    check(typeof sandbox.reapplyQueueRowTint === 'function', 'reapplyQueueRowTint compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -404,11 +417,30 @@ const redSev = {
   unmatched: false,
 };
 
+const amberSev = {
+  level: 'amber',
+  urgentCount: 0,
+  abnormalCount: 1,
+  top: { name: 'Sodium', value: '130', unit: 'mmol/L' },
+  misprioritised: false,
+  unmatched: false,
+};
+
+const noneSev = {
+  level: 'none',
+  urgentCount: 0,
+  abnormalCount: 0,
+  top: null,
+  misprioritised: false,
+  unmatched: false,
+};
+
 function freshCaches() {
   sandbox._chipHtmlMemo = new Map();
   sandbox._durableRowMap = new Map();
   sandbox._queueResultCache = new Map();
   sandbox._queueMonCache = new Map();
+  sandbox.CONFIG = {}; // PREF('queueRowTint', true) -> true by default (no CONFIG.prefs)
 }
 
 if (sandbox) {
@@ -730,6 +762,184 @@ if (sandbox) {
       nameCell.children.length === 1,
       `no durable-map entry: nothing injected even though a row-id-keyed cache entry exists (got ${nameCell.children.length} children)`
     );
+  }
+
+  // ============================================================
+  // Layer 8 — severity row tint (item 1.3, TRIAGE-LENS-2026-07-02.md):
+  // marker class on .ag-row (+ its preview row), keyed off the SAME durable
+  // map/cache as the result chips, cleared+reapplied every churn cycle, gated
+  // on prefs.queueRowTint.
+  // ============================================================
+  console.log('\nLayer 8: severity row tint — cached red/amber, unknown rows, churn, recycled row-index, pref gate');
+
+  {
+    // ---- tinted on cached red/amber ----
+    freshCaches();
+    const rowIdRed = 'a0000000-0000-4000-8000-000000000001';
+    const rowIdAmber = 'a0000000-0000-4000-8000-000000000002';
+    const rowRed = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRed, dob: '01 Jan 1980 (46y)' });
+    const rowAmber = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmber, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    [rowRed, rowAmber].forEach(({ master, detail }) => {
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox._durableRowMap.set(0, rowIdRed);
+    sandbox._durableRowMap.set(1, rowIdAmber);
+    sandbox._queueResultCache.set(rowIdRed, { sev: redSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdAmber, { sev: amberSev, ts: Date.now() });
+
+    sandbox.reapplyQueueRowTint();
+    check(
+      rowRed.master.classes.includes('ch-row-sev-red'),
+      'reapplyQueueRowTint: red-cached master row gets ch-row-sev-red'
+    );
+    check(
+      rowRed.detail.classes.includes('ch-row-sev-red'),
+      'reapplyQueueRowTint: red-cached preview/detail row ALSO gets ch-row-sev-red'
+    );
+    check(
+      !rowRed.master.classes.includes('ch-row-sev-amber'),
+      'reapplyQueueRowTint: red-cached row does not also carry the amber class'
+    );
+    check(
+      rowAmber.master.classes.includes('ch-row-sev-amber'),
+      'reapplyQueueRowTint: amber-cached master row gets ch-row-sev-amber'
+    );
+    check(
+      rowAmber.detail.classes.includes('ch-row-sev-amber'),
+      'reapplyQueueRowTint: amber-cached preview/detail row ALSO gets ch-row-sev-amber'
+    );
+
+    // ---- no tint for unknown rows (no cache entry / null sev / level 'none') ----
+    freshCaches();
+    const rowIdUnknown1 = 'a0000000-0000-4000-8000-000000000003'; // no durable-map entry at all
+    const rowIdUnknown2 = 'a0000000-0000-4000-8000-000000000004'; // durable-map entry, no cache entry
+    const rowIdUnknown3 = 'a0000000-0000-4000-8000-000000000005'; // cached but sev===null (failed fetch)
+    const rowIdUnknown4 = 'a0000000-0000-4000-8000-000000000006'; // cached, level==='none'
+    const rU1 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdUnknown1, dob: '01 Jan 1980 (46y)' });
+    const rU2 = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdUnknown2, dob: '01 Jan 1980 (46y)' });
+    const rU3 = buildPreviewRowPair({ rowIndex: 2, rowId: rowIdUnknown3, dob: '01 Jan 1980 (46y)' });
+    const rU4 = buildPreviewRowPair({ rowIndex: 3, rowId: rowIdUnknown4, dob: '01 Jan 1980 (46y)' });
+    const gridRoot2 = new El('div', {});
+    [rU1, rU2, rU3, rU4].forEach(({ master, detail }) => {
+      gridRoot2.appendChild(master);
+      gridRoot2.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRoot2);
+    sandbox.queueObservedContainer = gridRoot2;
+
+    // rowIndex 0: nothing in the durable map at all.
+    sandbox._durableRowMap.set(1, rowIdUnknown2); // durable entry, but no cache entry below
+    sandbox._durableRowMap.set(2, rowIdUnknown3);
+    sandbox._queueResultCache.set(rowIdUnknown3, { sev: null, ts: Date.now() });
+    sandbox._durableRowMap.set(3, rowIdUnknown4);
+    sandbox._queueResultCache.set(rowIdUnknown4, { sev: noneSev, ts: Date.now() });
+
+    sandbox.reapplyQueueRowTint();
+    for (const [label, r] of [
+      ['no durable-map entry', rU1],
+      ['durable entry but no cache entry', rU2],
+      ['cached null sev (failed fetch)', rU3],
+      ["cached level 'none'", rU4],
+    ]) {
+      check(
+        !r.master.classes.includes('ch-row-sev-red') && !r.master.classes.includes('ch-row-sev-amber'),
+        `reapplyQueueRowTint: ${label} -> master row gets NEITHER tint class (never implies "assessed")`
+      );
+      check(
+        !r.detail.classes.includes('ch-row-sev-red') && !r.detail.classes.includes('ch-row-sev-amber'),
+        `reapplyQueueRowTint: ${label} -> preview row gets NEITHER tint class either`
+      );
+    }
+
+    // ---- tint cleared and reapplied on the churn cycle ----
+    freshCaches();
+    const rowIdChurn = 'a0000000-0000-4000-8000-000000000007';
+    const rowChurn = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdChurn, dob: '01 Jan 1980 (46y)' });
+    const gridRoot3 = new El('div', {});
+    gridRoot3.appendChild(rowChurn.master);
+    gridRoot3.appendChild(rowChurn.detail);
+    sandbox.document = makeDocument(gridRoot3);
+    sandbox.queueObservedContainer = gridRoot3;
+
+    sandbox._durableRowMap.set(0, rowIdChurn);
+    sandbox._queueResultCache.set(rowIdChurn, { sev: redSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+    check(rowChurn.master.classes.includes('ch-row-sev-red'), 'churn setup: row tinted red before the churn cycle');
+
+    // Simulate the SAME wipe/reapply sequence refreshQueueChips runs on every
+    // Vue re-render — clear must remove it, reapply must restore it (immune to
+    // the fact that AG-Grid never actually strips CLASSES the way it strips DOM
+    // nodes, so an untested clear() would silently mask a real regression).
+    sandbox.clearQueueRowTint();
+    check(
+      !rowChurn.master.classes.includes('ch-row-sev-red') && !rowChurn.master.classes.includes('ch-row-sev-amber'),
+      'clearQueueRowTint: tint classes removed from the row on the wipe half of the cycle'
+    );
+    check(
+      !rowChurn.detail.classes.includes('ch-row-sev-red'),
+      'clearQueueRowTint: tint classes removed from the preview row too'
+    );
+    sandbox.reapplyQueueRowTint();
+    check(
+      rowChurn.master.classes.includes('ch-row-sev-red'),
+      'reapplyQueueRowTint: tint restored on the SAME row after the wipe (churn cycle survives)'
+    );
+
+    // ---- recycled row-index with a DIFFERENT taskUuid never keeps the old tint ----
+    // AG-Grid reuses row-index DOM nodes for a different patient/task once the
+    // queue re-sorts. If clear+reapply didn't run together, row-index 0 could
+    // keep yesterday's red tint on today's (calm) patient — the tint analogue
+    // of the v3.69 wrong-row chip bug.
+    const rowIdNewPatient = 'a0000000-0000-4000-8000-000000000008';
+    sandbox._durableRowMap.set(0, rowIdNewPatient); // same row-index, different task
+    sandbox._queueResultCache.set(rowIdNewPatient, { sev: amberSev, ts: Date.now() });
+    // Full cycle: wipe, then reapply from the now-updated durable map/cache.
+    sandbox.clearQueueRowTint();
+    sandbox.reapplyQueueRowTint();
+    check(
+      !rowChurn.master.classes.includes('ch-row-sev-red'),
+      'recycled row-index: the OLD patient\'s red tint is gone'
+    );
+    check(
+      rowChurn.master.classes.includes('ch-row-sev-amber'),
+      "recycled row-index: the row now carries the NEW patient's amber tint"
+    );
+
+    // Recycle again, this time onto a task with NO cached severity at all —
+    // the row must end up with NO tint, not a stuck amber from the previous cycle.
+    const rowIdNewPatientNoSev = 'a0000000-0000-4000-8000-000000000009';
+    sandbox._durableRowMap.set(0, rowIdNewPatientNoSev);
+    sandbox.clearQueueRowTint();
+    sandbox.reapplyQueueRowTint();
+    check(
+      !rowChurn.master.classes.includes('ch-row-sev-red') && !rowChurn.master.classes.includes('ch-row-sev-amber'),
+      'recycled row-index onto an unassessed task: no tint at all survives (not stuck amber)'
+    );
+
+    // ---- pref off = no tint ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueRowTint: false } };
+    const rowIdPrefOff = 'a0000000-0000-4000-8000-00000000000a';
+    const rowPrefOff = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdPrefOff, dob: '01 Jan 1980 (46y)' });
+    const gridRoot4 = new El('div', {});
+    gridRoot4.appendChild(rowPrefOff.master);
+    gridRoot4.appendChild(rowPrefOff.detail);
+    sandbox.document = makeDocument(gridRoot4);
+    sandbox.queueObservedContainer = gridRoot4;
+
+    sandbox._durableRowMap.set(0, rowIdPrefOff);
+    sandbox._queueResultCache.set(rowIdPrefOff, { sev: redSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+    check(
+      !rowPrefOff.master.classes.includes('ch-row-sev-red') && !rowPrefOff.master.classes.includes('ch-row-sev-amber'),
+      'prefs.queueRowTint=false: reapplyQueueRowTint is a no-op even though a red-cached row exists'
+    );
+    sandbox.CONFIG = {}; // restore default for any tests that might run after this block
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

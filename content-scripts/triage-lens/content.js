@@ -3510,6 +3510,56 @@
     if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
   };
 
+  // ---- Severity row tint (item 1.3, TRIAGE-LENS-2026-07-02.md) ----
+  // Pre-attentive 2-3px left-edge tint on rows with a KNOWN cached severity — red for
+  // red/urgent, amber for amber. A marker CLASS added to the host `.ag-row` (and its
+  // preview/detail row when one exists), same "class on the host element" pattern as
+  // QUEUE_DECORATED_KEY — NOT an injected node. Rows with no cached severity get
+  // neither class: this must never imply "assessed" (that's item 1.1's territory).
+  const ROW_TINT_RED = 'ch-row-sev-red';
+  const ROW_TINT_AMBER = 'ch-row-sev-amber';
+
+  // Strip stale tint classes from every row currently carrying one, scoped to the live
+  // grid container. Must run in the SAME wipe cycle as the chip-node wipe
+  // (refreshQueueChips) so a recycled row-index never keeps a previous patient's
+  // tint colour — the tint analogue of the v3.69 wrong-row chip bug (CLAUDE.md rule #4).
+  const clearQueueRowTint = () => {
+    queueScope()
+      .querySelectorAll('.' + ROW_TINT_RED + ', .' + ROW_TINT_AMBER)
+      .forEach((el) => el.classList.remove(ROW_TINT_RED, ROW_TINT_AMBER));
+  };
+
+  // Re-apply tint straight from the per-task cache, using the EXACT SAME durable
+  // rowIndex->taskUuid->severity lookup as reinjectCachedResultChips above (survives
+  // the runQueue churn that empties _queueRowUuids). Tints both the master row and its
+  // preview/detail row (queueChipHost's host resolution shows a GP may be scanning
+  // either). Gated on prefs.queueRowTint (default true) via the existing PREF()
+  // mechanism. Idempotent: always paired with clearQueueRowTint() in the same cycle,
+  // so calling it repeatedly never accumulates stale classes.
+  const reapplyQueueRowTint = () => {
+    if (!PREF('queueRowTint', true)) return;
+    let n = 0;
+    const scope = queueScope();
+    scope.querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)').forEach((row) => {
+      const ri = row.getAttribute('row-index');
+      if (ri == null) return;
+      const rowIndex = Number(ri);
+      const taskUuid = _durableRowMap.get(rowIndex);
+      if (!taskUuid) return;
+      const entry = _queueResultCache.get(taskUuid);
+      if (!entry || entry.sev === undefined || entry.sev === null) return;
+      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
+      const level = entry.sev.level;
+      if (level !== 'red' && level !== 'amber') return; // unknown/none -> no tint, ever
+      const cls = level === 'red' ? ROW_TINT_RED : ROW_TINT_AMBER;
+      row.classList.add(cls);
+      const previewRow = findQueuePreviewRow(row);
+      if (previewRow) previewRow.classList.add(cls);
+      n++;
+    });
+    if (n) log('queue-result: tinted ' + n + ' row(s) from durable map (visible rows)');
+  };
+
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
   let _resultFetchCount = 0;
   let _resultFetchWindowTimer = null;
@@ -3792,12 +3842,19 @@
     log('queue: refreshQueueChips, rows=' + _queueRowUuids.size);
     if (queueObserver) queueObserver.disconnect();
     queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
+    // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
+    // a recycled row-index must never keep a previous patient's tint colour.
+    clearQueueRowTint();
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
     // Restore result chips synchronously from the per-task cache via each row's row-id.
     // DOM-driven (like the age chips) so they survive re-renders even when the
     // bridge-provided row->task map is transiently empty (the SPA keeps clearing it).
     reinjectCachedResultChips();
+    // Re-tint from the same cache the chips above just used — piggybacks this cycle so
+    // a config-driven cache invalidation (entry.sev cleared, watchConfig handler below)
+    // also clears/re-derives the tint for free (item 1.3, CLAUDE.md rule #4).
+    reapplyQueueRowTint();
     // Restore monitoring chips synchronously from the per-task cache via the durable
     // rowIndex->taskUuid map (see reinjectCachedMonitoringChips above) — unconditional,
     // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
