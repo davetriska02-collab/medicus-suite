@@ -179,6 +179,21 @@
   border-color: var(--amber-line);
   border-style: dashed;
 }
+/* "All-normal, fileable" marker (item 4.4, TRIAGE-LENS-2026-07-02.md) — a small
+   green tick, filled (not outline) like .ch-chip-green: unlike the meta/
+   unclassified chips above this is a positive, confident signal (the profile-
+   independent lab-filing gate cleared this report), not a "go look" caution.
+   Always injected INSIDE the existing .ch-q-result host (content.js
+   injectResultChip), which already sits in the hud.css token-block selector
+   list above — var(--green) here resolves via CSS inheritance, so this class
+   deliberately does NOT need its own entry in that list (CLAUDE.md rule 5 only
+   applies to a new TOP-LEVEL injected/marker host). */
+.ch-chip-fileable {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+  font-weight: 700;
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {

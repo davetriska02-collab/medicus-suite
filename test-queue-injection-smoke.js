@@ -29,7 +29,12 @@
 // onQueueStatusFocusClick, plus their small consts/module state
 // (QUEUE_STATUS_BAR_ID, QUEUE_STATUS_FLASH_CLASS, QUEUE_FOCUS_CLASS,
 // QUEUE_STATUS_TOOLTIP, the _queueStatus*/_queueFocusAlertsOn/
-// _queueStatusBarRafPending module `let`s).
+// _queueStatusBarRafPending module `let`s). Item 4.4 (TRIAGE-LENS-2026-07-02.md)
+// added the "all-normal, fileable" queue marker — no new extracted functions
+// (it's an additive branch inside the existing injectResultChip/
+// reinjectCachedResultChips), just the FILEABLE_CHIP_HTML constant, which rides
+// along with injectResultChip's own extraction regex (it's declared just above
+// it in content.js).
 //
 // STUBBED (deliberately, not injection mechanics — already covered by other
 // test files): getSystemChip/matchRules (chip *content*/enable-state is
@@ -437,6 +442,10 @@ const parts = [
   // injectResultChip reads (same pattern as UNIT_MISMATCH_CHIP_HTML above). It
   // calls escapeHtml, already extracted above.
   extract(/const buildUnclassifiedChipHtml = \(list\) => \{[\s\S]*?\n {2}\};/, 'buildUnclassifiedChipHtml'),
+  // Item 4.4 (TRIAGE-LENS-2026-07-02.md) — the "all-normal, fileable" tick's
+  // fixed markup, another free variable injectResultChip reads (same pattern as
+  // UNIT_MISMATCH_CHIP_HTML/RESULT_ERROR_CHIP_HTML above).
+  extract(/const FILEABLE_CHIP_HTML =[\s\S]*?;/, 'FILEABLE_CHIP_HTML'),
   extract(/const injectResultChip = \(rowIndex, sev, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
   // Item 2.2 — result-chip detail popover: the pure line-builders plus the
   // singleton popover open/close machinery injectResultChip's click handlers call.
@@ -585,6 +594,8 @@ const EXPOSE = [
   'UNIT_MISMATCH_CHIP_HTML',
   // Item 3.2 Part B — unclassified-qualitative-positive chip surfacing.
   'buildUnclassifiedChipHtml',
+  // Item 4.4 — "all-normal, fileable" queue marker.
+  'FILEABLE_CHIP_HTML',
   'closeResultDetailPopover',
   'buildResultDetailPopoverEl',
   'toggleResultDetailPopover',
@@ -751,6 +762,10 @@ if (!parts.some((p) => !p)) {
   try {
     vm.runInContext(combinedSrc, sandbox, { filename: 'content-extract.js' });
     check(typeof sandbox.injectResultChip === 'function', 'injectResultChip compiled and callable');
+    check(
+      typeof sandbox.FILEABLE_CHIP_HTML === 'string' && sandbox.FILEABLE_CHIP_HTML.includes('ch-q-fileable'),
+      'FILEABLE_CHIP_HTML compiled — carries the .ch-q-fileable marker class'
+    );
     check(typeof sandbox.injectQueueMonitoringChip === 'function', 'injectQueueMonitoringChip compiled and callable');
     check(typeof sandbox.decorateOneRow === 'function', 'decorateOneRow compiled and callable');
     check(typeof sandbox.reinjectCachedResultChips === 'function', 'reinjectCachedResultChips compiled and callable');
@@ -4066,6 +4081,203 @@ if (sandbox) {
     );
 
     sandbox.CONFIG = {}; // restore default for any tests that might run after this block
+  }
+
+  // ============================================================
+  // Layer 24 — item 4.4 (TRIAGE-LENS-2026-07-02.md): "all-normal, fileable"
+  // queue marker. A cached sev with level:'none' AND fileable:true renders a
+  // small green tick (.ch-chip-fileable / .ch-q-fileable) inside the SAME
+  // .ch-q-result host the severity chips use, de-dupes, and survives the SPA
+  // churn/reinject cycle exactly like the other result-chip families. A
+  // level:'none' row where the lab-filing gate found a blocker (fileable:false
+  // or unset) shows nothing — the tick's ABSENCE is never a claim. Never shows
+  // on red/amber rows or the error ("?") chip. Pref-gated
+  // (PREF('queueFileableMarker', true), default ON).
+  // ============================================================
+  console.log(
+    '\nLayer 24: fileable marker (item 4.4) — render, de-dupe, churn survival, blocked-none shows nothing, never on red/amber/error, pref gate'
+  );
+
+  {
+    const fileableSev = { ...noneSev, fileable: true };
+    const blockedNoneSev = { ...noneSev, fileable: false }; // gate found a blocker (culture/free-text/unmatched/etc.)
+
+    // NB: same fake-DOM caveat as Layer 18 above — the chip is fixed markup
+    // assigned via span.innerHTML, which the fake DOM stores as a raw STRING
+    // rather than parsing into real child elements. So `.ch-q-result`/
+    // `.ch-chip-error` (set via real className/setAttribute) ARE
+    // querySelectorAll-able, but the fileable tick's own classes
+    // (ch-chip-fileable/ch-q-fileable) live inside that innerHTML string and
+    // must be asserted via a regex over `.innerHTML`, not querySelectorAll.
+
+    // ---- renders the tick on a fileable row ----
+    freshCaches();
+    const rowIdFileable = 'd0000000-0000-4000-8000-000000000001';
+    const rowFileable = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdFileable, dob: '01 Jan 1980 (46y)' });
+    const gridRootFileable = new El('div', {});
+    gridRootFileable.appendChild(rowFileable.master);
+    gridRootFileable.appendChild(rowFileable.detail);
+    sandbox.document = makeDocument(gridRootFileable);
+    sandbox.queueObservedContainer = gridRootFileable;
+
+    sandbox.injectResultChip(0, fileableSev, rowIdFileable, false);
+    let fileableHost = rowFileable.wrap.querySelector('.ch-q-result');
+    check(!!fileableHost, 'injectResultChip: fileable row injects the .ch-q-result chip host');
+    let fileableHtml = fileableHost ? fileableHost.innerHTML : '';
+    check(
+      (fileableHtml.match(/ch-q-fileable/g) || []).length === 1,
+      'injectResultChip: fileable row renders exactly one .ch-q-fileable tick'
+    );
+    check(
+      /class="ch-chip ch-chip-fileable ch-q-fileable"/.test(fileableHtml),
+      'injectResultChip: the tick also carries .ch-chip-fileable (colour class)'
+    );
+    check(/>✓</.test(fileableHtml), "injectResultChip: the tick's visible glyph is a checkmark");
+
+    // ---- de-dupes: calling injectResultChip again does not duplicate ----
+    sandbox.injectResultChip(0, fileableSev, rowIdFileable, false);
+    const fileableHostsAfter = rowFileable.wrap.querySelectorAll('.ch-q-result');
+    check(
+      fileableHostsAfter.length === 1,
+      'injectResultChip: calling twice does not duplicate the chip host (still one .ch-q-result span)'
+    );
+    check(
+      (fileableHostsAfter[0].innerHTML.match(/ch-q-fileable/g) || []).length === 1,
+      'injectResultChip: calling twice does not duplicate the fileable tick inside the host'
+    );
+
+    // ---- sev none but fileable:false (a blocker) shows NO tick, and nothing else either ----
+    freshCaches();
+    const rowIdBlocked = 'd0000000-0000-4000-8000-000000000002';
+    const rowBlocked = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdBlocked, dob: '01 Jan 1980 (46y)' });
+    const gridRootBlocked = new El('div', {});
+    gridRootBlocked.appendChild(rowBlocked.master);
+    gridRootBlocked.appendChild(rowBlocked.detail);
+    sandbox.document = makeDocument(gridRootBlocked);
+    sandbox.queueObservedContainer = gridRootBlocked;
+
+    sandbox.injectResultChip(0, blockedNoneSev, rowIdBlocked, false);
+    check(
+      !rowBlocked.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: level:none but fileable:false (a blocker) injects nothing (no chip host at all)'
+    );
+
+    // A plain level:'none' row with no `fileable` field at all (the pre-4.4 shape,
+    // e.g. an entry computed before LabFilingUtils loaded) must behave identically —
+    // no tick, nothing injected.
+    freshCaches();
+    const rowIdNoneUnset = 'd0000000-0000-4000-8000-000000000003';
+    const rowNoneUnset = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdNoneUnset, dob: '01 Jan 1980 (46y)' });
+    const gridRootNoneUnset = new El('div', {});
+    gridRootNoneUnset.appendChild(rowNoneUnset.master);
+    gridRootNoneUnset.appendChild(rowNoneUnset.detail);
+    sandbox.document = makeDocument(gridRootNoneUnset);
+    sandbox.queueObservedContainer = gridRootNoneUnset;
+    sandbox.injectResultChip(0, noneSev, rowIdNoneUnset, false);
+    check(
+      !rowNoneUnset.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: level:none with fileable unset injects nothing (fail-closed default)'
+    );
+
+    // ---- never shows on red/amber rows ----
+    freshCaches();
+    const rowIdRed = 'd0000000-0000-4000-8000-000000000004';
+    const rowIdAmber = 'd0000000-0000-4000-8000-000000000005';
+    const rowRed = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRed, dob: '01 Jan 1980 (46y)' });
+    const rowAmber = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmber, dob: '01 Jan 1980 (46y)' });
+    const gridRootRA = new El('div', {});
+    [rowRed, rowAmber].forEach(({ master, detail }) => {
+      gridRootRA.appendChild(master);
+      gridRootRA.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootRA);
+    sandbox.queueObservedContainer = gridRootRA;
+    sandbox.injectResultChip(0, redSev, rowIdRed, false);
+    sandbox.injectResultChip(1, amberSev, rowIdAmber, false);
+    const redHost = rowRed.wrap.querySelector('.ch-q-result');
+    const amberHost = rowAmber.wrap.querySelector('.ch-q-result');
+    check(
+      !!redHost && !/ch-q-fileable/.test(redHost.innerHTML),
+      'injectResultChip: a red-level row never shows the fileable tick'
+    );
+    check(
+      !!amberHost && !/ch-q-fileable/.test(amberHost.innerHTML),
+      'injectResultChip: an amber-level row never shows the fileable tick'
+    );
+
+    // ---- never shows on the error ("couldn't check") chip, even if a stale sev
+    // object on the call happened to carry fileable:true (defensive — the isError
+    // branch never looks at sev at all) ----
+    freshCaches();
+    const rowIdError = 'd0000000-0000-4000-8000-000000000006';
+    const rowError = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdError, dob: '01 Jan 1980 (46y)' });
+    const gridRootError = new El('div', {});
+    gridRootError.appendChild(rowError.master);
+    gridRootError.appendChild(rowError.detail);
+    sandbox.document = makeDocument(gridRootError);
+    sandbox.queueObservedContainer = gridRootError;
+    sandbox.injectResultChip(0, fileableSev, rowIdError, true); // isError=true
+    const errorHost = rowError.wrap.querySelector('.ch-q-result');
+    check(
+      !!errorHost && !/ch-q-fileable/.test(errorHost.innerHTML),
+      'injectResultChip: the error ("?") chip never shows the fileable tick, even with a fileable sev passed in'
+    );
+    check(
+      !!errorHost && /ch-chip-error/.test(errorHost.innerHTML),
+      'injectResultChip: the error row still renders its own grey "?" chip as normal'
+    );
+
+    // ---- survives SPA churn via reinjectCachedResultChips, keyed by the durable map ----
+    freshCaches();
+    const rowIdChurnFileable = 'd0000000-0000-4000-8000-000000000007';
+    const rowChurnFileable = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdChurnFileable, dob: '01 Jan 1980 (46y)' });
+    const gridRootChurn = new El('div', {});
+    gridRootChurn.appendChild(rowChurnFileable.master);
+    gridRootChurn.appendChild(rowChurnFileable.detail);
+    sandbox.document = makeDocument(gridRootChurn);
+    sandbox.queueObservedContainer = gridRootChurn;
+
+    sandbox._durableRowMap.set(0, rowIdChurnFileable);
+    sandbox._queueResultCache.set(rowIdChurnFileable, { sev: fileableSev, fileable: true, ts: Date.now() });
+    sandbox.injectResultChip(0, fileableSev, rowIdChurnFileable, false);
+    const churnHostBefore = rowChurnFileable.wrap.querySelector('.ch-q-result');
+    check(
+      !!churnHostBefore && /ch-q-fileable/.test(churnHostBefore.innerHTML),
+      'setup: fileable tick present before the churn'
+    );
+
+    // Vue re-render wipes every foreign node wholesale.
+    gridRootChurn.querySelectorAll('.ch-q-result, .ch-q-mon, .ch-queue-chips').forEach((n) => n.remove());
+    check(
+      gridRootChurn.querySelectorAll('.ch-q-result').length === 0,
+      "churn: wipe removed the fileable tick's host node from the grid"
+    );
+
+    sandbox.reinjectCachedResultChips();
+    const churnHostAfter = rowChurnFileable.wrap.querySelector('.ch-q-result');
+    check(
+      !!churnHostAfter && /ch-q-fileable/.test(churnHostAfter.innerHTML),
+      'reinjectCachedResultChips: fileable tick restored after churn from the durable map + cache'
+    );
+
+    // ---- pref gate: queueFileableMarker off (default true) suppresses the tick ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueFileableMarker: false } };
+    const rowIdPrefOff = 'd0000000-0000-4000-8000-000000000008';
+    const rowPrefOff = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdPrefOff, dob: '01 Jan 1980 (46y)' });
+    const gridRootPrefOff = new El('div', {});
+    gridRootPrefOff.appendChild(rowPrefOff.master);
+    gridRootPrefOff.appendChild(rowPrefOff.detail);
+    sandbox.document = makeDocument(gridRootPrefOff);
+    sandbox.queueObservedContainer = gridRootPrefOff;
+
+    sandbox.injectResultChip(0, fileableSev, rowIdPrefOff, false);
+    check(
+      !rowPrefOff.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: queueFileableMarker=false suppresses the tick, and nothing else to show -> nothing injected at all'
+    );
+
+    sandbox.CONFIG = {}; // restore default (PREF('queueFileableMarker', true) -> true)
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

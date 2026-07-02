@@ -1418,6 +1418,26 @@ check(
   'config-change cache invalidation also clears the stale .unitMismatches (item 3.1)'
 );
 
+// Item 4.4 (TRIAGE-LENS-2026-07-02.md) — "all-normal, fileable" queue marker.
+// computeQueueRowResult computes sev.fileable via LabFilingUtils.fileabilityBlockers
+// (only ever for sev.level === 'none'), and the scheduler mirrors it onto the cache
+// entry alongside .detail/.unitMismatches — same lockstep reasoning, so it survives
+// the durable re-inject path with no extra fetch and is cleared on config change.
+check(
+  /sev\.level === 'none'/.test(src) &&
+    /window\.LabFilingUtils/.test(src) &&
+    /LF\.fileabilityBlockers\(report, sev, resultRules\)/.test(src),
+  "computeQueueRowResult computes sev.fileable via window.LabFilingUtils.fileabilityBlockers, reusing lab-file-button.js's own profile-independent gate rather than reimplementing it"
+);
+check(
+  /e2\.fileable = !isError && !!\(sev && sev\.fileable === true\);/.test(src),
+  'scheduler mirrors sev.fileable onto the cache entry as e2.fileable, cleared for error entries'
+);
+check(
+  /entry\.fileable = undefined;/.test(src),
+  'config-change cache invalidation also clears the stale .fileable (item 4.4)'
+);
+
 // The popover build path — no innerHTML of any lab-derived string. Grey '?' error
 // chips get a popover too: fixed explanation text that says it retries automatically.
 const popoverBuildMatch = src.match(
@@ -1535,10 +1555,16 @@ if (rdvMatch) {
     'computes via the EXACT SAME path the queue uses — computeQueueRowResult — not a re-derived evaluation'
   );
   check(
-    /e2\.sev = isError \? null : sev;\s*\n\s*e2\.error = isError;\s*\n\s*e2\.detail = !isError && sev && sev\.detail \? sev\.detail : undefined;\s*\n[\s\S]*?e2\.unitMismatches = !isError && sev && Array\.isArray\(sev\.unitMismatches\) \? sev\.unitMismatches : undefined;\s*\n\s*e2\.ts = Date\.now\(\);/.test(
+    /e2\.sev = isError \? null : sev;\s*\n\s*e2\.error = isError;\s*\n\s*e2\.detail = !isError && sev && sev\.detail \? sev\.detail : undefined;\s*\n[\s\S]*?e2\.unitMismatches = !isError && sev && Array\.isArray\(sev\.unitMismatches\) \? sev\.unitMismatches : undefined;\s*\n[\s\S]*?e2\.ts = Date\.now\(\);/.test(
       body
     ),
     "writes the resolved sev/error/detail/unitMismatches/ts back onto the cache entry, mirroring the queue scheduler's own write shape"
+  );
+  check(
+    /e2\.unitMismatches = !isError && sev && Array\.isArray\(sev\.unitMismatches\) \? sev\.unitMismatches : undefined;\s*\n[\s\S]*?e2\.fileable = !isError && !!\(sev && sev\.fileable === true\);\s*\n\s*e2\.ts = Date\.now\(\);/.test(
+      body
+    ),
+    'item 4.4 — also mirrors the resolved .fileable flag onto the cache entry, in the same write as .detail/.unitMismatches, before .ts'
   );
   check(
     /if \(pageType\(\) !== 'detail' \|\| !liveCtx \|\| liveCtx\.taskUuid !== taskUuid\) return;/.test(body),

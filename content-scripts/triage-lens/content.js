@@ -4384,6 +4384,33 @@
     try {
       if (sev && typeof sev === 'object') sev.detail = buildResultDetail(report, sev);
     } catch (e) { log('queue-result: buildResultDetail failed', e.message); }
+    // Item 4.4 (TRIAGE-LENS-2026-07-02.md) — "all-normal, fileable" queue marker.
+    // Reuses shared/lab-filing-utils.js's fileabilityBlockers(report, severity,
+    // resultRules) — the EXACT profile-independent gate lab-file-button.js's own
+    // loadReportSeverity() already runs on the filing screen (severity.level ===
+    // 'none' AND no free-text/culture/unmatched/missing-result-rules blocker).
+    // Deliberately NOT lab-file-button.js's computeProfileBlockers — those need a
+    // MATCHED FILING PROFILE (per-profile parameter overrides, trend guard, the
+    // per-patient suppress list, text-suppress phrases, med exclusion), which the
+    // queue has no concept of; fileabilityBlockers is the profile-independent half
+    // of the gate and is exactly "all-normal, nothing that blocks auto-filing".
+    // shared/lab-filing-utils.js loads in the SAME manifest content-script block as
+    // this file (after content.js, before lab-file-button.js) and runs
+    // synchronously at document_idle, well before any fetch-driven call into this
+    // function — so window.LabFilingUtils is always populated by the time this
+    // executes. READ-ONLY: this NEVER files anything — filing stays the explicit
+    // lab-file-button.js action on the filing screen. Fails CLOSED: if the util
+    // isn't loaded, or blockers can't be computed, `fileable` stays undefined/false
+    // — absence of the tick is never a claim, only its presence is.
+    try {
+      if (sev && typeof sev === 'object' && sev.level === 'none') {
+        const LF = window.LabFilingUtils;
+        if (LF && typeof LF.fileabilityBlockers === 'function') {
+          const fileBlockers = LF.fileabilityBlockers(report, sev, resultRules);
+          sev.fileable = Array.isArray(fileBlockers) && fileBlockers.length === 0;
+        }
+      }
+    } catch (e) { log('queue-result: fileability check failed', e.message); }
     // Item 3.1 — log each individual unit-mismatch skip (not just the count) at the
     // point sev is computed, once per fetch — the most useful place to see WHICH
     // analyte/rule/unit-pair was skipped when diagnosing a "why didn't this rule
@@ -4444,6 +4471,26 @@
       name + extra + '</span>';
   };
 
+  // "All-normal, fileable" marker (item 4.4, TRIAGE-LENS-2026-07-02.md) — a small
+  // green tick shown ONLY when computeQueueRowResult's fileability check found the
+  // report level:'none' AND cleared shared/lab-filing-utils.js's fileabilityBlockers
+  // (free-text/culture/unmatched/missing-rules) — the same profile-independent gate
+  // lab-file-button.js runs on the filing screen. READ-ONLY: it never files anything
+  // — filing stays the explicit lab-file-button.js action on the task's filing
+  // screen; this is purely "work the reds first, batch the ticks later". Fixed
+  // markup, NOT routed through findSystemChip/renderSystemChipHtmlMemo — same
+  // reasoning as RESULT_ERROR_CHIP_HTML/UNIT_MISMATCH_CHIP_HTML above: a system-level
+  // indicator with no defaults.json systemChips slot to author a label for. Classed
+  // `ch-chip-fileable` (colour) + `ch-q-fileable` (a stable hook independent of the
+  // colour class). Rendered INSIDE the existing .ch-q-result host span (see
+  // injectResultChip below), so it inherits that host's hud.css token-block scope
+  // (CLAUDE.md rule 5) via CSS inheritance without needing its own top-level entry
+  // in the selector list.
+  const FILEABLE_CHIP_HTML =
+    '<span class="ch-chip ch-chip-fileable ch-q-fileable" role="note" ' +
+    'title="Every result is within normal limits and nothing was found that blocks auto-filing. ' +
+    'This is a marker only, nothing is filed automatically — file from the task’s lab-filing action.">✓</span>';
+
   // taskUuid (item 2.2) is threaded through by every call site (initial post-fetch
   // inject, the scheduler's fresh-cache-hit path, and reinjectCachedResultChips) so
   // the popover click handler can read this row's cached detail at click time.
@@ -4483,6 +4530,21 @@
           builtHtml = builtHtml.concat([chipHtml]);
           log('queue-result: unclassified chip', rowIndex, 'count=' + unclassifiedList.length);
         }
+      }
+      // Item 4.4 — "all-normal, fileable" marker. Appended (not gated on builtHtml
+      // being non-empty, same convention as the two blocks above) because a
+      // genuinely all-normal report shows NO clinical/meta chip at all today — the
+      // tick is that row's only signal, so without this an all-normal-and-fileable
+      // row would render nothing. Only ever true when computeQueueRowResult found
+      // sev.level==='none' AND the LabFilingUtils gate cleared it (see FILEABLE_
+      // CHIP_HTML above) — a row the gate can't judge, or any red/amber/error row,
+      // never sets sev.fileable, so this never fires for them. Pref-gated (default
+      // true, PREF('queueFileableMarker', true)) and re-checked on every render, so
+      // turning the pref off in Settings clears the tick on the next refresh — same
+      // convention as queueRowTint.
+      if (sev && sev.fileable === true && PREF('queueFileableMarker', true)) {
+        builtHtml = builtHtml.concat([FILEABLE_CHIP_HTML]);
+        log('queue-result: fileable marker', rowIndex);
       }
       if (!builtHtml.length) return;
     }
@@ -5103,6 +5165,8 @@
           // same reasoning as the .detail mirror above: the popover click handler
           // reads it straight off the cache, never through .sev.
           e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
+          // Item 4.4 — same mirror as the queue scheduler worker above.
+          e2.fileable = !isError && !!(sev && sev.fileable === true);
           e2.ts = Date.now();
         }
         // Only paint if the GP is still on THIS task's detail page — a slow
@@ -5662,6 +5726,11 @@
             // Item 3.1 — mirror unitMismatches onto the cache entry alongside
             // .detail (same lockstep reasoning as the comment above).
             e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
+            // Item 4.4 — mirror the fileable flag alongside .detail/.unitMismatches
+            // (same lockstep reasoning): survives the durable-map re-inject path with
+            // no extra fetch, and is re-derived from THIS pass's sev every time, never
+            // defaulted true.
+            e2.fileable = !isError && !!(sev && sev.fileable === true);
             // An error entry always gets the short _RESULT_ERROR_TTL retry
             // window (via a fresh ts — the fresh-check above applies
             // _RESULT_ERROR_TTL to it). A definitive-null (disabled/unmatched)
@@ -6351,15 +6420,16 @@
     watchConfig(() => {
       // Config changed — invalidate cached result severities so edited/enabled
       // result rules are recomputed on the next pass (not re-injected stale),
-      // then wipe + redo queue chips and re-render the HUD. .detail/.unitMismatches
-      // ride on the same cache entry as .sev (items 2.2/3.1) — clear both too so a
-      // stale popover built under the old config can't linger once .sev is
-      // recomputed.
+      // then wipe + redo queue chips and re-render the HUD. .detail/.unitMismatches/
+      // .fileable ride on the same cache entry as .sev (items 2.2/3.1/4.4) — clear
+      // all of them too so a stale popover or fileable tick built under the old
+      // config can't linger once .sev is recomputed.
       for (const entry of _queueResultCache.values()) {
         entry.sev = undefined;
         entry.ts = 0;
         entry.detail = undefined;
         entry.unitMismatches = undefined;
+        entry.fileable = undefined;
       }
       // The memoised chip HTML is config-derived too — drop it so edited labels/
       // kinds re-render rather than serving the stale cached string.
