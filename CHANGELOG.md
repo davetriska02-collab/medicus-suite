@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.147.1] — 2026-07-02
+
+### Suite health — fix two false "degraded" alarms on the health strip
+
+The `#healthStrip` amber banner could read "Queue chips — master/detail row
+linkage (findQueuePreviewRow) degraded" and "Patient UUID resolution … DOM
+fallback degraded" while the queue chips were visibly rendering fine — a
+DOM-contract canary false alarm, not a real break.
+
+- **`queue.preview-row-link`**: the canary tested only whether AG-Grid's
+  master/detail preview row was present, not whether chips actually landed.
+  `queueChipHost()`'s own further fallback (the `patientName` cell) is
+  covered by the separate `queue.chip-host` contract — when that contract
+  reads OK, the narrower preview-row contract is now treated as OK too
+  (`dom-contracts.js`'s new `suppressedByOk` field, applied in
+  `contract-canary.js`'s `runProbeRound`), instead of alarming on a
+  transient/legitimately-absent preview row that a working fallback already
+  covers.
+- **`api-client.patient-uuid-dom-fallback`**: probed on every page
+  (`pageMatch: null`) even though the DOM fallback it backs is only ever
+  consulted when URL-based patient/encounter/task-id resolution
+  (`detectMedicusContext`) fails — on a queue/task-list page (a genuinely
+  multi-patient screen) it FAILed constantly for a fallback that was never
+  going to run. `runProbeRound` now skips this contract for any round where
+  the URL already resolved an id.
+- Both fixes are hysteresis-neutral: an already-degraded contract now
+  auto-recovers the moment its covering signal reads OK, same as any other
+  recovery.
+
 ## [v3.147.0] — 2026-07-02
 
 ### NHS Patient Leaflets — a new tab, not a Google search
