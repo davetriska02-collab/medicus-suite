@@ -512,6 +512,23 @@ const parts = [
     /const showRuleMatchMenu = \(anchor, rules, previewText, openList\) => \{[\s\S]*?\n {2}\};/,
     'showRuleMatchMenu'
   ),
+  // Item 2.4 (TRIAGE-LENS-2026-07-02.md) — detail-page verdict banner: echoes
+  // the queue's cached result-triage verdict on the task detail page.
+  extract(/const DETAIL_VERDICT_CLASS = .*;/, 'DETAIL_VERDICT_CLASS'),
+  extract(
+    /let _detailVerdictTaskUuid = null;\s*\n\s*const _detailVerdictAttempted = new Set\(\);/,
+    '_detailVerdict* module state'
+  ),
+  extract(/function detailVerdictState\(entry, now\) \{[\s\S]*?\n {2}\}/, 'detailVerdictState'),
+  extract(/function buildDetailVerdictHeadline\(sev\) \{[\s\S]*?\n {2}\}/, 'buildDetailVerdictHeadline'),
+  extract(/const detailVerdictHost = .*;/, 'detailVerdictHost'),
+  extract(/const removeDetailVerdictBanner = \(\) => \{[\s\S]*?\n {2}\};/, 'removeDetailVerdictBanner'),
+  extract(/const buildDetailVerdictEl = \(taskUuid, sev, isError\) => \{[\s\S]*?\n {2}\};/, 'buildDetailVerdictEl'),
+  extract(
+    /const renderDetailVerdictBanner = \(taskUuid, sev, isError\) => \{[\s\S]*?\n {2}\};/,
+    'renderDetailVerdictBanner'
+  ),
+  extract(/const runDetailVerdict = \(\) => \{[\s\S]*?\n {2}\};/, 'runDetailVerdict'),
 ];
 
 const EXPOSE = [
@@ -552,6 +569,12 @@ const EXPOSE = [
   'renderRuleMenuList',
   'renderRuleMenuDetail',
   'buildEvidenceEl',
+  'detailVerdictState',
+  'buildDetailVerdictHeadline',
+  'removeDetailVerdictBanner',
+  'buildDetailVerdictEl',
+  'renderDetailVerdictBanner',
+  'runDetailVerdict',
 ];
 
 let sandbox = null;
@@ -624,7 +647,29 @@ if (!parts.some((p) => !p)) {
       addEventListener: () => {},
       removeEventListener: () => {},
       TriageLensMatch: require('./content-scripts/triage-lens/rule-match.js'),
+      // Item 2.4 — runDetailVerdict resolves the detail task's uuid via this,
+      // exactly like the OIR/monitoring detail-page paths already do. Each
+      // Layer 16 scenario points this at whichever taskUuid it's driving;
+      // defaults to "no context" so an unconfigured call is a safe no-op.
+      SentinelApiClient: { detectMedicusContext: () => null },
     },
+    // Item 2.4 — runDetailVerdict reads location.href only to hand it to
+    // SentinelApiClient.detectMedicusContext above (itself stubbed per-scenario),
+    // so the exact value here is never asserted on, just needs to exist.
+    location: { href: 'https://abc123.medicus.health/abc123/tasks/data/investigation_result/overview/x' },
+    // Item 2.4 — findCardByTitle is the (unextracted) card-lookup helper
+    // detailVerdictHost() calls; stubbed here as an external global exactly
+    // like matchRules/getSystemChip above, so Layer 16 controls the "Task
+    // Details" card host directly without needing the full DOM-heading-scan
+    // implementation (already covered by its own callers elsewhere).
+    findCardByTitle: () => null,
+    // Item 2.4 — only reached inside runDetailVerdict's compute-on-miss
+    // .then() callback, which no Layer 16 scenario exercises (compute-on-miss
+    // wiring is source-verified in test-result-triage-queue.js instead); kept
+    // here so an accidental hit fails loudly rather than throwing ReferenceError.
+    pageType: () => 'detail',
+    computeQueueRowResult: () => Promise.resolve(null),
+    QUEUE_RESULT_FETCH_ERROR: Object.freeze({ __chQueueResultError: true }),
   };
   vm.createContext(sandbox);
   try {
@@ -651,6 +696,10 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.onQueueStatusFocusClick === 'function', 'onQueueStatusFocusClick compiled and callable');
     check(typeof sandbox.rankRuleMatches === 'function', 'rankRuleMatches compiled and callable');
     check(typeof sandbox.showRuleMatchMenu === 'function', 'showRuleMatchMenu compiled and callable');
+    check(typeof sandbox.detailVerdictState === 'function', 'detailVerdictState compiled and callable');
+    check(typeof sandbox.buildDetailVerdictHeadline === 'function', 'buildDetailVerdictHeadline compiled and callable');
+    check(typeof sandbox.renderDetailVerdictBanner === 'function', 'renderDetailVerdictBanner compiled and callable');
+    check(typeof sandbox.runDetailVerdict === 'function', 'runDetailVerdict compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -2182,6 +2231,265 @@ if (sandbox) {
       chipsFor({ ...noneSev, top: { name: 'X', prior: { value: 1, date: null, dir: 'up' } } }).length === 0,
       'trend arrow: a none-level report renders no severity chip, so no arrow (red/amber only)'
     );
+  }
+
+  console.log(
+    '\nLayer 16: detail-page verdict banner (item 2.4) — render, error, nothing, stale-task replace, pref gate, textContent discipline'
+  );
+  {
+    freshCaches();
+    const hostCard = new El('div', { class: 'm-card-v2' });
+    sandbox.document = makeDocument(hostCard);
+    sandbox.findCardByTitle = (title) => (title === 'Task Details' ? hostCard : null);
+
+    const taskA = '11111111-1111-4111-8111-111111111111';
+    const taskB = '22222222-2222-4222-8222-222222222222';
+    const taskC = '33333333-3333-4333-8333-333333333333';
+    const taskD = '44444444-4444-4444-8444-444444444444';
+    const taskE = '55555555-5555-4555-8555-555555555555';
+    const ctxFor = (taskUuid) => ({ apiBase: 'https://x', taskUuid, taskTypeSlug: 'investigation_result' });
+    const setCtx = (taskUuid) => {
+      sandbox.window.SentinelApiClient = { detectMedicusContext: () => ctxFor(taskUuid) };
+    };
+
+    // ---- detailVerdictState: pure decision function ----
+    const now = 1_800_000_000_000;
+    check(sandbox.detailVerdictState(undefined, now) === 'compute', 'state: no entry -> compute');
+    check(
+      sandbox.detailVerdictState({ sev: undefined }, now) === 'compute',
+      'state: never-evaluated (sev undefined) -> compute'
+    );
+    check(
+      sandbox.detailVerdictState({ sev: { level: 'red' }, ts: now - 1000 }, now) === 'render',
+      'state: fresh non-null sev -> render'
+    );
+    check(
+      sandbox.detailVerdictState({ sev: { level: 'red' }, ts: now - 6 * 60 * 1000 }, now) === 'compute',
+      'state: sev aged past _RESULT_CACHE_TTL -> compute (stale, not render)'
+    );
+    check(
+      sandbox.detailVerdictState({ sev: null, ts: now - 1000 }, now) === 'nothing',
+      'state: fresh definitive null -> nothing'
+    );
+    check(
+      sandbox.detailVerdictState({ sev: null, error: true, ts: now - 1000 }, now) === 'error',
+      'state: fresh error entry -> error'
+    );
+    check(
+      sandbox.detailVerdictState({ sev: null, error: true, ts: now - 61 * 1000 }, now) === 'compute',
+      'state: error entry aged past the SHORT _RESULT_ERROR_TTL -> compute (retry), not stuck on error'
+    );
+
+    // ---- buildDetailVerdictHeadline: reuses sev fields, never re-derives severity ----
+    check(
+      sandbox.buildDetailVerdictHeadline({ level: 'red', urgentCount: 2, abnormalCount: 0 }) === '2 urgent',
+      'headline: red multi-urgent'
+    );
+    check(
+      sandbox.buildDetailVerdictHeadline({ level: 'red', urgentCount: 1, abnormalCount: 0 }) === '1 urgent',
+      'headline: red singular urgent (no "1 urgents")'
+    );
+    check(
+      sandbox.buildDetailVerdictHeadline({ level: 'amber', urgentCount: 0, abnormalCount: 4 }) === '4 abnormal',
+      'headline: amber abnormal count'
+    );
+    check(sandbox.buildDetailVerdictHeadline(null) === '', 'headline: null sev -> empty string');
+
+    // ---- render: banner from a FRESH cache entry — headline + capped lines + "+n more" ----
+    const detailArr = [
+      {
+        name: 'Potassium',
+        value: 6.2,
+        unit: 'mmol/L',
+        low: 3.5,
+        high: 5.3,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: 'Critical high potassium (red ≥6.5)',
+        prior: { value: 4.1, date: '2026-05-03', dir: 'up' },
+      },
+      {
+        name: 'eGFR',
+        value: 38,
+        unit: 'mL/min',
+        low: 90,
+        high: null,
+        flag: 'below',
+        date: '2026-06-12',
+        ruleLabel: null,
+        prior: null,
+      },
+      {
+        name: 'CRP',
+        value: 80,
+        unit: 'mg/L',
+        low: null,
+        high: 10,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: null,
+        prior: null,
+      },
+      {
+        name: 'WCC',
+        value: 15,
+        unit: '10^9/L',
+        low: 4,
+        high: 11,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: null,
+        prior: null,
+      },
+    ];
+    // level 'amber' + abnormalCount (never 'red' + abnormalCount — a real
+    // evaluateReportSeverity() only sets level:'red' alongside urgentCount>0,
+    // mirroring selectResultChips' own level/count pairing) — this is the
+    // plan's own worked example ("2 abnormal: K+ 6.2 up ... eGFR 38 down ...").
+    const sevD = {
+      level: 'amber',
+      urgentCount: 0,
+      abnormalCount: 4,
+      top: { name: 'Potassium' },
+      misprioritised: false,
+      unmatched: false,
+      detail: detailArr,
+    };
+    sandbox._queueResultCache.set(taskA, { sev: sevD, ts: Date.now(), detail: detailArr });
+    setCtx(taskA);
+    sandbox.runDetailVerdict();
+    let banner = sandbox.document.querySelector('.ch-detail-verdict');
+    check(!!banner, 'banner: renders from a fresh cache entry (cache HIT, zero extra fetches)');
+    check(banner && banner.classes.includes('ch-detail-verdict-amber'), 'banner: amber variant for an amber sev');
+    check(banner && banner.dataset.chTaskUuid === taskA, 'banner: stamped with the taskUuid');
+    const headlineEl = banner && banner.querySelector('.ch-detail-verdict-headline');
+    check(
+      !!headlineEl && headlineEl.textContent === '4 abnormal',
+      `banner: headline text (got "${headlineEl && headlineEl.textContent}")`
+    );
+    const lines = banner ? banner.querySelectorAll('.ch-detail-verdict-line') : [];
+    check(lines.length === 3, `banner: capped at 3 detail lines (got ${lines.length})`);
+    check(
+      lines[0] &&
+        lines[0].textContent ===
+          'Potassium 6.2 mmol/L ↑ (3.5–5.3) · 12 Jun · rule: Critical high potassium (red ≥6.5) · was 4.1, 03 May',
+      `banner: first line is formatDetailLine's own output (got "${lines[0] && lines[0].textContent}")`
+    );
+    const more = banner && banner.querySelector('.ch-detail-verdict-more');
+    check(
+      !!more && more.textContent === '+1 more',
+      `banner: "+n more" for the remaining entry (got "${more && more.textContent}")`
+    );
+
+    // Re-running for the SAME still-fresh task must not duplicate the banner.
+    sandbox.runDetailVerdict();
+    check(
+      sandbox.document.querySelectorAll('.ch-detail-verdict').length === 1,
+      'banner: re-running for the same fresh task does not duplicate (idempotent across SPA churn)'
+    );
+
+    // ---- error variant + stale-taskUuid replace (A -> B) ----
+    sandbox._queueResultCache.set(taskB, { sev: null, error: true, ts: Date.now() });
+    setCtx(taskB);
+    sandbox.runDetailVerdict();
+    const errBanner = sandbox.document.querySelector('.ch-detail-verdict');
+    check(
+      sandbox.document.querySelectorAll('.ch-detail-verdict').length === 1,
+      'stale-task replace: switching task (A -> B) leaves exactly ONE banner, never two'
+    );
+    check(
+      !!errBanner && errBanner.dataset.chTaskUuid === taskB,
+      'stale-task replace: surviving banner belongs to the NEW task'
+    );
+    check(
+      errBanner && errBanner.classes.includes('ch-detail-verdict-error'),
+      'error banner: carries the grey error variant class'
+    );
+    const errLine = errBanner && errBanner.querySelector('.ch-detail-verdict-line');
+    check(
+      !!errLine && errLine.textContent === sandbox.RESULT_ERROR_POPOVER_TEXT,
+      "error banner: reuses the SAME wording family as the queue's own error popover"
+    );
+
+    // ---- null-sev (nothing gradeable) renders NOTHING, clearing the previous banner ----
+    sandbox._queueResultCache.set(taskC, { sev: null, ts: Date.now() }); // definitive, no .error
+    setCtx(taskC);
+    sandbox.runDetailVerdict();
+    check(
+      sandbox.document.querySelectorAll('.ch-detail-verdict').length === 0,
+      'null-sev: renders NOTHING for a non-gradeable task (admin/med request), and clears the stale banner too'
+    );
+
+    // ---- pref gate: detailVerdictBanner:false suppresses even a fresh graded result ----
+    sandbox._queueResultCache.set(taskD, { sev: sevD, ts: Date.now(), detail: detailArr });
+    sandbox.CONFIG = { prefs: { detailVerdictBanner: false } };
+    setCtx(taskD);
+    sandbox.runDetailVerdict();
+    check(
+      sandbox.document.querySelectorAll('.ch-detail-verdict').length === 0,
+      'pref off: detailVerdictBanner=false suppresses the banner even with a fresh abnormal result cached'
+    );
+    sandbox.CONFIG = {}; // restore default (PREF('detailVerdictBanner', true) -> true)
+
+    // ---- stale-taskUuid replace, second pair (D -> E) — also covers the RED variant ----
+    setCtx(taskD);
+    sandbox.runDetailVerdict();
+    check(
+      sandbox.document.querySelector('.ch-detail-verdict').dataset.chTaskUuid === taskD,
+      'stale-task replace: banner for task D renders once the pref is back on'
+    );
+    const sevE = {
+      level: 'red',
+      urgentCount: 1,
+      abnormalCount: 0,
+      top: { name: 'Potassium' },
+      misprioritised: false,
+      unmatched: false,
+      detail: [
+        {
+          name: 'Potassium',
+          value: 6.8,
+          unit: 'mmol/L',
+          low: 3.5,
+          high: 5.3,
+          flag: 'urgent',
+          date: null,
+          ruleLabel: null,
+          prior: null,
+        },
+      ],
+    };
+    sandbox._queueResultCache.set(taskE, { sev: sevE, ts: Date.now(), detail: sevE.detail });
+    setCtx(taskE);
+    sandbox.runDetailVerdict();
+    check(
+      sandbox.document.querySelectorAll('.ch-detail-verdict').length === 1,
+      'stale-task replace: switching to a DIFFERENT task (D -> E) never leaves two banners'
+    );
+    const bannerE = sandbox.document.querySelector('.ch-detail-verdict');
+    check(
+      bannerE && bannerE.dataset.chTaskUuid === taskE,
+      'stale-task replace: the surviving banner belongs to the new task E, not the stale D'
+    );
+    check(bannerE && bannerE.classes.includes('ch-detail-verdict-red'), 'banner: red variant for a red/urgent sev');
+
+    // ---- textContent discipline (grep-level) — lab/config-derived strings never via innerHTML ----
+    const bdvFnMatch = src.match(/const buildDetailVerdictEl = \(taskUuid, sev, isError\) => \{[\s\S]*?\n {2}\};/);
+    check(!!bdvFnMatch, 'buildDetailVerdictEl found in content.js for the textContent-discipline check');
+    if (bdvFnMatch) {
+      check(
+        !/\.innerHTML/.test(bdvFnMatch[0]),
+        'buildDetailVerdictEl never uses innerHTML (createElement/textContent only)'
+      );
+      check(
+        /\.textContent = formatDetailLine\(entry\)/.test(bdvFnMatch[0]),
+        'detail lines are assigned via textContent'
+      );
+      check(
+        /\.textContent = RESULT_ERROR_POPOVER_TEXT/.test(bdvFnMatch[0]),
+        'the error line is ALSO assigned via textContent'
+      );
+    }
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

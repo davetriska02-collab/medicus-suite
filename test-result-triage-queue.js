@@ -1356,5 +1356,107 @@ check(
 );
 
 // ============================================================
+// Layer 8 — item 2.4 (TRIAGE-LENS-2026-07-02.md): detail-page verdict banner.
+// The DOM-rendering half (detailVerdictState/buildDetailVerdictHeadline/
+// renderDetailVerdictBanner/runDetailVerdict's cache-HIT + pref-gate paths) is
+// driven behaviourally in test-queue-injection-smoke.js Layer 16. The
+// compute-on-miss fetch path there is network/engine machinery out of scope
+// for a DOM-injection harness (same carve-out as computeQueueRowResult itself,
+// see that file's header) — source-verified here instead, same style as this
+// file's own Layer 3/3b/3c wiring checks.
+// ============================================================
+console.log('Layer 8: detail-page verdict banner (item 2.4) — wiring');
+
+// runDetail() must actually call the new entry point, or nothing above ever runs.
+check(/runOutstandingMatch\(\);\s*\n\s*runDetailVerdict\(\);/.test(src), 'runDetail() calls runDetailVerdict()');
+
+// Leaving the detail page type must tear the banner down (never lingers into a
+// differently-typed page, e.g. back to the queue) and reset the task-tracking state.
+check(
+  /if \(type !== 'detail'\) \{\s*\n\s*teardownOutstandingObserver\(\);\s*\n\s*removeDetailVerdictBanner\(\);\s*\n\s*_detailVerdictTaskUuid = null;\s*\n\s*\}/.test(
+    src
+  ),
+  'run() tears down the verdict banner (and resets _detailVerdictTaskUuid) when leaving the detail page type'
+);
+
+const rdvMatch = src.match(/const runDetailVerdict = \(\) => \{[\s\S]*?\n {2}\};/);
+check(!!rdvMatch, 'runDetailVerdict function found in content.js');
+if (rdvMatch) {
+  const body = rdvMatch[0];
+  check(
+    /const ctx = API\.detectMedicusContext\(location\.href\)/.test(body),
+    'resolves the detail task via detectMedicusContext, same as OIR/monitoring'
+  );
+  check(/!PREF\('detailVerdictBanner', true\)/.test(body), 'gated on prefs.detailVerdictBanner, default true');
+  check(
+    /if \(taskUuid !== _detailVerdictTaskUuid\)/.test(body),
+    'a task-change (not mere absence) drives the stale-banner cleanup — CLAUDE.md rule 4/5'
+  );
+  check(
+    /const state = detailVerdictState\(entry, Date\.now\(\)\)/.test(body),
+    'defers the render/error/nothing/compute decision entirely to the pure detailVerdictState helper'
+  );
+  // Compute-on-miss: attempted-once guard, THEN seed the cache entry with the
+  // SAME overviewURL shape the queue bridge itself writes (item 2.2's cache
+  // contract) — /tasks/data/{slug}/overview/{uuid}, matching runOutstandingMatch's
+  // own construction (content.js's proven, already-shipped overviewURL pattern).
+  check(
+    /if \(_detailVerdictAttempted\.has\(taskUuid\)\) return;\s*\n\s*_detailVerdictAttempted\.add\(taskUuid\);/.test(
+      body
+    ),
+    'compute-on-miss fires at most once per taskUuid per page-visit (attempted-set guard)'
+  );
+  check(
+    /overviewURL: `\/tasks\/data\/\$\{ctx\.taskTypeSlug\}\/overview\/\$\{taskUuid\}`/.test(body),
+    'seeds a _queueResultCache entry with the derived overviewURL when this task was never seen in the queue'
+  );
+  check(
+    /if \(!_queueResultCache\.has\(taskUuid\)\) \{/.test(body),
+    'only seeds the cache entry on a genuine miss — never clobbers an existing (possibly stale-but-present) entry'
+  );
+  check(
+    /computeQueueRowResult\(taskUuid\)\s*\n\s*\.then\(\(sev\) => \{/.test(body),
+    'computes via the EXACT SAME path the queue uses — computeQueueRowResult — not a re-derived evaluation'
+  );
+  check(
+    /e2\.sev = isError \? null : sev;\s*\n\s*e2\.error = isError;\s*\n\s*e2\.detail = !isError && sev && sev\.detail \? sev\.detail : undefined;\s*\n\s*e2\.ts = Date\.now\(\);/.test(
+      body
+    ),
+    "writes the resolved sev/error/detail/ts back onto the cache entry, mirroring the queue scheduler's own write shape"
+  );
+  check(
+    /if \(pageType\(\) !== 'detail' \|\| !liveCtx \|\| liveCtx\.taskUuid !== taskUuid\) return;/.test(body),
+    'a slow fetch never paints after the GP has navigated away or onto a different task'
+  );
+  check(
+    /\.catch\(\(e\) => log\('detail-verdict: compute threw', e\.message\)\)/.test(body),
+    'compute failures are caught, not thrown into the page'
+  );
+}
+
+// The banner class must be in hud.css's token-block selector list (CLAUDE.md
+// rule 5) or var(--red)/var(--amber)/etc resolve to nothing and it renders as
+// an unstyled box.
+const hudCss = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'hud.css'), 'utf8');
+check(
+  /\.ch-result-popover,\s*\n\.ch-detail-verdict \{/.test(hudCss),
+  ".ch-detail-verdict is in hud.css's token-block selector list"
+);
+check(
+  /\.ch-detail-verdict-red \{/.test(hudCss) && /\.ch-detail-verdict-amber \{/.test(hudCss),
+  'hud.css defines the red/amber banner variants'
+);
+check(/\.ch-detail-verdict-error \{/.test(hudCss), 'hud.css defines the grey error banner variant');
+
+// The pref checkbox — mirrors queueRowTint/queueStatusBar exactly (generic
+// [data-pref] wiring in content-scripts/triage-lens/options.js needs no
+// per-key code, so the ONLY options-side footprint is this one HTML line).
+const optionsHtml = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'options.html'), 'utf8');
+check(
+  /data-pref="detailVerdictBanner" checked/.test(optionsHtml),
+  'options.html has the detailVerdictBanner checkbox, defaulting checked like queueRowTint/queueStatusBar'
+);
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

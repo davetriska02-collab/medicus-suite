@@ -2686,6 +2686,7 @@
     enableDrag(hudEl);
     runMonitoringChip();
     runOutstandingMatch();
+    runDetailVerdict();
     log('detail rendered', { data, signals, taskDetails, initialReq, docInfo });
   };
 
@@ -3341,8 +3342,14 @@
       // If we've navigated away from the queue, release the observer so the
       // next queue visit always rebuilds it against a fresh container.
       if (type !== 'queue') teardownQueueObserver();
-      // The outstanding-match observer is detail-page-only; release it elsewhere.
-      if (type !== 'detail') teardownOutstandingObserver();
+      // The outstanding-match observer AND the verdict banner (item 2.4) are
+      // detail-page-only; release/clear both elsewhere so neither can linger
+      // into a differently-typed page (e.g. back to the queue).
+      if (type !== 'detail') {
+        teardownOutstandingObserver();
+        removeDetailVerdictBanner();
+        _detailVerdictTaskUuid = null;
+      }
       if (type === 'record') runRecord();
       else if (type === 'detail') runDetail();
       else if (type === 'queue') runQueue();
@@ -4441,6 +4448,205 @@
       n++;
     });
     if (n) log('queue-result: tinted ' + n + ' row(s) from durable map (visible rows)');
+  };
+
+  // ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----
+  // Opening a task and staring at a raw report to re-derive what the queue chip
+  // already knew is the exact "the screen never lies" gap this closes: echo the
+  // SAME cached severity onto the task detail page, reusing the queue's own
+  // cache/compute path (_queueResultCache / computeQueueRowResult) so a task
+  // seen in the queue this session renders with ZERO extra fetches, and a task
+  // opened directly (no queue visit) computes ONCE per taskUuid per page-visit.
+  const DETAIL_VERDICT_CLASS = 'ch-detail-verdict';
+
+  // Which taskUuid the banner currently reflects (module state — survives
+  // runDetail's repeated calls across SPA route/DOM churn) and which taskUuids
+  // have already had a compute-on-miss attempted THIS PAGE-VISIT, so a genuine
+  // cache miss fetches exactly once (the caches above make a repeat visit to
+  // the same task cheap; this guard is what makes a repeat runDetail() pass on
+  // the SAME task, before that fetch resolves, a no-op rather than a re-fetch).
+  let _detailVerdictTaskUuid = null;
+  const _detailVerdictAttempted = new Set();
+
+  // Pure — decides what the banner should show for a given _queueResultCache
+  // entry (or undefined/missing) at time `now`. This is the single seam that
+  // carries all the TTL/error/null-sev logic; the wiring below just acts on the
+  // result. Exported for unit testing via regex extraction (same pattern as
+  // the other pure helpers in this file).
+  //   'render'  — a fresh, graded severity is cached: draw the banner from it.
+  //   'error'   — a fresh (within _RESULT_ERROR_TTL) error entry: draw the grey
+  //               "couldn't check" variant.
+  //   'nothing' — a fresh, definitive null (nothing gradeable — e.g. an admin/
+  //               med task, or disabled result chips): draw NOTHING, ever — a
+  //               verdict banner on a non-result task is noise, not signal.
+  //   'compute' — no entry, the entry has aged past its own TTL (result or
+  //               error), or the row has literally never been evaluated
+  //               (entry.sev === undefined): the caller must compute once.
+  function detailVerdictState(entry, now) {
+    const nowTs = typeof now === 'number' ? now : Date.now();
+    if (!entry) return 'compute';
+    if (entry.error) {
+      return entry.ts && nowTs - entry.ts <= _RESULT_ERROR_TTL ? 'error' : 'compute';
+    }
+    if (entry.sev === undefined) return 'compute';
+    if (!entry.ts || nowTs - entry.ts > _RESULT_CACHE_TTL) return 'compute';
+    return entry.sev === null ? 'nothing' : 'render';
+  }
+
+  // Compose the chip-equivalent headline, reusing selectResultChips' OWN
+  // priority order and sev fields — never re-deriving severity. Mirrors the
+  // top of selectResultChips (clinical severity first, then review/combo/
+  // noGrowth) but returns plain text for the banner rather than a chip def.
+  function buildDetailVerdictHeadline(sev) {
+    if (!sev || typeof sev !== 'object') return '';
+    if (sev.level === 'red' && sev.urgentCount > 0) {
+      return sev.urgentCount === 1 ? '1 urgent' : sev.urgentCount + ' urgent';
+    }
+    if (sev.level === 'amber' && sev.abnormalCount > 0) {
+      return sev.abnormalCount === 1 ? '1 abnormal' : sev.abnormalCount + ' abnormal';
+    }
+    if (sev.reviewCount > 0) {
+      const label = sev.reviewTop && sev.reviewTop.label ? String(sev.reviewTop.label) : '';
+      return label && label !== 'Needs review' ? label : 'Needs review';
+    }
+    if (sev.comboCount > 0 && sev.comboTop && sev.comboTop.label) return String(sev.comboTop.label);
+    if (sev.noGrowthCount > 0) {
+      const label = sev.noGrowthTop && sev.noGrowthTop.label ? String(sev.noGrowthTop.label) : '';
+      return label && label !== 'No growth' ? label : 'No growth';
+    }
+    return '';
+  }
+
+  // Least-fragile stable host: the "Task Details" card every non-document
+  // detail task is expected to carry (EXPECTED_CARDS_BY_PAGE['detail'] — the
+  // same anchor extractTaskDetails()/pageReady() already rely on for this
+  // exact page type, so it is present whenever runDetail's own extraction is).
+  const detailVerdictHost = () => findCardByTitle('Task Details');
+
+  // Remove any existing banner node (idempotent — safe to call unconditionally).
+  const removeDetailVerdictBanner = () => {
+    document.querySelectorAll('.' + DETAIL_VERDICT_CLASS).forEach((el) => el.remove());
+  };
+
+  // Build the banner element with createElement/textContent ONLY — the pieces
+  // (analyte names/values, rule labels) are lab-report/config-derived and
+  // untrusted, same discipline as buildResultDetailPopoverEl (CLAUDE.md).
+  const buildDetailVerdictEl = (taskUuid, sev, isError) => {
+    const el = document.createElement('div');
+    el.className = DETAIL_VERDICT_CLASS;
+    el.dataset.chTaskUuid = taskUuid;
+    el.setAttribute('role', 'note');
+    if (isError) {
+      el.classList.add(DETAIL_VERDICT_CLASS + '-error');
+      const line = document.createElement('div');
+      line.className = DETAIL_VERDICT_CLASS + '-line';
+      line.textContent = RESULT_ERROR_POPOVER_TEXT;
+      el.appendChild(line);
+      return el;
+    }
+    const level = sev && sev.level === 'red' ? 'red' : 'amber';
+    el.classList.add(DETAIL_VERDICT_CLASS + '-' + level);
+    const headline = buildDetailVerdictHeadline(sev);
+    if (headline) {
+      const h = document.createElement('div');
+      h.className = DETAIL_VERDICT_CLASS + '-headline';
+      h.textContent = headline;
+      el.appendChild(h);
+    }
+    const DETAIL_LINE_CAP = 3;
+    const detail = sev && Array.isArray(sev.detail) ? sev.detail : [];
+    detail.slice(0, DETAIL_LINE_CAP).forEach((entry) => {
+      const line = document.createElement('div');
+      line.className = DETAIL_VERDICT_CLASS + '-line';
+      line.textContent = formatDetailLine(entry);
+      el.appendChild(line);
+    });
+    if (detail.length > DETAIL_LINE_CAP) {
+      const more = document.createElement('div');
+      more.className = DETAIL_VERDICT_CLASS + '-more';
+      more.textContent = '+' + (detail.length - DETAIL_LINE_CAP) + ' more';
+      el.appendChild(more);
+    }
+    return el;
+  };
+
+  // PREPEND into the host card, de-duped + kept fresh by taskUuid (never mere
+  // presence — CLAUDE.md rule 4/5: a stale banner on the wrong patient is the
+  // failure mode that matters). A banner already correct for this taskUuid is
+  // left alone (idempotent across runDetail's repeated calls on SPA churn).
+  const renderDetailVerdictBanner = (taskUuid, sev, isError) => {
+    const host = detailVerdictHost();
+    if (!host) return;
+    const existing = host.querySelector('.' + DETAIL_VERDICT_CLASS);
+    if (existing) {
+      if (existing.dataset.chTaskUuid === taskUuid) return;
+      existing.remove();
+    }
+    const el = buildDetailVerdictEl(taskUuid, sev, isError);
+    host.insertBefore(el, host.firstChild);
+  };
+
+  // Entry point — called from runDetail() on every pass. A cache HIT (this
+  // task was seen in the queue, or a previous visit already computed it)
+  // renders immediately with zero extra fetches. A cache MISS computes once
+  // via the SAME path the queue uses (computeQueueRowResult), seeding a
+  // _queueResultCache entry with the derived overviewURL first — exactly the
+  // shape the queue bridge itself writes — so computeQueueRowResult's existing
+  // cache-read is unchanged. No spinner/placeholder while that fetch is in
+  // flight (plan item 2): nothing renders until there is a real verdict.
+  const runDetailVerdict = () => {
+    const API = window.SentinelApiClient;
+    if (!API) { removeDetailVerdictBanner(); return; }
+    const ctx = API.detectMedicusContext(location.href);
+    const taskUuid = ctx && ctx.taskUuid;
+    if (!taskUuid || !PREF('detailVerdictBanner', true)) {
+      removeDetailVerdictBanner();
+      _detailVerdictTaskUuid = taskUuid || null;
+      return;
+    }
+    if (taskUuid !== _detailVerdictTaskUuid) {
+      // Task changed since the last render (including "none yet") — drop any
+      // stale banner from the previous task before deciding this one's state,
+      // so there is never a frame showing the wrong patient's verdict.
+      removeDetailVerdictBanner();
+      _detailVerdictTaskUuid = taskUuid;
+    }
+    const entry = _queueResultCache.get(taskUuid);
+    const state = detailVerdictState(entry, Date.now());
+    if (state === 'render') { renderDetailVerdictBanner(taskUuid, entry.sev, false); return; }
+    if (state === 'error') { renderDetailVerdictBanner(taskUuid, null, true); return; }
+    if (state === 'nothing') { removeDetailVerdictBanner(); return; }
+    // state === 'compute'
+    if (_detailVerdictAttempted.has(taskUuid)) return;
+    _detailVerdictAttempted.add(taskUuid);
+    if (!ctx.taskTypeSlug) return; // no overview URL derivable — nothing to compute
+    if (!_queueResultCache.has(taskUuid)) {
+      _queueResultCache.set(taskUuid, {
+        overviewURL: `/tasks/data/${ctx.taskTypeSlug}/overview/${taskUuid}`,
+        priorityDisplay: '',
+        unmatched: false,
+      });
+    }
+    computeQueueRowResult(taskUuid)
+      .then((sev) => {
+        const isError = sev === QUEUE_RESULT_FETCH_ERROR;
+        const e2 = _queueResultCache.get(taskUuid);
+        if (e2) {
+          e2.sev = isError ? null : sev;
+          e2.error = isError;
+          e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
+          e2.ts = Date.now();
+        }
+        // Only paint if the GP is still on THIS task's detail page — a slow
+        // fetch must never land a verdict banner after navigating away (or
+        // onto a different patient's task in the meantime).
+        const liveCtx = API.detectMedicusContext(location.href);
+        if (pageType() !== 'detail' || !liveCtx || liveCtx.taskUuid !== taskUuid) return;
+        if (isError) { renderDetailVerdictBanner(taskUuid, null, true); return; }
+        if (sev === null) { removeDetailVerdictBanner(); return; }
+        renderDetailVerdictBanner(taskUuid, sev, false);
+      })
+      .catch((e) => log('detail-verdict: compute threw', e.message));
   };
 
   // ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ----

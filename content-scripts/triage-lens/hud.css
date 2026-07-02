@@ -25,7 +25,8 @@
 .ch-oir-toast,
 .ch-row-sev-red,
 .ch-row-sev-amber,
-.ch-result-popover {
+.ch-result-popover,
+.ch-detail-verdict {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -178,6 +179,52 @@
 }
 .ch-row-sev-amber {
   box-shadow: inset 3px 0 0 0 var(--amber);
+}
+
+/* ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----
+   PREPENDED into the "Task Details" card on a task detail page — echoes the
+   SAME cached queue verdict so a GP doesn't have to re-derive it from the raw
+   report. A genuine injected node (unlike the row tint above), so a real
+   border-left is fine here — there's no AG-Grid row width math to fight. */
+.ch-detail-verdict {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.ch-detail-verdict-red {
+  background: var(--red-dim);
+  border-left-color: var(--red);
+}
+.ch-detail-verdict-amber {
+  background: var(--amber-dim);
+  border-left-color: var(--amber);
+}
+/* Grey "couldn't check" variant — same wording family + colour language as
+   the queue's own error chip/popover (.ch-chip-error / .ch-result-popover-error),
+   so a failed check never looks like a graded clinical verdict. */
+.ch-detail-verdict-error {
+  background: var(--bg-mid);
+  border-left-color: var(--border-hi);
+  color: var(--text-4);
+}
+.ch-detail-verdict-headline {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.ch-detail-verdict-line {
+  color: var(--text-2);
+}
+.ch-detail-verdict-more {
+  color: var(--text-4);
+  font-style: italic;
+  font-size: 11px;
+  margin-top: 2px;
 }
 
 /* ---- Result / monitoring chips injected into Medicus queue rows ----
