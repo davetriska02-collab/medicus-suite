@@ -82,29 +82,72 @@ pass, each needing Keeper-style source verification before shipping:
 
 ---
 
-## Part C — Calibration content pass (3.3) — PENDING BUILD
+## Part C — Calibration content pass (3.3) — BUILT, VERIFIED, awaiting sign-off
 
-*This section is populated when item 3.3 is built. It will contain, as a
-reviewable diff, every new and changed shipped rule in `defaults.json`:*
+Built and committed as a **draft** (`ef031d3` + corrections `d9d7615`), config
+version 21→22, regen + lock refreshed. **Not released** — no manifest bump, not
+merged to main. Every threshold was independently re-checked by a second agent
+against a named UK source (the "Verdict" column). Suite 143/143.
 
-- **New analytes** (missed-alert gaps): hypernatraemia, absolute creatinine/AKI,
-  glucose, LFT transaminases, high CRP/WCC, a K⁺ 6.0–6.5 amber band.
-- **Recalibrations** (alert-fatigue): HbA1c ≥48 red → amber (diagnostic, not
-  urgent), each with its `RETIRED_*` un-stick entry so it reaches existing installs.
-- **Context-paired rules** (from 3.5): e.g. FIB-4 base red ≥3.25 for all + a
-  `<65` rule at 2.67, so the elderly aren't systematically over-called.
+### Shipped in this pass (all CONFIRMED or defensible)
 
-Every row will cite its primary source (BNF / NICE / KDIGO / specialty guidance)
-and note the defaults version bump + un-stick requirement.
+| Analyte | Rule | Amber | Red | Source | Verdict |
+|---|---|---|---|---|---|
+| Sodium (high) | `base-high-sodium` | ≥150 | **≥160** | severe-hypernatraemia convention | corrected 155→160 (155 unsourced) |
+| Creatinine absolute | `base-high-creatinine-aki` | — | ≥354 µmol/L | KDIGO AKI stage 3 (353.6) | ✅ CONFIRMED |
+| Creatinine rise | `base-creatinine-delta-aki` | ≥+26.5 in 48h | — | KDIGO AKI stage 1 | ✅ CONFIRMED |
+| Glucose high | `base-high-glucose` | ≥11.1 | ≥30 | WHO/NICE dx; JBDS HHS | ✅ CONFIRMED |
+| Glucose low | `base-low-glucose` | ≤4.0 | ≤3.0 | "4 is the floor"; ISHG Level-2 | ✅ CONFIRMED |
+| CRP high | `base-high-crp` | ≥20 | ≥100 | NICE CG191 pneumonia | ✅ CONFIRMED (exact) |
+| WCC high | `base-high-wcc` | ≥12 | — | SIRS criterion | ✅ CONFIRMED |
+| Potassium amber band | `base-high-potassium` | **≥6.0** (new) | ≥6.5 (unchanged) | UK Kidney Assoc. hyperkalaemia | ✅ CONFIRMED (exact) |
+| HbA1c | `base-hba1c-diabetes` | **48** (was red) | — | NICE NG28 / WHO dx = 48 | value ✅; demotion = policy call ⚠ |
+| ALT high | `base-high-alt` | ≥120 | ≥320 U/L | 3×ULN statin-stop; ~8×ULN | ⚠ amber grounded, red soft, lab-ULN varies |
+| AST high | `base-high-ast` | ≥120 | ≥320 U/L | paired with ALT | ⚠ same caveat |
+| Neutrophils high | `base-high-neutrophils` | ≥7.5 | — | UK lab reference ULN | ⚠ range-boundary, not an action threshold |
+
+### Reverted after verification (NOT shipped)
+
+- **FIB-4 age-adjustment** — my original instruction was clinically wrong. The
+  shipped `red ≥3.25 for ≥65` used the **hepatitis-C** FIB-4 cutoff, not the
+  NAFLD/MASLD one, and would have **missed referral-grade fibrosis in over-65s**
+  (2.67–3.24 → only amber). The correct age-adjustment (McPherson 2017 / AASLD
+  2023 / EASL-EASD-EASO 2024) *raises the rule-out cutoff* to 2.0 for ≥65 while
+  keeping referral at 2.67 for all ages — but that needs the engine to
+  **suppress** low-range elderly alerts, which the escalate-only model can't do.
+  So FIB-4 is reverted to status quo (red ≥2.67 all ages) and the correct
+  age-split is proposed below as follow-up, not shipped.
+
+---
+
+## Decisions that need you (short list)
+
+1. **HbA1c red → amber** — value is correct (48 = diagnostic); demoting from red
+   is an alert-fatigue tradeoff (new-diabetes isn't acutely dangerous like AKI).
+   Your call: ship the demotion, or keep it red?
+2. **ALT/AST 120 / 320 U/L** — amber (3×ULN) is well-grounded; red (8×ULN) is
+   plausible but not guideline-cited, and both are inherently lab-ULN-dependent
+   (labs vary 30–55 U/L). Ship as-is with the caveat, adjust the red, or hold LFTs?
+3. **Neutrophils ≥7.5** — this is a lab-range boundary, not a validated action
+   threshold like WCC>12. Keep as a low-confidence "outside range" flag, or drop it?
+4. **Sodium red ≥160** — I moved it from 155 (unsourced) to 160 (better-sourced
+   severe convention). Confirm 160, or prefer a different cutoff?
+5. **FIB-4 follow-up** — do you want the correct age-split pursued? It needs an
+   engine change (a way for a context rule to *raise a rule's own lower cutoff*
+   for a band, i.e. controlled suppression) — a small Phase-5-style addition.
+6. **Deferred deltas** — Hb-fall and K⁺-rise delta rules were not shippable (no
+   defensible UK-guideline magnitude found). Pursue, or leave the point-in-time
+   potassium/Hb thresholds to cover it?
 
 ---
 
 ## Sign-off
 
-- [ ] Part A.1 lexicon approved / amended
-- [ ] Part A.2 marker lists approved / amended
-- [ ] Part B delta candidates approved for build (which, at what thresholds)
-- [ ] Part C calibration diffs reviewed and approved
-- [ ] Release v3.150.0 authorised
+- [ ] Part A.1 positive-qualitative lexicon approved / amended
+- [ ] Part A.2 negation & past-marker lists approved / amended
+- [ ] Part C shipped rules approved (with any amendments to decisions 1–4 above)
+- [ ] FIB-4 follow-up: pursue / drop (decision 5)
+- [ ] Deferred deltas: pursue / drop (decision 6)
+- [ ] **Release v3.150.0 authorised**
 
-*Nothing in `defaults.json` changes, and no release commits, until the boxes above are ticked.*
+*No release commit (manifest bump + CHANGELOG + merge) happens until the release box is ticked.*
