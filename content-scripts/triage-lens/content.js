@@ -3954,6 +3954,13 @@
       flag: flagFor(f),
       date: f.date || null,
       ruleLabel: composeRuleThresholdLabel(f.ruleLabel, f.ruleComparator, f.ruleThreshold, f.effSev),
+      // ADDITIVE (item 2.7, TRIAGE-LENS-2026-07-02.md) — the fired rule's id (only set
+      // when a rule, not the lab flag, drove this result's severity — same gate as
+      // ruleLabel, see result-severity.js's ruleDriven). Looked up against
+      // CONFIG.resultRules at POPOVER-RENDER time (buildResultDetailPopoverEl), not
+      // cached here, so an edited rule's actions apply immediately with no cache
+      // invalidation — see findResultRuleActionsById below.
+      ruleId: f.ruleId || null,
       prior: f.prior || null,
     });
 
@@ -4296,6 +4303,67 @@
     'This is usually transient (network hiccup, Medicus API blip). ' +
     'It retries automatically; the chip updates when a retry succeeds.';
 
+  // findResultRuleActionsById(ruleId) → action[] | null (item 2.7, TRIAGE-LENS-2026-07-02.md)
+  // Looks up a result rule's `actions` array by id straight from the LIVE CONFIG at
+  // POPOVER-RENDER time (not cached alongside the detail entry, which only carries the
+  // small ruleId string) — so editing a rule's actions in Settings applies to the next
+  // popover open with no cache invalidation needed. Returns null (never []) when the
+  // rule is missing, disabled-out-of-config, or carries no actions, so callers can use
+  // a simple truthiness check.
+  const findResultRuleActionsById = (ruleId) => {
+    if (!ruleId || !CONFIG || !Array.isArray(CONFIG.resultRules)) return null;
+    const rule = CONFIG.resultRules.find((r) => r && r.id === ruleId);
+    if (!rule || !Array.isArray(rule.actions) || !rule.actions.length) return null;
+    return rule.actions;
+  };
+
+  // buildResultRuleActionsRow(actions) — item 2.7. One button per guidance action,
+  // built with createElement/textContent only (no innerHTML — action label/text are
+  // clinician-authored config, but this popover's hard rule per item 2.2 is
+  // createElement/textContent throughout, so this stays consistent rather than
+  // carving out an exception). Reuses executeAction for link/snippet — the SAME
+  // scheme-guarded (isSafeActionUrl) function the alert-rule action menu uses, so a
+  // javascript:/data: link action is blocked here exactly as it is there. `note`
+  // actions are handled locally (a toggled inline text block) rather than via
+  // executeAction's note branch, which rewrites a whole ch-action-menu singleton — a
+  // different popover/lifecycle to this one; toggling in place keeps the rest of this
+  // popover's detail lines visible instead of replacing them.
+  const buildResultRuleActionsRow = (actions) => {
+    const row = document.createElement('div');
+    row.className = 'ch-result-popover-actions';
+    actions.forEach((a) => {
+      if (!a || typeof a !== 'object') return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ch-result-popover-action ch-result-popover-action-' + (a.type || 'note');
+      btn.textContent = a.label || '(unlabelled)';
+      if (a.type === 'note' && a.text) {
+        const note = document.createElement('div');
+        // Deliberately NOT "ch-result-popover-action-note" — the button itself already
+        // carries that exact class as its type modifier (ch-result-popover-action-<type>),
+        // so reusing it here would make the two indistinguishable by selector.
+        note.className = 'ch-result-popover-action-notebody';
+        note.textContent = a.text;
+        note.style.display = 'none';
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          note.style.display = note.style.display === 'none' ? 'block' : 'none';
+        });
+        row.appendChild(btn);
+        row.appendChild(note);
+      } else {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          executeAction(a, btn, null);
+        });
+        row.appendChild(btn);
+      }
+    });
+    return row;
+  };
+
   // Build the popover body with createElement/textContent only — no innerHTML of any
   // lab-derived string. `detail` is the array built by buildResultDetail; each line's
   // TEXT comes from formatDetailLine, assigned via textContent only. isError builds
@@ -4324,6 +4392,11 @@
       line.className = 'ch-result-popover-line' + (entry.flag ? ' ch-result-popover-line-' + entry.flag : '');
       line.textContent = formatDetailLine(entry);
       el.appendChild(line);
+      // Item 2.7 — guidance actions carried by the fired result rule, resolved by
+      // ruleId against the live CONFIG (see findResultRuleActionsById above). No
+      // ruleId, or a rule with no actions configured, renders nothing extra.
+      const actions = findResultRuleActionsById(entry.ruleId);
+      if (actions) el.appendChild(buildResultRuleActionsRow(actions));
     });
     return el;
   };

@@ -95,6 +95,17 @@
 // condition may be satisfied by a DIFFERENT result row). Combo is ESCALATE-ONLY: a fired amber
 // combo raises the report level to ≥ amber; a fired red combo to red. It never lowers severity
 // and never calms/suppresses (other than honouring its own suppressIfProblem).
+//
+// actions (OPTIONAL, all three kinds — item 2.7, TRIAGE-LENS-2026-07-02.md):
+//   actions    : <action>[]     — OPTIONAL. Click-to-fire guidance shortcuts shown in the
+//                                queue result-chip detail popover when this rule fires
+//                                (e.g. a local hyperkalaemia pathway link on a K+ rule).
+//                                Same schema as an alert rule's actions (options.js
+//                                validateTriageRule / the alert-rule action editor).
+//   Each <action> is one of:
+//     { type:'link',    label:string, url:string  } — url must be absolute http(s).
+//     { type:'snippet', label:string, text:string  } — text copied to clipboard on click.
+//     { type:'note',    label:string, text:string  } — text shown inline on click.
 
 (function (global) {
   'use strict';
@@ -146,6 +157,59 @@
         errs.push(where + 'analyte.specimen, if present, must be an array of strings.');
       }
     }
+  }
+
+  // isSafeActionUrl(url) → boolean
+  // Only absolute http(s) URLs are permitted for a link action, so an authored/imported
+  // result rule can't smuggle a javascript:/data: URL that runs on click. Mirrors the
+  // isSafeActionUrl() scheme allowlist in content.js (executeAction, the click-time
+  // guard) and options.js (validateTriageRule, the alert-rule editor/import guard) —
+  // result-rules.js is a standalone module (Node + browser-global, no shared import
+  // path with those two content-script files), so this ~10-line check is duplicated
+  // here rather than imported. Keep the three in lock-step if the semantics ever change.
+  function isSafeActionUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
+
+  // actions — OPTIONAL on every rule kind (threshold/text/combo). Same schema as an
+  // alert rule's actions (options.js validateTriageRule): an array of
+  // { type:'link'|'snippet'|'note', label:string, url?:string, text?:string }.
+  // Pushes errors onto `errs`, each naming its index so a malformed entry is locatable.
+  function validateActions(rule, errs) {
+    if (rule.actions === undefined) return;
+    if (!Array.isArray(rule.actions)) {
+      errs.push('actions, if present, must be an array.');
+      return;
+    }
+    rule.actions.forEach((a, i) => {
+      if (!a || typeof a !== 'object' || Array.isArray(a)) {
+        errs.push('actions[' + i + ']: must be an object.');
+        return;
+      }
+      if (!ALLOWED_ACTION_TYPES.includes(a.type)) {
+        errs.push('actions[' + i + '].type must be one of: ' + ALLOWED_ACTION_TYPES.join(', ') + '.');
+      }
+      if (!a.label || typeof a.label !== 'string' || !a.label.trim()) {
+        errs.push('actions[' + i + ']: label is required.');
+      }
+      if (a.type === 'link') {
+        if (!a.url || typeof a.url !== 'string') {
+          errs.push('actions[' + i + ']: url is required for link actions.');
+        } else if (!isSafeActionUrl(a.url)) {
+          errs.push('actions[' + i + ']: url must be an absolute http:// or https:// URL.');
+        }
+      }
+      if ((a.type === 'snippet' || a.type === 'note') && (a.text == null || typeof a.text !== 'string')) {
+        errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
+      }
+    });
   }
 
   // Validate the combo-specific fields: level (optional amber|red) and the conditions
@@ -245,6 +309,7 @@
     if (kind === 'combo') {
       validateComboFields(rule, errs);
       validateSuppressIfProblem(rule, errs);
+      validateActions(rule, errs);
       return errs;
     }
 
@@ -288,6 +353,9 @@
     // already has a matching problem on record (e.g. don't flag a possible new diabetes
     // for a known diabetic). Object: { match: string[] (≥1 non-empty), exclude?: string[] }.
     validateSuppressIfProblem(rule, errs);
+
+    // actions — OPTIONAL (all kinds, item 2.7). See validateActions above.
+    validateActions(rule, errs);
 
     if (kind === 'text') {
       // A text rule classifies by phrase lists: normalText (calm-if-present) and/or
@@ -568,6 +636,49 @@ A combo rule fires ONLY when MULTIPLE conditions are ALL satisfied (logical AND)
 --- END COMBO EXAMPLE ---
 
 This example fires amber ONLY when a urine report shows BOTH a pus-cell count above 40 AND a culture that reads "no growth" (sterile pyuria — a pattern a clinician should review). Either finding alone does not fire it. It cannot lower a lab-urgent flag on the same report.
+
+=== OPTIONAL: actions (guidance shortcuts) ===
+
+Any of the three rule kinds above ("threshold", "text", "combo") may carry an OPTIONAL top-level "actions" array — click-to-fire guidance shortcuts shown in the queue result-chip popover when the rule fires (e.g. a local hyperkalaemia pathway link on a high-potassium rule). Same schema as a Triage Lens alert rule's actions.
+
+  actions     (array, optional) — each entry:
+    type      (string, required) — "link" | "snippet" | "note"
+    label     (string, required) — Button label, e.g. "Local hyperkalaemia pathway".
+    url       (string)           — Required for type "link". Must be an absolute
+                                   http:// or https:// URL — javascript:/data: URLs
+                                   are rejected.
+    text      (string)           — Required for type "snippet" and "note".
+                       snippet: text copied to clipboard on click.
+                       note: informational text shown inline in the popover on click.
+
+--- ACTIONS EXAMPLE (added to the "High potassium" threshold rule above) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "threshold",
+  "label": "High potassium",
+  "analyte": {
+    "match": ["potassium"]
+  },
+  "comparator": "above",
+  "amber": 5.5,
+  "red": 6.0,
+  "unit": "mmol/L",
+  "actions": [
+    {
+      "type": "link",
+      "label": "Local hyperkalaemia pathway",
+      "url": "https://www.example-lmc.nhs.uk/pathways/hyperkalaemia"
+    },
+    {
+      "type": "note",
+      "label": "Safety-net reminder",
+      "text": "If red (>=6.0 mmol/L), repeat urgently and consider same-day ECG per local pathway."
+    }
+  ]
+}
+--- END ACTIONS EXAMPLE ---
 
 === CLOSING REMINDER ===
 

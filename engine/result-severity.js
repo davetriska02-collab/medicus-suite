@@ -264,9 +264,15 @@
   //   threshold  — ADDITIVE (item 2.2): the specific numeric threshold (red or amber,
   //                whichever produced `sev`) that was crossed, or null. Same
   //                display-only status as `comparator`.
+  //   ruleId     — ADDITIVE (item 2.7, TRIAGE-LENS-2026-07-02.md): the winning rule's
+  //                `id`, or null. Display-only, same status as comparator/threshold —
+  //                lets the queue detail popover look up that rule's `actions` (e.g. a
+  //                local hyperkalaemia pathway link) from CONFIG.resultRules at RENDER
+  //                time, not grading time, so an edited rule's actions apply
+  //                immediately with no cache invalidation needed.
   // `problems` (optional) is the patient's problem list for suppressIfProblem rules.
   function computeRuleSev(result, rules, problems) {
-    const NONE = { sev: 'none', label: null, comparator: null, threshold: null };
+    const NONE = { sev: 'none', label: null, comparator: null, threshold: null, ruleId: null };
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     if (!result || typeof result !== 'object') return NONE;
 
@@ -277,6 +283,7 @@
     let bestLabel = null;
     let bestComparator = null;
     let bestThreshold = null;
+    let bestRuleId = null;
 
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
@@ -320,11 +327,12 @@
         bestLabel = (typeof rule.label === 'string' && rule.label) || null;
         bestComparator = rule.comparator;
         bestThreshold = ruleSev === 'urgent' ? red : amber;
+        bestRuleId = (typeof rule.id === 'string' && rule.id) || null;
       }
       if (best === 'urgent') break; // can't go higher
     }
 
-    return { sev: best, label: bestLabel, comparator: bestComparator, threshold: bestThreshold };
+    return { sev: best, label: bestLabel, comparator: bestComparator, threshold: bestThreshold, ruleId: bestRuleId };
   }
 
   // ── Extract the most recent PRIOR numeric value for trend display (item 2.6,
@@ -473,13 +481,15 @@
    * per-result attribution entries, one per result whose effective severity is 'urgent'
    * or 'abnormal' (in report order), for the queue detail popover. Each entry:
    *   { index, name, value, unit, low, high, date, effSev, isAbove, isBelow, urgent,
-   *     ruleLabel, ruleComparator, ruleThreshold, prior }
+   *     ruleLabel, ruleComparator, ruleThreshold, ruleId, prior }
    * `index` is the result's position in report.results (for cross-referencing back to
    * the full normalised result, e.g. its .history). ruleLabel/ruleComparator/
-   * ruleThreshold are only set when a rule (not the lab flag) drove this result's
-   * severity — same ruleDriven gate as top.ruleLabel. `prior` is extractPrior(result).
-   * This field is purely descriptive: it does not feed level/urgentCount/abnormalCount/
-   * top, all of which are computed exactly as before.
+   * ruleThreshold/ruleId are only set when a rule (not the lab flag) drove this result's
+   * severity — same ruleDriven gate as top.ruleLabel. ruleId is ADDITIVE (item 2.7): the
+   * winning rule's `id`, purely for the popover to look up that rule's `actions` from
+   * CONFIG.resultRules by id at render time — it never feeds grading. `prior` is
+   * extractPrior(result). This field is purely descriptive: it does not feed
+   * level/urgentCount/abnormalCount/top, all of which are computed exactly as before.
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop,
    *             flagged }}
@@ -599,6 +609,7 @@
             ruleLabel,
             ruleComparator: ruleDriven ? ruleResult.comparator : null,
             ruleThreshold: ruleDriven ? ruleResult.threshold : null,
+            ruleId: ruleDriven ? ruleResult.ruleId : null,
             prior: extractPrior(r),
           });
         }

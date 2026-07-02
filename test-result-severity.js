@@ -1896,6 +1896,61 @@ console.log('\n--- item 2.2: computeRuleSev additive comparator/threshold surfac
   assert(out2.flagged[0].ruleThreshold === null, 'not rule-driven → ruleThreshold null');
 }
 
+console.log('\n--- item 2.7: computeRuleSev/flagged additive `ruleId` (guidance-action lookup key) ---');
+{
+  const potassiumBorderline = {
+    name: 'Potassium',
+    value: 6.2,
+    rawValue: '6.2',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: false,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const ruleRed = {
+    id: 'k-critical',
+    enabled: true,
+    kind: 'threshold',
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+    actions: [{ type: 'note', label: 'Reminder', text: 'Repeat urgently.' }],
+  };
+
+  // computeRuleSev itself (via evaluateReportSeverity's flagged[].ruleId) carries the
+  // winning rule's id when it drove the escalation — this is the popover's lookup key
+  // into CONFIG.resultRules to find `actions` (item 2.7), never consumed by grading.
+  const out = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleRed] });
+  assert(out.flagged.length === 1, 'one flagged entry');
+  assert(out.flagged[0].ruleId === 'k-critical', "flagged[0].ruleId carries the rule-driven rule's id");
+  // Existing counters/level are untouched by the additive field.
+  assert(out.level === 'red' && out.urgentCount === 1, 'level/urgentCount unaffected by ruleId addition');
+
+  // Not rule-driven (matches but does not exceed lab severity) → ruleId stays null,
+  // same gate as ruleLabel/ruleComparator/ruleThreshold.
+  const ruleSameLevel = { ...ruleRed, red: 8.0, amber: 5.0 };
+  const out2 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleSameLevel] });
+  assert(out2.flagged[0].ruleId === null, 'not rule-driven → ruleId null (same gate as ruleLabel)');
+
+  // Rule with no explicit id string → ruleId null (never a non-string/undefined leak).
+  const ruleNoId = { ...ruleRed, id: undefined };
+  const out3 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleNoId] });
+  assert(out3.flagged[0].ruleId === null, 'rule with no id → ruleId null, not undefined');
+
+  // No rules at all → flagged is still populated (lab-driven), ruleId simply null.
+  const labOnly = { ...potassiumBorderline, urgent: true }; // lab-urgent, no rules
+  const out4 = evaluateReportSeverity(makeReport([labOnly]), { resultRules: [] });
+  assert(out4.flagged[0].ruleId === null, 'lab-driven-only flagged entry → ruleId null (no rule fired)');
+}
+
 console.log('\n--- item 2.6: extractPrior() ---');
 {
   assert(extractPrior(null) === null, 'null result → null');

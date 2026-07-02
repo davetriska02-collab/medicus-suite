@@ -547,6 +547,12 @@
               </select>
             </label>
 
+            <fieldset class="tl-field">
+              <legend>Actions <small>(click-to-fire from the result-chip popover when this rule fires)</small></legend>
+              <div id="rrActionList"></div>
+              <button class="tl-btn tl-btn-secondary" id="btnRrAddAction" type="button">+ Add action</button>
+            </fieldset>
+
             <div class="rr-fields-single">
               <label class="tl-field">
                 <span>Analyte match <small>(one substring per line — case-insensitive)</small></span>
@@ -807,10 +813,9 @@
                 font-size: 11px;
                 color: var(--text-4);
               "
-              >Off = the row is flagged "resulted (this report)" but never ticked automatically — manual ticking and
-              the bulk tick-off button above are unaffected. On (default): the confident/predating match is ticked,
-              audited, and a Review toast appears (ticking writes to Medicus immediately and can't be undone from
-              there).</small
+              >Off = the row is flagged "resulted (this report)" but never ticked automatically — manual ticking and the
+              bulk tick-off button above are unaffected. On (default): the confident/predating match is ticked, audited,
+              and a Review toast appears (ticking writes to Medicus immediately and can't be undone from there).</small
             ></span
           >
         </label>
@@ -916,31 +921,31 @@
         </div>
 
         <!-- OIR merge-conflict dialog -->
-        <div id="oirMergeOverlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="oirMergeTitle">
+        <div id="oirMergeOverlay" style="display: none" role="dialog" aria-modal="true" aria-labelledby="oirMergeTitle">
           <div id="oirMergeDialog">
-            <h3 id="oirMergeTitle" style="margin:0 0 6px">Merge overlapping entries?</h3>
-            <p id="oirMergeDesc" style="margin:0 0 14px; font-size:12px; color:var(--text-2)"></p>
+            <h3 id="oirMergeTitle" style="margin: 0 0 6px">Merge overlapping entries?</h3>
+            <p id="oirMergeDesc" style="margin: 0 0 14px; font-size: 12px; color: var(--text-2)"></p>
             <div class="tl-field">
               <span>Merged label</span>
               <input type="text" id="oirMergeLabel" maxlength="80" />
             </div>
-            <div class="tl-field" style="margin-top:8px">
+            <div class="tl-field" style="margin-top: 8px">
               <span>Request terms <small>(combined — read-only)</small></span>
               <textarea id="oirMergeReq" rows="3" readonly></textarea>
             </div>
-            <div class="tl-field" style="margin-top:8px">
+            <div class="tl-field" style="margin-top: 8px">
               <span>Report terms <small>(combined — read-only)</small></span>
               <textarea id="oirMergeRep" rows="3" readonly></textarea>
             </div>
-            <div class="tl-field" style="margin-top:8px">
+            <div class="tl-field" style="margin-top: 8px">
               <span>Analyte terms <small>(combined — read-only)</small></span>
               <textarea id="oirMergeAnalytes" rows="3" readonly></textarea>
             </div>
-            <label class="tl-field tl-field-inline" style="margin-top:8px">
+            <label class="tl-field tl-field-inline" style="margin-top: 8px">
               <input type="checkbox" id="oirMergeSingle" disabled />
               <span>Single-analyte test <small>(only set when all merged entries agree)</small></span>
             </label>
-            <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap">
+            <div style="display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap">
               <button class="tl-btn tl-btn-primary" id="btnOirMergeConfirm">Merge</button>
               <button class="tl-btn" id="btnOirMergeSeparate">Save separately</button>
               <button class="tl-btn tl-btn-ghost" id="btnOirMergeCancel">Cancel</button>

@@ -445,6 +445,11 @@ const parts = [
   // NB: ends at `';` (quote + semicolon) — the text itself contains a bare `;`,
   // so a lazy `[\s\S]*?;` would truncate mid-string and break compilation.
   extract(/const RESULT_ERROR_POPOVER_TEXT =[\s\S]*?';/, 'RESULT_ERROR_POPOVER_TEXT'),
+  // Item 2.7 — guidance actions on result rules: buildResultDetailPopoverEl's per-entry
+  // actions row, resolved by ruleId against CONFIG.resultRules at render time. Depends
+  // on executeAction (extracted below, items 2.1/2.3/2.5 block) for link/snippet clicks.
+  extract(/const findResultRuleActionsById = \(ruleId\) => \{[\s\S]*?\n {2}\};/, 'findResultRuleActionsById'),
+  extract(/const buildResultRuleActionsRow = \(actions\) => \{[\s\S]*?\n {2}\};/, 'buildResultRuleActionsRow'),
   extract(
     /const buildResultDetailPopoverEl = \(detail, isError\) => \{[\s\S]*?\n {2}\};/,
     'buildResultDetailPopoverEl'
@@ -547,6 +552,10 @@ const EXPOSE = [
   'buildResultDetailPopoverEl',
   'toggleResultDetailPopover',
   'RESULT_ERROR_POPOVER_TEXT',
+  // Item 2.7 — guidance actions on result rules.
+  'findResultRuleActionsById',
+  'buildResultRuleActionsRow',
+  'executeAction',
   'reinjectCachedResultChips',
   'injectQueueMonitoringChip',
   'reinjectCachedMonitoringChips',
@@ -596,6 +605,12 @@ if (!parts.some((p) => !p)) {
   // between scenarios by reference.
   sandbox = {
     console,
+    // Node's vm module gives a fresh context none of the web-platform globals —
+    // isSafeActionUrl (used by executeAction, exercised directly in Layer 16, item
+    // 2.7) calls `new URL(url)`; without this it would ReferenceError inside its own
+    // try/catch and silently always return false. Same fix as test-triage-import-
+    // validation.js's `sandbox = { URL }`.
+    URL,
     CONFIG: {},
     log: () => {},
     showActionMenu: () => {},
@@ -695,6 +710,8 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.onQueueStatusJumpClick === 'function', 'onQueueStatusJumpClick compiled and callable');
     check(typeof sandbox.onQueueStatusFocusClick === 'function', 'onQueueStatusFocusClick compiled and callable');
     check(typeof sandbox.rankRuleMatches === 'function', 'rankRuleMatches compiled and callable');
+    check(typeof sandbox.findResultRuleActionsById === 'function', 'findResultRuleActionsById compiled and callable');
+    check(typeof sandbox.buildResultRuleActionsRow === 'function', 'buildResultRuleActionsRow compiled and callable');
     check(typeof sandbox.showRuleMatchMenu === 'function', 'showRuleMatchMenu compiled and callable');
     check(typeof sandbox.detailVerdictState === 'function', 'detailVerdictState compiled and callable');
     check(typeof sandbox.buildDetailVerdictHeadline === 'function', 'buildDetailVerdictHeadline compiled and callable');
@@ -2490,6 +2507,221 @@ if (sandbox) {
         'the error line is ALSO assigned via textContent'
       );
     }
+  }
+
+  // ============================================================
+  // Layer 17 — result-rule guidance actions in the detail popover (item 2.7,
+  // TRIAGE-LENS-2026-07-02.md): a detail entry's ruleId resolved against
+  // CONFIG.resultRules at RENDER time, action buttons wired to the real
+  // (scheme-guarded) executeAction, note actions toggled inline, and rules
+  // with no actions (or no ruleId, or an id CONFIG doesn't recognise) render no row.
+  // ============================================================
+  console.log('\nLayer 17: result-rule guidance actions in the detail popover (item 2.7)');
+
+  {
+    freshCaches();
+    sandbox.closeResultDetailPopover();
+    const rowId = '88888888-8888-4888-8888-888888888888';
+    const { master, detail } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    const detailWithActions = [
+      {
+        name: 'Potassium',
+        value: 6.2,
+        unit: 'mmol/L',
+        low: 3.5,
+        high: 5.3,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: 'Critical high potassium (red ≥6.0)',
+        ruleId: 'k-critical', // resolves to CONFIG.resultRules below
+        prior: null,
+      },
+      {
+        // eGFR: not rule-driven (ruleId null) — must never render an actions row.
+        name: 'eGFR',
+        value: 38,
+        unit: 'mL/min',
+        low: 90,
+        high: null,
+        flag: 'below',
+        date: '2026-06-12',
+        ruleLabel: null,
+        ruleId: null,
+        prior: null,
+      },
+      {
+        // ruleId set, but that rule id isn't in CONFIG.resultRules (e.g. deleted since
+        // grading ran) — fail-quiet, no row, no throw.
+        name: 'Sodium',
+        value: 128,
+        unit: 'mmol/L',
+        low: 133,
+        high: 146,
+        flag: 'below',
+        date: '2026-06-12',
+        ruleLabel: 'Low sodium',
+        ruleId: 'no-such-rule',
+        prior: null,
+      },
+      {
+        // ruleId resolves, but that rule carries NO actions array — no row either.
+        name: 'CRP',
+        value: 180,
+        unit: 'mg/L',
+        low: null,
+        high: 5,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: 'High CRP',
+        ruleId: 'crp-no-actions',
+        prior: null,
+      },
+    ];
+
+    sandbox.CONFIG = {
+      resultRules: [
+        {
+          id: 'k-critical',
+          enabled: true,
+          kind: 'threshold',
+          label: 'Critical high potassium',
+          analyte: { match: ['potassium'] },
+          comparator: 'above',
+          amber: 5.5,
+          red: 6.0,
+          actions: [
+            { type: 'link', label: 'Hyperkalaemia pathway', url: 'https://example.nhs.uk/hyperk' },
+            { type: 'link', label: 'Malicious', url: 'javascript:alert(1)' },
+            { type: 'snippet', label: 'Copy safety-net text', text: 'Repeat urgently.' },
+            { type: 'note', label: 'Reminder', text: 'Consider same-day ECG if red.' },
+          ],
+        },
+        {
+          id: 'crp-no-actions',
+          enabled: true,
+          kind: 'threshold',
+          label: 'High CRP',
+          analyte: { match: ['crp'] },
+          comparator: 'above',
+          amber: 50,
+          red: null,
+          // no actions array at all
+        },
+      ],
+    };
+
+    sandbox._durableRowMap.set(0, rowId);
+    sandbox._queueResultCache.set(rowId, { sev: redSev, ts: Date.now(), detail: detailWithActions });
+
+    const anchor = new El('span', { class: 'ch-chip ch-chip-red' });
+    gridRoot.appendChild(anchor);
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    let state = sandbox.__popoverState();
+    check(!!state.el, 'popover open with a rule-actions-bearing detail array');
+
+    const actionRows = state.el.querySelectorAll('.ch-result-popover-actions');
+    check(actionRows.length === 1, `exactly one actions row rendered (got ${actionRows.length})`);
+
+    const buttons = actionRows[0].querySelectorAll('.ch-result-popover-action');
+    check(buttons.length === 4, `one button per action on the fired rule (got ${buttons.length})`);
+    check(
+      buttons[0].textContent === 'Hyperkalaemia pathway',
+      'action button label rendered via textContent (got "' + buttons[0].textContent + '")'
+    );
+    check(
+      buttons[0]._innerHTML === null,
+      'action button built with textContent, never innerHTML (fake-DOM innerHTML slot untouched)'
+    );
+    check(
+      buttons[0].classes.includes('ch-result-popover-action-link'),
+      'link action button carries its type modifier class'
+    );
+    check(
+      buttons[2].classes.includes('ch-result-popover-action-snippet'),
+      'snippet action button carries its type modifier class'
+    );
+    check(
+      buttons[3].classes.includes('ch-result-popover-action-note'),
+      'note action button carries its type modifier class'
+    );
+
+    // ---- eGFR / Sodium / CRP entries never grow an actions row ----
+    const allLines = state.el.querySelectorAll('.ch-result-popover-line');
+    check(allLines.length === 4, `four detail lines rendered (got ${allLines.length})`);
+    check(
+      actionRows.length === 1,
+      'rules with no fired ruleId, an unresolvable ruleId, or no actions render NO extra row (only the one true positive)'
+    );
+
+    // ---- link action: safe http(s) URL opens via window.open ----
+    {
+      const opened = [];
+      sandbox.window.open = (...args) => opened.push(args);
+      buttons[0].click();
+      check(
+        opened.length === 1 && opened[0][0] === 'https://example.nhs.uk/hyperk',
+        'clicking a safe link action button calls window.open with its URL (via the real executeAction)'
+      );
+      delete sandbox.window.open;
+    }
+
+    // ---- link action: javascript: URL is blocked by executeAction's isSafeActionUrl guard ----
+    {
+      const opened = [];
+      sandbox.window.open = (...args) => opened.push(args);
+      buttons[1].click();
+      check(
+        opened.length === 0,
+        'clicking a javascript: link action button never calls window.open (executeAction scheme guard holds here too)'
+      );
+      delete sandbox.window.open;
+    }
+
+    // ---- note action: toggles an inline text block via textContent, no navigation away ----
+    const noteBtn = buttons[3];
+    const noteBlocksBefore = actionRows[0].querySelectorAll('.ch-result-popover-action-notebody');
+    check(noteBlocksBefore.length === 1, 'note text block exists (hidden) before click');
+    check(noteBlocksBefore[0].style.display === 'none', 'note text block starts hidden');
+    noteBtn.click();
+    check(noteBlocksBefore[0].style.display === 'block', 'clicking the note button reveals its text inline');
+    check(noteBlocksBefore[0].textContent === 'Consider same-day ECG if red.', 'note text rendered via textContent');
+    check(
+      !!state.el && sandbox.document.body.children.includes(state.el),
+      'note click does NOT replace/close the whole popover — the other detail lines are still there'
+    );
+    noteBtn.click();
+    check(noteBlocksBefore[0].style.display === 'none', 'clicking the note button again hides it (toggle)');
+
+    sandbox.closeResultDetailPopover();
+
+    // ---- CONFIG.resultRules edited between fetch and popover open: actions reflect
+    //      the LIVE config, not anything cached at fetch time (the plan's explicit
+    //      "lookup-at-render, not cache-invalidation" design). ----
+    sandbox.CONFIG.resultRules[0].actions = [{ type: 'note', label: 'Updated guidance', text: 'New text.' }];
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    const freshButtons = state.el.querySelectorAll('.ch-result-popover-action');
+    check(
+      freshButtons.length === 1 && freshButtons[0].textContent === 'Updated guidance',
+      'editing CONFIG.resultRules[].actions changes what the NEXT popover open renders — no cache to invalidate'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- empty CONFIG (no resultRules at all) never throws, renders no actions row ----
+    sandbox.CONFIG = {};
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    check(
+      state.el.querySelectorAll('.ch-result-popover-actions').length === 0,
+      'CONFIG with no resultRules array → no actions row, no throw'
+    );
+    sandbox.closeResultDetailPopover();
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

@@ -835,6 +835,154 @@ console.log('\n--- analyte.specimen validation ---');
   assert(prompt.toLowerCase().includes('specimen'), 'resultRuleSchemaPrompt documents the specimen field');
 }
 
+// ── actions (optional, item 2.7 TRIAGE-LENS-2026-07-02.md) validation ────────
+console.log('\n--- actions validation (item 2.7 — guidance actions on result rules) ---');
+{
+  // Omitted is valid (optional) — threshold, text, and combo kinds.
+  assert(validateResultRule(validRule({})).length === 0, 'actions: omitted is valid on threshold rule');
+  assert(
+    validateResultRule({
+      kind: 'text',
+      label: 'Needs review',
+      analyte: { match: ['MSU'] },
+      normalText: ['no growth'],
+    }).length === 0,
+    'actions: omitted is valid on text rule'
+  );
+  assert(validateResultRule(validCombo({})).length === 0, 'actions: omitted is valid on combo rule');
+
+  // A good, complete set of link/snippet/note actions passes on every kind.
+  const goodActions = [
+    { type: 'link', label: 'Local hyperkalaemia pathway', url: 'https://www.example-lmc.nhs.uk/hyperk' },
+    { type: 'snippet', label: 'Safety-net text', text: 'Repeat urgently if red.' },
+    { type: 'note', label: 'Reminder', text: 'Consider same-day ECG if red.' },
+  ];
+  assert(
+    validateResultRule(validRule({ actions: goodActions })).length === 0,
+    'actions: a good link+snippet+note set is valid on a threshold rule'
+  );
+  assert(
+    validateResultRule(
+      Object.assign(
+        {
+          kind: 'text',
+          label: 'Needs review',
+          analyte: { match: ['MSU'] },
+          normalText: ['no growth'],
+        },
+        { actions: goodActions }
+      )
+    ).length === 0,
+    'actions: a good action set is valid on a text rule'
+  );
+  assert(
+    validateResultRule(validCombo({ actions: goodActions })).length === 0,
+    'actions: a good action set is valid on a combo rule'
+  );
+
+  // actions must be an array
+  assert(
+    validateResultRule(validRule({ actions: 'not-an-array' })).length > 0,
+    'actions: a non-array value is rejected'
+  );
+
+  // Each entry naming its index — malformed type
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'popup', label: 'Bad', text: 'x' }] }));
+    assert(errs.length > 0, 'actions: unknown type is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: error names the malformed index (actions[0])');
+    assert(hasError(errs, 'type'), 'actions: error mentions "type"');
+  }
+
+  // Missing label
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'note', label: '', text: 'x' }] }));
+    assert(errs.length > 0, 'actions: missing label is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: missing-label error names the index');
+    assert(hasError(errs, 'label'), 'actions: missing-label error mentions "label"');
+  }
+
+  // link action missing url entirely
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'link', label: 'No URL' }] }));
+    assert(errs.length > 0, 'actions: link action with no url is rejected');
+    assert(hasError(errs, 'url'), 'actions: missing-url error mentions "url"');
+  }
+
+  // link action with a javascript: URL — must be rejected (scheme allowlist)
+  {
+    const errs = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'Evil', url: 'javascript:alert(1)' }] })
+    );
+    assert(errs.length > 0, 'actions: javascript: URL is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: javascript: URL error names the index');
+    assert(hasError(errs, 'http'), 'actions: javascript: URL error mentions the http(s) requirement');
+  }
+
+  // link action with a data: URL — also rejected
+  {
+    const errs = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'Evil', url: 'data:text/html,<script>alert(1)</script>' }] })
+    );
+    assert(errs.length > 0, 'actions: data: URL is rejected');
+  }
+
+  // link action with a plain http(s) URL is accepted
+  {
+    const errsHttp = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'OK', url: 'http://example.nhs.uk/pathway' }] })
+    );
+    assert(errsHttp.length === 0, 'actions: plain http:// URL is accepted');
+    const errsHttps = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'OK', url: 'https://example.nhs.uk/pathway' }] })
+    );
+    assert(errsHttps.length === 0, 'actions: https:// URL is accepted');
+  }
+
+  // snippet/note missing text
+  {
+    const errsSnippet = validateResultRule(validRule({ actions: [{ type: 'snippet', label: 'No text' }] }));
+    assert(errsSnippet.length > 0, 'actions: snippet action with no text is rejected');
+    assert(hasError(errsSnippet, 'text'), 'actions: snippet missing-text error mentions "text"');
+
+    const errsNote = validateResultRule(validRule({ actions: [{ type: 'note', label: 'No text' }] }));
+    assert(errsNote.length > 0, 'actions: note action with no text is rejected');
+  }
+
+  // A second, well-formed action after a malformed one still names index 1, not 0
+  {
+    const errs = validateResultRule(
+      validRule({
+        actions: [
+          { type: 'note', label: 'OK', text: 'fine' },
+          { type: 'link', label: 'Bad', url: 'javascript:evil()' },
+        ],
+      })
+    );
+    assert(hasError(errs, 'actions[1]'), 'actions: malformed second entry is named by its own index (actions[1])');
+  }
+
+  // Non-object entries
+  {
+    const errs = validateResultRule(validRule({ actions: [null, 'nope', 42] }));
+    assert(errs.length >= 3, 'actions: non-object entries each produce an error');
+  }
+}
+
+// ── resultRuleSchemaPrompt: documents the optional actions array ────────────
+console.log('\n--- resultRuleSchemaPrompt: covers actions ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('actions'), 'prompt documents the actions field');
+  assert(prompt.toLowerCase().includes('link'), 'prompt documents the link action type');
+  assert(prompt.toLowerCase().includes('snippet'), 'prompt documents the snippet action type');
+  assert(prompt.toLowerCase().includes('note'), 'prompt documents the note action type');
+  assert(
+    prompt.toLowerCase().includes('hyperkalaemia'),
+    'prompt includes a worked actions example (hyperkalaemia pathway)'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

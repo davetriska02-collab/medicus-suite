@@ -543,10 +543,19 @@
     activateTab('edit');
   };
 
-  const renderActions = () => {
-    const cont = $('#actionList');
+  // renderActionEditorInto(containerSel, actions) — shared click-to-fire action-list
+  // editor. Renders one row per entry in `actions` (type select + label + url-or-text
+  // field), mutating the array IN PLACE on every edit/add/remove so the caller's own
+  // draft object (which owns the array by reference) stays in sync with no return
+  // value needed. Originally alert-rule-only (#actionList / editingDraft.actions);
+  // factored out (item 2.7, TRIAGE-LENS-2026-07-02.md) so the result-rule editor
+  // (#rrActionList / rrEditingDraft.actions) can carry the same link/snippet/note
+  // guidance shortcuts an alert rule can, without duplicating this ~30-line block.
+  const renderActionEditorInto = (containerSel, actions) => {
+    const cont = $(containerSel);
+    if (!cont) return;
     cont.innerHTML = '';
-    editingDraft.actions.forEach((a, i) => {
+    actions.forEach((a, i) => {
       const row = document.createElement('div');
       row.className = 'tl-action-row';
       row.innerHTML = `
@@ -569,17 +578,19 @@
         input.addEventListener('input', (e) => {
           const idx = +e.target.dataset.i;
           const key = e.target.dataset.k;
-          editingDraft.actions[idx][key] = e.target.value;
-          if (key === 'type') renderActions(); // re-render on type change to swap url/text input
+          actions[idx][key] = e.target.value;
+          if (key === 'type') renderActionEditorInto(containerSel, actions); // re-render on type change to swap url/text input
         });
       });
       row.querySelector('.tl-action-remove').addEventListener('click', () => {
-        editingDraft.actions.splice(i, 1);
-        renderActions();
+        actions.splice(i, 1);
+        renderActionEditorInto(containerSel, actions);
       });
       cont.appendChild(row);
     });
   };
+
+  const renderActions = () => renderActionEditorInto('#actionList', editingDraft.actions);
 
   // ============================================================
   // RULE VALIDATION (shared by save path and LLM importer)
@@ -2098,6 +2109,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
   };
 
+  // renderRrActions() — result-rule editor's action list, backed by rrEditingDraft.actions.
+  // Reuses the shared renderActionEditorInto helper (item 2.7) — the same one the
+  // alert-rule editor's renderActions() calls — targeting #rrActionList instead of
+  // #actionList.
+  const renderRrActions = () => renderActionEditorInto('#rrActionList', rrEditingDraft.actions);
+
   const setupResultEditPane = () => {
     $('#btnBackToResultRules').addEventListener('click', () => {
       rrEditingId = null;
@@ -2114,6 +2131,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       });
     });
     $('#btnSaveResultEdit').addEventListener('click', saveCurrentResultRule);
+    $('#btnRrAddAction').addEventListener('click', () => {
+      rrEditingDraft.actions.push({ type: 'note', label: '', text: '' });
+      renderRrActions();
+    });
     $('#btnDeleteResultRule').addEventListener('click', async () => {
       if (!rrEditingId) return;
       const r = CONFIG.resultRules.find((x) => x.id === rrEditingId);
@@ -2656,6 +2677,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (!rule) return;
     rrEditingId = id;
     rrEditingDraft = JSON.parse(JSON.stringify(rule));
+    if (!Array.isArray(rrEditingDraft.actions)) rrEditingDraft.actions = [];
 
     $('#rrEditTitle').textContent = rule.builtin
       ? 'Edit built-in result rule: ' + rule.label
@@ -2682,6 +2704,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrNormalLabel').value = rrEditingDraft.normalLabel || '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
     rrApplyKindVisibility(kind);
+    renderRrActions();
 
     // Reset test-match indicator when opening editor
     const testEl = $('#rrTestName');
@@ -2702,6 +2725,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (!rrEditingId) return;
     const selectedKind = $('#rrKind').value;
     const enabled = $('#rrEnabled').checked;
+    // Actions (item 2.7) are edited straight into rrEditingDraft.actions by
+    // renderRrActions/btnRrAddAction regardless of rule type, so read/capture them
+    // ONCE here before any kind-specific branch below reassigns or mutates
+    // rrEditingDraft — omit the key entirely when empty (matches the sparse-optional-
+    // field convention every other result-rule field uses, e.g. analyte.exclude).
+    const draftActions = Array.isArray(rrEditingDraft.actions) ? rrEditingDraft.actions : [];
 
     // ── Combo (multi-condition) — built by the inline combo builder ───────────
     if (selectedKind === 'combo') {
@@ -2719,6 +2748,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // Honour the editor's Enabled checkbox (the manual editor lets a clinician
       // enable after review; the LLM-import path is the one that forces disabled).
       const rule = { ...built.rule, enabled };
+      if (draftActions.length) rule.actions = draftActions;
       const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
       if (VALIDATE) {
         const errs = VALIDATE(rule);
@@ -2781,6 +2811,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         enabled,
       };
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
     } else {
       rrEditingDraft.label = label;
       rrEditingDraft.analyte = analyte;
@@ -2792,6 +2823,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const unitVal = $('#rrUnit').value.trim();
       rrEditingDraft.unit = unitVal || null;
       rrEditingDraft.enabled = enabled;
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
+      else delete rrEditingDraft.actions;
       // Remove text-only / combo-only fields if switching to threshold
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;

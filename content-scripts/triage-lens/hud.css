@@ -1100,3 +1100,38 @@
   font-style: italic;
   font-size: 11px;
 }
+/* ---- Result-rule guidance actions (item 2.7, TRIAGE-LENS-2026-07-02.md) ----
+   Click-to-fire link/snippet/note shortcuts a result rule can carry (same schema as
+   an alert rule's actions), rendered under the detail line for the result whose
+   severity that rule drove. */
+.ch-result-popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0 8px;
+}
+.ch-result-popover-action {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+}
+.ch-result-popover-action:hover {
+  background: var(--accent-hover);
+  color: #fff;
+}
+.ch-result-popover-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ch-result-popover-action-notebody {
+  width: 100%;
+  white-space: pre-wrap;
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 4px 0 0;
+}
