@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.149.0] — 2026-07-02
+
+### Triage Lens — Evidence at the chip (Phase 2)
+
+Phase 2 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: every chip can now explain
+itself and carry its next step — all client-side, on data already fetched, with
+no change to clinical grading.
+
+- **Request chips show their evidence.** Clicking a queue rule chip opens a
+  menu showing the exact sentence from the patient's request that triggered
+  the rule (matched term highlighted) plus the rule's attached actions —
+  guidance links, copy-ready snippets, notes — via the scheme-guarded action
+  executor. When several rules match one request, chips rank red < amber <
+  info and collapse to the top chip + "+N" (the overflow menu lists all
+  matched rules, each with its own evidence and actions). Evidence is built
+  with `textContent` only — request text is never rendered as HTML, and
+  Medicus's own DOM is never mutated for highlighting. New matcher API
+  `ruleMatchEvidence()` is built on the same compiled patterns as the boolean
+  matcher and parity-swept across the full 78-rule corpus.
+- **Result chips answer "how bad?" in place.** Red/amber chips gain a trend
+  arrow (↑/↓) when a prior value exists in the report's own history —
+  suppressed on any unit mismatch, never a cross-unit comparison. Clicking a
+  chip opens a detail popover: value, unit, reference range, lab flag, sample
+  date, which rule fired (with its threshold, e.g. "red ≥6.5"), and the prior
+  value with date. The grey "couldn't check" chip explains itself and notes
+  the automatic retry. Engine change is purely additive attribution
+  (`flagged`, `ruleId`, `extractPrior`) — grading behaviour byte-identical,
+  all pre-existing severity tests unchanged.
+- **The verdict follows you into the task.** Opening a task from the queue
+  shows a slim severity-edged banner echoing the evaluation ("2 abnormal:
+  K⁺ 6.2 ↑ · eGFR 38 ↓ — rule: …") from cache with zero extra fetches;
+  directly-opened tasks compute once via the queue's own path. The banner is
+  keyed to the task ID (a slow fetch can never paint the wrong patient's
+  verdict), shows an honest grey variant when the check failed, and stays
+  silent on non-result tasks. Pref `detailVerdictBanner` (default on).
+- **Result rules can carry guidance actions.** The same link/snippet/note
+  actions request rules have — validated (http/https only), editable in the
+  result-rule editor (shared action-editor component), documented in the LLM
+  authoring prompt, and rendered in the chip popover for the rule that fired.
+  Actions resolve from live config at render time, so edits apply instantly.
+  No shipped rule gains actions in this release (user-authored only).
+
 ## [v3.148.0] — 2026-07-02
 
 ### Triage Lens — Trust: the screen never lies (Phase 1)
