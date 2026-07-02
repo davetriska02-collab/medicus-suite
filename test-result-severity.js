@@ -1414,6 +1414,33 @@ console.log('\n--- Keeper: culture abnormalText positive-flag guard (shipped rul
     );
     assert(positiveOneBottle.noGrowthCount === 0, 'blood culture positive-in-one-bottle is NOT counted as noGrowth');
   }
+
+  // v21 false-amber negation fix: bare "gram positive"/"gram negative"/"candida" substrings
+  // used to collide with NEGATIVE phrasing ("No gram negative organisms isolated", "Candida
+  // species not isolated") and trip a false-amber review. Replaced with morphology-qualified
+  // gram-stain terms and named candida species, which do not appear in negation phrasing.
+  assert(
+    run('Blood culture', 'No growth after 5 days. No gram negative organisms isolated.').noGrowthCount === 1,
+    'blood culture "No gram negative organisms isolated" (negative) → calmed, not falsely reviewed'
+  );
+  assert(
+    run('Blood culture', 'Candida species not isolated. No growth after 5 days.').noGrowthCount === 1,
+    'blood culture "Candida species not isolated" (negative) → calmed, not falsely reviewed'
+  );
+  // Genuine positives still fire — including an interim gram-film-only report with no
+  // genus name yet, proving the morphology-qualified terms alone still carry a positive.
+  assert(
+    run('Blood culture', 'Escherichia coli (Gram negative bacilli) isolated').reviewCount === 1,
+    'blood culture genuine positive (named organism) → still review'
+  );
+  assert(
+    run('Blood culture', 'Gram-positive cocci in clusters seen; identification to follow').reviewCount === 1,
+    'blood culture interim gram-film-only positive (no genus name yet) → still review'
+  );
+  assert(
+    run('Blood culture', 'Candida albicans isolated from both bottles').reviewCount === 1,
+    'blood culture genuine candida positive (named species) → still review'
+  );
 }
 
 // ── Word-boundary normalText matching (calm path tightened; flag path left broad) ─

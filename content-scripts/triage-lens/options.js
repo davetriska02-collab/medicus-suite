@@ -156,6 +156,57 @@
     'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
     'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
     'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
+    // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
+    // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
+    // false-amber review) to morphology-qualified gram-stain terms and named candida
+    // species. A held rule whose abnormalText still deep-equals this OLD 30-element
+    // shipped array is un-stuck to the new shipped array; a customised array is left alone.
+    'base-blood-culture': {
+      abnormalText: [
+        [
+          'grown in aerobic bottle',
+          'grown in anaerobic bottle',
+          'positive blood culture',
+          'gram positive',
+          'gram negative',
+          'gram-positive',
+          'gram-negative',
+          'bacteraemia',
+          'bacteremia',
+          'fungaemia',
+          'sensitive to',
+          'resistant to',
+          'sensitivities shown',
+          'staphylococcus',
+          'streptococcus',
+          'escherichia',
+          'klebsiella',
+          'enterococcus',
+          'pseudomonas',
+          'haemophilus',
+          'neisseria',
+          'listeria',
+          'salmonella',
+          'candida',
+          'acinetobacter',
+          'serratia',
+          'enterobacter',
+          'proteus',
+          'citrobacter',
+          'stenotrophomonas',
+        ],
+      ],
+    },
+  };
+  // A retired field's candidate value may be a scalar (indexOf works) or, for
+  // abnormalText, an array of candidate arrays — reference-compare via indexOf never
+  // matches two distinct array instances, so deep-compare element-wise when the held
+  // value is itself an array.
+  const arraysShallowEqual = (a, b) =>
+    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+  const fieldStillDefault = (candidates, heldValue) => {
+    if (Array.isArray(heldValue)) return candidates.some((c) => arraysShallowEqual(c, heldValue));
+    return candidates.indexOf(heldValue) !== -1;
   };
   const revertRetiredResultRuleFields = (resultRules, shippedResultRules) => {
     if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
@@ -164,10 +215,11 @@
       const shippedRule = shippedResultRules.find((r) => r && r.id === id);
       if (!held || !shippedRule) continue;
       const fields = RETIRED_RESULTRULE_FIELDS[id];
-      const stillDefault = Object.keys(fields).every((f) => fields[f].indexOf(held[f]) !== -1);
+      const stillDefault = Object.keys(fields).every((f) => fieldStillDefault(fields[f], held[f]));
       if (!stillDefault) continue;
       for (const f of Object.keys(fields)) {
-        if (shippedRule[f] !== undefined) held[f] = shippedRule[f];
+        if (shippedRule[f] === undefined) continue;
+        held[f] = Array.isArray(shippedRule[f]) ? [...shippedRule[f]] : shippedRule[f];
       }
     }
   };
@@ -3170,7 +3222,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // Returns custom entries whose req terms overlap with entry's req terms,
   // excluding the entry itself and the entry being edited (by editKey).
   const findOirReqConflicts = (entry, tests, editKey) => {
-    const norm = (s) => String(s || '').toLowerCase().trim();
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .trim();
     const newReq = (entry.req || []).map(norm).filter(Boolean);
     if (!newReq.length) return [];
     return (tests || []).filter((t) => {
@@ -3187,7 +3242,11 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
     const newIsBuiltin = (defs || []).some((d) => d.key === newEntry.key);
     const conflictIsBuiltin = !newIsBuiltin && conflicts.some((c) => (defs || []).some((d) => d.key === c.key));
-    const base = newIsBuiltin ? newEntry : conflictIsBuiltin ? conflicts.find((c) => (defs || []).some((d) => d.key === c.key)) : conflicts[0];
+    const base = newIsBuiltin
+      ? newEntry
+      : conflictIsBuiltin
+        ? conflicts.find((c) => (defs || []).some((d) => d.key === c.key))
+        : conflicts[0];
     const all = [newEntry, ...conflicts];
     const unionArr = (field) => {
       const seen = new Set();
@@ -3195,7 +3254,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       for (const e of all) {
         for (const t of e[field] || []) {
           const k = String(t).toLowerCase().trim();
-          if (k && !seen.has(k)) { seen.add(k); out.push(t); }
+          if (k && !seen.has(k)) {
+            seen.add(k);
+            out.push(t);
+          }
         }
       }
       return out;
@@ -3226,7 +3288,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#oirMergeSingle').checked = merged.singleAnalyte;
     overlay.style.display = 'flex';
 
-    const hide = () => { overlay.style.display = 'none'; };
+    const hide = () => {
+      overlay.style.display = 'none';
+    };
 
     const replaceBtn = (id, listener) => {
       const old = $(`#${id}`);

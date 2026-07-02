@@ -126,8 +126,7 @@ if (content && options) {
     };
     content.revert(stored, shippedChips);
     check(
-      stored['queue.resultRuleUrgent'].label === '{label}' &&
-        stored['queue.resultRuleUrgent'].enabled === false,
+      stored['queue.resultRuleUrgent'].label === '{label}' && stored['queue.resultRuleUrgent'].enabled === false,
       'revert: label fixed while the user’s enabled:false customisation is preserved'
     );
   }
@@ -230,13 +229,20 @@ if (contentBF && optionsBF) {
 function extractRRFields(file) {
   const src = fs.readFileSync(file, 'utf8');
   const tableMatch = src.match(/const RETIRED_RESULTRULE_FIELDS = \{[\s\S]*?\n {2}\};/);
+  // v21 added two small helpers revertRetiredResultRuleFields now depends on: a deep-equal
+  // for array-valued candidates (abnormalText) alongside the pre-existing scalar indexOf path.
+  const helpersMatch = src.match(
+    /const arraysShallowEqual = \(a, b\) =>[\s\S]*?\n {2}const fieldStillDefault = \(candidates, heldValue\) => \{[\s\S]*?\n {2}\};/
+  );
   const fnMatch = src.match(
     /const revertRetiredResultRuleFields = \(resultRules, shippedResultRules\) => \{[\s\S]*?\n {2}\};/
   );
-  if (!tableMatch || !fnMatch) return null;
+  if (!tableMatch || !helpersMatch || !fnMatch) return null;
   const sandbox = {};
   vm.runInNewContext(
     tableMatch[0] +
+      '\n' +
+      helpersMatch[0] +
       '\n' +
       fnMatch[0] +
       '\nthis.table = RETIRED_RESULTRULE_FIELDS;\nthis.revert = revertRetiredResultRuleFields;',
@@ -261,13 +267,21 @@ if (contentRR && optionsRR) {
 
   // Every id must be a shipped builtin, and every retired value must be OLD — the CURRENT
   // shipped value must NOT appear in any retired list (else we'd thrash a live default).
+  // A candidate may be a scalar (indexOf) or, for array-valued fields like abnormalText,
+  // an array of candidate arrays — compare those by value, not by reference.
+  const candidateListIncludes = (candidates, value) => {
+    if (Array.isArray(value)) {
+      return candidates.some((c) => Array.isArray(c) && JSON.stringify(c) === JSON.stringify(value));
+    }
+    return candidates.indexOf(value) !== -1;
+  };
   for (const id of Object.keys(contentRR.table)) {
     const r = shippedRR2.find((x) => x.id === id);
     check(r && r.builtin === true, `RETIRED_RESULTRULE id "${id}" is a shipped builtin`);
     if (!r) continue;
     for (const field of Object.keys(contentRR.table[id])) {
       check(
-        contentRR.table[id][field].indexOf(r[field]) === -1,
+        !candidateListIncludes(contentRR.table[id][field], r[field]),
         `current shipped ${field} for "${id}" (${JSON.stringify(r[field])}) is NOT in its retired list`
       );
     }
@@ -385,6 +399,94 @@ if (contentRR && optionsRR) {
       'editable flags: a clinician-renamed built-in label survives the shipped-defaults merge'
     );
   }
+  // ── v21 blood-culture false-amber negation fix: array-valued field revert ──
+  // abnormalText is an ARRAY, so the scalar .indexOf(held[f]) check used for label/red never
+  // matches it (reference-compares) — revertRetiredResultRuleFields now deep-compares
+  // element-wise when the held value is itself an array. This pins that behaviour directly.
+  const shippedBloodCulture = shippedRR2.find((r) => r.id === 'base-blood-culture');
+  check(
+    !!shippedBloodCulture && Array.isArray(shippedBloodCulture.abnormalText),
+    'shipped defaults.json carries a base-blood-culture rule with an abnormalText array'
+  );
+  const OLD_BLOOD_CULTURE_ABNORMAL_TEXT = [
+    'grown in aerobic bottle',
+    'grown in anaerobic bottle',
+    'positive blood culture',
+    'gram positive',
+    'gram negative',
+    'gram-positive',
+    'gram-negative',
+    'bacteraemia',
+    'bacteremia',
+    'fungaemia',
+    'sensitive to',
+    'resistant to',
+    'sensitivities shown',
+    'staphylococcus',
+    'streptococcus',
+    'escherichia',
+    'klebsiella',
+    'enterococcus',
+    'pseudomonas',
+    'haemophilus',
+    'neisseria',
+    'listeria',
+    'salmonella',
+    'candida',
+    'acinetobacter',
+    'serratia',
+    'enterobacter',
+    'proteus',
+    'citrobacter',
+    'stenotrophomonas',
+  ];
+  check(
+    JSON.stringify((contentRR.table['base-blood-culture'] || {}).abnormalText) ===
+      JSON.stringify([OLD_BLOOD_CULTURE_ABNORMAL_TEXT]),
+    'base-blood-culture retired-fields entry holds the OLD 30-element bare gram/candida abnormalText array'
+  );
+  // A held rule whose abnormalText still deep-equals the OLD array is reverted to the NEW
+  // shipped array (un-sticks the false-amber negation fix for existing installs).
+  {
+    const held = [
+      {
+        id: 'base-blood-culture',
+        builtin: true,
+        kind: 'text',
+        label: 'Blood culture — needs review',
+        normalLabel: 'No growth',
+        normalText: ['no growth'],
+        abnormalText: [...OLD_BLOOD_CULTURE_ABNORMAL_TEXT],
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      JSON.stringify(held[0].abnormalText) === JSON.stringify(shippedBloodCulture.abnormalText),
+      'revert: a held base-blood-culture still at the OLD abnormalText is reverted to the NEW shipped array'
+    );
+  }
+  // A practice that customised their abnormalText (a different array) is left untouched —
+  // reference-inequality alone must not trigger a revert, and neither must an unrelated edit.
+  {
+    const customAbnormalText = ['my own custom flag', 'another custom flag'];
+    const held = [
+      {
+        id: 'base-blood-culture',
+        builtin: true,
+        kind: 'text',
+        label: 'Blood culture — needs review',
+        normalLabel: 'No growth',
+        normalText: ['no growth'],
+        abnormalText: customAbnormalText,
+      },
+    ];
+    contentRR.revert(held, shippedRR2);
+    check(
+      held[0].abnormalText === customAbnormalText,
+      'revert: a practice-customised abnormalText array is left completely untouched'
+    );
+  }
+
   // Empty / null held set is a safe no-op.
   {
     let threw = false;
