@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 23,
   "rules": [
     {
       "id": "mh-crisis",
@@ -4064,7 +4064,7 @@
       "kind": "threshold",
       "enabled": true,
       "builtin": true,
-      "label": "Critical high potassium (red ≥6.5 mmol/L)",
+      "label": "Critical high potassium (red ≥6.5 mmol/L, amber ≥6.0)",
       "analyte": {
         "match": [
           "potassium"
@@ -4075,6 +4075,7 @@
         ]
       },
       "comparator": "above",
+      "amber": 6.0,
       "red": 6.5,
       "unit": "mmol/L"
     },
@@ -4227,7 +4228,8 @@
         ]
       },
       "comparator": "above",
-      "red": 48,
+      "red": null,
+      "amber": 48,
       "unit": "mmol/mol",
       "suppressIfProblem": {
         "match": [
@@ -4384,10 +4386,14 @@
         "grown in aerobic bottle",
         "grown in anaerobic bottle",
         "positive blood culture",
-        "gram positive",
-        "gram negative",
-        "gram-positive",
-        "gram-negative",
+        "gram positive cocci",
+        "gram-positive cocci",
+        "gram positive bacilli",
+        "gram-positive bacilli",
+        "gram negative bacilli",
+        "gram-negative bacilli",
+        "gram negative cocci",
+        "gram-negative cocci",
         "bacteraemia",
         "bacteremia",
         "fungaemia",
@@ -4404,7 +4410,12 @@
         "neisseria",
         "listeria",
         "salmonella",
-        "candida",
+        "candidaemia",
+        "candida albicans",
+        "candida glabrata",
+        "candida parapsilosis",
+        "candida tropicalis",
+        "candida auris",
         "acinetobacter",
         "serratia",
         "enterobacter",
@@ -4795,6 +4806,195 @@
       "amber": 180,
       "red": 110,
       "unit": "ng/L"
+    },
+    {
+      "id": "base-high-sodium",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High sodium — hypernatraemia (red ≥160 mmol/L, amber ≥150)",
+      "analyte": {
+        "match": [
+          "sodium"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "valproate"
+        ]
+      },
+      "comparator": "above",
+      "amber": 150,
+      "red": 160,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-creatinine-aki",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Critical high creatinine — AKI stage 3 (red ≥354 µmol/L)",
+      "analyte": {
+        "match": [
+          "creatinine"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "clearance",
+          "ratio"
+        ]
+      },
+      "comparator": "above",
+      "red": 354,
+      "unit": "µmol/L"
+    },
+    {
+      "id": "base-creatinine-delta-aki",
+      "kind": "delta",
+      "enabled": true,
+      "builtin": true,
+      "label": "Rising creatinine — possible AKI (amber ≥+26.5 µmol/L)",
+      "analyte": {
+        "match": [
+          "creatinine"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "clearance",
+          "ratio"
+        ]
+      },
+      "direction": "rise",
+      "by": true,
+      "amber": 26.5,
+      "maxDays": 2,
+      "unit": "µmol/L"
+    },
+    {
+      "id": "base-high-glucose",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High glucose — hyperglycaemia (red ≥30 mmol/L, amber ≥11.1)",
+      "analyte": {
+        "match": [
+          "glucose"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf"
+        ]
+      },
+      "comparator": "above",
+      "amber": 11.1,
+      "red": 30,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-low-glucose",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "Low glucose — hypoglycaemia (red ≤3.0 mmol/L, amber ≤4.0)",
+      "analyte": {
+        "match": [
+          "glucose"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf"
+        ]
+      },
+      "comparator": "below",
+      "amber": 4.0,
+      "red": 3.0,
+      "unit": "mmol/L"
+    },
+    {
+      "id": "base-high-alt",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High ALT — transaminitis (red ≥320 U/L, amber ≥120)",
+      "analyte": {
+        "match": [
+          "alt",
+          "alanine aminotransferase",
+          "alanine transaminase"
+        ]
+      },
+      "comparator": "above",
+      "amber": 120,
+      "red": 320,
+      "unit": "U/L"
+    },
+    {
+      "id": "base-high-ast",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High AST — transaminitis (red ≥320 U/L, amber ≥120)",
+      "analyte": {
+        "match": [
+          "ast",
+          "aspartate aminotransferase",
+          "aspartate transaminase"
+        ],
+        "exclude": [
+          "fasting"
+        ]
+      },
+      "comparator": "above",
+      "amber": 120,
+      "red": 320,
+      "unit": "U/L"
+    },
+    {
+      "id": "base-high-crp",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High CRP — possible severe infection (red ≥100, amber ≥20)",
+      "analyte": {
+        "match": [
+          "crp",
+          "c-reactive protein",
+          "c reactive protein"
+        ]
+      },
+      "comparator": "above",
+      "amber": 20,
+      "red": 100,
+      "unit": "mg/L"
+    },
+    {
+      "id": "base-high-wcc",
+      "kind": "threshold",
+      "enabled": true,
+      "builtin": true,
+      "label": "High white cell count (amber ≥12 ×10⁹/L)",
+      "analyte": {
+        "match": [
+          "white cell count",
+          "white blood cell count",
+          "wbc",
+          "leucocyte count",
+          "leukocyte count"
+        ],
+        "exclude": [
+          "urine",
+          "urinary",
+          "csf",
+          "pus"
+        ]
+      },
+      "comparator": "above",
+      "amber": 12,
+      "unit": "×10⁹/L"
     }
   ]
 }

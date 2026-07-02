@@ -2,6 +2,198 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.150.0] — 2026-07-02
+
+### Triage Lens — Smarter grading (Phase 3)
+
+Phase 3 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the first phase to change
+what fires red and amber. Every new/changed shipped threshold was independently
+verified against a named UK source and **CSO-signed-off** before release — see
+`docs/plans/TRIAGE-LENS-PHASE3-REVIEW.md`.
+
+**Engine capabilities** (grading was byte-identical until this release shipped
+content that uses them):
+
+- **Unit-mismatch guard** — a result rule no longer grades a value reported in a
+  unit incompatible with the rule's own (`unitsCompatible()` normalises µ/u,
+  superscript and cell-count notations, `micrograms/L`↔`µg/L`). On a genuine
+  mismatch the rule is skipped and surfaced as a grey "unit?" chip with a
+  plain-language popover line; absent units stay fail-open (Medicus often omits
+  them). IU vs U kept distinct.
+- **Text rules can reach red** — optional `abnormalLevel:'red'` lets a designated
+  positive text finding escalate past the historic amber cap (escalate-only).
+- **Unclassified-positive safety net** — an unmatched non-numeric positive result
+  ("Positive"/"Detected"/…) no longer scores nothing; it surfaces an amber "?"
+  chip. Heavily negation-guarded (incl. a `non-reactive` glued-prefix guard),
+  amber-max, and only when no rule already classified the result.
+- **Negation / past-reference demotion** — request-queue chips visually demote
+  (never suppress) when the trigger phrase is negated ("no chest pain") or
+  historic ("UTI last year"): outline style, "(negated?)"/"(past?)" suffix,
+  ranked below undemoted matches.
+- **Patient-context gates** — result rules accept `context:{minAge,maxAge,sex}`;
+  request rules accept `require:{ageMin,ageMax,sex,medsAny,problemsAny}`. Both
+  AND-gate and **fail closed** — a gate whose data isn't available on the current
+  surface simply doesn't fire, never suppressing a base match.
+- **Delta / trend rule kind** — `kind:'delta'` grades on change over time
+  (direction, absolute or percent, unit-guarded, optional `maxDays`), rendered
+  with the change summary in the chip popover.
+
+**New shipped result-rule coverage** (config version 21→23; each cited to a UK
+source, thresholds in the review doc):
+
+- Hypernatraemia (Na high, amber ≥150 / red ≥160), absolute creatinine/AKI
+  (red ≥354 µmol/L, KDIGO stage 3) plus a creatinine-rise delta (≥26.5 µmol/L in
+  48h, KDIGO stage 1), glucose (high ≥11.1 / ≥30; low ≤4.0 / ≤3.0), ALT & AST
+  transaminitis (≥120 / ≥320 U/L), CRP (≥20 / ≥100, NICE CG191), WCC high (≥12),
+  and a **potassium 6.0–6.4 amber band** below the existing red ≥6.5 (UK Kidney
+  Association).
+- **HbA1c ≥48 demoted red → amber** — 48 is the diagnostic threshold, not an
+  acute-danger value; demotion cuts red alert-fatigue (with a `RETIRED_*`
+  un-stick so it reaches existing installs). New diabetes still flags, at amber.
+
+**Held back after clinical review** (in the review doc, pursued as follow-up):
+the FIB-4 age-adjustment was reverted to status quo (the drafted ≥65 cutoff used
+a hepatitis-C value and the correct age-adjustment needs an engine change the
+escalate-only model can't do yet); the neutrophil-high rule was dropped (a
+lab-range boundary, not a validated action threshold); and Hb-fall / K⁺-rise
+delta rules await a defensible sourced magnitude.
+
+## [v3.149.0] — 2026-07-02
+
+### Triage Lens — Evidence at the chip (Phase 2)
+
+Phase 2 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: every chip can now explain
+itself and carry its next step — all client-side, on data already fetched, with
+no change to clinical grading.
+
+- **Request chips show their evidence.** Clicking a queue rule chip opens a
+  menu showing the exact sentence from the patient's request that triggered
+  the rule (matched term highlighted) plus the rule's attached actions —
+  guidance links, copy-ready snippets, notes — via the scheme-guarded action
+  executor. When several rules match one request, chips rank red < amber <
+  info and collapse to the top chip + "+N" (the overflow menu lists all
+  matched rules, each with its own evidence and actions). Evidence is built
+  with `textContent` only — request text is never rendered as HTML, and
+  Medicus's own DOM is never mutated for highlighting. New matcher API
+  `ruleMatchEvidence()` is built on the same compiled patterns as the boolean
+  matcher and parity-swept across the full 78-rule corpus.
+- **Result chips answer "how bad?" in place.** Red/amber chips gain a trend
+  arrow (↑/↓) when a prior value exists in the report's own history —
+  suppressed on any unit mismatch, never a cross-unit comparison. Clicking a
+  chip opens a detail popover: value, unit, reference range, lab flag, sample
+  date, which rule fired (with its threshold, e.g. "red ≥6.5"), and the prior
+  value with date. The grey "couldn't check" chip explains itself and notes
+  the automatic retry. Engine change is purely additive attribution
+  (`flagged`, `ruleId`, `extractPrior`) — grading behaviour byte-identical,
+  all pre-existing severity tests unchanged.
+- **The verdict follows you into the task.** Opening a task from the queue
+  shows a slim severity-edged banner echoing the evaluation ("2 abnormal:
+  K⁺ 6.2 ↑ · eGFR 38 ↓ — rule: …") from cache with zero extra fetches;
+  directly-opened tasks compute once via the queue's own path. The banner is
+  keyed to the task ID (a slow fetch can never paint the wrong patient's
+  verdict), shows an honest grey variant when the check failed, and stays
+  silent on non-result tasks. Pref `detailVerdictBanner` (default on).
+- **Result rules can carry guidance actions.** The same link/snippet/note
+  actions request rules have — validated (http/https only), editable in the
+  result-rule editor (shared action-editor component), documented in the LLM
+  authoring prompt, and rendered in the chip popover for the rule that fired.
+  Actions resolve from live config at render time, so edits apply instantly.
+  No shipped rule gains actions in this release (user-authored only).
+
+## [v3.148.0] — 2026-07-02
+
+### Triage Lens — Trust: the screen never lies (Phase 1)
+
+Phase 1 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the queue and HUD now
+distinguish "assessed and clear" from "not assessed" everywhere, alert rows are
+visible at a glance, and every machine-initiated write leaves an audit trail.
+
+- **"Not assessed" never looks like "normal".** The HUD headline says **"Not
+  fully assessed"** (never "No flags") when a clinical card could not be read,
+  with a grey footer naming the missing cards, and a tile whose entire source
+  is unreadable renders a grey not-assessed state instead of implying clear.
+  Card lookup itself is hardened (count-suffix and whitespace/case tolerant,
+  ambiguity-safe) and warns once per page load when an expected card is
+  missing. On the results queue, a row whose check **failed** now shows a grey
+  outline "?" chip and is retried within a minute — previously indistinguishable
+  from an unassessed or normal row. The monitoring-due chip is now conservative:
+  a transient fetch/evaluation failure preserves the last known chip instead of
+  clearing it (only a successful evaluation can clear), while patient/page
+  changes still reset it so a chip can never leak across patients.
+- **Live triage status bar** replaces the passive queue legend: live counts
+  ("3 red · 7 amber · 22 clear · 2 ? · checking 8…"), a **jump-to-next-red**
+  button (amber fallback) that scrolls and flashes the row, and a
+  **Focus alerts** toggle that dims non-alert rows (never hides them). "Clear"
+  counts only results that were actually assessed; tasks with no gradeable
+  report are not claimed as clear. Pref-gated (`queueStatusBar`, default on).
+- **Severity row tint**: alert rows carry a 2–3px red/amber left-edge tint
+  (master and preview rows), wiped and re-derived in the same cycle as the
+  chips so a recycled grid row can never wear a previous patient's colour.
+  Pref-gated (`queueRowTint`, default on).
+- **Machine writes are audited and surfaced.** OIR auto-ticks now write
+  `kind:'auto'` entries to the existing audit log and show a toast listing
+  exactly what was ticked, with a **Review** action (scroll + flash — labelled
+  honestly: ticking writes to Medicus immediately and cannot be reversed from
+  the toast) recorded as `kind:'auto-review'`; a new `oirAutoTick` pref
+  (default on) can disable auto-ticking entirely. The routine-prescriptions
+  button now records every outcome (committed / highlighted / aborted,
+  including the previously-untracked `auto` mode) in a machine-local ring
+  buffer mirrored to the Clinical Event Ledger. Audit logs stay machine-local
+  by design (excluded from backups, matching the lab-filing precedent). Hazard
+  log: new **H-036** (auto-tick wrong-match hazard), H-035 updated.
+- **Fixed in passing:** meta chips (`Under-prioritised`, `Unmatched patient`)
+  rendered filled instead of outline on the live page — the `.ch-chip-meta`
+  rule existed only in the stale PiP CSS copy, now restored to `hud.css`.
+
+## [v3.147.1] — 2026-07-02
+
+### Triage Lens — Phase 0 hardening (guardrails before the improvement plan)
+
+Groundwork from `docs/plans/TRIAGE-LENS-2026-07-02.md` (Phase 0): the tests and
+one-line safety fixes that protect every later phase. No user-visible feature
+change beyond one false-alert fix; the value is regression insurance on the
+suite's most-regressed surface.
+
+- **Blood-culture chip no longer false-ambers negative reports.** Bare
+  substrings `gram positive` / `gram negative` / `candida` in the
+  `base-blood-culture` result rule tripped a "needs review" amber on explicitly
+  *negative* reports ("No gram negative organisms isolated", "Candida species
+  not isolated"). Replaced with morphology-qualified gram-stain terms
+  (`gram negative bacilli`, `gram-positive cocci`, …) and named candida species
+  + `candidaemia`, which keep detecting genuine positives — including interim
+  gram-film-only reports — without colliding with negation phrasing.
+  `defaults.json` config version 20 → 21. The migration un-stick
+  (`revertRetiredResultRuleFields`) was extended to deep-compare **array**
+  fields (it previously handled only scalar labels/thresholds), so existing
+  installs whose stored rule still matches the old shipped array pick up the fix
+  while practice-customised rules are left untouched — mirrored in
+  `content.js` + `options.js` per the lock-step convention. Phrasing set flagged
+  for Keeper source-review in the Phase 3 calibration pass.
+- **Action URLs are scheme-checked.** `executeAction` in
+  `content-scripts/triage-lens/content.js` now permits only `http:` / `https:`
+  before `window.open`; a `javascript:` / `data:` URL from an imported or edited
+  config is rejected and logged, not executed. The same allowlist is enforced in
+  `options.js` at rule-edit / LLM-import time (defence in depth).
+- **Backup imports are validated before they persist.** The file-import and
+  raw-JSON save paths in `options.js` previously accepted anything with a
+  `rules` array. They now run every rule through `validateTriageRule` /
+  `validateResultRule`, shape-check `thresholds` / `prefs` / `systemChips`, and
+  normalise `version` — rejecting the whole import (naming the first offender)
+  rather than half-persisting a malformed or hostile config.
+- **New regression tests.** A live-grid injection smoke harness
+  (`test-queue-injection-smoke.js`, 57 checks) drives the real chip injectors
+  through prepend / de-dupe / SPA-churn-survival / durable-map keying — closing
+  the "needs a live-grid smoke test" gap the changelog has flagged repeatedly.
+  `test-triage-alert-engine.js` (45 checks) covers the previously untested
+  `triage-alert-engine.evaluate()`; `test-routine-rx-macro.js` (49 checks) gives
+  the routine-Rx macro the behavioural coverage lab-file already had;
+  `test-triage-import-validation.js` (68 checks) guards the new import/URL
+  validation. `test-triage-rule-patterns.js` now imports the real
+  `rule-match.js` instead of a re-implementation (no drift was found).
+- **Internal:** the analyte match/exclude/specimen matcher, previously copied
+  three times inside `engine/result-severity.js`, is now one shared
+  `analyteMatches` helper with direct unit tests (`test-analyte-match.js`) —
+  behaviour verified identical before unifying.
 ## [v3.147.1] — 2026-07-02
 
 ### Suite health — fix two false "degraded" alarms on the health strip

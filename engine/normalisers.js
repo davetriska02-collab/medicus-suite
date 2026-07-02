@@ -554,10 +554,20 @@
               normaliseDateString(pr.formattedSpecimenCollectionDate) ||
               normaliseDateString(pr.specimenCollectionDate) ||
               null;
+            // unit — ADDITIVE (item 2.6, TRIAGE-LENS-2026-07-02.md trend arrows): a
+            // previousResults entry from the API has never been observed to carry its
+            // own unit (same analyte/test code as the parent result, reported over
+            // time), so this inherits the parent result's unit unless the entry
+            // explicitly states a different one. Consumers (result-severity.js
+            // extractPrior) compare this against the CURRENT result's unit before ever
+            // showing a trend — inheriting here just lets that guard pass in the
+            // ordinary case instead of always failing closed for lack of data; an
+            // explicit differing unit on the historical entry still blocks the trend.
             history.push({
               date: prevDate,
               value: prevNum,
               flag: deriveHistoryFlag(prevNum, low, high),
+              unit: pr.resultUnit != null ? String(pr.resultUnit) : r.resultUnit || null,
             });
           });
           // Sort newest-first (nulls last)

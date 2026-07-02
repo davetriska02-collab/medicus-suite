@@ -288,6 +288,137 @@ console.log('\n--- validateResultRule: text rule valid cases ---');
   assert(errs.length === 0, 'text rule with multiple match and normalText strings → valid');
 }
 
+// ── validateResultRule: text rule — abnormalLevel (item 3.2 Leg A) ────────────
+console.log('\n--- validateResultRule: text rule — abnormalLevel ---');
+{
+  // abnormalLevel:'red' with abnormalText present → valid (red-capable text rule)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated', 'positive blood culture'],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length === 0, "abnormalLevel:'red' with abnormalText → valid");
+}
+{
+  // abnormalLevel:'amber' explicit (the default) with abnormalText → valid
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+    abnormalLevel: 'amber',
+  });
+  assert(errs.length === 0, "abnormalLevel:'amber' with abnormalText → valid");
+}
+{
+  // Omitting abnormalLevel is valid (defaults to amber)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+  });
+  assert(errs.length === 0, 'abnormalLevel omitted → valid (defaults amber)');
+}
+{
+  // Bad value → error, only amber|red permitted
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+    abnormalLevel: 'urgent',
+  });
+  assert(errs.length > 0, "abnormalLevel:'urgent' → error");
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel')),
+    'error mentions abnormalLevel'
+  );
+}
+{
+  // abnormalLevel with NO abnormalText → error (can never take effect)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture review',
+    analyte: { match: ['culture'] },
+    normalText: ['no growth'],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel with no abnormalText → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.toLowerCase().includes('abnormaltext')),
+    'error explains abnormalLevel needs abnormalText'
+  );
+}
+{
+  // abnormalLevel on a THRESHOLD rule (kind absent → threshold) → error, naming the rule.
+  const errs = validateResultRule({
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel on a threshold rule (kind omitted) → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.toLowerCase().includes("kind:'text'")),
+    "error explains abnormalLevel is only valid on kind:'text'"
+  );
+  assert(
+    errs.some((e) => e.includes('High potassium')),
+    'error names the offending rule by its label'
+  );
+}
+{
+  // abnormalLevel on an EXPLICIT kind:'threshold' rule → same error.
+  const errs = validateResultRule({
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, "abnormalLevel on an explicit kind:'threshold' rule → error");
+}
+{
+  // abnormalLevel on a COMBO rule → error, naming the rule (combo returns early —
+  // this check must run BEFORE that early return or a combo rule would silently
+  // accept the field).
+  const errs = validateResultRule({
+    kind: 'combo',
+    label: 'Sterile pyuria',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 40 },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel on a combo rule → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.includes('Sterile pyuria')),
+    'combo error names the rule and mentions abnormalLevel'
+  );
+}
+{
+  // A valid threshold rule with NO abnormalLevel at all is completely unaffected
+  // (regression guard for the new kind-check).
+  const errs = validateResultRule({
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  });
+  assert(errs.length === 0, 'threshold rule with no abnormalLevel → still valid (unaffected)');
+}
+
 // ── validateResultRule: text rule — missing normalText ────────────────────────
 console.log('\n--- validateResultRule: text rule — missing / bad normalText ---');
 {
@@ -732,6 +863,251 @@ console.log('\n--- resultRuleSchemaPrompt: covers combo kind ---');
   assert(prompt.toLowerCase().includes('no growth'), 'combo example references the "no growth" culture condition');
 }
 
+// ── validateResultRule: delta rule cases (item 3.6, TRIAGE-LENS-2026-07-02.md) ─
+console.log('\n--- validateResultRule: delta rule cases ---');
+
+function validDelta(overrides) {
+  return Object.assign(
+    {
+      id: 'rule_delta',
+      enabled: false,
+      builtin: false,
+      kind: 'delta',
+      label: 'AKI watch (rising creatinine)',
+      analyte: { match: ['creatinine'], exclude: ['urine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+      red: 26,
+      maxDays: 7,
+    },
+    overrides
+  );
+}
+
+{
+  const errs = validateResultRule(validDelta());
+  assert(errs.length === 0, 'complete valid delta (absolute "by") rule returns no errors');
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined, byPercent: true }));
+  assert(errs.length === 0, 'complete valid delta (percent "byPercent") rule returns no errors');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: undefined }));
+  assert(errs.length === 0, 'delta rule with maxDays omitted → valid (no age limit)');
+}
+{
+  const errs = validateResultRule(validDelta({ red: null }));
+  assert(errs.length === 0, 'delta rule with only amber (red null) → valid');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: null }));
+  assert(errs.length === 0, 'delta rule with only red (amber null) → valid');
+}
+{
+  const errs = validateResultRule(validDelta({ direction: 'either' }));
+  assert(errs.length === 0, "delta rule with direction 'either' → valid");
+}
+
+// direction enum
+{
+  const errs = validateResultRule(validDelta({ direction: 'up' }));
+  assert(errs.length > 0, 'delta rule with bad direction → error');
+  assert(hasError(errs, 'direction'), 'error mentions "direction"');
+}
+{
+  const errs = validateResultRule(validDelta({ direction: undefined }));
+  assert(errs.length > 0, 'delta rule with missing direction → error');
+}
+
+// exactly one of by / byPercent
+{
+  const errs = validateResultRule(validDelta({ by: true, byPercent: true }));
+  assert(errs.length > 0, 'delta rule with BOTH by and byPercent → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('exactly one')),
+    'error explains exactly one of by/byPercent is required'
+  );
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined }));
+  assert(errs.length > 0, 'delta rule with NEITHER by nor byPercent → error');
+}
+{
+  const errs = validateResultRule(validDelta({ by: 5 }));
+  assert(errs.length > 0, 'delta rule with "by" set to a number (not boolean true) → error');
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined, byPercent: false }));
+  assert(errs.length > 0, 'delta rule with "byPercent" set to false → error (still needs one true)');
+}
+
+// amber/red finiteness, presence, non-negativity
+{
+  const errs = validateResultRule(validDelta({ amber: null, red: null }));
+  assert(errs.length > 0, 'delta rule with neither amber nor red → error');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: 'a lot' }));
+  assert(errs.length > 0, 'delta rule with non-numeric amber → error');
+}
+{
+  const errs = validateResultRule(validDelta({ red: NaN }));
+  assert(errs.length > 0, 'delta rule with NaN red → error');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: -5 }));
+  assert(errs.length > 0, 'delta rule with negative amber magnitude → error');
+}
+{
+  const errs = validateResultRule(validDelta({ red: -1 }));
+  assert(errs.length > 0, 'delta rule with negative red magnitude → error');
+}
+
+// ordering — red >= amber, direction-independent (unlike threshold's comparator-flipped rule)
+{
+  const errs = validateResultRule(validDelta({ amber: 26, red: 15 }));
+  assert(errs.length > 0, 'delta rule with red < amber → ordering error');
+  assert(hasError(errs, 'red'), 'ordering error mentions "red"');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ direction: 'fall', byPercent: true, by: undefined, amber: 15, red: 25 })
+  );
+  assert(errs.length === 0, "delta 'fall' direction still requires red >= amber (magnitude, not signed value)");
+}
+{
+  const errs = validateResultRule(validDelta({ amber: 15, red: 15 }));
+  assert(errs.length === 0, 'delta rule with red === amber → valid (>= is inclusive)');
+}
+
+// maxDays — optional positive integer
+{
+  const errs = validateResultRule(validDelta({ maxDays: 0 }));
+  assert(errs.length > 0, 'delta rule with maxDays 0 → error (must be positive)');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: -3 }));
+  assert(errs.length > 0, 'delta rule with negative maxDays → error');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: 3.5 }));
+  assert(errs.length > 0, 'delta rule with non-integer maxDays → error');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: null }));
+  assert(errs.length === 0, 'delta rule with maxDays explicitly null → valid (treated as omitted)');
+}
+
+// shared checks still apply to delta
+{
+  const errs = validateResultRule(validDelta({ label: '' }));
+  assert(errs.length > 0, 'delta rule with empty label → error');
+}
+{
+  const errs = validateResultRule(validDelta({ analyte: { match: [] } }));
+  assert(errs.length > 0, 'delta rule with empty analyte.match → error');
+}
+{
+  const errs = validateResultRule(validDelta({ suppressIfProblem: { exclude: ['x'] } }));
+  assert(errs.length > 0, 'delta suppressIfProblem missing match → error (shared validator)');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ actions: [{ type: 'link', label: 'Pathway', url: 'https://example.nhs.uk' }] })
+  );
+  assert(errs.length === 0, 'delta rule with a valid action → valid (shared validator)');
+}
+
+// cross-kind field rejection — delta-only fields must never appear on other kinds …
+{
+  const errs = validateResultRule(validRule({ direction: 'rise' }));
+  assert(errs.length > 0, 'threshold rule carrying "direction" → error');
+  assert(hasError(errs, 'direction'), 'error names "direction"');
+}
+{
+  const errs = validateResultRule(validRule({ by: true }));
+  assert(errs.length > 0, 'threshold rule carrying "by" → error');
+}
+{
+  const errs = validateResultRule(validRule({ byPercent: true }));
+  assert(errs.length > 0, 'threshold rule carrying "byPercent" → error');
+}
+{
+  const errs = validateResultRule(validRule({ maxDays: 7 }));
+  assert(errs.length > 0, 'threshold rule carrying "maxDays" → error');
+}
+{
+  const textRule = {
+    id: 'r',
+    enabled: false,
+    builtin: false,
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['msu'] },
+    normalText: ['no growth'],
+    direction: 'rise',
+  };
+  const errs = validateResultRule(textRule);
+  assert(errs.length > 0, 'text rule carrying "direction" → error');
+}
+{
+  const errs = validateResultRule(validCombo({ maxDays: 7 }));
+  assert(errs.length > 0, 'combo rule carrying "maxDays" → error');
+}
+// … and non-delta fields must never appear on a delta rule
+{
+  const errs = validateResultRule(validDelta({ comparator: 'above' }));
+  assert(errs.length > 0, 'delta rule carrying "comparator" → error');
+  assert(hasError(errs, 'comparator'), 'error names "comparator"');
+}
+{
+  const errs = validateResultRule(validDelta({ normalText: ['no growth'] }));
+  assert(errs.length > 0, 'delta rule carrying "normalText" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ abnormalText: ['abnormal'] }));
+  assert(errs.length > 0, 'delta rule carrying "abnormalText" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ normalLabel: 'Normal' }));
+  assert(errs.length > 0, 'delta rule carrying "normalLabel" → error');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ conditions: [{ analyte: { match: ['x'] }, comparator: 'above', value: 1 }] })
+  );
+  assert(errs.length > 0, 'delta rule carrying "conditions" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ level: 'red' }));
+  assert(errs.length > 0, 'delta rule carrying "level" → error');
+}
+// amber/red are SHARED with threshold — never flagged as cross-kind on delta.
+{
+  const errs = validateResultRule(validDelta({ amber: 15, red: 26 }));
+  assert(errs.length === 0, 'delta amber/red are not rejected as foreign fields (shared with threshold)');
+}
+
+// ── resultRuleSchemaPrompt: documents the delta kind ─────────────────────────
+console.log('\n--- resultRuleSchemaPrompt: covers delta kind ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('delta'), 'prompt documents the delta kind');
+  assert(prompt.toLowerCase().includes('direction'), 'prompt documents the direction field');
+  assert(prompt.toLowerCase().includes('bypercent'), 'prompt documents the byPercent field');
+  assert(prompt.toLowerCase().includes('maxdays'), 'prompt documents the maxDays field');
+  assert(
+    prompt.toLowerCase().includes('creatinine') && prompt.toLowerCase().includes('aki'),
+    'prompt includes a worked rising-creatinine (AKI) example'
+  );
+  assert(
+    prompt.toLowerCase().includes('haemoglobin') || prompt.toLowerCase().includes('hemoglobin'),
+    'prompt includes a worked falling-haemoglobin example'
+  );
+}
+
 // ── analyte.exclude (optional) validation ────────────────────────────────────
 console.log('\n--- analyte.exclude validation ---');
 {
@@ -833,6 +1209,312 @@ console.log('\n--- analyte.specimen validation ---');
   // The authoring prompt documents the specimen field
   const prompt = resultRuleSchemaPrompt();
   assert(prompt.toLowerCase().includes('specimen'), 'resultRuleSchemaPrompt documents the specimen field');
+}
+
+// ── actions (optional, item 2.7 TRIAGE-LENS-2026-07-02.md) validation ────────
+console.log('\n--- actions validation (item 2.7 — guidance actions on result rules) ---');
+{
+  // Omitted is valid (optional) — threshold, text, and combo kinds.
+  assert(validateResultRule(validRule({})).length === 0, 'actions: omitted is valid on threshold rule');
+  assert(
+    validateResultRule({
+      kind: 'text',
+      label: 'Needs review',
+      analyte: { match: ['MSU'] },
+      normalText: ['no growth'],
+    }).length === 0,
+    'actions: omitted is valid on text rule'
+  );
+  assert(validateResultRule(validCombo({})).length === 0, 'actions: omitted is valid on combo rule');
+
+  // A good, complete set of link/snippet/note actions passes on every kind.
+  const goodActions = [
+    { type: 'link', label: 'Local hyperkalaemia pathway', url: 'https://www.example-lmc.nhs.uk/hyperk' },
+    { type: 'snippet', label: 'Safety-net text', text: 'Repeat urgently if red.' },
+    { type: 'note', label: 'Reminder', text: 'Consider same-day ECG if red.' },
+  ];
+  assert(
+    validateResultRule(validRule({ actions: goodActions })).length === 0,
+    'actions: a good link+snippet+note set is valid on a threshold rule'
+  );
+  assert(
+    validateResultRule(
+      Object.assign(
+        {
+          kind: 'text',
+          label: 'Needs review',
+          analyte: { match: ['MSU'] },
+          normalText: ['no growth'],
+        },
+        { actions: goodActions }
+      )
+    ).length === 0,
+    'actions: a good action set is valid on a text rule'
+  );
+  assert(
+    validateResultRule(validCombo({ actions: goodActions })).length === 0,
+    'actions: a good action set is valid on a combo rule'
+  );
+
+  // actions must be an array
+  assert(
+    validateResultRule(validRule({ actions: 'not-an-array' })).length > 0,
+    'actions: a non-array value is rejected'
+  );
+
+  // Each entry naming its index — malformed type
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'popup', label: 'Bad', text: 'x' }] }));
+    assert(errs.length > 0, 'actions: unknown type is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: error names the malformed index (actions[0])');
+    assert(hasError(errs, 'type'), 'actions: error mentions "type"');
+  }
+
+  // Missing label
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'note', label: '', text: 'x' }] }));
+    assert(errs.length > 0, 'actions: missing label is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: missing-label error names the index');
+    assert(hasError(errs, 'label'), 'actions: missing-label error mentions "label"');
+  }
+
+  // link action missing url entirely
+  {
+    const errs = validateResultRule(validRule({ actions: [{ type: 'link', label: 'No URL' }] }));
+    assert(errs.length > 0, 'actions: link action with no url is rejected');
+    assert(hasError(errs, 'url'), 'actions: missing-url error mentions "url"');
+  }
+
+  // link action with a javascript: URL — must be rejected (scheme allowlist)
+  {
+    const errs = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'Evil', url: 'javascript:alert(1)' }] })
+    );
+    assert(errs.length > 0, 'actions: javascript: URL is rejected');
+    assert(hasError(errs, 'actions[0]'), 'actions: javascript: URL error names the index');
+    assert(hasError(errs, 'http'), 'actions: javascript: URL error mentions the http(s) requirement');
+  }
+
+  // link action with a data: URL — also rejected
+  {
+    const errs = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'Evil', url: 'data:text/html,<script>alert(1)</script>' }] })
+    );
+    assert(errs.length > 0, 'actions: data: URL is rejected');
+  }
+
+  // link action with a plain http(s) URL is accepted
+  {
+    const errsHttp = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'OK', url: 'http://example.nhs.uk/pathway' }] })
+    );
+    assert(errsHttp.length === 0, 'actions: plain http:// URL is accepted');
+    const errsHttps = validateResultRule(
+      validRule({ actions: [{ type: 'link', label: 'OK', url: 'https://example.nhs.uk/pathway' }] })
+    );
+    assert(errsHttps.length === 0, 'actions: https:// URL is accepted');
+  }
+
+  // snippet/note missing text
+  {
+    const errsSnippet = validateResultRule(validRule({ actions: [{ type: 'snippet', label: 'No text' }] }));
+    assert(errsSnippet.length > 0, 'actions: snippet action with no text is rejected');
+    assert(hasError(errsSnippet, 'text'), 'actions: snippet missing-text error mentions "text"');
+
+    const errsNote = validateResultRule(validRule({ actions: [{ type: 'note', label: 'No text' }] }));
+    assert(errsNote.length > 0, 'actions: note action with no text is rejected');
+  }
+
+  // A second, well-formed action after a malformed one still names index 1, not 0
+  {
+    const errs = validateResultRule(
+      validRule({
+        actions: [
+          { type: 'note', label: 'OK', text: 'fine' },
+          { type: 'link', label: 'Bad', url: 'javascript:evil()' },
+        ],
+      })
+    );
+    assert(hasError(errs, 'actions[1]'), 'actions: malformed second entry is named by its own index (actions[1])');
+  }
+
+  // Non-object entries
+  {
+    const errs = validateResultRule(validRule({ actions: [null, 'nope', 42] }));
+    assert(errs.length >= 3, 'actions: non-object entries each produce an error');
+  }
+}
+
+// ── resultRuleSchemaPrompt: documents the optional actions array ────────────
+console.log('\n--- resultRuleSchemaPrompt: covers actions ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('actions'), 'prompt documents the actions field');
+  assert(prompt.toLowerCase().includes('link'), 'prompt documents the link action type');
+  assert(prompt.toLowerCase().includes('snippet'), 'prompt documents the snippet action type');
+  assert(prompt.toLowerCase().includes('note'), 'prompt documents the note action type');
+  assert(
+    prompt.toLowerCase().includes('hyperkalaemia'),
+    'prompt includes a worked actions example (hyperkalaemia pathway)'
+  );
+}
+
+// ── context validation (item 3.5 — patient-context gate on any rule kind) ─────
+console.log('\n--- context validation (item 3.5 — patient-context gate) ---');
+{
+  // Omitted is valid on every kind.
+  assert(validateResultRule(validRule({})).length === 0, 'context: omitted is valid on threshold rule');
+  assert(
+    validateResultRule({
+      kind: 'text',
+      label: 'Needs review',
+      analyte: { match: ['MSU'] },
+      normalText: ['no growth'],
+    }).length === 0,
+    'context: omitted is valid on text rule'
+  );
+  assert(validateResultRule(validCombo({})).length === 0, 'context: omitted is valid on combo rule');
+  assert(
+    validateResultRule({
+      kind: 'delta',
+      label: 'AKI watch',
+      analyte: { match: ['creatinine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+    }).length === 0,
+    'context: omitted is valid on delta rule'
+  );
+
+  // A well-formed context (the FIB-4-over-65 worked example) is valid on every kind.
+  const fib4Context = { minAge: 65 };
+  assert(
+    validateResultRule(validRule({ context: fib4Context })).length === 0,
+    'context: { minAge: 65 } is valid on a threshold rule'
+  );
+  assert(
+    validateResultRule(
+      Object.assign(
+        { kind: 'text', label: 'Needs review', analyte: { match: ['MSU'] }, normalText: ['no growth'] },
+        { context: fib4Context }
+      )
+    ).length === 0,
+    'context: { minAge: 65 } is valid on a text rule'
+  );
+  assert(
+    validateResultRule(validCombo({ context: fib4Context })).length === 0,
+    'context: { minAge: 65 } is valid on a combo rule'
+  );
+  assert(
+    validateResultRule({
+      kind: 'delta',
+      label: 'AKI watch',
+      analyte: { match: ['creatinine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+      context: fib4Context,
+    }).length === 0,
+    'context: { minAge: 65 } is valid on a delta rule'
+  );
+
+  // A full context object (minAge + maxAge + sex) is valid.
+  assert(
+    validateResultRule(validRule({ context: { minAge: 18, maxAge: 65, sex: 'female' } })).length === 0,
+    'context: full { minAge, maxAge, sex } is valid'
+  );
+  // maxAge alone, sex alone, are each independently valid.
+  assert(validateResultRule(validRule({ context: { maxAge: 12 } })).length === 0, 'context: maxAge alone is valid');
+  assert(validateResultRule(validRule({ context: { sex: 'male' } })).length === 0, 'context: sex alone is valid');
+
+  // context must be an object (not an array, not a primitive)
+  {
+    const errs = validateResultRule(validRule({ context: 'not-an-object' }));
+    assert(errs.length > 0, 'context: a non-object value is rejected');
+    assert(hasError(errs, 'context'), 'context: non-object error mentions "context"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: [65, 'female'] }));
+    assert(errs.length > 0, 'context: an array is rejected (must be a plain object)');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: 65 }));
+    assert(errs.length > 0, 'context: a bare number is rejected');
+  }
+
+  // minAge / maxAge — must be non-negative finite numbers
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: -1 } }));
+    assert(errs.length > 0, 'context: negative minAge is rejected');
+    assert(hasError(errs, 'minAge'), 'context: negative-minAge error mentions "minAge"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { maxAge: -5 } }));
+    assert(errs.length > 0, 'context: negative maxAge is rejected');
+    assert(hasError(errs, 'maxAge'), 'context: negative-maxAge error mentions "maxAge"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: 'sixty-five' } }));
+    assert(errs.length > 0, 'context: non-numeric minAge is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { maxAge: Infinity } }));
+    assert(errs.length > 0, 'context: non-finite maxAge (Infinity) is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: NaN } }));
+    assert(errs.length > 0, 'context: NaN minAge is rejected');
+  }
+  // minAge 0 is a valid non-negative boundary
+  assert(validateResultRule(validRule({ context: { minAge: 0 } })).length === 0, 'context: minAge 0 is valid');
+
+  // minAge <= maxAge ordering, when both present
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: 70, maxAge: 65 } }));
+    assert(errs.length > 0, 'context: minAge > maxAge is rejected');
+    assert(hasError(errs, 'minAge'), 'context: ordering error mentions minAge/maxAge');
+  }
+  assert(
+    validateResultRule(validRule({ context: { minAge: 18, maxAge: 18 } })).length === 0,
+    'context: minAge === maxAge is valid (a single-year band)'
+  );
+
+  // sex — must be lowercase 'male' or 'female'
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'Male' } }));
+    assert(errs.length > 0, 'context: capitalised sex ("Male") is rejected — must be lowercase');
+    assert(hasError(errs, 'sex'), 'context: bad-sex error mentions "sex"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'unknown' } }));
+    assert(errs.length > 0, 'context: an unrecognised sex value is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'f' } }));
+    assert(errs.length > 0, 'context: abbreviated sex ("f") is rejected — must be the full lowercase word');
+  }
+
+  // An empty context object ({}) is technically well-formed (no clauses to violate) —
+  // the engine's contextAllows treats an empty object as "no gate" (see
+  // test-result-severity.js), so validation should not reject it either.
+  assert(validateResultRule(validRule({ context: {} })).length === 0, 'context: an empty object {} is valid');
+}
+
+// ── resultRuleSchemaPrompt: documents the optional context field ────────────
+console.log('\n--- resultRuleSchemaPrompt: covers context (item 3.5) ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('context'), 'prompt documents the context field');
+  assert(prompt.toLowerCase().includes('minage'), 'prompt documents minAge');
+  assert(prompt.toLowerCase().includes('maxage'), 'prompt documents maxAge');
+  assert(
+    prompt.toLowerCase().includes('fail-closed') || prompt.toLowerCase().includes('fail closed'),
+    'prompt explains the fail-closed semantics'
+  );
+  assert(
+    prompt.toLowerCase().includes('fib-4') || prompt.toLowerCase().includes('fib4'),
+    'prompt includes the FIB-4-over-65 worked example'
+  );
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

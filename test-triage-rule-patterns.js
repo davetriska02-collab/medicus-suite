@@ -8,11 +8,20 @@
 // a silent clinical miss (the chip just never fires), so this test fails the
 // build if any shipped pattern is invalid, plus pins schema invariants and a
 // set of positive/negative match examples for the high-risk rules.
+//
+// The compile/match step below is NOT a local reimplementation — it requires
+// the real shared matcher (content-scripts/triage-lens/rule-match.js,
+// window.TriageLensMatch) that content.js and options.js both delegate to
+// (see test-triage-preview-parity.js). A local mirror here could silently
+// diverge from the real matcher and this test would keep passing while the
+// live page behaved differently — exactly the latent-divergence risk this
+// file exists to close.
 
 'use strict';
 
 const path = require('path');
 const cfg = require(path.join(__dirname, 'defaults.json'));
+const M = require(path.join(__dirname, 'content-scripts', 'triage-lens', 'rule-match.js'));
 
 let passed = 0,
   failed = 0;
@@ -25,17 +34,20 @@ function check(cond, msg) {
   }
 }
 
-// ---- Mirror of the engine's compile step (content.js compileRule) ----
+// ---- Real engine compile step (content-scripts/triage-lens/rule-match.js) ----
+// M.compileRule returns null for a disabled rule or one with no usable
+// patterns; every rule in defaults.json is builtin:true + enabled:true, so
+// that null path is exercised separately in test-triage-preview-parity.js,
+// not here. Wrap to preserve this file's original "throws on invalid" shape
+// so section 1 below (which expects compileRule to throw on a bad pattern)
+// keeps working unchanged.
 function compileRule(rule) {
-  const compiled = [];
-  for (const p of rule.patterns || []) {
-    const s = String(p || '').trim();
-    if (!s) continue;
-    const src = rule.regex ? s : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wrapped = rule.regex ? '\\b' + src + '\\b' : '\\b' + src;
-    compiled.push(new RegExp(wrapped, 'i')); // throws on invalid — intentional
+  const compiled = M.compileRule(rule);
+  if (!compiled) return [];
+  if (Array.isArray(compiled._errors) && compiled._errors.length) {
+    throw new Error(compiled._errors.join('; '));
   }
-  return compiled;
+  return compiled._compiled;
 }
 
 // ---- 1. Every shipped pattern must compile ----

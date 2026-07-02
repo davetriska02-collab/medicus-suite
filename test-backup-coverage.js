@@ -262,6 +262,18 @@ const ALLOWLIST = new Set([
   // IS backed up — it rides triagelens.config via triage-io:
   'triagelens.oir.auditLog',
 
+  // Routine-prescription button audit trail (Phase 1.4, H-035 gap fix) —
+  // machine-local ring buffer (cap 200) of what the "send to routine
+  // prescriptions" macro did on THIS device: task URL/UUID, team, commit
+  // mode, timestamp, outcome (committed/highlighted/aborted+reason). Same
+  // doctrine as labfiling.auditLog / triagelens.oir.auditLog: it is a
+  // per-device governance record, not user config, and restoring it onto
+  // another machine would fabricate a misleading "what this macro did here"
+  // trail. The routine-rx *config* (teams/lastTeam/commitMode) IS backed up —
+  // it rides triagelens.routineRx via triage-io; only the audit log is
+  // excluded:
+  'triagelens.routinerx.auditLog',
+
   // F2 Clinical Event Ledger — machine-local ring buffer (cap 5000 events /
   // 90 days) of what the suite displayed or did on THIS machine
   // (shared/event-ledger.js; read/export/clear UI in the Options "Event

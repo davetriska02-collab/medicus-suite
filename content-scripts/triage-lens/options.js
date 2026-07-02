@@ -141,7 +141,15 @@
   // content.js; bump defaults.json "version" when you add an entry here.
   const RETIRED_RESULTRULE_FIELDS = {
     'base-low-haemoglobin': { label: ['Critical low haemoglobin'], red: [100] },
-    'base-high-potassium': { label: ['Critical high potassium'] },
+    // v22 added an amber band (6.0–6.4 mmol/L, UKKA Oct 2023 "moderate" hyperkalaemia
+    // band) below the pre-existing red ≥6.5 — a NEW field on a held builtin, which the
+    // append-by-id merge never delivers on its own. Both the ancient (pre-v17) and the
+    // v17 numbered label are listed as retired candidates so either vintage of held rule
+    // (which never carried an amber field) is brought up to the new label + amber value.
+    'base-high-potassium': {
+      label: ['Critical high potassium', 'Critical high potassium (red ≥6.5 mmol/L)'],
+      amber: [undefined],
+    },
     'base-low-sodium': { label: ['Critical low sodium'] },
     'base-low-egfr': { label: ['Critical low eGFR'] },
     'base-low-platelets': { label: ['Critical low platelets'] },
@@ -156,6 +164,64 @@
     'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
     'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
     'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
+    // v22 (CSO calibration pass, TRIAGE-LENS-2026-07-02.md item 3.3) demoted HbA1c ≥48 from
+    // red to amber — 48 mmol/mol is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself a
+    // marker of clinical urgency, and firing red on every newly-diagnostic HbA1c was alert
+    // fatigue. A held rule still at the old red:48/no-amber shape is moved to red:null,
+    // amber:48 (label text is unchanged — "HbA1c ≥48" reads correctly at either severity, so
+    // it is not part of this un-stick).
+    'base-hba1c-diabetes': { red: [48], amber: [undefined] },
+    // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
+    // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
+    // false-amber review) to morphology-qualified gram-stain terms and named candida
+    // species. A held rule whose abnormalText still deep-equals this OLD 30-element
+    // shipped array is un-stuck to the new shipped array; a customised array is left alone.
+    'base-blood-culture': {
+      abnormalText: [
+        [
+          'grown in aerobic bottle',
+          'grown in anaerobic bottle',
+          'positive blood culture',
+          'gram positive',
+          'gram negative',
+          'gram-positive',
+          'gram-negative',
+          'bacteraemia',
+          'bacteremia',
+          'fungaemia',
+          'sensitive to',
+          'resistant to',
+          'sensitivities shown',
+          'staphylococcus',
+          'streptococcus',
+          'escherichia',
+          'klebsiella',
+          'enterococcus',
+          'pseudomonas',
+          'haemophilus',
+          'neisseria',
+          'listeria',
+          'salmonella',
+          'candida',
+          'acinetobacter',
+          'serratia',
+          'enterobacter',
+          'proteus',
+          'citrobacter',
+          'stenotrophomonas',
+        ],
+      ],
+    },
+  };
+  // A retired field's candidate value may be a scalar (indexOf works) or, for
+  // abnormalText, an array of candidate arrays — reference-compare via indexOf never
+  // matches two distinct array instances, so deep-compare element-wise when the held
+  // value is itself an array.
+  const arraysShallowEqual = (a, b) =>
+    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+  const fieldStillDefault = (candidates, heldValue) => {
+    if (Array.isArray(heldValue)) return candidates.some((c) => arraysShallowEqual(c, heldValue));
+    return candidates.indexOf(heldValue) !== -1;
   };
   const revertRetiredResultRuleFields = (resultRules, shippedResultRules) => {
     if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
@@ -164,10 +230,11 @@
       const shippedRule = shippedResultRules.find((r) => r && r.id === id);
       if (!held || !shippedRule) continue;
       const fields = RETIRED_RESULTRULE_FIELDS[id];
-      const stillDefault = Object.keys(fields).every((f) => fields[f].indexOf(held[f]) !== -1);
+      const stillDefault = Object.keys(fields).every((f) => fieldStillDefault(fields[f], held[f]));
       if (!stillDefault) continue;
       for (const f of Object.keys(fields)) {
-        if (shippedRule[f] !== undefined) held[f] = shippedRule[f];
+        if (shippedRule[f] === undefined) continue;
+        held[f] = Array.isArray(shippedRule[f]) ? [...shippedRule[f]] : shippedRule[f];
       }
     }
   };
@@ -487,14 +554,58 @@
       c.checked = (editingDraft.pages || []).includes(c.dataset.page);
     });
 
+    // require — item 3.5 patient-context gate (optional). Populate from
+    // editingDraft.require if present, else leave every field blank/"Any".
+    const req = editingDraft.require && typeof editingDraft.require === 'object' ? editingDraft.require : null;
+    if ($('#fReqAgeMin')) $('#fReqAgeMin').value = req && Number.isFinite(req.ageMin) ? req.ageMin : '';
+    if ($('#fReqAgeMax')) $('#fReqAgeMax').value = req && Number.isFinite(req.ageMax) ? req.ageMax : '';
+    if ($('#fReqSex')) $('#fReqSex').value = req && (req.sex === 'male' || req.sex === 'female') ? req.sex : '';
+    if ($('#fReqMedsAny')) $('#fReqMedsAny').value = req && Array.isArray(req.medsAny) ? req.medsAny.join('\n') : '';
+    if ($('#fReqProblemsAny'))
+      $('#fReqProblemsAny').value = req && Array.isArray(req.problemsAny) ? req.problemsAny.join('\n') : '';
+
     renderActions();
     activateTab('edit');
   };
 
-  const renderActions = () => {
-    const cont = $('#actionList');
+  // readRequireFromForm() → object | null — item 3.5. Reads the "Require patient
+  // context" fieldset into a require object, or null when every field is empty/Any
+  // (so a rule with no require clause is saved WITHOUT a require key, same
+  // sparse-optional-field convention as bumpsTile/actions).
+  const readRequireFromForm = () => {
+    const ageMinVal = (($('#fReqAgeMin') && $('#fReqAgeMin').value) || '').trim();
+    const ageMaxVal = (($('#fReqAgeMax') && $('#fReqAgeMax').value) || '').trim();
+    const sexVal = ($('#fReqSex') && $('#fReqSex').value) || '';
+    const medsAny = (($('#fReqMedsAny') && $('#fReqMedsAny').value) || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const problemsAny = (($('#fReqProblemsAny') && $('#fReqProblemsAny').value) || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const require = {};
+    if (ageMinVal !== '' && Number.isFinite(+ageMinVal)) require.ageMin = +ageMinVal;
+    if (ageMaxVal !== '' && Number.isFinite(+ageMaxVal)) require.ageMax = +ageMaxVal;
+    if (sexVal === 'male' || sexVal === 'female') require.sex = sexVal;
+    if (medsAny.length) require.medsAny = medsAny;
+    if (problemsAny.length) require.problemsAny = problemsAny;
+    return Object.keys(require).length ? require : null;
+  };
+
+  // renderActionEditorInto(containerSel, actions) — shared click-to-fire action-list
+  // editor. Renders one row per entry in `actions` (type select + label + url-or-text
+  // field), mutating the array IN PLACE on every edit/add/remove so the caller's own
+  // draft object (which owns the array by reference) stays in sync with no return
+  // value needed. Originally alert-rule-only (#actionList / editingDraft.actions);
+  // factored out (item 2.7, TRIAGE-LENS-2026-07-02.md) so the result-rule editor
+  // (#rrActionList / rrEditingDraft.actions) can carry the same link/snippet/note
+  // guidance shortcuts an alert rule can, without duplicating this ~30-line block.
+  const renderActionEditorInto = (containerSel, actions) => {
+    const cont = $(containerSel);
+    if (!cont) return;
     cont.innerHTML = '';
-    editingDraft.actions.forEach((a, i) => {
+    actions.forEach((a, i) => {
       const row = document.createElement('div');
       row.className = 'tl-action-row';
       row.innerHTML = `
@@ -517,17 +628,19 @@
         input.addEventListener('input', (e) => {
           const idx = +e.target.dataset.i;
           const key = e.target.dataset.k;
-          editingDraft.actions[idx][key] = e.target.value;
-          if (key === 'type') renderActions(); // re-render on type change to swap url/text input
+          actions[idx][key] = e.target.value;
+          if (key === 'type') renderActionEditorInto(containerSel, actions); // re-render on type change to swap url/text input
         });
       });
       row.querySelector('.tl-action-remove').addEventListener('click', () => {
-        editingDraft.actions.splice(i, 1);
-        renderActions();
+        actions.splice(i, 1);
+        renderActionEditorInto(containerSel, actions);
       });
       cont.appendChild(row);
     });
   };
+
+  const renderActions = () => renderActionEditorInto('#actionList', editingDraft.actions);
 
   // ============================================================
   // RULE VALIDATION (shared by save path and LLM importer)
@@ -538,6 +651,19 @@
   const ALLOWED_PAGES = PAGES.map((p) => p.id);
   const ALLOWED_BUMPS = ['', 'risk', 'monitoring', 'meds', 'openLoops', 'carePlan', 'safeguarding'];
   const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
+
+  // isSafeActionUrl(url) → boolean
+  // Mirrors content.js's executeAction scheme check: only absolute http(s) URLs
+  // are allowed for link actions, so an imported/edited config can't smuggle in
+  // a javascript:/data: URL that would execute on click.
+  const isSafeActionUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch (e) {
+      return false;
+    }
+  };
 
   // validateTriageRule(rule) → string[]
   // Returns an array of error strings (empty = valid).
@@ -607,13 +733,112 @@
       }
       if (a.type === 'link' && (!a.url || typeof a.url !== 'string')) {
         errs.push('actions[' + i + ']: url is required for link actions.');
+      } else if (a.type === 'link' && !isSafeActionUrl(a.url)) {
+        errs.push('actions[' + i + ']: url must be an absolute http:// or https:// URL.');
       }
       if ((a.type === 'snippet' || a.type === 'note') && (a.text == null || typeof a.text !== 'string')) {
         errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
       }
     });
 
+    // require — OPTIONAL patient-context gate (item 3.5, TRIAGE-LENS-2026-07-02.md):
+    // { ageMin?, ageMax?, sex?, medsAny?, problemsAny? }. Validated by the SAME
+    // validator content.js's ruleRequireMet gate is built against (rule-match.js),
+    // so the editor/import path can never accept a require shape the runtime gate
+    // would silently misinterpret.
+    const VALIDATE_REQUIRE = window.TriageLensMatch && window.TriageLensMatch.validateRuleRequire;
+    if (VALIDATE_REQUIRE) {
+      VALIDATE_REQUIRE(rule).forEach((e) => errs.push(e));
+    }
+
     return errs;
+  };
+
+  // ============================================================
+  // FULL-CONFIG IMPORT VALIDATION (backup file + pasted JSON)
+  // ============================================================
+  // validateImportedConfig(parsed, currentConfig) → { errors: string[], normalized?: object }
+  // Shared by the file-import handler and the "Save pasted JSON" handler so a
+  // crafted or corrupt backup is rejected wholesale rather than partially
+  // persisted. Runs the SAME per-rule validators the manual editor uses
+  // (validateTriageRule / SentinelResultRules.validateResultRule) over every
+  // entry, sanity-checks the shape of the other top-level keys, and
+  // normalises `version` to a number.
+  const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+  const validateImportedConfig = (parsed, currentConfig) => {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { errors: ['Not a valid Triage Lens config: expected a JSON object.'] };
+    }
+
+    const errors = [];
+
+    if (!Array.isArray(parsed.rules)) {
+      errors.push('rules must be an array.');
+    } else {
+      for (let i = 0; i < parsed.rules.length && errors.length === 0; i++) {
+        const errs = validateTriageRule(parsed.rules[i]);
+        if (errs.length > 0) {
+          const name = (parsed.rules[i] && (parsed.rules[i].label || parsed.rules[i].id)) || 'untitled';
+          errors.push('rules[' + i + '] (' + name + '): ' + errs[0]);
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.resultRules !== undefined) {
+      if (!Array.isArray(parsed.resultRules)) {
+        errors.push('resultRules must be an array.');
+      } else {
+        const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
+        if (VALIDATE) {
+          for (let i = 0; i < parsed.resultRules.length && errors.length === 0; i++) {
+            const errs = VALIDATE(parsed.resultRules[i]);
+            if (errs.length > 0) {
+              const name = (parsed.resultRules[i] && parsed.resultRules[i].label) || 'untitled';
+              errors.push('resultRules[' + i + '] (' + name + '): ' + errs[0]);
+            }
+          }
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.thresholds !== undefined) {
+      if (!isPlainObject(parsed.thresholds)) {
+        errors.push('thresholds must be an object.');
+      } else {
+        for (const key of Object.keys(parsed.thresholds)) {
+          if (!Number.isFinite(parsed.thresholds[key])) {
+            errors.push('thresholds.' + key + ' must be a finite number.');
+            break;
+          }
+        }
+      }
+    }
+
+    if (errors.length === 0 && parsed.prefs !== undefined && !isPlainObject(parsed.prefs)) {
+      errors.push('prefs must be an object.');
+    }
+
+    if (errors.length === 0 && parsed.systemChips !== undefined && !isPlainObject(parsed.systemChips)) {
+      errors.push('systemChips must be an object.');
+    }
+
+    if (errors.length > 0) return { errors };
+
+    // Normalise version to a number. mergeShippedDefaults treats a falsy/NaN
+    // version as 0 ("older than anything shipped") and silently merges shipped
+    // builtins in on the next options load — so a missing/invalid imported
+    // version must NOT be allowed to trigger that; fall back to the
+    // pre-import CONFIG.version instead. A genuinely-numeric (even low)
+    // imported version is left as-is — that's the existing, intended
+    // "import an older backup, then it catches up on next load" behaviour.
+    const normalized = { ...parsed };
+    const importedVersion = Number(parsed.version);
+    normalized.version = Number.isFinite(importedVersion)
+      ? importedVersion
+      : (currentConfig && currentConfig.version) || 0;
+
+    return { errors: [], normalized };
   };
 
   // ============================================================
@@ -845,6 +1070,11 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     editingDraft.notes = $('#fNotes').value.trim();
     editingDraft.fields = $$('#fFields input:checked').map((c) => c.dataset.field);
     editingDraft.pages = $$('#fPages input:checked').map((c) => c.dataset.page);
+    // require — item 3.5. Sparse-optional: omit the key entirely when every field is
+    // blank, same convention as bumpsTile/actions elsewhere in this editor.
+    const require = readRequireFromForm();
+    if (require) editingDraft.require = require;
+    else delete editingDraft.require;
 
     // Validate via the shared validator; the form builder ensures kind/fields/pages
     // come from the fixed select/checkbox sets, so the main check that can fail here
@@ -950,7 +1180,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // Treat the preview input as the request field (most common). Uses the
       // shared matcher so the fire/no-fire result matches the runtime exactly.
       if (rule.fields.includes('request') && window.TriageLensMatch.ruleMatchesText(c, text)) {
-        matches.push(rule);
+        // Item 3.4 (TRIAGE-LENS-2026-07-02.md) — surface the same negation/
+        // past-tense qualifier the queue chip shows, via the SAME shared
+        // matcher (window.TriageLensMatch.ruleMatchEvidence), so the preview
+        // can never disagree with what the live page demotes. Display-only —
+        // matching itself (whether the rule fires at all) is unaffected.
+        const ev = window.TriageLensMatch.ruleMatchEvidence(c, text);
+        matches.push({ rule, qualifier: ev ? ev.qualifier : null });
       }
     }
     const errorHtml = errors.length
@@ -962,17 +1198,30 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       cont.innerHTML = errorHtml + '<div class="tl-preview-empty">No rules match.</div>';
       return;
     }
+    const QUALIFIER_SUFFIX = { negated: '(negated?)', past: '(past?)' };
     cont.innerHTML =
       errorHtml +
       matches
-        .map(
-          (r) => `
+        .map(({ rule: r, qualifier }) => {
+          const qSuffix = qualifier
+            ? ` <span class="tl-rule-qualifier tl-rule-qualifier-${escAttr(qualifier)}">${QUALIFIER_SUFFIX[qualifier]}</span>`
+            : '';
+          // Item 3.5 — the preview only tests the PATTERN (request text); it has no
+          // patient age/sex/meds/problems to gate against, so a rule with a require
+          // clause is shown here UNGATED with a note, rather than silently applying
+          // (which would misrepresent the live page) or hiding it (which would hide
+          // a rule that DOES fire on a real page with the right patient context).
+          const reqNote =
+            r.require && typeof r.require === 'object'
+              ? ' <span class="tl-rule-meta">requires patient context — shown here without gating</span>'
+              : '';
+          return `
       <div class="tl-preview-match">
         <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
-        <span class="tl-rule-label">${escHtml(r.label)}</span>
-        <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>
-      </div>`
-        )
+        <span class="tl-rule-label">${escHtml(r.label)}${qSuffix}</span>
+        <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>${reqNote}
+      </div>`;
+        })
         .join('');
   };
 
@@ -1001,15 +1250,17 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const text = await f.text();
       try {
         const parsed = JSON.parse(text);
-        if (!parsed || !Array.isArray(parsed.rules)) throw new Error('Not a valid Triage Lens config');
-        if (!confirm(`Import config with ${parsed.rules.length} rules? Your current rules will be replaced.`)) return;
-        await saveConfig(parsed);
+        const { errors, normalized } = validateImportedConfig(parsed, CONFIG);
+        if (errors.length > 0) throw new Error(errors[0]);
+        if (!confirm(`Import config with ${normalized.rules.length} rules? Your current rules will be replaced.`))
+          return;
+        await saveConfig(normalized);
         flash('Imported');
         renderRules();
         populateThresholds();
         populatePrefs();
         populateOir();
-        $('#rawJson').value = JSON.stringify(parsed, null, 2);
+        $('#rawJson').value = JSON.stringify(normalized, null, 2);
       } catch (e) {
         flash('Import failed: ' + e.message, 'err');
       }
@@ -1044,8 +1295,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#btnSaveJson').addEventListener('click', async () => {
       try {
         const parsed = JSON.parse($('#rawJson').value);
-        if (!parsed || !Array.isArray(parsed.rules)) throw new Error('Missing rules array');
-        await saveConfig(parsed);
+        const { errors, normalized } = validateImportedConfig(parsed, CONFIG);
+        if (errors.length > 0) throw new Error(errors[0]);
+        await saveConfig(normalized);
         renderRules();
         populateThresholds();
         populatePrefs();
@@ -1772,6 +2024,17 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     );
   };
 
+  /** Summarise a delta rule's change thresholds, e.g. "Δ rise ≥+26 red / ≥+15 amber within 7d". */
+  const rrDeltaSummary = (rule) => {
+    const dirWord = rule.direction === 'rise' ? 'rise' : rule.direction === 'fall' ? 'fall' : 'change';
+    const axisLabel = rule.byPercent === true ? '%' : '';
+    const parts = [];
+    if (rule.red != null) parts.push('≥+' + rule.red + axisLabel + ' red');
+    if (rule.amber != null) parts.push('≥+' + rule.amber + axisLabel + ' amber');
+    const daysNote = Number.isFinite(rule.maxDays) ? ' within ' + rule.maxDays + 'd' : '';
+    return 'Δ ' + dirWord + ' ' + parts.join(' / ') + daysNote;
+  };
+
   const rrSeveritySummary = (rule) => {
     if (rule.kind === 'combo') {
       const conds = Array.isArray(rule.conditions) ? rule.conditions : [];
@@ -1784,6 +2047,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       return (
         'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more
       );
+    }
+    if (rule.kind === 'delta') {
+      return rrDeltaSummary(rule);
     }
     const parts = [];
     const cmp = rule.comparator === 'above' ? '≥' : '≤';
@@ -1829,15 +2095,38 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
                 ? 'info'
                 : 'info';
       // Direction glyph so a high/low pair (e.g. high vs low calcium) is distinguishable at a glance.
+      // A delta rule's glyph reflects its configured `direction` (rise/fall/either)
+      // rather than a threshold rule's `comparator`.
       const _rrDir =
         rule.kind === 'text' || rule.kind === 'combo'
           ? ''
-          : rule.comparator === 'above'
-            ? '↑'
-            : rule.comparator === 'below'
-              ? '↓'
+          : rule.kind === 'delta'
+            ? rule.direction === 'rise'
+              ? '↑'
+              : rule.direction === 'fall'
+                ? '↓'
+                : rule.direction === 'either'
+                  ? '↕'
+                  : ''
+            : rule.comparator === 'above'
+              ? '↑'
+              : rule.comparator === 'below'
+                ? '↓'
+                : '';
+      const _rrDirTitle =
+        rule.kind === 'delta'
+          ? _rrDir === '↑'
+            ? 'Fires on a RISE'
+            : _rrDir === '↓'
+              ? 'Fires on a FALL'
+              : _rrDir === '↕'
+                ? 'Fires on either direction'
+                : ''
+          : _rrDir === '↑'
+            ? 'Fires on a HIGH value'
+            : _rrDir === '↓'
+              ? 'Fires on a LOW value'
               : '';
-      const _rrDirTitle = _rrDir === '↑' ? 'Fires on a HIGH value' : _rrDir === '↓' ? 'Fires on a LOW value' : '';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
         <span class="tl-rule-kind tl-rule-kind-${_rrKind}">${KIND_LABEL[_rrKind] || _rrKind.toUpperCase()}</span>
@@ -1881,19 +2170,24 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   const rrApplyKindVisibility = (kind) => {
     const isText = kind === 'text';
     const isCombo = kind === 'combo';
+    const isDelta = kind === 'delta';
     // The single-analyte block (match / exclude / specimen + advisory Test match)
-    // doesn't apply to a combo — each combo condition carries its own analyte.
+    // doesn't apply to a combo — each combo condition carries its own analyte. A
+    // delta rule DOES use it (like threshold/text — one analyte per rule).
     document.querySelectorAll('.rr-fields-single').forEach((el) => {
       el.style.display = isCombo ? 'none' : '';
     });
     document.querySelectorAll('.rr-fields-threshold').forEach((el) => {
-      el.style.display = isText || isCombo ? 'none' : '';
+      el.style.display = isText || isCombo || isDelta ? 'none' : '';
     });
     document.querySelectorAll('.rr-fields-text').forEach((el) => {
       el.style.display = isText ? '' : 'none';
     });
     document.querySelectorAll('.rr-fields-combo').forEach((el) => {
       el.style.display = isCombo ? '' : 'none';
+    });
+    document.querySelectorAll('.rr-fields-delta').forEach((el) => {
+      el.style.display = isDelta ? '' : 'none';
     });
     // Initialise the builder's two starter conditions the first time combo is
     // selected on a non-combo rule (an edit of an existing combo is seeded by
@@ -1941,6 +2235,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     }
   };
 
+  // renderRrActions() — result-rule editor's action list, backed by rrEditingDraft.actions.
+  // Reuses the shared renderActionEditorInto helper (item 2.7) — the same one the
+  // alert-rule editor's renderActions() calls — targeting #rrActionList instead of
+  // #actionList.
+  const renderRrActions = () => renderActionEditorInto('#rrActionList', rrEditingDraft.actions);
+
   const setupResultEditPane = () => {
     $('#btnBackToResultRules').addEventListener('click', () => {
       rrEditingId = null;
@@ -1957,6 +2257,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       });
     });
     $('#btnSaveResultEdit').addEventListener('click', saveCurrentResultRule);
+    $('#btnRrAddAction').addEventListener('click', () => {
+      rrEditingDraft.actions.push({ type: 'note', label: '', text: '' });
+      renderRrActions();
+    });
     $('#btnDeleteResultRule').addEventListener('click', async () => {
       if (!rrEditingId) return;
       const r = CONFIG.resultRules.find((x) => x.id === rrEditingId);
@@ -2499,6 +2803,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     if (!rule) return;
     rrEditingId = id;
     rrEditingDraft = JSON.parse(JSON.stringify(rule));
+    if (!Array.isArray(rrEditingDraft.actions)) rrEditingDraft.actions = [];
 
     $('#rrEditTitle').textContent = rule.builtin
       ? 'Edit built-in result rule: ' + rule.label
@@ -2514,17 +2819,39 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
     $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');
     $('#rrAnalyteSpecimen').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.specimen) || []).join('\n');
-    const kind = rrEditingDraft.kind === 'text' ? 'text' : rrEditingDraft.kind === 'combo' ? 'combo' : 'threshold';
+    const kind =
+      rrEditingDraft.kind === 'text'
+        ? 'text'
+        : rrEditingDraft.kind === 'combo'
+          ? 'combo'
+          : rrEditingDraft.kind === 'delta'
+            ? 'delta'
+            : 'threshold';
     $('#rrKind').value = kind;
     if (kind === 'combo' && _rrComboApi) _rrComboApi.loadFromRule(rrEditingDraft);
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
-    $('#rrAmber').value = rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
-    $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
+    $('#rrAmber').value = kind !== 'delta' && rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
+    $('#rrRed').value = kind !== 'delta' && rrEditingDraft.red != null ? rrEditingDraft.red : '';
     $('#rrUnit').value = rrEditingDraft.unit || '';
     $('#rrNormalText').value = Array.isArray(rrEditingDraft.normalText) ? rrEditingDraft.normalText.join('\n') : '';
     $('#rrNormalLabel').value = rrEditingDraft.normalLabel || '';
+    // Delta fields (item 3.6) — direction/by-basis/amber/red/maxDays.
+    if ($('#rrDeltaDirection')) $('#rrDeltaDirection').value = rrEditingDraft.direction || 'rise';
+    if ($('#rrDeltaBasis')) $('#rrDeltaBasis').value = rrEditingDraft.byPercent === true ? 'percent' : 'value';
+    if ($('#rrDeltaAmber'))
+      $('#rrDeltaAmber').value = kind === 'delta' && rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
+    if ($('#rrDeltaRed'))
+      $('#rrDeltaRed').value = kind === 'delta' && rrEditingDraft.red != null ? rrEditingDraft.red : '';
+    if ($('#rrDeltaMaxDays')) $('#rrDeltaMaxDays').value = rrEditingDraft.maxDays != null ? rrEditingDraft.maxDays : '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
+    // context — item 3.5 patient-context gate (optional, same on every kind).
+    const rrCtx = rrEditingDraft.context && typeof rrEditingDraft.context === 'object' ? rrEditingDraft.context : null;
+    if ($('#rrContextMinAge')) $('#rrContextMinAge').value = rrCtx && Number.isFinite(rrCtx.minAge) ? rrCtx.minAge : '';
+    if ($('#rrContextMaxAge')) $('#rrContextMaxAge').value = rrCtx && Number.isFinite(rrCtx.maxAge) ? rrCtx.maxAge : '';
+    if ($('#rrContextSex'))
+      $('#rrContextSex').value = rrCtx && (rrCtx.sex === 'male' || rrCtx.sex === 'female') ? rrCtx.sex : '';
     rrApplyKindVisibility(kind);
+    renderRrActions();
 
     // Reset test-match indicator when opening editor
     const testEl = $('#rrTestName');
@@ -2541,10 +2868,34 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     activateTab('resultEdit');
   };
 
+  // readRrContextFromForm() → object | null — item 3.5. Reads the result-rule
+  // editor's "Patient context" fieldset (shared by every rule kind) into a
+  // context object, or null when every field is empty/Any (sparse-optional,
+  // same convention as actions/analyte.exclude).
+  const readRrContextFromForm = () => {
+    const minAgeVal = (($('#rrContextMinAge') && $('#rrContextMinAge').value) || '').trim();
+    const maxAgeVal = (($('#rrContextMaxAge') && $('#rrContextMaxAge').value) || '').trim();
+    const sexVal = ($('#rrContextSex') && $('#rrContextSex').value) || '';
+    const context = {};
+    if (minAgeVal !== '' && Number.isFinite(+minAgeVal)) context.minAge = +minAgeVal;
+    if (maxAgeVal !== '' && Number.isFinite(+maxAgeVal)) context.maxAge = +maxAgeVal;
+    if (sexVal === 'male' || sexVal === 'female') context.sex = sexVal;
+    return Object.keys(context).length ? context : null;
+  };
+
   const saveCurrentResultRule = async () => {
     if (!rrEditingId) return;
     const selectedKind = $('#rrKind').value;
     const enabled = $('#rrEnabled').checked;
+    // Actions (item 2.7) are edited straight into rrEditingDraft.actions by
+    // renderRrActions/btnRrAddAction regardless of rule type, so read/capture them
+    // ONCE here before any kind-specific branch below reassigns or mutates
+    // rrEditingDraft — omit the key entirely when empty (matches the sparse-optional-
+    // field convention every other result-rule field uses, e.g. analyte.exclude).
+    const draftActions = Array.isArray(rrEditingDraft.actions) ? rrEditingDraft.actions : [];
+    // context (item 3.5) — same "read once before any branch reassigns
+    // rrEditingDraft" reasoning as draftActions above.
+    const draftContext = readRrContextFromForm();
 
     // ── Combo (multi-condition) — built by the inline combo builder ───────────
     if (selectedKind === 'combo') {
@@ -2562,6 +2913,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // Honour the editor's Enabled checkbox (the manual editor lets a clinician
       // enable after review; the LLM-import path is the one that forces disabled).
       const rule = { ...built.rule, enabled };
+      if (draftActions.length) rule.actions = draftActions;
+      if (draftContext) rule.context = draftContext;
       const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
       if (VALIDATE) {
         const errs = VALIDATE(rule);
@@ -2613,6 +2966,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         Array.isArray(rrEditingDraft.abnormalText) && rrEditingDraft.abnormalText.length
           ? rrEditingDraft.abnormalText
           : null;
+      // Preserve abnormalLevel:'red' (item 3.2 Part A) for the same reason as abnormalText:
+      // the editor has no field for it, so carry it forward rather than silently dropping a
+      // red text rule (e.g. a positive-blood-culture rule) back to amber on every save.
+      const keptAbnormalLevel = rrEditingDraft.abnormalLevel === 'red' ? 'red' : null;
       rrEditingDraft = {
         id: rrEditingDraft.id,
         builtin: rrEditingDraft.builtin || false,
@@ -2624,6 +2981,33 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         enabled,
       };
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
+      if (keptAbnormalLevel) rrEditingDraft.abnormalLevel = keptAbnormalLevel;
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
+      if (draftContext) rrEditingDraft.context = draftContext;
+    } else if (selectedKind === 'delta') {
+      // ── Delta / trend (item 3.6) — built fresh, same pattern as the text branch
+      // above (avoids leftover threshold/text/combo fields on the saved object).
+      const direction = $('#rrDeltaDirection').value;
+      const basis = $('#rrDeltaBasis').value; // 'value' | 'percent'
+      const amberVal = ($('#rrDeltaAmber').value || '').trim();
+      const redVal = ($('#rrDeltaRed').value || '').trim();
+      const maxDaysVal = ($('#rrDeltaMaxDays').value || '').trim();
+      rrEditingDraft = {
+        id: rrEditingDraft.id,
+        builtin: rrEditingDraft.builtin || false,
+        kind: 'delta',
+        label,
+        analyte,
+        direction,
+        amber: amberVal !== '' && Number.isFinite(+amberVal) ? +amberVal : null,
+        red: redVal !== '' && Number.isFinite(+redVal) ? +redVal : null,
+        enabled,
+      };
+      if (basis === 'percent') rrEditingDraft.byPercent = true;
+      else rrEditingDraft.by = true;
+      if (maxDaysVal !== '' && Number.isFinite(+maxDaysVal)) rrEditingDraft.maxDays = Math.round(+maxDaysVal);
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
+      if (draftContext) rrEditingDraft.context = draftContext;
     } else {
       rrEditingDraft.label = label;
       rrEditingDraft.analyte = analyte;
@@ -2635,12 +3019,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const unitVal = $('#rrUnit').value.trim();
       rrEditingDraft.unit = unitVal || null;
       rrEditingDraft.enabled = enabled;
-      // Remove text-only / combo-only fields if switching to threshold
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
+      else delete rrEditingDraft.actions;
+      if (draftContext) rrEditingDraft.context = draftContext;
+      else delete rrEditingDraft.context;
+      // Remove text-only / combo-only / delta-only fields if switching to threshold
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;
       delete rrEditingDraft.normalLabel;
+      delete rrEditingDraft.abnormalLevel;
       delete rrEditingDraft.conditions;
       delete rrEditingDraft.level;
+      delete rrEditingDraft.direction;
+      delete rrEditingDraft.by;
+      delete rrEditingDraft.byPercent;
+      delete rrEditingDraft.maxDays;
     }
 
     const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
@@ -2783,6 +3176,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               '" unless: ' +
               shownPhrases +
               morePhrases +
+              ' — will import DISABLED';
+          } else if (c.kind === 'delta') {
+            const dirWord = c.direction === 'rise' ? 'rises' : c.direction === 'fall' ? 'falls' : 'changes';
+            const axisLabel = c.byPercent === true ? '%' : '';
+            const parts = [];
+            if (c.red != null) parts.push('≥+' + c.red + axisLabel + ' red');
+            if (c.amber != null) parts.push('≥+' + c.amber + axisLabel + ' amber');
+            const daysNote = Number.isFinite(c.maxDays) ? ' within ' + c.maxDays + 'd' : '';
+            summary =
+              (c.label || 'Untitled') +
+              ' — Delta: fires when it ' +
+              dirWord +
+              ' ' +
+              parts.join(' / ') +
+              daysNote +
               ' — will import DISABLED';
           } else {
             const cmp = c.comparator === 'above' ? '≥' : '≤';
@@ -3065,7 +3473,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   // Returns custom entries whose req terms overlap with entry's req terms,
   // excluding the entry itself and the entry being edited (by editKey).
   const findOirReqConflicts = (entry, tests, editKey) => {
-    const norm = (s) => String(s || '').toLowerCase().trim();
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .trim();
     const newReq = (entry.req || []).map(norm).filter(Boolean);
     if (!newReq.length) return [];
     return (tests || []).filter((t) => {
@@ -3082,7 +3493,11 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     const defs = window.SentinelOutstandingMatch ? window.SentinelOutstandingMatch.TEST_DEFS : [];
     const newIsBuiltin = (defs || []).some((d) => d.key === newEntry.key);
     const conflictIsBuiltin = !newIsBuiltin && conflicts.some((c) => (defs || []).some((d) => d.key === c.key));
-    const base = newIsBuiltin ? newEntry : conflictIsBuiltin ? conflicts.find((c) => (defs || []).some((d) => d.key === c.key)) : conflicts[0];
+    const base = newIsBuiltin
+      ? newEntry
+      : conflictIsBuiltin
+        ? conflicts.find((c) => (defs || []).some((d) => d.key === c.key))
+        : conflicts[0];
     const all = [newEntry, ...conflicts];
     const unionArr = (field) => {
       const seen = new Set();
@@ -3090,7 +3505,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       for (const e of all) {
         for (const t of e[field] || []) {
           const k = String(t).toLowerCase().trim();
-          if (k && !seen.has(k)) { seen.add(k); out.push(t); }
+          if (k && !seen.has(k)) {
+            seen.add(k);
+            out.push(t);
+          }
         }
       }
       return out;
@@ -3121,7 +3539,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#oirMergeSingle').checked = merged.singleAnalyte;
     overlay.style.display = 'flex';
 
-    const hide = () => { overlay.style.display = 'none'; };
+    const hide = () => {
+      overlay.style.display = 'none';
+    };
 
     const replaceBtn = (id, listener) => {
       const old = $(`#${id}`);
@@ -3281,6 +3701,20 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           '<div class="tl-empty" style="padding:14px 0;font-style:italic;color:var(--text-4)">No tick-offs recorded yet.</div>';
         return;
       }
+      // kind → { tag: short badge text, verb: sentence verb }. 'bulk' (the
+      // pre-existing clinician-confirmed path) has no badge, to keep its
+      // rendering unchanged. 'auto' and 'auto-review' (Phase 1.4 — machine
+      // auto-tick + its Review action) get an explicit badge so this viewer
+      // reads honestly: 'auto-review' is a REVIEW, not a reversal (ticking
+      // writes to Medicus immediately — see recordOirAudit's doc comment).
+      const KIND_META = {
+        bulk: { tag: '', verb: 'ticked off' },
+        auto: { tag: 'AUTO', verb: 'auto-ticked' },
+        'auto-review': {
+          tag: 'REVIEW',
+          verb: 'reviewed (auto-ticked, not reversed)',
+        },
+      };
       const list = document.createElement('div');
       list.className = 'tl-rule-list';
       const shown = log.slice(0, 20);
@@ -3297,13 +3731,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               .filter(Boolean)
               .join(', ')
           : '';
+        const meta = KIND_META[entry.kind] || KIND_META.bulk;
+        const badge = meta.tag
+          ? '<span style="font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-4);border:1px solid var(--border);border-radius:3px;padding:1px 4px;white-space:nowrap;">' +
+            escHtml(meta.tag) +
+            '</span>'
+          : '';
         row.innerHTML =
           '<span style="color:var(--text-4);white-space:nowrap;font-size:11px;">' +
           escHtml(ts) +
           '</span>' +
+          badge +
           '<span>' +
           escHtml(String(count)) +
-          ' ticked off' +
+          ' ' +
+          escHtml(meta.verb) +
           (names ? ': ' + names : '') +
           '</span>';
         list.appendChild(row);
