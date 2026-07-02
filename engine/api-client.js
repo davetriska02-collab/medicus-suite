@@ -12,6 +12,14 @@
 (function(global) {
   'use strict';
 
+  // DOM-contract registry (Horizon-1) — findPatientUuidFromDom's Strategy 1/2
+  // attribute + anchor selectors are read FROM shared/dom-contracts.js rather
+  // than duplicated here, so the registry and this file cannot drift apart.
+  // Dual-mode require, same pattern as this file's own module.exports below.
+  const DomContracts = typeof module !== 'undefined' && module.exports
+    ? require('../shared/dom-contracts.js')
+    : global.DomContracts;
+
   // ---- URL detection ----
 
   // Page is at e.g. https://england.medicus.health/560b6c/patient/...
@@ -103,8 +111,15 @@
     const UUID_RE_STRICT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const UUID_RE_GREEDY = /\/(?:care-record|patient)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
+    // Selector contract: api-client.patient-uuid-dom-fallback (target =
+    // Strategy 1's authoritative attribute list). Falls back to the literal
+    // list if the registry script hasn't loaded (defensive only — the
+    // manifest always loads shared/dom-contracts.js first).
+    const C = DomContracts && DomContracts.get('api-client.patient-uuid-dom-fallback');
+    const dataAttrSelector = C ? C.target.join(', ') : '[data-patient-id], [data-patientid], [data-patient], [data-pid]';
+
     // Strategy 1: explicit data attributes (most authoritative if present)
-    const dataAttrEls = doc.querySelectorAll('[data-patient-id], [data-patientid], [data-patient], [data-pid]');
+    const dataAttrEls = doc.querySelectorAll(dataAttrSelector);
     const dataAttrUuids = new Set();
     dataAttrEls.forEach(el => {
       const v = el.getAttribute('data-patient-id')
@@ -116,9 +131,12 @@
     if (dataAttrUuids.size === 1) return Array.from(dataAttrUuids)[0];
     if (dataAttrUuids.size > 1) return null; // multi-patient screen, refuse to guess
 
-    // Strategy 2 & 3: scan all anchor hrefs for /care-record/{uuid} or /patient/{uuid}
+    // Strategy 2 & 3: scan all anchor hrefs for /care-record/{uuid} or /patient/{uuid}.
+    // The href-regex extraction itself (UUID_RE_GREEDY above) is JS-level and has
+    // no CSS-selector equivalent to relocate; only the initial anchor-node scan
+    // (the registry's `anchor` field) is a genuine selector contract.
     const linkUuids = new Set();
-    const links = doc.querySelectorAll('a[href]');
+    const links = doc.querySelectorAll(C ? C.anchor : 'a[href]');
     links.forEach(a => {
       const href = a.getAttribute('href') || '';
       // Reset the regex each iteration since it's global

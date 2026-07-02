@@ -34,6 +34,34 @@
 (function () {
   'use strict';
 
+  // DOM-contract registry (Horizon-1) — dual-mode require so fileAllNormal's
+  // generic selector families work identically under `node test-lab-file-macro.js`
+  // (require) and in the browser (manifest loads shared/dom-contracts.js
+  // earlier in the same content-script block). See lab-file.file-button /
+  // lab-file.normal-option-controls in that registry — both are runtime:false
+  // (documented false-positive risk) but still the single source of truth for
+  // these selector arrays.
+  const DomContracts =
+    typeof module !== 'undefined' && module.exports
+      ? require('../../shared/dom-contracts.js')
+      : typeof window !== 'undefined'
+        ? window.DomContracts
+        : null;
+  const FILE_BUTTON_SEL = ((DomContracts && DomContracts.get('lab-file.file-button')) || {}).target || [
+    'button',
+    '[role="button"]',
+    'input[type="submit"]',
+  ];
+  const NORMAL_OPTION_SEL = ((DomContracts && DomContracts.get('lab-file.normal-option-controls')) || {}).target || [
+    '[role="radio"]',
+    '[role="option"]',
+    '.q-radio',
+    '.q-checkbox',
+    '.q-item',
+    'label',
+    'button',
+  ];
+
   // ── DOM helpers (DOM-library-agnostic so the core is unit-testable) ──────────
 
   function norm(s) {
@@ -199,7 +227,7 @@
 
     // GATE 2 — the File control must exist on this screen. If the profile's labels
     // don't fit this layout, we abort before touching anything.
-    const fileBtn0 = findByText(root, ['button', '[role="button"]', 'input[type="submit"]'], f.fileButtonText, vis);
+    const fileBtn0 = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis);
     if (!fileBtn0) {
       result.reason = 'no-file-button';
       return result;
@@ -229,12 +257,7 @@
       // Options already visible (e.g. a "No action" radio per row): click each.
       const opts = f.rowSelector
         ? findAllByText(root, [f.rowSelector], f.normalOptionText, vis)
-        : findAllByText(
-            root,
-            ['[role="radio"]', '[role="option"]', '.q-radio', '.q-checkbox', '.q-item', 'label', 'button'],
-            f.normalOptionText,
-            vis
-          );
+        : findAllByText(root, NORMAL_OPTION_SEL, f.normalOptionText, vis);
       for (const el of opts) {
         if (el.getAttribute && el.getAttribute('aria-checked') === 'true') {
           marked++; // already normal
@@ -339,7 +362,7 @@
 
     // STEP 5 — file. Re-find the button and require it enabled.
     const fileBtn = await wait(() => {
-      const b = findByText(root, ['button', '[role="button"]', 'input[type="submit"]'], f.fileButtonText, vis);
+      const b = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis);
       return b && isEnabled(b) ? b : null;
     });
     if (!fileBtn) {

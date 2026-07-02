@@ -26,6 +26,7 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
+        "shared/dom-contracts.js",
         "content-scripts/dom-observer-hub.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
