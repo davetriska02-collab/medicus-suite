@@ -204,10 +204,16 @@ export async function loadSnapshots() {
 }
 
 // Persist today's snapshot (one per day; re-running replaces today's row).
+// Upserts by date key so two concurrent writers (e.g. panel + pop-out both
+// polling) converge on the same result regardless of interleaving: whichever
+// write lands last still ends up with exactly one row for `row.date`, rather
+// than a blind append that could duplicate today's row or race with, and
+// silently discard, a concurrent writer's read-modify-write.
 export async function saveSnapshot(row) {
   if (!row || !row.date) return;
   const existing = await loadSnapshots();
-  const merged = pruneSnapshots([...existing, row], SNAPSHOT_KEEP_DAYS, row.date);
+  const withoutToday = existing.filter((s) => s.date !== row.date);
+  const merged = pruneSnapshots([...withoutToday, row], SNAPSHOT_KEEP_DAYS, row.date);
   await chrome.storage.local.set({ [SNAPSHOT_KEY]: merged });
 }
 

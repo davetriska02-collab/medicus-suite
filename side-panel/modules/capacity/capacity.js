@@ -126,6 +126,10 @@ function onStorageChange(changes) {
     SITE_ID = changes['suite.practiceCode'].newValue || null;
     // Force refresh of cached data when practice changes
     Object.keys(state.data).forEach((d) => delete state.data[d]);
+    // Also invalidate the cached appointment-type list so the preset editor
+    // re-fetches fresh types for the new practice instead of reusing the
+    // previous practice's types (see openNewPreset/openEditPreset guards).
+    availableTypes = [];
     changed = true;
   }
   if (changed) {

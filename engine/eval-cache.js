@@ -56,18 +56,35 @@
     return djb2(`M:${meds}\nO:${obs}\nP:${probs}\nC:${ctx}\nR:${rulesSig}\nD:${day}`);
   }
 
-  // A cheap signature of the active ruleset — count + each rule's id and a
-  // version-ish discriminator so an edited rule busts the cache. Order-independent.
+  // A cheap signature of the active ruleset — count + each rule's id plus a
+  // stable serialisation of the rule's full content (thresholds, match/exclude
+  // lists, intervals, enabled flag, etc.) so an edited rule busts the cache even
+  // when its id and enabled flag are unchanged. Order-independent.
   function rulesSignature(rules) {
     if (!Array.isArray(rules)) return '0';
     return (
       rules.length +
       ':' +
       rules
-        .map((r) => `${(r && (r.id || r.indicatorCode)) || '?'}~${r && r.enabled === false ? 0 : 1}`)
+        .map((r) => `${(r && (r.id || r.indicatorCode)) || '?'}~${stableStringify(r)}`)
         .sort()
         .join(',')
     );
+  }
+
+  // Deterministic JSON.stringify: object keys are sorted recursively so that
+  // two objects with the same content in different key order (e.g. after a
+  // round-trip through storage) produce identical output — unrelated
+  // re-serialisation must not spuriously bust the cache.
+  function stableStringify(value) {
+    if (value === null || typeof value !== 'object') {
+      return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+      return '[' + value.map(stableStringify).join(',') + ']';
+    }
+    const keys = Object.keys(value).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
   }
 
   // Small, fast string hash (djb2). Collisions are astronomically unlikely for

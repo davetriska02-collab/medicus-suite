@@ -14,6 +14,8 @@
 
 'use strict';
 
+import { isActionNeeded } from '../sweep/sweep-core.js';
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WR_POLL_MS = 30 * 1000;
@@ -501,7 +503,7 @@ function sweepProvenance() {
   const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const results = Array.isArray(lastRun.results) ? lastRun.results : [];
   const actionNeeded = results.filter(
-    (r) => Array.isArray(r.chips) && r.chips.some((c) => ['overdue', 'not_met', 'alert'].includes(c.status))
+    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
   ).length;
   // Patients actually checked this run (fall back to total when offset absent).
   const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
