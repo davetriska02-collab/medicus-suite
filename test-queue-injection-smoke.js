@@ -433,6 +433,10 @@ const parts = [
   // Item 3.1 — the "unit?" meta chip's fixed markup, another free variable
   // injectResultChip reads (same pattern as RESULT_ERROR_CHIP_HTML above).
   extract(/const UNIT_MISMATCH_CHIP_HTML =[\s\S]*?;/, 'UNIT_MISMATCH_CHIP_HTML'),
+  // Item 3.2 Part B — the "unclassified" chip builder, another free variable
+  // injectResultChip reads (same pattern as UNIT_MISMATCH_CHIP_HTML above). It
+  // calls escapeHtml, already extracted above.
+  extract(/const buildUnclassifiedChipHtml = \(list\) => \{[\s\S]*?\n {2}\};/, 'buildUnclassifiedChipHtml'),
   extract(/const injectResultChip = \(rowIndex, sev, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
   // Item 2.2 — result-chip detail popover: the pure line-builders plus the
   // singleton popover open/close machinery injectResultChip's click handlers call.
@@ -561,6 +565,8 @@ const EXPOSE = [
   // Item 3.1 — unit-mismatch guard surfacing.
   'formatUnitMismatchLine',
   'UNIT_MISMATCH_CHIP_HTML',
+  // Item 3.2 Part B — unclassified-qualitative-positive chip surfacing.
+  'buildUnclassifiedChipHtml',
   'closeResultDetailPopover',
   'buildResultDetailPopoverEl',
   'toggleResultDetailPopover',

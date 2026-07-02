@@ -3853,8 +3853,14 @@
       ? sev.top.prior.dir
       : null;
     const trendArrow = priorDir === 'up' ? ' ↑' : priorDir === 'down' ? ' ↓' : '';
-    // Clinical severity chips (urgent/abnormal) — highest priority, shown first
-    if (sev.level === 'red' && sev.urgentCount > 0) {
+    // Clinical severity chips (urgent/abnormal) — highest priority, shown first.
+    // Keyed on urgentCount / abnormalCount (a genuine numeric/lab-flagged RESULT), NOT on
+    // the aggregate `level`: item 3.2 lets a red TEXT review or a red COMBO push `level` to
+    // red while urgentCount stays 0, and the old `level === 'amber'` guard on the abnormal
+    // branch would then suppress a real numeric-abnormal chip. Counting the results directly
+    // keeps the numeric chip visible alongside the red text/combo chip. (When abnormalCount
+    // is 0 no abnormal chip renders anyway, so a review-only amber report is unchanged.)
+    if (sev.urgentCount > 0) {
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleUrgent',
@@ -3863,11 +3869,7 @@
       } else {
         chips.push({ id: 'queue.resultUrgent', vars: { name: topName + trendArrow, count: sev.urgentCount } });
       }
-    } else if (sev.level === 'amber' && sev.abnormalCount > 0) {
-      // Guard on abnormalCount > 0: `level` is ALSO raised to amber by a text-rule
-      // review (reviewCount > 0) that found no numeric abnormal. In that case the
-      // review chip below carries the signal and this clinical abnormal chip must NOT
-      // render — otherwise it shows a meaningless "0 abnormal" next to the review chip.
+    } else if (sev.abnormalCount > 0) {
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleAbnormal',
@@ -3877,11 +3879,43 @@
         chips.push({ id: 'queue.resultAbnormal', vars: { count: sev.abnormalCount } });
       }
     }
-    // Text-rule review chips — after clinical severity, before meta process chips.
-    // A specifically-labelled text rule (e.g. bowel screening non-responder) shows its own
-    // label via the attributable chip; the generic "Needs review" covers cultures (whose
-    // rule label is itself "Needs review").
-    if (sev.reviewCount > 0) {
+    // Part A (item 3.2, TRIAGE-LENS-2026-07-02.md) — a red-level text review
+    // (reviewTop.level === 'red', e.g. a positive blood culture rule authored with
+    // abnormalLevel:'red') reuses the SAME urgent/rule-urgent chip templates as a
+    // genuine numeric urgent result — there is no separate "review, but red" system
+    // chip in defaults.json, and there must not be a new one added here (this rule set
+    // is calibrated by a CSO review, not this mechanism change) — reusing the existing
+    // red family is the deliberate choice. Renders alongside the numeric urgent/abnormal
+    // chip above when both fire (they already co-render today — see the
+    // "urgent numeric + review" case in test-result-severity.js — this is not a new
+    // interaction, just a new colour for the review side of it).
+    const isRedReview = !!(sev.reviewTop && sev.reviewTop.level === 'red');
+    if (isRedReview) {
+      const redName = sev.reviewTop.name || '';
+      const redLabel = sev.reviewTop.label || '';
+      // Same "is this a real custom label, or just the generic default" distinction as
+      // every other attributable chip here (numeric urgent/abnormal, amber review): a
+      // text rule authored WITHOUT its own `label` falls back to the literal string
+      // "Needs review" (see computeTextOutcome) — that is not a name worth naming in
+      // the chip, so it renders via the generic red id instead of the rule-attributed one.
+      if (redLabel && redLabel !== 'Needs review') {
+        chips.push({
+          id: 'queue.resultRuleUrgent',
+          vars: { name: redName, rule: redLabel, label: composeResultRuleLabel(redName, redLabel) }
+        });
+      } else {
+        chips.push({ id: 'queue.resultUrgent', vars: { name: redName, count: 1 } });
+      }
+    }
+    // Text-rule review chips (amber) — after clinical severity, before meta process
+    // chips. A specifically-labelled text rule (e.g. bowel screening non-responder)
+    // shows its own label via the attributable chip; the generic "Needs review" covers
+    // cultures (whose rule label is itself "Needs review"). Suppressed when the review
+    // chip above ALREADY carried this exact finding red (reviewCount === 1 and it was
+    // the red one) — never double-show the identical result as both a red and an amber
+    // chip. A report with additional amber-level reviews alongside the red one still
+    // shows this generic amber chip (reviewCount counts every review, red or amber).
+    if (sev.reviewCount > 0 && !(isRedReview && sev.reviewCount === 1)) {
       const reviewLabel = sev.reviewTop && sev.reviewTop.label ? String(sev.reviewTop.label) : '';
       if (reviewLabel && reviewLabel !== 'Needs review') {
         chips.push({ id: 'queue.resultReviewRule', vars: { rule: reviewLabel } });
@@ -3909,6 +3943,10 @@
     // Meta/process chips (outline, not filled) — last
     if (sev.misprioritised) chips.push({ id: 'queue.resultMisprioritised', vars: {}, meta: true });
     if (sev.unmatched) chips.push({ id: 'queue.resultUnmatched', vars: {}, meta: true });
+    // NOTE: sev.unclassified (Part B, item 3.2) is NOT rendered here — there is no
+    // defaults.json systemChips slot for it (this mechanism change deliberately ships
+    // no new shipped chip config) — see buildUnclassifiedChipHtml/injectResultChip,
+    // which appends it as FIXED markup, the same pattern as the "unit?" meta chip.
     // When a more informative severity chip is already present, suppress bare-flag review
     // chips (e.g. a custom rule matching Medicus's internal "High" flag result). A review
     // chip labelled just "High" / "Low" / "H" adds no signal when the severity chip already
@@ -3927,13 +3965,14 @@
   // detail array for the queue result-chip popover. Takes the normalised investigation
   // report (engine/normalisers.js normaliseInvestigationReport) and the sev object
   // returned by evaluateReportSeverity (engine/result-severity.js), including its
-  // ADDITIVE `flagged`/`reviewTop`/`noGrowthTop`/`comboTop` fields — never recomputes
-  // grading itself, just reshapes what's already been decided. Capped at 10 entries,
-  // filled in priority order: numeric urgent-flagged results, then numeric
-  // abnormal-flagged results, then the rule-fired (text-rule) review result, then the
-  // fired combo + calm noGrowth informational lines. Exported for unit testing via
-  // regex extraction — self-contained (nests its own small helpers), same pattern as
-  // selectResultChips' composeResultRuleLabel above.
+  // ADDITIVE `flagged`/`reviewTop`/`noGrowthTop`/`comboTop`/`unclassified` fields —
+  // never recomputes grading itself, just reshapes what's already been decided. Capped
+  // at 10 entries, filled in priority order: numeric urgent-flagged results, then
+  // numeric abnormal-flagged results, then the rule-fired (text-rule) review result,
+  // then every unclassified-positive result (item 3.2 Part B), then the fired combo +
+  // calm noGrowth informational lines. Exported for unit testing via regex extraction —
+  // self-contained (nests its own small helpers), same pattern as selectResultChips'
+  // composeResultRuleLabel above.
   function buildResultDetail(report, sevResult) {
     const DETAIL_CAP = 10;
     if (!sevResult || typeof sevResult !== 'object') return [];
@@ -4004,12 +4043,36 @@
         unit: null,
         low: null,
         high: null,
-        flag: null,
+        // Part A (item 3.2) — a red-level text review shows the urgent glyph (mirrors the
+        // comboTop tier below), so the popover line reads as red, not a plain review.
+        flag: sevResult.reviewTop.level === 'red' ? 'urgent' : null,
         date: (match && match.date) || null,
         ruleLabel: sevResult.reviewTop.label || null,
         prior: null,
       });
     }
+
+    // Tier 3b — unclassified qualitative positives (Part B, item 3.2). Results no rule
+    // classified but whose text looks positive; surfaced so the popover/banner explain
+    // the amber chip rather than showing nothing. ONE LINE PER ENTRY in
+    // sevResult.unclassified (not just the first — capped like every other tier by
+    // pushCap/DETAIL_CAP). Value shows the raw result string when available.
+    const unclassifiedList = Array.isArray(sevResult.unclassified) ? sevResult.unclassified : [];
+    unclassifiedList.forEach((u) => {
+      if (!u || !u.name) return;
+      const match = results.find((r) => r && r.name === u.name);
+      pushCap({
+        name: u.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: null,
+        date: (match && match.date) || null,
+        ruleLabel: "'" + String(u.token || '') + "' — not matched by a rule, surfaced for review",
+        prior: null,
+      });
+    });
 
     // Tier 4 — informational lines: the fired combo (report-level, not tied to a
     // single result row), then the calm noGrowth text-rule outcome.
@@ -4260,6 +4323,30 @@
     '<span class="ch-chip ch-chip-meta ch-chip-unit-mismatch" role="note" ' +
     'title="One or more rules were skipped: reported unit does not match the rule’s expected unit — see detail">unit?</span>';
 
+  // "Unclassified qualitative positive" chip (Part B, item 3.2, TRIAGE-LENS-2026-07-02.md)
+  // — a non-numeric result (e.g. "Positive", "Detected") that no lab flag and no text
+  // rule caught, surfaced so it can never be silently invisible (see
+  // engine/result-severity.js matchUnclassifiedPositive). Fixed markup, NOT routed
+  // through findSystemChip/renderSystemChipHtmlMemo — same reasoning as
+  // RESULT_ERROR_CHIP_HTML/UNIT_MISMATCH_CHIP_HTML above: this mechanism change ships
+  // no new defaults.json systemChips slot (that is the calibration pass's call). AMBER
+  // but deliberately NOT the filled .ch-chip-amber a lab-confirmed abnormal/review chip
+  // uses — dashed outline (.ch-chip-unclassified, hud.css) with a "?" hint prefix, so a
+  // GP never mistakes an unreviewed free-text hit for a graded clinical finding.
+  // `name`/`token` are lab-report-derived and untrusted — escapeHtml()'d, this file's
+  // innerHTML discipline. Shows only the FIRST unclassified entry by name (mirrors the
+  // review/noGrowth/combo "top" chip convention); a count suffix covers the rest.
+  const buildUnclassifiedChipHtml = (list) => {
+    if (!Array.isArray(list) || !list.length) return null;
+    const first = list[0] && typeof list[0] === 'object' ? list[0] : {};
+    const name = escapeHtml(String(first.name || 'Result').trim());
+    const extra = list.length > 1 ? ' +' + (list.length - 1) : '';
+    const title = 'Not matched by a rule — surfaced for review (unclassified positive result' +
+      (list.length > 1 ? 's' : '') + ')';
+    return '<span class="ch-chip ch-chip-unclassified" role="note" title="' + escapeHtml(title) + '">? ' +
+      name + extra + '</span>';
+  };
+
   // taskUuid (item 2.2) is threaded through by every call site (initial post-fetch
   // inject, the scheduler's fresh-cache-hit path, and reinjectCachedResultChips) so
   // the popover click handler can read this row's cached detail at click time.
@@ -4288,6 +4375,17 @@
       if (hasUnitMismatch) {
         builtHtml = builtHtml.concat([UNIT_MISMATCH_CHIP_HTML]);
         log('queue-result: unit-mismatch chip', rowIndex, 'count=' + sev.unitMismatches.length);
+      }
+      // Part B (item 3.2) — same "append even when nothing else fired" reasoning as the
+      // unit-mismatch chip above: a report whose ONLY signal is an unclassified positive
+      // (nothing else matched/flagged it) must still show something, not silence.
+      const unclassifiedList = sev && Array.isArray(sev.unclassified) ? sev.unclassified : [];
+      if (unclassifiedList.length) {
+        const chipHtml = buildUnclassifiedChipHtml(unclassifiedList);
+        if (chipHtml) {
+          builtHtml = builtHtml.concat([chipHtml]);
+          log('queue-result: unclassified chip', rowIndex, 'count=' + unclassifiedList.length);
+        }
       }
       if (!builtHtml.length) return;
     }
@@ -4662,10 +4760,14 @@
   // noGrowth) but returns plain text for the banner rather than a chip def.
   function buildDetailVerdictHeadline(sev) {
     if (!sev || typeof sev !== 'object') return '';
-    if (sev.level === 'red' && sev.urgentCount > 0) {
+    // Keyed on urgentCount/abnormalCount directly (not gated on `level`) — item 3.2
+    // lets a red text review push `level` to red while urgentCount stays 0, and a
+    // `level === 'amber'` guard would then hide a genuine numeric abnormal headline.
+    // Same reasoning as selectResultChips' numeric branch above.
+    if (sev.urgentCount > 0) {
       return sev.urgentCount === 1 ? '1 urgent' : sev.urgentCount + ' urgent';
     }
-    if (sev.level === 'amber' && sev.abnormalCount > 0) {
+    if (sev.abnormalCount > 0) {
       return sev.abnormalCount === 1 ? '1 abnormal' : sev.abnormalCount + ' abnormal';
     }
     if (sev.reviewCount > 0) {
@@ -4673,6 +4775,16 @@
       return label && label !== 'Needs review' ? label : 'Needs review';
     }
     if (sev.comboCount > 0 && sev.comboTop && sev.comboTop.label) return String(sev.comboTop.label);
+    // Part B (item 3.2) — an unclassified qualitative positive (amber), when nothing
+    // more severe carried the headline. Names the analyte + matched token, e.g.
+    // "Hepatitis B surface antigen: 'Positive'".
+    if (Array.isArray(sev.unclassified) && sev.unclassified.length > 0) {
+      const first = sev.unclassified[0] || {};
+      const n = first.name ? String(first.name) : '';
+      const t = first.token ? String(first.token) : '';
+      const suffix = sev.unclassified.length > 1 ? ' (+' + (sev.unclassified.length - 1) + ')' : '';
+      return (n ? n + ': ' : '') + (t ? "'" + t + "'" : 'unclassified') + suffix;
+    }
     if (sev.noGrowthCount > 0) {
       const label = sev.noGrowthTop && sev.noGrowthTop.label ? String(sev.noGrowthTop.label) : '';
       return label && label !== 'No growth' ? label : 'No growth';

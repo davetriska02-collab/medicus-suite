@@ -2810,6 +2810,10 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         Array.isArray(rrEditingDraft.abnormalText) && rrEditingDraft.abnormalText.length
           ? rrEditingDraft.abnormalText
           : null;
+      // Preserve abnormalLevel:'red' (item 3.2 Part A) for the same reason as abnormalText:
+      // the editor has no field for it, so carry it forward rather than silently dropping a
+      // red text rule (e.g. a positive-blood-culture rule) back to amber on every save.
+      const keptAbnormalLevel = rrEditingDraft.abnormalLevel === 'red' ? 'red' : null;
       rrEditingDraft = {
         id: rrEditingDraft.id,
         builtin: rrEditingDraft.builtin || false,
@@ -2821,6 +2825,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
         enabled,
       };
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
+      if (keptAbnormalLevel) rrEditingDraft.abnormalLevel = keptAbnormalLevel;
       if (draftActions.length) rrEditingDraft.actions = draftActions;
     } else {
       rrEditingDraft.label = label;
@@ -2839,6 +2844,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;
       delete rrEditingDraft.normalLabel;
+      delete rrEditingDraft.abnormalLevel;
       delete rrEditingDraft.conditions;
       delete rrEditingDraft.level;
     }

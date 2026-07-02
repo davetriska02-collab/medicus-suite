@@ -156,6 +156,130 @@
     return an === bn ? 'match' : 'mismatch';
   }
 
+  // ── Unclassified-positive qualitative safety net (Part B, item 3.2,
+  // TRIAGE-LENS-2026-07-02.md) ──────────────────────────────────────────────────
+  // A non-numeric result carrying an apparently-positive qualitative token — that NO
+  // lab flag (isAbove/isBelow/urgent) AND NO text rule classified — otherwise scores
+  // 'none' and vanishes entirely (a "Positive" / "Detected" with no authored rule is
+  // invisible today: no numeric chip, since the value is non-finite; no text-rule
+  // chip, since nothing matched). This surfaces it as an AMBER-MAX "unclassified"
+  // finding — a safety net, not a diagnosis: it can never reach red (only an authored,
+  // clinician-reviewed text rule with abnormalLevel:'red', see Part A above, can do
+  // that), and it is heavily negation-guarded (below) against exactly the "not
+  // detected" / "no growth" phrasing that fills a genuinely calm microbiology report.
+  //
+  // TIGHT lexicon (deliberately short — this must not become a second, uncalibrated
+  // rules engine): whole-word, case-insensitive.
+  const POSITIVE_QUALITATIVE = [
+    'positive',
+    'detected',
+    'reactive',
+    'isolated',
+    'abnormal',
+    'seen',
+    'present',
+    'grown',
+    'raised',
+  ];
+
+  // NEGATION GUARD — replicates content-scripts/triage-lens/rule-match.js's
+  // detectQualifier negation check (item 3.4) EXACTLY: a whole-word negator within 6
+  // words IMMEDIATELY BEFORE the matched token, in the SAME sentence (sentence
+  // boundary = . ! ? or newline). Deliberately REPLICATED here rather than imported:
+  // this file (engine/result-severity.js) is loaded EARLIER than rule-match.js in the
+  // manifest's content_scripts ordering — result-severity.js sits in the SECOND
+  // content_scripts block, rule-match.js is the FIRST file of the THIRD block — so a
+  // top-level `global.TriageLensMatch` read here would see `undefined` in the browser
+  // world at this file's load time (the two files DO share one JS global object once
+  // both blocks have loaded, since both are the default/isolated world, but that's
+  // only true from the time rule-match.js finishes executing onward — too late for a
+  // load-time import here). This is the SAME "avoid a content-world dep" reasoning
+  // this file already applies to result-rules.js (see computeTextOutcome's header
+  // comment) — Node tests CAN require() rule-match.js directly (it's dual-mode too),
+  // but the browser path cannot rely on load order, so the logic is duplicated for
+  // both rather than forked. Flagged in this change's report for the Phase 3 review:
+  // keep NEGATORS/the window/sentence-boundary semantics in lock-step with
+  // rule-match.js's NEGATORS/detectQualifier if either ever changes.
+  //
+  // Extends rule-match.js's base negator set (no/not/denies/denied/denying/without/
+  // never/nil) with 'none' — a common microbiology negative-culture phrasing ("None
+  // isolated") that none of the base words would catch on their own.
+  const UNCLASSIFIED_NEGATORS = ['no', 'not', 'denies', 'denied', 'denying', 'without', 'never', 'nil', 'none'];
+  const UNCLASSIFIED_NEGATOR_SET = new Set(UNCLASSIFIED_NEGATORS);
+  const UNCLASSIFIED_NEGATION_WORD_WINDOW = 6;
+  const UNCLASSIFIED_SENTENCE_BOUNDARY = /[.!?\n]/;
+
+  // The start of the sentence containing `index` in `text` — mirrors rule-match.js's
+  // sentenceSpan (left side only; this file only ever needs the BEFORE window).
+  function unclassifiedSentenceLeft(text, index) {
+    if (!UNCLASSIFIED_SENTENCE_BOUNDARY.test(text)) return 0;
+    let left = index;
+    while (left > 0 && !UNCLASSIFIED_SENTENCE_BOUNDARY.test(text[left - 1])) left--;
+    return left;
+  }
+
+  // Is the token match starting at `matchIndex` in `text` negated? Whole-word negator
+  // among the (up to) 6 words immediately BEFORE the match, within the same sentence —
+  // identical mechanics to rule-match.js's detectQualifier negation branch.
+  function isUnclassifiedTokenNegated(text, matchIndex) {
+    // A glued "non-" / "non " prefix immediately before the token is a negating
+    // prefix — "non-reactive", "non reactive" are standard true-NEGATIVE serology
+    // results. The word-window scan below misses this because "non" is not a
+    // standalone negator (and adding it to the set would over-suppress a distant
+    // "non-Hodgkin ... cells seen"), so handle the abutting prefix precisely.
+    // Require "non" to be its own word (boundary or string start before it) so
+    // "cannon"/"canon" never trip it.
+    const prefix = text.slice(Math.max(0, matchIndex - 5), matchIndex);
+    if (/(^|[^a-z])non[-\s]$/.test(prefix)) return true;
+    const left = unclassifiedSentenceLeft(text, matchIndex);
+    const before = text.slice(left, matchIndex);
+    const words = before.split(/\s+/).filter(Boolean);
+    const window = words.slice(-UNCLASSIFIED_NEGATION_WORD_WINDOW);
+    for (let i = window.length - 1; i >= 0; i--) {
+      // Strip surrounding punctuation so "no," / "(no" still match, but "notable"/
+      // "nothing" — real words that merely CONTAIN a negator — never do (whole-word
+      // discipline, same as rule-match.js).
+      const clean = window[i].replace(/[^a-zA-Z]/g, '').toLowerCase();
+      if (UNCLASSIFIED_NEGATOR_SET.has(clean)) return true;
+    }
+    return false;
+  }
+
+  // matchUnclassifiedPositive(result) → matched token string | null
+  // Scans the result's value string (rawValue) + interpretation + combined text for a
+  // POSITIVE_QUALITATIVE token, negation-guarded by isUnclassifiedTokenNegated above.
+  // The three sources are joined with an explicit sentence break ('. ') so a negation
+  // in one source can never reach across into another (the raw value string and the
+  // free text are distinct statements). Whitespace is collapsed first so a token or
+  // negator split across a lab line-wrap still matches (same rationale as
+  // computeTextOutcome's collapseWs). Scans the lexicon in its declared order, then
+  // left-to-right through the text for each token, returning the FIRST occurrence (of
+  // any token) that is NOT negated — a later, un-negated positive ("...not detected
+  // for chlamydia. Gonorrhoea detected.") is still found even when an earlier
+  // occurrence of the same word was negated. Returns null when every occurrence of
+  // every lexicon token is negated, or none appear at all. Pure — never consulted
+  // unless the caller has already confirmed the result is non-numeric, lab-unflagged,
+  // and untouched by any text rule (see evaluateReportSeverity's gate).
+  function matchUnclassifiedPositive(result) {
+    if (!result || typeof result !== 'object') return null;
+    const parts = [];
+    if (typeof result.rawValue === 'string') parts.push(result.rawValue);
+    if (typeof result.interpretation === 'string') parts.push(result.interpretation);
+    if (typeof result.text === 'string') parts.push(result.text);
+    const combined = collapseWs(parts.join('. '));
+    if (!combined.trim()) return null;
+    const lower = combined.toLowerCase();
+    for (let t = 0; t < POSITIVE_QUALITATIVE.length; t++) {
+      const token = POSITIVE_QUALITATIVE[t];
+      const re = new RegExp('\\b' + token + '\\b', 'g');
+      let m;
+      while ((m = re.exec(lower))) {
+        if (!isUnclassifiedTokenNegated(lower, m.index)) return token;
+      }
+    }
+    return null;
+  }
+
   // ── Compute text-rule outcome for a single result ────────────────────────────
   // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
   // Also returns the matched rule's label / normalLabel for chip display.
@@ -172,12 +296,23 @@
   //                  normalText is ABSENT → 'review' (the culture "not clearly normal"
   //                  pattern). A rule with ONLY abnormalText that did not match flags
   //                  nothing — its analyte was seen but no flag phrase was present.
+  //   abnormalLevel — Part A (item 3.2, TRIAGE-LENS-2026-07-02.md): a fired abnormalText
+  //                  rule carries an optional abnormalLevel ('amber' default | 'red'). The
+  //                  returned `level` is 'red' when ANY fired abnormalText rule declared
+  //                  'red', otherwise 'amber' for a review outcome (null when the outcome is
+  //                  not a review). Escalate-only — the caller lifts the report to red on a
+  //                  red review, never lowers anything.
+  //   applied      — Part B support: true iff SOME text rule's analyte matched this result
+  //                  (even a lone-abnormalText rule that found no flag phrase, i.e. outcome
+  //                  'none' but the analyte WAS seen). The unclassified-positive fall-through
+  //                  pass (evaluateReportSeverity) uses this to leave alone any result a text
+  //                  rule already covers.
   function computeTextOutcome(result, rules) {
     if (!Array.isArray(rules) || rules.length === 0) {
-      return { outcome: 'none', label: null, normalLabel: null };
+      return { outcome: 'none', label: null, normalLabel: null, level: null, applied: false };
     }
     if (!result || typeof result !== 'object') {
-      return { outcome: 'none', label: null, normalLabel: null };
+      return { outcome: 'none', label: null, normalLabel: null, level: null, applied: false };
     }
 
     // Collapse every run of whitespace (spaces, NEWLINES, tabs) to a single space before
@@ -216,6 +351,8 @@
     let anyRuleApplied = false;
     let abnormalFound = false; // an abnormalText phrase positively matched → forced review
     let abnormalLabel = null;
+    let abnormalRedLabel = null; // label of the first RED-level abnormalText rule that fired
+    let abnormalIsRed = false; // Part A — a fired abnormalText rule declared abnormalLevel:'red'
     let normalFound = false;
     let reviewLabel = null;
     let normalLabel = null;
@@ -251,6 +388,17 @@
         );
         if (foundAbnormal) {
           abnormalFound = true;
+          // Part A (item 3.2) — a fired abnormalText rule may declare abnormalLevel:'red'
+          // to escalate the report to RED (default 'amber' = historic amber-cap). If ANY
+          // fired abnormalText rule is red, the outcome is red; the red rule's own label
+          // is preferred for attribution so the chip names the red finding.
+          const isRed = rule.abnormalLevel === 'red';
+          if (isRed) {
+            abnormalIsRed = true;
+            if (!abnormalRedLabel) {
+              abnormalRedLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
+            }
+          }
           if (!abnormalLabel) {
             abnormalLabel = (typeof rule.label === 'string' && rule.label) || 'Needs review';
           }
@@ -277,14 +425,22 @@
       }
     }
 
-    if (!anyRuleApplied) return { outcome: 'none', label: null, normalLabel: null };
+    if (!anyRuleApplied) return { outcome: 'none', label: null, normalLabel: null, level: null, applied: false };
     // Precedence: an explicit abnormalText flag wins over a normal phrase (never calm a
     // positively-flagged finding); a normal phrase calms; otherwise a "not clearly normal"
     // normalText rule reviews; a lone abnormalText rule that did not match stays none.
-    if (abnormalFound) return { outcome: 'review', label: abnormalLabel || 'Needs review', normalLabel: null };
-    if (normalFound) return { outcome: 'noGrowth', label: null, normalLabel: normalLabel || 'No growth' };
-    if (reviewLabel) return { outcome: 'review', label: reviewLabel, normalLabel: null };
-    return { outcome: 'none', label: null, normalLabel: null };
+    if (abnormalFound) {
+      const label = abnormalIsRed
+        ? abnormalRedLabel || abnormalLabel || 'Needs review'
+        : abnormalLabel || 'Needs review';
+      return { outcome: 'review', label, normalLabel: null, level: abnormalIsRed ? 'red' : 'amber', applied: true };
+    }
+    if (normalFound)
+      return { outcome: 'noGrowth', label: null, normalLabel: normalLabel || 'No growth', level: null, applied: true };
+    // A normalText-driven review ("not clearly normal") is always amber — abnormalLevel:'red'
+    // only ever escalates a POSITIVE abnormalText flag, never the calm-set-absent review.
+    if (reviewLabel) return { outcome: 'review', label: reviewLabel, normalLabel: null, level: 'amber', applied: true };
+    return { outcome: 'none', label: null, normalLabel: null, level: null, applied: true };
   }
 
   // ── Patient-record suppression helper ─────────────────────────────────────────
@@ -637,9 +793,27 @@
    * comboCount/comboTop — grading of everything else is byte-identical to before this
    * field existed. Surfaced by content.js as a "unit?" meta chip + popover/banner
    * lines, never as a severity change.
+   * reviewTop — now carries a `level` ('amber' | 'red'). Part A (item 3.2): a text rule
+   * whose fired abnormalText declared abnormalLevel:'red' produces a red review; reviewTop
+   * is promoted to that red review (even if an amber review was seen first), and the report
+   * `level` is escalated to red. redReviewCount drives the escalation but is intentionally
+   * kept OUT of urgentCount / misprioritised (a lab-urgent-only concept).
+   *
+   * unclassified — ADDITIVE (Part B, item 3.2), display-only: an array of
+   * { name, token } — one entry per result with NO finite numeric value, NO lab flag
+   * (isAbove/isBelow/urgent all false), and untouched by any text rule (no rule's
+   * analyte both matched AND produced a classification), whose combined text carries a
+   * POSITIVE_QUALITATIVE token past the negation guard (matchUnclassifiedPositive).
+   * These results would otherwise score 'none' and vanish entirely — no numeric chip
+   * (non-finite value), no text-rule chip (nothing matched). Escalate-only to (at most)
+   * amber — never red; an uncharacterised free-text hit can be flagged for a look, not
+   * graded. Surfaced by content.js as a distinct "unclassified" amber chip (never the
+   * same fill as a lab-confirmed abnormal) plus popover/banner lines naming the analyte
+   * and the matched token.
+   *
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop,
-   *             flagged, unitMismatches }}
+   *             flagged, unitMismatches, unclassified }}
    *
    * Combo-rule outcomes (kind:'combo') are evaluated across the WHOLE report (not per
    * result): a combo fires when ALL its conditions are satisfied by SOME result in the
@@ -677,6 +851,7 @@
       comboTop: null,
       flagged: [],
       unitMismatches: [],
+      unclassified: [],
     };
 
     try {
@@ -699,6 +874,14 @@
       let noGrowthCount = 0;
       let reviewTop = null;
       let noGrowthTop = null;
+      // Part A (item 3.2) — count of red-level text reviews. A red text review escalates
+      // the whole report to red (below), deliberately WITHOUT touching urgentCount (and
+      // therefore without touching `misprioritised`, which is a lab-urgent concept).
+      let redReviewCount = 0;
+
+      // Part B (item 3.2) — unclassified qualitative positives (see
+      // matchUnclassifiedPositive). One entry per qualifying result, in report order.
+      const unclassified = [];
 
       // ADDITIVE (item 2.2) — per-result attribution for the queue detail popover.
       // Populated alongside the existing loop below; does not influence any of the
@@ -786,10 +969,32 @@
         const textResult = computeTextOutcome(r, resultRules);
         if (textResult.outcome === 'review') {
           reviewCount++;
-          if (!reviewTop) reviewTop = { name: r.name, label: textResult.label };
+          // Part A (item 3.2) — a red-level text review (abnormalLevel:'red' fired) carries
+          // its own 'red' level. Count it, and promote reviewTop to a red review when one
+          // exists (so the queue chip renders in the red family and names the red finding),
+          // even if an amber review was seen first in report order.
+          const isRedReview = textResult.level === 'red';
+          if (isRedReview) redReviewCount++;
+          if (!reviewTop || (isRedReview && reviewTop.level !== 'red')) {
+            reviewTop = { name: r.name, label: textResult.label, level: isRedReview ? 'red' : 'amber' };
+          }
         } else if (textResult.outcome === 'noGrowth') {
           noGrowthCount++;
           if (!noGrowthTop) noGrowthTop = { name: r.name, label: textResult.normalLabel };
+        }
+
+        // Part B (item 3.2) — unclassified qualitative positive fall-through. Runs AFTER
+        // rules, only for a result that: (1) has NO finite numeric value; (2) has NO lab
+        // flag (isAbove/isBelow/urgent all false); and (3) was NOT classified by ANY text
+        // rule (textResult.applied is false — this is the "no double-count" guard: a
+        // result an authored text rule already covers, even one that matched the analyte
+        // but found no phrase, is left to that rule and never re-flagged here). Such a
+        // result scores 'none' today and disappears entirely; if its text carries a
+        // positive qualitative token past the negation guard, surface it amber.
+        // Escalate-only, AMBER-MAX — never red (see matchUnclassifiedPositive header).
+        if (!Number.isFinite(r.value) && !r.isAbove && !r.isBelow && !r.urgent && !(textResult && textResult.applied)) {
+          const token = matchUnclassifiedPositive(r);
+          if (token) unclassified.push({ name: r.name, token });
         }
       });
 
@@ -826,11 +1031,20 @@
       let level;
       if (urgentCount > 0) {
         level = 'red';
-      } else if (abnormalCount > 0 || reviewCount > 0) {
-        // review (unclassified culture) escalates to amber; noGrowth does not
+      } else if (abnormalCount > 0 || reviewCount > 0 || unclassified.length > 0) {
+        // review (unclassified culture) escalates to amber; noGrowth does not. Part B —
+        // an unclassified qualitative positive also escalates to (at most) amber.
         level = 'amber';
       } else {
         level = 'none';
+      }
+
+      // Part A (item 3.2) — a red-level text review escalates the report to RED (escalate-
+      // only; never lowers). Kept OUT of urgentCount, so `misprioritised` (lab-urgent only)
+      // is unaffected — a clinician-authored red text flag is not the lab marking the
+      // result urgent, the same category boundary combos observe.
+      if (redReviewCount > 0) {
+        level = 'red';
       }
 
       // Fold in a fired combo (escalate-only). A red combo raises level to 'red';
@@ -882,6 +1096,7 @@
         comboTop,
         flagged,
         unitMismatches,
+        unclassified,
       };
     } catch (_) {
       return none;
@@ -904,6 +1119,12 @@
     collapseWs,
     specimenAllows,
     unitsCompatible,
+    // Part B (item 3.2) — exported for direct unit tests. See the header comment above
+    // matchUnclassifiedPositive for why the negation guard is REPLICATED (not imported)
+    // from content-scripts/triage-lens/rule-match.js.
+    matchUnclassifiedPositive,
+    POSITIVE_QUALITATIVE,
+    UNCLASSIFIED_NEGATORS,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

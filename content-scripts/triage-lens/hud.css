@@ -163,6 +163,20 @@
   color: var(--text-4);
   border-color: var(--border-hi);
 }
+/* "Unclassified qualitative positive" chip (Part B, item 3.2, TRIAGE-LENS-2026-07-02.md)
+   — AMBER-MAX safety net: a non-numeric result contained a positive-lexicon token that
+   no text rule classified and the lab did not flag (see engine/result-severity.js
+   matchUnclassifiedPositive). Deliberately NOT the same filled .ch-chip-amber
+   treatment as a lab-confirmed abnormal/review chip — amber ink/border, transparent
+   fill + dashed border (same "provisional, go look" visual family as
+   .ch-chip-demoted/.ch-chip-not-assessed) so a GP never mistakes an unreviewed
+   free-text hit for a graded clinical finding. */
+.ch-chip-unclassified {
+  background: transparent;
+  color: var(--amber);
+  border-color: var(--amber-line);
+  border-style: dashed;
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {

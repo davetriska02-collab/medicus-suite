@@ -2,7 +2,13 @@
 // Run with: node test-result-severity.js
 'use strict';
 
-const { evaluateReportSeverity, extractPrior } = require('./engine/result-severity.js');
+const {
+  evaluateReportSeverity,
+  extractPrior,
+  matchUnclassifiedPositive,
+  POSITIVE_QUALITATIVE,
+  UNCLASSIFIED_NEGATORS,
+} = require('./engine/result-severity.js');
 
 let passed = 0;
 let failed = 0;
@@ -2251,6 +2257,240 @@ console.log('\n--- item 3.1: unit-mismatch guard — combo numeric condition ---
     dedupOut.unitMismatches.length === 1,
     'two conditions producing the same (result, rule) mismatch dedupe to one entry'
   );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Item 3.2 — Close the qualitative fall-through
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Fixtures: non-numeric text results (no numeric value, no lab flag).
+const textResult = (name, over) =>
+  Object.assign(
+    {
+      name,
+      value: NaN,
+      rawValue: '',
+      comparator: null,
+      unit: null,
+      low: null,
+      high: null,
+      isAbove: false,
+      isBelow: false,
+      urgent: false,
+      interpretation: null,
+      date: '2026-06-01',
+      history: [],
+      text: '',
+    },
+    over
+  );
+
+// ── Leg A: red-capable text rules ─────────────────────────────────────────────
+console.log('\n--- Leg A: red-capable text rules (abnormalLevel:red) ---');
+{
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', {
+    rawValue: 'Staphylococcus aureus — organism isolated',
+    text: 'Staphylococcus aureus — organism isolated',
+  });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleRed] });
+  assert(out.level === 'red', 'red text rule (abnormalLevel:red) → report level red');
+  assert(out.reviewCount === 1, 'reviewCount is 1');
+  assert(out.reviewTop && out.reviewTop.level === 'red', "reviewTop.level is 'red'");
+  assert(out.reviewTop.label === 'Positive blood culture', 'reviewTop carries the red rule label');
+  assert(out.urgentCount === 0, 'urgentCount stays 0 (text-red is NOT lab-urgent)');
+  assert(out.misprioritised === false, 'misprioritised stays false regardless of priority (text-red excluded)');
+}
+{
+  // A red text rule is escalate-only and does not depend on priorityDisplay for misprioritised.
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleRed], priorityDisplay: 'Routine' });
+  assert(
+    out.level === 'red' && out.misprioritised === false,
+    'text-red on a Routine row → red but never misprioritised'
+  );
+}
+{
+  // Default (no abnormalLevel) preserves EXACT prior behaviour: amber cap.
+  const bcRuleAmber = {
+    id: 'bc-amber',
+    kind: 'text',
+    enabled: true,
+    label: 'Blood culture flag',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc]), { resultRules: [bcRuleAmber] });
+  assert(out.level === 'amber', 'text rule with no abnormalLevel → amber (unchanged behaviour)');
+  assert(out.reviewTop.level === 'amber', "reviewTop.level defaults to 'amber'");
+}
+{
+  // A red review promotes reviewTop over an earlier amber review.
+  const amberRule = {
+    id: 'a',
+    kind: 'text',
+    enabled: true,
+    label: 'HVS review',
+    analyte: { match: ['HVS'] },
+    abnormalText: ['candida'],
+  };
+  const redRule = {
+    id: 'r',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const hvs = textResult('HVS', { text: 'candida seen' });
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([hvs, bc]), { resultRules: [amberRule, redRule] });
+  assert(out.reviewCount === 2, 'both reviews counted');
+  assert(out.level === 'red', 'presence of a red review → level red');
+  assert(
+    out.reviewTop.level === 'red' && out.reviewTop.name === 'Blood culture',
+    'reviewTop promoted to the red review'
+  );
+}
+{
+  // Red text review never LOWERS a lab-urgent result (escalate-only, stays red).
+  const bcRuleRed = {
+    id: 'bc-red',
+    kind: 'text',
+    enabled: true,
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated'],
+    abnormalLevel: 'red',
+  };
+  const bc = textResult('Blood culture', { text: 'organism isolated' });
+  const out = evaluateReportSeverity(makeReport([bc, rdwUrgent]), { resultRules: [bcRuleRed] });
+  assert(out.level === 'red' && out.urgentCount === 1, 'lab-urgent + red text review → red, urgentCount from lab only');
+}
+
+// ── Leg B: unclassified-positive surfacing ────────────────────────────────────
+console.log('\n--- Leg B: unclassified qualitative positive surfacing ---');
+{
+  // "Detected" with no rule, no lab flag → surfaced amber.
+  const r = textResult('Respiratory PCR', { rawValue: 'Detected', text: 'Detected' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.level === 'amber', 'unclassified positive → level amber');
+  assert(out.unclassified.length === 1, 'unclassified list has 1 entry');
+  assert(out.unclassified[0] && out.unclassified[0].name === 'Respiratory PCR', 'unclassified[0] names the analyte');
+  assert(out.unclassified[0].token === 'detected', 'unclassified[0].token is the matched token');
+  assert(out.urgentCount === 0 && out.abnormalCount === 0, 'never numeric-graded (no value)');
+}
+{
+  // Negation guard: "Not detected" must NOT surface.
+  const r = textResult('Respiratory PCR', { rawValue: 'Not detected', text: 'Not detected' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, '"Not detected" → not surfaced (negation guard)');
+  assert(out.level === 'none', 'genuinely-negative qualitative result stays none');
+}
+{
+  // "No growth" negation guard.
+  const r = textResult('Wound swab', { text: 'No growth after 48 hours' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, '"No growth" → not surfaced');
+}
+{
+  // Whole-word discipline: "represent"/"presentation" must not trip 'present'.
+  const r = textResult('Note', { text: 'Sample representative of the presentation' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'substring inside a larger word does not trip the lexicon');
+}
+{
+  // A result COVERED by a text rule is left to that rule (not double-surfaced),
+  // even when the rule's outcome is 'none' (lone abnormalText, no phrase hit).
+  const coverRule = {
+    id: 'cov',
+    kind: 'text',
+    enabled: true,
+    label: 'Culture flag',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+  };
+  const r = textResult('Urine culture', { text: 'Organism isolated, mixed growth' });
+  const out = evaluateReportSeverity(makeReport([r]), { resultRules: [coverRule] });
+  assert(out.unclassified.length === 0, 'a result a text rule touched is NOT also surfaced as unclassified');
+}
+{
+  // A lab-flagged (abnormal) result is already visible → not unclassified.
+  const r = textResult('Marker', { text: 'positive', isAbove: true });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'lab-flagged result → not surfaced as unclassified (already visible)');
+}
+{
+  // A numeric result never enters the unclassified pass.
+  const r = textResult('Value', { value: 12, rawValue: '12 positive', text: '12 positive' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 0, 'numeric result → never unclassified');
+}
+{
+  // Sentence-scoped: a negation in a DIFFERENT clause does not cancel a genuine positive.
+  const r = textResult('Culture', { text: 'Organism isolated. No growth in anaerobic bottle.' });
+  const out = evaluateReportSeverity(makeReport([r]));
+  assert(out.unclassified.length === 1, 'positive in one sentence survives a negation in another');
+}
+
+// ── matchUnclassifiedPositive direct unit tests ───────────────────────────────
+console.log('\n--- matchUnclassifiedPositive (direct) ---');
+{
+  assert(
+    Array.isArray(POSITIVE_QUALITATIVE) && POSITIVE_QUALITATIVE.includes('reactive'),
+    'POSITIVE_QUALITATIVE exported'
+  );
+  assert(
+    Array.isArray(UNCLASSIFIED_NEGATORS) && UNCLASSIFIED_NEGATORS.includes('not'),
+    'UNCLASSIFIED_NEGATORS exported'
+  );
+  assert(matchUnclassifiedPositive({ text: 'HIV reactive' }) === 'reactive', 'reactive token matched');
+  assert(matchUnclassifiedPositive({ text: 'not reactive' }) === null, 'preceding negator negates the token');
+  assert(
+    matchUnclassifiedPositive({ text: 'none isolated' }) === null,
+    "'none' negator (culture phrasing) negates 'isolated'"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'nothing to report' }) === null,
+    'no false match on unrelated text (whole-word)'
+  );
+  // 'non-' / 'non ' glued prefix is a negating prefix — standard true-negative serology
+  assert(
+    matchUnclassifiedPositive({ text: 'Hepatitis C antibody non-reactive' }) === null,
+    "'non-reactive' → not surfaced (glued negating prefix)"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'HBsAg non reactive' }) === null,
+    "'non reactive' (spaced) → not surfaced"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'non-Hodgkin lymphoma cells seen' }) === 'seen',
+    "'non' only negates the abutting token, not a distant one ('seen' still surfaces)"
+  );
+  assert(
+    matchUnclassifiedPositive({ text: 'cannon reactive' }) === 'reactive',
+    "'non' must be a whole word — 'cannon' does not negate 'reactive'"
+  );
+  assert(matchUnclassifiedPositive(null) === null, 'null-safe');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

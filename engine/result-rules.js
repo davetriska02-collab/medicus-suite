@@ -61,6 +61,14 @@
 //                                    surface a specific coded finding without having to
 //                                    enumerate the full "normal" set (which risks a
 //                                    false-negative — e.g. "abnormal" contains "normal").
+//     abnormalLevel: 'amber'|'red'  — OPTIONAL; default 'amber' (= exact prior behaviour).
+//                                    The severity a FIRED abnormalText flag escalates the
+//                                    report to. 'red' lets a designated text finding (e.g. a
+//                                    positive blood culture) reach RED instead of being
+//                                    amber-capped. Escalate-only — never lowers anything.
+//                                    Meaningful ONLY with abnormalText (it governs the
+//                                    abnormalText flag); an abnormalLevel with no abnormalText
+//                                    is a validation error, not a silent no-op.
 //     normalLabel : string          — optional; label shown on chip when outcome is 'noGrowth'
 //                                    (default "No growth")
 //   }
@@ -302,6 +310,22 @@
       errs.push('label should be 60 characters or fewer (got ' + rule.label.trim().length + ').');
     }
 
+    // abnormalLevel — OPTIONAL, and ONLY meaningful/valid on kind:'text' rules (item 3.2,
+    // TRIAGE-LENS-2026-07-02.md — it governs the level a fired abnormalText flag escalates
+    // to). A 'threshold' or 'combo' rule has no abnormalText to escalate, so the field can
+    // only ever be a silent no-op there — reject it outright (naming the rule), rather than
+    // accept dead config a clinician might mistake for working. Checked here (before the
+    // combo early-return below) so it covers ALL non-text kinds in one place; the 'amber'/
+    // 'red' value check + the "must accompany a non-empty abnormalText" check for kind:'text'
+    // itself live further down, in the text-kind block.
+    if (rule.abnormalLevel !== undefined && kind !== 'text') {
+      errs.push(
+        (rule.label && typeof rule.label === 'string' && rule.label.trim()
+          ? '"' + rule.label.trim() + '"'
+          : '(unlabelled rule)') + ": abnormalLevel is only valid on kind:'text' rules."
+      );
+    }
+
     // ── combo kind: a top-level rule with no single analyte — its analytes live on
     //    each condition. Validate conditions then fall through to the shared
     //    suppressIfProblem block and return; the per-kind analyte/threshold/text
@@ -381,6 +405,23 @@
       // normalLabel — optional string
       if (rule.normalLabel !== undefined && rule.normalLabel !== null && typeof rule.normalLabel !== 'string') {
         errs.push('normalLabel must be a string or omitted.');
+      }
+
+      // abnormalLevel — OPTIONAL; default 'amber'. Only 'amber' or 'red' are permitted, and
+      // it is meaningful ONLY alongside a non-empty abnormalText (it sets the level a fired
+      // abnormalText flag escalates to). An abnormalLevel with no abnormalText can never take
+      // effect, so it is an ERROR rather than a silent no-op (a red text rule with no
+      // abnormalText would look red-capable but never fire red — a patient-safety trap).
+      if (rule.abnormalLevel !== undefined && rule.abnormalLevel !== null) {
+        if (rule.abnormalLevel !== 'amber' && rule.abnormalLevel !== 'red') {
+          errs.push("abnormalLevel, if present, must be 'amber' or 'red'.");
+        }
+        if (abnormalCount <= 0) {
+          errs.push(
+            'abnormalLevel is only meaningful with abnormalText (it sets the level a fired ' +
+              'abnormalText flag escalates to).'
+          );
+        }
       }
     } else {
       // threshold kind: comparator, amber, red, unit
@@ -548,6 +589,13 @@ This example escalates a potassium result to amber if >= 5.5 mmol/L and to red i
                                                 abnormalText rule cannot hide or calm anything.
                                                 e.g. ["no response to bowel cancer screening"]
                                    * At least one of normalText / abnormalText is required.
+  abnormalLevel ("amber"|"red", optional) — The severity a FIRED abnormalText flag escalates
+                                   the report to. Default "amber" (the historic behaviour — a
+                                   text finding could never exceed amber). Set "red" ONLY for a
+                                   finding that genuinely warrants same-day review on its own
+                                   (e.g. a positive blood culture / bacteraemia). Escalate-only:
+                                   it never lowers a lab flag. Meaningful ONLY with abnormalText
+                                   — an abnormalLevel with no abnormalText is rejected on import.
   normalLabel (string, optional) — Label on the calm chip when a normal phrase is found.
                                    Default "No growth" if omitted.
 
@@ -583,6 +631,24 @@ This example applies to any result whose name contains "MSU" or "urine culture".
 --- END TEXT EXAMPLE ---
 
 This example surfaces bowel cancer screening non-responders: it applies to bowel-screening results and flags 'review' ONLY when the text contains a "no response" phrase. A normal or abnormal screening result contains no such phrase, so it is left untouched — the rule can never hide a positive result.
+
+--- TEXT EXAMPLE (positive blood culture — abnormalText, RED) ---
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "text",
+  "label": "Positive blood culture",
+  "analyte": {
+    "match": ["blood culture"],
+    "specimen": ["blood culture"]
+  },
+  "abnormalText": ["organism isolated", "gram positive cocci", "gram negative bacilli", "positive blood culture"],
+  "abnormalLevel": "red"
+}
+--- END TEXT EXAMPLE ---
+
+This example flags a blood culture RED (same-day review) when the text names an isolate. abnormalLevel:"red" lifts the amber cap so a genuine bacteraemia is not under-graded. Use "red" only for findings that warrant urgent review on their own; leave it out (defaulting to amber) otherwise.
 
 === SCHEMA — kind:"combo" ===
 

@@ -288,6 +288,137 @@ console.log('\n--- validateResultRule: text rule valid cases ---');
   assert(errs.length === 0, 'text rule with multiple match and normalText strings → valid');
 }
 
+// ── validateResultRule: text rule — abnormalLevel (item 3.2 Leg A) ────────────
+console.log('\n--- validateResultRule: text rule — abnormalLevel ---');
+{
+  // abnormalLevel:'red' with abnormalText present → valid (red-capable text rule)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Positive blood culture',
+    analyte: { match: ['blood culture'] },
+    abnormalText: ['organism isolated', 'positive blood culture'],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length === 0, "abnormalLevel:'red' with abnormalText → valid");
+}
+{
+  // abnormalLevel:'amber' explicit (the default) with abnormalText → valid
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+    abnormalLevel: 'amber',
+  });
+  assert(errs.length === 0, "abnormalLevel:'amber' with abnormalText → valid");
+}
+{
+  // Omitting abnormalLevel is valid (defaults to amber)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+  });
+  assert(errs.length === 0, 'abnormalLevel omitted → valid (defaults amber)');
+}
+{
+  // Bad value → error, only amber|red permitted
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture flagged',
+    analyte: { match: ['culture'] },
+    abnormalText: ['heavy growth'],
+    abnormalLevel: 'urgent',
+  });
+  assert(errs.length > 0, "abnormalLevel:'urgent' → error");
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel')),
+    'error mentions abnormalLevel'
+  );
+}
+{
+  // abnormalLevel with NO abnormalText → error (can never take effect)
+  const errs = validateResultRule({
+    kind: 'text',
+    label: 'Culture review',
+    analyte: { match: ['culture'] },
+    normalText: ['no growth'],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel with no abnormalText → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.toLowerCase().includes('abnormaltext')),
+    'error explains abnormalLevel needs abnormalText'
+  );
+}
+{
+  // abnormalLevel on a THRESHOLD rule (kind absent → threshold) → error, naming the rule.
+  const errs = validateResultRule({
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel on a threshold rule (kind omitted) → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.toLowerCase().includes("kind:'text'")),
+    "error explains abnormalLevel is only valid on kind:'text'"
+  );
+  assert(
+    errs.some((e) => e.includes('High potassium')),
+    'error names the offending rule by its label'
+  );
+}
+{
+  // abnormalLevel on an EXPLICIT kind:'threshold' rule → same error.
+  const errs = validateResultRule({
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, "abnormalLevel on an explicit kind:'threshold' rule → error");
+}
+{
+  // abnormalLevel on a COMBO rule → error, naming the rule (combo returns early —
+  // this check must run BEFORE that early return or a combo rule would silently
+  // accept the field).
+  const errs = validateResultRule({
+    kind: 'combo',
+    label: 'Sterile pyuria',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 40 },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+    abnormalLevel: 'red',
+  });
+  assert(errs.length > 0, 'abnormalLevel on a combo rule → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('abnormallevel') && e.includes('Sterile pyuria')),
+    'combo error names the rule and mentions abnormalLevel'
+  );
+}
+{
+  // A valid threshold rule with NO abnormalLevel at all is completely unaffected
+  // (regression guard for the new kind-check).
+  const errs = validateResultRule({
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  });
+  assert(errs.length === 0, 'threshold rule with no abnormalLevel → still valid (unaffected)');
+}
+
 // ── validateResultRule: text rule — missing normalText ────────────────────────
 console.log('\n--- validateResultRule: text rule — missing / bad normalText ---');
 {
