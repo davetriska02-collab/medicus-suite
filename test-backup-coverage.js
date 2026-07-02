@@ -99,6 +99,7 @@ const KEY_PREFIXES = [
   'sweep',
   'reception',
   'ledger',
+  'health',
 ];
 
 function hasKeyPrefix(k) {
@@ -269,6 +270,16 @@ const ALLOWLIST = new Set([
   // misleading "what was shown here" record. The exclusion is stated in the
   // user-facing disclosure block in options.html:
   'ledger.events',
+
+  // Horizon-1 H2 — DOM-contract runtime canary state (shared/contract-canary.js):
+  // per-contract { lastProbe, status, sinceTs, probeCount, failStreak, lastFailTs }
+  // written by the content-script probe injected into the live Medicus page.
+  // Machine-local diagnostic telemetry — same doctrine as
+  // sentinel.extractionBaseline/ledger.events: restoring it onto another
+  // machine would import a stale/foreign "is Medicus broken here" verdict
+  // that has nothing to do with that machine's actual, current DOM. Surfaced
+  // read-only in Options → Suite health (options.html #sect-health):
+  'health.contracts',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

@@ -898,6 +898,92 @@
       .ledger-clear-row input[type='text'] {
         width: 180px;
       }
+
+      /* ── Suite Health section (Horizon-1 H2) ─────────────────────────────── */
+      .health-summary {
+        font-size: 11px;
+        color: var(--text-4);
+        margin-bottom: 10px;
+        font-family: var(--mono);
+      }
+      .health-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow-x: auto;
+        margin-bottom: 22px;
+      }
+      .health-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .health-table th {
+        text-align: left;
+        padding: 8px 10px;
+        background: var(--bg-mid);
+        color: var(--text-3);
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-size: 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .health-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        vertical-align: top;
+      }
+      .health-table td.health-td-feature {
+        white-space: nowrap;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .health-table td.health-td-degrades,
+      .health-table td.health-td-explain {
+        max-width: 320px;
+      }
+      .health-table td.health-td-checked {
+        white-space: nowrap;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-3);
+      }
+      .health-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: var(--r-pill);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+      }
+      .health-status--ok {
+        background: var(--green-dim);
+        color: var(--green);
+        border: 1px solid var(--green-line);
+      }
+      .health-status--degraded {
+        background: var(--amber-dim);
+        color: var(--amber);
+        border: 1px solid var(--amber-line);
+      }
+      .health-status--na {
+        background: var(--bg-mid);
+        color: var(--text-4);
+        border: 1px solid var(--border-hi);
+      }
+      .health-status--unchecked {
+        background: var(--bg-mid);
+        color: var(--text-4);
+        border: 1px solid var(--border-hi);
+      }
+      .health-status--fixture {
+        background: var(--bg-mid);
+        color: var(--text-3);
+        border: 1px solid var(--border-hi);
+      }
     </style>
   </head>
   <body>
@@ -923,6 +1009,7 @@
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
         <button class="nav-item" data-section="ledger">Event Ledger</button>
+        <button class="nav-item" data-section="health">Suite Health</button>
         <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
         <button class="nav-item" data-section="debug">Debug</button>
       </nav>
@@ -2018,6 +2105,38 @@
           </div>
         </section>
 
+        <!-- Suite Health section (Horizon-1 H2) — self-diagnosis of the extension's own
+             DOM-contract integration points, not a Medicus fault report -->
+        <section class="opt-section" id="sect-health">
+          <h1>Suite health <span class="module-badge">self-diagnosis</span></h1>
+          <p class="section-desc">
+            The suite depends on specific pieces of Medicus's own page structure to work &mdash; a checkbox, a
+            button, a row of results. This section is the extension quietly checking that those pieces are still
+            where it expects, using a small background probe that runs on the live Medicus page. That probe counts
+            elements only &mdash; it never reads patient data or page text. A <strong>degraded</strong> row means
+            Medicus's interface may have changed since the extension was built, and that one feature may be silently
+            limited until the extension is updated to match.
+            <strong>It is not a fault report about Medicus</strong> &mdash; Medicus changing its own UI is normal and
+            expected; this is the suite catching up with it, automatically, before a clinician has to notice the
+            hard way.
+          </p>
+          <p class="section-desc">
+            <strong>What to do about a degraded row:</strong> first check you're on the latest version of the
+            extension (see the version badge above, or the update checker) &mdash; most fixes for this ship as a
+            routine update. If it's still degraded after updating, tell Dave (the extension's maintainer) which
+            feature it is so the underlying selector can be fixed.
+          </p>
+          <p class="section-desc">
+            Some contracts below are marked <strong>fixture-tested only</strong> rather than live-checked &mdash;
+            their own selectors are too generic, or too transient (existing only for a few seconds mid-interaction),
+            to probe live without false alarms. Those are still regression-tested against recorded Medicus DOM
+            snapshots on every code change; they are just not re-checked against the live page every session. The
+            explanation column says why, contract by contract.
+          </p>
+          <div class="health-summary" id="healthSummary"></div>
+          <div class="health-table-wrap" id="healthTableWrap"></div>
+        </section>
+
         <!-- Backup & Restore section -->
         <section class="opt-section" id="sect-backup">
           <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
@@ -2626,6 +2745,7 @@
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/display-prefs.js"></script>
+    <script src="../shared/dom-contracts.js"></script>
     <script src="../shared/event-ledger.js"></script>
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>

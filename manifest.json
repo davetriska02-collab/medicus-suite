@@ -28,6 +28,7 @@
       "js": [
         "shared/dom-contracts.js",
         "content-scripts/dom-observer-hub.js",
+        "shared/contract-canary.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
         "engine/extractors/medications.js",

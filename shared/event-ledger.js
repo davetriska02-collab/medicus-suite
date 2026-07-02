@@ -3,8 +3,12 @@
 //
 // A machine-local, append-only ring buffer of what THIS extension displayed or
 // did on THIS machine: alerts shown, dismissals, recall tasks created, patient
-// summaries copied, pre-flight checks run, results filed via Lab Filing. It
-// exists to answer "did the tool flag this?" with evidence instead of a shrug.
+// summaries copied, pre-flight checks run, results filed via Lab Filing, and
+// (Horizon-1 H2) DOM-contract canary transitions — a runtime probe of the
+// suite's OWN integration points going degraded/recovered (source 'health',
+// see shared/contract-canary.js; always patientRef null — self-diagnosis, not
+// a clinical event). It exists to answer "did the tool flag this?" with
+// evidence instead of a shrug.
 //
 // WHAT IT IS NOT (load-bearing honesty, mirrored in the Options disclosure):
 //   - NOT part of the clinical record, and no substitute for Medicus's own
@@ -49,8 +53,21 @@
   const STORAGE_KEY = 'ledger.events';
   const MAX_EVENTS = 5000;
   const RETENTION_DAYS = 90;
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight'];
-  const ACTIONS = ['shown', 'dismissed', 'recall-created', 'summary-copied', 'preflight-run', 'sweep-run', 'filed'];
+  // 'health' (Horizon-1 H2) — shared/contract-canary.js's own runtime DOM-contract
+  // probes, NOT a clinical source: patientRef is always null for these events (see
+  // contract-canary.js). 'contract-degraded'/'contract-recovered' are its two actions.
+  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health'];
+  const ACTIONS = [
+    'shown',
+    'dismissed',
+    'recall-created',
+    'summary-copied',
+    'preflight-run',
+    'sweep-run',
+    'filed',
+    'contract-degraded',
+    'contract-recovered',
+  ];
   const MAX_LABEL_LEN = 120;
   const MAX_RULEID_LEN = 80;
   const MAX_SEVERITY_LEN = 24;

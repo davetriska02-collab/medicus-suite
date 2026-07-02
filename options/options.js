@@ -3276,3 +3276,83 @@ rmSaveBtn?.addEventListener('click', async () => {
     .querySelectorAll('.nav-item[data-section="ledger"]')
     .forEach((btn) => btn.addEventListener('click', refreshLedger));
 })();
+
+// ── Suite Health section (Horizon-1 H2) ────────────────────────────────────────
+// Read-only table over chrome.storage.local['health.contracts'], written by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json). This page never probes anything itself; it only
+// reads the canary's last result and the registry (shared/dom-contracts.js,
+// loaded before this script) for the plain-English feature/degradation text.
+// health.contracts is machine-local diagnostic state, deliberately EXCLUDED
+// from suite backup (see test-backup-coverage.js ALLOWLIST) — same doctrine as
+// the Event Ledger above.
+(function initHealthSection() {
+  const DC = typeof window !== 'undefined' ? window.DomContracts : null;
+  const wrap = document.getElementById('healthTableWrap');
+  const summaryEl = document.getElementById('healthSummary');
+  if (!DC || !wrap) return;
+
+  function fmtTs(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function statusInfo(row, contract) {
+    if (contract.runtime === false) return { label: 'Fixture-tested only', cls: 'health-status--fixture' };
+    if (!row || !row.status) return { label: 'Not checked yet', cls: 'health-status--unchecked' };
+    if (row.status === 'degraded') return { label: 'Degraded', cls: 'health-status--degraded' };
+    if (row.status === 'ok') return { label: 'OK', cls: 'health-status--ok' };
+    return { label: 'Not applicable here', cls: 'health-status--na' };
+  }
+
+  async function refreshHealth() {
+    const r = await chrome.storage.local.get('health.contracts');
+    const health = (r && r['health.contracts']) || {};
+    const contracts = DC.list();
+
+    const degradedCount = contracts.filter((c) => health[c.id]?.status === 'degraded').length;
+    const runtimeCount = contracts.filter((c) => c.runtime === true).length;
+    if (summaryEl) {
+      summaryEl.textContent =
+        degradedCount > 0
+          ? `${degradedCount} of ${contracts.length} feature${contracts.length === 1 ? '' : 's'} currently degraded.`
+          : `All checked features look OK — ${runtimeCount} of ${contracts.length} are live-checked; the rest are fixture-tested only (see the explanation column).`;
+    }
+
+    const rows = contracts
+      .map((c) => {
+        const row = health[c.id];
+        const { label, cls } = statusInfo(row, c);
+        const explanation = c.runtime === false ? c.runtimeNote || '' : '';
+        return `<tr>
+          <td class="health-td-feature">${escHtml(c.feature)}</td>
+          <td class="health-td-degrades">${escHtml(c.degradation)}</td>
+          <td><span class="health-status ${cls}">${escHtml(label)}</span></td>
+          <td class="health-td-checked">${row ? escHtml(fmtTs(row.lastProbe)) : '—'}</td>
+          <td class="health-td-explain">${escHtml(explanation)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    wrap.innerHTML =
+      `<table class="health-table"><thead><tr>` +
+      `<th>Feature</th><th>What degrades</th><th>Status</th><th>Last checked</th><th>Why fixture-only</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshHealth);
+  } else {
+    refreshHealth();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="health"]')
+    .forEach((btn) => btn.addEventListener('click', refreshHealth));
+
+  // Snappier than a re-open: the canary writes this key directly from the
+  // Medicus tab while Options may already be open in another tab.
+  chrome.storage.onChanged?.addListener((changes) => {
+    if (changes['health.contracts']) refreshHealth();
+  });
+})();

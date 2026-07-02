@@ -1520,12 +1520,68 @@ async function fetchAndRenderSubRagStrip() {
 
 let subRagPoller = makePoller(fetchAndRenderSubRagStrip, SUB_RAG_POLL_MS, 'sub-rag-strip').start();
 
-// Refresh all three strips immediately when the panel becomes visible again
+// ── Suite health strip (global — visible on every module) ─────────────────────
+// Self-diagnosis, not a clinical alert: shown ONLY when >= 1 DOM contract this
+// suite depends on (shared/dom-contracts.js) has been probed 'degraded' by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json's content-script list). The canary does all the
+// probing and hysteresis; this strip only reads its result out of
+// chrome.storage.local — no API calls, no polling backoff needed. Calm and
+// amber-only by design (never red — Medicus changing its own UI is expected,
+// not a clinical emergency). Same strip family as #wrStrip/#rmStrip/
+// #subRagStrip (CLAUDE.md "Global demand / alert strips"); panel-only by the
+// same convention those three already use (no WR/RM/SubRag strips in the
+// pop-out either — see pop-out/pop-out.js's MODULES comment).
+const healthStripEl = document.getElementById('healthStrip');
+const HEALTH_POLL_MS = 30 * 1000;
+
+async function fetchAndRenderHealthStrip() {
+  if (!healthStripEl) return true;
+  try {
+    const r = await chrome.storage.local.get('health.contracts');
+    const health = r['health.contracts'] || {};
+    const DC = window.DomContracts;
+    const degradedIds = Object.keys(health).filter((id) => health[id]?.status === 'degraded');
+    if (degradedIds.length === 0 || !DC) {
+      healthStripEl.className = 'health-strip health-strip-hidden';
+      healthStripEl.innerHTML = '';
+      return true;
+    }
+    // Several contracts can share one owning feature (e.g. the three queue-chip
+    // contracts) — de-dupe so the strip reads "Queue chips degraded", not
+    // "Queue chips, Queue chips, Queue chips degraded".
+    const features = degradedIds
+      .map((id) => DC.get(id)?.feature || id)
+      .filter((f, i, arr) => arr.indexOf(f) === i);
+    healthStripEl.className = 'health-strip health-strip-amber';
+    healthStripEl.innerHTML = `
+      <span class="health-strip-icon">⚠</span>
+      <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
+      <button class="health-strip-goto">Details →</button>
+    `;
+    healthStripEl.querySelector('.health-strip-goto')?.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html#sect-health') });
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+let healthPoller = makePoller(fetchAndRenderHealthStrip, HEALTH_POLL_MS, 'health-strip').start();
+// Snappier than the 30s poll: the canary writes this key directly, so react
+// to it immediately when the panel is open and watching.
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['health.contracts']) fetchAndRenderHealthStrip();
+});
+
+// Refresh all four strips immediately when the panel becomes visible again
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     fetchAndRenderStrip();
     fetchAndRenderRmStrip();
     fetchAndRenderSubRagStrip();
+    fetchAndRenderHealthStrip();
   }
 });
 
@@ -1550,6 +1606,7 @@ window.addEventListener('pagehide', () => {
   if (wrPoller) wrPoller.stop();
   if (rmPoller) rmPoller.stop();
   if (subRagPoller) subRagPoller.stop();
+  if (healthPoller) healthPoller.stop();
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
