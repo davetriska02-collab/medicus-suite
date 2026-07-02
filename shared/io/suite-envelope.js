@@ -338,6 +338,15 @@ function previewEnvelope(envelope) {
     if (m) lines.push(m);
   }
 
+  if (mods.condor) {
+    const dayScoreCount = (mods.condor.dayScores || []).length;
+    const snapshotCount = (mods.condor.reportSnapshots || []).length;
+    lines.push(`Condor: ${dayScoreCount} day score(s), ${snapshotCount} report snapshot(s)`);
+  } else {
+    const m = missing('Condor');
+    if (m) lines.push(m);
+  }
+
   if (mods.reception) {
     const customCount = (mods.reception.customPathways || []).length;
     const editCount = Object.keys(mods.reception.pathwayOverrides || {}).length;

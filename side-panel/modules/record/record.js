@@ -42,6 +42,7 @@
 //   live monitoring/QOF chips → getSentinelSnapshot.chips
 
 import { copyText } from '../shared/export-util.js';
+import { isChipActionNeeded } from '../sentinel/sentinel-core.js';
 
 let container = null;
 let _runToken = 0; // cancels stale async renders on rapid patient/tab change
@@ -491,7 +492,7 @@ export function buildRecordSummaryText(model, chips, stamp) {
     (c) => c.type === 'drug-monitoring' || c.type === 'qof-indicator' || c.type === 'qof-register'
   );
   if (monitorChips.length) {
-    const overdue = monitorChips.filter((c) => /overdue|due|missing|not_/i.test(JSON.stringify(c)));
+    const overdue = monitorChips.filter((c) => isChipActionNeeded(c.status));
     lines.push(
       `  Live monitoring & QOF: ${overdue.length ? `${overdue.length} need attention` : 'all up to date'} (${monitorChips.length} checked)`
     );
@@ -665,7 +666,7 @@ function safetyCard(meds, problems, obs, pc, chips) {
   // Live monitoring / QOF chips (already computed by the Monitoring engine).
   // Headline the number NEEDING ATTENTION (not the bare total), so a green
   // "all clear" can never sit beside an outstanding item.
-  const overdue = monitorChips.filter((c) => /overdue|due|missing|not_/i.test(JSON.stringify(c)));
+  const overdue = monitorChips.filter((c) => isChipActionNeeded(c.status));
   if (monitorChips.length) {
     const n = overdue.length;
     rows.push(

@@ -27,11 +27,13 @@ const START = 'const EMBEDDED_DEFAULTS = `';
 const END = '`;';
 
 // Compact JSON with non-ASCII escaped as \uXXXX (matches the embedded style),
-// then backslashes doubled so the string survives the template literal.
+// then backslashes doubled, backticks escaped, and template-literal
+// interpolation starts (${) escaped so the string survives being embedded in
+// a template literal.
 function buildEmbeddedLiteral(obj) {
   const compact = JSON.stringify(obj).replace(/[\u0080-\uffff]/g,
     c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
-  return compact.replace(/\\/g, '\\\\');
+  return compact.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 }
 
 function currentEmbeddedLiteral(src) {

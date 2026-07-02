@@ -1521,7 +1521,8 @@ function computeEFI(activeProblems, pastProblems, drugs) {
   const ticked = [];
   for (const d of EFI_DEFICITS) {
     if (d.id === 'polypharm') {
-      if (drugs && drugs.length >= 5) ticked.push({ ...d, evidence: `${drugs.length} drugs detected` });
+      const activeDrugs = drugs ? drugs.filter((rx) => rx.active) : [];
+      if (activeDrugs.length >= 5) ticked.push({ ...d, evidence: `${activeDrugs.length} drugs detected` });
       continue;
     }
     const match = all.find((p) => d.terms.some((t) => p.name.toLowerCase().includes(t)));
@@ -1559,7 +1560,18 @@ function computeDrugMonitoring(entries) {
 
   for (const d of HIGH_RISK_DRUGS) {
     const drugRe = new RegExp(
-      '\\b(' + d.terms.map((t) => t.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('|') + ')\\b',
+      '\\b(' +
+        d.terms
+          .map((t) => {
+            const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // A term ending in a digit (e.g. "aspirin 75") is written in real
+            // label text with no space before the unit ("75mg") — "5" and "m"
+            // are both word chars, so a trailing \b never matches there. Drop
+            // the trailing boundary for such terms so "aspirin 75mg ..." matches.
+            return /\d$/.test(t) ? esc : esc + '\\b';
+          })
+          .join('|') +
+        ')',
       'i'
     );
     const drugEntries = scanEntries.filter((e) => {

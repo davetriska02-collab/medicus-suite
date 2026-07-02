@@ -41,6 +41,7 @@ let _takerInitials = ''; // in-memory only, per panel session
 let _pillExpanded = false;
 let _onActivated = null;
 let _storageListener = null;
+let _patientCardGen = 0; // request-token guard against stale fetchSnapshot() resolution races
 
 // ── Draft autosave ────────────────────────────────────────────────────────────
 // reception.captureDraft — transient working state, PHI-bearing, TTL 4 h.
@@ -323,12 +324,16 @@ async function refreshPatientCard() {
   if (!container) return;
   const card = container.querySelector('#rcpPatientCard .rcp-card-body');
   if (!card) return;
+  const gen = ++_patientCardGen;
+  let snapshot;
   try {
-    _snapshot = await fetchSnapshot();
+    snapshot = await fetchSnapshot();
   } catch (_) {
-    _snapshot = null;
+    snapshot = null;
   }
+  if (gen !== _patientCardGen) return; // a newer refresh superseded this one — discard stale result
   if (!container) return; // cleaned up mid-fetch
+  _snapshot = snapshot;
   renderPatientCard();
 }
 

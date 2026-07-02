@@ -7,7 +7,7 @@
   async function condorExport() {
     const r = await chrome.storage.local.get(['condor.dayScores', 'practice.reportSnapshots', 'condor.indexConfig']);
     return {
-      dayScores: r['condor.dayScores'] ?? {},
+      dayScores: r['condor.dayScores'] ?? [],
       reportSnapshots: r['practice.reportSnapshots'] ?? [],
       // Tunable pressure-index weightings/band thresholds (item 8) — { weights,
       // thresholds } or null when the user has never customised them (defaults).
@@ -18,7 +18,7 @@
   async function condorImport(data) {
     if (!data || typeof data !== 'object') return;
     const patch = {};
-    if (data.dayScores && typeof data.dayScores === 'object') {
+    if (Array.isArray(data.dayScores)) {
       patch['condor.dayScores'] = data.dayScores;
     }
     // Practice Report daily snapshots (forward-accruing history for the live-only
