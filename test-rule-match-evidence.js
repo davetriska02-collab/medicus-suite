@@ -166,12 +166,13 @@ console.log('--- context: sentence boundary vs ellipsised window fallback ---');
 }
 
 // ── 6. Parity: evidence !== null exactly when ruleMatchesText is true,
-//     across the shipped 78-rule corpus x the REAL corpus of texts already
-//     exercised by test-triage-rule-patterns.js (reused, not duplicated) ──
-console.log('--- parity sweep: 78-rule corpus x test-triage-rule-patterns.js texts ---');
+//     across the shipped 80-rule corpus (item 4.3, TRIAGE-LENS-2026-07-02.md,
+//     added the 2 green rules) x the REAL corpus of texts already exercised
+//     by test-triage-rule-patterns.js (reused, not duplicated) ──
+console.log('--- parity sweep: 80-rule corpus x test-triage-rule-patterns.js texts ---');
 {
   const cfg = require('./defaults.json');
-  check(cfg.rules.length === 78, `defaults.json ships 78 rules (got ${cfg.rules.length})`);
+  check(cfg.rules.length === 80, `defaults.json ships 80 rules (got ${cfg.rules.length})`);
 
   const patternsTestSrc = fs.readFileSync(path.join(__dirname, 'test-triage-rule-patterns.js'), 'utf8');
   // Reuse the corpus of realistic request texts already hand-written in

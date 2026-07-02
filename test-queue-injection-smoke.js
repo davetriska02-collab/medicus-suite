@@ -2005,10 +2005,15 @@ if (sandbox) {
   const ruleRed = mkRule('r-red', 'red', 'Sepsis flag', ['fever']);
   const ruleAmber = mkRule('r-amber', 'amber', 'UTI query', ['waterworks']);
   const ruleInfo = mkRule('r-info', 'info', 'Admin query', ['sick note']);
+  // Item 4.3 (TRIAGE-LENS-2026-07-02.md) — the green routine tier. Ranks LAST
+  // (below info): green is "confidently routine, nothing to check", so it must
+  // never outrank even an informational chip — it's only ever the top chip
+  // when NO red/amber/info rule ALSO matched the same request text.
+  const ruleGreen = mkRule('r-green', 'green', 'Admin details query', ['change of address']);
   const multiRulePreviewText = 'Patient has a fever and waterworks symptoms, also wants a sick note.';
 
   {
-    // ---- pure ranking: red < amber < info regardless of match order ----
+    // ---- pure ranking: red < amber < info < green regardless of match order ----
     const ranked = sandbox.rankRuleMatches([ruleAmber, ruleInfo, ruleRed]);
     check(
       ranked.map((r) => r.id).join(',') === 'r-red,r-amber,r-info',
@@ -2019,6 +2024,18 @@ if (sandbox) {
     check(
       ranked2[0].id === 'r-red' && ranked2[1].id === 'r-red',
       'rankRuleMatches: ties on severity keep their original relative order (stable sort)'
+    );
+    // Item 4.3: green sorts after info, last of all four kinds, regardless of
+    // input order.
+    const rankedGreen = sandbox.rankRuleMatches([ruleGreen, ruleInfo, ruleAmber, ruleRed]);
+    check(
+      rankedGreen.map((r) => r.id).join(',') === 'r-red,r-amber,r-info,r-green',
+      `rankRuleMatches: red < amber < info < green (got ${rankedGreen.map((r) => r.id).join(',')})`
+    );
+    const rankedGreenAlone = sandbox.rankRuleMatches([ruleGreen]);
+    check(
+      rankedGreenAlone.length === 1 && rankedGreenAlone[0].id === 'r-green',
+      'rankRuleMatches: a green-only match still ranks (never dropped)'
     );
   }
 
@@ -2110,6 +2127,80 @@ if (sandbox) {
       !/more rule/.test(ruleChips[0].getAttribute('aria-label') || ''),
       'single-rule row: aria-label has no "more rules matched" suffix'
     );
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- Item 4.3: a row matching ONLY a green rule shows the green chip as
+    //      top (and only) chip — the collapse mechanics don't special-case
+    //      green, so a single green match behaves exactly like a single red/
+    //      amber/info match. ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleGreen];
+    const rowId = 'e0000000-0000-4000-8000-000000000003';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(ruleChips.length === 1, `green-only row: exactly 1 rule-match chip (no overflow), got ${ruleChips.length}`);
+    check(
+      ruleChips[0] && ruleChips[0].classes.includes('ch-chip-green'),
+      `green-only row: the top (only) chip carries the GREEN colour class, got classes: ${ruleChips[0] && ruleChips[0].classes.join(' ')}`
+    );
+    check(
+      ruleChips[0].textContent.includes('Admin details query'),
+      "green-only row: chip shows the green rule's label"
+    );
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- Item 4.3: a row matching an amber AND a green rule shows amber on
+    //      top, green demoted into the "+N" overflow — never the reverse. This
+    //      is the escalate-only safety guarantee: a routine-admin phrase never
+    //      outranks a genuine clinical match on the SAME row. ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleGreen, ruleAmber]; // deliberately green-first, not pre-sorted
+    const rowId = 'e0000000-0000-4000-8000-000000000004';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(ruleChips.length === 2, `amber+green row: top chip + "+1" overflow chip, got ${ruleChips.length}`);
+    const [topChip, overflowChip] = ruleChips;
+    check(
+      topChip && topChip.classes.includes('ch-chip-amber'),
+      `amber+green row: top chip is the amber match, NOT the green one, got classes: ${topChip && topChip.classes.join(' ')}`
+    );
+    check(topChip.textContent.includes('UTI query'), "amber+green row: top chip shows the amber rule's label");
+    check(
+      overflowChip && overflowChip.classes.includes('ch-chip-meta') && overflowChip.textContent.includes('+1'),
+      `amber+green row: overflow chip reads "+1", got classes/text: ${overflowChip && overflowChip.classes.join(' ')} / ${overflowChip && overflowChip.textContent}`
+    );
+    // Opening the "+N" list confirms the green match is still fully present
+    // (escalate-only — demoted in rank, never suppressed), just not the headline.
+    overflowChip.click();
+    const openedListMenu = sandbox.document.querySelector('.ch-rule-menu');
+    const listItems = openedListMenu && openedListMenu.querySelectorAll('.ch-rule-menu-list-item');
+    check(
+      listItems && listItems.length === 2,
+      `amber+green row: "+N" list shows both matched rules, got ${listItems && listItems.length}`
+    );
+    check(
+      listItems && listItems.some((li) => /Admin details query/.test(li.textContent)),
+      'amber+green row: the green rule is present (not suppressed) inside the "+N" list'
+    );
+    sandbox.closeActionMenu();
     sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
   }
 

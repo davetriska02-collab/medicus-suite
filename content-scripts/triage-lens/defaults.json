@@ -1,5 +1,5 @@
 {
-  "version": 23,
+  "version": 24,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3586,6 +3586,84 @@
           "type": "link",
           "label": "NICE CKS dementia",
           "url": "https://cks.nice.org.uk/topics/dementia/"
+        }
+      ]
+    },
+    {
+      "id": "practice-admin-details",
+      "enabled": true,
+      "label": "Practice admin (non-clinical)",
+      "kind": "green",
+      "patterns": [
+        "proof of address",
+        "registration query",
+        "regist\\w* (with|at) (the |this )?practice",
+        "new patient registration",
+        "change of address",
+        "chang\\w* (my |our |the )?address",
+        "updat\\w* (my |our |the )?address",
+        "change of (phone|telephone|mobile) number",
+        "chang\\w* (my |our |the )?(phone|telephone|mobile) number",
+        "updat\\w* (my |our |the )?(phone|telephone|mobile) number",
+        "change (my |our |the )?(contact )?details",
+        "updat\\w* (my |our |the )?(contact )?details",
+        "change of name",
+        "deregist\\w*",
+        "leav\\w* the practice",
+        "transfer\\w* (my )?(medical )?records to (a|another)"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Reception admin — no clinical action needed",
+          "text": "Routine administrative request (address / phone / registration / name / leaving the practice) — confidently non-clinical. No GP review required.\n\n• Verify patient identity before amending personal details (data-protection / anti-impersonation check)\n• Registration/catchment queries: confirm catchment area before accepting\n• Deregistration/leaving: follow the practice's standard leaver process (records transfer request)\n• If this request ALSO raises a clinical concern elsewhere in the same message, that concern fires its own (higher-ranked) rule chip independently — this note only covers the administrative part"
+        }
+      ]
+    },
+    {
+      "id": "pharmacy-process-query",
+      "enabled": true,
+      "label": "Pharmacy/prescription admin",
+      "kind": "green",
+      "patterns": [
+        "pharmacy quer\\w*",
+        "chemist quer\\w*",
+        "prescription not ready",
+        "prescription (hasn.?t|has not) (arrived|come through|been sent|turned up)",
+        "pharmacy (hasn.?t|has not) receiv\\w*",
+        "wrong pharmacy",
+        "chang\\w* (my |the )?(nominated )?pharmacy",
+        "nominated pharmacy",
+        "prescription (sent|gone) to (the )?wrong pharmacy",
+        "collect (my |the )?prescription",
+        "prescription ready for collection",
+        "when (can|will) i collect my prescription"
+      ],
+      "regex": true,
+      "fields": [
+        "request"
+      ],
+      "pages": [
+        "queue",
+        "detail"
+      ],
+      "bumpsTile": null,
+      "builtin": true,
+      "actions": [
+        {
+          "type": "note",
+          "label": "Reception admin — no clinical action needed",
+          "text": "Routine pharmacy/prescription-PROCESS query (dispensing, collection, nominated pharmacy) — confidently non-clinical, distinct from a NEW repeat-prescription request (see the separate 'Repeat meds' rule). No GP review required.\n\n• Direct to reception/dispensary to chase the pharmacy or amend the nominated pharmacy on the EPS system\n• If the patient ALSO reports a new symptom or a medication concern (e.g. ran out and now unwell), that fires its own (higher-ranked) rule chip independently — this note only covers the dispensing-process part"
         }
       ]
     }
