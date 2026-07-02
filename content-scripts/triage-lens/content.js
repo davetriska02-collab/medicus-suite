@@ -1799,6 +1799,35 @@
     }
   };
 
+  // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — the CSO-signed reception pathway
+  // set (rules/reception-pathways.json), fetched ONCE per session for the
+  // reception-match engine (window.SentinelReceptionMatch, engine/reception-match.js).
+  // Unlike loadMonitoringRules above this is read by decorateOneRow's SYNCHRONOUS,
+  // DOM-driven chip pass (CLAUDE.md's "age/decoration" durability rule) rather than
+  // by an async-fetch chip family — so this cache is a plain module `let`, kicked
+  // off ONCE at module init (see loadConfig().then(...) below) and read as-is
+  // (possibly still null) on every decorateOneRow call. That's safe: the live
+  // queue's MutationObserver churns constantly and refreshQueueChips wipes + fully
+  // rebuilds every row's chips on every cycle, so the very next churn after the
+  // fetch resolves picks the pathway chip up — exactly like CONFIG itself before
+  // its first chrome.storage.local.get resolves.
+  let _receptionPathwaysData = null; // { pathways, closingQuestions, … } | null
+  let _receptionPathwaysFetchStarted = false;
+  const ensureReceptionPathwaysLoaded = () => {
+    if (_receptionPathwaysData || _receptionPathwaysFetchStarted) return;
+    _receptionPathwaysFetchStarted = true;
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.getURL) return;
+    const url = chrome.runtime.getURL('rules/reception-pathways.json');
+    fetch(url)
+      .then((r) => r.json())
+      .then((doc) => {
+        _receptionPathwaysData = doc && Array.isArray(doc.pathways) ? doc : null;
+      })
+      .catch((e) => {
+        log('reception pathways load failed', e);
+      });
+  };
+
   // Async: fetch patient data via Sentinel, evaluate, and return the
   // selectMonitoringDue() result (or null). Guards every global access.
   const computeMonitoringChip = async () => {
@@ -2474,6 +2503,174 @@
     } else {
       renderRuleMenuDetail(rules[0], previewText, rules, false);
     }
+    armActionMenuDismissal();
+  };
+
+  // ---- Pathway menu — Pharmacy First divert + missing-info ask-back (items
+  // 4.1/4.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Reuses the SAME activeActionMenu/closeActionMenu singleton as
+  // showActionMenu/showRuleMatchMenu above (only one popover open at a time),
+  // and reuses renderRuleMenuActionItems/executeAction verbatim for every
+  // "copy" button so the clipboard-write + "Copied" confirmation + safe
+  // execCommand fallback is EXACTLY the same code path already hardened for
+  // the rule-chip snippet actions and lab-file-button.js's fileAndMessage
+  // handoff — no new clipboard code.
+  //
+  // DECISION-SUPPORT SURFACING ONLY: rules/reception-pathways.json's own
+  // header states this "captures a structured history only — does not
+  // triage, diagnose, or advise beyond red-flag escalation." Every action
+  // offered here is either read-only information or a PREPARE-ONLY draft —
+  // nothing is ever sent, filed, or auto-advised. `pathway`/red-flag `ask`/
+  // `escalate` text is CSO-signed config content (trusted), but this menu
+  // still builds everything via createElement/textContent, never innerHTML —
+  // the same discipline buildEvidenceEl applies to genuinely untrusted
+  // request text, kept here for consistency and because buildAskBackText's
+  // output is partly templated around that same request-derived match state.
+
+  // A single-item "actions list" wrapping one prepare-only copy draft, reusing
+  // renderRuleMenuActionItems's existing snippet-action rendering + click
+  // wiring (which calls the real, already-hardened executeAction).
+  const buildCopySnippetActionsEl = (text, label) =>
+    renderRuleMenuActionItems({ actions: [{ type: 'snippet', label, text }] });
+
+  // Plain-text, prepare-only Pharmacy First redirect draft ("this looks
+  // suitable for Pharmacy First: …"). Built HERE, not in
+  // engine/reception-match.js (matching-only, out of scope to edit) — this is
+  // pure UI-layer templating around the pathway's own CSO-signed
+  // pharmacyFirst.note, with no independent clinical content of its own.
+  const buildPharmacyFirstRedirectText = (pathway, pfElig) => {
+    const title = (pathway && pathway.title) || 'this presentation';
+    const lines = [];
+    lines.push(`This looks suitable for Pharmacy First (${title}).`);
+    if (pfElig && pfElig.ageNote) lines.push(pfElig.ageNote);
+    lines.push(
+      'Prepared draft only — please review before use. A clinician or care navigator still confirms suitability; this is not a referral and not a clinical decision.'
+    );
+    return lines.join('\n') + '\n';
+  };
+
+  // The PROMINENT "patient may have already mentioned a red flag" banner
+  // (item 4.2's escalation-note requirement) — a safety signal the keyword
+  // rule chips might miss, so it renders FIRST in the menu, ahead of both the
+  // Pharmacy First and ask-back sections. `flaggedInText` entries are
+  // { id, ask, escalate } from redFlagGaps (CSO-signed content).
+  const buildPathwayEscalationEl = (flaggedInText) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-escalation';
+    const head = document.createElement('div');
+    head.className = 'ch-pathway-escalation-head';
+    head.textContent = '⚠ Patient may have already mentioned:';
+    wrap.appendChild(head);
+    flaggedInText.forEach((rf) => {
+      const line = document.createElement('div');
+      line.className = 'ch-pathway-escalation-line';
+      line.textContent = (rf && rf.ask ? rf.ask : rf && rf.id) + ' — escalate ' + ((rf && rf.escalate) || '?') + ' if confirmed';
+      wrap.appendChild(line);
+    });
+    return wrap;
+  };
+
+  const buildPathwaySectionHead = (label) => {
+    const head = document.createElement('div');
+    head.className = 'ch-pathway-section-head';
+    head.textContent = label;
+    return head;
+  };
+
+  // Pharmacy First section — the pathway's own note, then the prepare-only
+  // redirect draft (shown inline AND offered as a one-click copy).
+  const buildPharmacyFirstSectionEl = (pathway, pfElig) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-section';
+    wrap.appendChild(buildPathwaySectionHead('Pharmacy First'));
+    const note = document.createElement('p');
+    note.className = 'ch-pathway-note';
+    note.textContent =
+      (pfElig && pfElig.ageNote) ||
+      'Age criteria met for Pharmacy First — a clinician or care navigator still confirms suitability.';
+    wrap.appendChild(note);
+    const redirectText = buildPharmacyFirstRedirectText(pathway, pfElig);
+    const draft = document.createElement('p');
+    draft.className = 'ch-pathway-draft';
+    draft.textContent = redirectText;
+    wrap.appendChild(draft);
+    wrap.appendChild(buildCopySnippetActionsEl(redirectText, 'Copy Pharmacy First message'));
+    return wrap;
+  };
+
+  // Ask-back section — the gap questions (what the request text does NOT yet
+  // cover) plus a one-click copy of the full buildAskBackText() draft. Shown
+  // even when there are zero gaps (buildAskBackText's own "no outstanding
+  // questions" line) so the section is never silently missing.
+  const buildAskBackSectionEl = (pathway, gapsData, closingQuestions) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-pathway-section';
+    wrap.appendChild(buildPathwaySectionHead('Ask-back — not yet mentioned'));
+    const gaps = (gapsData && gapsData.gaps) || [];
+    if (gaps.length) {
+      const list = document.createElement('ul');
+      list.className = 'ch-pathway-gap-list';
+      gaps.forEach((g) => {
+        const li = document.createElement('li');
+        li.textContent = (g && g.ask) || (g && g.id) || '';
+        list.appendChild(li);
+      });
+      wrap.appendChild(list);
+    } else {
+      const none = document.createElement('p');
+      none.className = 'ch-pathway-note';
+      none.textContent = 'No outstanding red-flag questions identified from the request text.';
+      wrap.appendChild(none);
+    }
+    const askBackText = window.SentinelReceptionMatch.buildAskBackText(pathway, gaps, closingQuestions);
+    wrap.appendChild(buildCopySnippetActionsEl(askBackText, 'Copy ask-back draft'));
+    return wrap;
+  };
+
+  // Entry point wired to the queue's Pharmacy First / Ask-back chips
+  // (decorateOneRow below). `pfElig`/`gapsData`/`closingQuestions` are
+  // ALREADY COMPUTED by decorateOneRow (closure-captured, same convention as
+  // showRuleMatchMenu's rankedRules/previewText) — never recomputed here, so
+  // the menu always reflects exactly what the chip itself was rendered from.
+  const showPathwayMenu = (anchor, pathway, previewText, pfElig, gapsData, closingQuestions) => {
+    closeActionMenu();
+    if (!pathway) return;
+    const r = anchor.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'ch-action-menu ch-pathway-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `${pathway.title || 'Reception pathway'} — Pharmacy First / ask-back`);
+    menu.style.position = 'fixed';
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    menu.style.zIndex = '2147483647';
+    document.body.appendChild(menu);
+    activeActionMenu = menu;
+    activeAnchorEl = anchor;
+
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    const badge = document.createElement('span');
+    badge.className = 'ch-chip ch-chip-info';
+    badge.textContent = pathway.title || 'Reception pathway';
+    head.appendChild(badge);
+    menu.appendChild(head);
+
+    const disclaimer = document.createElement('div');
+    disclaimer.className = 'ch-pathway-disclaimer';
+    disclaimer.textContent =
+      'Decision support only — offers information and prepares drafts. It never diagnoses, advises beyond red-flag escalation, or sends anything.';
+    menu.appendChild(disclaimer);
+
+    const flaggedInText = (gapsData && gapsData.flaggedInText) || [];
+    if (flaggedInText.length) {
+      menu.appendChild(buildPathwayEscalationEl(flaggedInText));
+    }
+    if (pfElig && pfElig.eligible === true) {
+      menu.appendChild(buildPharmacyFirstSectionEl(pathway, pfElig));
+    }
+    menu.appendChild(buildAskBackSectionEl(pathway, gapsData, closingQuestions));
+
     armActionMenuDismissal();
   };
 
@@ -6023,6 +6220,62 @@
       }
     }
 
+    // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — Pharmacy First divert chip +
+    // missing-info ask-back, wired to the ALREADY-BUILT reception-match engine
+    // (engine/reception-match.js, window.SentinelReceptionMatch). ADDITIVE only —
+    // never affects the red/amber/info rule chips above. Pref-gated (default true)
+    // so a practice can turn this whole surface off. `_receptionPathwaysData` may
+    // still be null on an early render (see ensureReceptionPathwaysLoaded's own
+    // comment) — that's a "not yet loaded" no-op here, not a failure.
+    //
+    // One pathway chip per row (the FIRST matched pathway — mirrors the existing
+    // "top match" convention, e.g. buildUnclassifiedChipHtml), not one per matched
+    // pathway, so the strip never gets crowded. pharmacyFirstEligibility FAILS
+    // CLOSED on unknown age (rowAgeYears, parsed above from this row's OWN DOB
+    // cell — same parse the child/elder system chips already use) — an
+    // age-unknown row therefore never renders the green Pharmacy First chip. The
+    // ask-back chip is independent of PF eligibility: it renders whenever the
+    // matched pathway has outstanding gap questions OR a red flag the patient
+    // already volunteered (flaggedInText) — a safety signal that must surface
+    // even when Pharmacy First itself can't be confirmed.
+    const RM = typeof window !== 'undefined' && window.SentinelReceptionMatch;
+    if (RM && PREF('requestPathwayChips', true) && previewText && _receptionPathwaysData) {
+      const matchedPathways = RM.matchPathways(previewText, _receptionPathwaysData.pathways);
+      const topPathway = matchedPathways[0];
+      if (topPathway) {
+        const pfElig = RM.pharmacyFirstEligibility(topPathway, rowAgeYears);
+        const gapsData = RM.redFlagGaps(topPathway, previewText);
+        const closingQuestions = _receptionPathwaysData.closingQuestions;
+        const hasEscalation = gapsData.flaggedInText.length > 0;
+        const hasAskBack = gapsData.gaps.length > 0 || hasEscalation;
+        if (pfElig.eligible === true) {
+          const pfIdx = ruleMatchActivators.push(
+            (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
+          ) - 1;
+          chips.push({
+            kind: 'green',
+            text: 'Pharmacy First',
+            isRuleMatch: true,
+            rqIdx: pfIdx,
+            ariaLabel: `Pharmacy First eligible — ${topPathway.title}` +
+              (hasEscalation ? ', patient may have already mentioned a red flag — review before diverting' : '')
+          });
+        } else if (hasAskBack) {
+          const abIdx = ruleMatchActivators.push(
+            (el) => showPathwayMenu(el, topPathway, previewText, pfElig, gapsData, closingQuestions)
+          ) - 1;
+          chips.push({
+            kind: 'info',
+            text: 'Ask-back',
+            isRuleMatch: true,
+            rqIdx: abIdx,
+            ariaLabel: `Reception ask-back available — ${topPathway.title}` +
+              (hasEscalation ? ', patient may have already mentioned a red flag — review before proceeding' : '')
+          });
+        }
+      }
+    }
+
     if (!chips.length) {
       row.dataset[QUEUE_DECORATED_KEY] = '1';
       return;
@@ -6413,6 +6666,10 @@
 
   // Load config first, then start. Config drives rule matching.
   loadConfig().then(() => {
+    // Items 4.1/4.2 — kick off the (session-once) reception-pathways fetch
+    // alongside the rest of bootstrap; see ensureReceptionPathwaysLoaded's own
+    // comment for why decorateOneRow itself never awaits this.
+    ensureReceptionPathwaysLoaded();
     waitFor(pageReady, () => {
       run(true);
       setupRouteWatcher();

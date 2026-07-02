@@ -540,6 +540,39 @@ const parts = [
     /const showRuleMatchMenu = \(anchor, rules, previewText, openList\) => \{[\s\S]*?\n {2}\};/,
     'showRuleMatchMenu'
   ),
+  // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — Pharmacy First divert chip +
+  // missing-info ask-back: the pathway menu built on top of the SAME
+  // activeActionMenu/renderRuleMenuActionItems/executeAction infra just
+  // extracted above. decorateOneRow's own pathway-chip computation needs no
+  // separate extraction — it lives INSIDE decorateOneRow's already-extracted
+  // body. `_receptionPathwaysData`/`_receptionPathwaysFetchStarted` and
+  // `ensureReceptionPathwaysLoaded` are DELIBERATELY NOT extracted (same
+  // "externally-provided global" convention as `_durableRowMap`/
+  // `_queueResultCache` above) — the harness pre-seeds
+  // `sandbox._receptionPathwaysData` directly rather than exercising the
+  // fetch pipeline (out of scope here, same as `loadMonitoringRules` above).
+  extract(
+    /const buildCopySnippetActionsEl = \(text, label\) =>[\s\S]*?\n {4}renderRuleMenuActionItems\(\{ actions: \[\{ type: 'snippet', label, text \}\] \}\);/,
+    'buildCopySnippetActionsEl'
+  ),
+  extract(
+    /const buildPharmacyFirstRedirectText = \(pathway, pfElig\) => \{[\s\S]*?\n {2}\};/,
+    'buildPharmacyFirstRedirectText'
+  ),
+  extract(/const buildPathwayEscalationEl = \(flaggedInText\) => \{[\s\S]*?\n {2}\};/, 'buildPathwayEscalationEl'),
+  extract(/const buildPathwaySectionHead = \(label\) => \{[\s\S]*?\n {2}\};/, 'buildPathwaySectionHead'),
+  extract(
+    /const buildPharmacyFirstSectionEl = \(pathway, pfElig\) => \{[\s\S]*?\n {2}\};/,
+    'buildPharmacyFirstSectionEl'
+  ),
+  extract(
+    /const buildAskBackSectionEl = \(pathway, gapsData, closingQuestions\) => \{[\s\S]*?\n {2}\};/,
+    'buildAskBackSectionEl'
+  ),
+  extract(
+    /const showPathwayMenu = \(anchor, pathway, previewText, pfElig, gapsData, closingQuestions\) => \{[\s\S]*?\n {2}\};/,
+    'showPathwayMenu'
+  ),
   // Item 2.4 (TRIAGE-LENS-2026-07-02.md) — detail-page verdict banner: echoes
   // the queue's cached result-triage verdict on the task detail page.
   extract(/const DETAIL_VERDICT_CLASS = .*;/, 'DETAIL_VERDICT_CLASS'),
@@ -627,6 +660,14 @@ const EXPOSE = [
   'renderRuleMenuList',
   'renderRuleMenuDetail',
   'buildEvidenceEl',
+  // Items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back.
+  'buildCopySnippetActionsEl',
+  'buildPharmacyFirstRedirectText',
+  'buildPathwayEscalationEl',
+  'buildPathwaySectionHead',
+  'buildPharmacyFirstSectionEl',
+  'buildAskBackSectionEl',
+  'showPathwayMenu',
   'detailVerdictState',
   'buildDetailVerdictHeadline',
   'removeDetailVerdictBanner',
@@ -706,6 +747,21 @@ if (!parts.some((p) => !p)) {
     _durableRowMap: new Map(),
     _queueResultCache: new Map(),
     _queueMonCache: new Map(),
+    // Items 4.1/4.2 — the CSO-signed reception-pathways ruleset, "externally
+    // provided" exactly like _durableRowMap/_queueResultCache above: real
+    // content.js fetches this ONCE at bootstrap (ensureReceptionPathwaysLoaded,
+    // deliberately not extracted/exercised here — a fetch pipeline, out of
+    // scope for this DOM-injection harness). Defaults to null ("not loaded
+    // yet") so a scenario that never sets it proves the pathway-chip block is
+    // a safe no-op, not a throw; Layer 23 below seeds it with the REAL
+    // rules/reception-pathways.json content.
+    _receptionPathwaysData: null,
+    // Items 4.1/4.2 — executeAction's snippet-action branch reads
+    // navigator.clipboard.writeText for the PREPARE-ONLY copy buttons (Copy
+    // Pharmacy First message / Copy ask-back draft). Harmless default here
+    // (resolves, records nothing); Layer 23 overrides this with a
+    // write-tracking mock per scenario.
+    navigator: { clipboard: { writeText: () => Promise.resolve() } },
     _RESULT_CACHE_TTL: 5 * 60 * 1000,
     // Item 1.1 leg D — error cache entries expire much sooner than a real
     // result so a failed check retries soon (see content.js's own constant).
@@ -734,6 +790,12 @@ if (!parts.some((p) => !p)) {
       addEventListener: () => {},
       removeEventListener: () => {},
       TriageLensMatch: require('./content-scripts/triage-lens/rule-match.js'),
+      // Items 4.1/4.2 — the REAL reception-match engine (dual-mode Node
+      // require, same pattern as TriageLensMatch above), so showPathwayMenu's
+      // buildAskBackText call and decorateOneRow's matchPathways/
+      // pharmacyFirstEligibility/redFlagGaps calls exercise the actual engine
+      // logic under test, not a stub.
+      SentinelReceptionMatch: require('./engine/reception-match.js'),
       // Item 2.4 — runDetailVerdict resolves the detail task's uuid via this,
       // exactly like the OIR/monitoring detail-page paths already do. Each
       // Layer 16 scenario points this at whichever taskUuid it's driving;
@@ -789,6 +851,20 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.findResultRuleActionsById === 'function', 'findResultRuleActionsById compiled and callable');
     check(typeof sandbox.buildResultRuleActionsRow === 'function', 'buildResultRuleActionsRow compiled and callable');
     check(typeof sandbox.showRuleMatchMenu === 'function', 'showRuleMatchMenu compiled and callable');
+    // Items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back.
+    check(typeof sandbox.buildCopySnippetActionsEl === 'function', 'buildCopySnippetActionsEl compiled and callable');
+    check(
+      typeof sandbox.buildPharmacyFirstRedirectText === 'function',
+      'buildPharmacyFirstRedirectText compiled and callable'
+    );
+    check(typeof sandbox.buildPathwayEscalationEl === 'function', 'buildPathwayEscalationEl compiled and callable');
+    check(typeof sandbox.buildPathwaySectionHead === 'function', 'buildPathwaySectionHead compiled and callable');
+    check(
+      typeof sandbox.buildPharmacyFirstSectionEl === 'function',
+      'buildPharmacyFirstSectionEl compiled and callable'
+    );
+    check(typeof sandbox.buildAskBackSectionEl === 'function', 'buildAskBackSectionEl compiled and callable');
+    check(typeof sandbox.showPathwayMenu === 'function', 'showPathwayMenu compiled and callable');
     check(typeof sandbox.detailVerdictState === 'function', 'detailVerdictState compiled and callable');
     check(typeof sandbox.buildDetailVerdictHeadline === 'function', 'buildDetailVerdictHeadline compiled and callable');
     check(typeof sandbox.renderDetailVerdictBanner === 'function', 'renderDetailVerdictBanner compiled and callable');
@@ -4278,6 +4354,286 @@ if (sandbox) {
     );
 
     sandbox.CONFIG = {}; // restore default (PREF('queueFileableMarker', true) -> true)
+  }
+
+  // ============================================================
+  // Layer 25 — items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md): Pharmacy First
+  // divert chip + missing-info ask-back, wired to the ALREADY-BUILT
+  // reception-match engine (engine/reception-match.js,
+  // window.SentinelReceptionMatch) via decorateOneRow + the new
+  // showPathwayMenu popover (reusing the SAME activeActionMenu/
+  // renderRuleMenuActionItems/executeAction infra as showRuleMatchMenu —
+  // items 2.1/2.3/2.5). Exercises the REAL engine + REAL
+  // rules/reception-pathways.json content (not stubbed), same convention as
+  // Layer 19's window.TriageLensMatch. PREPARE-ONLY: every "copy" button
+  // writes to the navigator.clipboard mock below and NEVER calls anything
+  // that sends/files.
+  // ============================================================
+  console.log(
+    '\nLayer 25: items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back (reception-match engine)'
+  );
+
+  {
+    const ReceptionMatch = require('./engine/reception-match.js');
+    const receptionPathwaysData = require('./rules/reception-pathways.json');
+    // Fixture text reused across scenarios — matches the "earache" pathway
+    // (SYNONYM_TERMS), whose pharmacyFirst block carries BOTH ageMin(1) and
+    // ageMax(17) (the most robust "age-unknown fails closed" case — a
+    // pathway with neither bound can't demonstrate the fail-closed gate at
+    // all), and whose text volunteers the rf-mastoid red flag ("swelling
+    // behind the ear", escalate '999') while leaving every other red flag on
+    // that pathway (meningism/head-injury/sudden-deaf/facial-droop/
+    // unwell-child) as a gap — so ONE fixture exercises the PF chip, the
+    // ask-back gaps, AND the flaggedInText escalation note together. Verified
+    // directly against the real engine before writing these assertions.
+    const requestText = 'Earache since yesterday, with some swelling behind the ear.';
+    const expectedGapIds = ['rf-meningism', 'rf-head-injury', 'rf-sudden-deaf', 'rf-facial-droop', 'rf-unwell-child'];
+
+    let clipboardWrites;
+    const mockClipboard = () => {
+      clipboardWrites = [];
+      sandbox.navigator = {
+        clipboard: {
+          writeText: (text) => {
+            clipboardWrites.push(text);
+            return Promise.resolve();
+          },
+        },
+      };
+    };
+
+    const setupRow = ({ rowIndex = 0, rowId, dob, text = requestText }) => {
+      const { master, detail, wrap } = buildPreviewRowPair({ rowIndex, rowId, dob });
+      wrap.children[0].textContent = 'Request: ' + text;
+      const gridRoot = new El('div', {});
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+      sandbox.document = makeDocument(gridRoot);
+      sandbox.queueObservedContainer = gridRoot;
+      return { master, wrap };
+    };
+
+    // ---- known age within the pathway's PF band -> green "Pharmacy First"
+    //      chip renders (never an "Ask-back" chip on the SAME row — one
+    //      pathway chip per row) ----
+    freshCaches();
+    mockClipboard();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdA = 'e0000000-0000-4000-8000-000000000001';
+    const { wrap: wrapA } = setupRow({ rowId: rowIdA, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdA}"]`));
+
+    const ruleChipsA = wrapA.querySelectorAll('.ch-q-rule-chip');
+    const pfChip = ruleChipsA.find((c) => c.textContent.includes('Pharmacy First'));
+    check(
+      !!pfChip,
+      `known age (8) within earache's 1–17 PF band renders a "Pharmacy First" chip (got chips: ${ruleChipsA.map((c) => c.textContent).join(' | ')})`
+    );
+    check(
+      pfChip && pfChip.classes.includes('ch-chip-green'),
+      'Pharmacy First chip carries the GREEN colour class (ch-chip-green)'
+    );
+    check(
+      !ruleChipsA.some((c) => c.textContent.includes('Ask-back')),
+      'no separate "Ask-back" chip on the same row as the Pharmacy First chip (one pathway chip per row)'
+    );
+
+    // Clicking the chip opens the pathway menu via the SAME activeActionMenu
+    // singleton as every other popover in the suite.
+    pfChip.click();
+    let menu = sandbox.document.querySelector('.ch-pathway-menu');
+    check(!!menu, 'clicking the Pharmacy First chip opens a .ch-pathway-menu popover');
+    check(
+      sandbox.document.querySelectorAll('.ch-action-menu').length === 1,
+      'only one popover open at a time (shared singleton)'
+    );
+
+    // ---- escalation note: PROMINENT, at the top, names the volunteered red flag + its escalate level ----
+    const escalationEl = menu.querySelector('.ch-pathway-escalation');
+    check(!!escalationEl, 'flaggedInText (rf-mastoid, "swelling behind the ear") renders the escalation banner');
+    check(
+      /already mentioned/i.test(escalationEl.querySelector('.ch-pathway-escalation-head').textContent),
+      'escalation banner heading reads "…already mentioned…"'
+    );
+    const escalationLine = escalationEl.querySelector('.ch-pathway-escalation-line');
+    check(
+      /swelling.*BEHIND the ear/i.test(escalationLine.textContent) && /999/.test(escalationLine.textContent),
+      `escalation line names the volunteered red flag and its escalate level (999), got "${escalationLine && escalationLine.textContent}"`
+    );
+    check(
+      escalationLine._innerHTML === null,
+      'escalation line built via textContent, never innerHTML (untrusted-adjacent content discipline)'
+    );
+    // Escalation banner is the FIRST content node after the menu head/disclaimer.
+    const menuSectionOrder = menu.children.map((c) => c.classes[c.classes.length - 1] || c.classes[0]);
+    check(
+      menuSectionOrder.indexOf('ch-pathway-escalation') < menuSectionOrder.indexOf('ch-pathway-section'),
+      'escalation banner renders ABOVE the Pharmacy First/ask-back sections, not buried below them'
+    );
+
+    // ---- Pharmacy First section: pathway note + prepare-only redirect draft + copy button ----
+    const sectionHeads = menu.querySelectorAll('.ch-pathway-section-head').map((h) => h.textContent);
+    check(
+      sectionHeads.includes('Pharmacy First'),
+      `Pharmacy First section present, got heads: ${sectionHeads.join(', ')}`
+    );
+    const pfSection = menu
+      .querySelectorAll('.ch-pathway-section')
+      .find((s) => s.querySelector('.ch-pathway-section-head').textContent === 'Pharmacy First');
+    check(
+      /acute middle-ear infection ages 1–17/.test(pfSection.querySelector('.ch-pathway-note').textContent),
+      "Pharmacy First section shows the pathway's own CSO-signed pharmacyFirst.note"
+    );
+    const pfDraft = pfSection.querySelector('.ch-pathway-draft').textContent;
+    check(
+      /this looks suitable for pharmacy first \(earache\)/i.test(pfDraft),
+      `prepare-only redirect draft follows the "this looks suitable for Pharmacy First: …" template, got "${pfDraft}"`
+    );
+    check(
+      /review before use/i.test(pfDraft),
+      'redirect draft is explicitly labelled prepared/review-before-use, never framed as already sent'
+    );
+    const pfCopyBtn = pfSection.querySelector('.ch-action-menu-item-snippet');
+    check(
+      !!pfCopyBtn && pfCopyBtn.textContent.includes('Copy Pharmacy First message'),
+      'Pharmacy First section has a "Copy Pharmacy First message" button'
+    );
+    pfCopyBtn.click();
+    check(
+      clipboardWrites.length === 1 && clipboardWrites[0] === pfDraft,
+      'clicking the Pharmacy First copy button writes EXACTLY the shown draft text to the clipboard (prepare-only, via the existing hardened executeAction snippet path)'
+    );
+
+    // ---- ask-back section: every un-mentioned red flag listed as a gap, plus its own copy button ----
+    const abSection = menu
+      .querySelectorAll('.ch-pathway-section')
+      .find((s) => /Ask-back/.test(s.querySelector('.ch-pathway-section-head').textContent));
+    check(!!abSection, 'ask-back section present alongside the Pharmacy First section');
+    // NB: this fake selector engine has no descendant (space) combinator (see
+    // its own header comment) — '.ch-pathway-gap-list li' would silently
+    // degrade to matching just the <ul> itself. Walk .children instead.
+    const gapItems = abSection.querySelector('.ch-pathway-gap-list').children;
+    check(
+      gapItems.length === expectedGapIds.length,
+      `ask-back lists exactly the un-mentioned red flags (${expectedGapIds.length}: meningism/head-injury/sudden-deaf/facial-droop/unwell-child), got ${gapItems.length}`
+    );
+    check(
+      !gapItems.some((li) => /swelling.*BEHIND the ear/i.test(li.textContent)),
+      'the ALREADY-volunteered red flag (rf-mastoid) is never ALSO listed as a gap'
+    );
+    check(
+      gapItems.every((li) => li._innerHTML === null),
+      'every gap question rendered via textContent, never innerHTML'
+    );
+    const abCopyBtn = abSection.querySelector('.ch-action-menu-item-snippet');
+    check(
+      !!abCopyBtn && abCopyBtn.textContent.includes('Copy ask-back draft'),
+      'ask-back section has a "Copy ask-back draft" button'
+    );
+    clipboardWrites.length = 0;
+    abCopyBtn.click();
+    check(
+      clipboardWrites.length === 1 && /^Ask-back for review — Earache/.test(clipboardWrites[0]),
+      `clicking the ask-back copy button writes the buildAskBackText() draft to the clipboard, got "${clipboardWrites[0]}"`
+    );
+    check(
+      expectedGapIds.every((id) => {
+        const rf = receptionPathwaysData.pathways.find((p) => p.id === 'earache').redFlags.find((r) => r.id === id);
+        return clipboardWrites[0].includes(rf.ask);
+      }),
+      'the copied ask-back draft names every gap question (buildAskBackText output, unmodified)'
+    );
+
+    sandbox.closeActionMenu();
+
+    // ---- age UNKNOWN on the SAME matched pathway/text: PF chip fails closed
+    //      (never rendered), but the ask-back chip still surfaces the
+    //      volunteered red flag — a safety signal that must not disappear
+    //      just because Pharmacy First itself can't be confirmed ----
+    freshCaches();
+    mockClipboard();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdB = 'e0000000-0000-4000-8000-000000000002';
+    const { wrap: wrapB } = setupRow({ rowId: rowIdB, dob: 'Unknown' }); // no "(NNy)" -> ageMatch never fires
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdB}"]`));
+
+    const ruleChipsB = wrapB.querySelectorAll('.ch-q-rule-chip');
+    check(
+      !ruleChipsB.some((c) => c.textContent.includes('Pharmacy First')),
+      'age-unknown row: NO "Pharmacy First" chip (fail-closed — engine/reception-match.js never claims an eligibility it cannot confirm)'
+    );
+    const abChip = ruleChipsB.find((c) => c.textContent.includes('Ask-back'));
+    check(
+      !!abChip,
+      `age-unknown row still renders an "Ask-back" chip (the volunteered red flag must still surface), got chips: ${ruleChipsB.map((c) => c.textContent).join(' | ')}`
+    );
+    check(
+      abChip && abChip.classes.includes('ch-chip-info'),
+      'Ask-back chip carries the info colour class (ch-chip-info) — distinct from the green PF chip'
+    );
+
+    abChip.click();
+    menu = sandbox.document.querySelector('.ch-pathway-menu');
+    check(
+      !!menu && !!menu.querySelector('.ch-pathway-escalation'),
+      "age-unknown row: the escalation banner still renders from the Ask-back chip's menu"
+    );
+    check(
+      menu
+        .querySelectorAll('.ch-pathway-section-head')
+        .map((h) => h.textContent)
+        .every((t) => t !== 'Pharmacy First'),
+      'age-unknown row: the menu carries NO Pharmacy First section (eligibility could not be confirmed)'
+    );
+    sandbox.closeActionMenu();
+
+    // ---- pref gate: requestPathwayChips=false suppresses BOTH chip kinds outright ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { requestPathwayChips: false } };
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdC = 'e0000000-0000-4000-8000-000000000003';
+    const { wrap: wrapC } = setupRow({ rowId: rowIdC, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdC}"]`));
+    check(
+      !wrapC.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      'requestPathwayChips=false suppresses the Pharmacy First/Ask-back chip even though the same row would otherwise qualify (the age system chip, unrelated to this pref, still renders)'
+    );
+    sandbox.CONFIG = {}; // restore default (PREF('requestPathwayChips', true) -> true)
+
+    // ---- no pathway match at all: no throw, no pathway chip ----
+    freshCaches();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdD = 'e0000000-0000-4000-8000-000000000004';
+    const { wrap: wrapD } = setupRow({
+      rowId: rowIdD,
+      dob: '01 Jan 1980 (46y)',
+      text: 'Requesting a repeat prescription for statins please.',
+    });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdD}"]`));
+    check(
+      !wrapD.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      'request text matching no pathway: no Pharmacy First/Ask-back chip, no throw'
+    );
+
+    // ---- _receptionPathwaysData not yet loaded (null): safe no-op, matches the
+    //      "fetch hasn't resolved yet" race documented on ensureReceptionPathwaysLoaded ----
+    freshCaches();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = null;
+    const rowIdE = 'e0000000-0000-4000-8000-000000000005';
+    const { wrap: wrapE } = setupRow({ rowId: rowIdE, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdE}"]`));
+    check(
+      !wrapE.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      '_receptionPathwaysData still null (fetch not yet resolved): pathway-chip block is a safe no-op, no throw'
+    );
+
+    sandbox._receptionPathwaysData = null;
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

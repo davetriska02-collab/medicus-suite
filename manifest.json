@@ -55,6 +55,7 @@
       "matches": ["https://*.medicus.health/*"],
       "js": [
         "content-scripts/triage-lens/rule-match.js",
+        "engine/reception-match.js",
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",
@@ -80,6 +81,7 @@
         "rules/drug-rules.json",
         "rules/qof-rules.json",
         "rules/vaccine-rules.json",
+        "rules/reception-pathways.json",
         "side-panel/modules/sentinel/passport.html"
       ],
       "matches": ["https://*.medicus.health/*"]
