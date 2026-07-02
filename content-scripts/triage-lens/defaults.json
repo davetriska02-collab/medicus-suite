@@ -1,5 +1,5 @@
 {
-  "version": 22,
+  "version": 23,
   "rules": [
     {
       "id": "mh-crisis",
@@ -4994,26 +4994,6 @@
       },
       "comparator": "above",
       "amber": 12,
-      "unit": "×10⁹/L"
-    },
-    {
-      "id": "base-high-neutrophils",
-      "kind": "threshold",
-      "enabled": true,
-      "builtin": true,
-      "label": "Neutrophilia — high neutrophils (amber ≥7.5 ×10⁹/L)",
-      "analyte": {
-        "match": [
-          "neutrophil"
-        ],
-        "exclude": [
-          "%",
-          "percent",
-          "ratio"
-        ]
-      },
-      "comparator": "above",
-      "amber": 7.5,
       "unit": "×10⁹/L"
     }
   ]

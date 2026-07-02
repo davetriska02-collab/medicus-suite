@@ -1,7 +1,9 @@
 # Triage Lens Phase 3 — Clinical Review & Sign-off
 
-**For:** Dr Dave Triska (CSO) · **Status:** DRAFT, in progress — do not ship until signed
-**Release gated:** v3.150.0 will not be committed until this document is signed off.
+**For:** Dr Dave Triska (CSO) · **Status:** SIGNED OFF 2026-07-02 — released as v3.150.0
+**Decisions:** HbA1c → amber (ship) · ALT/AST ship as-is · neutrophils DROPPED ·
+sodium red ≥160 confirmed · FIB-4 correct age-split → pursue as follow-up ·
+Hb-fall/K⁺-rise deltas → pursue as follow-up.
 
 Phase 3 ("Smarter grading") is the first phase that changes **what fires red and
 amber**. Everything else in the triage rebuild has been guardrails, honesty

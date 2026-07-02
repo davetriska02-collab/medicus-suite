@@ -2,6 +2,62 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.150.0] — 2026-07-02
+
+### Triage Lens — Smarter grading (Phase 3)
+
+Phase 3 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the first phase to change
+what fires red and amber. Every new/changed shipped threshold was independently
+verified against a named UK source and **CSO-signed-off** before release — see
+`docs/plans/TRIAGE-LENS-PHASE3-REVIEW.md`.
+
+**Engine capabilities** (grading was byte-identical until this release shipped
+content that uses them):
+
+- **Unit-mismatch guard** — a result rule no longer grades a value reported in a
+  unit incompatible with the rule's own (`unitsCompatible()` normalises µ/u,
+  superscript and cell-count notations, `micrograms/L`↔`µg/L`). On a genuine
+  mismatch the rule is skipped and surfaced as a grey "unit?" chip with a
+  plain-language popover line; absent units stay fail-open (Medicus often omits
+  them). IU vs U kept distinct.
+- **Text rules can reach red** — optional `abnormalLevel:'red'` lets a designated
+  positive text finding escalate past the historic amber cap (escalate-only).
+- **Unclassified-positive safety net** — an unmatched non-numeric positive result
+  ("Positive"/"Detected"/…) no longer scores nothing; it surfaces an amber "?"
+  chip. Heavily negation-guarded (incl. a `non-reactive` glued-prefix guard),
+  amber-max, and only when no rule already classified the result.
+- **Negation / past-reference demotion** — request-queue chips visually demote
+  (never suppress) when the trigger phrase is negated ("no chest pain") or
+  historic ("UTI last year"): outline style, "(negated?)"/"(past?)" suffix,
+  ranked below undemoted matches.
+- **Patient-context gates** — result rules accept `context:{minAge,maxAge,sex}`;
+  request rules accept `require:{ageMin,ageMax,sex,medsAny,problemsAny}`. Both
+  AND-gate and **fail closed** — a gate whose data isn't available on the current
+  surface simply doesn't fire, never suppressing a base match.
+- **Delta / trend rule kind** — `kind:'delta'` grades on change over time
+  (direction, absolute or percent, unit-guarded, optional `maxDays`), rendered
+  with the change summary in the chip popover.
+
+**New shipped result-rule coverage** (config version 21→23; each cited to a UK
+source, thresholds in the review doc):
+
+- Hypernatraemia (Na high, amber ≥150 / red ≥160), absolute creatinine/AKI
+  (red ≥354 µmol/L, KDIGO stage 3) plus a creatinine-rise delta (≥26.5 µmol/L in
+  48h, KDIGO stage 1), glucose (high ≥11.1 / ≥30; low ≤4.0 / ≤3.0), ALT & AST
+  transaminitis (≥120 / ≥320 U/L), CRP (≥20 / ≥100, NICE CG191), WCC high (≥12),
+  and a **potassium 6.0–6.4 amber band** below the existing red ≥6.5 (UK Kidney
+  Association).
+- **HbA1c ≥48 demoted red → amber** — 48 is the diagnostic threshold, not an
+  acute-danger value; demotion cuts red alert-fatigue (with a `RETIRED_*`
+  un-stick so it reaches existing installs). New diabetes still flags, at amber.
+
+**Held back after clinical review** (in the review doc, pursued as follow-up):
+the FIB-4 age-adjustment was reverted to status quo (the drafted ≥65 cutoff used
+a hepatitis-C value and the correct age-adjustment needs an engine change the
+escalate-only model can't do yet); the neutrophil-high rule was dropped (a
+lab-range boundary, not a validated action threshold); and Hb-fall / K⁺-rise
+delta rules await a defensible sourced magnitude.
+
 ## [v3.149.0] — 2026-07-02
 
 ### Triage Lens — Evidence at the chip (Phase 2)

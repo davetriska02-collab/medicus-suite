@@ -3331,7 +3331,7 @@ console.log('\n--- item 3.3: base-high-crp (NEW) ---');
   assert(red.level === 'red', 'CRP 120 (>= red 100, immediate-antibiotic band) → red');
 }
 
-console.log('\n--- item 3.3: base-high-wcc / base-high-neutrophils (sepsis signal, NEW) ---');
+console.log('\n--- item 3.3: base-high-wcc (sepsis signal, NEW) ---');
 {
   const wccRule = shippedRule('base-high-wcc');
   const below = evaluateReportSeverity(makeReport([mkResult('White cell count', 8, { unit: '×10⁹/L' })]), {
@@ -3342,16 +3342,6 @@ console.log('\n--- item 3.3: base-high-wcc / base-high-neutrophils (sepsis signa
     resultRules: [wccRule],
   });
   assert(amber.level === 'amber', 'WCC 14 (>= amber 12, SIRS/sepsis-screen criterion) → amber');
-
-  const neutRule = shippedRule('base-high-neutrophils');
-  const neutBelow = evaluateReportSeverity(makeReport([mkResult('Neutrophils', 6, { unit: '×10⁹/L' })]), {
-    resultRules: [neutRule],
-  });
-  assert(neutBelow.level === 'none', 'neutrophils 6 (below amber 7.5) → quiet');
-  const neutAmber = evaluateReportSeverity(makeReport([mkResult('Neutrophils', 9, { unit: '×10⁹/L' })]), {
-    resultRules: [neutRule],
-  });
-  assert(neutAmber.level === 'amber', 'neutrophils 9 (>= amber 7.5) → amber (neutrophilia)');
 }
 
 console.log('\n--- item 3.3: base-high-potassium amber band (CHANGED — added amber) ---');
