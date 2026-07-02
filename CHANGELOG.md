@@ -2,6 +2,235 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.147.0] — 2026-07-02
+
+### NHS Patient Leaflets — a new tab, not a Google search
+
+Dave: "I end up sticking it in Google — NHS wart — and it feels disjointed."
+A new side-panel tab puts the right NHS patient leaflet one search away,
+without ever sending patient data anywhere. Plan:
+`docs/plans/NHS-LEAFLETS-2026-07-02.md`.
+
+- **Tier 1 — bundled A-Z, works with zero configuration.** A curated index
+  of 221 entries (166 conditions + 55 medicines) ships in
+  `rules/nhs-az-index.json`, matched by fuzzy search with alias and
+  typo-tolerant prefix matching. Every search also offers a guaranteed
+  "Search nhs.uk for '\<term\>'" fallback row, so the tab never dead-ends on
+  an index miss. Results **open in a new tab** (a normal user-initiated
+  navigation, not an extension fetch) or **copy a link** for the
+  patient-SMS workflow; a Recent list keeps the last 10 for quick reuse.
+  This tier contacts no new endpoint at all.
+- **Tier 2 — optional in-panel rendering via the NHS Website Content API.**
+  Options-gated: a subscription key, entered in Options → Leaflets, lets a
+  search result render the leaflet text right in the panel — headings and
+  paragraphs built from text nodes only (no `innerHTML` of remote content),
+  with a visible "From the NHS website" attribution link back to the
+  source page. Responses are cached for 24h to respect syndication
+  freshness terms and avoid re-fetching on every click. Any fetch failure
+  (401/403/429/network/unexpected shape) fails calmly back to tier-1
+  open-in-tab behaviour with a one-line notice — the module is
+  indistinguishable from tier-1-only when no key is set. The API key is
+  deliberately excluded from suite backups (secrets stay machine-local);
+  everything else (recent list, enabled flag) travels normally.
+- **`scripts/verify-nhs-index.js`** HEAD-checks every bundled slug against
+  the live site from a machine with normal egress (this sandbox couldn't
+  reach nhs.uk to verify the seed index directly) and reports failures —
+  documented in `rules/`.
+- **Honest disclosure.** README and `docs/DPIA.md` now say plainly that
+  `api.github.com` is no longer the *only* external endpoint the extension
+  can contact: with a key configured, selecting a search result sends
+  `api.nhs.uk` the condition or medicine term the user selected — never
+  patient data. Without a key, nothing changes.
+- **Event Ledger.** Every leaflet open is recorded (source `leaflets`,
+  action `opened`, label = slug, `patientRef` always null) — evidence of
+  what was opened, never who for.
+- New module: `side-panel/modules/leaflets/`; backup wiring
+  (`shared/io/leaflets-io.js`, `VALID_SCOPES`, `doFullExport`/
+  `applyEnvelope`/`previewEnvelope`, Options export card); tab help in
+  `shared/tab-help.js`; tour step (`TOUR_VERSION` 7 → 8).
+
+## [v3.146.0] — 2026-07-02
+
+### Unbreakable — the suite knows when Medicus changes
+
+Three of the last six mainline fixes (v3.143.1 OIR checkboxes, v3.143.2
+assignee picker) were regressions caused by Medicus silently changing
+frontend components, discovered by a clinician in clinic — for a safety
+tool that means periods where features silently didn't fire and nobody
+knew. This release makes the next one self-announcing. Landed as two
+batches (`8a5a06f`, `230fc1d`); plan: `docs/plans/HORIZON1-UNBREAKABLE-2026-07-02.md`.
+
+- **DOM-contract registry (`shared/dom-contracts.js`).** All 14 Medicus
+  selector contracts the suite depends on, declared once with
+  anchor/target/legacy-fallback semantics. Consumers outside content.js
+  (routine-rx button, lab-file button, booking/task inline widgets,
+  api-client's UUID fallback) now read their selectors FROM the registry
+  instead of hard-coding them. `content-scripts/triage-lens/content.js`
+  is untouched (tests pin its exact content) — its own contracts (OIR
+  checkboxes, queue-chip hosts) are mirrored in the registry, and a
+  grep-based sync test fails CI if a future content.js selector change
+  drifts from the mirror.
+- **Recorded-fixture tests.** 21 sanitised fixtures covering current
+  `m-*` and legacy `q-*` Medicus markup variants, synthesised from the
+  selector expectations the code demonstrably handles today (fixtures
+  carry provenance headers saying so, not real patient DOM). A 310-check
+  contract test verifies every contract against its fixtures (anchor
+  match, target match, legacy fallback, and FAIL/NOT_APPLICABLE probe
+  semantics never false-alarming), plus a 31-check sync test for the
+  content.js mirror. `scripts/capture-fixture.js` is a paste-into-the-
+  Medicus-console helper that captures and PHI-sanitises real DOM
+  subtrees, to replace synthesised fixtures with real ones over time.
+- **Runtime canaries (`shared/contract-canary.js`).** Probes the 7 of 14
+  contracts that are safe to check at runtime (the rest are fixture-only,
+  with documented reasons) via the existing DOM-observer hub — no new
+  MutationObservers — debounced ≥5s, counts/booleans only, never text
+  content. Two-strike hysteresis (≥2 FAILs at least 30s apart) so SPA
+  churn can't false-alarm; a single OK recovers the contract.
+- **Suite health surfaces.** An amber `#healthStrip` in the side panel
+  (panel-only, following the existing wr/rm/subRag strip convention)
+  appears only when a contract is degraded, pointing to Options. Options
+  gains a "Suite health" table of all 14 contracts — status, plain-English
+  "what degrades", and why fixture-only contracts aren't probed live.
+  ok↔degraded transitions are logged to the Clinical Event Ledger (source
+  `health`, deduped per contract per day). `health.contracts` is
+  machine-local and excluded from suite backups.
+
+No new tour steps — the health strip is exceptional-state UI (only visible
+when something is degraded) and the Suite-health card lives in Options,
+out of tour scope. `TOUR_VERSION` stays at 7.
+
+## [v3.145.0] — 2026-07-01
+
+### Class-leader features — Prescribing Pre-flight, Clinical Event Ledger, Practice Pulse
+
+Three features chosen for best-of-type differentiation
+(`docs/plans/CLASS-LEADERS-2026-07-01.md`), landed as three batches (`fab7081`,
+`158e30a`, `3395739`). Read-only against the clinical record throughout — no new
+record writes.
+
+- **Prescribing Pre-flight (Record tab).** A collapsible "Pre-flight" section lets you
+  type a drug you're considering and see, before it exists in the record: the ACB
+  delta and any band change, STOPP/START prompts newly triggered by the addition (not
+  ones already true of the current regimen), interactions against current meds, and
+  required monitoring — distinguishing a baseline already satisfied by a recent result
+  from one that's missing. The full alert library (interaction/awareness rules,
+  PINCER combos, etc.) is treated as always-on background knowledge for this what-if
+  check, not just the rules a clinician has opted into live — a deliberate design
+  decision, documented in `engine/preflight.js`. An unknown drug is reported as
+  unknown, never implied safe. Every result carries the caveat "Decision aid, not
+  advice — confirm against the BNF and the full record." New pure module
+  `engine/preflight.js` composes the existing ACB, STOPP/START and drug-monitoring/
+  combo engines — no new drug term lists or interaction pairs were added. Also fixes a
+  real latent bug: `alert-library.json`'s library rules carried no `id` of their own,
+  so de-duplication (used to tell "already firing on current meds" apart from "newly
+  introduced by the proposed drug") collided on `ruleId undefined` and silently
+  dropped interaction alerts; rules are now stamped with their library `libId` as
+  `id`. Tests: `test-preflight.js`.
+- **Clinical Event Ledger.** A machine-local, capped record (5000 events, 90-day
+  retention, pruned on every append) of what the suite displayed or did — answering
+  "did the tool flag this?" with evidence instead of a shrug. Instruments: Sentinel
+  red/amber chips shown (deduped per patient+rule+day so it's evidence, not noise) and
+  dismissals; Sweep run summaries and each "Create recall task"; Record "Copy patient
+  summary" and Pre-flight runs; Lab Filing filings mirrored alongside the existing
+  audit log (mirror, not migrate — the lab-filing log itself is untouched). Writes are
+  fire-and-forget and never break the calling surface on a throwing storage layer.
+  Patient references are the Medicus UUID only — never a name — and shape-validated at
+  write time (`sanitisePatientRef`), rejecting anything that doesn't look like a
+  UUID/hex identifier. Options → Event Ledger adds a card with patient-UUID and
+  date-range filters, CSV export (RFC-4180 quoting plus a spreadsheet
+  formula-injection guard), a typed-CLEAR confirmation to wipe the ledger, and a
+  plain-English disclosure of what it is and isn't (not a clinical record; absence of
+  an event is not evidence nothing was shown). Deliberately **excluded from suite
+  backup**, same doctrine as the lab-filing audit log — restoring an event ledger onto
+  another machine would fabricate a misleading "what was shown here" record. New
+  `shared/event-ledger.js`. Tests: `test-event-ledger.js`.
+- **Practice Pulse (Condor).** Condor's daily snapshots become week-on-week
+  operational intelligence. A new Pulse card shows trend rows — pressure index,
+  demand, slots free, waiting room, urgent tasks, task age — over 7d/30d with inline
+  sparklines and a "based on N of 30 possible snapshots" coverage line; gaps (days the
+  extension wasn't open) are disclosed, never interpolated. Historical pressure-index
+  values are shown exactly as recorded on the day, not recomputed under today's custom
+  weightings — restating history under current settings could silently disagree with
+  what a partner actually saw at the time. The Practice Report's Trends section is
+  rebuilt on the same pure core (`pulse-core.js`) with a prior-period comparison per
+  audience profile, so the panel and the printed report can never quietly diverge.
+  Verified-already-fixed rather than newly fixed: live Condor's capacity figures
+  already honoured the `slots.hiddenTypes` filter, and the Practice Report already
+  used the same filter — both now covered by a regression test
+  (`test-pulse-core.js`) rather than left to silently drift back apart. The snapshot
+  store (`practice.reportSnapshots`) was already capped at 90 days
+  (`pruneSnapshots`/`SNAPSHOT_KEEP_DAYS`) — verified, not newly capped — and is now
+  regression-tested too. Tests: `test-pulse-core.js`.
+- Reference: `docs/plans/CLASS-LEADERS-2026-07-01.md`.
+
+Tour: one new step — Record Pre-flight (`#recPreflight`), `TOUR_VERSION` bumped 6 → 7.
+Condor Pulse and Options → Event Ledger were deliberately not added as dedicated
+steps: the tour's 20-step sanity cap was reached, Condor stays taught by the existing
+nav-tabs overview step (as before), and the guided tour only covers the side panel,
+not the Options page. All existing anchor selectors re-verified against current
+markup (`test-tour-steps.js`). `defaults.json` (both copies) intentionally
+untouched — no migration-propagated content changed this release.
+
+## [v3.144.0] — 2026-07-01
+
+### Top-10 user-value set — answer-first Today, discoverability, coverage transparency, filters and tunables
+
+Ten improvements drawn from the practice-panel appraisals and the Dave-council roadmap
+(`docs/plans/TOP10-USER-VALUE-2026-07-01.md`), landed as three batches
+(`b2d9c81`, `d05ec6a`, `c75b304`). Read-only throughout — no new clinical-record writes.
+
+- **Today: "what needs you now" headline.** A plain-English sentence at the top of
+  Today, rolled up from data the module already polls — red states lead, amber next,
+  and a quiet "nothing needs you right now" state carries a "last checked HH:MM"
+  provenance line when all clear. Pure builder (`today-headline.js`) with a 55-case
+  test. Also fixed a bug in `triageClause` where it read wall-clock `Date.now()`
+  instead of the threaded `now` parameter, which could misjudge triage age against
+  the caller's reference time.
+- **Per-tab "?" help.** The two copies of `TAB_HELP` that had drifted apart between
+  `panel.js` and `pop-out.js` are now one shared source, `shared/tab-help.js`; missing
+  entries for Submissions, Visualiser and About were added. A coverage test fails CI
+  if a new tab ships without help copy.
+- **Trends: self-describing resting state.** The empty/no-patient state now explains
+  its own purpose, shows an inline SVG worked example, and states the first step
+  ("open a patient in Medicus, then pick a metric") instead of showing a blank chart.
+- **Sentinel: rule-coverage drill-down.** The rule-currency footer line is now a
+  toggle that expands into every drug-monitoring rule (with its matched terms) and
+  every QOF indicator covered — read-only, renders without a patient loaded so it can
+  be checked ahead of a clinic. Rule/indicator counts are test-locked against
+  `rules/drug-rules.json` and `rules/qof-rules.json`. (The "N meds checked · M matched
+  · K overdue · P unmatched" audit headline was already shipped in the v3.138.0-era
+  work — verified present, not rebuilt.)
+- **Record: "Copy patient summary".** Verified pre-existing with its own tests
+  (`test-record-summary.js`); not rebuilt.
+- **Command palette: patient-scoped actions.** A new "Patient" command group — copy
+  patient summary (via the Record tab's single formatter path), open visualiser, jump
+  to Record/Trends/Sentinel — appears only when patient context exists, hidden
+  otherwise.
+- **Referrals: search and clinician filter.** Patient-name search plus a clinician
+  dropdown, AND-combined with the existing priority/status chips, filtering the list,
+  chart and the 2WW safety-net worklist together. CSV export respects the active
+  filters and discloses them; CSV-injection hardened so CR/LF characters typed into
+  the search box can no longer forge extra rows in the export.
+- **Condor: tunable pressure-index weightings and thresholds.** Practice Pressure
+  Index maths extracted into one shared pure core (`condor-index-core.js`) used by
+  `condor.js`, `ppi.js` and `practice-report.js`. A new cog editor lets a power user
+  adjust component weightings and the AMBER/RED band thresholds, with visible
+  defaults and one-click reset (`condor.indexConfig`, included in the Condor backup
+  scope). The capacity safety floor is applied unconditionally *after* any custom
+  config — proven by an adversarial fuzz test that no combination of weightings can
+  produce a GREEN result while capacity is over limit. "Custom weightings" is
+  disclosed in Copy Figures, CSV export, the headline and the Practice Report.
+- **Slots: proactive alert thresholds.** Alert-rule evaluation extracted into a pure
+  core (`slots-alert-core.js`); a new in-module cog editor replaces the Options-only
+  configuration; breaches now surface on Today's Slots card and in the Today headline.
+  (Evaluation and storage already existed; this delivers the in-module editor, the
+  pure core, and the Today integration.)
+- Reference: `docs/plans/TOP10-USER-VALUE-2026-07-01.md` is the source plan for all ten
+  items, including what was deliberately excluded from this set.
+
+Tour: two new steps (Today headline, Sentinel rule-coverage drill-down),
+`TOUR_VERSION` bumped 5 → 6 so returning users see a short "what's new" pass. All
+other tour anchors re-verified against the current markup (`test-tour-steps.js`).
 ## [v3.143.3] — 2026-07-02
 
 ### Bug bash — 22 fixes across data-fetch, queue chips, drug rules, backup and modules

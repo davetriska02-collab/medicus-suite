@@ -1595,6 +1595,69 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   color: var(--red);
 }
 
+/* ── Suite health strip (global, Horizon-1 H2) ────────────────────────────────
+   Amber-only self-diagnosis banner: shown when the runtime DOM-contract canary
+   (shared/contract-canary.js) has found >= 1 integration point the suite
+   depends on missing from the live Medicus page. NEVER red — this is the
+   extension flagging its OWN selectors may be stale, not a clinical alert.
+   Same band shape as .wr-strip/.sub-rag-strip; text is allowed to wrap since
+   feature-name lists have no natural width cap. */
+.health-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+  min-height: 28px;
+}
+.health-strip-hidden {
+  display: none;
+}
+.health-strip-amber {
+  background: var(--amber-dim);
+  border-bottom-color: var(--amber-line);
+}
+.health-strip-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--amber);
+}
+.health-strip-text {
+  color: var(--text-2);
+  flex: 1 1 auto;
+  line-height: 1.35;
+}
+.health-strip-goto {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  background: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+  white-space: nowrap;
+}
+.health-strip-goto:hover {
+  color: var(--text-2);
+  border-color: var(--accent);
+}
+.health-strip-goto:active {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
 /* ── Medicus UI-change canary strip (global) ──────────────────────────────────
    Amber banner shown when a patient record is on screen but the extension could
    extract nothing from it — i.e. Medicus likely changed its layout. NOT a

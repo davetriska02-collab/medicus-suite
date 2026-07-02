@@ -534,6 +534,24 @@ async function runNextBatch() {
     aborted,
     isResume: false,
   });
+
+  // F2 Clinical Event Ledger — one summary event per completed (or cancelled)
+  // sweep run: counts + clinician scope ONLY, never per-patient rows (a patient
+  // is only ledgered individually when a recall task is actually created).
+  // Fire-and-forget: the ledger swallows its own failures.
+  if ((aborted || _sweepOffset >= total) && window.EventLedger) {
+    window.EventLedger.record({
+      source: 'sweep',
+      patientRef: null,
+      severity: null,
+      ruleId: null,
+      label:
+        `${actionRows.length} of ${_sweepOffset} checked need action` +
+        ` · clinicians: ${_selectedClinicians.length ? _selectedClinicians.join('; ') : 'all'}` +
+        (aborted ? ' · cancelled early' : ''),
+      action: 'sweep-run',
+    });
+  }
 }
 
 // ── Render helpers ────────────────────────────────────────────────────────────
@@ -1030,6 +1048,18 @@ async function submitRecall(slot) {
   if (statusEl) statusEl.textContent = '';
   try {
     await createGeneralTask(_recallApiBase, { patientId, assignee, description, priority });
+    // F2 Clinical Event Ledger — a recall task was actually created for this
+    // patient (fire-and-forget; can never break the recall flow).
+    if (window.EventLedger) {
+      window.EventLedger.record({
+        source: 'sweep',
+        patientRef: patientId,
+        severity: null,
+        ruleId: null,
+        label: 'recall task created' + (assigneeLabel ? ` — ${assigneeLabel}` : ''),
+        action: 'recall-created',
+      });
+    }
     slot.innerHTML = `<div class="sweep-recall-done">&#10003; Recall task created${
       assigneeLabel ? ` — assigned to ${esc(assigneeLabel)}` : ''
     }.</div>`;

@@ -42,12 +42,13 @@
 
 ## Global demand / alert strips
 
-Three permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
+Four permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
+- `#healthStrip` — suite self-diagnosis: >= 1 DOM contract (`shared/dom-contracts.js`) probed `degraded` by the runtime canary (`shared/contract-canary.js`, injected into the live Medicus page) — amber-only, never red (`health-strip-*` CSS)
 
-Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern.
+Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern. All four are panel-only by convention — `pop-out/pop-out.js`'s `MODULES` comment records this deliberately ("no WR/RM strips — they stay in the docked panel"); a new strip should match unless there's a specific reason to break the pattern.
 
 ## Injecting chips into the live Medicus queue (mechanics — copy the pattern, don't rediscover)
 

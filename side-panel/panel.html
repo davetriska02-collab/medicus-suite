@@ -224,6 +224,23 @@
             </svg>
             <span>Knowledge</span>
           </button>
+          <button class="nav-tab" data-module="leaflets" aria-label="NHS Patient Leaflets">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Leaflets</span>
+          </button>
           <button class="nav-tab" data-module="record" aria-label="Patient Record (live)">
             <svg
               width="14"
@@ -442,6 +459,7 @@
         <div id="wrStrip" class="wr-strip wr-strip-hidden" role="status" aria-live="polite"></div>
         <div id="rmStrip" class="rm-strip rm-strip-hidden" role="status" aria-live="polite"></div>
         <div id="subRagStrip" class="sub-rag-strip sub-rag-strip-hidden" role="status" aria-live="polite"></div>
+        <div id="healthStrip" class="health-strip health-strip-hidden" role="status" aria-live="polite"></div>
       </div>
       <div id="setupHost" aria-live="polite" style="display: none"></div>
       <main class="suite-content" id="suiteContent">
@@ -467,10 +485,14 @@
     <script src="../engine/stopp-start.js"></script>
     <script src="../engine/ruleset-io.js"></script>
     <script src="../engine/rules-engine.js"></script>
+    <script src="../engine/preflight.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/extraction-health.js"></script>
+    <script src="../shared/dom-contracts.js"></script>
+    <script src="../shared/event-ledger.js"></script>
     <script src="../shared/reception-pathway-utils.js"></script>
     <script src="../shared/knowledge-utils.js"></script>
+    <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/display-prefs.js"></script>
     <script src="../shared/glossary.js"></script>

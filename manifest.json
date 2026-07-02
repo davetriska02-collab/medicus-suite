@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.143.3",
+  "version": "3.147.0",
   "description": "The clinical intelligence layer for Medicus: read-only safety monitoring, triage red-flags, QOF tracking and operational dashboards.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
     "https://*.medicus.health/*",
     "https://*.api.england.medicus.health/*",
-    "https://api.github.com/repos/davetriska02-collab/medicus-suite/*"
+    "https://api.github.com/repos/davetriska02-collab/medicus-suite/*",
+    "https://api.nhs.uk/*"
   ],
   "background": { "service_worker": "service-worker.js" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
@@ -26,7 +27,9 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
+        "shared/dom-contracts.js",
         "content-scripts/dom-observer-hub.js",
+        "shared/contract-canary.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
         "engine/extractors/medications.js",
@@ -55,6 +58,7 @@
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",
+        "shared/event-ledger.js",
         "content-scripts/triage-lens/lab-file-button.js"
       ],
       "css": ["content-scripts/triage-lens/hud.css"],

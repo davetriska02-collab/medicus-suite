@@ -35,6 +35,13 @@
   if (window.__chRoutineRx) return;
   window.__chRoutineRx = true;
 
+  // DOM-contract registry (Horizon-1) — loaded earlier in the manifest's
+  // content-script list. Selectors below are read FROM shared/dom-contracts.js
+  // rather than duplicated here, so the registry and this file cannot drift
+  // apart. See routine-rx.routing-control / routine-rx.assignee-option /
+  // routine-rx.action-anchor in that registry.
+  var DC = window.DomContracts;
+
   // ---- config / storage --------------------------------------------------
 
   var STORE_KEY = 'triagelens.routineRx';
@@ -278,8 +285,12 @@
 
       // 3. the team option — extra margin over the old 4s since this now waits
       // on a real debounce + server round trip, not a local list filter.
+      var optionSel =
+        DC && DC.get('routine-rx.assignee-option')
+          ? DC.get('routine-rx.assignee-option').target.join(', ')
+          : '[id^="select-item-"], [role="option"], li[role="option"]';
       var option = await waitFor(function () {
-        var opts = document.querySelectorAll('[id^="select-item-"], [role="option"], li[role="option"]');
+        var opts = document.querySelectorAll(optionSel);
         var exact = null,
           partial = null;
         for (var i = 0; i < opts.length; i++) {
@@ -526,9 +537,12 @@
   // only widen to the costly div/span sweep if the narrow set yields nothing. The
   // narrow set covers the live app; the wide set is a defensive fallback.
   function findRoutingControl() {
+    var C = DC && DC.get('routine-rx.routing-control');
+    var narrow = C ? C.target : ['label', '[role="radio"]', '.radio'];
+    var wide = C && C.legacy[0] ? C.legacy[0] : ['div', 'span'];
     return (
-      findByText(['label', '[role="radio"]', '.radio'], 'Save & send to routine requests task list') ||
-      findByText(['div', 'span'], 'Save & send to routine requests task list')
+      findByText(narrow, 'Save & send to routine requests task list') ||
+      findByText(wide, 'Save & send to routine requests task list')
     );
   }
 
@@ -538,7 +552,11 @@
     var routine = findRoutingControl();
     if (!routine) return null;
 
-    var candidates = collectByText(['button', '[role="button"]'], 'More actions');
+    var actionSel =
+      DC && DC.get('routine-rx.action-anchor')
+        ? DC.get('routine-rx.action-anchor').target
+        : ['button', '[role="button"]'];
+    var candidates = collectByText(actionSel, 'More actions');
     for (var i = 0; i < candidates.length; i++) {
       var more = candidates[i];
       if (more.closest('[role="dialog"], [aria-modal="true"]')) continue;

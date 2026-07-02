@@ -521,6 +521,7 @@ async function doFullExport() {
     knowledge,
     labfiling,
     notifications,
+    leaflets,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -536,6 +537,7 @@ async function doFullExport() {
     knowledgeExport(),
     labfilingExport(),
     notificationsExport(),
+    leafletsExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -553,6 +555,7 @@ async function doFullExport() {
     knowledge,
     labfiling,
     notifications,
+    leaflets,
     suite,
   });
 }
@@ -573,6 +576,7 @@ async function doModuleExport(scope) {
     knowledge: () => knowledgeExport(),
     labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
+    leaflets: () => leafletsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -607,6 +611,7 @@ async function applyEnvelope(envelope) {
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
+    mods.leaflets && (() => leafletsImport(mods.leaflets)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1829,6 +1834,39 @@ rmSaveBtn?.addEventListener('click', async () => {
   if (rmSavedTag) {
     rmSavedTag.classList.add('show');
     setTimeout(() => rmSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+// ── Leaflets (NHS Website Content API — optional tier 2) ─────────────────────
+// The API key is deliberately never round-tripped through leafletsExport() —
+// see shared/io/leaflets-io.js header. This section reads/writes
+// chrome.storage.local directly (same as the request-monitor section above)
+// rather than going through the IO file, because the IO file's job is the
+// backup boundary, not the settings-page load/save path.
+
+const lfEnabled = document.getElementById('lfEnabled');
+const lfApiKey = document.getElementById('lfApiKey');
+const lfSaveBtn = document.getElementById('saveLeaflets');
+const lfSavedTag = document.getElementById('leafletsSaved');
+
+(async function initLeafletsSection() {
+  try {
+    const r = await chrome.storage.local.get('leaflets.config');
+    const cfg = r['leaflets.config'] || {};
+    if (lfEnabled) lfEnabled.checked = cfg.enabled === true;
+    if (lfApiKey) lfApiKey.value = typeof cfg.apiKey === 'string' ? cfg.apiKey : '';
+  } catch (e) {
+    console.warn('[Leaflets init]', e.message);
+  }
+})();
+
+lfSaveBtn?.addEventListener('click', async () => {
+  const enabled = !!lfEnabled?.checked;
+  const apiKey = (lfApiKey?.value || '').trim();
+  await chrome.storage.local.set({ 'leaflets.config': { enabled, apiKey } });
+  if (lfSavedTag) {
+    lfSavedTag.classList.add('show');
+    setTimeout(() => lfSavedTag.classList.remove('show'), 2000);
   }
 });
 
@@ -3146,4 +3184,213 @@ rmSaveBtn?.addEventListener('click', async () => {
   document
     .querySelectorAll('.nav-item[data-section="knowledge"]')
     .forEach((btn) => btn.addEventListener('click', refreshStats));
+})();
+
+// ── Event Ledger section (F2) ─────────────────────────────────────────────────
+// Machine-local record of what the suite flagged — filter/table/CSV-export/clear
+// UI over shared/event-ledger.js (window.EventLedger, loaded before this script).
+// The ledger key (ledger.events) is deliberately EXCLUDED from suite backup —
+// same doctrine as labfiling.auditLog; see the disclosure block in options.html
+// and the ALLOWLIST entry in test-backup-coverage.js.
+(function initLedgerSection() {
+  const EL = typeof window !== 'undefined' ? window.EventLedger : null;
+  const wrap = document.getElementById('ledgerTableWrap');
+  if (!EL || !wrap) return;
+
+  // Rows rendered in the table (newest first). The CSV export always includes
+  // EVERY filtered event — the cap is a render guard, not a data cap.
+  const RENDER_CAP = 200;
+
+  let _events = [];
+
+  const $ = (id) => document.getElementById(id);
+
+  function currentFilter() {
+    return {
+      patientRef: ($('ledgerFilterPatient')?.value || '').trim(),
+      from: $('ledgerFilterFrom')?.value || null,
+      to: $('ledgerFilterTo')?.value || null,
+    };
+  }
+
+  function filteredEvents() {
+    return EL.filterEvents(_events, currentFilter());
+  }
+
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    return isNaN(d.getTime())
+      ? String(ts || '')
+      : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderTable() {
+    const rows = filteredEvents();
+    const summary = $('ledgerSummary');
+    if (summary) {
+      summary.textContent =
+        `${rows.length} of ${_events.length} event${_events.length === 1 ? '' : 's'}` +
+        (rows.length > RENDER_CAP ? ` — showing the newest ${RENDER_CAP}; Export CSV includes all filtered rows` : '');
+    }
+    if (rows.length === 0) {
+      wrap.innerHTML = `<div class="ledger-empty">${
+        _events.length ? 'No events match these filters.' : 'No events recorded yet on this machine.'
+      }</div>`;
+      return;
+    }
+    const body = rows
+      .slice(0, RENDER_CAP)
+      .map((e) => {
+        const sevCls = e.severity === 'red' ? 'ledger-sev-red' : e.severity === 'amber' ? 'ledger-sev-amber' : '';
+        const detail =
+          escHtml(e.ruleId || '') + (e.ruleId && e.label ? ' · ' : '') + escHtml(e.label || '');
+        return `<tr>
+          <td>${escHtml(fmtTs(e.ts))}</td>
+          <td>${escHtml(e.source || '')}</td>
+          <td>${escHtml(e.patientRef || '—')}</td>
+          <td class="${sevCls}">${escHtml(e.severity || '')}</td>
+          <td class="ledger-td-label">${detail}</td>
+          <td>${escHtml(e.action || '')}</td>
+        </tr>`;
+      })
+      .join('');
+    wrap.innerHTML =
+      `<table class="ledger-table"><thead><tr>` +
+      `<th>When</th><th>Source</th><th>Patient (UUID)</th><th>Severity</th><th>Rule / detail</th><th>Action</th>` +
+      `</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  async function refreshLedger() {
+    _events = await EL.getEvents();
+    renderTable();
+  }
+
+  // Filters re-render live (data already in memory — no storage churn).
+  ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+    $(id)?.addEventListener('input', renderTable);
+  });
+  $('ledgerResetFilter')?.addEventListener('click', () => {
+    ['ledgerFilterPatient', 'ledgerFilterFrom', 'ledgerFilterTo'].forEach((id) => {
+      const el = $(id);
+      if (el) el.value = '';
+    });
+    renderTable();
+  });
+
+  // CSV export — same client-side Blob pattern as the Lab Filing audit export;
+  // eventsCsv applies quote-escaping AND the spreadsheet formula-injection guard.
+  $('ledgerExportCsv')?.addEventListener('click', () => {
+    const csv = EL.eventsCsv(filteredEvents());
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `event-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Clear ledger — destructive, so behind a TYPED confirmation ("CLEAR"), not
+  // just a click-through confirm dialog.
+  const clearInput = $('ledgerClearConfirm');
+  const clearBtn = $('ledgerClearBtn');
+  clearInput?.addEventListener('input', () => {
+    if (clearBtn) clearBtn.disabled = clearInput.value.trim() !== 'CLEAR';
+  });
+  clearBtn?.addEventListener('click', async () => {
+    if (!clearInput || clearInput.value.trim() !== 'CLEAR') return;
+    await EL.clearLedger();
+    clearInput.value = '';
+    clearBtn.disabled = true;
+    await refreshLedger();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshLedger);
+  } else {
+    refreshLedger();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="ledger"]')
+    .forEach((btn) => btn.addEventListener('click', refreshLedger));
+})();
+
+// ── Suite Health section (Horizon-1 H2) ────────────────────────────────────────
+// Read-only table over chrome.storage.local['health.contracts'], written by the
+// runtime canary (shared/contract-canary.js, injected into the live Medicus
+// page — see manifest.json). This page never probes anything itself; it only
+// reads the canary's last result and the registry (shared/dom-contracts.js,
+// loaded before this script) for the plain-English feature/degradation text.
+// health.contracts is machine-local diagnostic state, deliberately EXCLUDED
+// from suite backup (see test-backup-coverage.js ALLOWLIST) — same doctrine as
+// the Event Ledger above.
+(function initHealthSection() {
+  const DC = typeof window !== 'undefined' ? window.DomContracts : null;
+  const wrap = document.getElementById('healthTableWrap');
+  const summaryEl = document.getElementById('healthSummary');
+  if (!DC || !wrap) return;
+
+  function fmtTs(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function statusInfo(row, contract) {
+    if (contract.runtime === false) return { label: 'Fixture-tested only', cls: 'health-status--fixture' };
+    if (!row || !row.status) return { label: 'Not checked yet', cls: 'health-status--unchecked' };
+    if (row.status === 'degraded') return { label: 'Degraded', cls: 'health-status--degraded' };
+    if (row.status === 'ok') return { label: 'OK', cls: 'health-status--ok' };
+    return { label: 'Not applicable here', cls: 'health-status--na' };
+  }
+
+  async function refreshHealth() {
+    const r = await chrome.storage.local.get('health.contracts');
+    const health = (r && r['health.contracts']) || {};
+    const contracts = DC.list();
+
+    const degradedCount = contracts.filter((c) => health[c.id]?.status === 'degraded').length;
+    const runtimeCount = contracts.filter((c) => c.runtime === true).length;
+    if (summaryEl) {
+      summaryEl.textContent =
+        degradedCount > 0
+          ? `${degradedCount} of ${contracts.length} feature${contracts.length === 1 ? '' : 's'} currently degraded.`
+          : `All checked features look OK — ${runtimeCount} of ${contracts.length} are live-checked; the rest are fixture-tested only (see the explanation column).`;
+    }
+
+    const rows = contracts
+      .map((c) => {
+        const row = health[c.id];
+        const { label, cls } = statusInfo(row, c);
+        const explanation = c.runtime === false ? c.runtimeNote || '' : '';
+        return `<tr>
+          <td class="health-td-feature">${escHtml(c.feature)}</td>
+          <td class="health-td-degrades">${escHtml(c.degradation)}</td>
+          <td><span class="health-status ${cls}">${escHtml(label)}</span></td>
+          <td class="health-td-checked">${row ? escHtml(fmtTs(row.lastProbe)) : '—'}</td>
+          <td class="health-td-explain">${escHtml(explanation)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    wrap.innerHTML =
+      `<table class="health-table"><thead><tr>` +
+      `<th>Feature</th><th>What degrades</th><th>Status</th><th>Last checked</th><th>Why fixture-only</th>` +
+      `</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshHealth);
+  } else {
+    refreshHealth();
+  }
+  document
+    .querySelectorAll('.nav-item[data-section="health"]')
+    .forEach((btn) => btn.addEventListener('click', refreshHealth));
+
+  // Snappier than a re-open: the canary writes this key directly from the
+  // Medicus tab while Options may already be open in another tab.
+  chrome.storage.onChanged?.addListener((changes) => {
+    if (changes['health.contracts']) refreshHealth();
+  });
 })();

@@ -18,7 +18,7 @@
 
 'use strict';
 
-import { rankCommands, pushRecent } from './palette-core.js';
+import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } from './palette-core.js';
 import { startTour } from '../tour/tour.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
@@ -58,6 +58,25 @@ function optionsSectionUrl(section) {
   return chrome.runtime.getURL(`options/options.html#sect-${section}`);
 }
 
+// Live patient-context detection for the palette's patient-scoped commands
+// (item 10 / Dave-council roadmap step 4). Same lookup path as record.js's
+// findMedicusTab + patientUuidFromContentScript: active tab → is it Medicus →
+// ask the content script's cached Sentinel snapshot for a patient identity.
+// Best-effort — any failure (no tab, no content script, navigating) means "no
+// patient", which is the safe default (commands simply don't appear).
+async function detectPatientContext() {
+  try {
+    const active = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = active[0];
+    if (!tab?.id || !tab?.url || !/medicus\.health/.test(tab.url)) return false;
+    const snap = await chrome.tabs.sendMessage(tab.id, { action: 'getSentinelSnapshot' });
+    const pc = snap && snap.patientContext;
+    return !!(pc && (pc.patientName || pc.patientUuid));
+  } catch (_) {
+    return false;
+  }
+}
+
 const SEARCH_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
 const GENERIC_ICONS = {
@@ -69,6 +88,8 @@ const GENERIC_ICONS = {
   window:
     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
   doc: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  person:
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
 };
 
 // Options sections (ids match options.html sect-* / options.js deep-linking).
@@ -89,7 +110,9 @@ const OPTIONS_SECTIONS = [
 ];
 
 // Build the command list from the live DOM + static registry.
-function buildCommands() {
+// hasPatient gates the patient-scoped commands (item 10) — resolved by the
+// caller (openPalette) via detectPatientContext before this runs.
+function buildCommands(hasPatient) {
   const cmds = [];
 
   // Navigation — one command per nav tab in this context.
@@ -286,7 +309,66 @@ function buildCommands() {
     });
   }
 
+  // Patient-scoped actions (item 10 / Dave-council roadmap step 4) — only
+  // added when a patient is open in Medicus (detectPatientContext, resolved
+  // by the caller before this function runs). Descriptor list + gating lives
+  // in palette-core.js (patientScopedCommands) so it's testable without
+  // chrome/DOM; `run` behaviour is attached here since it needs live tabs.
+  if (hasPatient) {
+    const runners = {
+      [PATIENT_COMMAND_IDS.COPY_SUMMARY]: runCopyPatientSummary,
+      [PATIENT_COMMAND_IDS.OPEN_VISUALISER]: () =>
+        chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') }),
+      [PATIENT_COMMAND_IDS.JUMP_RECORD]: () => clickNavTab('record'),
+      [PATIENT_COMMAND_IDS.JUMP_TRENDS]: () => clickNavTab('trends'),
+      [PATIENT_COMMAND_IDS.JUMP_SENTINEL]: () => clickNavTab('sentinel'),
+    };
+    for (const descriptor of patientScopedCommands(true)) {
+      cmds.push({ ...descriptor, icon: GENERIC_ICONS.person, run: runners[descriptor.id] });
+    }
+  }
+
   return cmds;
+}
+
+// Click a nav tab by module name, if it exists in this shell (record/trends/
+// sentinel are real modules in both panel and pop-out, so this is normally a
+// no-op guard rather than a real gap).
+function clickNavTab(moduleName) {
+  document.querySelector(`.nav-tab[data-module="${moduleName}"]`)?.click();
+}
+
+// "Copy patient summary" from the palette. Reuses the Record tab's own
+// formatter/flow (buildRecordSummaryText + its Copy button) rather than
+// re-implementing the live Medicus fetch here: jump to Record, then click its
+// Copy button once the module has loaded the patient and enabled it. Record
+// already shows a "Copied" confirmation on its own button — this just gets
+// the user there in one step, which is the whole point of a palette action.
+async function runCopyPatientSummary() {
+  clickNavTab('record');
+  const btn = await waitForEnabled('#recCopySummary', 4000);
+  btn?.click();
+}
+
+// Poll for a selector to appear AND be enabled (Record disables its Copy
+// button until a patient snapshot has loaded — see record.js wireStaticControls).
+function waitForEnabled(selector, timeoutMs) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const el = document.querySelector(selector);
+      if (el && !el.disabled) {
+        resolve(el);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(tick, 150);
+    };
+    tick();
+  });
 }
 
 // Wire the global hotkey + launcher button. Call once per page.
@@ -314,8 +396,20 @@ export function togglePalette() {
 
 export function openPalette() {
   if (_layer) return;
-  _commands = buildCommands();
+  // Build synchronously (no patient commands yet) so the palette opens
+  // instantly — the live tabs.sendMessage patient-context lookup below is not
+  // worth blocking the whole palette for. If a patient is found, the list is
+  // quietly patched in and re-rendered a beat later (openPalette closure
+  // re-checks _layer so a since-closed palette is a no-op).
+  _commands = buildCommands(false);
   _selected = 0;
+  detectPatientContext().then((hasPatient) => {
+    if (!hasPatient || !_layer) return;
+    _commands = buildCommands(true);
+    const query = _layer.querySelector('.suite-palette-input')?.value || '';
+    _selected = 0;
+    renderList(query);
+  });
 
   _layer = document.createElement('div');
   _layer.className = 'suite-palette-layer';

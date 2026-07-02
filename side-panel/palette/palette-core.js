@@ -8,8 +8,49 @@
 // Exports:
 //   scoreMatch(query, text)                — 0 = no match, higher = better
 //   rankCommands(commands, query, recents) — filtered + ordered command list
+//   patientScopedCommands(hasPatient)      — patient-context command descriptors
 
 'use strict';
+
+// Patient-scoped command descriptors (Dave-council roadmap step 4 / top-10
+// plan item 10). These only make sense with a patient open in Medicus — "Copy
+// patient summary" has nothing to copy, "Jump to Sentinel" has nothing to
+// triage. Pure and declarative on purpose (no `run` here) so this list is
+// testable without chrome/DOM: palette.js attaches `run` by id when it builds
+// the live command registry, and calls this with the live patient-context
+// signal it already has to gate presence.
+//
+// Distinct ids from the always-present nav:record / nav:trends / nav:sentinel
+// / open:visualiser commands — those jump to a tab regardless of context; these
+// are the "I'm mid-consultation, patient is open" quick actions, grouped
+// together under "Patient" so they float to the top of that context.
+export const PATIENT_COMMAND_IDS = Object.freeze({
+  COPY_SUMMARY: 'patient:copy-summary',
+  OPEN_VISUALISER: 'patient:open-visualiser',
+  JUMP_RECORD: 'patient:jump-record',
+  JUMP_TRENDS: 'patient:jump-trends',
+  JUMP_SENTINEL: 'patient:jump-sentinel',
+});
+
+const PATIENT_COMMAND_DESCRIPTORS = [
+  { id: PATIENT_COMMAND_IDS.COPY_SUMMARY, label: 'Copy patient summary', keywords: 'clipboard copy snapshot' },
+  {
+    id: PATIENT_COMMAND_IDS.OPEN_VISUALISER,
+    label: 'Open visualiser',
+    keywords: 'visualiser sar pdf record patient',
+  },
+  { id: PATIENT_COMMAND_IDS.JUMP_RECORD, label: 'Jump to Record', keywords: 'patient record live summary' },
+  { id: PATIENT_COMMAND_IDS.JUMP_TRENDS, label: 'Jump to Trends', keywords: 'patient trends chart metric' },
+  { id: PATIENT_COMMAND_IDS.JUMP_SENTINEL, label: 'Jump to Sentinel', keywords: 'patient monitoring qof drug' },
+];
+
+// Returns the patient-scoped command descriptors when `hasPatient` is true,
+// otherwise an empty array — the hide/absent behaviour the plan requires.
+// Each descriptor carries `group: 'Patient'` so callers don't need to repeat it.
+export function patientScopedCommands(hasPatient) {
+  if (!hasPatient) return [];
+  return PATIENT_COMMAND_DESCRIPTORS.map((d) => ({ ...d, group: 'Patient' }));
+}
 
 // Score how well `query` matches `text`.
 //   0                — no match

@@ -183,6 +183,12 @@ export function buildSnapshotRow(live, ppi, today = localISO()) {
     // (over capacity floors GREEN→AMBER); otherwise "25/100 AMBER" reads as a bug.
     if (ppi.floored) row.bandFloored = true;
     if (ppi.overCapacity) row.overCapacity = true;
+    // Item 8: carry the custom-weightings disclosure + the actual band
+    // thresholds used, so a report generated while a custom config is active
+    // never shows the hard-coded "GREEN under 40 · AMBER 40-70" hint when the
+    // real cut-offs were different (see renderCurrentSnapshot in report-render.js).
+    if (ppi.isCustom) row.customWeightings = true;
+    if (ppi.config?.thresholds) row.thresholds = ppi.config.thresholds;
   }
   if (live?.submissions?.totals) row.demand = live.submissions.totals.all ?? null;
   if (live?.slots) row.slotsRemaining = live.slots.totalRemaining ?? null;
@@ -365,6 +371,10 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
 
   const allSnapshots = snapshots.status === 'fulfilled' ? snapshots.value : [];
   const rangeSnapshots = allSnapshots.filter((s) => s.date >= range.start && s.date <= range.end);
+  // The FULL (unfiltered) snapshot series, in addition to the range-scoped `snapshotHistory`
+  // below. Pulse (pulse-core.js buildPulseRows) needs the days immediately BEFORE `range` too
+  // (the prior-period window), which a range-filtered slice cannot supply — pass the whole
+  // thing through and let the pure builder do its own windowing, anchored at `range.end`.
 
   // Prior-period comparison: fetch the equal-length window immediately before this
   // range so the report can show an honest like-for-like delta.
@@ -396,6 +406,7 @@ export async function buildReport({ siteId, range, live = null, ppi = null } = {
     referrals: pick(referralsRes, 'referrals'),
     currentSnapshot: live ? buildSnapshotRow(live, ppi) : null,
     snapshotHistory: rangeSnapshots,
+    snapshotHistoryFull: allSnapshots,
     // Prior period: the equal-length window immediately before this range.
     // `priorRange` carries the explicit ISO dates so the renderer can label them.
     priorRange: prev,

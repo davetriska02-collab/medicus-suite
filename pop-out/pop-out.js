@@ -6,6 +6,7 @@ import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
 import { initPalette } from '../side-panel/palette/palette.js';
 import { sanitiseHiddenTabs } from '../side-panel/tab-catalog.js';
+import { TAB_HELP } from '../shared/tab-help.js';
 
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
@@ -55,78 +56,20 @@ const MODULES = {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
     css: '../side-panel/modules/knowledge/knowledge.css',
   },
+  leaflets: {
+    js: () => import('../side-panel/modules/leaflets/leaflets.js'),
+    css: '../side-panel/modules/leaflets/leaflets.css',
+  },
   record: {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',
   },
 };
 
-// ── Per-tab help registry (mirrors panel.js — keep in sync) ─────────────────────
-// Plain-English, UK English, two-line summary per module: what the tab is, and
-// what to do first. Reference aid only — NOT clinical decision support.
-const TAB_HELP = {
-  today: {
-    title: 'Today',
-    what: 'A morning overview of the practice: waiting room, triage load, demand and free slots, all on one screen.',
-    firstStep: 'Read it top to bottom before clinic to see what the day looks like.',
-  },
-  slots: {
-    title: 'Slots',
-    what: 'Counts of free appointment slots by type for any chosen date.',
-    firstStep: 'Pick a date to see how many slots of each type are still free.',
-  },
-  capacity: {
-    title: 'Forecast',
-    what: 'A short-term projection of appointment capacity against expected demand.',
-    firstStep: 'Check the coming days for any shortfall between slots and demand.',
-  },
-  sentinel: {
-    title: 'Monitoring',
-    what: 'Shows drug-monitoring and QOF (Quality and Outcomes Framework) reminders for the patient record you have open in Medicus.',
-    firstStep: 'Open a patient in Medicus, then check the reminders here against the record.',
-  },
-  activity: {
-    title: 'Activity',
-    what: 'Workload per staff member over a date range, broken down by task type.',
-    firstStep: 'Choose a date range to see each person’s totals.',
-  },
-  referrals: {
-    title: 'Referrals',
-    what: 'A summary of referrals over a date range by priority, status, clinician and specialty.',
-    firstStep: 'Set a date range to see referral counts and breakdowns.',
-  },
-  condor: {
-    title: 'Condor',
-    what: 'A live dashboard of practice pressure, pulling several demand signals together.',
-    firstStep: 'Glance at the headline level to gauge how busy the practice is right now.',
-  },
-  trends: {
-    title: 'Trends',
-    what: 'How key practice figures have moved over time, shown as charts.',
-    firstStep: 'Pick a measure and time window to see the trend line.',
-  },
-  reception: {
-    title: 'Reception',
-    what: 'Quick-reference pathways to help reception direct patient requests to the right place.',
-    firstStep: 'Search or browse for the request type to see the suggested pathway.',
-  },
-  sweep: {
-    title: 'Sweep',
-    what: 'A pre-clinic scan of your upcoming patients that flags points worth a look beforehand.',
-    firstStep: 'Run the sweep before clinic, then review each flagged patient in Medicus.',
-  },
-  record: {
-    title: 'Record',
-    what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep:
-      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
-  },
-  knowledge: {
-    title: 'Knowledge',
-    what: 'A searchable store of the practice’s own notes, contacts and how-to information.',
-    firstStep: 'Type a keyword to find the relevant practice note.',
-  },
-};
+// ── Per-tab help registry ──────────────────────────────────────────────────────
+// TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
+// this file and panel.js (was previously duplicated per shell; converged so a
+// tab description can't drift between panel and pop-out).
 
 function _helpEsc(s) {
   return String(s ?? '')
