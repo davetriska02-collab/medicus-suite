@@ -2081,19 +2081,42 @@
 
   // ---- Action menu popover ----
   // Anchored to document.body so it works in HUD, queue rows, and the request
-  // panel. One menu open at a time. Click outside to dismiss.
+  // panel. One menu open at a time (shared singleton — the rule-match menu
+  // below, item 2.1/2.3/2.5 of TRIAGE-LENS-2026-07-02.md, reuses this SAME
+  // activeActionMenu/closeActionMenu pair rather than a second one, so that
+  // (a) only one popover is ever open across the whole extension and (b) its
+  // "note" action back-button — wired to closeActionMenu() inside
+  // executeAction below — closes the right menu regardless of which caller
+  // opened it). Dismiss on outside click, Esc, or scroll (item 2.5's "menu
+  // element" requirement); activeAnchorEl lets refreshQueueChips notice when
+  // a still-open menu's anchor chip has been wiped out from under it by the
+  // next churn cycle (CLAUDE.md rule #3) and close rather than float over a
+  // dead reference.
   let activeActionMenu = null;
+  let activeAnchorEl = null;
   const closeActionMenu = () => {
     if (activeActionMenu) {
       activeActionMenu.remove();
       activeActionMenu = null;
     }
+    activeAnchorEl = null;
     document.removeEventListener('click', onDocClickForMenu, true);
+    document.removeEventListener('keydown', onKeydownForMenu, true);
+    window.removeEventListener('scroll', onScrollForMenu, true);
   };
   const onDocClickForMenu = (e) => {
     if (!activeActionMenu) return;
     if (activeActionMenu.contains(e.target)) return;
     closeActionMenu();
+  };
+  const onKeydownForMenu = (e) => {
+    if (e.key === 'Escape') closeActionMenu();
+  };
+  const onScrollForMenu = () => closeActionMenu();
+  const armActionMenuDismissal = () => {
+    setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
+    document.addEventListener('keydown', onKeydownForMenu, true);
+    window.addEventListener('scroll', onScrollForMenu, true);
   };
 
   const findRuleById = (id) => {
@@ -2154,7 +2177,8 @@
 
     document.body.appendChild(menu);
     activeActionMenu = menu;
-    setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
+    activeAnchorEl = anchor;
+    armActionMenuDismissal();
   };
 
   const isSafeActionUrl = (url) => {
@@ -2221,6 +2245,190 @@
         closeActionMenu();
       });
     }
+  };
+
+  // ---- Rule-match menu (queue rule chips — items 2.1/2.3/2.5,
+  // TRIAGE-LENS-2026-07-02.md) ----
+  // Reuses the SAME activeActionMenu/closeActionMenu singleton as
+  // showActionMenu/executeAction above — only one popover open at a time —
+  // so link/snippet/note actions clicked from here run through the existing,
+  // already-hardened executeAction unchanged (scheme-checked links, clipboard
+  // snippets, note view). This block only builds what goes INSIDE the popover
+  // for a queue row's matched rules: an evidence line ahead of the actions,
+  // and — when more than one rule matched — a list view to drill through
+  // them. `rules` is the row's RANKED matched (compiled) rule array and
+  // `previewText` the row's request text, both closure-captured by
+  // decorateOneRow at decoration time (evidence is computed lazily here, on
+  // menu open, per item 2.1 — decorateOneRow itself never calls this).
+  const buildEvidenceEl = (rule, previewText) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-rule-menu-evidence';
+    const ev = window.TriageLensMatch.ruleMatchEvidence(rule, previewText || '');
+    if (!ev) {
+      wrap.classList.add('ch-rule-menu-evidence-empty');
+      wrap.textContent = 'No matching text found in the current request.';
+      return wrap;
+    }
+    const label = document.createElement('div');
+    label.className = 'ch-rule-menu-evidence-label';
+    label.textContent = 'Matched text';
+    wrap.appendChild(label);
+    const p = document.createElement('p');
+    p.className = 'ch-rule-menu-evidence-text';
+    // The request text is UNTRUSTED (patient/reception-typed) — built with
+    // createElement/textContent only, NEVER innerHTML of it (a prior
+    // attribute-injection XSS was fixed in this area; CLAUDE.md pins that
+    // discipline for this surface). ev.term is a verbatim substring of
+    // ev.context (both derived from the same source string), so a plain
+    // indexOf finds it; if the term happens to recur earlier in the same
+    // sentence the FIRST occurrence is highlighted — a cosmetic edge case,
+    // not a correctness/safety one.
+    const idx = ev.context.indexOf(ev.term);
+    if (idx === -1) {
+      p.appendChild(document.createTextNode(ev.context));
+    } else {
+      p.appendChild(document.createTextNode(ev.context.slice(0, idx)));
+      const strong = document.createElement('strong');
+      strong.appendChild(document.createTextNode(ev.context.slice(idx, idx + ev.term.length)));
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(ev.context.slice(idx + ev.term.length)));
+    }
+    wrap.appendChild(p);
+    return wrap;
+  };
+
+  const RULE_MENU_ACTION_ICONS = { link: '🔗', snippet: '📋', note: '📌' };
+
+  const renderRuleMenuActionItems = (rule) => {
+    const box = document.createDocumentFragment();
+    const actions = rule.actions || [];
+    if (!actions.length) {
+      const empty = document.createElement('div');
+      empty.className = 'ch-action-menu-empty';
+      empty.textContent = 'No actions configured for this rule.';
+      box.appendChild(empty);
+      return box;
+    }
+    actions.forEach((a) => {
+      const item = document.createElement('div');
+      item.className = 'ch-action-menu-item ch-action-menu-item-' + (a.type || 'note');
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('tabindex', '0');
+      const icon = document.createElement('span');
+      icon.className = 'ch-action-icon';
+      icon.textContent = RULE_MENU_ACTION_ICONS[a.type] || '•';
+      const label = document.createElement('span');
+      label.className = 'ch-action-label';
+      label.textContent = a.label || '(unlabelled)';
+      item.appendChild(icon);
+      item.appendChild(label);
+      const activate = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        executeAction(a, item, activeActionMenu);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
+      });
+      box.appendChild(item);
+    });
+    return box;
+  };
+
+  // Detail view: one rule's evidence + actions. `showBack` is true only when
+  // reached by drilling into the "+N" list view, so the top chip's own
+  // (single-rule) detail view has no back target.
+  const renderRuleMenuDetail = (rule, previewText, rules, showBack) => {
+    if (!activeActionMenu) return;
+    activeActionMenu.innerHTML = '';
+    activeActionMenu.setAttribute(
+      'aria-label',
+      `${rule.label} — ${rule.kind} alert`
+    );
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    if (showBack) {
+      const back = document.createElement('button');
+      back.className = 'ch-action-back';
+      back.type = 'button';
+      back.textContent = '← Back';
+      back.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        renderRuleMenuList(rules, previewText);
+      });
+      head.appendChild(back);
+    }
+    const badge = document.createElement('span');
+    badge.className = 'ch-chip ch-chip-' + rule.kind;
+    badge.textContent = rule.label;
+    head.appendChild(badge);
+    activeActionMenu.appendChild(head);
+    activeActionMenu.appendChild(buildEvidenceEl(rule, previewText));
+    activeActionMenu.appendChild(renderRuleMenuActionItems(rule));
+  };
+
+  // List view: every matched rule on this row (item 2.5's "+N" overflow),
+  // each row drilling into its own detail view via renderRuleMenuDetail.
+  const renderRuleMenuList = (rules, previewText) => {
+    if (!activeActionMenu) return;
+    activeActionMenu.innerHTML = '';
+    activeActionMenu.setAttribute('aria-label', `Matched rules, ${rules.length} total`);
+    const head = document.createElement('div');
+    head.className = 'ch-action-menu-head';
+    head.textContent = `Matched rules (${rules.length})`;
+    activeActionMenu.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'ch-rule-menu-list';
+    rules.forEach((r) => {
+      const item = document.createElement('div');
+      item.className = 'ch-rule-menu-list-item';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('tabindex', '0');
+      const badge = document.createElement('span');
+      badge.className = 'ch-chip ch-chip-' + r.kind;
+      badge.textContent = r.kind;
+      const label = document.createElement('span');
+      label.className = 'ch-rule-menu-list-label';
+      label.textContent = r.label;
+      item.appendChild(badge);
+      item.appendChild(label);
+      const activate = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        renderRuleMenuDetail(r, previewText, rules, true);
+      };
+      item.addEventListener('click', activate);
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') activate(e);
+      });
+      list.appendChild(item);
+    });
+    activeActionMenu.appendChild(list);
+  };
+
+  // Entry point wired to the queue rule-match chips (decorateOneRow below).
+  // `openList` is true for the "+N" overflow chip (straight to the full
+  // list), false for the top chip (straight to its own detail — matches the
+  // pre-2.5 single-chip behaviour when there's only one matched rule).
+  const showRuleMatchMenu = (anchor, rules, previewText, openList) => {
+    closeActionMenu();
+    if (!rules || !rules.length) return;
+    const r = anchor.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'ch-action-menu ch-rule-menu';
+    menu.setAttribute('role', 'menu');
+    menu.style.position = 'fixed';
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    menu.style.zIndex = '2147483647';
+    document.body.appendChild(menu);
+    activeActionMenu = menu;
+    activeAnchorEl = anchor;
+    if (openList && rules.length > 1) {
+      renderRuleMenuList(rules, previewText);
+    } else {
+      renderRuleMenuDetail(rules[0], previewText, rules, false);
+    }
+    armActionMenuDismissal();
   };
 
   const renderHUD = (data, signals, requestSignals) => {
@@ -4361,6 +4569,52 @@
     return { target, inPreview: !!previewRow };
   };
 
+  // ---- Rank & collapse multi-fire request-rule chips (item 2.5,
+  // TRIAGE-LENS-2026-07-02.md) ----
+  // Sort matched rules red < amber < info (unknown/other kinds sort last,
+  // defensively, rather than throwing); ties keep their original matchRules
+  // order (stable — explicit index tiebreak rather than relying on engine
+  // sort stability). decorateOneRow below renders only rankRuleMatches(...)[0]
+  // as a chip, plus a "+N" overflow chip for the rest — a request that trips
+  // several rules used to render one chip per rule, crowding the row.
+  const RULE_KIND_RANK = { red: 0, amber: 1, green: 2, info: 3 };
+  const rankRuleMatches = (rules) =>
+    rules
+      .map((r, i) => ({ r, i }))
+      .sort((a, b) => {
+        const ra = RULE_KIND_RANK[a.r.kind] ?? 4;
+        const rb = RULE_KIND_RANK[b.r.kind] ?? 4;
+        return ra !== rb ? ra - rb : a.i - b.i;
+      })
+      .map((x) => x.r);
+
+  // Deliberately separate from renderChipHtml above (system chips — child/
+  // elder/priority/task-age — are UNCHANGED by item 2.5) so only the
+  // ranked/collapsed rule-match chips get role="button"/tabindex/aria-label
+  // and the click-to-evidence wiring. Built as a real element via
+  // createElement/textContent/setAttribute (not an HTML string) — chip.text/
+  // chip.ariaLabel are OUR OWN generated strings (rule label + kind, never
+  // raw request text), but building them this way needs no escaping at all
+  // and lets this chip be appended onto the strip AFTER the system chips'
+  // combined innerHTML without a re-parse. `chip.rqIdx` indexes into
+  // decorateOneRow's per-row ruleMatchActivators array (wired up after the
+  // element lands in the DOM) rather than encoding the handler in the markup.
+  const buildRuleMatchChipEl = (chip) => {
+    const el = document.createElement('span');
+    el.className = `ch-chip ch-chip-${chip.kind} ch-chip-actionable ch-q-rule-chip`;
+    el.setAttribute('data-rq-idx', String(chip.rqIdx));
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-label', chip.ariaLabel);
+    el.setAttribute('title', chip.text);
+    el.appendChild(document.createTextNode(chip.text));
+    const chev = document.createElement('span');
+    chev.className = 'ch-chev';
+    chev.textContent = ' ▾';
+    el.appendChild(chev);
+    return el;
+  };
+
   const decorateOneRow = (row) => {
     if (!row || !row.classList || !row.classList.contains('ag-row')) return;
     // Only decorate master rows. Skip detail/preview rows (they have no cells).
@@ -4421,15 +4675,44 @@
       }
     }
 
-    // User rules — match against the request preview text
+    // User rules — match against the request preview text. Rank matches by
+    // severity and collapse to a top chip + "+N" overflow chip (item 2.5)
+    // rather than one chip per matched rule. Both are clickable (item 2.3):
+    // the top chip opens straight to ITS rule's evidence+actions; "+N" opens
+    // the full ranked list, each entry drilling into its own evidence+actions
+    // the same way. ruleMatchActivators holds the per-chip click callbacks —
+    // populated here (closure-capturing rankedRules/previewText, already in
+    // hand) and consumed by the wiring pass below, by index (data-rq-idx),
+    // once the chip HTML has actually landed in the DOM.
     const ruleMatches = matchRules('queue', { request: previewText });
-    for (const rule of ruleMatches) {
+    const ruleMatchActivators = [];
+    if (ruleMatches.length) {
+      const rankedRules = rankRuleMatches(ruleMatches);
+      const topRule = rankedRules[0];
+      const overflow = rankedRules.length - 1;
+      const topIdx = ruleMatchActivators.push(
+        (el) => showRuleMatchMenu(el, rankedRules, previewText, false)
+      ) - 1;
       chips.push({
-        kind: rule.kind,
-        text: rule.label,
-        ruleId: rule.id,
-        hasActions: (rule.actions || []).length > 0
+        kind: topRule.kind,
+        text: topRule.label,
+        isRuleMatch: true,
+        rqIdx: topIdx,
+        ariaLabel: `${topRule.label} — ${topRule.kind} alert` +
+          (overflow > 0 ? `, ${overflow} more rule${overflow === 1 ? '' : 's'} matched` : '')
       });
+      if (overflow > 0) {
+        const moreIdx = ruleMatchActivators.push(
+          (el) => showRuleMatchMenu(el, rankedRules, previewText, true)
+        ) - 1;
+        chips.push({
+          kind: 'meta',
+          text: '+' + overflow,
+          isRuleMatch: true,
+          rqIdx: moreIdx,
+          ariaLabel: `${overflow} more matched rule${overflow === 1 ? '' : 's'} — show all`
+        });
+      }
     }
 
     if (!chips.length) {
@@ -4454,13 +4737,36 @@
     if (target && !target.querySelector('.ch-queue-chips')) {
       const strip = document.createElement('span');
       strip.className = 'ch-queue-chips';
-      strip.innerHTML = chips.map(c => renderChipHtml(c)).join('');
+      // System chips (child/elder/priority/task-age — UNCHANGED by item 2.5)
+      // render via the existing combined-HTML-string path; the ranked
+      // rule-match chips (top + "+N") are appended afterwards as real
+      // elements (buildRuleMatchChipEl above) — mixing innerHTML then
+      // appendChild on the same node is standard DOM (Medicus's own page
+      // does this constantly) and keeps the rule-match chips last, matching
+      // their position in `chips` (system chips are always pushed first).
+      const systemChips = chips.filter(c => !c.isRuleMatch);
+      const ruleMatchChips = chips.filter(c => c.isRuleMatch);
+      strip.innerHTML = systemChips.map(c => renderChipHtml(c)).join('');
+      ruleMatchChips.forEach(c => strip.appendChild(buildRuleMatchChipEl(c)));
       target.insertBefore(strip, target.firstChild);
-      // Wire action menu handlers onto chips that have actions
+      // Wire action menu handlers onto system chips that have actions
+      // (child/elder/priority/task-age + any other plain ruleId chip) —
+      // UNCHANGED from before item 2.5.
       strip.querySelectorAll('[data-rule-id]').forEach(el => {
         el.addEventListener('click', (e) => {
           e.preventDefault(); e.stopPropagation();
           showActionMenu(el, el.dataset.ruleId);
+        });
+      });
+      // Wire the ranked rule-match chips (top + "+N") — item 2.3/2.5. Enter/
+      // Space activate too (role="button" chips, per plan a11y requirement).
+      strip.querySelectorAll('[data-rq-idx]').forEach(el => {
+        const activator = ruleMatchActivators[Number(el.dataset.rqIdx)];
+        if (!activator) return;
+        const activate = (e) => { e.preventDefault(); e.stopPropagation(); activator(el); };
+        el.addEventListener('click', activate);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') activate(e);
         });
       });
     }
@@ -4506,6 +4812,15 @@
 
   const refreshQueueChips = () => {
     log('queue: refreshQueueChips, rows=' + _queueRowUuids.size);
+    // Item 2.5 (TRIAGE-LENS-2026-07-02.md): every churn cycle wipes and
+    // rebuilds ALL chip nodes (CLAUDE.md rule #3), so a chip-anchored popover
+    // (the rule-match menu, or the older per-chip action menu) left open
+    // across a churn can end up pointing at a dead anchor. Close it rather
+    // than leave it floating over nothing — cheap, and applies to either
+    // menu since both share the activeActionMenu/activeAnchorEl singleton.
+    if (activeActionMenu && activeAnchorEl && !activeAnchorEl.isConnected) {
+      closeActionMenu();
+    }
     if (queueObserver) queueObserver.disconnect();
     queueScope().querySelectorAll('.ch-queue-chips, .ch-q-mon, .ch-q-result').forEach(s => s.remove());
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —

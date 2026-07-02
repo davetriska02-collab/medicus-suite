@@ -103,11 +103,26 @@ class El {
     this._text = '';
     this._innerHTML = null;
     this._listeners = {};
+    // showRuleMatchMenu (items 2.1/2.3/2.5) positions its popover via
+    // menu.style.{position,top,left,zIndex} — a plain mutable object is
+    // enough; nothing here asserts on actual rendered position.
+    this.style = {};
     if (attrs) for (const k of Object.keys(attrs)) this.setAttribute(k, attrs[k]);
   }
   setAttribute(name, value) {
     if (name === 'class') this.classes = String(value).split(/\s+/).filter(Boolean);
     else this.attrs[name] = String(value);
+    // Real DOM reflects data-* attributes into .dataset (kebab-case ->
+    // camelCase) bidirectionally. The rule-match chip wiring (items 2.1/
+    // 2.3/2.5) sets data-rq-idx via setAttribute (so the [data-rq-idx]
+    // attribute-selector querySelectorAll below still finds it) and reads it
+    // back via el.dataset.rqIdx — mirror that one-way reflection here so
+    // both call sites work against this fake DOM the same way they do on a
+    // real page.
+    if (name.indexOf('data-') === 0) {
+      const camel = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      this.dataset[camel] = String(value);
+    }
   }
   getAttribute(name) {
     if (name === 'class') return this.classes.join(' ');
@@ -201,7 +216,20 @@ class El {
   addEventListener(type, fn) {
     (this._listeners[type] = this._listeners[type] || []).push(fn);
   }
+  removeEventListener() {}
   dispatchEvent() {}
+  // Real element.click() dispatches a click event to registered listeners —
+  // used below to simulate a GP clicking a rule-match/menu chip without
+  // needing a real click-event pipeline.
+  click() {
+    (this._listeners.click || []).forEach((fn) => fn({ preventDefault() {}, stopPropagation() {} }));
+  }
+  // Items 2.1/2.3/2.5's showRuleMatchMenu positions the popover off the
+  // anchor's rect — a fixed zero rect is fine, nothing here asserts on
+  // pixel position.
+  getBoundingClientRect() {
+    return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+  }
   querySelector(sel) {
     return findFirst(this, sel);
   }
@@ -280,6 +308,24 @@ function makeDocument(rootEl) {
     createElement(tag) {
       return new El(tag);
     },
+    // renderRuleMenuActionItems (items 2.1/2.3/2.5) builds its action-item
+    // list in a DocumentFragment before appending it once. A plain container
+    // El is a faithful-enough stand-in here: unlike a real fragment it stays
+    // as an extra node in the tree rather than being unwrapped on insertion,
+    // but querySelector/querySelectorAll (used by every assertion in this
+    // harness) recurse through descendants regardless of nesting depth, so
+    // that difference is invisible to the tests.
+    createDocumentFragment() {
+      return new El('#fragment');
+    },
+    // buildRuleMatchChipEl/buildEvidenceEl (items 2.1/2.3/2.5) build via
+    // createTextNode rather than innerHTML (the evidence text is untrusted
+    // row-derived content — CLAUDE.md's textContent-only discipline).
+    createTextNode(text) {
+      const t = new El('#text');
+      t.textContent = text;
+      return t;
+    },
     querySelector(sel) {
       return findFirst(body, sel);
     },
@@ -298,6 +344,12 @@ function makeDocument(rootEl) {
       }
       return false;
     },
+    // closeActionMenu/armActionMenuDismissal (items 2.1/2.3/2.5) register/
+    // unregister outside-click and Esc listeners on `document` — no-ops here
+    // since this harness drives the menu functions directly rather than
+    // simulating a real click-outside/keydown event pipeline.
+    addEventListener() {},
+    removeEventListener() {},
   };
 }
 
@@ -401,6 +453,32 @@ const parts = [
   extract(/const applyQueueFocusClass = \(\) => \{[\s\S]*?\n {2}\};/, 'applyQueueFocusClass'),
   extract(/const renderQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'renderQueueStatusBar'),
   extract(/const updateQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'updateQueueStatusBar'),
+  // Items 2.1/2.3/2.5 (TRIAGE-LENS-2026-07-02.md) — ranked/collapsed
+  // rule-match chips (decorateOneRow's rule-chip section) + the rule-match
+  // evidence/actions menu they open.
+  extract(/const RULE_KIND_RANK = \{[\s\S]*?\};/, 'RULE_KIND_RANK'),
+  extract(/const rankRuleMatches = \(rules\) =>[\s\S]*?\.map\(\(x\) => x\.r\);/, 'rankRuleMatches'),
+  extract(/const buildRuleMatchChipEl = \(chip\) => \{[\s\S]*?\n {2}\};/, 'buildRuleMatchChipEl'),
+  extract(/let activeActionMenu = null;[\s\S]*?let activeAnchorEl = null;/, 'activeActionMenu/activeAnchorEl state'),
+  extract(/const closeActionMenu = \(\) => \{[\s\S]*?\n {2}\};/, 'closeActionMenu'),
+  extract(/const onDocClickForMenu = \(e\) => \{[\s\S]*?\n {2}\};/, 'onDocClickForMenu'),
+  extract(/const onKeydownForMenu = \(e\) => \{[\s\S]*?\n {2}\};/, 'onKeydownForMenu'),
+  extract(/const onScrollForMenu = \(\) => closeActionMenu\(\);/, 'onScrollForMenu'),
+  extract(/const armActionMenuDismissal = \(\) => \{[\s\S]*?\n {2}\};/, 'armActionMenuDismissal'),
+  extract(/const isSafeActionUrl = \(url\) => \{[\s\S]*?\n {2}\};/, 'isSafeActionUrl'),
+  extract(/const executeAction = \(action, anchorEl, menuEl\) => \{[\s\S]*?\n {2}\};/, 'executeAction'),
+  extract(/const buildEvidenceEl = \(rule, previewText\) => \{[\s\S]*?\n {2}\};/, 'buildEvidenceEl'),
+  extract(/const RULE_MENU_ACTION_ICONS = \{[\s\S]*?\};/, 'RULE_MENU_ACTION_ICONS'),
+  extract(/const renderRuleMenuActionItems = \(rule\) => \{[\s\S]*?\n {2}\};/, 'renderRuleMenuActionItems'),
+  extract(
+    /const renderRuleMenuDetail = \(rule, previewText, rules, showBack\) => \{[\s\S]*?\n {2}\};/,
+    'renderRuleMenuDetail'
+  ),
+  extract(/const renderRuleMenuList = \(rules, previewText\) => \{[\s\S]*?\n {2}\};/, 'renderRuleMenuList'),
+  extract(
+    /const showRuleMatchMenu = \(anchor, rules, previewText, openList\) => \{[\s\S]*?\n {2}\};/,
+    'showRuleMatchMenu'
+  ),
 ];
 
 const EXPOSE = [
@@ -428,6 +506,13 @@ const EXPOSE = [
   'applyQueueFocusClass',
   'renderQueueStatusBar',
   'updateQueueStatusBar',
+  'rankRuleMatches',
+  'buildRuleMatchChipEl',
+  'closeActionMenu',
+  'showRuleMatchMenu',
+  'renderRuleMenuList',
+  'renderRuleMenuDetail',
+  'buildEvidenceEl',
 ];
 
 let sandbox = null;
@@ -476,9 +561,22 @@ if (!parts.some((p) => !p)) {
     // setTimeout(fn,0) when rAF is unavailable, but for deterministic assertions
     // this harness runs the callback synchronously instead (see file-header note).
     requestAnimationFrame: (fn) => fn(),
-    // Only used by onQueueStatusJumpClick to remove the flash class after 2.6s —
-    // a fire-and-forget visual cleanup this harness has no reason to wait out.
+    // Only used by onQueueStatusJumpClick to remove the flash class after 2.6s,
+    // and by armActionMenuDismissal (items 2.1/2.3/2.5) to defer registering the
+    // outside-click listener — neither is a real event pipeline this harness
+    // drives, so the deferred callback simply never runs (fire-and-forget).
     setTimeout: () => {},
+    // showRuleMatchMenu (items 2.1/2.3/2.5) positions the popover off
+    // window.innerWidth and (de)registers a scroll-dismiss listener; the REAL
+    // shared matcher is wired in as TriageLensMatch so buildEvidenceEl's
+    // window.TriageLensMatch.ruleMatchEvidence(...) call exercises the actual
+    // rule-match.js logic under test, not a stub.
+    window: {
+      innerWidth: 1200,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      TriageLensMatch: require('./content-scripts/triage-lens/rule-match.js'),
+    },
   };
   vm.createContext(sandbox);
   try {
@@ -503,6 +601,8 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.updateQueueStatusBar === 'function', 'updateQueueStatusBar compiled and callable');
     check(typeof sandbox.onQueueStatusJumpClick === 'function', 'onQueueStatusJumpClick compiled and callable');
     check(typeof sandbox.onQueueStatusFocusClick === 'function', 'onQueueStatusFocusClick compiled and callable');
+    check(typeof sandbox.rankRuleMatches === 'function', 'rankRuleMatches compiled and callable');
+    check(typeof sandbox.showRuleMatchMenu === 'function', 'showRuleMatchMenu compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -1587,6 +1687,255 @@ if (sandbox) {
       'clicking the (disabled, but content.js does not rely on the DOM disabled attribute alone) jump handler with nothing to jump to is a safe no-op'
     );
     check(!rowCalm.master.classes.includes('ch-q-status-flash'), 'no-op click: the calm row is never flashed');
+  }
+
+  // ============================================================
+  // Layer 14 — ranked/collapsed rule-match chips + their evidence menu
+  // (items 2.1/2.3/2.5, TRIAGE-LENS-2026-07-02.md)
+  // ============================================================
+  console.log(
+    '\nLayer 14: rule-match chips ranked red<amber<info, collapsed to top+"+N", clickable menu with evidence + list-all'
+  );
+
+  const RM = require('./content-scripts/triage-lens/rule-match.js');
+  function mkRule(id, kind, label, patterns) {
+    return RM.compileRule({
+      id,
+      label,
+      kind,
+      enabled: true,
+      regex: false,
+      patterns,
+      fields: ['request'],
+      pages: ['queue'],
+      builtin: true,
+      actions: [{ type: 'note', label: 'Clinical note', text: 'n/a' }],
+    });
+  }
+  const ruleRed = mkRule('r-red', 'red', 'Sepsis flag', ['fever']);
+  const ruleAmber = mkRule('r-amber', 'amber', 'UTI query', ['waterworks']);
+  const ruleInfo = mkRule('r-info', 'info', 'Admin query', ['sick note']);
+  const multiRulePreviewText = 'Patient has a fever and waterworks symptoms, also wants a sick note.';
+
+  {
+    // ---- pure ranking: red < amber < info regardless of match order ----
+    const ranked = sandbox.rankRuleMatches([ruleAmber, ruleInfo, ruleRed]);
+    check(
+      ranked.map((r) => r.id).join(',') === 'r-red,r-amber,r-info',
+      `rankRuleMatches: red < amber < info (got ${ranked.map((r) => r.id).join(',')})`
+    );
+    // Stable within the same severity: original relative order preserved.
+    const ranked2 = sandbox.rankRuleMatches([ruleAmber, ruleRed, ruleInfo, ruleRed]);
+    check(
+      ranked2[0].id === 'r-red' && ranked2[1].id === 'r-red',
+      'rankRuleMatches: ties on severity keep their original relative order (stable sort)'
+    );
+  }
+
+  {
+    // ---- decorateOneRow: multiple matched rules -> top chip + "+N" ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleAmber, ruleInfo, ruleRed]; // deliberately NOT pre-sorted
+    const rowId = 'e0000000-0000-4000-8000-000000000001';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(
+      ruleChips.length === 2,
+      `multi-rule row: exactly 2 rule-match chips rendered (top + "+N"), got ${ruleChips.length}`
+    );
+    const [topChip, overflowChip] = ruleChips;
+    check(
+      topChip && topChip.classes.includes('ch-chip-red'),
+      `top chip is the highest-severity match (red), got classes: ${topChip && topChip.classes.join(' ')}`
+    );
+    check(topChip.textContent.includes('Sepsis flag'), "top chip shows the top-ranked rule's label");
+    check(topChip.getAttribute('data-rq-idx') === '0', 'top chip carries data-rq-idx="0"');
+    check(topChip.getAttribute('role') === 'button', 'top chip has role="button" (a11y requirement)');
+    check(topChip.getAttribute('tabindex') === '0', 'top chip has tabindex="0" (a11y requirement)');
+    check(
+      /Sepsis flag.*red alert.*2 more rules matched/.test(topChip.getAttribute('aria-label') || ''),
+      `top chip aria-label names the rule, its severity, and the overflow count (got: ${topChip.getAttribute('aria-label')})`
+    );
+    check(
+      overflowChip && overflowChip.classes.includes('ch-chip-meta') && overflowChip.textContent.includes('+2'),
+      `overflow chip reads "+2" with the meta (outline) kind, got classes/text: ${overflowChip && overflowChip.classes.join(' ')} / ${overflowChip && overflowChip.textContent}`
+    );
+    check(
+      overflowChip.getAttribute('role') === 'button' && overflowChip.getAttribute('tabindex') === '0',
+      'overflow "+N" chip is also role="button" tabindex="0"'
+    );
+    check(
+      !wrap.querySelectorAll('[data-rule-id]').length,
+      'rule-match chips do NOT carry data-rule-id (kept distinct from the system-chip [data-rule-id] wiring, no double-handler risk)'
+    );
+
+    // ---- end-to-end: an actual click on the RENDERED chip (not a direct
+    // showRuleMatchMenu(...) call) drives decorateOneRow's own wiring —
+    // dataset.rqIdx lookup -> ruleMatchActivators[idx] -> showRuleMatchMenu —
+    // proving the wiring pass itself (not just the menu-building functions
+    // in isolation) is correct. ----
+    topChip.click();
+    const openedMenu = sandbox.document.querySelector('.ch-rule-menu');
+    check(!!openedMenu, "clicking the RENDERED top chip opens the rule-match popover via decorateOneRow's own wiring");
+    const openedHead = openedMenu && openedMenu.querySelector('.ch-action-menu-head');
+    const openedBadge = openedHead && openedHead.querySelector('.ch-chip');
+    check(
+      openedBadge && openedBadge.textContent === 'Sepsis flag',
+      `clicking the top chip opens detail for the TOP rule specifically (got: ${openedBadge && openedBadge.textContent})`
+    );
+    sandbox.closeActionMenu();
+
+    overflowChip.click();
+    const openedListMenu = sandbox.document.querySelector('.ch-rule-menu');
+    check(
+      openedListMenu && openedListMenu.querySelectorAll('.ch-rule-menu-list-item').length === 3,
+      'clicking the RENDERED "+N" chip opens the list-all view with every matched rule, via the real click wiring'
+    );
+    sandbox.closeActionMenu();
+  }
+
+  {
+    // ---- decorateOneRow: single matched rule -> top chip only, no "+N" ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleRed];
+    const rowId = 'e0000000-0000-4000-8000-000000000002';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(ruleChips.length === 1, `single-rule row: exactly 1 rule-match chip (no overflow), got ${ruleChips.length}`);
+    check(
+      !/more rule/.test(ruleChips[0].getAttribute('aria-label') || ''),
+      'single-rule row: aria-label has no "more rules matched" suffix'
+    );
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- "+N" click opens the list-all view with every matched rule ----
+    freshCaches();
+    sandbox.document = makeDocument(new El('div', {}));
+    const anchor = new El('span');
+    sandbox.showRuleMatchMenu(anchor, [ruleRed, ruleAmber, ruleInfo], multiRulePreviewText, true);
+    const menu = sandbox.document.querySelector('.ch-rule-menu');
+    check(!!menu, 'showRuleMatchMenu(openList=true): a .ch-rule-menu popover was appended to document.body');
+    check(menu.getAttribute('role') === 'menu', 'popover has role="menu"');
+    const listItems = menu.querySelectorAll('.ch-rule-menu-list-item');
+    check(listItems.length === 3, `list view: one row per matched rule (got ${listItems.length})`);
+    const labels = listItems.map((i) => i.textContent).join(' | ');
+    check(
+      labels.includes('Sepsis flag') && labels.includes('UTI query') && labels.includes('Admin query'),
+      `list view: every matched rule's label is present (got: ${labels})`
+    );
+    listItems.forEach((i) => {
+      check(i.getAttribute('role') === 'menuitem', 'each list row has role="menuitem"');
+      check(i.getAttribute('tabindex') === '0', 'each list row has tabindex 0');
+    });
+
+    // Drilling into a list item shows that rule's own detail (evidence +
+    // actions) WITH a back button (came from the list). (This fake DOM's
+    // selector engine has no descendant combinator — `.a .b` is parsed as
+    // "has both classes on ONE element", not "a .b inside .a" — so drill
+    // down in two querySelector steps instead of one compound selector.)
+    listItems[1].click(); // UTI query
+    const detailHead = menu.querySelector('.ch-action-menu-head');
+    const detailBadge = detailHead && detailHead.querySelector('.ch-chip');
+    check(
+      detailBadge && detailBadge.textContent === 'UTI query',
+      `clicking a list row drills into ITS OWN rule's detail view (got badge: ${detailBadge && detailBadge.textContent})`
+    );
+    check(!!menu.querySelector('.ch-action-back'), 'detail view reached FROM the list carries a "Back" control');
+    const evidenceText = menu.querySelector('.ch-rule-menu-evidence-text');
+    check(
+      !!evidenceText && evidenceText.textContent.includes('waterworks'),
+      `drilled-into detail view shows evidence for the CLICKED rule (waterworks), got: ${evidenceText && evidenceText.textContent}`
+    );
+    const evidenceStrong = evidenceText && evidenceText.querySelector('strong');
+    check(!!evidenceStrong, 'evidence text highlights the matched term in a <strong> element');
+    check(
+      evidenceStrong && evidenceStrong.textContent === 'waterworks',
+      `the <strong> element wraps exactly the matched term (got "${evidenceStrong && evidenceStrong.textContent}")`
+    );
+
+    // Back returns to the list.
+    menu.querySelector('.ch-action-back').click();
+    check(
+      menu.querySelectorAll('.ch-rule-menu-list-item').length === 3,
+      'clicking "Back" from a drilled-into detail view returns to the full list'
+    );
+  }
+
+  {
+    // ---- top-chip click opens detail DIRECTLY (no list, no back button) ----
+    freshCaches();
+    sandbox.document = makeDocument(new El('div', {}));
+    const anchor = new El('span');
+    sandbox.showRuleMatchMenu(anchor, [ruleRed, ruleAmber], multiRulePreviewText, false);
+    const menu = sandbox.document.querySelector('.ch-rule-menu');
+    check(
+      menu.querySelectorAll('.ch-rule-menu-list-item').length === 0,
+      'top-chip open (openList=false): no list view rendered'
+    );
+    const topHead = menu.querySelector('.ch-action-menu-head');
+    const badge = topHead && topHead.querySelector('.ch-chip');
+    check(
+      badge && badge.textContent === 'Sepsis flag',
+      'top-chip open: detail view is for the TOP (highest-severity) rule directly'
+    );
+    check(!menu.querySelector('.ch-action-back'), 'top-chip open: no back button (nothing to go back to)');
+    const evidenceText = menu.querySelector('.ch-rule-menu-evidence-text');
+    check(
+      !!evidenceText && evidenceText.textContent.includes('fever'),
+      `top-chip open: evidence shown for the top rule (fever), got: ${evidenceText && evidenceText.textContent}`
+    );
+    check(
+      menu.querySelectorAll('.ch-action-menu-item').length === 1,
+      'detail view lists the rule\'s configured action(s) (one "note" action fixture)'
+    );
+
+    // A rule with NO textual match in the given previewText (defensive case —
+    // e.g. stale evidence after the request text changed) shows the "no
+    // matching text" fallback rather than throwing or showing nothing.
+    const ruleNoMatch = mkRule('r-nomatch', 'amber', 'Unrelated rule', ['xyzxyz-never-present']);
+    sandbox.showRuleMatchMenu(anchor, [ruleNoMatch], 'completely different text', false);
+    const menu2 = sandbox.document.querySelector('.ch-rule-menu');
+    check(
+      menu2.querySelector('.ch-rule-menu-evidence-empty') &&
+        /no matching text/i.test(menu2.querySelector('.ch-rule-menu-evidence-empty').textContent),
+      'no-match case: shows the "no matching text found" fallback instead of throwing'
+    );
+  }
+
+  {
+    // ---- evidence-line-uses-textContent: source-level guard that the
+    // request-text evidence path never builds via innerHTML (a prior
+    // attribute-injection XSS was fixed in this area; the request text is
+    // patient/reception-typed and untrusted). Grep-level assert per the
+    // TRIAGE-LENS-2026-07-02.md plan's explicit allowance for this check. ----
+    const buildEvidenceElSrc = (src.match(/const buildEvidenceEl = \(rule, previewText\) => \{[\s\S]*?\n {2}\};/) || [
+      '',
+    ])[0];
+    check(buildEvidenceElSrc.length > 0, 'buildEvidenceEl source located for the innerHTML guard');
+    check(
+      !/\.innerHTML/.test(buildEvidenceElSrc),
+      'buildEvidenceEl never assigns .innerHTML — evidence text is built with createElement/textContent/createTextNode only'
+    );
+    check(
+      /createTextNode|\.textContent\s*=/.test(buildEvidenceElSrc),
+      'buildEvidenceEl does use textContent/createTextNode to place the (untrusted) request-derived text'
+    );
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

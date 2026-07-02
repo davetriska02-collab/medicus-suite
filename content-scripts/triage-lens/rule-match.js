@@ -61,7 +61,57 @@
     return compiledRule._compiled.some((re) => re.test(text));
   }
 
-  const api = { compileRule, ruleMatchesText };
+  // ---- Match evidence (item 2.1, TRIAGE-LENS-2026-07-02.md) ----
+  // Built ON TOP of the SAME compiled pattern array ruleMatchesText tests
+  // against — same patterns, same order, same "first pattern that matches
+  // wins" — so this can never disagree with ruleMatchesText: evidence !==
+  // null exactly when ruleMatchesText(compiledRule, text) is true. Returns
+  // null when nothing matches, else:
+  //   term    — the matched substring exactly as it appears in `text`
+  //             (patterns are case-insensitive, so this preserves the
+  //             original text's casing/inflection, e.g. "Coughing").
+  //   start/end — character offsets of the match within `text`.
+  //   context — the sentence containing the match (bounded by the nearest
+  //             `.`/`!`/`?`/newline on each side, or the start/end of `text`
+  //             itself), trimmed. If `text` contains NO sentence-ending
+  //             punctuation anywhere (common in free-typed patient request
+  //             text), falls back to an ellipsised +/-80 character window
+  //             around the match instead.
+  const SENTENCE_BOUNDARY = /[.!?\n]/;
+  const CONTEXT_WINDOW = 80;
+
+  function matchContext(text, start, end) {
+    if (SENTENCE_BOUNDARY.test(text)) {
+      let left = start;
+      while (left > 0 && !SENTENCE_BOUNDARY.test(text[left - 1])) left--;
+      let right = end;
+      while (right < text.length && !SENTENCE_BOUNDARY.test(text[right])) right++;
+      if (right < text.length) right++; // include the terminating punctuation itself
+      return text.slice(left, right).trim();
+    }
+    const left = Math.max(0, start - CONTEXT_WINDOW);
+    const right = Math.min(text.length, end + CONTEXT_WINDOW);
+    let ctx = text.slice(left, right).trim();
+    if (left > 0) ctx = '…' + ctx;
+    if (right < text.length) ctx = ctx + '…';
+    return ctx;
+  }
+
+  function ruleMatchEvidence(compiledRule, text) {
+    if (!compiledRule || !compiledRule._compiled) return null;
+    const s = text == null ? '' : String(text);
+    for (const re of compiledRule._compiled) {
+      const m = re.exec(s);
+      if (m) {
+        const start = m.index;
+        const end = start + m[0].length;
+        return { term: m[0], start, end, context: matchContext(s, start, end) };
+      }
+    }
+    return null;
+  }
+
+  const api = { compileRule, ruleMatchesText, ruleMatchEvidence };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
