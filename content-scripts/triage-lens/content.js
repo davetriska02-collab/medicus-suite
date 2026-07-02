@@ -3811,15 +3811,27 @@
     // the lab flag) — lets us show an attributable chip instead of a generic one.
     const ruleLabel = sev.top && sev.top.ruleLabel ? sev.top.ruleLabel : null;
     const topName = sev.top ? sev.top.name : '';
+    // Item 2.6 (TRIAGE-LENS-2026-07-02.md trend arrows) — a bare arrow glyph appended
+    // to the SALIENT chip's own label when sev.top carries a usable prior (up/down
+    // only; 'same' gets no glyph — nothing to draw attention to). sev.top.prior is
+    // computed by evaluateReportSeverity (engine/result-severity.js, additive field);
+    // this is purely a display append, one character, and never changes which chip id
+    // renders. Only the chips below that actually show the analyte name/label have
+    // anywhere to put it — the plain "{count} abnormal" chip (no rule, no name in its
+    // shipped template) has no slot for it and is deliberately left unchanged.
+    const priorDir = sev.top && sev.top.prior && (sev.top.prior.dir === 'up' || sev.top.prior.dir === 'down')
+      ? sev.top.prior.dir
+      : null;
+    const trendArrow = priorDir === 'up' ? ' ↑' : priorDir === 'down' ? ' ↓' : '';
     // Clinical severity chips (urgent/abnormal) — highest priority, shown first
     if (sev.level === 'red' && sev.urgentCount > 0) {
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleUrgent',
-          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) }
+          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) + trendArrow }
         });
       } else {
-        chips.push({ id: 'queue.resultUrgent', vars: { name: topName, count: sev.urgentCount } });
+        chips.push({ id: 'queue.resultUrgent', vars: { name: topName + trendArrow, count: sev.urgentCount } });
       }
     } else if (sev.level === 'amber' && sev.abnormalCount > 0) {
       // Guard on abnormalCount > 0: `level` is ALSO raised to amber by a text-rule
@@ -3829,7 +3841,7 @@
       if (ruleLabel) {
         chips.push({
           id: 'queue.resultRuleAbnormal',
-          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) }
+          vars: { name: topName, rule: ruleLabel, label: composeResultRuleLabel(topName, ruleLabel) + trendArrow }
         });
       } else {
         chips.push({ id: 'queue.resultAbnormal', vars: { count: sev.abnormalCount } });
@@ -3879,6 +3891,170 @@
       });
     }
     return chips;
+  }
+
+  // Pure helper (item 2.2, TRIAGE-LENS-2026-07-02.md) — build the compact per-result
+  // detail array for the queue result-chip popover. Takes the normalised investigation
+  // report (engine/normalisers.js normaliseInvestigationReport) and the sev object
+  // returned by evaluateReportSeverity (engine/result-severity.js), including its
+  // ADDITIVE `flagged`/`reviewTop`/`noGrowthTop`/`comboTop` fields — never recomputes
+  // grading itself, just reshapes what's already been decided. Capped at 10 entries,
+  // filled in priority order: numeric urgent-flagged results, then numeric
+  // abnormal-flagged results, then the rule-fired (text-rule) review result, then the
+  // fired combo + calm noGrowth informational lines. Exported for unit testing via
+  // regex extraction — self-contained (nests its own small helpers), same pattern as
+  // selectResultChips' composeResultRuleLabel above.
+  function buildResultDetail(report, sevResult) {
+    const DETAIL_CAP = 10;
+    if (!sevResult || typeof sevResult !== 'object') return [];
+    const results = report && Array.isArray(report.results) ? report.results : [];
+    const out = [];
+    const pushCap = (entry) => {
+      if (entry && out.length < DETAIL_CAP) out.push(entry);
+    };
+
+    // Compose a rule's label with its threshold summary, e.g.
+    // "Critical high potassium (red ≥6.5)". comparator/threshold are the ADDITIVE
+    // fields computeRuleSev now carries (result-severity.js) — display-only.
+    const composeRuleThresholdLabel = (label, comparator, threshold, effSev) => {
+      if (!label) return null;
+      if ((comparator !== 'above' && comparator !== 'below') || !Number.isFinite(threshold)) return label;
+      const band = effSev === 'urgent' ? 'red' : 'amber';
+      const symbol = comparator === 'above' ? '≥' : '≤';
+      return label + ' (' + band + ' ' + symbol + threshold + ')';
+    };
+
+    // Direction for a numeric flagged entry: prefer the lab's own above/below range
+    // flags, then a rule's comparator (a rule can escalate a value the lab itself
+    // never flagged above/below), and only fall back to the bare 'urgent' lab flag
+    // (result.urgent — a distinct API field independent of range) when no direction
+    // is known at all.
+    const flagFor = (f) => {
+      if (f.isAbove) return 'above';
+      if (f.isBelow) return 'below';
+      if (f.ruleComparator === 'above') return 'above';
+      if (f.ruleComparator === 'below') return 'below';
+      if (f.urgent || f.effSev === 'urgent') return 'urgent';
+      return null;
+    };
+
+    const toEntry = (f) => ({
+      name: f.name || '',
+      value: f.value === undefined ? null : f.value,
+      unit: f.unit || null,
+      low: f.low === undefined ? null : f.low,
+      high: f.high === undefined ? null : f.high,
+      flag: flagFor(f),
+      date: f.date || null,
+      ruleLabel: composeRuleThresholdLabel(f.ruleLabel, f.ruleComparator, f.ruleThreshold, f.effSev),
+      prior: f.prior || null,
+    });
+
+    const flagged = Array.isArray(sevResult.flagged) ? sevResult.flagged : [];
+    // Tier 1 — urgent-flagged numeric results
+    flagged.filter((f) => f && f.effSev === 'urgent').forEach((f) => pushCap(toEntry(f)));
+    // Tier 2 — abnormal-flagged numeric results
+    flagged.filter((f) => f && f.effSev === 'abnormal').forEach((f) => pushCap(toEntry(f)));
+
+    // Tier 3 — rule-fired (text-rule) review result. evaluateReportSeverity only
+    // tracks the FIRST review outcome (reviewTop); look up the matching normalised
+    // result (by name) for a value/date to show, when still available.
+    if (sevResult.reviewTop && sevResult.reviewTop.name) {
+      const match = results.find((r) => r && r.name === sevResult.reviewTop.name);
+      pushCap({
+        name: sevResult.reviewTop.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: null,
+        date: (match && match.date) || null,
+        ruleLabel: sevResult.reviewTop.label || null,
+        prior: null,
+      });
+    }
+
+    // Tier 4 — informational lines: the fired combo (report-level, not tied to a
+    // single result row), then the calm noGrowth text-rule outcome.
+    if (sevResult.comboTop && sevResult.comboTop.label) {
+      pushCap({
+        name: sevResult.comboTop.label,
+        value: null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: sevResult.comboTop.level === 'red' ? 'urgent' : null,
+        date: null,
+        ruleLabel: null,
+        prior: null,
+      });
+    }
+    if (sevResult.noGrowthTop && sevResult.noGrowthTop.name) {
+      const match = results.find((r) => r && r.name === sevResult.noGrowthTop.name);
+      pushCap({
+        name: sevResult.noGrowthTop.name,
+        value: match && match.rawValue ? match.rawValue : null,
+        unit: null,
+        low: null,
+        high: null,
+        flag: null,
+        date: (match && match.date) || null,
+        ruleLabel: sevResult.noGrowthTop.label || null,
+        prior: null,
+      });
+    }
+
+    return out;
+  }
+
+  // Pure helper (item 2.2) — render one buildResultDetail() entry as a single display
+  // line, e.g. "K+ 6.2 mmol/L ↑ (3.5–5.3) · 12 Jun · rule: Critical high potassium
+  // (red ≥6.5) · was 4.1, 03 May". Exported for unit testing via regex extraction —
+  // self-contained (nests its own date formatter). The RESULT of this function must
+  // only ever be assigned via textContent, never innerHTML — the pieces it joins
+  // (analyte name, value, unit, rule label) are untrusted lab-report/config-derived
+  // strings (CLAUDE.md / TRIAGE-LENS-2026-07-02.md item 2.2 hard rule).
+  function formatDetailLine(entry) {
+    if (!entry || typeof entry !== 'object') return '';
+    const shortDate = (iso) => {
+      if (typeof iso !== 'string') return '';
+      const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return '';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mon = months[Number(m[2]) - 1];
+      return mon ? m[3] + ' ' + mon : '';
+    };
+    const GLYPH = { urgent: '❗', above: '↑', below: '↓' };
+
+    let head = String(entry.name || '').trim();
+    const hasValue = entry.value !== null && entry.value !== undefined && entry.value !== '';
+    if (hasValue) {
+      head += (head ? ' ' : '') + String(entry.value);
+      if (entry.unit) head += ' ' + entry.unit;
+    }
+    if (entry.flag && GLYPH[entry.flag]) head += ' ' + GLYPH[entry.flag];
+    const hasLow = entry.low !== null && entry.low !== undefined;
+    const hasHigh = entry.high !== null && entry.high !== undefined;
+    if (hasLow || hasHigh) {
+      head += ' (' + (hasLow ? entry.low : '?') + '–' + (hasHigh ? entry.high : '?') + ')';
+    }
+
+    const segs = [];
+    const headTrimmed = head.trim();
+    if (headTrimmed) segs.push(headTrimmed);
+    const d = shortDate(entry.date);
+    if (d) segs.push(d);
+    if (entry.ruleLabel) segs.push('rule: ' + entry.ruleLabel);
+    if (
+      entry.prior &&
+      (entry.prior.dir === 'up' || entry.prior.dir === 'down' || entry.prior.dir === 'same') &&
+      entry.prior.value !== null &&
+      entry.prior.value !== undefined
+    ) {
+      const pd = shortDate(entry.prior.date);
+      segs.push('was ' + entry.prior.value + (pd ? ', ' + pd : ''));
+    }
+    return segs.join(' · ');
   }
 
   // Sentinel returned by computeQueueRowResult (item 1.1 leg D) to distinguish
@@ -3981,6 +4157,17 @@
       log('queue-result: evaluateReportSeverity threw', e.message);
       return QUEUE_RESULT_FETCH_ERROR;
     }
+    // Item 2.2 — build the compact per-result detail array for the queue chip popover
+    // from the SAME already-fetched/normalised report + already-computed sev (no extra
+    // fetch, no re-evaluation). Attached directly onto the returned sev object so it
+    // rides along wherever `sev` is cached/returned (see the scheduler below, which
+    // additionally mirrors it onto the cache entry as `.detail`) without changing this
+    // function's return contract (still `sev`, null, or the error sentinel — the
+    // sentinel paths above all return before this point, so an error row can never
+    // carry a numeric detail array; its popover is the fixed explanation text).
+    try {
+      if (sev && typeof sev === 'object') sev.detail = buildResultDetail(report, sev);
+    } catch (e) { log('queue-result: buildResultDetail failed', e.message); }
     log('queue-result: sev for', taskUuid, '=', sev && sev.level, '(rules=' + resultRules.length + ')');
     return sev;
   };
@@ -3995,7 +4182,10 @@
     '<span class="ch-chip ch-chip-meta ch-chip-error" role="note" ' +
     'title="Medicus Suite couldn’t check this result — will retry">?</span>';
 
-  const injectResultChip = (rowIndex, sev, isError) => {
+  // taskUuid (item 2.2) is threaded through by every call site (initial post-fetch
+  // inject, the scheduler's fresh-cache-hit path, and reinjectCachedResultChips) so
+  // the popover click handler can read this row's cached detail at click time.
+  const injectResultChip = (rowIndex, sev, taskUuid, isError) => {
     if (!sev && !isError) return;
     const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
     if (!row) return;
@@ -4019,6 +4209,7 @@
     const span = document.createElement('span');
     span.className = host.inPreview ? 'ch-q-result' : 'ch-q-result ch-q-result-inline';
     span.setAttribute('role', 'note');
+    if (taskUuid) span.dataset.chTaskUuid = taskUuid;
     span.innerHTML = builtHtml.join('');
     // Always PREPEND. Appending to the end of the (Vue-managed) patient-name cell
     // gets reconciled away by Medicus's renderer on its next re-render; prepending
@@ -4026,10 +4217,142 @@
     // width-cap on .ch-q-result-inline, not by position.
     host.target.insertBefore(span, host.target.firstChild);
     log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview, isError ? '(error)' : '');
+    const rendered = span.querySelectorAll('.ch-chip');
     if (built) {
-      const rendered = span.querySelectorAll('.ch-chip');
       built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
     }
+    // Item 2.2 — make each rendered chip clickable: opens a singleton popover showing
+    // this row's cached detail lines. All chips in this host share the SAME popover
+    // content (the row's whole detail set, not per-chip filtering) — simpler and still
+    // correct, since a row typically shows 1-2 chips drawn from the same report. The
+    // grey "?" error chip gets the SAME wiring: its popover renders the fixed
+    // explanation text instead of detail lines (isError is threaded through so the
+    // toggle never shows a numeric detail array for a failed check — there isn't one
+    // cached for error entries anyway).
+    // Wired here (not via delegation) so both injection paths — the initial
+    // fetch-then-inject call below and reinjectCachedResultChips' durable re-inject —
+    // go through this SAME function and always get a live listener on the fresh node
+    // Vue's re-render just replaced (delegated listeners on a still-live ancestor would
+    // also work, but per-node keeps this identical to the existing action-menu pattern).
+    if (taskUuid) {
+      rendered.forEach((chipEl) => {
+        chipEl.classList.add('ch-chip-actionable');
+        chipEl.setAttribute('role', 'button');
+        chipEl.setAttribute('tabindex', '0');
+        chipEl.addEventListener('click', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          toggleResultDetailPopover(chipEl, taskUuid, !!isError);
+        });
+        chipEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault(); e.stopPropagation();
+            toggleResultDetailPopover(chipEl, taskUuid, !!isError);
+          }
+        });
+      });
+    }
+  };
+
+  // ---- Result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Singleton, document.body-hosted (same convention as the action menu above). Built
+  // with createElement/textContent ONLY — the lines are derived from lab-report data
+  // (untrusted), so no innerHTML anywhere on this path (CLAUDE.md / plan hard rule).
+  let _resultDetailPopoverEl = null;
+  let _resultDetailPopoverAnchor = null;
+
+  const closeResultDetailPopover = () => {
+    if (_resultDetailPopoverEl) {
+      _resultDetailPopoverEl.remove();
+      _resultDetailPopoverEl = null;
+    }
+    _resultDetailPopoverAnchor = null;
+    document.removeEventListener('click', onDocClickForResultPopover, true);
+    document.removeEventListener('keydown', onKeydownForResultPopover, true);
+    window.removeEventListener('scroll', closeResultDetailPopover, true);
+  };
+  const onDocClickForResultPopover = (e) => {
+    if (!_resultDetailPopoverEl) return;
+    if (_resultDetailPopoverEl.contains(e.target)) return;
+    if (_resultDetailPopoverAnchor && _resultDetailPopoverAnchor.contains(e.target)) return;
+    closeResultDetailPopover();
+  };
+  const onKeydownForResultPopover = (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') closeResultDetailPopover();
+  };
+
+  // Fixed explanation shown when the grey "?" error chip is clicked (item 2.2 —
+  // the error chip gets a popover too). Plain, non-alarming, and honest about the
+  // retry behaviour: the scheduler re-attempts an error entry after the short
+  // _RESULT_ERROR_TTL, with no user action needed.
+  const RESULT_ERROR_POPOVER_TEXT =
+    'Medicus Suite couldn’t check this result — the fetch or evaluation failed. ' +
+    'This is usually transient (network hiccup, Medicus API blip). ' +
+    'It retries automatically; the chip updates when a retry succeeds.';
+
+  // Build the popover body with createElement/textContent only — no innerHTML of any
+  // lab-derived string. `detail` is the array built by buildResultDetail; each line's
+  // TEXT comes from formatDetailLine, assigned via textContent only. isError builds
+  // the fixed error explanation instead (never a numeric detail array — error cache
+  // entries don't carry one).
+  const buildResultDetailPopoverEl = (detail, isError) => {
+    const el = document.createElement('div');
+    el.className = 'ch-result-popover';
+    el.setAttribute('role', 'dialog');
+    if (isError) {
+      const line = document.createElement('div');
+      line.className = 'ch-result-popover-line ch-result-popover-error';
+      line.textContent = RESULT_ERROR_POPOVER_TEXT;
+      el.appendChild(line);
+      return el;
+    }
+    if (!Array.isArray(detail) || !detail.length) {
+      const empty = document.createElement('div');
+      empty.className = 'ch-result-popover-empty';
+      empty.textContent = 'No detail available.';
+      el.appendChild(empty);
+      return el;
+    }
+    detail.forEach((entry) => {
+      const line = document.createElement('div');
+      line.className = 'ch-result-popover-line' + (entry.flag ? ' ch-result-popover-line-' + entry.flag : '');
+      line.textContent = formatDetailLine(entry);
+      el.appendChild(line);
+    });
+    return el;
+  };
+
+  // Toggle: clicking the SAME open anchor again closes it; clicking any other chip (or
+  // a fresh open) closes whatever was open and opens the new one. `taskUuid` is read
+  // fresh from _queueResultCache at click time (not a stale closure), so a detail
+  // array that changed since inject (config/cache invalidation) is never shown stale.
+  // The error state is ALSO re-read from the live cache entry (OR'd with the inject-time
+  // flag): if the entry has flipped to error since inject, never show a stale detail
+  // array for a row whose current state is "couldn't check".
+  const toggleResultDetailPopover = (anchorEl, taskUuid, isError) => {
+    if (_resultDetailPopoverEl && _resultDetailPopoverAnchor === anchorEl) {
+      closeResultDetailPopover();
+      return;
+    }
+    closeResultDetailPopover();
+    const entry = _queueResultCache.get(taskUuid);
+    const showError = !!isError || !!(entry && entry.error);
+    const detail = !showError && entry && Array.isArray(entry.detail) ? entry.detail : [];
+    const popover = buildResultDetailPopoverEl(detail, showError);
+    const r = anchorEl.getBoundingClientRect();
+    popover.style.position = 'fixed';
+    popover.style.top = (r.bottom + 4) + 'px';
+    popover.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+    popover.style.zIndex = '2147483647';
+    document.body.appendChild(popover);
+    _resultDetailPopoverEl = popover;
+    _resultDetailPopoverAnchor = anchorEl;
+    // Dismiss on outside click, Esc, or scroll (matches the action-menu's deferred
+    // listener-attach so the click that OPENED the popover doesn't also close it).
+    setTimeout(() => {
+      document.addEventListener('click', onDocClickForResultPopover, true);
+      document.addEventListener('keydown', onKeydownForResultPopover, true);
+      window.addEventListener('scroll', closeResultDetailPopover, true);
+    }, 0);
   };
 
   // Re-inject result chips straight from the per-task cache, keyed by each row's own
@@ -4064,7 +4387,7 @@
       if (entry.sev === null && !entry.error) return;
       const ttl = entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
       if (!entry.ts || (Date.now() - entry.ts) > ttl) return;
-      injectResultChip(rowIndex, entry.sev, !!entry.error);
+      injectResultChip(rowIndex, entry.sev, taskUuid, !!entry.error);
       n++;
     });
     if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
@@ -4476,7 +4799,7 @@
         const entryTtl = entry && entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
         const fresh = entry && entry.sev !== undefined && entry.ts && (Date.now() - entry.ts) <= entryTtl;
         if (fresh) {
-          injectResultChip(rowIndex, entry.sev, !!entry.error);
+          injectResultChip(rowIndex, entry.sev, taskUuid, !!entry.error);
         } else {
           if (_resultFetchCount >= _RESULT_FETCH_MAX) continue; // skip, don't throw
           _resultFetchCount++;
@@ -4486,6 +4809,15 @@
             const e2 = _queueResultCache.get(taskUuid);
             e2.sev = isError ? null : sev;
             e2.error = isError;
+            // Item 2.2 — mirror the detail array (built inside computeQueueRowResult,
+            // attached to sev.detail) onto the cache entry itself, alongside .sev, so
+            // the popover click handler can read it straight off the cache without
+            // reaching through .sev (and so it stays in lockstep with whatever .sev
+            // this pass just wrote — see toggleResultDetailPopover above). An ERROR
+            // result never carries one (the sentinel returns before the detail attach
+            // in computeQueueRowResult), so an error entry's detail is always cleared
+            // here — its popover is the fixed explanation text, never stale numbers.
+            e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
             // An error entry always gets the short _RESULT_ERROR_TTL retry
             // window (via a fresh ts — the fresh-check above applies
             // _RESULT_ERROR_TTL to it). A definitive-null (disabled/unmatched)
@@ -4494,7 +4826,7 @@
             // one-off null blanked the row for 5 minutes.
             e2.ts = (!isError && sev === null) ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
-          injectResultChip(rowIndex, isError ? null : sev, isError);
+          injectResultChip(rowIndex, isError ? null : sev, taskUuid, isError);
           // Item 1.2: a row just moved out of "checking" (cache entry written
           // above) — refresh the status bar so the "checking N…" count steps
           // down live as the fetch pass progresses, not only once per grid
@@ -4826,6 +5158,13 @@
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
+    // Item 2.2 — the wipe above just removed every .ch-q-result chip, including any
+    // node the detail popover is anchored to. A popover whose anchor no longer exists
+    // must close rather than linger detached/mis-positioned; reinjectCachedResultChips
+    // below will supply a fresh anchor if the GP reopens it.
+    if (_resultDetailPopoverAnchor && !document.contains(_resultDetailPopoverAnchor)) {
+      closeResultDetailPopover();
+    }
     queueScope().querySelectorAll('.ag-row').forEach(r => { delete r.dataset[QUEUE_DECORATED_KEY]; });
     decorateQueueRows();
     // Restore result chips synchronously from the per-task cache via each row's row-id.
@@ -5084,8 +5423,10 @@
     watchConfig(() => {
       // Config changed — invalidate cached result severities so edited/enabled
       // result rules are recomputed on the next pass (not re-injected stale),
-      // then wipe + redo queue chips and re-render the HUD.
-      for (const entry of _queueResultCache.values()) { entry.sev = undefined; entry.ts = 0; }
+      // then wipe + redo queue chips and re-render the HUD. .detail rides on the
+      // same cache entry as .sev (item 2.2) — clear it too so a stale popover
+      // built under the old config can't linger once .sev is recomputed.
+      for (const entry of _queueResultCache.values()) { entry.sev = undefined; entry.ts = 0; entry.detail = undefined; }
       // The memoised chip HTML is config-derived too — drop it so edited labels/
       // kinds re-render rather than serving the stale cached string.
       _chipHtmlMemo.clear();

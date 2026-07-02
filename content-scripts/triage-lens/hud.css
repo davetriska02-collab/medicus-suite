@@ -24,7 +24,8 @@
 .ch-rule-menu,
 .ch-oir-toast,
 .ch-row-sev-red,
-.ch-row-sev-amber {
+.ch-row-sev-amber,
+.ch-result-popover {
   /* Surfaces */
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
@@ -1009,4 +1010,46 @@
 .ch-rule-menu-list-label {
   flex: 1;
   font-size: 12px;
+}
+
+/* ---- Result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md) ----
+   Appended to document.body, same anchoring convention as .ch-action-menu above. */
+.ch-result-popover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  min-width: 220px;
+  max-width: 340px;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-1);
+  padding: 8px 10px;
+}
+.ch-result-popover-line {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.ch-result-popover-line:last-child {
+  border-bottom: none;
+}
+.ch-result-popover-line-urgent {
+  color: var(--red);
+  font-weight: 600;
+}
+.ch-result-popover-line-above,
+.ch-result-popover-line-below {
+  color: var(--amber);
+}
+/* Error variant — the grey "?" chip's explanation (fetch/eval failed, retries
+   automatically). Grey like the .ch-chip-error family: informational, never
+   mistaken for a graded clinical line. */
+.ch-result-popover-error {
+  color: var(--text-4);
+}
+.ch-result-popover-empty {
+  color: var(--text-5);
+  font-style: italic;
+  font-size: 11px;
 }

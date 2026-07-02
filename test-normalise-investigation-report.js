@@ -227,6 +227,41 @@ console.log('\n--- History flag derivation ---');
   assert(r.history[1].flag === 'normal', 'prev value 4.8 within 4–11 → flag normal');
 }
 
+// ── History unit field (item 2.6, TRIAGE-LENS-2026-07-02.md trend arrows) ──────
+// ADDITIVE: previousResults entries have never been observed to carry their own
+// unit on real Medicus payloads (same analyte/test code as the parent, reported
+// over time) — history.unit inherits the parent result's unit unless the raw
+// entry explicitly states a different one, so extractPrior's unit guard
+// (engine/result-severity.js) passes in the ordinary case instead of always
+// failing closed for lack of data.
+console.log('\n--- History unit field (additive, item 2.6) ---');
+{
+  const out = normaliseInvestigationReport(makePayload([{ results: [wbcWithHistory] }], []));
+  const r = out.results[0];
+  assert(
+    r.history[0].unit === '× 10⁹/L' && r.history[1].unit === '× 10⁹/L',
+    'previousResults entries with no unit of their own inherit the parent result.unit'
+  );
+
+  const explicitUnitResult = {
+    ...wbcWithHistory,
+    previousResults: [
+      {
+        result: '12.3',
+        specimenCollectionDate: '2026-01-02 10:00:00',
+        formattedSpecimenCollectionDate: '02 Jan 26, 10:00',
+        id: 'prev-1',
+        resultUnit: 'mmol/L', // explicitly different from the parent's '× 10⁹/L'
+      },
+    ],
+  };
+  const out2 = normaliseInvestigationReport(makePayload([{ results: [explicitUnitResult] }], []));
+  assert(
+    out2.results[0].history[0].unit === 'mmol/L',
+    'an explicit resultUnit on a previousResults entry overrides the inherited parent unit'
+  );
+}
+
 // ── patientId fallback (data.patientId) ──────────────────────────────────────
 console.log('\n--- patientId fallback ---');
 {

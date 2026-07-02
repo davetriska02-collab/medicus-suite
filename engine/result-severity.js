@@ -254,12 +254,19 @@
 
   // ── Compute rule-derived severity for a single result ─────────────────────────
   // Deliberately does NOT import result-rules.js to avoid a content-world dep.
-  // Uses minimal inline guards only. Returns { sev, label }:
-  //   sev   — 'none' | 'abnormal' | 'urgent' (highest a matching rule produced)
-  //   label — the label of the rule that produced `sev` (for attributable chips), or null.
+  // Uses minimal inline guards only. Returns { sev, label, comparator, threshold }:
+  //   sev        — 'none' | 'abnormal' | 'urgent' (highest a matching rule produced)
+  //   label      — the label of the rule that produced `sev` (for attributable chips), or null.
+  //   comparator — ADDITIVE (item 2.2, TRIAGE-LENS-2026-07-02.md): the winning rule's
+  //                'above'/'below' comparator, or null. Display-only — read by the queue
+  //                detail popover to render a threshold summary ("red ≥6.5"); never
+  //                consumed by grading itself, so it cannot change what fires.
+  //   threshold  — ADDITIVE (item 2.2): the specific numeric threshold (red or amber,
+  //                whichever produced `sev`) that was crossed, or null. Same
+  //                display-only status as `comparator`.
   // `problems` (optional) is the patient's problem list for suppressIfProblem rules.
   function computeRuleSev(result, rules, problems) {
-    const NONE = { sev: 'none', label: null };
+    const NONE = { sev: 'none', label: null, comparator: null, threshold: null };
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     if (!result || typeof result !== 'object') return NONE;
 
@@ -268,6 +275,8 @@
 
     let best = 'none';
     let bestLabel = null;
+    let bestComparator = null;
+    let bestThreshold = null;
 
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
@@ -309,11 +318,47 @@
       if (SEV_ORDER[ruleSev] > SEV_ORDER[best]) {
         best = ruleSev;
         bestLabel = (typeof rule.label === 'string' && rule.label) || null;
+        bestComparator = rule.comparator;
+        bestThreshold = ruleSev === 'urgent' ? red : amber;
       }
       if (best === 'urgent') break; // can't go higher
     }
 
-    return { sev: best, label: bestLabel };
+    return { sev: best, label: bestLabel, comparator: bestComparator, threshold: bestThreshold };
+  }
+
+  // ── Extract the most recent PRIOR numeric value for trend display (item 2.6,
+  // TRIAGE-LENS-2026-07-02.md) ────────────────────────────────────────────────
+  // Pure, display-only — never consumed by grading. Looks at `result.history`
+  // (already built newest-first by normaliseInvestigationReport) and returns the
+  // most recent entry with a finite numeric value, PROVIDED its unit matches the
+  // current result's unit (case/whitespace-normalised) or both are absent.
+  //
+  // Deliberately conservative: if the found entry's unit differs from the
+  // current result's unit, this returns null (no arrow) rather than guessing —
+  // a full cross-unit conversion/guard is out of scope here (see A2/3.1 in the
+  // plan); showing a trend across two different units would be actively
+  // misleading, so silence is the safe failure mode.
+  // Returns { value, date, dir } | null, where dir is 'up' | 'down' | 'same'
+  // (current vs prior, epsilon-compared).
+  function normaliseUnitForCompare(u) {
+    return typeof u === 'string' ? u.trim().toLowerCase().replace(/\s+/g, ' ') : '';
+  }
+  function extractPrior(result) {
+    if (!result || typeof result !== 'object') return null;
+    if (!Number.isFinite(result.value)) return null;
+    if (!Array.isArray(result.history) || result.history.length === 0) return null;
+    // history is newest-first (normaliseInvestigationReport sorts it); the first
+    // entry with a finite value IS the most recent prior numeric value.
+    const priorEntry = result.history.find((h) => h && Number.isFinite(h.value));
+    if (!priorEntry) return null;
+    const curUnit = normaliseUnitForCompare(result.unit);
+    const priorUnit = normaliseUnitForCompare(priorEntry.unit);
+    if (curUnit !== priorUnit) return null; // includes "one absent, one present" — never a guess
+    const EPS = 1e-9;
+    const diff = result.value - priorEntry.value;
+    const dir = Math.abs(diff) < EPS ? 'same' : diff > 0 ? 'up' : 'down';
+    return { value: priorEntry.value, date: priorEntry.date || null, dir };
   }
 
   // ── Compute combo-rule outcome across a whole report ──────────────────────────
@@ -420,8 +465,24 @@
    *
    * top.ruleLabel — when the salient result's severity was RAISED by a rule (not the lab
    * flag), this carries that rule's label so the queue can render an attributable chip.
+   * top.prior — ADDITIVE (item 2.6, TRIAGE-LENS-2026-07-02.md): { value, date, dir } |
+   *             null from extractPrior(salient) — display-only trend data for the salient
+   *             result's chip arrow. Never affects grading.
+   *
+   * flagged — ADDITIVE (item 2.2, TRIAGE-LENS-2026-07-02.md), display-only: an array of
+   * per-result attribution entries, one per result whose effective severity is 'urgent'
+   * or 'abnormal' (in report order), for the queue detail popover. Each entry:
+   *   { index, name, value, unit, low, high, date, effSev, isAbove, isBelow, urgent,
+   *     ruleLabel, ruleComparator, ruleThreshold, prior }
+   * `index` is the result's position in report.results (for cross-referencing back to
+   * the full normalised result, e.g. its .history). ruleLabel/ruleComparator/
+   * ruleThreshold are only set when a rule (not the lab flag) drove this result's
+   * severity — same ruleDriven gate as top.ruleLabel. `prior` is extractPrior(result).
+   * This field is purely descriptive: it does not feed level/urgentCount/abnormalCount/
+   * top, all of which are computed exactly as before.
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
-   *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop }}
+   *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop,
+   *             flagged }}
    *
    * Combo-rule outcomes (kind:'combo') are evaluated across the WHOLE report (not per
    * result): a combo fires when ALL its conditions are satisfied by SOME result in the
@@ -457,6 +518,7 @@
       noGrowthTop: null,
       comboCount: 0,
       comboTop: null,
+      flagged: [],
     };
 
     try {
@@ -480,7 +542,12 @@
       let reviewTop = null;
       let noGrowthTop = null;
 
-      results.forEach((r) => {
+      // ADDITIVE (item 2.2) — per-result attribution for the queue detail popover.
+      // Populated alongside the existing loop below; does not influence any of the
+      // existing counters/tops.
+      const flagged = [];
+
+      results.forEach((r, i) => {
         if (!r || typeof r !== 'object') return;
 
         // Lab-derived severity
@@ -511,6 +578,29 @@
             firstAbnormal = r;
             firstAbnormalRuleLabel = ruleLabel;
           }
+        }
+
+        // ADDITIVE (item 2.2) — record every flagged result (not just the first),
+        // in report order, for the detail popover. Display-only; does not affect
+        // level/urgentCount/abnormalCount/top above.
+        if (effSev === 'urgent' || effSev === 'abnormal') {
+          flagged.push({
+            index: i,
+            name: r.name,
+            value: r.value,
+            unit: r.unit,
+            low: r.low,
+            high: r.high,
+            date: r.date,
+            effSev,
+            isAbove: !!r.isAbove,
+            isBelow: !!r.isBelow,
+            urgent: !!r.urgent,
+            ruleLabel,
+            ruleComparator: ruleDriven ? ruleResult.comparator : null,
+            ruleThreshold: ruleDriven ? ruleResult.threshold : null,
+            prior: extractPrior(r),
+          });
         }
 
         // Text-rule outcome — independent, does not affect urgentCount/abnormalCount
@@ -560,6 +650,9 @@
             value: salient.value,
             unit: salient.unit,
             ruleLabel: salientRuleLabel || null,
+            // ADDITIVE (item 2.6) — display-only trend data for the chip's own arrow
+            // glyph; never affects grading.
+            prior: extractPrior(salient),
           }
         : null;
 
@@ -584,6 +677,7 @@
         noGrowthTop,
         comboCount,
         comboTop,
+        flagged,
       };
     } catch (_) {
       return none;
@@ -594,8 +688,11 @@
   // analyteMatches / collapseWs / specimenAllows are exported alongside the public API
   // (same flat convention as e.g. rules-engine.js's drugMatchesRule) so the shared
   // match/exclude/specimen gate can be unit-tested directly, not just indirectly through
-  // evaluateReportSeverity.
-  const api = { evaluateReportSeverity, analyteMatches, collapseWs, specimenAllows };
+  // evaluateReportSeverity. extractPrior likewise (item 2.6) — it already backs
+  // top.prior and every flagged[].prior computed inside evaluateReportSeverity above,
+  // so content.js's queue popover never needs to duplicate the unit-normalise/
+  // epsilon-compare logic; it just reads the field.
+  const api = { evaluateReportSeverity, extractPrior, analyteMatches, collapseWs, specimenAllows };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

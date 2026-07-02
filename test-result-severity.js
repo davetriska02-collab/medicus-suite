@@ -2,7 +2,7 @@
 // Run with: node test-result-severity.js
 'use strict';
 
-const { evaluateReportSeverity } = require('./engine/result-severity.js');
+const { evaluateReportSeverity, extractPrior } = require('./engine/result-severity.js');
 
 let passed = 0;
 let failed = 0;
@@ -1812,6 +1812,196 @@ console.log('\n--- shipped base-throat-swab rule: valid, scoped, fires correctly
       'base-throat-swab: does NOT fire on urine-headed culture (specimen gate)'
     );
   }
+}
+
+// ── item 2.2/2.6 (TRIAGE-LENS-2026-07-02.md) — additive `flagged`/top.prior fields ──
+console.log('\n--- item 2.2: evaluateReportSeverity() additive `flagged` array ---');
+{
+  const potassium = {
+    name: 'Potassium',
+    value: 6.8,
+    rawValue: '6.8',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: true,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const out = evaluateReportSeverity(makeReport([wbcNormal, potassium, mcvAbove]));
+  assert(Array.isArray(out.flagged), 'flagged is an array');
+  assert(out.flagged.length === 2, `flagged only contains the 2 non-normal results (got ${out.flagged.length})`);
+  assert(out.flagged[0].name === 'Potassium', 'flagged[0] is Potassium (report order preserved)');
+  assert(out.flagged[0].effSev === 'urgent', 'flagged[0].effSev is urgent (lab-flagged urgent)');
+  assert(out.flagged[0].index === 1, 'flagged[0].index is its position in report.results (1)');
+  assert(out.flagged[1].name === 'MCV' && out.flagged[1].effSev === 'abnormal', 'flagged[1] is MCV/abnormal');
+  assert(
+    out.flagged.every((f) => 'prior' in f),
+    'every flagged entry carries a prior field (possibly null)'
+  );
+  // Existing fields still computed exactly as before — additive field changes nothing else.
+  assert(out.level === 'red' && out.urgentCount === 1 && out.abnormalCount === 2, 'existing level/counts unchanged');
+
+  const noneOut = evaluateReportSeverity(makeReport([]));
+  assert(Array.isArray(noneOut.flagged) && noneOut.flagged.length === 0, 'empty report → flagged is []');
+}
+
+console.log('\n--- item 2.2: computeRuleSev additive comparator/threshold surface via `flagged` ---');
+{
+  const potassiumBorderline = {
+    name: 'Potassium',
+    value: 6.2,
+    rawValue: '6.2',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true, // lab already flags it abnormal
+    isBelow: false,
+    urgent: false, // NOT lab-urgent — a rule pushes it to urgent
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [],
+  };
+  const ruleRed = {
+    id: 'k-critical',
+    enabled: true,
+    kind: 'threshold',
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+  };
+  const out = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleRed] });
+  assert(out.flagged.length === 1, 'one flagged entry');
+  const f = out.flagged[0];
+  assert(f.effSev === 'urgent', 'rule pushed effSev to urgent (6.2 >= red 6.0)');
+  assert(f.ruleLabel === 'Critical high potassium', 'ruleLabel set (rule-driven, exceeded lab severity)');
+  assert(f.ruleComparator === 'above', 'ruleComparator carried (additive computeRuleSev field)');
+  assert(f.ruleThreshold === 6.0, 'ruleThreshold carries the RED threshold that was crossed (additive field)');
+  assert(out.top && out.top.ruleLabel === 'Critical high potassium', 'top.ruleLabel unaffected by the addition');
+
+  // A rule that matches but does NOT exceed the lab's own severity must NOT be
+  // treated as rule-driven (ruleLabel/ruleComparator/ruleThreshold stay null) —
+  // unchanged precedence, just confirming the additive fields respect it too.
+  const ruleSameLevel = { ...ruleRed, red: 8.0, amber: 5.0 }; // amber only, lab already says abnormal
+  const out2 = evaluateReportSeverity(makeReport([potassiumBorderline]), { resultRules: [ruleSameLevel] });
+  assert(out2.flagged[0].ruleLabel === null, 'rule matching at the SAME (not higher) severity → ruleLabel null');
+  assert(out2.flagged[0].ruleComparator === null, 'not rule-driven → ruleComparator null');
+  assert(out2.flagged[0].ruleThreshold === null, 'not rule-driven → ruleThreshold null');
+}
+
+console.log('\n--- item 2.6: extractPrior() ---');
+{
+  assert(extractPrior(null) === null, 'null result → null');
+  assert(extractPrior({ value: 5, history: [] }) === null, 'no history → null');
+  assert(
+    extractPrior({ value: NaN, unit: 'mmol/L', history: [{ value: 4, unit: 'mmol/L' }] }) === null,
+    'non-finite current value → null'
+  );
+
+  const up = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/L' }],
+  });
+  assert(
+    up && up.dir === 'up' && up.value === 4.1 && up.date === '2026-05-03',
+    'higher current value → dir "up", value/date carried'
+  );
+
+  const down = extractPrior({
+    value: 82,
+    unit: 'g/L',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  assert(down && down.dir === 'down', 'lower current value → dir "down"');
+
+  const same = extractPrior({
+    value: 5,
+    unit: 'mmol/L',
+    history: [{ value: 5, date: '2026-01-01', unit: 'mmol/L' }],
+  });
+  assert(same && same.dir === 'same', 'equal current/prior value → dir "same"');
+
+  const mismatch = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mEq/L' }],
+  });
+  assert(mismatch === null, 'unit mismatch → null (never a cross-unit comparison)');
+
+  const oneAbsent = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [{ value: 4.1, date: '2026-05-03', unit: null }],
+  });
+  assert(oneAbsent === null, 'current has a unit, history entry does not → null (NOT "both absent")');
+
+  const bothAbsent = extractPrior({
+    value: 6.2,
+    unit: null,
+    history: [{ value: 4.1, date: '2026-05-03', unit: null }],
+  });
+  assert(bothAbsent && bothAbsent.dir === 'up', 'both units absent → treated as a match, arrow shown');
+
+  const caseWhitespace = extractPrior({
+    value: 6.2,
+    unit: ' MMOL/L ',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/l' }],
+  });
+  assert(caseWhitespace && caseWhitespace.dir === 'up', 'unit compare is case/whitespace-insensitive');
+
+  // History is newest-first; a leading non-finite entry (e.g. unparsable prior value)
+  // must be skipped in favour of the next finite one.
+  const skipNonFinite = extractPrior({
+    value: 6.2,
+    unit: 'mmol/L',
+    history: [
+      { value: NaN, date: '2026-06-01', unit: 'mmol/L' },
+      { value: 4.1, date: '2026-05-03', unit: 'mmol/L' },
+    ],
+  });
+  assert(
+    skipNonFinite && skipNonFinite.value === 4.1 && skipNonFinite.date === '2026-05-03',
+    'skips a non-finite history entry to find the next finite prior value'
+  );
+}
+
+console.log('\n--- item 2.6: top.prior on evaluateReportSeverity() ---');
+{
+  const kWithHistory = {
+    name: 'Potassium',
+    value: 6.8,
+    rawValue: '6.8',
+    comparator: null,
+    unit: 'mmol/L',
+    low: 3.5,
+    high: 5.3,
+    isAbove: true,
+    isBelow: false,
+    urgent: true,
+    interpretation: 'Above reference range',
+    date: '2026-06-12',
+    history: [{ value: 4.1, date: '2026-05-03', unit: 'mmol/L', flag: 'normal' }],
+  };
+  const out = evaluateReportSeverity(makeReport([kWithHistory]));
+  assert(
+    out.top && out.top.prior && out.top.prior.dir === 'up',
+    "top.prior computed from the salient result's history"
+  );
+  assert(
+    out.flagged[0].prior && out.flagged[0].prior.dir === 'up',
+    'flagged[0].prior matches top.prior for the same result'
+  );
+
+  const noHistOut = evaluateReportSeverity(makeReport([rdwUrgent])); // fixture has history: []
+  assert(noHistOut.top && noHistOut.top.prior === null, 'no history on the salient result → top.prior null');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

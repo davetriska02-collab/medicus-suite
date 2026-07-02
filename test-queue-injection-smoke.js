@@ -103,11 +103,25 @@ class El {
     this._text = '';
     this._innerHTML = null;
     this._listeners = {};
-    // showRuleMatchMenu (items 2.1/2.3/2.5) positions its popover via
-    // menu.style.{position,top,left,zIndex} — a plain mutable object is
-    // enough; nothing here asserts on actual rendered position.
+    // showRuleMatchMenu (items 2.1/2.3/2.5) and the result-chip detail popover
+    // (item 2.2) position their popovers via el.style.{position,top,left,zIndex},
+    // and item 2.2 measures its anchor via getBoundingClientRect — a plain
+    // mutable object + a zero-rect are all the harness needs (position maths is
+    // not under test here).
     this.style = {};
     if (attrs) for (const k of Object.keys(attrs)) this.setAttribute(k, attrs[k]);
+  }
+  getBoundingClientRect() {
+    return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+  }
+  contains(node) {
+    if (node === this) return true;
+    let p = node && node.parent;
+    while (p) {
+      if (p === this) return true;
+      p = p.parent;
+    }
+    return false;
   }
   setAttribute(name, value) {
     if (name === 'class') this.classes = String(value).split(/\s+/).filter(Boolean);
@@ -224,12 +238,8 @@ class El {
   click() {
     (this._listeners.click || []).forEach((fn) => fn({ preventDefault() {}, stopPropagation() {} }));
   }
-  // Items 2.1/2.3/2.5's showRuleMatchMenu positions the popover off the
-  // anchor's rect — a fixed zero rect is fine, nothing here asserts on
-  // pixel position.
-  getBoundingClientRect() {
-    return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
-  }
+  // (getBoundingClientRect for both menu/popover anchor positioning is defined
+  // once near the top of the class — items 2.1/2.3/2.5 and 2.2 share it.)
   querySelector(sel) {
     return findFirst(this, sel);
   }
@@ -344,10 +354,11 @@ function makeDocument(rootEl) {
       }
       return false;
     },
-    // closeActionMenu/armActionMenuDismissal (items 2.1/2.3/2.5) register/
+    // closeActionMenu/armActionMenuDismissal (items 2.1/2.3/2.5) and the
+    // result-chip detail popover's open/close paths (item 2.2) register/
     // unregister outside-click and Esc listeners on `document` — no-ops here
-    // since this harness drives the menu functions directly rather than
-    // simulating a real click-outside/keydown event pipeline.
+    // since this harness drives the menu/popover functions directly rather
+    // than simulating a real click-outside/keydown event pipeline.
     addEventListener() {},
     removeEventListener() {},
   };
@@ -419,7 +430,29 @@ const parts = [
   // error chip. RESULT_ERROR_CHIP_HTML is a free variable inside
   // injectResultChip, so it must be extracted alongside it.
   extract(/const RESULT_ERROR_CHIP_HTML =[\s\S]*?;/, 'RESULT_ERROR_CHIP_HTML'),
-  extract(/const injectResultChip = \(rowIndex, sev, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
+  extract(/const injectResultChip = \(rowIndex, sev, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
+  // Item 2.2 — result-chip detail popover: the pure line-builders plus the
+  // singleton popover open/close machinery injectResultChip's click handlers call.
+  extract(/function buildResultDetail\(report, sevResult\) \{[\s\S]*?\n {2}\}/, 'buildResultDetail'),
+  extract(/function formatDetailLine\(entry\) \{[\s\S]*?\n {2}\}/, 'formatDetailLine'),
+  extract(
+    /let _resultDetailPopoverEl = null;\s*\n\s*let _resultDetailPopoverAnchor = null;/,
+    '_resultDetailPopover* module state'
+  ),
+  extract(/const closeResultDetailPopover = \(\) => \{[\s\S]*?\n {2}\};/, 'closeResultDetailPopover'),
+  extract(/const onDocClickForResultPopover = \(e\) => \{[\s\S]*?\n {2}\};/, 'onDocClickForResultPopover'),
+  extract(/const onKeydownForResultPopover = \(e\) => \{[\s\S]*?\n {2}\};/, 'onKeydownForResultPopover'),
+  // NB: ends at `';` (quote + semicolon) — the text itself contains a bare `;`,
+  // so a lazy `[\s\S]*?;` would truncate mid-string and break compilation.
+  extract(/const RESULT_ERROR_POPOVER_TEXT =[\s\S]*?';/, 'RESULT_ERROR_POPOVER_TEXT'),
+  extract(
+    /const buildResultDetailPopoverEl = \(detail, isError\) => \{[\s\S]*?\n {2}\};/,
+    'buildResultDetailPopoverEl'
+  ),
+  extract(
+    /const toggleResultDetailPopover = \(anchorEl, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/,
+    'toggleResultDetailPopover'
+  ),
   extract(/const reinjectCachedResultChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedResultChips'),
   extract(/const injectQueueMonitoringChip = \(rowIndex, result\) => \{[\s\S]*?\n {2}\};/, 'injectQueueMonitoringChip'),
   extract(/const reinjectCachedMonitoringChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedMonitoringChips'),
@@ -491,6 +524,12 @@ const EXPOSE = [
   'decorateQueueRows',
   'queueScope',
   'injectResultChip',
+  'buildResultDetail',
+  'formatDetailLine',
+  'closeResultDetailPopover',
+  'buildResultDetailPopoverEl',
+  'toggleResultDetailPopover',
+  'RESULT_ERROR_POPOVER_TEXT',
   'reinjectCachedResultChips',
   'injectQueueMonitoringChip',
   'reinjectCachedMonitoringChips',
@@ -517,7 +556,14 @@ const EXPOSE = [
 
 let sandbox = null;
 if (!parts.some((p) => !p)) {
-  const combinedSrc = parts.join('\n\n') + '\n\n' + EXPOSE.map((n) => `this.${n} = ${n};`).join('\n');
+  const combinedSrc =
+    parts.join('\n\n') +
+    '\n\n' +
+    EXPOSE.map((n) => `this.${n} = ${n};`).join('\n') +
+    // Item 2.2 — the popover singleton state lives in module-level `let`s the
+    // extracted functions close over; this read-only accessor lets the harness
+    // assert open/closed without reaching into the closure.
+    '\nthis.__popoverState = () => ({ el: _resultDetailPopoverEl, anchor: _resultDetailPopoverAnchor });';
 
   // Externally-provided globals: real content.js reads these off `window`/
   // `CONFIG`/module-level `let`s. We pre-set them as plain mutable
@@ -562,13 +608,15 @@ if (!parts.some((p) => !p)) {
     // this harness runs the callback synchronously instead (see file-header note).
     requestAnimationFrame: (fn) => fn(),
     // Only used by onQueueStatusJumpClick to remove the flash class after 2.6s,
-    // and by armActionMenuDismissal (items 2.1/2.3/2.5) to defer registering the
-    // outside-click listener — neither is a real event pipeline this harness
-    // drives, so the deferred callback simply never runs (fire-and-forget).
+    // by armActionMenuDismissal (items 2.1/2.3/2.5) to defer registering the
+    // outside-click listener, and by item 2.2's deferred dismiss-listener attach —
+    // none is a real event pipeline this harness drives, so the deferred callback
+    // simply never runs (fire-and-forget).
     setTimeout: () => {},
-    // showRuleMatchMenu (items 2.1/2.3/2.5) positions the popover off
-    // window.innerWidth and (de)registers a scroll-dismiss listener; the REAL
-    // shared matcher is wired in as TriageLensMatch so buildEvidenceEl's
+    // showRuleMatchMenu (items 2.1/2.3/2.5) and toggleResultDetailPopover (item
+    // 2.2) position their popovers off window.innerWidth and (de)register
+    // scroll-dismiss listeners; the REAL shared matcher is wired in as
+    // TriageLensMatch so buildEvidenceEl's
     // window.TriageLensMatch.ruleMatchEvidence(...) call exercises the actual
     // rule-match.js logic under test, not a stub.
     window: {
@@ -1006,7 +1054,7 @@ if (sandbox) {
     );
 
     // ---- de-dupe: calling injectResultChip for the error chip twice is a no-op ----
-    sandbox.injectResultChip(0, null, true);
+    sandbox.injectResultChip(0, null, rowId, true);
     check(
       wrap.querySelectorAll('.ch-q-result').length === 1,
       'error entry: injectResultChip called again does not duplicate (still 1 .ch-q-result span)'
@@ -1935,6 +1983,204 @@ if (sandbox) {
     check(
       /createTextNode|\.textContent\s*=/.test(buildEvidenceElSrc),
       'buildEvidenceEl does use textContent/createTextNode to place the (untrusted) request-derived text'
+    );
+  }
+  // ============================================================
+  // Layer 15 — result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md):
+  // open/close toggle, singleton behaviour, detail-line rendering via
+  // textContent, error-chip explanation popover, anchor-death close, arrow
+  // rules on the chip label (item 2.6), detail cached alongside the error flag.
+  // ============================================================
+  console.log('\nLayer 15: result-chip detail popover — open/close, error variant, anchor death, trend arrows');
+
+  {
+    // ---- open: cached detail renders one .ch-result-popover-line per entry, via textContent ----
+    freshCaches();
+    sandbox.closeResultDetailPopover(); // defensive reset of the singleton state
+    const rowId = '66666666-6666-4666-8666-666666666666';
+    const { master, detail } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    const detailArr = [
+      {
+        name: 'Potassium',
+        value: 6.2,
+        unit: 'mmol/L',
+        low: 3.5,
+        high: 5.3,
+        flag: 'above',
+        date: '2026-06-12',
+        ruleLabel: 'Critical high potassium (red ≥6.5)',
+        prior: { value: 4.1, date: '2026-05-03', dir: 'up' },
+      },
+      {
+        name: 'eGFR',
+        value: 38,
+        unit: 'mL/min',
+        low: 90,
+        high: null,
+        flag: 'below',
+        date: '2026-06-12',
+        ruleLabel: null,
+        prior: null,
+      },
+    ];
+    sandbox._durableRowMap.set(0, rowId);
+    sandbox._queueResultCache.set(rowId, { sev: redSev, ts: Date.now(), detail: detailArr });
+
+    const anchor = new El('span', { class: 'ch-chip ch-chip-red' });
+    gridRoot.appendChild(anchor);
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    let state = sandbox.__popoverState();
+    check(!!state.el, 'popover: open — singleton element exists');
+    check(state.anchor === anchor, 'popover: open — anchored to the clicked chip');
+    check(
+      sandbox.document.body.children.includes(state.el),
+      'popover: hosted on document.body (survives grid-subtree wipes by construction)'
+    );
+    check(state.el.classes.includes('ch-result-popover'), 'popover: carries the token-block class ch-result-popover');
+    const lines = state.el.querySelectorAll('.ch-result-popover-line');
+    check(lines.length === 2, `popover: one line per detail entry (got ${lines.length})`);
+    check(
+      lines[0].textContent ===
+        'Potassium 6.2 mmol/L ↑ (3.5–5.3) · 12 Jun · rule: Critical high potassium (red ≥6.5) · was 4.1, 03 May',
+      `popover: line text is formatDetailLine output via textContent (got "${lines[0].textContent}")`
+    );
+    check(
+      lines[0]._innerHTML === null && lines[1]._innerHTML === null,
+      'popover: lines were built with textContent, never innerHTML (fake-DOM innerHTML slot untouched)'
+    );
+    check(
+      lines[0].classes.includes('ch-result-popover-line-above'),
+      'popover: above-flag line carries its severity class'
+    );
+
+    // ---- toggle: same anchor closes; different anchor swaps (still singleton) ----
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    check(!state.el && !state.anchor, 'popover: clicking the same anchor again closes it (toggle)');
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    const anchor2 = new El('span', { class: 'ch-chip ch-chip-amber' });
+    gridRoot.appendChild(anchor2);
+    sandbox.toggleResultDetailPopover(anchor2, rowId, false);
+    state = sandbox.__popoverState();
+    check(state.anchor === anchor2, 'popover: clicking a different chip swaps the singleton to the new anchor');
+    check(
+      sandbox.document.body.children.filter((c) => c.classes.includes('ch-result-popover')).length === 1,
+      'popover: only ever ONE popover element on the body (singleton)'
+    );
+    sandbox.closeResultDetailPopover();
+    check(!sandbox.__popoverState().el, 'popover: closeResultDetailPopover clears element + anchor state');
+
+    // ---- empty detail: popover still opens, with the explicit empty message ----
+    sandbox._queueResultCache.set(rowId, { sev: redSev, ts: Date.now() }); // no .detail
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    check(
+      state.el.querySelectorAll('.ch-result-popover-empty').length === 1 &&
+        state.el.querySelectorAll('.ch-result-popover-line').length === 0,
+      'popover: no cached detail → explicit "No detail available." message, no fabricated lines'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- error variant: fixed explanation, never a numeric detail array ----
+    // Even a (hypothetical) stale detail array on an error entry must not render —
+    // the live entry.error state wins.
+    sandbox._queueResultCache.set(rowId, { sev: null, error: true, ts: Date.now(), detail: detailArr });
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    const errLines = state.el.querySelectorAll('.ch-result-popover-error');
+    check(errLines.length === 1, 'error popover: renders the single explanation line');
+    check(
+      errLines[0].textContent === sandbox.RESULT_ERROR_POPOVER_TEXT,
+      'error popover: explanation text assigned via textContent'
+    );
+    check(
+      /retries automatically/.test(errLines[0].textContent),
+      'error popover: tells the GP it retries automatically'
+    );
+    check(
+      state.el.querySelectorAll('.ch-result-popover-line-above').length === 0 && !/6\.2/.test(state.el.textContent),
+      'error popover: NEVER shows the stale numeric detail lines (live entry.error wins)'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- inject-time error flag alone (no live cache entry) also gets the error popover ----
+    sandbox._queueResultCache.delete(rowId);
+    sandbox.toggleResultDetailPopover(anchor, rowId, true);
+    state = sandbox.__popoverState();
+    check(
+      state.el.querySelectorAll('.ch-result-popover-error').length === 1,
+      'error popover: inject-time isError flag alone (cache entry gone) still shows the explanation'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- anchor death: refreshQueueChips' guard closes a popover whose anchor was wiped ----
+    sandbox._queueResultCache.set(rowId, { sev: redSev, ts: Date.now(), detail: detailArr });
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    check(!!sandbox.__popoverState().el, 'anchor death: popover open before the wipe');
+    anchor.remove(); // Vue re-render strips the injected chip node
+    check(!sandbox.document.contains(anchor), 'anchor death: anchor no longer in the document');
+    // The exact guard refreshQueueChips runs each wipe cycle (source-pinned in
+    // test-result-triage-queue.js Layer 7; executed here against the live state):
+    vm.runInContext(
+      'if (_resultDetailPopoverAnchor && !document.contains(_resultDetailPopoverAnchor)) { closeResultDetailPopover(); }',
+      sandbox
+    );
+    check(!sandbox.__popoverState().el, 'anchor death: the refreshQueueChips guard closes the orphaned popover');
+
+    // ---- dataset stamp: injectResultChip records the taskUuid on the chip host ----
+    freshCaches();
+    const rowId2 = '77777777-7777-4777-8777-777777777777';
+    const pair2 = buildPreviewRowPair({ rowIndex: 0, rowId: rowId2, dob: '01 Jan 1980 (46y)' });
+    const gridRoot2 = new El('div', {});
+    gridRoot2.appendChild(pair2.master);
+    gridRoot2.appendChild(pair2.detail);
+    sandbox.document = makeDocument(gridRoot2);
+    sandbox.queueObservedContainer = gridRoot2;
+    sandbox.injectResultChip(0, redSev, rowId2, false);
+    const injectedSpan = pair2.wrap.querySelector('.ch-q-result');
+    check(!!injectedSpan, 'dataset stamp: chip injected');
+    check(
+      injectedSpan.dataset.chTaskUuid === rowId2,
+      'dataset stamp: injected .ch-q-result host carries data-ch-task-uuid for the popover path'
+    );
+
+    // ---- trend arrow rules on the chip label (item 2.6) ----
+    const arrowSev = (dir, level) => ({
+      level,
+      urgentCount: level === 'red' ? 1 : 0,
+      abnormalCount: 1,
+      top: {
+        name: 'Potassium',
+        value: '6.8',
+        unit: 'mmol/L',
+        ruleLabel: null,
+        prior: dir ? { value: 4.1, date: '2026-05-03', dir } : null,
+      },
+      misprioritised: false,
+      unmatched: false,
+    });
+    const chipsFor = (sev) => sandbox.selectResultChips(sev);
+    check(
+      chipsFor(arrowSev('up', 'red'))[0].vars.name === 'Potassium ↑',
+      'trend arrow: red chip with an "up" prior gains ↑ on its label var'
+    );
+    check(chipsFor(arrowSev('down', 'red'))[0].vars.name === 'Potassium ↓', 'trend arrow: "down" prior gains ↓');
+    check(chipsFor(arrowSev('same', 'red'))[0].vars.name === 'Potassium', 'trend arrow: "same" prior gets NO glyph');
+    check(
+      chipsFor(arrowSev(null, 'red'))[0].vars.name === 'Potassium',
+      'trend arrow: no prior gets NO glyph (pre-2.6 sev shapes unaffected)'
+    );
+    // The green/none level renders no severity chip at all, so no arrow can leak
+    // onto a calm row via this path (arrow is red/amber-only by construction).
+    check(
+      chipsFor({ ...noneSev, top: { name: 'X', prior: { value: 1, date: null, dir: 'up' } } }).length === 0,
+      'trend arrow: a none-level report renders no severity chip, so no arrow (red/amber only)'
     );
   }
 } else {
