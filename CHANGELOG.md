@@ -2,6 +2,55 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.151.0] — 2026-07-02
+
+### Triage Lens — Workload off the GP (Phase 4)
+
+Phase 4 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: turning the evidence and
+honesty of the earlier phases into consultations that never reach the GP. The
+clinical items (pathway matching, green routine rules) were CSO-reviewed —
+`docs/plans/TRIAGE-LENS-PHASE4-REVIEW.md`.
+
+**Queue workflow (client-side):**
+- **Keyboard triage** — j/k (or arrows) move a cursor through the results
+  queue, Enter opens the cursor row, n jumps to the next red/amber. Ignores
+  keys while typing. Pref `queueKeyboardNav` (default on).
+- **Seen-dimming** (opt-in, default off) — rows whose task was opened this
+  session dim so unworked rows stand out. Visual-only, session-local,
+  suppresses nothing: it **never dims a red/amber row** (gate reads the result
+  cache, so it holds even with row-tint off) and auto-undims the moment a row
+  re-grades to an alert. Hazard log H-037.
+- **"All-normal, fileable" marker** — a green ✓ on rows whose report is
+  confidently all-normal with no filing blockers, so the GP works reds first
+  and batches the easy filings. Reuses the lab-file gate; fail-closed; marks
+  nothing it can't confirm, and files nothing itself.
+
+**Request-queue decision support (CSO-reviewed):**
+- **Pharmacy First divert chip** — a request matching a Pharmacy First pathway
+  (from the CSO-signed `reception-pathways.json`) shows a green chip when the
+  patient is age-eligible (fails closed on unknown age). Clicking offers a
+  prepare-only redirect draft — copy-to-clipboard, never auto-sent.
+- **Missing-info ask-back** — for a matched pathway, the chip menu lists the
+  red-flag questions the request hasn't answered and a prepare-only ask-back
+  draft; a red flag the patient *volunteered* (999/duty) surfaces as a
+  prominent escalation note. Decision support only — offers info and drafts,
+  never triages or auto-advises.
+- **Green routine rules** — requests that are confidently non-clinical
+  (practice-admin details, pharmacy/prescription process queries) now show a
+  green chip so the safe tail can be swept in one pass. Green ranks *below*
+  red/amber/info, so a symptom co-occurring with an admin phrase always keeps
+  its clinical chip on top — green can never mask a signal. defaults config
+  23→24.
+- **`engine/reception-match.js`** — new pure matching engine (Pharmacy First
+  eligibility, red-flag gap detection) over the pathways file, fail-closed on
+  unknown age, conservative gap detection (over-asks rather than assumes).
+
+**Deferred** (in the review doc): repeat-contact (the queue payload carries no
+patient identifier — awaiting a decision on the name+DOB fallback); the
+photo-missing prompt (no attachment field is visible in the data the extension
+reads — needs live-Medicus discovery); and the Phase 3 FIB-4 age-split /
+Hb-K⁺ delta follow-ups.
+
 ## [v3.150.0] — 2026-07-02
 
 ### Triage Lens — Smarter grading (Phase 3)

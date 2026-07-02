@@ -100,14 +100,13 @@ capture). Deferred until that discovery can be done on a real Medicus instance.
 
 ---
 
-## Decisions needed
+## Decisions
 
-- [ ] **4.1/4.2** — approve the reception-match SYNONYM / RED_FLAG topic maps (now firing)
-- [ ] **4.3** — approve / prune the two green routine rules
-- [ ] **4.5 repeat-contact** — option 1 (name+DOB, recommended) / 2 (defer) / 3 (fetch-gated)
-- [ ] **4.8 photo prompt** — build after feasibility check, or drop
-- [ ] **Phase 3 follow-ups** (FIB-4 age-split, deltas) — build now / later
-- [ ] **Release v3.151.0** authorised (bundles the approved 4.1/4.2/4.3 content)
+- [x] **4.1/4.2** — reception-match maps approved (CSO, 2026-07-02)
+- [x] **4.3** — two green routine rules approved (CSO, 2026-07-02)
+- [x] **Release v3.151.0** authorised — clinical wave shipped
+- [ ] **4.5 repeat-contact** — still open: option 1 (name+DOB, recommended) / 2 (defer) / 3 (fetch-gated)
+- [ ] **4.8 photo prompt** — deferred (not feasible from current data; needs live-Medicus discovery)
+- [ ] **Phase 3 follow-ups** (FIB-4 age-split, deltas) — deferred, build TBD
 
-*The three clinical drafts (`f002ea4`, `d095227`) do not release until the boxes
-above are ticked. Client-side items 4.4/4.6/4.7 are already live on the branch.*
+*Shipped in v3.151.0. 4.5 / 4.8 / follow-ups remain open for a future session.*
