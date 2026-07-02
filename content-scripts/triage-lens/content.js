@@ -704,9 +704,49 @@
   // ============================================================
   // 2. DOM EXTRACTION
   // ============================================================
+  // One-time-per-title console.warn guard (item 1.1, TRIAGE-LENS-2026-07-02.md).
+  // findCardByTitle is called on every run() pass (SPA re-renders fire constantly),
+  // so warning on every miss would spam the console; a Set persists for the
+  // current page load and is cleared by onRoute() on SPA navigation so a genuinely
+  // new page gets its own warning if the card is still missing there.
+  const _cardMissWarned = new Set();
+
+  // Find a Medicus card by its header text. A plain exact match silently drops
+  // the WHOLE card (and everything computed from it) the moment Medicus tweaks a
+  // label or appends a live count ("Active Problems (5)") — a patient-safety
+  // risk, not a cosmetic one, so this is deliberately tiered rather than a single
+  // strict `===`:
+  //   1. exact match after normalising (trim/collapse-whitespace/case-insensitive)
+  //   2. same, with a trailing " (N)" count suffix stripped off the header first
+  //   3. startsWith(title) — but ONLY when exactly one header qualifies; an
+  //      ambiguous prefix (e.g. "Tasks" matching both "Tasks" and "Tasks &
+  //      Actions") must resolve to no match, never to the wrong card.
+  // A still-unresolved title is logged once per page load (see _cardMissWarned)
+  // so a real drift is visible without being silent.
   const findCardByTitle = (title) => {
-    const h2 = [...document.querySelectorAll('h2, h3, h4')].find(h => h.textContent.trim() === title);
-    return h2 ? (h2.closest('.m-card-v2') || h2.closest('[class*="m-card"]') || h2.parentElement?.parentElement) : null;
+    const headers = [...document.querySelectorAll('h2, h3, h4')];
+    const norm = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const wantNorm = norm(title);
+
+    let h2 = headers.find(h => norm(h.textContent) === wantNorm);
+
+    if (!h2) {
+      h2 = headers.find(h => norm(h.textContent).replace(/\s*\(\d+\)$/, '') === wantNorm);
+    }
+
+    if (!h2) {
+      const candidates = headers.filter(h => norm(h.textContent).startsWith(wantNorm));
+      if (candidates.length === 1) h2 = candidates[0];
+    }
+
+    if (!h2) {
+      if (!_cardMissWarned.has(title)) {
+        _cardMissWarned.add(title);
+        console.warn('[TriageLens] card not found: "' + title + '" — extraction for this section will be empty this page load');
+      }
+      return null;
+    }
+    return h2.closest('.m-card-v2') || h2.closest('[class*="m-card"]') || h2.parentElement?.parentElement;
   };
 
   const cardContent = (card) => {
@@ -1190,7 +1230,45 @@
     };
   };
 
-  const extractAll = () => {
+  // ---- Extraction-health (item 1.1 leg B, TRIAGE-LENS-2026-07-02.md) ----
+  // Static map of the card titles each page type's extraction genuinely queries
+  // via findCardByTitle. Keep this truthful to the extractors above — if a new
+  // findCardByTitle('...') call is added to record/detail extraction, add its
+  // title here too, or a real drop will go undetected by _missingCards.
+  //   record  — the five cards extractAll() itself reads (extractRegisters,
+  //             extractActiveProblems, extractMedications, extractTasks,
+  //             extractObservations).
+  //   detail  — extractTaskDetails / extractRequester / extractInitialRequest
+  //             (the non-document-task detail extraction in runDetail).
+  //   detail-document — extractDocumentTaskInfo's cards (the isDocumentTask()
+  //             branch of runDetail). NOT the same set as plain "detail":
+  //             a document-task page genuinely has no Task Details/Requester
+  //             Details/Initial Request cards, so treating those as "expected"
+  //             there would flag every document task as unreadable.
+  // Deliberately does NOT include Registers/Active Problems/etc for 'detail' —
+  // those record-summary cards are optional context on a detail page (a
+  // document/communication-thread page may never render them at all), so their
+  // absence there is normal, not a silent failure. See pageReady()'s own
+  // detail-readiness check, which likewise never requires them.
+  const EXPECTED_CARDS_BY_PAGE = {
+    record: ['Registers', 'Active Problems', 'Current Medication', 'Tasks & Actions', 'Observations & Results'],
+    detail: ['Task Details', 'Requester Details', 'Initial Request'],
+    'detail-document': ['Task Overview', 'Document Details', 'Internal Comments', 'Codes & Actions']
+  };
+
+  // Pure (given the current DOM): which of the titles expected for this page are
+  // genuinely ABSENT (findCardByTitle returned null) — never cards that are
+  // present but empty ("None."). A present-but-empty card is a real "nothing to
+  // flag"; a missing card node is "could not read", and the two must never look
+  // the same to a GP scanning the HUD.
+  const computeMissingCards = (pageTypeVal, isDocTask) => {
+    const key = pageTypeVal === 'detail' && isDocTask ? 'detail-document' : pageTypeVal;
+    const expected = EXPECTED_CARDS_BY_PAGE[key] || [];
+    return expected.filter(title => !findCardByTitle(title));
+  };
+
+  const extractAll = (pageTypeVal, isDocTask) => {
+    const pt = pageTypeVal || pageType();
     return {
       banner: extractBanner(),
       registers: extractRegisters(),
@@ -1199,7 +1277,8 @@
       tasks: extractTasks(),
       obs: extractObservations(),
       docs: extractDocuments(),
-      cons: extractConsultations()
+      cons: extractConsultations(),
+      _missingCards: computeMissingCards(pt, isDocTask)
     };
   };
 
@@ -1688,16 +1767,24 @@
     const engine = window.SentinelRules;
     if (!fetcher || typeof fetcher.fetchPatientData !== 'function') return null;
     if (!engine || typeof engine.evaluatePatient !== 'function') return null;
+    // Item 1.1 leg C (TRIAGE-LENS-2026-07-02.md): from here on, EVERY
+    // could-not-evaluate path THROWS rather than returning null. Contract:
+    // null now means ONLY "successfully evaluated, nothing due" (a definitive
+    // clear) — never "we don't know". runMonitoringChip's .catch() on this
+    // promise (below) preserves whatever chip is already on screen instead of
+    // clearing it, exactly like the pre-existing medications-fetch-failure
+    // throw a few lines down. Previously only that one branch threw; every
+    // other failure here quietly cleared a real due-monitoring chip.
     const rules = await loadMonitoringRules();
-    if (!rules || rules.length === 0) return null;
+    if (!rules || rules.length === 0) throw new Error('monitoring chip: rules failed to load');
     let data;
     try {
       data = await fetcher.fetchPatientData('live');
     } catch (e) {
       log('monitoring fetchPatientData failed', e);
-      return null;
+      throw e;
     }
-    if (!data || data.error) return null;
+    if (!data || data.error) throw new Error('monitoring chip: fetchPatientData returned no usable data');
     // A real per-field fetch failure (banner OK, but medications/problems/
     // observations individually errored and DOM fallback also came up empty —
     // see engine/data-fetcher.js debug.dataFetchFailed) is NOT the same as a
@@ -1708,7 +1795,9 @@
     if (data.debug && data.debug.dataFetchFailed && data.debug.dataFetchFailed.medications) {
       throw new Error('monitoring chip: medications fetch failed, DOM fallback empty');
     }
-    // No usable data → no chip (never a false all-clear).
+    // Confirmed (not a fetch failure, see the dataFetchFailed check just above)
+    // — this patient genuinely has no medications on record. A definitive
+    // clear: nothing to monitor, so null (not a throw) is correct here.
     if (!Array.isArray(data.medications) || data.medications.length === 0) return null;
     const now = new Date().toISOString();
     const evalOpts = {
@@ -1734,7 +1823,7 @@
       chips = engine.evaluatePatient(data.medications || [], data.observations || [], rules, evalOpts);
     } catch (e) {
       log('monitoring evaluatePatient failed', e);
-      return null;
+      throw e;
     }
     if (cache && inputHash != null) _monEvalCache.set(monitoringToken(), inputHash, chips);
     return selectMonitoringDue(chips);
@@ -1805,9 +1894,11 @@
     // Dedupe: remove any previously injected monitoring chip (either severity)
     // before adding the current one.
     row.querySelectorAll('.ch-monitoring-chip').forEach(el => el.remove());
-    // If the "No flags" placeholder is the only thing present, clear it.
-    const placeholder = row.querySelector('.ch-chip-info');
-    if (placeholder && row.children.length === 1 && /No flags/i.test(placeholder.textContent)) {
+    // If the "No flags" / "Not fully assessed" placeholder is the only thing
+    // present, clear it — a real chip firing means there IS something to show,
+    // whichever placeholder headlineNoFlagsChipHtml() picked.
+    const placeholder = row.querySelector('.ch-chip-info, .ch-chip-not-assessed');
+    if (placeholder && row.children.length === 1 && /No flags|Not fully assessed/i.test(placeholder.textContent)) {
       placeholder.remove();
     }
     const tmp = document.createElement('div');
@@ -1861,12 +1952,71 @@
     return name || lastPatientName;
   };
 
-  const tile = (key, label, signal) => `
+  // ---- Extraction-health (item 1.1 leg B) — pure helpers, unit-testable
+  // without a DOM or a full renderHUD() call. ----
+
+  // Which cards each HUD tile's signal is computed from (see computeSignals).
+  // Conservative & manual — kept next to the tile map itself, not derived, so a
+  // reviewer can see at a glance whether a new signal source needs adding here.
+  // Non-card sources (banner warnings, the docs/consultations free-text search)
+  // are deliberately excluded: they're never gated by findCardByTitle, so their
+  // absence is not an extraction failure this mechanism can detect.
+  const TILE_CARD_SOURCES = {
+    risk: ['Active Problems', 'Registers'],
+    monitoring: ['Tasks & Actions', 'Observations & Results'],
+    meds: ['Current Medication'],
+    openLoops: ['Tasks & Actions'],
+    carePlan: ['Registers', 'Active Problems'],
+    safeguarding: ['Registers']
+  };
+
+  // Pure: is this tile's CURRENT clear/zero state actually "we never read the
+  // data" rather than "we read it and it's genuinely clear"? Only fires when
+  // EVERY card this tile draws from is missing AND the tile found nothing —
+  // a tile that already has a real finding (e.g. risk's docs-derived recent-
+  // discharge check, which isn't card-gated) keeps showing that finding rather
+  // than being masked by an unrelated missing card.
+  const tileNotAssessed = (key, signal, missingCards) => {
+    const sources = TILE_CARD_SOURCES[key];
+    if (!sources || !sources.length || !signal) return false;
+    if (signal.items && signal.items.length > 0) return false;
+    const missing = missingCards || [];
+    return sources.every(title => missing.includes(title));
+  };
+
+  // Pure: the header-chips-row placeholder when no chip fired. A missing card
+  // must never render identically to a genuine "No flags" — that's the whole
+  // point of item 1.1 (H-005: "not assessed" must never look like "normal").
+  const headlineNoFlagsChipHtml = (missingCards) => {
+    if (missingCards && missingCards.length) {
+      return '<span class="ch-chip ch-chip-not-assessed" title="Could not read: ' +
+        escapeHtml(missingCards.join(', ')) + '">Not fully assessed</span>';
+    }
+    return '<span class="ch-chip ch-chip-info">No flags</span>';
+  };
+
+  // Pure: the grey footer line naming which cards could not be read this pass.
+  const missingCardsFooterHtml = (missingCards) => {
+    if (!missingCards || !missingCards.length) return '';
+    return `<div class="ch-missing-footer">Could not read: ${escapeHtml(missingCards.join(', '))}</div>`;
+  };
+
+  const tile = (key, label, signal, missingCards) => {
+    if (tileNotAssessed(key, signal, missingCards)) {
+      return `
+    <div class="ch-tile ch-not-assessed" data-tile="${key}" title="Could not read the card(s) this tile needs">
+      <div class="ch-tile-label">${label}</div>
+      <div class="ch-tile-status">—</div>
+      <div class="ch-tile-count">Not assessed</div>
+    </div>`;
+    }
+    return `
     <div class="ch-tile ch-${signal.level}" data-tile="${key}">
       <div class="ch-tile-label">${label}</div>
       <div class="ch-tile-status">${signal.level === 'green' && signal.items.length === 0 ? '—' : signal.level.toUpperCase()}</div>
       <div class="ch-tile-count">${signal.items.length ? signal.items.length + ' signal' + (signal.items.length > 1 ? 's' : '') : ''}</div>
     </div>`;
+  };
 
   const detailList = (items) => {
     if (!items.length) return '<div class="ch-detail-empty">No flags</div>';
@@ -2074,6 +2224,11 @@
 
     const showTiles = PREF('showBuiltInTiles', true);
     const showFoot = PREF('showFootStats', true);
+    // Item 1.1 leg B — cards findCardByTitle genuinely could not find this pass.
+    // Drives: the headline chip chooser (never a green/info "No flags" when we
+    // know something wasn't read), the grey footer line, and each tile's
+    // "not assessed" fallback below.
+    const missingCards = data._missingCards || [];
 
     hud.innerHTML = `
       <header class="ch-head">
@@ -2089,15 +2244,16 @@
         ${patient ? `<button class="ch-patient" data-act="focus-tab" title="Bring source tab to front">${escapeHtml(patient)} →</button>` : ''}
         ${requestPanel(requestSignals)}
         <div class="ch-chips">
-          ${allHeaderChips.length ? allHeaderChips.map(c => renderChipHtml(c)).join('') : '<span class="ch-chip ch-chip-info">No flags</span>'}
+          ${allHeaderChips.length ? allHeaderChips.map(c => renderChipHtml(c)).join('') : headlineNoFlagsChipHtml(missingCards)}
         </div>
+        ${missingCardsFooterHtml(missingCards)}
         ${showTiles ? `<div class="ch-grid">
-          ${tile('risk', 'Risk', signals.risk)}
-          ${tile('monitoring', 'Monitoring', signals.monitoring)}
-          ${tile('meds', 'Meds', signals.meds)}
-          ${tile('openLoops', 'Open loops', signals.openLoops)}
-          ${tile('carePlan', 'Care plan', signals.carePlan)}
-          ${tile('safeguarding', 'Safeguarding', signals.safeguarding)}
+          ${tile('risk', 'Risk', signals.risk, missingCards)}
+          ${tile('monitoring', 'Monitoring', signals.monitoring, missingCards)}
+          ${tile('meds', 'Meds', signals.meds, missingCards)}
+          ${tile('openLoops', 'Open loops', signals.openLoops, missingCards)}
+          ${tile('carePlan', 'Care plan', signals.carePlan, missingCards)}
+          ${tile('safeguarding', 'Safeguarding', signals.safeguarding, missingCards)}
         </div>
         <div class="ch-detail" id="ch-detail">
           <div class="ch-detail-head">Click a tile for detail</div>
@@ -2243,7 +2399,7 @@
 
   // ---- Per-page handlers ----
   const runRecord = () => {
-    const data = extractAll();
+    const data = extractAll('record', false);
     const signals = computeSignals(data);
     applyRules(signals, 'record', buildFieldsData(data, ''));
     renderHUD(data, signals, null);
@@ -2254,10 +2410,14 @@
   };
 
   const runDetail = () => {
-    const data = extractAll();
+    // Resolved up front (URL-only check) so extractAll() knows which detail
+    // expected-card set applies (item 1.1 leg B — a document task and a
+    // request/communication task expect different cards).
+    const docTask = isDocumentTask();
+    const data = extractAll('detail', docTask);
     const signals = computeSignals(data);
 
-    const docInfo = isDocumentTask() ? extractDocumentTaskInfo() : null;
+    const docInfo = docTask ? extractDocumentTaskInfo() : null;
 
     let taskDetails, requester, initialReq;
     if (docInfo) {
@@ -2878,9 +3038,17 @@
   let _queueMonRunning = false;
   let _queueMonGeneration = 0; // incremented on each new data arrival
 
-  // taskUuid → { overviewURL, priorityDisplay, unmatched, sev, ts } — result-triage cache
+  // taskUuid → { overviewURL, priorityDisplay, unmatched, sev, error, ts } —
+  // result-triage cache. `error: true` (item 1.1 leg D) marks a row whose fetch
+  // or evaluation genuinely failed (sev stays null either way — a definitive
+  // "nothing due" clear and a failed check both leave sev null; `error`
+  // distinguishes them for rendering + retry cadence).
   const _queueResultCache = new Map();
   const _RESULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  // Error entries get a much shorter TTL than a real result so a transient
+  // fetch/eval failure retries soon instead of showing "couldn't check" for
+  // the full 5 minutes.
+  const _RESULT_ERROR_TTL = 60 * 1000; // 60 seconds
   let _queueResultRunning = false;
   let _queueResultGeneration = 0;
 
@@ -3369,6 +3537,14 @@
     return chips;
   }
 
+  // Sentinel returned by computeQueueRowResult (item 1.1 leg D) to distinguish
+  // "attempted this row's fetch/eval and it genuinely failed" from a plain
+  // `null`, which stays reserved for "nothing to check" (feature disabled,
+  // this task has no matching investigation report) or "checked, nothing due".
+  // A distinct object identity — never a string/bool — so it can't collide
+  // with a real evaluateReportSeverity() result or a plain null.
+  const QUEUE_RESULT_FETCH_ERROR = Object.freeze({ __chQueueResultError: true });
+
   const computeQueueRowResult = async (taskUuid) => {
     const urgentCfg  = findSystemChip('queue.resultUrgent');
     const abnormalCfg = findSystemChip('queue.resultAbnormal');
@@ -3393,14 +3569,20 @@
     const API  = window.SentinelApiClient;
     const NORM = window.SentinelNormalisers;
     const SEV  = window.SentinelResultSeverity;
+    // Globals absent / no API context: the whole feature can't run in this
+    // world — same "nothing to check" bucket as anyEnabled/overviewURL below,
+    // not a per-row failure, so plain null (no error chip, no aggressive retry).
     if (!API || !NORM || !SEV) { log('queue-result: globals not loaded', taskUuid); return null; }
     const ctx = API.detectMedicusContext(location.href);
     if (!ctx) { log('queue-result: no medicus context'); return null; }
     const entry = _queueResultCache.get(taskUuid);
+    // No overviewURL: this task has no matching investigation report to fetch
+    // (e.g. a non-lab task type in the same queue) — a structural "nothing to
+    // check" for this row, not a failed check, so plain null.
     if (!entry || !entry.overviewURL) { log('queue-result: no overviewURL', taskUuid); return null; }
     let raw;
     try { raw = await API.fetchInvestigationReport(ctx.apiBase, entry.overviewURL); }
-    catch (e) { log('queue-result: fetchInvestigationReport threw', e.message); return null; }
+    catch (e) { log('queue-result: fetchInvestigationReport threw', e.message); return QUEUE_RESULT_FETCH_ERROR; }
     const report = NORM.normaliseInvestigationReport(raw);
     // Retain the just-parsed result lines in memory so the options-page result-rule
     // inspector can offer "Load a recent result" instead of demanding a raw paste.
@@ -3444,39 +3626,66 @@
       }
     } catch (e) { log('queue-result: problem fetch failed', e.message); }
 
-    const sev = SEV.evaluateReportSeverity(report, {
-      priorityDisplay: entry.priorityDisplay,
-      resultRules,
-      problems
-    });
+    let sev;
+    try {
+      sev = SEV.evaluateReportSeverity(report, {
+        priorityDisplay: entry.priorityDisplay,
+        resultRules,
+        problems
+      });
+    } catch (e) {
+      log('queue-result: evaluateReportSeverity threw', e.message);
+      return QUEUE_RESULT_FETCH_ERROR;
+    }
     log('queue-result: sev for', taskUuid, '=', sev && sev.level, '(rules=' + resultRules.length + ')');
     return sev;
   };
 
-  const injectResultChip = (rowIndex, sev) => {
-    if (!sev) return;
+  // The "couldn't check" chip (item 1.1 leg D) — fixed markup, NOT routed
+  // through getSystemChip/renderSystemChipHtmlMemo (those are user-configurable
+  // chip CONTENT; this is a system-level failure indicator and must not be
+  // relabelled/disabled by a rule config). Grey outline (.ch-chip-meta family +
+  // its own .ch-chip-error modifier — see hud.css) so it's visually distinct
+  // from both a filled clinical chip and the plain meta/outline chips.
+  const RESULT_ERROR_CHIP_HTML =
+    '<span class="ch-chip ch-chip-meta ch-chip-error" role="note" ' +
+    'title="Medicus Suite couldn’t check this result — will retry">?</span>';
+
+  const injectResultChip = (rowIndex, sev, isError) => {
+    if (!sev && !isError) return;
     const row = document.querySelector(`.ag-row[row-index="${rowIndex}"]:not(.ag-full-width-row)`);
     if (!row) return;
-    const chipDefs = selectResultChips(sev);
-    if (!chipDefs.length) return;
-    const built = chipDefs
-      .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
-      .filter((b) => b.html);
-    if (!built.length) return;
+    // `built` stays undefined on the error path — the error markup already
+    // carries its ch-chip-meta/ch-chip-error classes inline, so there's no
+    // post-hoc meta marking to do for it.
+    let builtHtml, built;
+    if (isError) {
+      builtHtml = [RESULT_ERROR_CHIP_HTML];
+    } else {
+      const chipDefs = selectResultChips(sev);
+      if (!chipDefs.length) return;
+      built = chipDefs
+        .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
+        .filter((b) => b.html);
+      if (!built.length) return;
+      builtHtml = built.map((b) => b.html);
+    }
     const host = queueChipHost(row, '.ch-q-result');
     if (!host) return;
     const span = document.createElement('span');
     span.className = host.inPreview ? 'ch-q-result' : 'ch-q-result ch-q-result-inline';
     span.setAttribute('role', 'note');
-    span.innerHTML = built.map((b) => b.html).join('');
+    span.innerHTML = builtHtml.join('');
     // Always PREPEND. Appending to the end of the (Vue-managed) patient-name cell
     // gets reconciled away by Medicus's renderer on its next re-render; prepending
     // before the cell's own content survives. The name stays visible via the CSS
     // width-cap on .ch-q-result-inline, not by position.
     host.target.insertBefore(span, host.target.firstChild);
-    log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview);
-    const rendered = span.querySelectorAll('.ch-chip');
-    built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
+    log('queue-result: chip injected', rowIndex, 'inPreview=' + host.inPreview, isError ? '(error)' : '');
+    if (built) {
+      const rendered = span.querySelectorAll('.ch-chip');
+      built.forEach((b, i) => { if (b.meta && rendered[i]) rendered[i].classList.add('ch-chip-meta'); });
+    }
   };
 
   // Re-inject result chips straight from the per-task cache, keyed by each row's own
@@ -3502,9 +3711,16 @@
       const taskUuid = _durableRowMap.get(rowIndex);
       if (!taskUuid) return;
       const entry = _queueResultCache.get(taskUuid);
-      if (!entry || entry.sev === undefined || entry.sev === null) return;
-      if (!entry.ts || (Date.now() - entry.ts) > _RESULT_CACHE_TTL) return;
-      injectResultChip(rowIndex, entry.sev);
+      if (!entry || entry.sev === undefined) return; // never evaluated -> nothing (still pending)
+      // A definitive clear/disabled/unmatched row (sev===null, not an error) has
+      // nothing to show — but an ERROR entry also has sev===null, and DOES have
+      // something to show (the grey "?" chip) as long as it's still live. Item
+      // 1.1 leg D: an expired error entry is treated as NOT cached (renders
+      // nothing here — the scheduler's own freshness check picks it up for retry).
+      if (entry.sev === null && !entry.error) return;
+      const ttl = entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+      if (!entry.ts || (Date.now() - entry.ts) > ttl) return;
+      injectResultChip(rowIndex, entry.sev, !!entry.error);
       n++;
     });
     if (n) log('queue-result: re-injected ' + n + ' cached chip(s) from durable map (visible rows)');
@@ -3617,22 +3833,31 @@
           }, _RESULT_FETCH_WINDOW_MS);
         }
         const entry = _queueResultCache.get(taskUuid);
-        const fresh = entry && entry.sev !== undefined && entry.ts && (Date.now() - entry.ts) <= _RESULT_CACHE_TTL;
+        // Item 1.1 leg D: an error entry is "fresh" only within the SHORT
+        // _RESULT_ERROR_TTL (60s), not the normal 5-minute TTL — an expired
+        // error entry must be treated as not-cached so it's retried below.
+        const entryTtl = entry && entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+        const fresh = entry && entry.sev !== undefined && entry.ts && (Date.now() - entry.ts) <= entryTtl;
         if (fresh) {
-          injectResultChip(rowIndex, entry.sev);
+          injectResultChip(rowIndex, entry.sev, !!entry.error);
         } else {
           if (_resultFetchCount >= _RESULT_FETCH_MAX) continue; // skip, don't throw
           _resultFetchCount++;
           const sev = await computeQueueRowResult(taskUuid);
+          const isError = sev === QUEUE_RESULT_FETCH_ERROR;
           if (_queueResultCache.has(taskUuid)) {
             const e2 = _queueResultCache.get(taskUuid);
-            e2.sev = sev;
-            // A failed fetch (null — transient error / flaky HIGH result) gets only a
-            // SHORT retry window so it re-surfaces on a later pass; a real result keeps
-            // the full TTL. Without this a one-off error blanked the row for 5 minutes.
-            e2.ts = sev === null ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
+            e2.sev = isError ? null : sev;
+            e2.error = isError;
+            // An error entry always gets the short _RESULT_ERROR_TTL retry
+            // window (via a fresh ts — the fresh-check above applies
+            // _RESULT_ERROR_TTL to it). A definitive-null (disabled/unmatched)
+            // fetch gets only a SHORT retry window too, so it re-surfaces on a
+            // later pass; a real result keeps the full TTL. Without this a
+            // one-off null blanked the row for 5 minutes.
+            e2.ts = (!isError && sev === null) ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
-          injectResultChip(rowIndex, sev);
+          injectResultChip(rowIndex, isError ? null : sev, isError);
           // Budget-aware inter-fetch delay (only on actual fetches, not cache hits):
           // ON-SCREEN rows get ZERO delay — the ~12 visible rows are well under the
           // 90/60s budget and the browser's ~6-connection-per-host ceiling, so firing
@@ -4005,6 +4230,9 @@
       // per change, each triggering a full 4-endpoint fetch cascade.
       clearTimeout(pending);
       clearTimeout(pendingSlow);
+      // New page load (SPA navigation) — let findCardByTitle warn again if the
+      // same title is still missing on THIS page (item 1.1).
+      _cardMissWarned.clear();
       pending = setTimeout(() => run(true), 250);
       pendingSlow = setTimeout(() => run(true), 1200);
     };

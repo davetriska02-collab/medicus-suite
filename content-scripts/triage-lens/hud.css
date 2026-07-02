@@ -108,6 +108,32 @@
   color: var(--accent);
   border-color: var(--accent-line);
 }
+/* "Not fully assessed" headline placeholder (item 1.1 leg B) — grey, never
+   green/info, so an extraction failure can't be mistaken for a genuine
+   "No flags" all-clear. Dashed border echoes .ch-tile.ch-not-assessed. */
+.ch-chip-not-assessed {
+  background: var(--bg-mid);
+  color: var(--text-4);
+  border-color: var(--border);
+  border-style: dashed;
+}
+/* Meta/process chips (misprioritised, unmatched, the "couldn't check" result
+   chip below): outline, not filled — keeps clinical fills reserved for actual
+   result severity. (Previously only shipped in the stale PiP-only EMBEDDED_CSS
+   copy in content.js — never in this, the live-page stylesheet, so meta chips
+   rendered filled/wrong on the real queue. Fixed here.) */
+.ch-chip-meta {
+  background: transparent;
+}
+/* "Couldn't check this result" chip (item 1.1 leg D) — rendered when a per-row
+   result fetch/eval genuinely fails (not merely still-pending). Grey outline,
+   visually distinct from both the clinical red/amber fills and the plain
+   .ch-chip-meta family, so "we don't know" is never mistaken for "normal". */
+.ch-chip-error {
+  background: transparent;
+  color: var(--text-4);
+  border-color: var(--border-hi);
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {
@@ -554,6 +580,20 @@
   color: var(--green);
 }
 
+/* ---- "Not assessed" state (item 1.1 leg B, TRIAGE-LENS-2026-07-02.md) ----
+   A tile whose only data source is a card findCardByTitle could not find must
+   never look like ch-green (genuinely clear) — grey, dashed border, distinct
+   from every real severity so a GP never reads "could not read" as "normal". */
+#medicus-clinical-hud .ch-tile.ch-not-assessed {
+  background: var(--bg-mid);
+  border-color: var(--border);
+  border-style: dashed;
+}
+#medicus-clinical-hud .ch-tile.ch-not-assessed .ch-tile-status,
+#medicus-clinical-hud .ch-tile.ch-not-assessed .ch-tile-count {
+  color: var(--text-5);
+}
+
 #medicus-clinical-hud .ch-detail {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -609,6 +649,17 @@
   padding-top: 6px;
   border-top: 1px dashed var(--border);
   text-align: center;
+}
+
+/* "Could not read: ..." footer (item 1.1 leg B) — grey, quiet, factual list of
+   the cards findCardByTitle missed this pass. Sits below the chips row so a
+   scanning GP sees it without it competing with real chip colour. */
+#medicus-clinical-hud .ch-missing-footer {
+  font-size: 10px;
+  color: var(--text-5);
+  padding: 4px 2px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
 }
 
 /* ---- Action menu popover (works for HUD chips and queue chips) ---- */

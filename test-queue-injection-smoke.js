@@ -321,7 +321,11 @@ const parts = [
   extract(/const decorateOneRow = \(row\) => \{[\s\S]*?\n {2}\};/, 'decorateOneRow'),
   extract(/const decorateQueueRows = \(\) => \{[\s\S]*?\n {2}\};/, 'decorateQueueRows'),
   extract(/const queueScope = \(\)[\s\S]*?;/, 'queueScope'),
-  extract(/const injectResultChip = \(rowIndex, sev\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
+  // Item 1.1 leg D (TRIAGE-LENS-2026-07-02.md) — the "couldn't check" grey
+  // error chip. RESULT_ERROR_CHIP_HTML is a free variable inside
+  // injectResultChip, so it must be extracted alongside it.
+  extract(/const RESULT_ERROR_CHIP_HTML =[\s\S]*?;/, 'RESULT_ERROR_CHIP_HTML'),
+  extract(/const injectResultChip = \(rowIndex, sev, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
   extract(/const reinjectCachedResultChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedResultChips'),
   extract(/const injectQueueMonitoringChip = \(rowIndex, result\) => \{[\s\S]*?\n {2}\};/, 'injectQueueMonitoringChip'),
   extract(/const reinjectCachedMonitoringChips = \(\) => \{[\s\S]*?\n {2}\};/, 'reinjectCachedMonitoringChips'),
@@ -385,6 +389,9 @@ if (!parts.some((p) => !p)) {
     _queueResultCache: new Map(),
     _queueMonCache: new Map(),
     _RESULT_CACHE_TTL: 5 * 60 * 1000,
+    // Item 1.1 leg D — error cache entries expire much sooner than a real
+    // result so a failed check retries soon (see content.js's own constant).
+    _RESULT_ERROR_TTL: 60 * 1000,
     _MON_CACHE_TTL: 5 * 60 * 1000,
     queueObservedContainer: null,
     document: null,
@@ -761,6 +768,106 @@ if (sandbox) {
     check(
       nameCell.children.length === 1,
       `no durable-map entry: nothing injected even though a row-id-keyed cache entry exists (got ${nameCell.children.length} children)`
+    );
+  }
+
+  // ============================================================
+  // Layer 7b — "couldn't check" error chip (item 1.1 leg D,
+  // TRIAGE-LENS-2026-07-02.md): a genuinely-failed per-row fetch/eval caches
+  // { sev: null, error: true, ts } and renders a grey "?" chip — distinct from
+  // both a real severity chip and the "still pending" nothing-at-all state.
+  // ============================================================
+  console.log('\nLayer 7b: "couldn\'t check" error chip — render, de-dupe, churn survival, TTL expiry, never tints');
+
+  {
+    // ---- a live (non-expired) error entry renders the grey "?" chip ----
+    freshCaches();
+    const rowId = '33333333-3333-4333-8333-333333333333';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox._durableRowMap.set(0, rowId);
+    sandbox._queueResultCache.set(rowId, { sev: null, error: true, ts: Date.now() });
+    sandbox.reinjectCachedResultChips();
+    check(
+      wrap.querySelectorAll('.ch-q-result').length === 1,
+      `error entry: grey chip rendered from cache (got ${wrap.querySelectorAll('.ch-q-result').length} .ch-q-result spans)`
+    );
+    check(
+      wrap.firstChild && wrap.firstChild.classes.includes('ch-q-result'),
+      'error entry: chip is still hosted/PREPENDED via the normal ch-q-result path'
+    );
+    const errHtml = wrap.firstChild ? wrap.firstChild.innerHTML : '';
+    check(
+      /ch-chip-meta/.test(errHtml) && /ch-chip-error/.test(errHtml),
+      `error entry: inner chip carries ch-chip-meta + ch-chip-error (grey outline family) (got: ${errHtml})`
+    );
+    check(
+      !/ch-chip-red|ch-chip-amber|ch-chip-green/.test(errHtml),
+      'error entry: chip carries NO clinical severity fill class — never mistaken for a graded result'
+    );
+
+    // ---- de-dupe: calling injectResultChip for the error chip twice is a no-op ----
+    sandbox.injectResultChip(0, null, true);
+    check(
+      wrap.querySelectorAll('.ch-q-result').length === 1,
+      'error entry: injectResultChip called again does not duplicate (still 1 .ch-q-result span)'
+    );
+
+    // ---- survives SPA churn via the same durable re-inject path ----
+    gridRoot.querySelectorAll('.ch-q-result').forEach((n) => n.remove());
+    check(wrap.querySelectorAll('.ch-q-result').length === 0, 'error entry churn: wipe removed the error chip node');
+    sandbox.reinjectCachedResultChips();
+    check(
+      wrap.querySelectorAll('.ch-q-result').length === 1,
+      'error entry churn: reinjectCachedResultChips restores the grey chip after the wipe'
+    );
+
+    // ---- an EXPIRED error entry (older than _RESULT_ERROR_TTL) renders nothing ----
+    freshCaches();
+    const rowIdExpired = '44444444-4444-4444-8444-444444444444';
+    const rExpired = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdExpired, dob: '01 Jan 1980 (46y)' });
+    const gridRoot2 = new El('div', {});
+    gridRoot2.appendChild(rExpired.master);
+    gridRoot2.appendChild(rExpired.detail);
+    sandbox.document = makeDocument(gridRoot2);
+    sandbox.queueObservedContainer = gridRoot2;
+
+    sandbox._durableRowMap.set(0, rowIdExpired);
+    // ts older than _RESULT_ERROR_TTL (60s) but well inside the normal
+    // _RESULT_CACHE_TTL (5min) — proves the error path uses its OWN short TTL,
+    // not the long one a real result gets.
+    sandbox._queueResultCache.set(rowIdExpired, { sev: null, error: true, ts: Date.now() - 90 * 1000 });
+    sandbox.reinjectCachedResultChips();
+    check(
+      rExpired.wrap.querySelectorAll('.ch-q-result').length === 0,
+      'expired error entry: renders NOTHING (treated as not-cached so the scheduler retries it)'
+    );
+
+    // ---- an error entry never tints the row (sev stays null throughout) ----
+    freshCaches();
+    const rowIdTint = '55555555-5555-4555-8555-555555555555';
+    const rTint = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdTint, dob: '01 Jan 1980 (46y)' });
+    const gridRoot3 = new El('div', {});
+    gridRoot3.appendChild(rTint.master);
+    gridRoot3.appendChild(rTint.detail);
+    sandbox.document = makeDocument(gridRoot3);
+    sandbox.queueObservedContainer = gridRoot3;
+
+    sandbox._durableRowMap.set(0, rowIdTint);
+    sandbox._queueResultCache.set(rowIdTint, { sev: null, error: true, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+    check(
+      !rTint.master.classes.includes('ch-row-sev-red') && !rTint.master.classes.includes('ch-row-sev-amber'),
+      'error entry: reapplyQueueRowTint never tints the row (entry.sev stays null for an error entry)'
+    );
+    check(
+      !rTint.detail.classes.includes('ch-row-sev-red') && !rTint.detail.classes.includes('ch-row-sev-amber'),
+      'error entry: preview/detail row is not tinted either'
     );
   }
 

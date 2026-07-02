@@ -609,5 +609,94 @@ if (gateMatch) {
 }
 
 // ============================================================
+// Layer 5 — item 1.1 leg D (TRIAGE-LENS-2026-07-02.md): the "couldn't check"
+// error chip contract. computeQueueRowResult / the scheduler's fetch-gate are
+// out of scope for the DOM-injection harness (test-queue-injection-smoke.js
+// covers the render/de-dupe/churn/tint side with literal cache entries), so
+// this file source-verifies the fetch/eval/cache wiring instead — same style
+// as Layer 3/3b/3c above.
+// ============================================================
+console.log('Layer 5: leg D — "couldn\'t check" error-chip fetch/cache wiring');
+
+// (a) computeQueueRowResult returns the QUEUE_RESULT_FETCH_ERROR sentinel (not
+//     a silent null) on every genuine fetch/eval failure — globals missing,
+//     the report fetch throwing, and evaluateReportSeverity throwing.
+const cqrrMatch = src.match(/const computeQueueRowResult = async \(taskUuid\) => \{[\s\S]*?\n {2}\};/);
+check(!!cqrrMatch, 'computeQueueRowResult function found');
+check(/const QUEUE_RESULT_FETCH_ERROR = Object\.freeze\(/.test(src), 'QUEUE_RESULT_FETCH_ERROR sentinel defined');
+if (cqrrMatch) {
+  // fetchInvestigationReport/evaluateReportSeverity throwing are the LAST
+  // "return QUEUE_RESULT_FETCH_ERROR" sites in the function, so a non-greedy
+  // scan forward from each log line correctly lands on its OWN return (not a
+  // later unrelated one). The globals/no-overviewURL checks below are instead
+  // anchored to the literal `return null;` statement precisely, so a lazy
+  // `[\s\S]*?` can't accidentally cross into a LATER unrelated
+  // "return QUEUE_RESULT_FETCH_ERROR" elsewhere in the function and false-pass.
+  check(
+    /fetchInvestigationReport threw[\s\S]*?return QUEUE_RESULT_FETCH_ERROR/.test(cqrrMatch[0]),
+    'a thrown report fetch returns the error sentinel'
+  );
+  check(
+    /evaluateReportSeverity threw[\s\S]*?return QUEUE_RESULT_FETCH_ERROR/.test(cqrrMatch[0]),
+    'a thrown evaluateReportSeverity() returns the error sentinel (previously uncaught)'
+  );
+  // Structural "nothing to check" paths — NOT per-row failures — must stay
+  // plain null, never the error sentinel: a disabled feature (anyEnabled
+  // false), the whole Sentinel API being absent from this world (globals not
+  // loaded / no medicus context — a page-load-order issue, not this row's
+  // fault), and a row with no matching investigation report at all.
+  check(
+    /if \(!anyEnabled\) return null;/.test(cqrrMatch[0]),
+    'disabled feature (anyEnabled false) still returns plain null, not the error sentinel'
+  );
+  check(
+    /if \(!API \|\| !NORM \|\| !SEV\) \{ log\('queue-result: globals not loaded', taskUuid\); return null; \}/.test(cqrrMatch[0]),
+    'missing Sentinel globals still returns plain null, not the error sentinel (whole feature unavailable, not a per-row failure)'
+  );
+  check(
+    /if \(!ctx\) \{ log\('queue-result: no medicus context'\); return null; \}/.test(cqrrMatch[0]),
+    'no medicus API context still returns plain null, not the error sentinel'
+  );
+  check(
+    /if \(!entry \|\| !entry\.overviewURL\) \{ log\('queue-result: no overviewURL', taskUuid\); return null; \}/.test(cqrrMatch[0]),
+    'row with no matching investigation report still returns plain null, not the error sentinel'
+  );
+}
+
+// (b) The scheduler's worker writes { sev: null, error: true } into
+//     _queueResultCache on an error-sentinel result, and its own freshness
+//     check uses the SHORT _RESULT_ERROR_TTL for error entries rather than
+//     the normal 5-minute TTL — an expired error entry must fall through to
+//     a real refetch, not linger as "fresh".
+if (sqrtMatch) {
+  check(
+    /const isError = sev === QUEUE_RESULT_FETCH_ERROR;/.test(sqrtMatch[0]),
+    'scheduler worker distinguishes the error sentinel from a definitive-null result'
+  );
+  check(
+    /e2\.error = isError;/.test(sqrtMatch[0]),
+    'scheduler worker persists entry.error into _queueResultCache'
+  );
+  check(
+    /entry && entry\.error \? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL/.test(sqrtMatch[0]),
+    "scheduler's own freshness check uses _RESULT_ERROR_TTL for error entries (expired error = not cached = retried)"
+  );
+}
+
+// (c) reinjectCachedResultChips renders the error entry (grey chip) while
+//     live, and — mirroring the scheduler — treats an expired error entry as
+//     not-cached (renders nothing, letting the next scheduler pass retry it).
+if (ricMatch) {
+  check(
+    /entry\.sev === null && !entry\.error/.test(ricMatch[0]),
+    'reinjectCachedResultChips only skips sev===null when it is NOT an error entry (error entries still render)'
+  );
+  check(
+    /entry\.error \? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL/.test(ricMatch[0]),
+    'reinjectCachedResultChips applies the short _RESULT_ERROR_TTL to error entries, not the long normal TTL'
+  );
+}
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
