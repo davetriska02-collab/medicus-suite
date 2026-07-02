@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.143.2] — 2026-07-01
+## [v3.143.3] — 2026-07-02
 
 ### Bug bash — 22 fixes across data-fetch, queue chips, drug rules, backup and modules
 
@@ -65,6 +65,28 @@ release.
   upserts by date, making concurrent panel+pop-out writes safe
 - **`engine/eval-cache.js`** — `rulesSignature()` now hashes each rule's full
   content, not just id/enabled, so an in-place rule edit correctly busts the cache
+
+## [v3.143.2] — 2026-07-01
+
+### Fix: "Send to Prescribing" team picker restored after Medicus dropdown component change
+
+Medicus replaced their Quasar `q-select` team/assignee picker with a native
+`m-simple-select` component whose option list is a debounced, server-driven search —
+it only narrows down as you type real keystrokes. The routine-prescription re-assign
+macro (`routine-rx-button.js`) was setting the whole team name in one shot and firing a
+single synthetic keydown, which never triggered that search: the full unfiltered
+Teams/Staff list stayed on screen, the configured team never appeared in it, and the
+button failed with "isn't in the assignee list" even though the team exists.
+
+- `runMacro` now simulates real character-by-character typing (`typeText`) into the
+  "Assign to" field — a `keydown`/native-value-set/`keyup` cycle per character with a
+  short pause between keystrokes — so the live search fires the same way it does for a
+  human typing.
+- The subsequent option-match wait was extended from 4s to 6s to give the debounce +
+  server round trip room, now that it's a live search rather than a local list filter.
+- The `[id^="select-item-"]` / `[role="option"]` selectors themselves were unaffected —
+  Medicus's new component still uses that markup, so no selector fallback was needed
+  here (unlike the OIR checkbox fix in v3.143.1).
 
 ## [v3.143.1] — 2026-06-30
 
