@@ -500,6 +500,20 @@ fieldset.tl-field legend {
   cursor: pointer;
 }
 
+/* Item 3.5 (TRIAGE-LENS-2026-07-02.md) — patient-context / require field groups
+   (request-rule "Require patient context" and result-rule "Patient context"
+   fieldsets). Deliberately a SEPARATE class from .tl-checks: its children are
+   full .tl-field labels (span + input, column layout), not checkbox rows, so it
+   must not inherit .tl-checks label's row-flex override. */
+.tl-req-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+.tl-req-fields .tl-field {
+  grid-column: span 1;
+}
+
 .tl-edit-footer {
   display: flex;
   justify-content: flex-end;

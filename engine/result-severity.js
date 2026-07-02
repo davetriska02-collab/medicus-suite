@@ -80,6 +80,43 @@
     return true;
   }
 
+  // ── Patient-context gate (item 3.5, TRIAGE-LENS-2026-07-02.md) ───────────────
+  // A rule may carry an OPTIONAL `context: { minAge?, maxAge?, sex? }` AND-gate (see
+  // result-rules.js header comment + resultRuleSchemaPrompt for the full schema and
+  // the FIB-4-over-65 worked example). contextAllows(rule, patientContext) is the
+  // SINGLE gate every rule-kind path consults (computeRuleSev, computeTextOutcome,
+  // computeDeltaSev, computeComboOutcome) — one place to keep the fail-closed
+  // semantics in lock-step across all four kinds.
+  //
+  // FAIL CLOSED: a rule with NO context clause is always allowed (byte-identical to
+  // pre-3.5 behaviour — this is the ONLY path when opts.patientContext is omitted,
+  // since zero shipped rules carry a context clause). A rule WITH a context clause is
+  // allowed only when patientContext supplies the specific field(s) that clause needs
+  // AND they satisfy it; if patientContext is absent, or lacks the needed field, the
+  // rule is SKIPPED (never assumed to match, never assumed not to) — exactly like a
+  // rule whose analyte simply didn't match this result. Because every result rule is
+  // escalate-only, a skipped context rule never suppresses anything; it just does not
+  // add its own escalation for this patient/this surface.
+  function contextAllows(rule, patientContext) {
+    const ctx = rule && rule.context;
+    if (!ctx || typeof ctx !== 'object') return true; // no gate → always allowed
+    const pc = patientContext && typeof patientContext === 'object' ? patientContext : null;
+    const hasMinAge = Number.isFinite(ctx.minAge);
+    const hasMaxAge = Number.isFinite(ctx.maxAge);
+    if (hasMinAge || hasMaxAge) {
+      const age = pc ? pc.ageYears : undefined;
+      if (!Number.isFinite(age)) return false; // can't confirm → fail closed
+      if (hasMinAge && age < ctx.minAge) return false;
+      if (hasMaxAge && age > ctx.maxAge) return false;
+    }
+    if (typeof ctx.sex === 'string' && ctx.sex) {
+      const sex = pc && typeof pc.sex === 'string' ? pc.sex.toLowerCase() : null;
+      if (!sex) return false; // can't confirm → fail closed
+      if (sex !== ctx.sex.toLowerCase()) return false;
+    }
+    return true;
+  }
+
   // ── Unit-mismatch guard (item 3.1, TRIAGE-LENS-2026-07-02.md) ────────────────
   // A threshold rule's `unit` field (e.g. "µg/L" on the digoxin-toxicity rule) has
   // historically been DISPLAY-ONLY — the numeric threshold was applied to
@@ -306,8 +343,12 @@
   //                  (even a lone-abnormalText rule that found no flag phrase, i.e. outcome
   //                  'none' but the analyte WAS seen). The unclassified-positive fall-through
   //                  pass (evaluateReportSeverity) uses this to leave alone any result a text
-  //                  rule already covers.
-  function computeTextOutcome(result, rules) {
+  //                  rule already covers. A rule skipped by the context gate (item 3.5) is
+  //                  NOT "seen" — it counts as though its analyte never matched, so it can
+  //                  never mark `applied` true and can never block the unclassified fallback.
+  //   `patientContext` (optional, item 3.5) — gates any rule carrying a `context` clause,
+  //                  see contextAllows above. Fail closed when absent/insufficient.
+  function computeTextOutcome(result, rules, patientContext) {
     if (!Array.isArray(rules) || rules.length === 0) {
       return { outcome: 'none', label: null, normalLabel: null, level: null, applied: false };
     }
@@ -371,6 +412,12 @@
       const hasNormal = Array.isArray(rule.normalText) && rule.normalText.length > 0;
       const hasAbnormal = Array.isArray(rule.abnormalText) && rule.abnormalText.length > 0;
       if (!hasNormal && !hasAbnormal) continue;
+
+      // Patient-context gate (item 3.5) — skip a context-gated rule that patientContext
+      // cannot confirm applies. Fail closed, checked before the analyte match so a
+      // context-skipped rule is treated exactly like a non-matching analyte (never
+      // marks `applied`).
+      if (!contextAllows(rule, patientContext)) continue;
 
       // Does this rule apply to this result? (match / exclude / specimen gate — shared
       // helper, see analyteMatches above.)
@@ -510,7 +557,11 @@
   //                (evaluateReportSeverity) folds these into the report-level
   //                `unitMismatches` array. Never affects sev/label/comparator/threshold.
   // `problems` (optional) is the patient's problem list for suppressIfProblem rules.
-  function computeRuleSev(result, rules, problems) {
+  // `patientContext` (optional, item 3.5) — { ageYears?, sex? } — gates any rule
+  // carrying a `context` clause via contextAllows above; absent/undefined means every
+  // context-gated rule is skipped (fail closed), matching pre-3.5 behaviour exactly
+  // when no rule has a context clause.
+  function computeRuleSev(result, rules, problems, patientContext) {
     const NONE = { sev: 'none', label: null, comparator: null, threshold: null, ruleId: null, unitMismatches: [] };
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     if (!result || typeof result !== 'object') return NONE;
@@ -537,6 +588,10 @@
       if (rule.comparator !== 'above' && rule.comparator !== 'below') continue;
       // Suppress if the patient already has the relevant problem on record.
       if (ruleSuppressedByProblems(rule, problems)) continue;
+
+      // Patient-context gate (item 3.5) — a rule with a context clause is skipped
+      // unless patientContext confirms it applies. Fail closed.
+      if (!contextAllows(rule, patientContext)) continue;
 
       // Check if this analyte matches the result (match / exclude / specimen gate —
       // shared helper, see analyteMatches above).
@@ -735,7 +790,9 @@
   //                    recorded here (nothing confidently wrong to report — see
   //                    priorUnitRelation above), matching 3.1's own precedent of
   //                    only recording an ACTUAL mismatch, never an absence.
-  function computeDeltaSev(rule, result) {
+  // `patientContext` (optional, item 3.5) — gates a rule carrying a `context` clause,
+  // see contextAllows above. Fail closed when absent/insufficient.
+  function computeDeltaSev(rule, result, patientContext) {
     const NONE = {
       sev: 'none',
       label: null,
@@ -753,6 +810,7 @@
     if (rule.direction !== 'rise' && rule.direction !== 'fall' && rule.direction !== 'either') return NONE;
     if (!result || typeof result !== 'object') return NONE;
     if (!Number.isFinite(result.value)) return NONE;
+    if (!contextAllows(rule, patientContext)) return NONE;
     if (!analyteMatches(analyte, result)) return NONE;
 
     const prior = findMostRecentNumericPrior(result);
@@ -824,7 +882,9 @@
   // computeRuleSev's own multi-rule loop exactly, including the suppressIfProblem
   // gate and the urgent-short-circuit). Collects unitMismatches from every rule
   // tried, not just the winner (same as computeRuleSev).
-  function computeDeltaSevForResult(result, rules, problems) {
+  // `patientContext` (optional, item 3.5) — threaded through to computeDeltaSev for
+  // each candidate rule.
+  function computeDeltaSevForResult(result, rules, problems, patientContext) {
     const NONE = {
       sev: 'none',
       label: null,
@@ -847,7 +907,7 @@
       if (rule.enabled === false) continue;
       if (ruleSuppressedByProblems(rule, problems)) continue;
 
-      const out = computeDeltaSev(rule, result);
+      const out = computeDeltaSev(rule, result, patientContext);
       if (Array.isArray(out.unitMismatches) && out.unitMismatches.length) {
         out.unitMismatches.forEach((m) => unitMismatches.push(m));
       }
@@ -883,7 +943,9 @@
   // Numeric condition value access reuses the EXACT computeRuleSev guard
   // (Number.isFinite(result.value)); a non-finite value never satisfies a numeric
   // condition (fail-safe — the combo will not fire on missing data).
-  function computeComboOutcome(report, rules, problems) {
+  // `patientContext` (optional, item 3.5) — gates a combo rule carrying a top-level
+  // `context` clause, see contextAllows above. Fail closed when absent/insufficient.
+  function computeComboOutcome(report, rules, problems, patientContext) {
     const NONE = { comboCount: 0, comboTop: null, unitMismatches: [] };
     if (!report || !Array.isArray(report.results)) return NONE;
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
@@ -953,6 +1015,8 @@
       if (!Array.isArray(conditions) || conditions.length < 2) continue;
       // Honour suppressIfProblem (fail-open when problems absent), like every other rule.
       if (ruleSuppressedByProblems(rule, problems)) continue;
+      // Patient-context gate (item 3.5) — fail closed.
+      if (!contextAllows(rule, patientContext)) continue;
 
       // Every condition must be satisfied by some result (AND).
       const allSatisfied = conditions.every((cond) => conditionSatisfied(cond, rule));
@@ -984,6 +1048,15 @@
    *                                         possible new diabetes when already on the register).
    *                                         When omitted, suppressIfProblem rules are NOT
    *                                         suppressed (fail-open — flag rather than hide).
+   * @param {object} [opts.patientContext]   ADDITIVE (item 3.5, TRIAGE-LENS-2026-07-02.md):
+   *                                         { ageYears?, sex? }. Gates any rule carrying a
+   *                                         `context` clause (result-rules.js) via
+   *                                         contextAllows — FAIL CLOSED: a context-gated rule
+   *                                         is skipped (never fires) unless this supplies the
+   *                                         field(s) that clause needs. Omitted by default;
+   *                                         since zero shipped rules carry a context clause,
+   *                                         omitting it (or passing undefined) is
+   *                                         byte-identical to pre-3.5 behaviour.
    *
    * top.ruleLabel — when the salient result's severity was RAISED by a rule (not the lab
    * flag), this carries that rule's label so the queue can render an attributable chip.
@@ -1089,6 +1162,10 @@
       const priorityDisplay = opts && opts.priorityDisplay ? String(opts.priorityDisplay) : '';
       const resultRules = opts && Array.isArray(opts.resultRules) ? opts.resultRules : [];
       const problems = opts && Array.isArray(opts.problems) ? opts.problems : [];
+      // ADDITIVE (item 3.5) — undefined by default (fail closed for every
+      // context-gated rule; a no-op when no rule carries a context clause).
+      const patientContext =
+        opts && opts.patientContext && typeof opts.patientContext === 'object' ? opts.patientContext : undefined;
 
       let urgentCount = 0;
       let abnormalCount = 0;
@@ -1128,14 +1205,14 @@
         const labSev = r.urgent ? 'urgent' : r.isAbove || r.isBelow ? 'abnormal' : 'none';
 
         // Rule-derived severity for numeric (threshold) rules
-        const ruleResult = computeRuleSev(r, resultRules, problems);
+        const ruleResult = computeRuleSev(r, resultRules, problems, patientContext);
         const ruleSev = ruleResult.sev;
 
         // ADDITIVE (item 3.6) — rule-derived severity for delta/trend rules
         // (kind:'delta'), aggregated across every delta rule matching this
         // result. Escalate-only, exactly like computeRuleSev: folded into effSev
         // below via the SAME maxSev pattern, never lowers labSev or ruleSev.
-        const deltaResult = computeDeltaSevForResult(r, resultRules, problems);
+        const deltaResult = computeDeltaSevForResult(r, resultRules, problems, patientContext);
         const deltaSev = deltaResult.sev;
 
         // ADDITIVE (item 3.1) — fold this result's skipped-rule unit mismatches
@@ -1231,7 +1308,7 @@
         }
 
         // Text-rule outcome — independent, does not affect urgentCount/abnormalCount
-        const textResult = computeTextOutcome(r, resultRules);
+        const textResult = computeTextOutcome(r, resultRules, patientContext);
         if (textResult.outcome === 'review') {
           reviewCount++;
           // Part A (item 3.2) — a red-level text review (abnormalLevel:'red' fired) carries
@@ -1265,7 +1342,7 @@
 
       // Combo rules (kind:'combo') — evaluated across the whole report, not per result.
       // ESCALATE-ONLY: a fired combo can only raise level, never lower it.
-      const combo = computeComboOutcome(report, resultRules, problems);
+      const combo = computeComboOutcome(report, resultRules, problems, patientContext);
       const comboCount = combo.comboCount;
       const comboTop = combo.comboTop;
       if (Array.isArray(combo.unitMismatches) && combo.unitMismatches.length) {
@@ -1390,6 +1467,9 @@
     matchUnclassifiedPositive,
     POSITIVE_QUALITATIVE,
     UNCLASSIFIED_NEGATORS,
+    // Item 3.5 — exported for direct unit tests. See the header comment above
+    // contextAllows for the fail-closed semantics every rule-kind path shares.
+    contextAllows,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

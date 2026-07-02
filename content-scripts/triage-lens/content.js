@@ -1597,9 +1597,17 @@
   // Apply user rules: merge matching rules into header chips & bump tiles.
   // Also returns the matched rules separately so the renderer can attach
   // action-menu handlers to their chips.
+  // requireCtx (item 3.5, optional) — { ageYears?, sex?, medsText?, problemsText? }.
+  // A rule with a `require` clause this ctx cannot confirm is EXCLUDED from `matched`
+  // (fails closed) — the SAME gate the queue applies in decorateOneRow, applied here
+  // for the detail/record HUD rule chips. Never suppresses another, un-gated rule.
   const RULE_CHIP_SEVERITY = { red: 0, amber: 1, green: 2, info: 3 };
-  const applyRules = (sig, page, fieldsData) => {
-    const matched = matchRules(page, fieldsData);
+  const applyRules = (sig, page, fieldsData, requireCtx) => {
+    const rawMatched = matchRules(page, fieldsData);
+    const matcherReq = typeof window !== 'undefined' && window.TriageLensMatch && window.TriageLensMatch.ruleRequireMet;
+    const matched = matcherReq
+      ? rawMatched.filter((r) => matcherReq(r, requireCtx || {}))
+      : rawMatched;
     // Red chips must never trail amber/info ones: order by severity (stable
     // sort preserves config order within the same severity).
     matched.sort((a, b) =>
@@ -2653,11 +2661,31 @@
     };
   };
 
+  // Item 3.5 — build the require-gate ctx { ageYears?, sex?, medsText?, problemsText? }
+  // for the detail/record HUD from the SAME extracted data buildFieldsData already
+  // reshaped (meds/problems are already flat string arrays there — no re-extraction).
+  //   ageYears — extractBanner() (DOM scan of the patient banner) parses an age from
+  //              an "(NNy" token or a DOB string. Same source the record/detail HUD
+  //              already displays.
+  //   sex      — NOT currently extracted anywhere on this page (extractBanner only
+  //              returns { warnings, age }) — always undefined here, so a
+  //              require:{sex} clause fails closed on every surface today.
+  //   medsText/problemsText — joined from fieldsData.meds / fieldsData.problems
+  //              (extractMedications / extractActiveProblems), the same "Current
+  //              Medication" / "Active Problems" cards the HUD renders.
+  const buildRequireCtx = (data, fieldsData) => ({
+    ageYears: Number.isFinite(data?.banner?.age) ? data.banner.age : undefined,
+    sex: undefined,
+    medsText: Array.isArray(fieldsData?.meds) ? fieldsData.meds.join(' ') : '',
+    problemsText: Array.isArray(fieldsData?.problems) ? fieldsData.problems.join(' ') : '',
+  });
+
   // ---- Per-page handlers ----
   const runRecord = () => {
     const data = extractAll('record', false);
     const signals = computeSignals(data);
-    applyRules(signals, 'record', buildFieldsData(data, ''));
+    const fieldsData = buildFieldsData(data, '');
+    applyRules(signals, 'record', fieldsData, buildRequireCtx(data, fieldsData));
     renderHUD(data, signals, null);
     restorePosition(hudEl);
     enableDrag(hudEl);
@@ -2688,7 +2716,8 @@
       initialReq = extractInitialRequest();
     }
 
-    applyRules(signals, 'detail', buildFieldsData(data, initialReq.text || ''));
+    const detailFieldsData = buildFieldsData(data, initialReq.text || '');
+    applyRules(signals, 'detail', detailFieldsData, buildRequireCtx(data, detailFieldsData));
     const requestSignals = computeRequestSignals(taskDetails, requester, initialReq);
 
     if (docInfo) {
@@ -4257,28 +4286,62 @@
       ? CONFIG.resultRules.filter(r => r && r.enabled !== false)
       : [];
 
-    // Patient-record suppression (e.g. "possible new diabetes" rules): fetch the
-    // problem list ONLY when a suppressIfProblem rule's analyte is actually present
-    // in this report — most reports (FBC, U&E) never trigger this extra fetch.
+    // Patient-record suppression (e.g. "possible new diabetes" rules) AND patient-
+    // context result rules (item 3.5 — age/sex-gated escalations, e.g. an
+    // over-65-only FIB-4 threshold): both need a full patient fetch beyond the
+    // investigation report itself, so share ONE opportunistic fetchAll, triggered
+    // ONLY when a relevant rule is actually configured AND its analyte is present in
+    // THIS report — most reports (FBC, U&E) never trigger it. Since zero shipped
+    // result rules carry suppressIfProblem-needing-fetch analytes outside their own
+    // report or a context clause today, `contextRules` is always empty and this
+    // extra fetch fires no more often than it did before item 3.5 — patientContext
+    // stays undefined (fail closed for every context-gated rule) until a clinician
+    // actually authors one.
     let problems = [];
+    let patientContext; // fail closed by default — undefined unless a real banner was fetched
     try {
       const suppressRules = resultRules.filter(
         r => r && r.suppressIfProblem && r.analyte && Array.isArray(r.analyte.match)
       );
-      if (suppressRules.length && report.patientUuid && Array.isArray(report.results)) {
+      const contextRules = resultRules.filter(r => r && r.context && typeof r.context === 'object');
+      const analyteTermsFor = (r) => {
+        if ((r.kind || 'threshold') === 'combo' && Array.isArray(r.conditions)) {
+          return r.conditions.reduce((acc, c) => {
+            if (c && c.analyte && Array.isArray(c.analyte.match)) acc.push(...c.analyte.match);
+            return acc;
+          }, []);
+        }
+        return (r.analyte && Array.isArray(r.analyte.match)) ? r.analyte.match : [];
+      };
+      if ((suppressRules.length || contextRules.length) && report.patientUuid && Array.isArray(report.results)) {
         const names = report.results.map(r => String((r && r.name) || '').toLowerCase());
-        const relevant = suppressRules.some(r =>
+        const relevantSuppress = suppressRules.some(r =>
           r.analyte.match.some(
             m => typeof m === 'string' && m && names.some(n => n.includes(m.toLowerCase()))
           )
         );
-        if (relevant) {
+        const relevantContext = contextRules.some(r =>
+          analyteTermsFor(r).some(
+            m => typeof m === 'string' && m && names.some(n => n.includes(m.toLowerCase()))
+          )
+        );
+        if (relevantSuppress || relevantContext) {
           const apiResults = await API.fetchAll(ctx.apiBase, report.patientUuid);
           const normalised = NORM.normaliseAll(apiResults, {
             url: location.href, title: '', view: null,
             patientUuid: report.patientUuid, resolutionSource: 'queue-result-suppress'
           });
           problems = Array.isArray(normalised.problems) ? normalised.problems : [];
+          // Item 3.5 — normaliseBanner (engine/normalisers.js) supplies ageYears/sex
+          // from the patient banner. Only carried through when at least one is a
+          // genuinely usable value — never a fabricated/guessed field.
+          const pc = normalised.patientContext;
+          if (pc && typeof pc === 'object' && (Number.isFinite(pc.ageYears) || typeof pc.sex === 'string')) {
+            patientContext = {
+              ageYears: Number.isFinite(pc.ageYears) ? pc.ageYears : undefined,
+              sex: typeof pc.sex === 'string' ? pc.sex : undefined,
+            };
+          }
         }
       }
     } catch (e) { log('queue-result: problem fetch failed', e.message); }
@@ -4288,7 +4351,8 @@
       sev = SEV.evaluateReportSeverity(report, {
         priorityDisplay: entry.priorityDisplay,
         resultRules,
-        problems
+        problems,
+        patientContext
       });
     } catch (e) {
       log('queue-result: evaluateReportSeverity threw', e.message);
@@ -5538,8 +5602,14 @@
 
     // Age extremes
     const ageMatch = dob.match(/\((\d+)\s*y/i);
+    // Item 3.5 (TRIAGE-LENS-2026-07-02.md) — captured OUTSIDE the if-block so the
+    // require gate below can reuse the SAME age already parsed from this row's own
+    // DOB cell (the queue surface has no sex/meds/problems data — see the require
+    // gate comment further down).
+    let rowAgeYears;
     if (ageMatch) {
       const age = +ageMatch[1];
+      rowAgeYears = age;
       if (age < TH('childAge')) pushSysChip('queue.child', { age });
       else if (age >= TH('elderAge')) pushSysChip('queue.elder', { age });
     }
@@ -5570,7 +5640,20 @@
     // here (closure-capturing rankedRules/previewText, already in hand) and
     // consumed by the wiring pass below, by index (data-rq-idx), once the
     // chip HTML has actually landed in the DOM.
-    const ruleMatches = matchRules('queue', { request: previewText });
+    // Item 3.5 — require gate applied AFTER text matching, exactly like the engine's
+    // result-rule contextAllows gate: a rule with a `require` clause the current
+    // surface's data cannot confirm is EXCLUDED from ruleMatches (fails closed) —
+    // never suppresses any OTHER, un-gated rule that also matched the same text.
+    // The queue surface only has age (parsed from this row's own DOB cell, above);
+    // sex/meds/problems are NOT available here, so any require:{sex|medsAny|
+    // problemsAny} clause always fails closed on the queue (see content.js's Part 2
+    // report — meds/problems only reach content.js on the detail/record HUD path,
+    // via extractMedications/extractActiveProblems).
+    const rawRuleMatches = matchRules('queue', { request: previewText });
+    const matcherReq = typeof window !== 'undefined' && window.TriageLensMatch && window.TriageLensMatch.ruleRequireMet;
+    const ruleMatches = matcherReq
+      ? rawRuleMatches.filter((r) => matcherReq(r, { ageYears: rowAgeYears }))
+      : rawRuleMatches;
     const ruleMatchActivators = [];
     if (ruleMatches.length) {
       const rankedRules = rankRuleMatches(ruleMatches, previewText);

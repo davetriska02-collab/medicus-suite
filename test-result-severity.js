@@ -8,6 +8,7 @@ const {
   matchUnclassifiedPositive,
   POSITIVE_QUALITATIVE,
   UNCLASSIFIED_NEGATORS,
+  contextAllows,
 } = require('./engine/result-severity.js');
 
 let passed = 0;
@@ -2478,10 +2479,7 @@ console.log('\n--- matchUnclassifiedPositive (direct) ---');
     matchUnclassifiedPositive({ text: 'Hepatitis C antibody non-reactive' }) === null,
     "'non-reactive' → not surfaced (glued negating prefix)"
   );
-  assert(
-    matchUnclassifiedPositive({ text: 'HBsAg non reactive' }) === null,
-    "'non reactive' (spaced) → not surfaced"
-  );
+  assert(matchUnclassifiedPositive({ text: 'HBsAg non reactive' }) === null, "'non reactive' (spaced) → not surfaced");
   assert(
     matchUnclassifiedPositive({ text: 'non-Hodgkin lymphoma cells seen' }) === 'seen',
     "'non' only negates the abutting token, not a distant one ('seen' still surfaces)"
@@ -2912,6 +2910,273 @@ console.log('\n--- item 3.6: delta rules — escalate-only (raises, never lowers
     'on a severity TIE, the threshold-rule result wins attribution (preserves pre-delta behaviour)'
   );
   assert(tiedOut.flagged[0].deltaSummary === null, 'on a threshold-wins tie, deltaSummary is null');
+}
+
+// ── item 3.5: patient-context gate (contextAllows + evaluateReportSeverity) ───
+// No shipped result rule carries a context clause (ZERO shipped context rules —
+// see TRIAGE-LENS-2026-07-02.md item 3.5), so every rule here is constructed inline.
+console.log('\n--- item 3.5: contextAllows (direct) ---');
+{
+  // No context clause on the rule → always allowed, regardless of patientContext.
+  assert(contextAllows({}, undefined) === true, 'no context clause: allowed with no patientContext');
+  assert(
+    contextAllows({}, { ageYears: 10, sex: 'male' }) === true,
+    'no context clause: allowed with any patientContext'
+  );
+  assert(contextAllows({ context: null }, undefined) === true, 'context: null is treated as no gate');
+
+  // An EMPTY context object ({}) has no clauses to violate — always allowed.
+  assert(contextAllows({ context: {} }, undefined) === true, 'context: {} (no clauses) allowed with no patientContext');
+
+  // minAge / maxAge — fail closed when patientContext or ageYears is absent.
+  const over65 = { context: { minAge: 65 } };
+  assert(contextAllows(over65, undefined) === false, 'minAge clause: no patientContext at all → fail closed');
+  assert(contextAllows(over65, {}) === false, 'minAge clause: patientContext present but no ageYears → fail closed');
+  assert(contextAllows(over65, { ageYears: 70 }) === true, 'minAge clause: age 70 >= 65 → allowed');
+  assert(contextAllows(over65, { ageYears: 65 }) === true, 'minAge clause: age exactly 65 (inclusive) → allowed');
+  assert(contextAllows(over65, { ageYears: 64 }) === false, 'minAge clause: age 64 < 65 → not allowed');
+  assert(contextAllows(over65, { ageYears: NaN }) === false, 'minAge clause: non-finite ageYears → fail closed');
+
+  const under16 = { context: { maxAge: 15 } };
+  assert(contextAllows(under16, { ageYears: 10 }) === true, 'maxAge clause: age 10 <= 15 → allowed');
+  assert(contextAllows(under16, { ageYears: 15 }) === true, 'maxAge clause: age exactly 15 (inclusive) → allowed');
+  assert(contextAllows(under16, { ageYears: 16 }) === false, 'maxAge clause: age 16 > 15 → not allowed');
+  assert(contextAllows(under16, undefined) === false, 'maxAge clause: no patientContext → fail closed');
+
+  const band = { context: { minAge: 18, maxAge: 65 } };
+  assert(contextAllows(band, { ageYears: 40 }) === true, 'band clause: age within [18,65] → allowed');
+  assert(contextAllows(band, { ageYears: 17 }) === false, 'band clause: age below band → not allowed');
+  assert(contextAllows(band, { ageYears: 66 }) === false, 'band clause: age above band → not allowed');
+
+  // sex — fail closed when patientContext or sex is absent; case-insensitive compare.
+  const femaleOnly = { context: { sex: 'female' } };
+  assert(contextAllows(femaleOnly, undefined) === false, 'sex clause: no patientContext → fail closed');
+  assert(contextAllows(femaleOnly, {}) === false, 'sex clause: patientContext present but no sex → fail closed');
+  assert(contextAllows(femaleOnly, { sex: 'female' }) === true, 'sex clause: matching sex → allowed');
+  assert(contextAllows(femaleOnly, { sex: 'male' }) === false, 'sex clause: non-matching sex → not allowed');
+  assert(contextAllows(femaleOnly, { sex: 'Female' }) === true, 'sex clause: case-insensitive match ("Female")');
+
+  // Both age and sex clauses — AND semantics, both must be confirmed and satisfied.
+  const both = { context: { minAge: 65, sex: 'male' } };
+  assert(contextAllows(both, { ageYears: 70, sex: 'male' }) === true, 'both clauses satisfied → allowed');
+  assert(contextAllows(both, { ageYears: 70, sex: 'female' }) === false, 'age ok, sex wrong → not allowed');
+  assert(contextAllows(both, { ageYears: 40, sex: 'male' }) === false, 'sex ok, age wrong → not allowed');
+  assert(contextAllows(both, { ageYears: 70 }) === false, 'age ok, sex missing from patientContext → fail closed');
+  assert(contextAllows(both, { sex: 'male' }) === false, 'sex ok, age missing from patientContext → fail closed');
+}
+
+console.log('\n--- item 3.5: context gate — threshold rules ---');
+{
+  const fib4Over65 = {
+    id: 'ctx-fib4-over65',
+    enabled: true,
+    kind: 'threshold',
+    label: 'FIB-4 raised (over 65)',
+    analyte: { match: ['fib-4'] },
+    comparator: 'above',
+    amber: 3.25,
+    context: { minAge: 65 },
+  };
+  const fib4Result = mkResult('FIB-4', 3.5);
+
+  const firesOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { ageYears: 70 },
+  });
+  assert(firesOut.level === 'amber', 'threshold+context: fires when patient matches (age 70 >= 65)');
+  assert(
+    firesOut.flagged[0].ruleLabel === 'FIB-4 raised (over 65)',
+    'threshold+context: chip attributes the context rule'
+  );
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([fib4Result]), { resultRules: [fib4Over65] });
+  assert(
+    noPatientContextOut.level === 'none',
+    'threshold+context: SKIPPED (fail closed) when patientContext is omitted entirely'
+  );
+
+  const underAgeOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { ageYears: 40 },
+  });
+  assert(underAgeOut.level === 'none', 'threshold+context: SKIPPED when patient age is confirmed but out of range');
+
+  const noAgeFieldOut = evaluateReportSeverity(makeReport([fib4Result]), {
+    resultRules: [fib4Over65],
+    patientContext: { sex: 'male' }, // patientContext present, but no ageYears
+  });
+  assert(
+    noAgeFieldOut.level === 'none',
+    'threshold+context: SKIPPED when patientContext lacks the needed ageYears field'
+  );
+}
+
+console.log('\n--- item 3.5: context gate — text rules ---');
+{
+  // Deliberately avoids every item-3.2-Part-B POSITIVE_QUALITATIVE lexicon token
+  // ('positive','detected','reactive','isolated','abnormal','seen','present',
+  // 'grown','raised') in both the abnormalText phrase and the result text — a
+  // context-skipped rule is expected to fall through to 'none' here, and using a
+  // lexicon word would instead trip the UNRELATED unclassified-positive fallback
+  // (see the dedicated fall-through assertion further below, which deliberately
+  // DOES use 'isolated' to pin that separate mechanism).
+  const femaleTextRule = {
+    id: 'ctx-text-female',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review (female)',
+    analyte: { match: ['culture'] },
+    abnormalText: ['mrsa colonisation confirmed'],
+    context: { sex: 'female' },
+  };
+  const cultureResult = { name: 'Culture', value: NaN, text: 'mrsa colonisation confirmed', unit: null, history: [] };
+
+  const firesOut = evaluateReportSeverity(makeReport([cultureResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'female' },
+  });
+  assert(firesOut.level === 'amber', 'text+context: fires when patient sex matches');
+  assert(
+    firesOut.reviewTop && firesOut.reviewTop.label === 'Needs review (female)',
+    'text+context: reviewTop attributes the context rule'
+  );
+
+  const wrongSexOut = evaluateReportSeverity(makeReport([cultureResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'male' },
+  });
+  assert(wrongSexOut.level === 'none', 'text+context: SKIPPED when patient sex does not match');
+  assert(wrongSexOut.reviewCount === 0, 'text+context: no review recorded on a sex mismatch');
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([cultureResult]), { resultRules: [femaleTextRule] });
+  assert(noPatientContextOut.level === 'none', 'text+context: SKIPPED (fail closed) when patientContext is omitted');
+
+  // A context-skipped text rule must NOT mark the result "applied" — it must stay
+  // eligible for the item 3.2 Part B unclassified-positive fall-through exactly as
+  // if no text rule existed at all (skipped ≡ not seen, not ≡ seen-but-none).
+  const positiveOnlyResult = { name: 'Culture', value: NaN, text: 'Organisms isolated', unit: null, history: [] };
+  const skippedFallThroughOut = evaluateReportSeverity(makeReport([positiveOnlyResult]), {
+    resultRules: [femaleTextRule],
+    patientContext: { sex: 'male' },
+  });
+  assert(
+    skippedFallThroughOut.unclassified.length === 1 && skippedFallThroughOut.unclassified[0].token === 'isolated',
+    'text+context: a context-skipped rule leaves the result open to the unclassified-positive fall-through'
+  );
+}
+
+console.log('\n--- item 3.5: context gate — delta rules ---');
+{
+  const childKRise = {
+    id: 'ctx-delta-child-k',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (child)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    context: { maxAge: 15 },
+  };
+  const kResult = mkResult('Potassium', 5.0, {
+    unit: 'mmol/L',
+    history: [{ value: 4.2, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+
+  const firesOut = evaluateReportSeverity(makeReport([kResult]), {
+    resultRules: [childKRise],
+    patientContext: { ageYears: 10 },
+  });
+  assert(firesOut.level === 'amber', 'delta+context: fires when patient matches (age 10 <= 15)');
+  assert(
+    firesOut.flagged[0].deltaSummary !== null,
+    'delta+context: deltaSummary set when the context-gated delta wins attribution'
+  );
+
+  const adultOut = evaluateReportSeverity(makeReport([kResult]), {
+    resultRules: [childKRise],
+    patientContext: { ageYears: 40 },
+  });
+  assert(adultOut.level === 'none', 'delta+context: SKIPPED when patient age is confirmed but out of range');
+
+  const noPatientContextOut = evaluateReportSeverity(makeReport([kResult]), { resultRules: [childKRise] });
+  assert(noPatientContextOut.level === 'none', 'delta+context: SKIPPED (fail closed) when patientContext is omitted');
+}
+
+console.log('\n--- item 3.5: context gate — combo rules ---');
+{
+  const comboOver65Male = {
+    id: 'ctx-combo-over65-male',
+    kind: 'combo',
+    enabled: true,
+    label: 'Combo (over 65, male)',
+    level: 'amber',
+    context: { minAge: 65, sex: 'male' },
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10 },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusResult = mkResult('Pus cells', 50);
+  const noGrowthResult = { name: 'Culture', value: NaN, text: 'No growth', unit: null, history: [] };
+  const comboReport = makeReport([pusResult, noGrowthResult]);
+
+  const firesOut = evaluateReportSeverity(comboReport, {
+    resultRules: [comboOver65Male],
+    patientContext: { ageYears: 70, sex: 'male' },
+  });
+  assert(firesOut.comboCount === 1, 'combo+context: fires when patient matches both clauses');
+  assert(firesOut.level === 'amber', 'combo+context: report escalated to amber');
+
+  const wrongSexOut = evaluateReportSeverity(comboReport, {
+    resultRules: [comboOver65Male],
+    patientContext: { ageYears: 70, sex: 'female' },
+  });
+  assert(wrongSexOut.comboCount === 0, 'combo+context: SKIPPED when one clause (sex) does not match');
+
+  const noPatientContextOut = evaluateReportSeverity(comboReport, { resultRules: [comboOver65Male] });
+  assert(noPatientContextOut.comboCount === 0, 'combo+context: SKIPPED (fail closed) when patientContext is omitted');
+}
+
+console.log('\n--- item 3.5: byte-identical when no rule carries a context clause ---');
+{
+  // A report with a mix of threshold/text/delta rules, NONE carrying a context
+  // clause, must produce the EXACT SAME evaluateReportSeverity output whether or
+  // not patientContext is supplied — the gate must be a true no-op for every
+  // rule that doesn't opt into it.
+  const plainThreshold = {
+    id: 'plain-k',
+    enabled: true,
+    kind: 'threshold',
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  };
+  const plainText = {
+    id: 'plain-msu',
+    enabled: true,
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['MSU'] },
+    normalText: ['no growth'],
+  };
+  const kResult = mkResult('Potassium', 6.2, { unit: 'mmol/L' });
+  const msuResult = { name: 'MSU', value: NaN, text: 'growth of e. coli', unit: null, history: [] };
+  const rules = [plainThreshold, plainText];
+  const report = makeReport([kResult, msuResult]);
+
+  const withoutPatientContext = evaluateReportSeverity(report, { resultRules: rules });
+  const withPatientContext = evaluateReportSeverity(report, {
+    resultRules: rules,
+    patientContext: { ageYears: 70, sex: 'female' },
+  });
+  assert(
+    JSON.stringify(withoutPatientContext) === JSON.stringify(withPatientContext),
+    'output is byte-identical with/without patientContext when no rule carries a context clause'
+  );
+  assert(withoutPatientContext.level === 'red', 'sanity: the plain rules still fire as expected (level red)');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

@@ -247,8 +247,10 @@ console.log('--- existing exports untouched ---');
     'ruleMatchEvidence exported with the documented signature'
   );
   check(
-    /const api = \{ compileRule, ruleMatchesText, ruleMatchEvidence, NEGATORS, PAST_MARKERS \};/.test(src),
-    'all five are exported off the same api object (item 3.4 adds NEGATORS/PAST_MARKERS)'
+    /const api = \{\s*compileRule,\s*ruleMatchesText,\s*ruleMatchEvidence,\s*NEGATORS,\s*PAST_MARKERS,\s*ruleRequireMet,\s*validateRuleRequire,\s*\};/.test(
+      src
+    ),
+    'all seven are exported off the same api object (item 3.5 adds ruleRequireMet/validateRuleRequire)'
   );
 }
 
@@ -417,6 +419,126 @@ console.log('--- NEGATORS/PAST_MARKERS exported ---');
   check(
     Array.isArray(M.PAST_MARKERS) && M.PAST_MARKERS.length === 9,
     `PAST_MARKERS exported, 9 entries (got ${M.PAST_MARKERS && M.PAST_MARKERS.length})`
+  );
+}
+
+// ── 10. ruleRequireMet (item 3.5, TRIAGE-LENS-2026-07-02.md) ──────────────
+// A rule's OPTIONAL `require` clause is a SEPARATE gate applied by the caller
+// AFTER a text match — never touches ruleMatchesText/ruleMatchEvidence. FAIL
+// CLOSED: a clause whose data is absent from ctx is treated as unsatisfied.
+console.log('--- ruleRequireMet: no require clause → always true ---');
+{
+  check(M.ruleRequireMet({}, {}) === true, 'no require field on the rule → allowed with empty ctx');
+  check(M.ruleRequireMet({}, undefined) === true, 'no require field on the rule → allowed with undefined ctx');
+  check(M.ruleRequireMet({ require: null }, {}) === true, 'require: null is treated as no gate');
+  check(M.ruleRequireMet({ require: {} }, {}) === true, 'require: {} (no clauses) is always satisfied');
+}
+
+console.log('--- ruleRequireMet: ageMin/ageMax ---');
+{
+  const child = { require: { ageMax: 15 } };
+  check(M.ruleRequireMet(child, { ageYears: 8 }) === true, 'ageMax: age within bound → true');
+  check(M.ruleRequireMet(child, { ageYears: 15 }) === true, 'ageMax: age exactly at bound (inclusive) → true');
+  check(M.ruleRequireMet(child, { ageYears: 16 }) === false, 'ageMax: age above bound → false');
+  check(M.ruleRequireMet(child, {}) === false, 'ageMax: no ageYears in ctx → fail closed');
+  check(M.ruleRequireMet(child, undefined) === false, 'ageMax: no ctx at all → fail closed');
+
+  const elder = { require: { ageMin: 65 } };
+  check(M.ruleRequireMet(elder, { ageYears: 70 }) === true, 'ageMin: age above bound → true');
+  check(M.ruleRequireMet(elder, { ageYears: 65 }) === true, 'ageMin: age exactly at bound (inclusive) → true');
+  check(M.ruleRequireMet(elder, { ageYears: 64 }) === false, 'ageMin: age below bound → false');
+  check(M.ruleRequireMet(elder, {}) === false, 'ageMin: no ageYears in ctx → fail closed');
+
+  const band = { require: { ageMin: 18, ageMax: 65 } };
+  check(M.ruleRequireMet(band, { ageYears: 40 }) === true, 'ageMin+ageMax band: within → true');
+  check(M.ruleRequireMet(band, { ageYears: 17 }) === false, 'ageMin+ageMax band: below → false');
+  check(M.ruleRequireMet(band, { ageYears: 66 }) === false, 'ageMin+ageMax band: above → false');
+}
+
+console.log('--- ruleRequireMet: sex ---');
+{
+  const maleOnly = { require: { sex: 'male' } };
+  check(M.ruleRequireMet(maleOnly, { sex: 'male' }) === true, 'sex: matching → true');
+  check(M.ruleRequireMet(maleOnly, { sex: 'female' }) === false, 'sex: non-matching → false');
+  check(M.ruleRequireMet(maleOnly, {}) === false, 'sex: no sex in ctx → fail closed');
+  check(M.ruleRequireMet(maleOnly, { sex: 'Male' }) === true, 'sex: case-insensitive match');
+}
+
+console.log('--- ruleRequireMet: medsAny / problemsAny (substring match) ---');
+{
+  const mtxGated = { require: { medsAny: ['methotrexate'] } };
+  check(
+    M.ruleRequireMet(mtxGated, { medsText: 'Methotrexate 10mg once weekly' }) === true,
+    'medsAny: case-insensitive substring hit → true'
+  );
+  check(M.ruleRequireMet(mtxGated, { medsText: 'Amlodipine 5mg' }) === false, 'medsAny: no matching substring → false');
+  check(M.ruleRequireMet(mtxGated, {}) === false, 'medsAny: no medsText in ctx → fail closed');
+  check(M.ruleRequireMet(mtxGated, { medsText: '' }) === false, 'medsAny: empty medsText → fail closed');
+
+  const ckdGated = { require: { problemsAny: ['ckd', 'chronic kidney disease'] } };
+  check(
+    M.ruleRequireMet(ckdGated, { problemsText: 'CKD stage 3' }) === true,
+    'problemsAny: case-insensitive substring hit → true'
+  );
+  check(M.ruleRequireMet(ckdGated, { problemsText: 'Asthma' }) === false, 'problemsAny: no matching substring → false');
+  check(M.ruleRequireMet(ckdGated, {}) === false, 'problemsAny: no problemsText in ctx → fail closed');
+}
+
+console.log('--- ruleRequireMet: whole require object (multiple clauses, AND) ---');
+{
+  const utiChild = {
+    require: { ageMax: 15 },
+  };
+  const utiMethotrexate = {
+    require: { medsAny: ['methotrexate'] },
+  };
+  // The queue surface has age but no meds — a UTI+child rule fires there,
+  // a UTI+methotrexate rule does not (fails closed, no meds data on the queue).
+  const queueCtx = { ageYears: 8 };
+  check(M.ruleRequireMet(utiChild, queueCtx) === true, 'age-gated rule fires on a surface that has age data');
+  check(
+    M.ruleRequireMet(utiMethotrexate, queueCtx) === false,
+    'meds-gated rule fails closed on a surface with no meds data'
+  );
+  // The detail/record surface has both — both fire when the data confirms them.
+  const detailCtx = { ageYears: 8, medsText: 'Methotrexate 10mg weekly, Folic acid 5mg weekly' };
+  check(M.ruleRequireMet(utiChild, detailCtx) === true, 'age-gated rule fires on a surface with age data');
+  check(M.ruleRequireMet(utiMethotrexate, detailCtx) === true, 'meds-gated rule fires when meds data confirms it');
+
+  const multiClause = { require: { ageMin: 18, ageMax: 65, sex: 'female', medsAny: ['warfarin'] } };
+  const fullCtx = { ageYears: 30, sex: 'female', medsText: 'Warfarin 3mg' };
+  check(M.ruleRequireMet(multiClause, fullCtx) === true, 'all four clauses satisfied → true');
+  check(
+    M.ruleRequireMet(multiClause, { ...fullCtx, sex: 'male' }) === false,
+    'one clause (sex) unsatisfied among several → false'
+  );
+  check(
+    M.ruleRequireMet(multiClause, { ageYears: 30, sex: 'female' }) === false,
+    'one clause (medsAny) has no data at all → fail closed, false'
+  );
+}
+
+// ── 11. validateRuleRequire (item 3.5) ─────────────────────────────────────
+console.log('--- validateRuleRequire ---');
+{
+  check(M.validateRuleRequire({}).length === 0, 'no require field → no errors');
+  check(M.validateRuleRequire({ require: undefined }).length === 0, 'require: undefined → no errors');
+  check(
+    M.validateRuleRequire({ require: { ageMin: 18, ageMax: 65, sex: 'female', medsAny: ['x'], problemsAny: ['y'] } })
+      .length === 0,
+    'a well-formed require object → no errors'
+  );
+  check(M.validateRuleRequire({ require: 'nope' }).length > 0, 'a non-object require is rejected');
+  check(M.validateRuleRequire({ require: [] }).length > 0, 'an array require is rejected');
+  check(M.validateRuleRequire({ require: { ageMin: -1 } }).length > 0, 'negative ageMin is rejected');
+  check(M.validateRuleRequire({ require: { ageMax: -1 } }).length > 0, 'negative ageMax is rejected');
+  check(M.validateRuleRequire({ require: { ageMin: 70, ageMax: 65 } }).length > 0, 'ageMin > ageMax is rejected');
+  check(M.validateRuleRequire({ require: { sex: 'Male' } }).length > 0, 'capitalised sex is rejected');
+  check(M.validateRuleRequire({ require: { sex: 'other' } }).length > 0, 'an unrecognised sex value is rejected');
+  check(M.validateRuleRequire({ require: { medsAny: 'not-an-array' } }).length > 0, 'a non-array medsAny is rejected');
+  check(
+    M.validateRuleRequire({ require: { problemsAny: [1, 2] } }).length > 0,
+    'a non-string-array problemsAny is rejected'
   );
 }
 

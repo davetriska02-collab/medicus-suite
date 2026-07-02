@@ -117,6 +117,42 @@
               <button class="tl-btn tl-btn-secondary" id="btnAddAction">+ Add action</button>
             </fieldset>
 
+            <fieldset class="tl-field">
+              <legend>
+                Require patient context
+                <small
+                  >(optional — ALL set fields must match; skipped entirely, never suppressing the base rule, when that
+                  data isn't available on the current page)</small
+                >
+              </legend>
+              <div class="tl-req-fields">
+                <label class="tl-field">
+                  <span>Min age (years)</span>
+                  <input type="number" id="fReqAgeMin" step="1" min="0" placeholder="e.g. 0" />
+                </label>
+                <label class="tl-field">
+                  <span>Max age (years)</span>
+                  <input type="number" id="fReqAgeMax" step="1" min="0" placeholder="e.g. 15" />
+                </label>
+                <label class="tl-field">
+                  <span>Sex</span>
+                  <select id="fReqSex">
+                    <option value="">Any</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </label>
+                <label class="tl-field">
+                  <span>Medications <small>(one substring per line, optional)</small></span>
+                  <textarea id="fReqMedsAny" rows="2" placeholder="methotrexate&#10;warfarin"></textarea>
+                </label>
+                <label class="tl-field">
+                  <span>Problems <small>(one substring per line, optional)</small></span>
+                  <textarea id="fReqProblemsAny" rows="2" placeholder="ckd&#10;immunosuppress"></textarea>
+                </label>
+              </div>
+            </fieldset>
+
             <label class="tl-field">
               <span>Notes (your own reference, not shown anywhere)</span>
               <textarea id="fNotes" rows="2"></textarea>
@@ -552,6 +588,34 @@
               <legend>Actions <small>(click-to-fire from the result-chip popover when this rule fires)</small></legend>
               <div id="rrActionList"></div>
               <button class="tl-btn tl-btn-secondary" id="btnRrAddAction" type="button">+ Add action</button>
+            </fieldset>
+
+            <fieldset class="tl-field">
+              <legend>
+                Patient context
+                <small
+                  >(optional — restricts this rule to matching patients; skipped entirely, never suppressing anything
+                  else, when age/sex isn't available on the surface being graded)</small
+                >
+              </legend>
+              <div class="tl-req-fields">
+                <label class="tl-field">
+                  <span>Min age (years)</span>
+                  <input type="number" id="rrContextMinAge" step="1" min="0" placeholder="e.g. 65" />
+                </label>
+                <label class="tl-field">
+                  <span>Max age (years)</span>
+                  <input type="number" id="rrContextMaxAge" step="1" min="0" placeholder="e.g. 120" />
+                </label>
+                <label class="tl-field">
+                  <span>Sex</span>
+                  <select id="rrContextSex">
+                    <option value="">Any</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </label>
+              </div>
             </fieldset>
 
             <div class="rr-fields-single">

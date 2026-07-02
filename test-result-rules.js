@@ -1359,6 +1359,164 @@ console.log('\n--- resultRuleSchemaPrompt: covers actions ---');
   );
 }
 
+// ── context validation (item 3.5 — patient-context gate on any rule kind) ─────
+console.log('\n--- context validation (item 3.5 — patient-context gate) ---');
+{
+  // Omitted is valid on every kind.
+  assert(validateResultRule(validRule({})).length === 0, 'context: omitted is valid on threshold rule');
+  assert(
+    validateResultRule({
+      kind: 'text',
+      label: 'Needs review',
+      analyte: { match: ['MSU'] },
+      normalText: ['no growth'],
+    }).length === 0,
+    'context: omitted is valid on text rule'
+  );
+  assert(validateResultRule(validCombo({})).length === 0, 'context: omitted is valid on combo rule');
+  assert(
+    validateResultRule({
+      kind: 'delta',
+      label: 'AKI watch',
+      analyte: { match: ['creatinine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+    }).length === 0,
+    'context: omitted is valid on delta rule'
+  );
+
+  // A well-formed context (the FIB-4-over-65 worked example) is valid on every kind.
+  const fib4Context = { minAge: 65 };
+  assert(
+    validateResultRule(validRule({ context: fib4Context })).length === 0,
+    'context: { minAge: 65 } is valid on a threshold rule'
+  );
+  assert(
+    validateResultRule(
+      Object.assign(
+        { kind: 'text', label: 'Needs review', analyte: { match: ['MSU'] }, normalText: ['no growth'] },
+        { context: fib4Context }
+      )
+    ).length === 0,
+    'context: { minAge: 65 } is valid on a text rule'
+  );
+  assert(
+    validateResultRule(validCombo({ context: fib4Context })).length === 0,
+    'context: { minAge: 65 } is valid on a combo rule'
+  );
+  assert(
+    validateResultRule({
+      kind: 'delta',
+      label: 'AKI watch',
+      analyte: { match: ['creatinine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+      context: fib4Context,
+    }).length === 0,
+    'context: { minAge: 65 } is valid on a delta rule'
+  );
+
+  // A full context object (minAge + maxAge + sex) is valid.
+  assert(
+    validateResultRule(validRule({ context: { minAge: 18, maxAge: 65, sex: 'female' } })).length === 0,
+    'context: full { minAge, maxAge, sex } is valid'
+  );
+  // maxAge alone, sex alone, are each independently valid.
+  assert(validateResultRule(validRule({ context: { maxAge: 12 } })).length === 0, 'context: maxAge alone is valid');
+  assert(validateResultRule(validRule({ context: { sex: 'male' } })).length === 0, 'context: sex alone is valid');
+
+  // context must be an object (not an array, not a primitive)
+  {
+    const errs = validateResultRule(validRule({ context: 'not-an-object' }));
+    assert(errs.length > 0, 'context: a non-object value is rejected');
+    assert(hasError(errs, 'context'), 'context: non-object error mentions "context"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: [65, 'female'] }));
+    assert(errs.length > 0, 'context: an array is rejected (must be a plain object)');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: 65 }));
+    assert(errs.length > 0, 'context: a bare number is rejected');
+  }
+
+  // minAge / maxAge — must be non-negative finite numbers
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: -1 } }));
+    assert(errs.length > 0, 'context: negative minAge is rejected');
+    assert(hasError(errs, 'minAge'), 'context: negative-minAge error mentions "minAge"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { maxAge: -5 } }));
+    assert(errs.length > 0, 'context: negative maxAge is rejected');
+    assert(hasError(errs, 'maxAge'), 'context: negative-maxAge error mentions "maxAge"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: 'sixty-five' } }));
+    assert(errs.length > 0, 'context: non-numeric minAge is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { maxAge: Infinity } }));
+    assert(errs.length > 0, 'context: non-finite maxAge (Infinity) is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: NaN } }));
+    assert(errs.length > 0, 'context: NaN minAge is rejected');
+  }
+  // minAge 0 is a valid non-negative boundary
+  assert(validateResultRule(validRule({ context: { minAge: 0 } })).length === 0, 'context: minAge 0 is valid');
+
+  // minAge <= maxAge ordering, when both present
+  {
+    const errs = validateResultRule(validRule({ context: { minAge: 70, maxAge: 65 } }));
+    assert(errs.length > 0, 'context: minAge > maxAge is rejected');
+    assert(hasError(errs, 'minAge'), 'context: ordering error mentions minAge/maxAge');
+  }
+  assert(
+    validateResultRule(validRule({ context: { minAge: 18, maxAge: 18 } })).length === 0,
+    'context: minAge === maxAge is valid (a single-year band)'
+  );
+
+  // sex — must be lowercase 'male' or 'female'
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'Male' } }));
+    assert(errs.length > 0, 'context: capitalised sex ("Male") is rejected — must be lowercase');
+    assert(hasError(errs, 'sex'), 'context: bad-sex error mentions "sex"');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'unknown' } }));
+    assert(errs.length > 0, 'context: an unrecognised sex value is rejected');
+  }
+  {
+    const errs = validateResultRule(validRule({ context: { sex: 'f' } }));
+    assert(errs.length > 0, 'context: abbreviated sex ("f") is rejected — must be the full lowercase word');
+  }
+
+  // An empty context object ({}) is technically well-formed (no clauses to violate) —
+  // the engine's contextAllows treats an empty object as "no gate" (see
+  // test-result-severity.js), so validation should not reject it either.
+  assert(validateResultRule(validRule({ context: {} })).length === 0, 'context: an empty object {} is valid');
+}
+
+// ── resultRuleSchemaPrompt: documents the optional context field ────────────
+console.log('\n--- resultRuleSchemaPrompt: covers context (item 3.5) ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('context'), 'prompt documents the context field');
+  assert(prompt.toLowerCase().includes('minage'), 'prompt documents minAge');
+  assert(prompt.toLowerCase().includes('maxage'), 'prompt documents maxAge');
+  assert(
+    prompt.toLowerCase().includes('fail-closed') || prompt.toLowerCase().includes('fail closed'),
+    'prompt explains the fail-closed semantics'
+  );
+  assert(
+    prompt.toLowerCase().includes('fib-4') || prompt.toLowerCase().includes('fib4'),
+    'prompt includes the FIB-4-over-65 worked example'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

@@ -159,6 +159,28 @@
 //     { type:'link',    label:string, url:string  } — url must be absolute http(s).
 //     { type:'snippet', label:string, text:string  } — text copied to clipboard on click.
 //     { type:'note',    label:string, text:string  } — text shown inline on click.
+//
+// context (OPTIONAL, all four kinds — item 3.5, TRIAGE-LENS-2026-07-02.md):
+//   context    : { minAge?:number, maxAge?:number, sex?:'male'|'female' } — OPTIONAL. An
+//               AND-gate restricting this rule to patients matching EVERY present clause.
+//               minAge/maxAge — non-negative finite numbers (years), inclusive; minAge must
+//               be <= maxAge when both are present. sex — lowercase 'male' or 'female'.
+//               FAIL-CLOSED at evaluation time (engine/result-severity.js): if the caller
+//               did not supply patientContext, or supplied it without the specific field(s)
+//               this rule's context clause needs, the rule is SKIPPED — never assumed to
+//               match, never assumed not to match. Because every result rule is
+//               escalate-only (see above), a skipped context rule simply does not ADD its
+//               escalation on top of the lab flag / other rules; it can never suppress
+//               anything. Worked example — FIB-4 (liver fibrosis index): the standard
+//               counselling cutoff (2.67) over-calls fibrosis risk in patients over 65;
+//               age-adjusted guidance recommends ~3.25 in that group instead. Model this as
+//               an age-scoped rule: { "context": { "minAge": 65 }, "comparator": "above",
+//               "amber": 3.25, ... } — a SEPARATE, non-context-gated rule (or the lab's own
+//               reference range) covers the general population at the standard cutoff; the
+//               context-gated rule ONLY ever adds its own amber flag for confirmed-over-65
+//               patients, and is silently skipped (no flag, no error) for any patient whose
+//               age could not be confirmed on the current surface. See resultRuleSchemaPrompt
+//               below for the full worked JSON example.
 
 (function (global) {
   'use strict';
@@ -230,6 +252,30 @@
   }
 
   const ALLOWED_ACTION_TYPES = ['link', 'snippet', 'note'];
+
+  // context — OPTIONAL on every rule kind (item 3.5, TRIAGE-LENS-2026-07-02.md):
+  // { minAge?:number, maxAge?:number, sex?:'male'|'female' }. Pushes errors onto `errs`.
+  // Shared so threshold/text/combo/delta all validate identically.
+  function validateContext(rule, errs) {
+    if (rule.context === undefined) return;
+    const c = rule.context;
+    if (!c || typeof c !== 'object' || Array.isArray(c)) {
+      errs.push('context, if present, must be an object with optional minAge/maxAge/sex.');
+      return;
+    }
+    const hasMinAge = c.minAge !== undefined && c.minAge !== null;
+    const hasMaxAge = c.maxAge !== undefined && c.maxAge !== null;
+    const minAgeValid = !hasMinAge || (Number.isFinite(c.minAge) && c.minAge >= 0);
+    const maxAgeValid = !hasMaxAge || (Number.isFinite(c.maxAge) && c.maxAge >= 0);
+    if (!minAgeValid) errs.push('context.minAge, if present, must be a non-negative finite number.');
+    if (!maxAgeValid) errs.push('context.maxAge, if present, must be a non-negative finite number.');
+    if (hasMinAge && hasMaxAge && minAgeValid && maxAgeValid && c.minAge > c.maxAge) {
+      errs.push('context.minAge must be <= context.maxAge when both are present.');
+    }
+    if (c.sex !== undefined && c.sex !== null && c.sex !== 'male' && c.sex !== 'female') {
+      errs.push("context.sex, if present, must be 'male' or 'female' (lowercase).");
+    }
+  }
 
   // actions — OPTIONAL on every rule kind (threshold/text/combo). Same schema as an
   // alert rule's actions (options.js validateTriageRule): an array of
@@ -473,6 +519,10 @@
     // rule, or a non-delta field on a delta rule, silently does nothing today;
     // reject it instead of masking the authoring mistake.
     validateNoCrossKindFields(rule, kind, errs);
+
+    // context — OPTIONAL, valid on EVERY kind (item 3.5) — checked once here, before
+    // the combo early-return below, so it covers all four kinds in one place.
+    validateContext(rule, errs);
 
     // ── combo kind: a top-level rule with no single analyte — its analytes live on
     //    each condition. Validate conditions then fall through to the shared
@@ -988,6 +1038,54 @@ Any of the four rule kinds above ("threshold", "text", "combo", "delta") may car
   ]
 }
 --- END ACTIONS EXAMPLE ---
+
+=== OPTIONAL: context (patient age/sex gate) ===
+
+Any of the four rule kinds above may carry an OPTIONAL top-level "context" object that
+restricts the rule to patients matching EVERY clause present (an AND-gate). Use this ONLY
+when a threshold/finding genuinely means something different in a specific age band or sex
+— it does not narrow or override any other rule; it just decides whether THIS rule's own
+escalation applies to THIS patient.
+
+  context     (object, optional)
+    minAge    (number, optional) — non-negative, years, inclusive.
+    maxAge    (number, optional) — non-negative, years, inclusive. Must be >= minAge if both set.
+    sex       ("male"|"female", optional) — lowercase.
+
+FAIL-CLOSED: if the patient's age/sex is not known on the surface where the rule is being
+evaluated, the rule is SKIPPED entirely for that patient — never assumed to match, never
+assumed not to. Because every result rule is escalate-only, a skipped context rule simply
+does not add its flag on top of whatever the lab/other rules already show; it can never hide
+or downgrade anything.
+
+--- CONTEXT EXAMPLE (FIB-4 raised, age-adjusted cutoff for patients over 65) ---
+
+FIB-4 (a liver fibrosis index) is usually flagged at >= 2.67, but that cutoff over-calls
+fibrosis risk in patients over 65 — age-adjusted guidance instead recommends a threshold
+around 3.25 for that age group. Rather than lowering the general-population rule's
+sensitivity, add a SEPARATE rule scoped to the over-65 cohort at the higher, more
+appropriate threshold (the standard <=64 cutoff stays on its own unscoped rule):
+
+{
+  "id": "rule_placeholder",
+  "enabled": false,
+  "builtin": false,
+  "kind": "threshold",
+  "label": "FIB-4 raised (over 65, age-adjusted cutoff)",
+  "analyte": {
+    "match": ["fib-4", "fib4"]
+  },
+  "comparator": "above",
+  "amber": 3.25,
+  "red": null,
+  "context": { "minAge": 65 }
+}
+--- END CONTEXT EXAMPLE ---
+
+This rule ONLY evaluates when the patient's age is confirmed >= 65 on the surface where the
+result is graded — for a patient younger than 65, or whenever age cannot be confirmed, this
+rule is silently skipped (no flag from THIS rule; a separate all-ages/under-65 FIB-4 rule, if
+authored, still applies normally). It can never suppress a lab flag or another rule's chip.
 
 === CLOSING REMINDER ===
 

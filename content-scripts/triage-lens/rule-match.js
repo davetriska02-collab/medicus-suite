@@ -233,7 +233,115 @@
     return later ? evidenceFromMatch(s, later) : firstEv;
   }
 
-  const api = { compileRule, ruleMatchesText, ruleMatchEvidence, NEGATORS, PAST_MARKERS };
+  // ---- require gate (item 3.5, TRIAGE-LENS-2026-07-02.md) ----
+  // A request/alert rule may carry an OPTIONAL top-level `require` object:
+  //   { ageMin?:number, ageMax?:number, sex?:'male'|'female',
+  //     medsAny?:string[], problemsAny?:string[] }
+  // ALL present clauses must be satisfied (AND) for ruleRequireMet to return true.
+  // This is a SEPARATE gate applied by the caller AFTER a text match — it never
+  // touches ruleMatchesText/ruleMatchEvidence, which stay pure text matchers so the
+  // Options preview and the live page can never disagree about whether the PATTERN
+  // matched. require only decides whether a rule that already matched the text is
+  // ALSO shown, given whatever patient context is available on the current surface.
+  //
+  // FAIL CLOSED: a clause whose data is absent from `ctx` is treated as unsatisfied
+  // (never assumed true, never assumed false-because-absent — the rule simply is not
+  // shown from that clause's perspective). This is the same escalate-only,
+  // never-suppress-the-base-rule posture as engine/result-severity.js's
+  // contextAllows: require only ever ADDS a gated variant/escalation alongside the
+  // always-on base match; the caller in content.js never uses a failed require gate
+  // to suppress the UNGATED base chip a rule would otherwise render.
+  //
+  // ctx = { ageYears?:number, sex?:string, medsText?:string, problemsText?:string }
+  // medsText/problemsText are free-text blobs (e.g. med names / problem labels joined
+  // with whitespace); medsAny/problemsAny match as case-insensitive substrings against
+  // them, mirroring result-rules.js's analyte.match substring semantics.
+  function ruleRequireMet(rule, ctx) {
+    const req = rule && rule.require;
+    if (!req || typeof req !== 'object') return true; // no gate → always allowed
+    const c = ctx && typeof ctx === 'object' ? ctx : {};
+
+    const hasAgeMin = Number.isFinite(req.ageMin);
+    const hasAgeMax = Number.isFinite(req.ageMax);
+    if (hasAgeMin || hasAgeMax) {
+      const age = c.ageYears;
+      if (!Number.isFinite(age)) return false; // can't confirm → fail closed
+      if (hasAgeMin && age < req.ageMin) return false;
+      if (hasAgeMax && age > req.ageMax) return false;
+    }
+
+    if (typeof req.sex === 'string' && req.sex) {
+      const sex = typeof c.sex === 'string' ? c.sex.toLowerCase() : null;
+      if (!sex) return false; // can't confirm → fail closed
+      if (sex !== req.sex.toLowerCase()) return false;
+    }
+
+    if (Array.isArray(req.medsAny) && req.medsAny.length) {
+      const medsText = typeof c.medsText === 'string' ? c.medsText.toLowerCase() : '';
+      if (!medsText) return false; // no meds data on this surface → can't confirm
+      const hit = req.medsAny.some(
+        (m) => typeof m === 'string' && m.trim() && medsText.includes(m.trim().toLowerCase())
+      );
+      if (!hit) return false;
+    }
+
+    if (Array.isArray(req.problemsAny) && req.problemsAny.length) {
+      const problemsText = typeof c.problemsText === 'string' ? c.problemsText.toLowerCase() : '';
+      if (!problemsText) return false; // no problems data on this surface → can't confirm
+      const hit = req.problemsAny.some(
+        (p) => typeof p === 'string' && p.trim() && problemsText.includes(p.trim().toLowerCase())
+      );
+      if (!hit) return false;
+    }
+
+    return true;
+  }
+
+  // validateRuleRequire(rule) → string[] — used by options.js's validateTriageRule
+  // and the LLM importer for request/alert rules. Returns an array of human-readable
+  // error strings (empty = valid).
+  function validateRuleRequire(rule) {
+    const errs = [];
+    if (!rule || rule.require === undefined) return errs;
+    const req = rule.require;
+    if (!req || typeof req !== 'object' || Array.isArray(req)) {
+      errs.push('require, if present, must be an object with optional ageMin/ageMax/sex/medsAny/problemsAny.');
+      return errs;
+    }
+    const hasAgeMin = req.ageMin !== undefined && req.ageMin !== null;
+    const hasAgeMax = req.ageMax !== undefined && req.ageMax !== null;
+    const ageMinValid = !hasAgeMin || (Number.isFinite(req.ageMin) && req.ageMin >= 0);
+    const ageMaxValid = !hasAgeMax || (Number.isFinite(req.ageMax) && req.ageMax >= 0);
+    if (!ageMinValid) errs.push('require.ageMin, if present, must be a non-negative finite number.');
+    if (!ageMaxValid) errs.push('require.ageMax, if present, must be a non-negative finite number.');
+    if (hasAgeMin && hasAgeMax && ageMinValid && ageMaxValid && req.ageMin > req.ageMax) {
+      errs.push('require.ageMin must be <= require.ageMax when both are present.');
+    }
+    if (req.sex !== undefined && req.sex !== null && req.sex !== 'male' && req.sex !== 'female') {
+      errs.push("require.sex, if present, must be 'male' or 'female' (lowercase).");
+    }
+    if (req.medsAny !== undefined) {
+      if (!Array.isArray(req.medsAny) || req.medsAny.some((m) => typeof m !== 'string')) {
+        errs.push('require.medsAny, if present, must be an array of strings.');
+      }
+    }
+    if (req.problemsAny !== undefined) {
+      if (!Array.isArray(req.problemsAny) || req.problemsAny.some((p) => typeof p !== 'string')) {
+        errs.push('require.problemsAny, if present, must be an array of strings.');
+      }
+    }
+    return errs;
+  }
+
+  const api = {
+    compileRule,
+    ruleMatchesText,
+    ruleMatchEvidence,
+    NEGATORS,
+    PAST_MARKERS,
+    ruleRequireMet,
+    validateRuleRequire,
+  };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

@@ -3073,6 +3073,448 @@ if (sandbox) {
       'banner: unitMismatches never changes the red/amber level class (surfacing only, no severity change)'
     );
   }
+
+  // ============================================================
+  // Layer 20 — item 3.2 (TRIAGE-LENS-2026-07-02.md): closing the qualitative-result
+  // fall-through. Part A — a red-level text review (a text rule's abnormalText
+  // matched with abnormalLevel:'red') reuses the SAME urgent/rule-urgent chip
+  // templates as a genuine numeric urgent result. Part B — an unclassified
+  // qualitative positive (non-numeric, no lab flag, no rule matched) gets its own
+  // fixed-markup AMBER chip (ch-chip-unclassified), plus popover/banner lines. This
+  // layer only exercises the DOM/chip/popover/banner SURFACING mechanics — the
+  // engine's grading/negation-guard correctness is exhaustively covered by
+  // test-result-severity.js.
+  // ============================================================
+  console.log('\nLayer 20: item 3.2 — red text-review chip + unclassified-positive chip/popover/banner');
+
+  {
+    // ---- Part A: a LABELLED red-level text review reuses queue.resultRuleUrgent ----
+    freshCaches();
+    const rowIdA1 = '11111111-1111-4111-8111-111111111111';
+    const pairA1 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdA1, dob: '01 Jan 1980 (46y)' });
+    const gridRootA1 = new El('div', {});
+    gridRootA1.appendChild(pairA1.master);
+    gridRootA1.appendChild(pairA1.detail);
+    sandbox.document = makeDocument(gridRootA1);
+    sandbox.queueObservedContainer = gridRootA1;
+
+    const redReviewLabelledSev = {
+      level: 'red',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      reviewCount: 1,
+      reviewTop: { name: 'Blood culture', label: 'Positive blood culture', level: 'red' },
+    };
+    sandbox.injectResultChip(0, redReviewLabelledSev, rowIdA1, false);
+    const spanA1 = pairA1.wrap.querySelector('.ch-q-result');
+    check(!!spanA1, 'Part A: a labelled red review injects a chip host');
+    const htmlA1 = spanA1 ? spanA1.innerHTML : '';
+    check(
+      htmlA1.includes('queue.resultRuleUrgent'),
+      'Part A: a labelled red-level review reuses the queue.resultRuleUrgent template'
+    );
+    check(
+      htmlA1.includes('Blood culture') && htmlA1.includes('Positive blood culture'),
+      'Part A: the red chip carries the analyte name and the rule label'
+    );
+    check(
+      !htmlA1.includes('queue.resultReviewRule') && !htmlA1.includes('queue.resultReview"'),
+      'Part A: the single red finding does NOT also render a duplicate amber review chip'
+    );
+
+    // ---- Part A: a GENERIC red review (rule label omitted → "Needs review") reuses
+    //      queue.resultUrgent, NOT queue.resultRuleUrgent ----
+    freshCaches();
+    const rowIdA2 = '22222222-2222-4222-8222-222222222222';
+    const pairA2 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdA2, dob: '01 Jan 1980 (46y)' });
+    const gridRootA2 = new El('div', {});
+    gridRootA2.appendChild(pairA2.master);
+    gridRootA2.appendChild(pairA2.detail);
+    sandbox.document = makeDocument(gridRootA2);
+    sandbox.queueObservedContainer = gridRootA2;
+
+    const redReviewGenericSev = {
+      level: 'red',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      reviewCount: 1,
+      reviewTop: { name: 'Blood culture', label: 'Needs review', level: 'red' },
+    };
+    sandbox.injectResultChip(0, redReviewGenericSev, rowIdA2, false);
+    const spanA2 = pairA2.wrap.querySelector('.ch-q-result');
+    const htmlA2 = spanA2 ? spanA2.innerHTML : '';
+    check(
+      htmlA2.includes('queue.resultUrgent') && !htmlA2.includes('queue.resultRuleUrgent'),
+      'Part A: an unlabelled ("Needs review") red review reuses the GENERIC queue.resultUrgent template'
+    );
+
+    // ---- Part A: a red text review co-renders alongside a genuine numeric
+    //      abnormal chip (two distinct findings on the same report) — the numeric
+    //      branch must NOT be suppressed by the review-driven red fold ----
+    freshCaches();
+    const rowIdA3 = '33333333-3333-4333-8333-333333333333';
+    const pairA3 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdA3, dob: '01 Jan 1980 (46y)' });
+    const gridRootA3 = new El('div', {});
+    gridRootA3.appendChild(pairA3.master);
+    gridRootA3.appendChild(pairA3.detail);
+    sandbox.document = makeDocument(gridRootA3);
+    sandbox.queueObservedContainer = gridRootA3;
+
+    const redReviewPlusAbnormalSev = {
+      level: 'red', // folded red by the review (engine/result-severity.js), not by urgentCount
+      urgentCount: 0,
+      abnormalCount: 1,
+      top: { name: 'Sodium', value: '130', unit: 'mmol/L' },
+      misprioritised: false,
+      unmatched: false,
+      reviewCount: 1,
+      reviewTop: { name: 'Blood culture', label: 'Positive blood culture', level: 'red' },
+    };
+    sandbox.injectResultChip(0, redReviewPlusAbnormalSev, rowIdA3, false);
+    const spanA3 = pairA3.wrap.querySelector('.ch-q-result');
+    const htmlA3 = spanA3 ? spanA3.innerHTML : '';
+    check(
+      htmlA3.includes('queue.resultAbnormal'),
+      'Part A: a genuine numeric abnormal chip is NOT hidden by the text-review red fold ' +
+        '(selectResultChips keys the numeric branch on abnormalCount, not on `level`)'
+    );
+    check(
+      htmlA3.includes('queue.resultRuleUrgent'),
+      'Part A: the red text-review chip still renders alongside the numeric abnormal chip'
+    );
+
+    // ---- Part B: an unclassified-only report (nothing else fired) still injects a
+    //      chip — fixed markup, distinct ch-chip-unclassified class ----
+    freshCaches();
+    const rowIdB1 = '44444444-4444-4444-8444-444444444444';
+    const pairB1 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdB1, dob: '01 Jan 1980 (46y)' });
+    const gridRootB1 = new El('div', {});
+    gridRootB1.appendChild(pairB1.master);
+    gridRootB1.appendChild(pairB1.detail);
+    sandbox.document = makeDocument(gridRootB1);
+    sandbox.queueObservedContainer = gridRootB1;
+
+    const unclassifiedOnlySev = {
+      level: 'amber',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      unclassified: [{ name: 'Hepatitis B surface antigen', token: 'Positive' }],
+    };
+    sandbox.injectResultChip(0, unclassifiedOnlySev, rowIdB1, false);
+    const spanB1 = pairB1.wrap.querySelector('.ch-q-result');
+    check(!!spanB1, 'Part B: an unclassified-only report (nothing else fired) still injects a chip host');
+    const htmlB1 = spanB1 ? spanB1.innerHTML : '';
+    check(
+      /class="ch-chip ch-chip-unclassified"/.test(htmlB1),
+      'Part B: unclassified chip carries its OWN ch-chip-unclassified class (never the filled ch-chip-amber)'
+    );
+    check(
+      />\? Hepatitis B surface antigen</.test(htmlB1),
+      'Part B: unclassified chip label is a "? " hint prefix + the analyte name'
+    );
+    check(
+      htmlB1 === sandbox.buildUnclassifiedChipHtml(unclassifiedOnlySev.unclassified),
+      "Part B: the injected markup is exactly buildUnclassifiedChipHtml()'s output when nothing else fired"
+    );
+
+    // ---- Part B: co-renders alongside a genuine numeric urgent chip (a report can
+    //      carry BOTH a graded finding and an unrelated unclassified one) ----
+    freshCaches();
+    const rowIdB2 = '55555555-5555-4555-8555-555555555555';
+    const pairB2 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdB2, dob: '01 Jan 1980 (46y)' });
+    const gridRootB2 = new El('div', {});
+    gridRootB2.appendChild(pairB2.master);
+    gridRootB2.appendChild(pairB2.detail);
+    sandbox.document = makeDocument(gridRootB2);
+    sandbox.queueObservedContainer = gridRootB2;
+
+    const mixedSev = { ...redSev, unclassified: [{ name: 'Chlamydia PCR', token: 'detected' }] };
+    sandbox.injectResultChip(0, mixedSev, rowIdB2, false);
+    const spanB2 = pairB2.wrap.querySelector('.ch-q-result');
+    const htmlB2 = spanB2 ? spanB2.innerHTML : '';
+    check(
+      htmlB2.includes('queue.resultUrgent') && /ch-chip-unclassified/.test(htmlB2),
+      'Part B: the unclassified chip co-renders alongside a genuine numeric urgent chip'
+    );
+
+    // ---- Part B: multiple entries → first name shown + "+N" suffix ----
+    const chipHtmlMulti = sandbox.buildUnclassifiedChipHtml([
+      { name: 'Hepatitis B surface antigen', token: 'Positive' },
+      { name: 'Chlamydia PCR', token: 'detected' },
+    ]);
+    check(
+      chipHtmlMulti.includes('? Hepatitis B surface antigen +1'),
+      'Part B: 2 unclassified entries → first analyte name + "+1" overflow suffix'
+    );
+
+    // ---- Part B: empty/absent list → no markup, no chip ----
+    check(
+      sandbox.buildUnclassifiedChipHtml([]) === null,
+      'Part B: empty list → buildUnclassifiedChipHtml returns null'
+    );
+    check(
+      sandbox.buildUnclassifiedChipHtml(null) === null,
+      'Part B: null list → buildUnclassifiedChipHtml is null-safe'
+    );
+    freshCaches();
+    const rowIdB3n = '66666666-6666-4666-8666-666666666666';
+    const pairB3n = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdB3n, dob: '01 Jan 1980 (46y)' });
+    const gridRootB3n = new El('div', {});
+    gridRootB3n.appendChild(pairB3n.master);
+    gridRootB3n.appendChild(pairB3n.detail);
+    sandbox.document = makeDocument(gridRootB3n);
+    sandbox.queueObservedContainer = gridRootB3n;
+    sandbox.injectResultChip(0, redSev, rowIdB3n, false); // redSev carries no .unclassified at all
+    const spanB3n = pairB3n.wrap.querySelector('.ch-q-result');
+    check(
+      !!spanB3n && !/ch-chip-unclassified/.test(spanB3n.innerHTML),
+      'Part B: no .unclassified on sev → no unclassified chip rendered'
+    );
+
+    // ---- Part B: XSS discipline — the analyte name is HTML-escaped in the fixed
+    //      markup (untrusted, lab-report-derived; this file's innerHTML rule) ----
+    const evilName = '<img src=x onerror=alert(1)>';
+    const evilHtml = sandbox.buildUnclassifiedChipHtml([{ name: evilName, token: 'positive' }]);
+    check(
+      !evilHtml.includes('<img'),
+      'Part B: a hostile analyte name is NOT injected as a raw tag into the chip markup'
+    );
+    check(evilHtml.includes('&lt;img'), 'Part B: the hostile analyte name renders as an escaped HTML entity');
+
+    // ---- Part B: popover shows one line per unclassified entry, in the SAME
+    //      "not matched by a rule" phrasing as buildResultDetail's Tier 3b ----
+    freshCaches();
+    sandbox.closeResultDetailPopover();
+    const rowIdB4 = '77777777-7777-4777-8777-777777777777';
+    const pairB4 = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdB4, dob: '01 Jan 1980 (46y)' });
+    const gridRootB4 = new El('div', {});
+    gridRootB4.appendChild(pairB4.master);
+    gridRootB4.appendChild(pairB4.detail);
+    sandbox.document = makeDocument(gridRootB4);
+    sandbox.queueObservedContainer = gridRootB4;
+
+    const reportB4 = {
+      results: [{ name: 'Hepatitis B surface antigen', rawValue: 'Positive', date: '2026-06-20' }],
+    };
+    const sevB4 = {
+      level: 'amber',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      unclassified: [{ name: 'Hepatitis B surface antigen', token: 'Positive' }],
+    };
+    const detailB4 = sandbox.buildResultDetail(reportB4, sevB4);
+    check(detailB4.length === 1, 'Part B: buildResultDetail includes exactly one entry for the unclassified result');
+    sandbox._durableRowMap.set(0, rowIdB4);
+    sandbox._queueResultCache.set(rowIdB4, { sev: sevB4, ts: Date.now(), detail: detailB4 });
+
+    const anchorB4 = new El('span', { class: 'ch-chip ch-chip-unclassified' });
+    gridRootB4.appendChild(anchorB4);
+    sandbox.toggleResultDetailPopover(anchorB4, rowIdB4, false);
+    const stateB4 = sandbox.__popoverState();
+    check(!!stateB4.el, 'Part B: popover opens for a row whose only cached detail is an unclassified entry');
+    const linesB4 = stateB4.el.querySelectorAll('.ch-result-popover-line');
+    check(
+      linesB4.length === 1,
+      `Part B: exactly one popover detail line for the unclassified entry (got ${linesB4.length})`
+    );
+    check(
+      linesB4[0].textContent ===
+        "Hepatitis B surface antigen Positive · 20 Jun · rule: 'Positive' — not matched by a rule, surfaced for review",
+      `Part B: popover line reads "not matched by a rule, surfaced for review" (got "${linesB4[0] && linesB4[0].textContent}")`
+    );
+    check(
+      linesB4[0]._innerHTML === null,
+      'Part B: popover line built with textContent, never innerHTML (fake-DOM innerHTML slot untouched)'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- Part B: banner headline names the analyte + token, and colours AMBER
+    //      (never red — the safety-net cap) for an unclassified-only report ----
+    const sevBannerB = {
+      level: 'amber',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      unclassified: [{ name: 'Hepatitis B surface antigen', token: 'Positive' }],
+      detail: detailB4,
+    };
+    const bannerB = sandbox.buildDetailVerdictEl('task-unclassified-1', sevBannerB, false);
+    check(
+      bannerB.classes.includes('ch-detail-verdict-amber') && !bannerB.classes.includes('ch-detail-verdict-red'),
+      'Part B: unclassified-only banner renders AMBER, never red (safety-net cap)'
+    );
+    const headlineB = bannerB.querySelectorAll('.ch-detail-verdict-headline');
+    check(
+      headlineB.length === 1 && headlineB[0].textContent === "Hepatitis B surface antigen: 'Positive'",
+      `Part B: banner headline names the analyte + matched token (got "${headlineB[0] && headlineB[0].textContent}")`
+    );
+    const lineElsB = bannerB.querySelectorAll('.ch-detail-verdict-line');
+    check(lineElsB.length >= 1, 'Part B: banner shows at least one detail line for the unclassified finding');
+
+    // ---- Part A: banner colours RED and names the rule for a red-level review ----
+    const redReviewSevForBanner = {
+      level: 'red',
+      urgentCount: 0,
+      abnormalCount: 0,
+      top: null,
+      misprioritised: false,
+      unmatched: false,
+      reviewCount: 1,
+      reviewTop: { name: 'Blood culture', label: 'Positive blood culture', level: 'red' },
+      detail: [],
+    };
+    const bannerRedReview = sandbox.buildDetailVerdictEl('task-red-review-1', redReviewSevForBanner, false);
+    check(
+      bannerRedReview.classes.includes('ch-detail-verdict-red'),
+      'Part A: a red-level text review colours the banner RED (level folded by the engine, not by urgentCount)'
+    );
+    const headlineRR = bannerRedReview.querySelectorAll('.ch-detail-verdict-headline');
+    check(
+      headlineRR.length === 1 && headlineRR[0].textContent === 'Positive blood culture',
+      `Part A: banner headline names the red review's own rule label (got "${headlineRR[0] && headlineRR[0].textContent}")`
+    );
+  }
+
+  // ============================================================
+  // Layer 21 — item 3.5 (TRIAGE-LENS-2026-07-02.md): request-rule `require` gate
+  // on the queue. decorateOneRow parses this row's OWN age from its DOB cell
+  // (the same parse the child/elder system chips already use) and applies
+  // window.TriageLensMatch.ruleRequireMet as an ADDITIONAL gate on top of the
+  // (stubbed here) text-matched rules — a rule whose require clause the queue
+  // cannot confirm is excluded from the rendered rule chips, but never
+  // suppresses any OTHER matched rule. The queue has NO meds/problems/sex data,
+  // so a require:{medsAny|problemsAny|sex} clause always fails closed there.
+  // ============================================================
+  console.log('\nLayer 21: item 3.5 — request-rule require gate on the queue (age fires, meds fails closed)');
+
+  {
+    const ageGatedRule = RM.compileRule({
+      id: 'r-age-child',
+      label: 'UTI (child)',
+      kind: 'red',
+      enabled: true,
+      regex: false,
+      patterns: ['uti'],
+      fields: ['request'],
+      pages: ['queue'],
+      builtin: true,
+      require: { ageMax: 15 },
+    });
+    const medsGatedRule = RM.compileRule({
+      id: 'r-meds-mtx',
+      label: 'Infection (methotrexate)',
+      kind: 'red',
+      enabled: true,
+      regex: false,
+      patterns: ['infection'],
+      fields: ['request'],
+      pages: ['queue'],
+      builtin: true,
+      require: { medsAny: ['methotrexate'] },
+    });
+    const ungatedRule = RM.compileRule({
+      id: 'r-plain',
+      label: 'Plain UTI',
+      kind: 'amber',
+      enabled: true,
+      regex: false,
+      patterns: ['uti'],
+      fields: ['request'],
+      pages: ['queue'],
+      builtin: true,
+    });
+
+    // ---- age-gated rule FIRES on the queue: this row's own DOB cell parses
+    //      to age 8, which satisfies require:{ageMax:15} — and the ungated
+    //      rule matched alongside it is entirely unaffected (base rule intact). ----
+    {
+      freshCaches();
+      sandbox.matchRules = () => [ageGatedRule, ungatedRule];
+      const rowId = 'f0000000-0000-4000-8000-000000000001';
+      const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 2018 (8y)' });
+      const gridRoot = new El('div', {});
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+      sandbox.document = makeDocument(gridRoot);
+      sandbox.queueObservedContainer = gridRoot;
+
+      sandbox.decorateOneRow(master);
+      const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+      check(
+        ruleChips.length === 2,
+        `age-gated rule fires + ungated rule unaffected: 2 rule-match chips (top + "+1"), got ${ruleChips.length}`
+      );
+      const [topChip] = ruleChips;
+      check(
+        topChip && topChip.textContent.includes('UTI (child)'),
+        `age-gated rule (require satisfied by this row's own DOB age) renders as the top chip (got "${topChip && topChip.textContent}")`
+      );
+    }
+
+    // ---- meds-gated rule FAILS CLOSED on the queue: no meds data is available
+    //      on this surface, so require:{medsAny:[...]} can never be confirmed —
+    //      the rule is excluded, never guessed either way. ----
+    {
+      freshCaches();
+      sandbox.matchRules = () => [medsGatedRule];
+      const rowId = 'f0000000-0000-4000-8000-000000000002';
+      const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+      const gridRoot = new El('div', {});
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+      sandbox.document = makeDocument(gridRoot);
+      sandbox.queueObservedContainer = gridRoot;
+
+      sandbox.decorateOneRow(master);
+      const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+      check(
+        ruleChips.length === 0,
+        `meds-gated rule fails closed on the queue (no meds data reachable there) — 0 rule-match chips, got ${ruleChips.length}`
+      );
+    }
+
+    // ---- both an age-gated and a meds-gated rule matched the same row: the
+    //      age-gated one still fires (its own gate is satisfiable here), the
+    //      meds-gated one is excluded — neither affects the other. ----
+    {
+      freshCaches();
+      sandbox.matchRules = () => [ageGatedRule, medsGatedRule];
+      const rowId = 'f0000000-0000-4000-8000-000000000003';
+      const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 2018 (8y)' });
+      const gridRoot = new El('div', {});
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+      sandbox.document = makeDocument(gridRoot);
+      sandbox.queueObservedContainer = gridRoot;
+
+      sandbox.decorateOneRow(master);
+      const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+      check(
+        ruleChips.length === 1,
+        `mixed row: only the age-gated rule survives the require gate (no "+N"), got ${ruleChips.length}`
+      );
+      check(
+        ruleChips[0] && ruleChips[0].textContent.includes('UTI (child)'),
+        'mixed row: the surviving chip is the age-gated rule, not the meds-gated one'
+      );
+    }
+
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');
 }

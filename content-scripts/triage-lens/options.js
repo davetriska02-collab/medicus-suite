@@ -539,8 +539,43 @@
       c.checked = (editingDraft.pages || []).includes(c.dataset.page);
     });
 
+    // require — item 3.5 patient-context gate (optional). Populate from
+    // editingDraft.require if present, else leave every field blank/"Any".
+    const req = editingDraft.require && typeof editingDraft.require === 'object' ? editingDraft.require : null;
+    if ($('#fReqAgeMin')) $('#fReqAgeMin').value = req && Number.isFinite(req.ageMin) ? req.ageMin : '';
+    if ($('#fReqAgeMax')) $('#fReqAgeMax').value = req && Number.isFinite(req.ageMax) ? req.ageMax : '';
+    if ($('#fReqSex')) $('#fReqSex').value = req && (req.sex === 'male' || req.sex === 'female') ? req.sex : '';
+    if ($('#fReqMedsAny')) $('#fReqMedsAny').value = req && Array.isArray(req.medsAny) ? req.medsAny.join('\n') : '';
+    if ($('#fReqProblemsAny'))
+      $('#fReqProblemsAny').value = req && Array.isArray(req.problemsAny) ? req.problemsAny.join('\n') : '';
+
     renderActions();
     activateTab('edit');
+  };
+
+  // readRequireFromForm() → object | null — item 3.5. Reads the "Require patient
+  // context" fieldset into a require object, or null when every field is empty/Any
+  // (so a rule with no require clause is saved WITHOUT a require key, same
+  // sparse-optional-field convention as bumpsTile/actions).
+  const readRequireFromForm = () => {
+    const ageMinVal = (($('#fReqAgeMin') && $('#fReqAgeMin').value) || '').trim();
+    const ageMaxVal = (($('#fReqAgeMax') && $('#fReqAgeMax').value) || '').trim();
+    const sexVal = ($('#fReqSex') && $('#fReqSex').value) || '';
+    const medsAny = (($('#fReqMedsAny') && $('#fReqMedsAny').value) || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const problemsAny = (($('#fReqProblemsAny') && $('#fReqProblemsAny').value) || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const require = {};
+    if (ageMinVal !== '' && Number.isFinite(+ageMinVal)) require.ageMin = +ageMinVal;
+    if (ageMaxVal !== '' && Number.isFinite(+ageMaxVal)) require.ageMax = +ageMaxVal;
+    if (sexVal === 'male' || sexVal === 'female') require.sex = sexVal;
+    if (medsAny.length) require.medsAny = medsAny;
+    if (problemsAny.length) require.problemsAny = problemsAny;
+    return Object.keys(require).length ? require : null;
   };
 
   // renderActionEditorInto(containerSel, actions) — shared click-to-fire action-list
@@ -690,6 +725,16 @@
         errs.push('actions[' + i + ']: text is required for ' + a.type + ' actions.');
       }
     });
+
+    // require — OPTIONAL patient-context gate (item 3.5, TRIAGE-LENS-2026-07-02.md):
+    // { ageMin?, ageMax?, sex?, medsAny?, problemsAny? }. Validated by the SAME
+    // validator content.js's ruleRequireMet gate is built against (rule-match.js),
+    // so the editor/import path can never accept a require shape the runtime gate
+    // would silently misinterpret.
+    const VALIDATE_REQUIRE = window.TriageLensMatch && window.TriageLensMatch.validateRuleRequire;
+    if (VALIDATE_REQUIRE) {
+      VALIDATE_REQUIRE(rule).forEach((e) => errs.push(e));
+    }
 
     return errs;
   };
@@ -1010,6 +1055,11 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     editingDraft.notes = $('#fNotes').value.trim();
     editingDraft.fields = $$('#fFields input:checked').map((c) => c.dataset.field);
     editingDraft.pages = $$('#fPages input:checked').map((c) => c.dataset.page);
+    // require — item 3.5. Sparse-optional: omit the key entirely when every field is
+    // blank, same convention as bumpsTile/actions elsewhere in this editor.
+    const require = readRequireFromForm();
+    if (require) editingDraft.require = require;
+    else delete editingDraft.require;
 
     // Validate via the shared validator; the form builder ensures kind/fields/pages
     // come from the fixed select/checkbox sets, so the main check that can fail here
@@ -1141,11 +1191,20 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           const qSuffix = qualifier
             ? ` <span class="tl-rule-qualifier tl-rule-qualifier-${escAttr(qualifier)}">${QUALIFIER_SUFFIX[qualifier]}</span>`
             : '';
+          // Item 3.5 — the preview only tests the PATTERN (request text); it has no
+          // patient age/sex/meds/problems to gate against, so a rule with a require
+          // clause is shown here UNGATED with a note, rather than silently applying
+          // (which would misrepresent the live page) or hiding it (which would hide
+          // a rule that DOES fire on a real page with the right patient context).
+          const reqNote =
+            r.require && typeof r.require === 'object'
+              ? ' <span class="tl-rule-meta">requires patient context — shown here without gating</span>'
+              : '';
           return `
       <div class="tl-preview-match">
         <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
         <span class="tl-rule-label">${escHtml(r.label)}${qSuffix}</span>
-        <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>
+        <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>${reqNote}
       </div>`;
         })
         .join('');
@@ -2770,6 +2829,12 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       $('#rrDeltaRed').value = kind === 'delta' && rrEditingDraft.red != null ? rrEditingDraft.red : '';
     if ($('#rrDeltaMaxDays')) $('#rrDeltaMaxDays').value = rrEditingDraft.maxDays != null ? rrEditingDraft.maxDays : '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
+    // context — item 3.5 patient-context gate (optional, same on every kind).
+    const rrCtx = rrEditingDraft.context && typeof rrEditingDraft.context === 'object' ? rrEditingDraft.context : null;
+    if ($('#rrContextMinAge')) $('#rrContextMinAge').value = rrCtx && Number.isFinite(rrCtx.minAge) ? rrCtx.minAge : '';
+    if ($('#rrContextMaxAge')) $('#rrContextMaxAge').value = rrCtx && Number.isFinite(rrCtx.maxAge) ? rrCtx.maxAge : '';
+    if ($('#rrContextSex'))
+      $('#rrContextSex').value = rrCtx && (rrCtx.sex === 'male' || rrCtx.sex === 'female') ? rrCtx.sex : '';
     rrApplyKindVisibility(kind);
     renderRrActions();
 
@@ -2788,6 +2853,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     activateTab('resultEdit');
   };
 
+  // readRrContextFromForm() → object | null — item 3.5. Reads the result-rule
+  // editor's "Patient context" fieldset (shared by every rule kind) into a
+  // context object, or null when every field is empty/Any (sparse-optional,
+  // same convention as actions/analyte.exclude).
+  const readRrContextFromForm = () => {
+    const minAgeVal = (($('#rrContextMinAge') && $('#rrContextMinAge').value) || '').trim();
+    const maxAgeVal = (($('#rrContextMaxAge') && $('#rrContextMaxAge').value) || '').trim();
+    const sexVal = ($('#rrContextSex') && $('#rrContextSex').value) || '';
+    const context = {};
+    if (minAgeVal !== '' && Number.isFinite(+minAgeVal)) context.minAge = +minAgeVal;
+    if (maxAgeVal !== '' && Number.isFinite(+maxAgeVal)) context.maxAge = +maxAgeVal;
+    if (sexVal === 'male' || sexVal === 'female') context.sex = sexVal;
+    return Object.keys(context).length ? context : null;
+  };
+
   const saveCurrentResultRule = async () => {
     if (!rrEditingId) return;
     const selectedKind = $('#rrKind').value;
@@ -2798,6 +2878,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     // rrEditingDraft — omit the key entirely when empty (matches the sparse-optional-
     // field convention every other result-rule field uses, e.g. analyte.exclude).
     const draftActions = Array.isArray(rrEditingDraft.actions) ? rrEditingDraft.actions : [];
+    // context (item 3.5) — same "read once before any branch reassigns
+    // rrEditingDraft" reasoning as draftActions above.
+    const draftContext = readRrContextFromForm();
 
     // ── Combo (multi-condition) — built by the inline combo builder ───────────
     if (selectedKind === 'combo') {
@@ -2816,6 +2899,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // enable after review; the LLM-import path is the one that forces disabled).
       const rule = { ...built.rule, enabled };
       if (draftActions.length) rule.actions = draftActions;
+      if (draftContext) rule.context = draftContext;
       const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
       if (VALIDATE) {
         const errs = VALIDATE(rule);
@@ -2884,6 +2968,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
       if (keptAbnormalLevel) rrEditingDraft.abnormalLevel = keptAbnormalLevel;
       if (draftActions.length) rrEditingDraft.actions = draftActions;
+      if (draftContext) rrEditingDraft.context = draftContext;
     } else if (selectedKind === 'delta') {
       // ── Delta / trend (item 3.6) — built fresh, same pattern as the text branch
       // above (avoids leftover threshold/text/combo fields on the saved object).
@@ -2907,6 +2992,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       else rrEditingDraft.by = true;
       if (maxDaysVal !== '' && Number.isFinite(+maxDaysVal)) rrEditingDraft.maxDays = Math.round(+maxDaysVal);
       if (draftActions.length) rrEditingDraft.actions = draftActions;
+      if (draftContext) rrEditingDraft.context = draftContext;
     } else {
       rrEditingDraft.label = label;
       rrEditingDraft.analyte = analyte;
@@ -2920,6 +3006,8 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       rrEditingDraft.enabled = enabled;
       if (draftActions.length) rrEditingDraft.actions = draftActions;
       else delete rrEditingDraft.actions;
+      if (draftContext) rrEditingDraft.context = draftContext;
+      else delete rrEditingDraft.context;
       // Remove text-only / combo-only / delta-only fields if switching to threshold
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;
