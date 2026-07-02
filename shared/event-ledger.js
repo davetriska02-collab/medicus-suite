@@ -59,7 +59,17 @@
   // 'leaflets' — side-panel/modules/leaflets/leaflets.js records a leaflet being
   // opened (slug only, patientRef always null — see shared/leaflets-utils.js
   // leafletOpenLedgerEvent). 'opened' is its one action.
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets'];
+  // 'routinerx' — content-scripts/triage-lens/routine-rx-button.js mirrors its
+  // one-click "send to routine prescriptions" macro (H-035). patientRef is
+  // always null (the button makes no network calls and reads no patient-data
+  // field values — see that file's header); `label` carries the assigned team
+  // name instead. Actions: 'committed' (macro clicked the commit control —
+  // 'auto' mode or an accepted 'confirm' dialog), 'highlighted' ('manual' mode
+  // — pre-filled, clinician must click), 'aborted' (couldn't complete,
+  // including the clinician declining the confirm dialog — the FULL reason
+  // string lives only in the module's own machine-local ring buffer,
+  // triagelens.routinerx.auditLog, not in this ledger's fixed shape).
+  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets', 'routinerx'];
   const ACTIONS = [
     'shown',
     'dismissed',
@@ -71,6 +81,9 @@
     'contract-degraded',
     'contract-recovered',
     'opened',
+    'committed',
+    'highlighted',
+    'aborted',
   ];
   const MAX_LABEL_LEN = 120;
   const MAX_RULEID_LEN = 80;

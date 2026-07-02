@@ -3450,6 +3450,20 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
           '<div class="tl-empty" style="padding:14px 0;font-style:italic;color:var(--text-4)">No tick-offs recorded yet.</div>';
         return;
       }
+      // kind → { tag: short badge text, verb: sentence verb }. 'bulk' (the
+      // pre-existing clinician-confirmed path) has no badge, to keep its
+      // rendering unchanged. 'auto' and 'auto-review' (Phase 1.4 — machine
+      // auto-tick + its Review action) get an explicit badge so this viewer
+      // reads honestly: 'auto-review' is a REVIEW, not a reversal (ticking
+      // writes to Medicus immediately — see recordOirAudit's doc comment).
+      const KIND_META = {
+        bulk: { tag: '', verb: 'ticked off' },
+        auto: { tag: 'AUTO', verb: 'auto-ticked' },
+        'auto-review': {
+          tag: 'REVIEW',
+          verb: 'reviewed (auto-ticked, not reversed)',
+        },
+      };
       const list = document.createElement('div');
       list.className = 'tl-rule-list';
       const shown = log.slice(0, 20);
@@ -3466,13 +3480,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               .filter(Boolean)
               .join(', ')
           : '';
+        const meta = KIND_META[entry.kind] || KIND_META.bulk;
+        const badge = meta.tag
+          ? '<span style="font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-4);border:1px solid var(--border);border-radius:3px;padding:1px 4px;white-space:nowrap;">' +
+            escHtml(meta.tag) +
+            '</span>'
+          : '';
         row.innerHTML =
           '<span style="color:var(--text-4);white-space:nowrap;font-size:11px;">' +
           escHtml(ts) +
           '</span>' +
+          badge +
           '<span>' +
           escHtml(String(count)) +
-          ' ticked off' +
+          ' ' +
+          escHtml(meta.verb) +
           (names ? ': ' + names : '') +
           '</span>';
         list.appendChild(row);

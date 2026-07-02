@@ -90,6 +90,10 @@ const EXTRACTED = [
   slice('function realClick(el) {', '// The "Assign to" picker (Medicus'),
   // findAssignInput
   slice('function findAssignInput() {', '\n\n  // ---- the macro'),
+  // commitAndAudit / highlightAndAudit (recordAudit itself is NOT extracted —
+  // audit persistence is covered by test-routine-rx-audit.js; here a sandbox
+  // spy stands in so the macro paths can call it)
+  slice('function commitAndAudit(', '\n\n  // ---- DOM helpers'),
   // running / abort / runMacro
   slice('var running = false;', '\n\n  // ---- UI: floating button'),
   // findRoutingControl / findActionAnchor
@@ -373,6 +377,8 @@ function makeSandbox(rootEl, pathname) {
     // slice (see file header).
     toast: (msg, kind) => TOASTS.push({ kind, msg }),
     highlight: (elx) => HIGHLIGHTED.push(elx),
+    // spy for the audit sink the commit/abort paths call (see extraction note)
+    recordAudit: () => {},
     saveCfg: () => {},
     renderButton: () => {},
     setBusy: () => {},

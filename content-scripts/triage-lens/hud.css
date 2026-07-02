@@ -20,6 +20,7 @@
 .ch-oir-flag,
 .ch-oir-bulk,
 .ch-action-menu,
+.ch-oir-toast,
 .ch-row-sev-red,
 .ch-row-sev-amber {
   /* Surfaces */
@@ -343,6 +344,81 @@
 .ch-oir-bulk-btn:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+/* Auto-tick toast — informs of a machine-initiated OIR tick (content.js
+   performOirAutoTick). Fixed bottom-right, ~15s auto-fade. The action is
+   labelled "Review" (NOT "Undo") because ticking writes to Medicus
+   immediately and can't be reversed from here — see the "never fake an
+   undo" note on performOirAutoReview. */
+.ch-oir-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483000;
+  max-width: 340px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-3);
+  font-family: var(--sans);
+  color: var(--text-1);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease);
+}
+.ch-oir-toast.ch-oir-toast-show {
+  opacity: 1;
+  transform: none;
+}
+.ch-oir-toast-msg {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.ch-oir-toast-note {
+  font-size: 11px;
+  color: var(--text-4);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.ch-oir-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.ch-oir-toast-btn {
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+.ch-oir-toast-btn:hover {
+  background: var(--accent-line);
+}
+
+/* Review flash — pulses the auto-ticked row(s) when the toast's Review
+   action is used (performOirAutoReview). Not a state change, purely visual. */
+.ch-oir-flash {
+  animation: ch-oir-flash-pulse 1.3s ease-in-out 2;
+}
+@keyframes ch-oir-flash-pulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--accent-line);
+  }
 }
 
 /* ---- HUD panel ---- */

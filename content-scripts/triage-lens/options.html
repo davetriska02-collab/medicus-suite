@@ -783,12 +783,34 @@
           >
         </label>
         <label class="tl-field tl-field-inline">
+          <input type="checkbox" data-pref="oirAutoTick" />
+          <span
+            >Auto-tick confident, report-covered requests
+            <small
+              class="tl-help"
+              style="
+                display: inline;
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                font-size: 11px;
+                color: var(--text-4);
+              "
+              >Off = the row is flagged "resulted (this report)" but never ticked automatically — manual ticking and
+              the bulk tick-off button above are unaffected. On (default): the confident/predating match is ticked,
+              audited, and a Review toast appears (ticking writes to Medicus immediately and can't be undone from
+              there).</small
+            ></span
+          >
+        </label>
+        <label class="tl-field tl-field-inline">
           <input type="checkbox" data-pref="oirShowValueOnBadge" />
           <span>Show the matched result value on the inline flag <small>(e.g. '18 ug/L LOW')</small></span>
         </label>
         <label class="tl-field tl-field-inline">
           <input type="checkbox" data-pref="oirAuditLog" />
-          <span>Keep a local audit trail of bulk tick-offs</span>
+          <span>Keep a local audit trail of tick-offs (bulk, auto-tick and review actions)</span>
         </label>
         <label class="tl-field">
           <span>Confidence floor</span>

@@ -2537,14 +2537,27 @@
     const ab = v.matchedAbnormal ? ` ${v.matchedAbnormal.toUpperCase()}` : '';
     return ` · ${v.matchedValue}${unit}${ab}`;
   };
-  // Append a bulk tick-off to the local OIR audit log (ring buffer, last 200).
+  // Append a tick-off to the local OIR audit log (ring buffer, last 200).
   // Machine-local governance record; never auto-restored (see backup allowlist).
-  const recordOirAudit = (verdicts, taskUuid) => {
+  // `kind` distinguishes WHO/WHAT initiated the write, all going through this
+  // one path/storage key/cap so the options audit viewer (renderOirAudit)
+  // picks every kind up automatically:
+  //   'bulk'       — clinician-confirmed bulk tick-off (confirmBulkTickOff)
+  //   'auto'       — machine auto-tick of confident, report-covered rows
+  //                  (performOirAutoTick) — see H-036 in docs/HAZARD-LOG.md
+  //   'auto-review'  — the auto-tick toast's Review action (performOirAutoReview).
+  //                  NOTE: this does NOT mean the tick was reversed — ticking
+  //                  writes to Medicus immediately and can't be undone from
+  //                  here (see confirmBulkTickOff's own dialog text) — it
+  //                  records that the clinician asked to review what was
+  //                  auto-ticked.
+  const recordOirAudit = (verdicts, taskUuid, kind) => {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
       const patientUuid = taskUuid ? _oirPatientCache.get(taskUuid) : undefined;
       const entry = {
         ts: new Date().toISOString(),
+        kind: kind || 'bulk',
         taskUuid: taskUuid || null,
         patientUuid: patientUuid || null,
         count: verdicts.length,
@@ -2565,6 +2578,110 @@
     } catch (e) {
       log('OIR audit write failed', e.message);
     }
+  };
+
+  // ---- Auto-tick toast (undo/review affordance) --------------------------
+  // Non-blocking, informational toast shown after a machine auto-tick fires.
+  // IMPORTANT — this is NOT a true undo: ticking an OIR checkbox writes to
+  // Medicus server-side immediately (see confirmBulkTickOff's own confirm
+  // text: "This cannot be undone from here"), so re-clicking the checkbox
+  // would either do nothing or falsely reassure the clinician the request is
+  // back on the outstanding list. Per the "never fake an undo" rule, the
+  // toast's action instead SCROLLS TO + FLASHES the ticked row(s) so the
+  // clinician can review them and, if genuinely needed, re-request via
+  // Medicus directly — and says so in its own copy.
+  const OIR_TOAST_MS = 15000;
+  let _oirToastEl = null;
+  let _oirToastTimer = null;
+
+  const removeOirToast = () => {
+    if (_oirToastTimer) {
+      clearTimeout(_oirToastTimer);
+      _oirToastTimer = null;
+    }
+    if (_oirToastEl && _oirToastEl.parentElement) _oirToastEl.remove();
+    _oirToastEl = null;
+  };
+
+  // Scrolls to + flashes the auto-ticked row(s) and records the review as an
+  // audit entry (kind: 'auto-review'). Standalone/testable — see
+  // recordOirAudit's kind doc for why this does not claim a reversal.
+  const performOirAutoReview = (verdicts, boxes, taskUuid) => {
+    const first = (boxes || []).find(Boolean);
+    if (first && typeof first.scrollIntoView === 'function') {
+      try {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    (boxes || []).forEach((b) => {
+      if (!b) return;
+      const row = (typeof b.closest === 'function' && b.closest('label.m-checkbox, .q-checkbox')) || b;
+      if (row && row.classList) {
+        row.classList.add('ch-oir-flash');
+        setTimeout(() => row.classList.remove('ch-oir-flash'), 2600);
+      }
+    });
+    log('OIR auto-tick review', { count: (boxes || []).length });
+    if (PREF('oirAuditLog', true)) recordOirAudit(verdicts, taskUuid, 'auto-review');
+  };
+
+  const showOirAutoTickToast = (verdicts, taskUuid, boxes) => {
+    if (typeof document === 'undefined') return;
+    removeOirToast();
+    const el = document.createElement('div');
+    el.className = 'ch-oir-toast';
+    const msg = document.createElement('div');
+    msg.className = 'ch-oir-toast-msg';
+    const names = verdicts
+      .map((v) => v.name)
+      .filter(Boolean)
+      .join(', ');
+    msg.textContent = `Auto-ticked: ${names} — resulted in this report`;
+    el.appendChild(msg);
+    const note = document.createElement('div');
+    note.className = 'ch-oir-toast-note';
+    note.textContent = 'This writes to Medicus immediately and can’t be undone from here.';
+    el.appendChild(note);
+    const actions = document.createElement('div');
+    actions.className = 'ch-oir-toast-actions';
+    const reviewBtn = document.createElement('button');
+    reviewBtn.type = 'button';
+    reviewBtn.className = 'ch-oir-toast-btn';
+    reviewBtn.textContent = 'Review';
+    reviewBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      performOirAutoReview(verdicts, boxes, taskUuid);
+      removeOirToast();
+    };
+    actions.appendChild(reviewBtn);
+    el.appendChild(actions);
+    document.body.appendChild(el);
+    _oirToastEl = el;
+    requestAnimationFrame(() => el.classList.add('ch-oir-toast-show'));
+    _oirToastTimer = setTimeout(() => {
+      if (_oirToastEl) _oirToastEl.classList.remove('ch-oir-toast-show');
+      setTimeout(removeOirToast, 300);
+    }, OIR_TOAST_MS);
+  };
+
+  // Filters confident, report-covered verdicts, ticks their checkboxes,
+  // audits (kind: 'auto') and surfaces the review toast above. Gated by the
+  // oirAutoTick pref (default ON — preserves the pre-existing behaviour);
+  // turning it off leaves the inline flags but never writes a tick.
+  // Standalone/testable — kept out of applyOutstandingMatch's body so it can
+  // be extracted and unit-tested without the rest of the match pipeline.
+  const performOirAutoTick = (verdicts, rows, taskUuid) => {
+    if (!PREF('oirAutoTick', true)) return;
+    const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
+    if (!toTickVerdicts.length) return;
+    const toTick = toTickVerdicts.map((v) => rows[v.id].box);
+    log('OIR auto-tick', { count: toTick.length });
+    tickRows(toTick);
+    if (PREF('oirAuditLog', true)) recordOirAudit(toTickVerdicts, taskUuid, 'auto');
+    showOirAutoTickToast(toTickVerdicts, taskUuid, toTick);
   };
 
   // Read the outstanding-request rows from the card.
@@ -2761,7 +2878,7 @@
       e.stopPropagation();
       if (confirmBulkTickOff(pending)) {
         log('OIR bulk tick-off', { count: pending.length });
-        if (PREF('oirAuditLog', true)) recordOirAudit(pending, taskUuid);
+        if (PREF('oirAuditLog', true)) recordOirAudit(pending, taskUuid, 'bulk');
         tickRows(pending.map((v) => rows[v.id].box));
         bar.remove();
       }
@@ -2806,13 +2923,11 @@
 
     // Auto-tick once per task — confident + predating, report-covered rows only.
     // Resulted-elsewhere rows are NEVER auto-ticked (autoTick === false).
+    // performOirAutoTick handles the oirAutoTick pref gate, the tick itself,
+    // the audit entry (kind: 'auto') and the undoable review toast.
     if (taskUuid && !_oirAutoTicked.has(taskUuid)) {
       _oirAutoTicked.add(taskUuid);
-      const toTick = verdicts.filter((v) => v.autoTick && rows[v.id]).map((v) => rows[v.id].box);
-      if (toTick.length) {
-        log('OIR auto-tick', { count: toTick.length });
-        tickRows(toTick);
-      }
+      performOirAutoTick(verdicts, rows, taskUuid);
     }
 
     // Bulk bar: only CONFIDENT results found elsewhere are eligible for one-click
