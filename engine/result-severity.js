@@ -45,6 +45,41 @@
     return analyte.specimen.some((t) => typeof t === 'string' && t.length > 0 && specLower.includes(t.toLowerCase()));
   }
 
+  // ── Whitespace collapse helper (shared by text-rule and combo-rule phrase matching) ──
+  // Collapse every run of whitespace (spaces, NEWLINES, tabs) to a single space before
+  // phrase matching. Lab reports hard-wrap free text, so a phrase like "no evidence of
+  // dysplasia or malignancy" can arrive as "...no evidence\nof dysplasia...". A literal
+  // includes() would miss it; normalising both sides makes matches robust to the lab's
+  // line wrapping and can never create a spurious match (the words are adjacent anyway).
+  function collapseWs(s) {
+    return String(s).replace(/\s+/g, ' ');
+  }
+
+  // ── Analyte match/exclude/specimen gate (shared by text, threshold, and combo rules) ──
+  // Does `result` satisfy an analyte's match criteria?
+  //   - analyte.match must be a non-empty array with at least one case-insensitive
+  //     substring hit against result.name.
+  //   - analyte.exclude (optional) drops a name that also contains an exclude substring
+  //     (checked AFTER match — e.g. a "platelet" rule must NOT fire on "Mean platelet
+  //     volume", a "haemoglobin" rule must NOT fire on "Haemoglobin A1c"). Same
+  //     case-insensitive substring semantics as match.
+  //   - analyte.specimen (optional, fail-open) — see specimenAllows above.
+  // Returns true iff all three gates pass.
+  function analyteMatches(analyte, result) {
+    if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) return false;
+    const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
+    const hit = analyte.match.some((m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase()));
+    if (!hit) return false;
+    if (
+      Array.isArray(analyte.exclude) &&
+      analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
+    ) {
+      return false;
+    }
+    if (!specimenAllows(analyte, result)) return false;
+    return true;
+  }
+
   // ── Compute text-rule outcome for a single result ────────────────────────────
   // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
   // Also returns the matched rule's label / normalLabel for chip display.
@@ -69,7 +104,6 @@
       return { outcome: 'none', label: null, normalLabel: null };
     }
 
-    const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
     // Collapse every run of whitespace (spaces, NEWLINES, tabs) to a single space before
     // phrase matching. Lab reports hard-wrap free text, so a phrase like "no evidence of
     // dysplasia or malignancy" can arrive as "...no evidence\nof dysplasia...". A literal
@@ -77,7 +111,7 @@
     // abnormalText flag phrase split across a line break would silently NOT fire (false
     // negative). Normalising both sides makes matches robust to the lab's line wrapping;
     // it can never create a spurious match (the words are adjacent in the sentence anyway).
-    const collapseWs = (s) => s.replace(/\s+/g, ' ');
+    // (collapseWs is the shared helper defined above.)
     // result.text is the pre-built combined free-text string (may be absent on old fixtures)
     const resultText = typeof result.text === 'string' ? collapseWs(result.text.toLowerCase()) : '';
 
@@ -125,24 +159,9 @@
       const hasAbnormal = Array.isArray(rule.abnormalText) && rule.abnormalText.length > 0;
       if (!hasNormal && !hasAbnormal) continue;
 
-      // Does this rule apply to this result?
-      const nameHit = analyte.match.some(
-        (m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase())
-      );
-      if (!nameHit) continue;
-      // analyte.exclude (optional) — same semantics as in computeRuleSev: skip a
-      // result whose name contains an exclude substring (a different test that
-      // happens to share a match token).
-      if (
-        Array.isArray(analyte.exclude) &&
-        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
-      ) {
-        continue;
-      }
-      // analyte.specimen (optional, fail-open) — scope rule to a specific specimen
-      // header (e.g. "throat swab") captured by the normaliser. Fail-open: if the
-      // result has no specimen header the rule still applies.
-      if (!specimenAllows(analyte, result)) continue;
+      // Does this rule apply to this result? (match / exclude / specimen gate — shared
+      // helper, see analyteMatches above.)
+      if (!analyteMatches(analyte, result)) continue;
 
       anyRuleApplied = true;
 
@@ -244,7 +263,6 @@
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     if (!result || typeof result !== 'object') return NONE;
 
-    const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
     const value = result.value;
     if (!Number.isFinite(value)) return NONE;
 
@@ -264,24 +282,9 @@
       // Suppress if the patient already has the relevant problem on record.
       if (ruleSuppressedByProblems(rule, problems)) continue;
 
-      // Check if any match substring hits the result name
-      const hits = analyte.match.some((m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase()));
-      if (!hits) continue;
-      // analyte.exclude (optional) drops false-positive analytes whose name
-      // contains a match substring but are a different test — e.g. a "platelet"
-      // rule must NOT fire on "Mean platelet volume", a "haemoglobin" rule must
-      // NOT fire on "Haemoglobin A1c", and a serum-electrolyte rule must skip a
-      // "Urine ..." analyte. Same case-insensitive substring semantics as match.
-      if (
-        Array.isArray(analyte.exclude) &&
-        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
-      ) {
-        continue;
-      }
-      // analyte.specimen (optional, fail-open) — scope rule to a specific specimen
-      // header captured by the normaliser. Fail-open: if the result has no specimen
-      // header the rule still applies.
-      if (!specimenAllows(analyte, result)) continue;
+      // Check if this analyte matches the result (match / exclude / specimen gate —
+      // shared helper, see analyteMatches above).
+      if (!analyteMatches(analyte, result)) continue;
 
       // Evaluate threshold
       let ruleSev = 'none';
@@ -333,23 +336,7 @@
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     const results = report.results;
 
-    const collapseWs = (s) => String(s).replace(/\s+/g, ' ');
-
-    // Does `result` match a condition's analyte (name match, not excluded, specimen-allowed)?
-    function analyteMatches(analyte, result) {
-      if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) return false;
-      const name = typeof result.name === 'string' ? result.name.toLowerCase() : '';
-      const hit = analyte.match.some((m) => typeof m === 'string' && m.length > 0 && name.includes(m.toLowerCase()));
-      if (!hit) return false;
-      if (
-        Array.isArray(analyte.exclude) &&
-        analyte.exclude.some((e) => typeof e === 'string' && e.length > 0 && name.includes(e.toLowerCase()))
-      ) {
-        return false;
-      }
-      if (!specimenAllows(analyte, result)) return false;
-      return true;
-    }
+    // (collapseWs, analyteMatches are the shared helpers defined above.)
 
     // Is a single condition satisfied by SOME result in the report?
     function conditionSatisfied(cond) {
@@ -604,7 +591,11 @@
   }
 
   // ── Module export (dual-mode: Node require OR browser global) ───────────────
-  const api = { evaluateReportSeverity };
+  // analyteMatches / collapseWs / specimenAllows are exported alongside the public API
+  // (same flat convention as e.g. rules-engine.js's drugMatchesRule) so the shared
+  // match/exclude/specimen gate can be unit-tested directly, not just indirectly through
+  // evaluateReportSeverity.
+  const api = { evaluateReportSeverity, analyteMatches, collapseWs, specimenAllows };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {
