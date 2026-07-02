@@ -2,6 +2,51 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.148.0] — 2026-07-02
+
+### Triage Lens — Trust: the screen never lies (Phase 1)
+
+Phase 1 of `docs/plans/TRIAGE-LENS-2026-07-02.md`: the queue and HUD now
+distinguish "assessed and clear" from "not assessed" everywhere, alert rows are
+visible at a glance, and every machine-initiated write leaves an audit trail.
+
+- **"Not assessed" never looks like "normal".** The HUD headline says **"Not
+  fully assessed"** (never "No flags") when a clinical card could not be read,
+  with a grey footer naming the missing cards, and a tile whose entire source
+  is unreadable renders a grey not-assessed state instead of implying clear.
+  Card lookup itself is hardened (count-suffix and whitespace/case tolerant,
+  ambiguity-safe) and warns once per page load when an expected card is
+  missing. On the results queue, a row whose check **failed** now shows a grey
+  outline "?" chip and is retried within a minute — previously indistinguishable
+  from an unassessed or normal row. The monitoring-due chip is now conservative:
+  a transient fetch/evaluation failure preserves the last known chip instead of
+  clearing it (only a successful evaluation can clear), while patient/page
+  changes still reset it so a chip can never leak across patients.
+- **Live triage status bar** replaces the passive queue legend: live counts
+  ("3 red · 7 amber · 22 clear · 2 ? · checking 8…"), a **jump-to-next-red**
+  button (amber fallback) that scrolls and flashes the row, and a
+  **Focus alerts** toggle that dims non-alert rows (never hides them). "Clear"
+  counts only results that were actually assessed; tasks with no gradeable
+  report are not claimed as clear. Pref-gated (`queueStatusBar`, default on).
+- **Severity row tint**: alert rows carry a 2–3px red/amber left-edge tint
+  (master and preview rows), wiped and re-derived in the same cycle as the
+  chips so a recycled grid row can never wear a previous patient's colour.
+  Pref-gated (`queueRowTint`, default on).
+- **Machine writes are audited and surfaced.** OIR auto-ticks now write
+  `kind:'auto'` entries to the existing audit log and show a toast listing
+  exactly what was ticked, with a **Review** action (scroll + flash — labelled
+  honestly: ticking writes to Medicus immediately and cannot be reversed from
+  the toast) recorded as `kind:'auto-review'`; a new `oirAutoTick` pref
+  (default on) can disable auto-ticking entirely. The routine-prescriptions
+  button now records every outcome (committed / highlighted / aborted,
+  including the previously-untracked `auto` mode) in a machine-local ring
+  buffer mirrored to the Clinical Event Ledger. Audit logs stay machine-local
+  by design (excluded from backups, matching the lab-filing precedent). Hazard
+  log: new **H-036** (auto-tick wrong-match hazard), H-035 updated.
+- **Fixed in passing:** meta chips (`Under-prioritised`, `Unmatched patient`)
+  rendered filled instead of outline on the live page — the `.ch-chip-meta`
+  rule existed only in the stale PiP CSS copy, now restored to `hud.css`.
+
 ## [v3.147.1] — 2026-07-02
 
 ### Triage Lens — Phase 0 hardening (guardrails before the improvement plan)
