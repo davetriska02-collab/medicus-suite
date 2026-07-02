@@ -119,6 +119,7 @@ const MODULES = {
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
+  leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
   record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
   about: null,
 };

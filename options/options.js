@@ -521,6 +521,7 @@ async function doFullExport() {
     knowledge,
     labfiling,
     notifications,
+    leaflets,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -536,6 +537,7 @@ async function doFullExport() {
     knowledgeExport(),
     labfilingExport(),
     notificationsExport(),
+    leafletsExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap('suite', {
@@ -553,6 +555,7 @@ async function doFullExport() {
     knowledge,
     labfiling,
     notifications,
+    leaflets,
     suite,
   });
 }
@@ -573,6 +576,7 @@ async function doModuleExport(scope) {
     knowledge: () => knowledgeExport(),
     labfiling: () => labfilingExport(),
     notifications: () => notificationsExport(),
+    leaflets: () => leafletsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -607,6 +611,7 @@ async function applyEnvelope(envelope) {
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
+    mods.leaflets && (() => leafletsImport(mods.leaflets)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1829,6 +1834,39 @@ rmSaveBtn?.addEventListener('click', async () => {
   if (rmSavedTag) {
     rmSavedTag.classList.add('show');
     setTimeout(() => rmSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+// ── Leaflets (NHS Website Content API — optional tier 2) ─────────────────────
+// The API key is deliberately never round-tripped through leafletsExport() —
+// see shared/io/leaflets-io.js header. This section reads/writes
+// chrome.storage.local directly (same as the request-monitor section above)
+// rather than going through the IO file, because the IO file's job is the
+// backup boundary, not the settings-page load/save path.
+
+const lfEnabled = document.getElementById('lfEnabled');
+const lfApiKey = document.getElementById('lfApiKey');
+const lfSaveBtn = document.getElementById('saveLeaflets');
+const lfSavedTag = document.getElementById('leafletsSaved');
+
+(async function initLeafletsSection() {
+  try {
+    const r = await chrome.storage.local.get('leaflets.config');
+    const cfg = r['leaflets.config'] || {};
+    if (lfEnabled) lfEnabled.checked = cfg.enabled === true;
+    if (lfApiKey) lfApiKey.value = typeof cfg.apiKey === 'string' ? cfg.apiKey : '';
+  } catch (e) {
+    console.warn('[Leaflets init]', e.message);
+  }
+})();
+
+lfSaveBtn?.addEventListener('click', async () => {
+  const enabled = !!lfEnabled?.checked;
+  const apiKey = (lfApiKey?.value || '').trim();
+  await chrome.storage.local.set({ 'leaflets.config': { enabled, apiKey } });
+  if (lfSavedTag) {
+    lfSavedTag.classList.add('show');
+    setTimeout(() => lfSavedTag.classList.remove('show'), 2000);
   }
 });
 

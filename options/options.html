@@ -1006,6 +1006,7 @@
         <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
+        <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="cqc">CQC Readiness</button>
         <button class="nav-item" data-section="ledger">Event Ledger</button>
@@ -1892,6 +1893,55 @@
           </details>
         </section>
 
+        <!-- Leaflets section -->
+        <section class="opt-section" id="sect-leaflets">
+          <h1>Leaflets <span class="module-badge">NHS patient information</span></h1>
+          <p class="section-desc">
+            The <strong>Leaflets</strong> tab searches a bundled index of common conditions and medicines and lets you
+            open or copy a link to the matching page on nhs.uk &mdash; this works with no setup and contacts nothing but
+            your browser's own navigation. The optional API key below additionally renders the leaflet text
+            <strong>in the side panel</strong>, using the NHS Website Content API.
+          </p>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="lfEnabled" />
+              <span class="field-label" style="margin: 0">Enable in-panel rendering (NHS Website Content API)</span>
+            </label>
+            <span class="field-help" style="margin-top: 4px; display: block">
+              Optional. With this off (or no key set below), the Leaflets tab still works fully &mdash; results just
+              open nhs.uk in a new browser tab instead of rendering here.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="lfApiKey">API subscription key</label>
+            <input type="password" id="lfApiKey" placeholder="Paste your subscription key" autocomplete="off" />
+            <span class="field-help">
+              Free to register via the
+              <a
+                href="https://digital.nhs.uk/developer/api-catalogue/nhs-website-content"
+                target="_blank"
+                rel="noopener noreferrer"
+                >NHS England API catalogue</a
+              >. <strong>Stored only on this device</strong> &mdash; the key is deliberately excluded from suite backups
+              (see the Leaflets card under Backup &amp; Restore), so restoring a backup on another machine never carries
+              it across.
+            </span>
+          </div>
+
+          <p class="field-help" style="margin: 4px 0 0">
+            Privacy: with a key configured and enabled, selecting a search result sends only the condition or medicine
+            name to <code style="color: var(--text-3)">api.nhs.uk</code> &mdash; never patient data. Without a key, no
+            new external endpoint is contacted at all; "Open" just navigates your browser to nhs.uk.
+          </p>
+
+          <div class="actions">
+            <button class="primary" id="saveLeaflets">Save</button>
+            <span class="saved" id="leafletsSaved">Saved ✓</span>
+          </div>
+        </section>
+
         <!-- Clinical Safety section -->
         <section class="opt-section" id="sect-safety">
           <h1>Clinical Safety</h1>
@@ -2650,6 +2700,14 @@
                   />
                 </div>
               </div>
+              <div class="module-export-card">
+                <div class="mec-name">Leaflets</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="leaflets">Export</button>
+                  <button class="ghost" data-mod-import="leaflets">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="leaflets" accept=".json" style="display: none" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2737,6 +2795,8 @@
     <script src="../shared/lab-filing-utils.js"></script>
     <script src="../shared/io/labfiling-io.js"></script>
     <script src="../shared/io/notifications-io.js"></script>
+    <script src="../shared/leaflets-utils.js"></script>
+    <script src="../shared/io/leaflets-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>

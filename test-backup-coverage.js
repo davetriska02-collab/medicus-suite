@@ -100,6 +100,7 @@ const KEY_PREFIXES = [
   'reception',
   'ledger',
   'health',
+  'leaflets',
 ];
 
 function hasKeyPrefix(k) {

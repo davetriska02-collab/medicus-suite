@@ -38,8 +38,16 @@ all already visible to the authorised clinician in the source record.
   clinician's workstation): the Request Monitor persists **initials only**;
   transient print/passport keys holding fuller data carry a 60-second TTL
   backstop (TF4). No patient data is held on any server.
-- **No external transmission of patient data.** The only outbound network call is
-  a version check to `api.github.com` carrying no patient data.
+- **No external transmission of patient data.** By default, the only outbound
+  network call is a version check to `api.github.com` carrying no patient data.
+- **Leaflets tab (optional, off by default).** With no API key configured, this
+  tab searches a bundled local index and opens nhs.uk in a new browser tab —
+  no new endpoint is contacted. If a user opts in by pasting an NHS Website
+  Content API key (Options → Leaflets), selecting a search result sends a GET
+  request to `api.nhs.uk` containing only the **condition or medicine name**
+  the user selected — never a patient identifier or any other patient data.
+  The key is stored locally on that device only and is excluded from suite
+  backups.
 
 **Scope / context / purpose.** Used by authorised clinical and administrative
 staff within a Medicus-enabled GP practice, as a memory aid / operational

@@ -2,6 +2,53 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.147.0] — 2026-07-02
+
+### NHS Patient Leaflets — a new tab, not a Google search
+
+Dave: "I end up sticking it in Google — NHS wart — and it feels disjointed."
+A new side-panel tab puts the right NHS patient leaflet one search away,
+without ever sending patient data anywhere. Plan:
+`docs/plans/NHS-LEAFLETS-2026-07-02.md`.
+
+- **Tier 1 — bundled A-Z, works with zero configuration.** A curated index
+  of 221 entries (166 conditions + 55 medicines) ships in
+  `rules/nhs-az-index.json`, matched by fuzzy search with alias and
+  typo-tolerant prefix matching. Every search also offers a guaranteed
+  "Search nhs.uk for '\<term\>'" fallback row, so the tab never dead-ends on
+  an index miss. Results **open in a new tab** (a normal user-initiated
+  navigation, not an extension fetch) or **copy a link** for the
+  patient-SMS workflow; a Recent list keeps the last 10 for quick reuse.
+  This tier contacts no new endpoint at all.
+- **Tier 2 — optional in-panel rendering via the NHS Website Content API.**
+  Options-gated: a subscription key, entered in Options → Leaflets, lets a
+  search result render the leaflet text right in the panel — headings and
+  paragraphs built from text nodes only (no `innerHTML` of remote content),
+  with a visible "From the NHS website" attribution link back to the
+  source page. Responses are cached for 24h to respect syndication
+  freshness terms and avoid re-fetching on every click. Any fetch failure
+  (401/403/429/network/unexpected shape) fails calmly back to tier-1
+  open-in-tab behaviour with a one-line notice — the module is
+  indistinguishable from tier-1-only when no key is set. The API key is
+  deliberately excluded from suite backups (secrets stay machine-local);
+  everything else (recent list, enabled flag) travels normally.
+- **`scripts/verify-nhs-index.js`** HEAD-checks every bundled slug against
+  the live site from a machine with normal egress (this sandbox couldn't
+  reach nhs.uk to verify the seed index directly) and reports failures —
+  documented in `rules/`.
+- **Honest disclosure.** README and `docs/DPIA.md` now say plainly that
+  `api.github.com` is no longer the *only* external endpoint the extension
+  can contact: with a key configured, selecting a search result sends
+  `api.nhs.uk` the condition or medicine term the user selected — never
+  patient data. Without a key, nothing changes.
+- **Event Ledger.** Every leaflet open is recorded (source `leaflets`,
+  action `opened`, label = slug, `patientRef` always null) — evidence of
+  what was opened, never who for.
+- New module: `side-panel/modules/leaflets/`; backup wiring
+  (`shared/io/leaflets-io.js`, `VALID_SCOPES`, `doFullExport`/
+  `applyEnvelope`/`previewEnvelope`, Options export card); tab help in
+  `shared/tab-help.js`; tour step (`TOUR_VERSION` 7 → 8).
+
 ## [v3.146.0] — 2026-07-02
 
 ### Unbreakable — the suite knows when Medicus changes

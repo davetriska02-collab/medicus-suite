@@ -29,10 +29,15 @@
 //       and Options → Event Ledger deliberately not taught: the 20-step cap
 //       was reached, Condor stays overview-only (nav-tabs step) as before,
 //       and the tour only covers the side panel, not the Options page.
+//   8 — Leaflets tab — NHS patient information search (bundled A-Z + optional
+//       in-panel API rendering) (v3.147.0). To stay within the 20-step cap,
+//       'display' and 'popout' were consolidated into one 'header-controls'
+//       step (same content, one fewer step) — no user-visible step was
+//       dropped.
 
 'use strict';
 
-export const TOUR_VERSION = 7;
+export const TOUR_VERSION = 8;
 
 export const TOUR_STEPS = [
   {
@@ -150,18 +155,11 @@ export const TOUR_STEPS = [
     body: 'Press Ctrl+K (or click here) for the command palette: jump to any tab, change theme or text size, open the right settings section, or replay this tour.',
   },
   {
-    id: 'display',
+    id: 'header-controls',
     addedIn: 2,
-    target: ['#displayBtn'],
-    title: 'Make it yours',
-    body: 'Light or dark theme, three text sizes, and a colour-blind-safe palette.',
-  },
-  {
-    id: 'popout',
-    addedIn: 2,
-    target: ['#popoutBtn'],
-    title: 'Pop out the panel',
-    body: 'Open the suite in a floating window you can park on a second screen while Medicus fills this one.',
+    target: ['#displayBtn', '#popoutBtn'],
+    title: 'Make it yours, or pop it out',
+    body: 'Light or dark theme, three text sizes, and a colour-blind-safe palette — or open the suite in a floating window you can park on a second screen while Medicus fills this one.',
   },
   {
     id: 'settings',
@@ -186,6 +184,15 @@ export const TOUR_STEPS = [
     centerFallback: true,
     title: 'Pre-flight — check before you prescribe',
     body: 'Type a drug you’re considering to see how it would change ACB and STOPP/START, any new interactions with current meds, and what monitoring it would need — before it exists in the record. A decision aid, not advice.',
+  },
+  {
+    id: 'leaflets',
+    addedIn: 8,
+    module: 'leaflets',
+    target: ['.lf-module'],
+    centerFallback: true,
+    title: 'Leaflets — NHS patient information, fast',
+    body: 'Search a condition or medicine to open or copy a link to its nhs.uk page — always works, no setup. Add an API key in Options → Leaflets to render the leaflet text right here.',
   },
   {
     id: 'finish',

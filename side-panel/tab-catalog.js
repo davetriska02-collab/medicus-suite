@@ -27,6 +27,7 @@ export const TAB_CATALOG = [
   { id: 'reception', name: 'Reception', blurb: 'Front-desk tools: guided call capture and patient status.' },
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
+  { id: 'leaflets', name: 'Leaflets', blurb: 'Find and share the right NHS patient information leaflet, fast.' },
   {
     id: 'record',
     name: 'Record',
@@ -42,12 +43,12 @@ export const ROLE_PRESETS = [
   {
     id: 'gp',
     label: 'GP / clinician',
-    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'visualiser', 'about'],
+    show: ['today', 'sentinel', 'record', 'trends', 'sweep', 'slots', 'knowledge', 'leaflets', 'visualiser', 'about'],
   },
   {
     id: 'reception',
     label: 'Reception',
-    show: ['today', 'reception', 'slots', 'submissions', 'knowledge', 'about'],
+    show: ['today', 'reception', 'slots', 'submissions', 'knowledge', 'leaflets', 'about'],
   },
   {
     id: 'manager',

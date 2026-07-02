@@ -105,6 +105,25 @@ async function runTests() {
   e = Ledger.makeEvent(baseEvent({ ts: '2026-06-30T09:00:00.000Z' }), now);
   check(e.ts === '2026-06-30T09:00:00.000Z', 'caller-supplied ts kept');
 
+  // ── leaflets source/action — shared/leaflets-utils.js leafletOpenLedgerEvent shape ──
+  console.log('\n--- makeEvent: leaflets source ---');
+  const leafletEvt = {
+    ts: now,
+    source: 'leaflets',
+    patientRef: null,
+    severity: null,
+    ruleId: null,
+    label: 'eczema',
+    action: 'opened',
+  };
+  e = Ledger.makeEvent(leafletEvt, now);
+  check(e && e.source === 'leaflets' && e.action === 'opened', 'leaflets/opened accepted');
+  check(
+    e.patientRef === null && e.severity === null && e.ruleId === null,
+    'leaflets event carries no patient/rule fields'
+  );
+  check(e.label === 'eczema', 'leaflets label (slug) preserved');
+
   // ── sanitisePatientRef — the PHI backstop ─────────────────────────────────
   console.log('\n--- sanitisePatientRef (UUID only, never a name) ---');
   check(Ledger.sanitisePatientRef(UUID) === UUID, 'lowercase UUID passes');

@@ -84,6 +84,11 @@ export const TAB_HELP = {
     what: 'Daily inbound task counts across medical, admin, investigation and prescription categories.',
     firstStep: 'Check today’s counts, or set a date range to compare days.',
   },
+  leaflets: {
+    title: 'Leaflets',
+    what: 'Find the right NHS patient information leaflet for a condition or medicine, ready to open or copy a link to share.',
+    firstStep: 'Type a condition or medicine name — every search also offers a direct nhs.uk search as a fallback.',
+  },
   visualiser: {
     title: 'Visualiser',
     what: 'Opens a full browser tab to analyse an exported patient-record PDF — a multi-year timeline view, separate from the panel.',

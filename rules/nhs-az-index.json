@@ -1,0 +1,1333 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-07-02",
+  "notes": "Seed A-Z index for the Leaflets tab (side-panel/modules/leaflets). Entries are AUTHORED from general nhs.uk URL-convention knowledge, NOT scraped or live-verified — this sandbox has no route to nhs.uk (see CLAUDE.md network policy). Every slug is a best-effort, high-confidence guess at the real nhs.uk path; entries whose slug pattern felt uncertain were deliberately left out rather than guessed (the tab's always-present 'Search nhs.uk for ...' fallback row covers any miss, so an absent entry never dead-ends a search). BEFORE SHIPPING or after any nhs.uk restructure: run `node scripts/verify-nhs-index.js` on a machine with normal internet egress — it HEAD-requests every entry's URL (conditions: https://www.nhs.uk/conditions/{slug}/, medicines: https://www.nhs.uk/medicines/{slug}/) and reports any non-200 response so a broken/renamed slug can be fixed or removed. Re-run periodically.",
+  "entries": [
+    {
+      "slug": "warts-and-verrucas",
+      "name": "Warts and verrucas",
+      "kind": "condition",
+      "aliases": ["wart", "verruca", "verrucas"]
+    },
+    {
+      "slug": "threadworms",
+      "name": "Threadworms",
+      "kind": "condition",
+      "aliases": ["pinworms"]
+    },
+    {
+      "slug": "impetigo",
+      "name": "Impetigo",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "croup",
+      "name": "Croup",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "chickenpox",
+      "name": "Chickenpox",
+      "kind": "condition",
+      "aliases": ["varicella"]
+    },
+    {
+      "slug": "scarlet-fever",
+      "name": "Scarlet fever",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "hand-foot-mouth-disease",
+      "name": "Hand, foot and mouth disease",
+      "kind": "condition",
+      "aliases": ["hfmd"]
+    },
+    {
+      "slug": "molluscum-contagiosum",
+      "name": "Molluscum contagiosum",
+      "kind": "condition",
+      "aliases": ["molluscum"]
+    },
+    {
+      "slug": "atopic-eczema",
+      "name": "Atopic eczema",
+      "kind": "condition",
+      "aliases": ["eczema", "dermatitis"]
+    },
+    {
+      "slug": "hives",
+      "name": "Hives",
+      "kind": "condition",
+      "aliases": ["urticaria", "nettle rash"]
+    },
+    {
+      "slug": "head-lice-and-nits",
+      "name": "Head lice and nits",
+      "kind": "condition",
+      "aliases": ["head lice", "nits"]
+    },
+    {
+      "slug": "conjunctivitis",
+      "name": "Conjunctivitis",
+      "kind": "condition",
+      "aliases": ["pink eye"]
+    },
+    {
+      "slug": "stye",
+      "name": "Stye",
+      "kind": "condition",
+      "aliases": ["sty"]
+    },
+    {
+      "slug": "ear-infections",
+      "name": "Ear infections",
+      "kind": "condition",
+      "aliases": ["otitis media", "otitis externa", "earache", "ear ache"]
+    },
+    {
+      "slug": "glue-ear",
+      "name": "Glue ear",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "tonsillitis",
+      "name": "Tonsillitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "sinusitis",
+      "name": "Sinusitis",
+      "kind": "condition",
+      "aliases": ["sinus infection"]
+    },
+    {
+      "slug": "labyrinthitis",
+      "name": "Labyrinthitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "vertigo",
+      "name": "Vertigo",
+      "kind": "condition",
+      "aliases": ["bppv", "benign paroxysmal positional vertigo"]
+    },
+    {
+      "slug": "plantar-fasciitis",
+      "name": "Plantar fasciitis",
+      "kind": "condition",
+      "aliases": ["heel pain"]
+    },
+    {
+      "slug": "carpal-tunnel-syndrome",
+      "name": "Carpal tunnel syndrome",
+      "kind": "condition",
+      "aliases": ["carpal tunnel"]
+    },
+    {
+      "slug": "sciatica",
+      "name": "Sciatica",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "gout",
+      "name": "Gout",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "shingles",
+      "name": "Shingles",
+      "kind": "condition",
+      "aliases": ["herpes zoster"]
+    },
+    {
+      "slug": "cold-sores",
+      "name": "Cold sores",
+      "kind": "condition",
+      "aliases": ["herpes labialis"]
+    },
+    {
+      "slug": "urinary-tract-infections-utis",
+      "name": "Urinary tract infections (UTIs)",
+      "kind": "condition",
+      "aliases": ["uti", "cystitis", "bladder infection"]
+    },
+    {
+      "slug": "thrush-in-men-and-women",
+      "name": "Thrush in men and women",
+      "kind": "condition",
+      "aliases": ["thrush", "candidiasis", "vaginal thrush"]
+    },
+    {
+      "slug": "bacterial-vaginosis",
+      "name": "Bacterial vaginosis",
+      "kind": "condition",
+      "aliases": ["bv"]
+    },
+    {
+      "slug": "menopause",
+      "name": "Menopause",
+      "kind": "condition",
+      "aliases": ["perimenopause", "hrt"]
+    },
+    {
+      "slug": "pre-menstrual-syndrome",
+      "name": "Premenstrual syndrome (PMS)",
+      "kind": "condition",
+      "aliases": ["pms", "premenstrual syndrome"]
+    },
+    {
+      "slug": "mastitis",
+      "name": "Mastitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "colic",
+      "name": "Colic",
+      "kind": "condition",
+      "aliases": ["infant colic"]
+    },
+    {
+      "slug": "fever-in-children",
+      "name": "Fever in children",
+      "kind": "condition",
+      "aliases": ["high temperature child"]
+    },
+    {
+      "slug": "sprains-and-strains",
+      "name": "Sprains and strains",
+      "kind": "condition",
+      "aliases": ["sprain", "strain"]
+    },
+    {
+      "slug": "tennis-elbow",
+      "name": "Tennis elbow",
+      "kind": "condition",
+      "aliases": ["lateral epicondylitis"]
+    },
+    {
+      "slug": "frozen-shoulder",
+      "name": "Frozen shoulder",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "raynauds",
+      "name": "Raynaud's phenomenon",
+      "kind": "condition",
+      "aliases": ["raynauds phenomenon", "raynaud's"]
+    },
+    {
+      "slug": "chilblains",
+      "name": "Chilblains",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "iron-deficiency-anaemia",
+      "name": "Iron deficiency anaemia",
+      "kind": "condition",
+      "aliases": ["anaemia", "low iron"]
+    },
+    {
+      "slug": "vitamin-b12-or-folate-deficiency-anaemia",
+      "name": "Vitamin B12 or folate deficiency anaemia",
+      "kind": "condition",
+      "aliases": ["b12 deficiency", "folate deficiency"]
+    },
+    {
+      "slug": "irritable-bowel-syndrome-ibs",
+      "name": "Irritable bowel syndrome (IBS)",
+      "kind": "condition",
+      "aliases": ["ibs"]
+    },
+    {
+      "slug": "diverticular-disease-and-diverticulitis",
+      "name": "Diverticular disease and diverticulitis",
+      "kind": "condition",
+      "aliases": ["diverticulitis"]
+    },
+    {
+      "slug": "piles-haemorrhoids",
+      "name": "Piles (haemorrhoids)",
+      "kind": "condition",
+      "aliases": ["haemorrhoids", "piles"]
+    },
+    {
+      "slug": "anal-fissure",
+      "name": "Anal fissure",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "hernia",
+      "name": "Hernia",
+      "kind": "condition",
+      "aliases": ["inguinal hernia"]
+    },
+    {
+      "slug": "gallstones",
+      "name": "Gallstones",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "kidney-stones",
+      "name": "Kidney stones",
+      "kind": "condition",
+      "aliases": ["renal colic"]
+    },
+    {
+      "slug": "migraine",
+      "name": "Migraine",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "tension-headaches",
+      "name": "Tension headaches",
+      "kind": "condition",
+      "aliases": ["tension headache"]
+    },
+    {
+      "slug": "cluster-headaches",
+      "name": "Cluster headaches",
+      "kind": "condition",
+      "aliases": ["cluster headache"]
+    },
+    {
+      "slug": "insomnia",
+      "name": "Insomnia",
+      "kind": "condition",
+      "aliases": ["sleep problems"]
+    },
+    {
+      "slug": "anxiety",
+      "name": "Anxiety",
+      "kind": "condition",
+      "aliases": ["generalised anxiety disorder", "gad"]
+    },
+    {
+      "slug": "clinical-depression",
+      "name": "Clinical depression",
+      "kind": "condition",
+      "aliases": ["depression"]
+    },
+    {
+      "slug": "panic-disorder",
+      "name": "Panic disorder",
+      "kind": "condition",
+      "aliases": ["panic attacks"]
+    },
+    {
+      "slug": "health-anxiety",
+      "name": "Health anxiety",
+      "kind": "condition",
+      "aliases": ["hypochondria"]
+    },
+    {
+      "slug": "restless-legs-syndrome",
+      "name": "Restless legs syndrome",
+      "kind": "condition",
+      "aliases": ["restless legs"]
+    },
+    {
+      "slug": "dry-eyes",
+      "name": "Dry eyes",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "blepharitis",
+      "name": "Blepharitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "tinnitus",
+      "name": "Tinnitus",
+      "kind": "condition",
+      "aliases": ["ringing in ears"]
+    },
+    {
+      "slug": "earwax-build-up",
+      "name": "Earwax build-up",
+      "kind": "condition",
+      "aliases": ["earwax", "ear wax"]
+    },
+    {
+      "slug": "nosebleeds",
+      "name": "Nosebleeds",
+      "kind": "condition",
+      "aliases": ["epistaxis", "nosebleed"]
+    },
+    {
+      "slug": "hay-fever",
+      "name": "Hay fever",
+      "kind": "condition",
+      "aliases": ["allergic rhinitis"]
+    },
+    {
+      "slug": "asthma",
+      "name": "Asthma",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "chronic-obstructive-pulmonary-disease-copd",
+      "name": "Chronic obstructive pulmonary disease (COPD)",
+      "kind": "condition",
+      "aliases": ["copd"]
+    },
+    {
+      "slug": "obstructive-sleep-apnoea",
+      "name": "Obstructive sleep apnoea",
+      "kind": "condition",
+      "aliases": ["sleep apnoea", "osa"]
+    },
+    {
+      "slug": "heartburn-and-acid-reflux",
+      "name": "Heartburn and acid reflux",
+      "kind": "condition",
+      "aliases": ["gord", "reflux", "gerd"]
+    },
+    {
+      "slug": "coeliac-disease",
+      "name": "Coeliac disease",
+      "kind": "condition",
+      "aliases": ["celiac disease"]
+    },
+    {
+      "slug": "type-2-diabetes",
+      "name": "Type 2 diabetes",
+      "kind": "condition",
+      "aliases": ["diabetes"]
+    },
+    {
+      "slug": "type-1-diabetes",
+      "name": "Type 1 diabetes",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "high-blood-pressure-hypertension",
+      "name": "High blood pressure (hypertension)",
+      "kind": "condition",
+      "aliases": ["hypertension"]
+    },
+    {
+      "slug": "high-cholesterol",
+      "name": "High cholesterol",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "atrial-fibrillation",
+      "name": "Atrial fibrillation",
+      "kind": "condition",
+      "aliases": ["af", "afib"]
+    },
+    {
+      "slug": "angina",
+      "name": "Angina",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "heart-failure",
+      "name": "Heart failure",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "underactive-thyroid-hypothyroidism",
+      "name": "Underactive thyroid (hypothyroidism)",
+      "kind": "condition",
+      "aliases": ["hypothyroidism"]
+    },
+    {
+      "slug": "overactive-thyroid-hyperthyroidism",
+      "name": "Overactive thyroid (hyperthyroidism)",
+      "kind": "condition",
+      "aliases": ["hyperthyroidism"]
+    },
+    {
+      "slug": "polycystic-ovary-syndrome-pcos",
+      "name": "Polycystic ovary syndrome (PCOS)",
+      "kind": "condition",
+      "aliases": ["pcos"]
+    },
+    {
+      "slug": "endometriosis",
+      "name": "Endometriosis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "fibroids",
+      "name": "Fibroids",
+      "kind": "condition",
+      "aliases": ["uterine fibroids"]
+    },
+    {
+      "slug": "erectile-dysfunction",
+      "name": "Erectile dysfunction",
+      "kind": "condition",
+      "aliases": ["impotence"]
+    },
+    {
+      "slug": "enlarged-prostate",
+      "name": "Enlarged prostate (BPH)",
+      "kind": "condition",
+      "aliases": ["bph", "benign prostatic hyperplasia"]
+    },
+    {
+      "slug": "balanitis",
+      "name": "Balanitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "epididymitis",
+      "name": "Epididymitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "psoriasis",
+      "name": "Psoriasis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "rosacea",
+      "name": "Rosacea",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "acne",
+      "name": "Acne",
+      "kind": "condition",
+      "aliases": ["spots"]
+    },
+    {
+      "slug": "cellulitis",
+      "name": "Cellulitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "ringworm",
+      "name": "Ringworm",
+      "kind": "condition",
+      "aliases": ["tinea"]
+    },
+    {
+      "slug": "athletes-foot",
+      "name": "Athlete's foot",
+      "kind": "condition",
+      "aliases": ["tinea pedis"]
+    },
+    {
+      "slug": "fungal-nail-infection",
+      "name": "Fungal nail infection",
+      "kind": "condition",
+      "aliases": ["nail fungus", "onychomycosis"]
+    },
+    {
+      "slug": "scabies",
+      "name": "Scabies",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "vitiligo",
+      "name": "Vitiligo",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "hair-loss",
+      "name": "Hair loss",
+      "kind": "condition",
+      "aliases": ["alopecia"]
+    },
+    {
+      "slug": "seborrhoeic-dermatitis",
+      "name": "Seborrhoeic dermatitis",
+      "kind": "condition",
+      "aliases": ["dandruff", "cradle cap adult"]
+    },
+    {
+      "slug": "ganglion-cyst",
+      "name": "Ganglion cyst",
+      "kind": "condition",
+      "aliases": ["ganglion"]
+    },
+    {
+      "slug": "dupuytrens-contracture",
+      "name": "Dupuytren's contracture",
+      "kind": "condition",
+      "aliases": ["dupuytrens"]
+    },
+    {
+      "slug": "achilles-tendinopathy",
+      "name": "Achilles tendinopathy",
+      "kind": "condition",
+      "aliases": ["achilles tendonitis"]
+    },
+    {
+      "slug": "bunions",
+      "name": "Bunions",
+      "kind": "condition",
+      "aliases": ["bunion"]
+    },
+    {
+      "slug": "ingrown-toenails",
+      "name": "Ingrown toenails",
+      "kind": "condition",
+      "aliases": ["ingrown toenail"]
+    },
+    {
+      "slug": "osteoarthritis",
+      "name": "Osteoarthritis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "rheumatoid-arthritis",
+      "name": "Rheumatoid arthritis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "fibromyalgia",
+      "name": "Fibromyalgia",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "back-pain",
+      "name": "Back pain",
+      "kind": "condition",
+      "aliases": ["lower back pain"]
+    },
+    {
+      "slug": "whiplash",
+      "name": "Whiplash",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "bursitis",
+      "name": "Bursitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "costochondritis",
+      "name": "Costochondritis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "menieres-disease",
+      "name": "Meniere's disease",
+      "kind": "condition",
+      "aliases": ["menieres"]
+    },
+    {
+      "slug": "sore-throat",
+      "name": "Sore throat",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "common-cold",
+      "name": "Common cold",
+      "kind": "condition",
+      "aliases": ["cold"]
+    },
+    {
+      "slug": "flu",
+      "name": "Flu",
+      "kind": "condition",
+      "aliases": ["influenza"]
+    },
+    {
+      "slug": "pneumonia",
+      "name": "Pneumonia",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "bronchitis",
+      "name": "Bronchitis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "whooping-cough",
+      "name": "Whooping cough",
+      "kind": "condition",
+      "aliases": ["pertussis"]
+    },
+    {
+      "slug": "chest-infection",
+      "name": "Chest infection",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "urinary-incontinence",
+      "name": "Urinary incontinence",
+      "kind": "condition",
+      "aliases": ["stress incontinence", "bladder weakness"]
+    },
+    {
+      "slug": "constipation",
+      "name": "Constipation",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "diarrhoea-and-vomiting",
+      "name": "Diarrhoea and vomiting",
+      "kind": "condition",
+      "aliases": ["gastroenteritis", "sickness bug", "d&v"]
+    },
+    {
+      "slug": "food-poisoning",
+      "name": "Food poisoning",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "norovirus",
+      "name": "Norovirus",
+      "kind": "condition",
+      "aliases": ["winter vomiting bug"]
+    },
+    {
+      "slug": "nappy-rash",
+      "name": "Nappy rash",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "cradle-cap",
+      "name": "Cradle cap",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "reflux-in-babies",
+      "name": "Reflux in babies",
+      "kind": "condition",
+      "aliases": ["infant reflux"]
+    },
+    {
+      "slug": "teething",
+      "name": "Teething",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "growing-pains",
+      "name": "Growing pains",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "bedwetting",
+      "name": "Bedwetting",
+      "kind": "condition",
+      "aliases": ["nocturnal enuresis"]
+    },
+    {
+      "slug": "glandular-fever",
+      "name": "Glandular fever",
+      "kind": "condition",
+      "aliases": ["mononucleosis", "mono"]
+    },
+    {
+      "slug": "mumps",
+      "name": "Mumps",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "measles",
+      "name": "Measles",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "rubella",
+      "name": "Rubella",
+      "kind": "condition",
+      "aliases": ["german measles"]
+    },
+    {
+      "slug": "slapped-cheek-syndrome",
+      "name": "Slapped cheek syndrome",
+      "kind": "condition",
+      "aliases": ["fifth disease", "parvovirus b19"]
+    },
+    {
+      "slug": "oral-thrush",
+      "name": "Oral thrush",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "mouth-ulcers",
+      "name": "Mouth ulcers",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "gum-disease",
+      "name": "Gum disease",
+      "kind": "condition",
+      "aliases": ["gingivitis", "periodontitis"]
+    },
+    {
+      "slug": "toothache",
+      "name": "Toothache",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "dry-mouth",
+      "name": "Dry mouth",
+      "kind": "condition",
+      "aliases": ["xerostomia"]
+    },
+    {
+      "slug": "bad-breath",
+      "name": "Bad breath",
+      "kind": "condition",
+      "aliases": ["halitosis"]
+    },
+    {
+      "slug": "laryngitis",
+      "name": "Laryngitis",
+      "kind": "condition",
+      "aliases": ["hoarse voice", "hoarseness"]
+    },
+    {
+      "slug": "swollen-glands",
+      "name": "Swollen glands",
+      "kind": "condition",
+      "aliases": ["swollen lymph nodes"]
+    },
+    {
+      "slug": "cough",
+      "name": "Cough",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "chronic-fatigue-syndrome-me",
+      "name": "Chronic fatigue syndrome (ME/CFS)",
+      "kind": "condition",
+      "aliases": ["cfs", "me", "myalgic encephalomyelitis"]
+    },
+    {
+      "slug": "osteoporosis",
+      "name": "Osteoporosis",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "vaginal-dryness",
+      "name": "Vaginal dryness",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "genital-herpes",
+      "name": "Genital herpes",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "genital-warts",
+      "name": "Genital warts",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "chlamydia",
+      "name": "Chlamydia",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "gonorrhoea",
+      "name": "Gonorrhoea",
+      "kind": "condition",
+      "aliases": ["gonorrhea"]
+    },
+    {
+      "slug": "boils-and-abscesses",
+      "name": "Boils and abscesses",
+      "kind": "condition",
+      "aliases": ["boil", "abscess"]
+    },
+    {
+      "slug": "sunburn",
+      "name": "Sunburn",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "heat-exhaustion-heatstroke",
+      "name": "Heat exhaustion and heatstroke",
+      "kind": "condition",
+      "aliases": ["heatstroke", "heat exhaustion"]
+    },
+    {
+      "slug": "hypothermia",
+      "name": "Hypothermia",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "frostbite",
+      "name": "Frostbite",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "insect-bites-and-stings",
+      "name": "Insect bites and stings",
+      "kind": "condition",
+      "aliases": ["bee sting", "wasp sting", "insect bite"]
+    },
+    {
+      "slug": "head-injury-and-concussion",
+      "name": "Head injury and concussion",
+      "kind": "condition",
+      "aliases": ["concussion", "minor head injury"]
+    },
+    {
+      "slug": "burns-and-scalds",
+      "name": "Burns and scalds",
+      "kind": "condition",
+      "aliases": ["burn", "scald"]
+    },
+    {
+      "slug": "cuts-and-grazes",
+      "name": "Cuts and grazes",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "bruises",
+      "name": "Bruises",
+      "kind": "condition",
+      "aliases": ["bruising"]
+    },
+    {
+      "slug": "broken-bone",
+      "name": "Broken bone",
+      "kind": "condition",
+      "aliases": ["fracture"]
+    },
+    {
+      "slug": "dizziness-lightheadedness",
+      "name": "Dizziness and lightheadedness",
+      "kind": "condition",
+      "aliases": ["dizziness", "lightheadedness"]
+    },
+    {
+      "slug": "fainting",
+      "name": "Fainting",
+      "kind": "condition",
+      "aliases": ["syncope"]
+    },
+    {
+      "slug": "heart-palpitations",
+      "name": "Heart palpitations",
+      "kind": "condition",
+      "aliases": ["palpitations"]
+    },
+    {
+      "slug": "high-temperature-fever-in-adults",
+      "name": "High temperature in adults",
+      "kind": "condition",
+      "aliases": ["fever adults", "high temperature"]
+    },
+    {
+      "slug": "sepsis",
+      "name": "Sepsis",
+      "kind": "condition",
+      "aliases": ["blood poisoning"]
+    },
+    {
+      "slug": "lymphoedema",
+      "name": "Lymphoedema",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "varicose-veins",
+      "name": "Varicose veins",
+      "kind": "condition",
+      "aliases": []
+    },
+    {
+      "slug": "deep-vein-thrombosis-dvt",
+      "name": "Deep vein thrombosis (DVT)",
+      "kind": "condition",
+      "aliases": ["dvt"]
+    },
+    {
+      "slug": "peripheral-arterial-disease",
+      "name": "Peripheral arterial disease",
+      "kind": "condition",
+      "aliases": ["pad"]
+    },
+    {
+      "slug": "paracetamol-for-adults",
+      "name": "Paracetamol (adults)",
+      "kind": "medicine",
+      "aliases": ["paracetamol"]
+    },
+    {
+      "slug": "paracetamol-for-children",
+      "name": "Paracetamol (children)",
+      "kind": "medicine",
+      "aliases": ["calpol"]
+    },
+    {
+      "slug": "ibuprofen-for-adults",
+      "name": "Ibuprofen (adults)",
+      "kind": "medicine",
+      "aliases": ["ibuprofen", "nurofen"]
+    },
+    {
+      "slug": "ibuprofen-for-children",
+      "name": "Ibuprofen (children)",
+      "kind": "medicine",
+      "aliases": ["nurofen for children"]
+    },
+    {
+      "slug": "amoxicillin",
+      "name": "Amoxicillin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "omeprazole",
+      "name": "Omeprazole",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "metformin",
+      "name": "Metformin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "sertraline",
+      "name": "Sertraline",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "citalopram",
+      "name": "Citalopram",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "atorvastatin",
+      "name": "Atorvastatin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "simvastatin",
+      "name": "Simvastatin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "warfarin",
+      "name": "Warfarin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "levothyroxine",
+      "name": "Levothyroxine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "salbutamol",
+      "name": "Salbutamol",
+      "kind": "medicine",
+      "aliases": ["ventolin"]
+    },
+    {
+      "slug": "prednisolone",
+      "name": "Prednisolone",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "diazepam",
+      "name": "Diazepam",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "co-codamol",
+      "name": "Co-codamol",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "naproxen",
+      "name": "Naproxen",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "diclofenac",
+      "name": "Diclofenac",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "insulin",
+      "name": "Insulin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "loperamide",
+      "name": "Loperamide",
+      "kind": "medicine",
+      "aliases": ["imodium"]
+    },
+    {
+      "slug": "senna",
+      "name": "Senna",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "ramipril",
+      "name": "Ramipril",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "amlodipine",
+      "name": "Amlodipine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "bisoprolol",
+      "name": "Bisoprolol",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "furosemide",
+      "name": "Furosemide",
+      "kind": "medicine",
+      "aliases": ["frusemide"]
+    },
+    {
+      "slug": "digoxin",
+      "name": "Digoxin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "metronidazole",
+      "name": "Metronidazole",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "flucloxacillin",
+      "name": "Flucloxacillin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "doxycycline",
+      "name": "Doxycycline",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "clarithromycin",
+      "name": "Clarithromycin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "trimethoprim",
+      "name": "Trimethoprim",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "nitrofurantoin",
+      "name": "Nitrofurantoin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "codeine",
+      "name": "Codeine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "tramadol",
+      "name": "Tramadol",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "gabapentin",
+      "name": "Gabapentin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "pregabalin",
+      "name": "Pregabalin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "amitriptyline",
+      "name": "Amitriptyline",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "mirtazapine",
+      "name": "Mirtazapine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "fluoxetine",
+      "name": "Fluoxetine",
+      "kind": "medicine",
+      "aliases": ["prozac"]
+    },
+    {
+      "slug": "propranolol",
+      "name": "Propranolol",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "lansoprazole",
+      "name": "Lansoprazole",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "allopurinol",
+      "name": "Allopurinol",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "colchicine",
+      "name": "Colchicine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "methotrexate",
+      "name": "Methotrexate",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "azathioprine",
+      "name": "Azathioprine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "hydroxychloroquine",
+      "name": "Hydroxychloroquine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "lithium",
+      "name": "Lithium",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "cetirizine",
+      "name": "Cetirizine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "loratadine",
+      "name": "Loratadine",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "folic-acid",
+      "name": "Folic acid",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "vitamin-d",
+      "name": "Vitamin D",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "melatonin",
+      "name": "Melatonin",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "zopiclone",
+      "name": "Zopiclone",
+      "kind": "medicine",
+      "aliases": []
+    },
+    {
+      "slug": "ondansetron",
+      "name": "Ondansetron",
+      "kind": "medicine",
+      "aliases": []
+    }
+  ]
+}

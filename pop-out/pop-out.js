@@ -56,6 +56,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/knowledge/knowledge.js'),
     css: '../side-panel/modules/knowledge/knowledge.css',
   },
+  leaflets: {
+    js: () => import('../side-panel/modules/leaflets/leaflets.js'),
+    css: '../side-panel/modules/leaflets/leaflets.css',
+  },
   record: {
     js: () => import('../side-panel/modules/record/record.js'),
     css: '../side-panel/modules/record/record.css',

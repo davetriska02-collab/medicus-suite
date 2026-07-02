@@ -56,7 +56,10 @@
   // 'health' (Horizon-1 H2) — shared/contract-canary.js's own runtime DOM-contract
   // probes, NOT a clinical source: patientRef is always null for these events (see
   // contract-canary.js). 'contract-degraded'/'contract-recovered' are its two actions.
-  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health'];
+  // 'leaflets' — side-panel/modules/leaflets/leaflets.js records a leaflet being
+  // opened (slug only, patientRef always null — see shared/leaflets-utils.js
+  // leafletOpenLedgerEvent). 'opened' is its one action.
+  const SOURCES = ['sentinel', 'sweep', 'labfiling', 'record', 'preflight', 'health', 'leaflets'];
   const ACTIONS = [
     'shown',
     'dismissed',
@@ -67,6 +70,7 @@
     'filed',
     'contract-degraded',
     'contract-recovered',
+    'opened',
   ];
   const MAX_LABEL_LEN = 120;
   const MAX_RULEID_LEN = 80;
