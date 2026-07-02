@@ -385,6 +385,143 @@ function fakeDomContracts(status) {
     'the second same-day contract-degraded event is DEDUPED by the ledger (event count does not grow past 2)'
   );
 
+  // ============================================================
+  console.log('\n--- runProbeRound(): suppressedByOk false-alarm guard ---');
+  // ============================================================
+  reset();
+  function fakeSuppressedPair(narrowStatus, coveringStatus) {
+    const narrow = {
+      id: 'fake.narrow',
+      feature: 'Fake Narrow',
+      degradation: 'x',
+      runtime: true,
+      pageMatch: null,
+      suppressedByOk: 'fake.covering',
+    };
+    const covering = {
+      id: 'fake.covering',
+      feature: 'Fake Covering',
+      degradation: 'x',
+      runtime: true,
+      pageMatch: null,
+    };
+    return {
+      STATUS: DomContracts.STATUS,
+      list: () => [narrow, covering],
+      probeContract: (c) => ({ id: c.id, status: c.id === 'fake.narrow' ? narrowStatus : coveringStatus }),
+    };
+  }
+
+  res = await CC.runProbeRound({
+    DomContracts: fakeSuppressedPair('fail', 'ok'),
+    href: 'https://x',
+    root: {},
+  });
+  check(
+    res.health['fake.narrow'].status === 'ok',
+    'a FAILing contract is treated as ok this round when its suppressedByOk covering contract reads ok'
+  );
+
+  reset();
+  res = await CC.runProbeRound({
+    DomContracts: fakeSuppressedPair('fail', 'fail'),
+    href: 'https://x',
+    root: {},
+  });
+  check(
+    res.health['fake.narrow'].status === 'ok' && res.health['fake.narrow'].failStreak === 1,
+    'the same FAIL still counts toward the streak when the covering contract also FAILs (no blanket suppression)'
+  );
+
+  // A real end-to-end sanity check against the actual registry: on a queue
+  // URL where queue.preview-row-link's own selectors are absent but
+  // queue.chip-host's patientName-cell fallback is present, the health strip
+  // must not flag queue.preview-row-link — this is exactly the "chips are
+  // visibly working" false alarm this guard exists to fix.
+  reset();
+  const fakeQueueRoot = {
+    querySelectorAll(sel) {
+      const present = {
+        '.ag-row': [{}],
+        '.ag-row [col-id="dateOfBirth"]': [{}],
+        '[col-id="patientName"]': [{}], // queue.chip-host's fallback host is present
+        // '[row-id^="detail_"]' and '.ag-full-width-row' deliberately absent —
+        // the preview row itself is missing this round.
+      };
+      return present[sel] || [];
+    },
+  };
+  res = await CC.runProbeRound({
+    DomContracts: DomContracts,
+    href: 'https://practice.medicus.health/tasks/prescription-request/task-list',
+    root: fakeQueueRoot,
+  });
+  check(
+    !!res && res.health['queue.preview-row-link'].status === 'ok',
+    'end-to-end: queue.preview-row-link reads ok (not degraded) when queue.chip-host is covering via its patientName fallback'
+  );
+
+  // ============================================================
+  console.log('\n--- runProbeRound(): UUID DOM-fallback ApiClient guard ---');
+  // ============================================================
+  reset();
+  function fakeUuidFallbackOnly(status) {
+    const contract = {
+      id: 'api-client.patient-uuid-dom-fallback',
+      feature: 'Fake UUID Fallback',
+      degradation: 'x',
+      runtime: true,
+      pageMatch: null,
+    };
+    return {
+      list: () => [contract],
+      probeContract: () => ({ id: contract.id, status }),
+    };
+  }
+
+  res = await CC.runProbeRound({
+    DomContracts: fakeUuidFallbackOnly('fail'),
+    ApiClient: { detectMedicusContext: () => ({ patientUuid: 'abc' }) },
+    href: 'https://x',
+    root: {},
+  });
+  check(
+    res === null,
+    'the UUID DOM-fallback contract is skipped entirely (no-op round) when the URL already resolved a patient id'
+  );
+
+  reset();
+  res = await CC.runProbeRound({
+    DomContracts: fakeUuidFallbackOnly('fail'),
+    ApiClient: { detectMedicusContext: () => ({ taskUuid: 'def' }) },
+    href: 'https://x',
+    root: {},
+  });
+  check(res === null, 'a URL-resolved taskUuid also skips the UUID DOM-fallback probe');
+
+  reset();
+  res = await CC.runProbeRound({
+    DomContracts: fakeUuidFallbackOnly('fail'),
+    ApiClient: { detectMedicusContext: () => ({ patientUuid: null, encounterUuid: null, taskUuid: null }) },
+    href: 'https://x',
+    root: {},
+  });
+  check(
+    !!res && res.health['api-client.patient-uuid-dom-fallback'],
+    'the UUID DOM-fallback contract is still probed normally when URL resolution found nothing'
+  );
+
+  reset();
+  res = await CC.runProbeRound({
+    DomContracts: fakeUuidFallbackOnly('fail'),
+    href: 'https://x',
+    root: {},
+  });
+  check(
+    !!res && res.health['api-client.patient-uuid-dom-fallback'],
+    'without an ApiClient dep at all, the UUID DOM-fallback contract is probed as before (guard is opt-in)'
+  );
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();
