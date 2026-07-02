@@ -2493,6 +2493,427 @@ console.log('\n--- matchUnclassifiedPositive (direct) ---');
   assert(matchUnclassifiedPositive(null) === null, 'null-safe');
 }
 
+// ── item 3.6: delta/trend rule grading ─────────────────────────────────────────
+// No delta rule ships in defaults.json (ZERO shipped delta rules — see
+// TRIAGE-LENS-2026-07-02.md item 3.6), so every rule here is constructed inline.
+console.log('\n--- item 3.6: delta rules — rise/fall/either grading (absolute "by") ---');
+{
+  const risingCreatinine = {
+    id: 'delta-aki',
+    enabled: true,
+    kind: 'delta',
+    label: 'AKI watch',
+    analyte: { match: ['creatinine'], exclude: ['urine'] },
+    direction: 'rise',
+    by: true,
+    amber: 15,
+    red: 26,
+  };
+
+  // Rise beyond red — fires urgent, matches the plan's illustrative example exactly.
+  const creat148 = mkResult('Creatinine', 148, {
+    unit: 'umol/L',
+    low: 60,
+    high: 120,
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const redOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [risingCreatinine] });
+  assert(redOut.level === 'red', 'rise of 38 crosses red (>=26) → level red');
+  assert(redOut.flagged[0].ruleLabel === 'AKI watch', 'flagged entry attributes the delta rule label');
+  assert(redOut.flagged[0].ruleComparator === 'rise', 'flagged entry ruleComparator carries the observed direction');
+  assert(redOut.flagged[0].ruleThreshold === 26, 'flagged entry ruleThreshold carries the winning (red) magnitude');
+  assert(redOut.flagged[0].ruleId === 'delta-aki', 'flagged entry ruleId carries the rule id');
+  assert(
+    redOut.flagged[0].deltaSummary === '+38 in 5 days',
+    `deltaSummary exact (got "${redOut.flagged[0].deltaSummary}")`
+  );
+
+  // Rise beyond amber but below red — fires abnormal.
+  const creat128 = mkResult('Creatinine', 128, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const amberOut = evaluateReportSeverity(makeReport([creat128]), { resultRules: [risingCreatinine] });
+  assert(amberOut.level === 'amber', 'rise of 18 crosses amber (>=15) but not red → level amber');
+
+  // Rise below amber — no fire.
+  const creat120 = mkResult('Creatinine', 120, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const noneOut = evaluateReportSeverity(makeReport([creat120]), { resultRules: [risingCreatinine] });
+  assert(noneOut.level === 'none', 'rise of 10 stays below amber (15) → level none');
+
+  // Wrong direction — a FALL never fires a 'rise'-only rule, even if the magnitude qualifies.
+  const creatFallen = mkResult('Creatinine', 80, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const wrongDirOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [risingCreatinine] });
+  assert(wrongDirOut.level === 'none', "a FALL never fires a 'rise'-only delta rule");
+
+  // Excluded analyte (urine creatinine) never matches, even with a qualifying rise.
+  const urineCreat = mkResult('Urine Creatinine', 148, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const excludedOut = evaluateReportSeverity(makeReport([urineCreat]), { resultRules: [risingCreatinine] });
+  assert(excludedOut.level === 'none', 'analyte.exclude drops "Urine Creatinine" even with a qualifying rise');
+
+  // 'fall'-only rule: a rise never fires it.
+  const fallRule = { ...risingCreatinine, id: 'delta-fall', direction: 'fall' };
+  const fallOnRiseOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [fallRule] });
+  assert(fallOnRiseOut.level === 'none', "a RISE never fires a 'fall'-only delta rule");
+  const fallOnFallOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [fallRule] });
+  assert(fallOnFallOut.level === 'red', "a FALL of 30 fires a 'fall'-only delta rule (crosses red 26)");
+
+  // 'either'-direction rule fires on BOTH a qualifying rise and a qualifying fall.
+  const eitherRule = { ...risingCreatinine, id: 'delta-either', direction: 'either' };
+  const eitherRiseOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [eitherRule] });
+  assert(eitherRiseOut.level === 'red', "'either' direction fires on a qualifying rise");
+  const eitherFallOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [eitherRule] });
+  assert(eitherFallOut.level === 'red', "'either' direction fires on a qualifying fall");
+
+  // No change at all (exactly equal) never fires, even an 'either' rule.
+  const creatSame = mkResult('Creatinine', 110, {
+    unit: 'umol/L',
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const sameOut = evaluateReportSeverity(makeReport([creatSame]), { resultRules: [eitherRule] });
+  assert(sameOut.level === 'none', 'zero change never fires, even on an "either"-direction rule');
+}
+
+console.log('\n--- item 3.6: delta rules — percent change ("byPercent") ---');
+{
+  const fallingHb = {
+    id: 'delta-hb',
+    enabled: true,
+    kind: 'delta',
+    label: 'Falling Hb — possible bleed',
+    analyte: { match: ['haemoglobin'], exclude: ['a1c'] },
+    direction: 'fall',
+    byPercent: true,
+    amber: 15,
+    red: 25,
+  };
+  // 104 → 82 is a ~21.15% fall — crosses amber (15%) but not red (25%).
+  const hb82 = mkResult('Haemoglobin', 82, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const hbOut = evaluateReportSeverity(makeReport([hb82]), { resultRules: [fallingHb] });
+  assert(hbOut.level === 'amber', '~21% fall crosses amber (15%) but not red (25%) → level amber');
+  assert(hbOut.flagged[0].deltaSummary.includes('%'), 'percent-mode deltaSummary includes a "%" suffix');
+  assert(hbOut.flagged[0].deltaSummary.startsWith('-'), 'a FALL renders a signed negative percent (no explicit "+")');
+
+  // A bigger percent fall crosses red.
+  const hb60 = mkResult('Haemoglobin', 60, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 104, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const hbRedOut = evaluateReportSeverity(makeReport([hb60]), { resultRules: [fallingHb] });
+  assert(hbRedOut.level === 'red', '~42% fall crosses red (25%) → level red');
+
+  // Zero-baseline prior never produces a meaningful percent change — fails closed, no fire.
+  const hbZeroPrior = mkResult('Haemoglobin', 5, {
+    unit: 'g/L',
+    date: '2026-06-01',
+    history: [{ value: 0, date: '2026-03-01', unit: 'g/L' }],
+  });
+  const zeroBaselineOut = evaluateReportSeverity(makeReport([hbZeroPrior]), { resultRules: [fallingHb] });
+  assert(zeroBaselineOut.level === 'none', 'a zero-value prior never produces a percent-change delta (fails closed)');
+}
+
+console.log('\n--- item 3.6: delta rules — maxDays window ---');
+{
+  const kRise = {
+    id: 'delta-k',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+    maxDays: 7,
+  };
+  // Prior 5 days ago — within the 7-day window → fires.
+  const kRecent = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const recentOut = evaluateReportSeverity(makeReport([kRecent]), { resultRules: [kRise] });
+  assert(recentOut.level === 'red', 'prior within maxDays window → delta fires normally');
+
+  // Prior 30 days ago — OUTSIDE the 7-day window → no fire, even though the magnitude qualifies.
+  const kStale = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-05-14', unit: 'mmol/L' }],
+  });
+  const staleOut = evaluateReportSeverity(makeReport([kStale]), { resultRules: [kRise] });
+  assert(staleOut.level === 'none', 'prior OLDER than maxDays → no delta fires (never falls back to it)');
+
+  // Exactly at the boundary (7 days) → still within the window (inclusive).
+  const kBoundary = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-06', unit: 'mmol/L' }],
+  });
+  const boundaryOut = evaluateReportSeverity(makeReport([kBoundary]), { resultRules: [kRise] });
+  assert(boundaryOut.level === 'red', 'prior exactly at the maxDays boundary → still fires (inclusive)');
+
+  // Either date missing → fails CLOSED (maxDays configured, age unverifiable).
+  const kNoCurrentDate = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: null,
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const noCurrentDateOut = evaluateReportSeverity(makeReport([kNoCurrentDate]), { resultRules: [kRise] });
+  assert(noCurrentDateOut.level === 'none', 'maxDays set + missing current date → fails closed, no delta');
+
+  const kNoPriorDate = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: null, unit: 'mmol/L' }],
+  });
+  const noPriorDateOut = evaluateReportSeverity(makeReport([kNoPriorDate]), { resultRules: [kRise] });
+  assert(noPriorDateOut.level === 'none', 'maxDays set + missing prior date → fails closed, no delta');
+
+  // No maxDays configured at all → an old prior still fires (no age limit).
+  const kNoLimit = { ...kRise, id: 'delta-k-nolimit', maxDays: undefined };
+  const kVeryStale = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2023-01-01', unit: 'mmol/L' }],
+  });
+  const noLimitOut = evaluateReportSeverity(makeReport([kVeryStale]), { resultRules: [kNoLimit] });
+  assert(noLimitOut.level === 'red', 'no maxDays configured → an old prior still fires (no age limit)');
+}
+
+console.log('\n--- item 3.6: delta rules — unit-guarded (3.1 reuse) ---');
+{
+  const kRise = {
+    id: 'delta-k-unit',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+  };
+  // Genuine mismatch (both units present, different families) → no delta, recorded.
+  const kMismatch = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mg/dL' }],
+  });
+  const mismatchOut = evaluateReportSeverity(makeReport([kMismatch]), { resultRules: [kRise] });
+  assert(mismatchOut.level === 'none', 'unit mismatch (mmol/L vs mg/dL) → delta SKIPPED, no fire');
+  assert(mismatchOut.unitMismatches.length === 1, 'a genuine unit mismatch IS recorded (mirrors 3.1)');
+  assert(mismatchOut.unitMismatches[0].ruleId === 'delta-k-unit', 'unitMismatches entry carries the delta rule id');
+
+  // One side absent (current has a unit, prior does not) → no delta, NOT recorded
+  // (nothing confidently wrong to report — same silent-fail-closed rule as extractPrior).
+  const kOneAbsent = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: null }],
+  });
+  const oneAbsentOut = evaluateReportSeverity(makeReport([kOneAbsent]), { resultRules: [kRise] });
+  assert(oneAbsentOut.level === 'none', 'one side has a unit, the other does not → no delta (never a guess)');
+  assert(
+    oneAbsentOut.unitMismatches.length === 0,
+    'one-side-absent is NOT recorded as a mismatch (nothing confirmed wrong)'
+  );
+
+  // Both sides absent → treated as comparable (matches extractPrior's own precedent).
+  const kBothAbsent = mkResult('Potassium', 6.2, {
+    unit: null,
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: null }],
+  });
+  const bothAbsentOut = evaluateReportSeverity(makeReport([kBothAbsent]), { resultRules: [kRise] });
+  assert(bothAbsentOut.level === 'red', 'both sides absent a unit → treated as comparable, delta fires normally');
+}
+
+console.log('\n--- item 3.6: delta rules — no history / suppressIfProblem / disabled ---');
+{
+  const kRise = {
+    id: 'delta-k-hist',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.5,
+    red: 1,
+  };
+  // No history at all → never fires (nothing to compare against).
+  const kNoHistory = mkResult('Potassium', 6.2, { unit: 'mmol/L', date: '2026-06-13', history: [] });
+  const noHistOut = evaluateReportSeverity(makeReport([kNoHistory]), { resultRules: [kRise] });
+  assert(noHistOut.level === 'none', 'no history at all → delta never fires');
+
+  // Disabled delta rule is ignored entirely.
+  const kQualifying = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 5.0, date: '2026-06-08', unit: 'mmol/L' }],
+  });
+  const disabledOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [{ ...kRise, enabled: false }],
+  });
+  assert(disabledOut.level === 'none', 'a disabled delta rule is ignored (like every other rule kind)');
+
+  // suppressIfProblem honoured — patient already on record for the relevant problem.
+  const kSuppressed = {
+    ...kRise,
+    id: 'delta-k-suppress',
+    suppressIfProblem: { match: ['chronic kidney disease'] },
+  };
+  const suppressedOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [kSuppressed],
+    problems: [{ label: 'Chronic kidney disease stage 3' }],
+  });
+  assert(suppressedOut.level === 'none', 'suppressIfProblem honoured for a delta rule, exactly like other kinds');
+  const notSuppressedOut = evaluateReportSeverity(makeReport([kQualifying]), {
+    resultRules: [kSuppressed],
+    problems: [{ label: 'Asthma' }],
+  });
+  assert(notSuppressedOut.level === 'red', 'an unrelated problem does not suppress the delta rule');
+}
+
+console.log('\n--- item 3.6: delta rules — escalate-only (raises, never lowers) ---');
+{
+  // A delta rule can RAISE a lab-normal result to amber/red …
+  const raiseRule = {
+    id: 'delta-raise',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising creatinine',
+    analyte: { match: ['creatinine'] },
+    direction: 'rise',
+    by: true,
+    amber: 15,
+    red: 26,
+  };
+  const labNormalButRising = mkResult('Creatinine', 128, {
+    unit: 'umol/L',
+    low: 60,
+    high: 135, // 128 is within the lab's own reference range → isAbove/isBelow both false
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const raisedOut = evaluateReportSeverity(makeReport([labNormalButRising]), { resultRules: [raiseRule] });
+  assert(raisedOut.level === 'amber', "a delta rule RAISES a lab-normal-range result's severity");
+
+  // … but NEVER lowers a lab-urgent flag, even when the delta itself would only grade amber.
+  const labUrgentTinyRise = mkResult('Creatinine', 150, {
+    unit: 'umol/L',
+    low: 60,
+    high: 120,
+    isAbove: true,
+    isBelow: false,
+    urgent: true, // lab itself already flags this urgent
+    date: '2026-06-13',
+    history: [{ value: 148, date: '2026-06-12', unit: 'umol/L' }], // rise of only 2 — below even amber (15)
+  });
+  const neverLoweredOut = evaluateReportSeverity(makeReport([labUrgentTinyRise]), { resultRules: [raiseRule] });
+  assert(neverLoweredOut.level === 'red', 'a lab-urgent flag is NEVER lowered by a weak/non-firing delta rule');
+  assert(
+    neverLoweredOut.flagged[0].ruleLabel === null,
+    'the lab flag (not the delta rule) drove severity → no rule attribution on the chip'
+  );
+
+  // … nor lowers a THRESHOLD rule's escalation when the delta rule itself doesn't fire.
+  const potassiumThreshold = {
+    id: 'threshold-k',
+    enabled: true,
+    label: 'High potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+  };
+  const weakDelta = {
+    id: 'delta-k-weak',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (weak)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 5, // a huge bar — this result's actual rise won't cross it
+    red: 10,
+  };
+  const kBothRulesResult = mkResult('Potassium', 6.2, {
+    unit: 'mmol/L',
+    date: '2026-06-13',
+    history: [{ value: 6.0, date: '2026-06-08', unit: 'mmol/L' }], // rise of only 0.2 — the delta rule never fires
+  });
+  const combinedOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [potassiumThreshold, weakDelta],
+  });
+  assert(combinedOut.level === 'red', "the threshold rule's red escalation is not diluted by a non-firing delta rule");
+  assert(
+    combinedOut.flagged[0].ruleLabel === 'High potassium',
+    'the THRESHOLD rule (not the delta) attributes the chip'
+  );
+
+  // When a delta rule reaches a HIGHER severity than a firing threshold rule, the
+  // delta rule's attribution wins the chip (never diluted by the weaker threshold).
+  const amberOnlyThreshold = { ...potassiumThreshold, id: 'threshold-k-amber-only', red: null };
+  const strongDelta = {
+    id: 'delta-k-strong',
+    enabled: true,
+    kind: 'delta',
+    label: 'Rising potassium (strong)',
+    analyte: { match: ['potassium'] },
+    direction: 'rise',
+    by: true,
+    amber: 0.1,
+    red: 0.15, // this result's rise of 0.2 crosses red
+  };
+  const bothFireOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [amberOnlyThreshold, strongDelta],
+  });
+  assert(bothFireOut.level === 'red', 'threshold reaches amber, delta reaches red → combined level is red');
+  assert(
+    bothFireOut.flagged[0].ruleLabel === 'Rising potassium (strong)',
+    'the HIGHER-severity delta rule attributes the chip, not the weaker amber-only threshold rule'
+  );
+  assert(bothFireOut.flagged[0].deltaSummary !== null, 'deltaSummary is set when the delta rule wins the attribution');
+
+  // Tie (both reach the SAME severity): the threshold-rule result wins the tie, so a
+  // report with NO delta rules configured is byte-identical to before this field existed.
+  const tiedDelta = { ...strongDelta, id: 'delta-k-tied', amber: 0.15, red: 10 }; // reaches only 'abnormal', same as threshold
+  const tiedOut = evaluateReportSeverity(makeReport([kBothRulesResult]), {
+    resultRules: [amberOnlyThreshold, tiedDelta],
+  });
+  assert(tiedOut.level === 'amber', 'a tie between threshold and delta severity still grades correctly');
+  assert(
+    tiedOut.flagged[0].ruleLabel === 'High potassium',
+    'on a severity TIE, the threshold-rule result wins attribution (preserves pre-delta behaviour)'
+  );
+  assert(tiedOut.flagged[0].deltaSummary === null, 'on a threshold-wins tie, deltaSummary is null');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

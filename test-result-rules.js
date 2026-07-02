@@ -863,6 +863,251 @@ console.log('\n--- resultRuleSchemaPrompt: covers combo kind ---');
   assert(prompt.toLowerCase().includes('no growth'), 'combo example references the "no growth" culture condition');
 }
 
+// ── validateResultRule: delta rule cases (item 3.6, TRIAGE-LENS-2026-07-02.md) ─
+console.log('\n--- validateResultRule: delta rule cases ---');
+
+function validDelta(overrides) {
+  return Object.assign(
+    {
+      id: 'rule_delta',
+      enabled: false,
+      builtin: false,
+      kind: 'delta',
+      label: 'AKI watch (rising creatinine)',
+      analyte: { match: ['creatinine'], exclude: ['urine'] },
+      direction: 'rise',
+      by: true,
+      amber: 15,
+      red: 26,
+      maxDays: 7,
+    },
+    overrides
+  );
+}
+
+{
+  const errs = validateResultRule(validDelta());
+  assert(errs.length === 0, 'complete valid delta (absolute "by") rule returns no errors');
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined, byPercent: true }));
+  assert(errs.length === 0, 'complete valid delta (percent "byPercent") rule returns no errors');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: undefined }));
+  assert(errs.length === 0, 'delta rule with maxDays omitted → valid (no age limit)');
+}
+{
+  const errs = validateResultRule(validDelta({ red: null }));
+  assert(errs.length === 0, 'delta rule with only amber (red null) → valid');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: null }));
+  assert(errs.length === 0, 'delta rule with only red (amber null) → valid');
+}
+{
+  const errs = validateResultRule(validDelta({ direction: 'either' }));
+  assert(errs.length === 0, "delta rule with direction 'either' → valid");
+}
+
+// direction enum
+{
+  const errs = validateResultRule(validDelta({ direction: 'up' }));
+  assert(errs.length > 0, 'delta rule with bad direction → error');
+  assert(hasError(errs, 'direction'), 'error mentions "direction"');
+}
+{
+  const errs = validateResultRule(validDelta({ direction: undefined }));
+  assert(errs.length > 0, 'delta rule with missing direction → error');
+}
+
+// exactly one of by / byPercent
+{
+  const errs = validateResultRule(validDelta({ by: true, byPercent: true }));
+  assert(errs.length > 0, 'delta rule with BOTH by and byPercent → error');
+  assert(
+    errs.some((e) => e.toLowerCase().includes('exactly one')),
+    'error explains exactly one of by/byPercent is required'
+  );
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined }));
+  assert(errs.length > 0, 'delta rule with NEITHER by nor byPercent → error');
+}
+{
+  const errs = validateResultRule(validDelta({ by: 5 }));
+  assert(errs.length > 0, 'delta rule with "by" set to a number (not boolean true) → error');
+}
+{
+  const errs = validateResultRule(validDelta({ by: undefined, byPercent: false }));
+  assert(errs.length > 0, 'delta rule with "byPercent" set to false → error (still needs one true)');
+}
+
+// amber/red finiteness, presence, non-negativity
+{
+  const errs = validateResultRule(validDelta({ amber: null, red: null }));
+  assert(errs.length > 0, 'delta rule with neither amber nor red → error');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: 'a lot' }));
+  assert(errs.length > 0, 'delta rule with non-numeric amber → error');
+}
+{
+  const errs = validateResultRule(validDelta({ red: NaN }));
+  assert(errs.length > 0, 'delta rule with NaN red → error');
+}
+{
+  const errs = validateResultRule(validDelta({ amber: -5 }));
+  assert(errs.length > 0, 'delta rule with negative amber magnitude → error');
+}
+{
+  const errs = validateResultRule(validDelta({ red: -1 }));
+  assert(errs.length > 0, 'delta rule with negative red magnitude → error');
+}
+
+// ordering — red >= amber, direction-independent (unlike threshold's comparator-flipped rule)
+{
+  const errs = validateResultRule(validDelta({ amber: 26, red: 15 }));
+  assert(errs.length > 0, 'delta rule with red < amber → ordering error');
+  assert(hasError(errs, 'red'), 'ordering error mentions "red"');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ direction: 'fall', byPercent: true, by: undefined, amber: 15, red: 25 })
+  );
+  assert(errs.length === 0, "delta 'fall' direction still requires red >= amber (magnitude, not signed value)");
+}
+{
+  const errs = validateResultRule(validDelta({ amber: 15, red: 15 }));
+  assert(errs.length === 0, 'delta rule with red === amber → valid (>= is inclusive)');
+}
+
+// maxDays — optional positive integer
+{
+  const errs = validateResultRule(validDelta({ maxDays: 0 }));
+  assert(errs.length > 0, 'delta rule with maxDays 0 → error (must be positive)');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: -3 }));
+  assert(errs.length > 0, 'delta rule with negative maxDays → error');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: 3.5 }));
+  assert(errs.length > 0, 'delta rule with non-integer maxDays → error');
+}
+{
+  const errs = validateResultRule(validDelta({ maxDays: null }));
+  assert(errs.length === 0, 'delta rule with maxDays explicitly null → valid (treated as omitted)');
+}
+
+// shared checks still apply to delta
+{
+  const errs = validateResultRule(validDelta({ label: '' }));
+  assert(errs.length > 0, 'delta rule with empty label → error');
+}
+{
+  const errs = validateResultRule(validDelta({ analyte: { match: [] } }));
+  assert(errs.length > 0, 'delta rule with empty analyte.match → error');
+}
+{
+  const errs = validateResultRule(validDelta({ suppressIfProblem: { exclude: ['x'] } }));
+  assert(errs.length > 0, 'delta suppressIfProblem missing match → error (shared validator)');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ actions: [{ type: 'link', label: 'Pathway', url: 'https://example.nhs.uk' }] })
+  );
+  assert(errs.length === 0, 'delta rule with a valid action → valid (shared validator)');
+}
+
+// cross-kind field rejection — delta-only fields must never appear on other kinds …
+{
+  const errs = validateResultRule(validRule({ direction: 'rise' }));
+  assert(errs.length > 0, 'threshold rule carrying "direction" → error');
+  assert(hasError(errs, 'direction'), 'error names "direction"');
+}
+{
+  const errs = validateResultRule(validRule({ by: true }));
+  assert(errs.length > 0, 'threshold rule carrying "by" → error');
+}
+{
+  const errs = validateResultRule(validRule({ byPercent: true }));
+  assert(errs.length > 0, 'threshold rule carrying "byPercent" → error');
+}
+{
+  const errs = validateResultRule(validRule({ maxDays: 7 }));
+  assert(errs.length > 0, 'threshold rule carrying "maxDays" → error');
+}
+{
+  const textRule = {
+    id: 'r',
+    enabled: false,
+    builtin: false,
+    kind: 'text',
+    label: 'Needs review',
+    analyte: { match: ['msu'] },
+    normalText: ['no growth'],
+    direction: 'rise',
+  };
+  const errs = validateResultRule(textRule);
+  assert(errs.length > 0, 'text rule carrying "direction" → error');
+}
+{
+  const errs = validateResultRule(validCombo({ maxDays: 7 }));
+  assert(errs.length > 0, 'combo rule carrying "maxDays" → error');
+}
+// … and non-delta fields must never appear on a delta rule
+{
+  const errs = validateResultRule(validDelta({ comparator: 'above' }));
+  assert(errs.length > 0, 'delta rule carrying "comparator" → error');
+  assert(hasError(errs, 'comparator'), 'error names "comparator"');
+}
+{
+  const errs = validateResultRule(validDelta({ normalText: ['no growth'] }));
+  assert(errs.length > 0, 'delta rule carrying "normalText" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ abnormalText: ['abnormal'] }));
+  assert(errs.length > 0, 'delta rule carrying "abnormalText" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ normalLabel: 'Normal' }));
+  assert(errs.length > 0, 'delta rule carrying "normalLabel" → error');
+}
+{
+  const errs = validateResultRule(
+    validDelta({ conditions: [{ analyte: { match: ['x'] }, comparator: 'above', value: 1 }] })
+  );
+  assert(errs.length > 0, 'delta rule carrying "conditions" → error');
+}
+{
+  const errs = validateResultRule(validDelta({ level: 'red' }));
+  assert(errs.length > 0, 'delta rule carrying "level" → error');
+}
+// amber/red are SHARED with threshold — never flagged as cross-kind on delta.
+{
+  const errs = validateResultRule(validDelta({ amber: 15, red: 26 }));
+  assert(errs.length === 0, 'delta amber/red are not rejected as foreign fields (shared with threshold)');
+}
+
+// ── resultRuleSchemaPrompt: documents the delta kind ─────────────────────────
+console.log('\n--- resultRuleSchemaPrompt: covers delta kind ---');
+{
+  const prompt = resultRuleSchemaPrompt();
+  assert(prompt.toLowerCase().includes('delta'), 'prompt documents the delta kind');
+  assert(prompt.toLowerCase().includes('direction'), 'prompt documents the direction field');
+  assert(prompt.toLowerCase().includes('bypercent'), 'prompt documents the byPercent field');
+  assert(prompt.toLowerCase().includes('maxdays'), 'prompt documents the maxDays field');
+  assert(
+    prompt.toLowerCase().includes('creatinine') && prompt.toLowerCase().includes('aki'),
+    'prompt includes a worked rising-creatinine (AKI) example'
+  );
+  assert(
+    prompt.toLowerCase().includes('haemoglobin') || prompt.toLowerCase().includes('hemoglobin'),
+    'prompt includes a worked falling-haemoglobin example'
+  );
+}
+
 // ── analyte.exclude (optional) validation ────────────────────────────────────
 console.log('\n--- analyte.exclude validation ---');
 {

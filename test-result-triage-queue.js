@@ -1236,6 +1236,116 @@ if (buildResultDetail && formatDetailLine) {
     }).includes('was 5, 01 Jan'),
     'formatDetailLine: dir "same" prior still renders "was X, date"'
   );
+
+  // ── item 3.6 (delta rules): buildResultDetail + formatDetailLine render a
+  // delta-fired entry with its change summary, matching the plan's illustrative
+  // shape: "Creatinine 148 umol/L ↑ +38 in 5 days (60–120) · 13 Jun · rule: AKI
+  // watch (red ≥+26)". A delta rule's ruleComparator is 'rise'/'fall' (the
+  // OBSERVED direction), not 'above'/'below' — flagFor/composeRuleThresholdLabel
+  // must treat the two uniformly.
+  const deltaFlaggedEntry = {
+    index: 0,
+    name: 'Creatinine',
+    effSev: 'urgent',
+    value: 148,
+    unit: 'umol/L',
+    low: 60,
+    high: 120,
+    date: '2026-06-13',
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    ruleLabel: 'AKI watch',
+    ruleComparator: 'rise',
+    ruleThreshold: 26,
+    ruleId: 'delta-creat',
+    deltaSummary: '+38 in 5 days',
+    prior: { value: 110, date: '2026-06-08', dir: 'up' },
+  };
+  const deltaEntry = buildResultDetail({ results: [] }, { level: 'red', flagged: [deltaFlaggedEntry] })[0];
+  check(deltaEntry.flag === 'above', "delta ruleComparator 'rise' maps to flag 'above' (↑ glyph)");
+  check(
+    deltaEntry.ruleLabel === 'AKI watch (red ≥+26)',
+    `delta threshold summary uses a "≥+" magnitude symbol (got "${deltaEntry.ruleLabel}")`
+  );
+  check(deltaEntry.deltaSummary === '+38 in 5 days', 'deltaSummary passed through unchanged from the flagged entry');
+  const deltaLine = formatDetailLine(deltaEntry);
+  check(
+    deltaLine === 'Creatinine 148 umol/L ↑ +38 in 5 days (60–120) · 13 Jun · rule: AKI watch (red ≥+26)',
+    `formatDetailLine renders the full delta popover line (got "${deltaLine}")`
+  );
+  check(
+    !deltaLine.includes('was 110'),
+    'the redundant "was X, date" segment is suppressed when deltaSummary is present'
+  );
+
+  // A 'fall'-direction delta entry maps to the ↓ glyph and the same "≥+" symbol.
+  const fallEntry = buildResultDetail(
+    { results: [] },
+    {
+      level: 'amber',
+      flagged: [
+        {
+          index: 0,
+          name: 'Haemoglobin',
+          effSev: 'abnormal',
+          value: 82,
+          unit: 'g/L',
+          low: 130,
+          high: 170,
+          date: '2026-06-01',
+          isAbove: false,
+          isBelow: false,
+          urgent: false,
+          ruleLabel: 'Falling Hb — possible bleed',
+          ruleComparator: 'fall',
+          ruleThreshold: 15,
+          ruleId: 'delta-hb',
+          deltaSummary: '-21.15% in 92 days',
+          prior: { value: 104, date: '2026-03-01', dir: 'down' },
+        },
+      ],
+    }
+  )[0];
+  check(fallEntry.flag === 'below', "delta ruleComparator 'fall' maps to flag 'below' (↓ glyph)");
+  check(
+    fallEntry.ruleLabel === 'Falling Hb — possible bleed (amber ≥+15)',
+    `fall-direction delta threshold summary (got "${fallEntry.ruleLabel}")`
+  );
+  const fallLine = formatDetailLine(fallEntry);
+  check(fallLine.includes('↓'), 'fall-direction delta entry renders the ↓ glyph');
+  check(fallLine.includes('-21.15% in 92 days'), 'fall-direction delta entry renders its percent deltaSummary');
+
+  // A non-delta entry (ruleComparator 'above'/'below', no deltaSummary) is
+  // completely unaffected — the "≥"/"≤" symbol and the "was X" segment still work
+  // exactly as before item 3.6.
+  const nonDeltaEntry = {
+    index: 0,
+    name: 'Sodium',
+    effSev: 'abnormal',
+    value: 128,
+    unit: 'mmol/L',
+    low: 133,
+    high: 145,
+    date: '2026-06-12',
+    isAbove: false,
+    isBelow: true,
+    urgent: false,
+    ruleLabel: 'Low sodium',
+    ruleComparator: 'below',
+    ruleThreshold: 130,
+    ruleId: 'threshold-na',
+    prior: { value: 140, date: '2026-05-01', dir: 'down' },
+  };
+  const nonDeltaBuilt = buildResultDetail({ results: [] }, { level: 'amber', flagged: [nonDeltaEntry] })[0];
+  check(
+    nonDeltaBuilt.ruleLabel === 'Low sodium (amber ≤130)',
+    'non-delta ruleLabel unaffected by the "≥+" symbol path'
+  );
+  check(
+    formatDetailLine(nonDeltaBuilt).includes('was 140, 01 May'),
+    'non-delta entries still show "was X, date" (no deltaSummary to suppress it)'
+  );
 }
 
 // ============================================================

@@ -621,6 +621,22 @@
   function normaliseUnitForCompare(u) {
     return typeof u === 'string' ? u.trim().toLowerCase().replace(/\s+/g, ' ') : '';
   }
+  // Shared "is a prior value comparable to the current one" classifier, factored out
+  // so both extractPrior (above, display-only trend arrow) and the delta-rule engine
+  // (item 3.6, below) apply the EXACT same strict comparability rule:
+  //   'match'      — both units present and the same family (unitsCompatible 'match').
+  //   'bothAbsent' — neither side carries a unit — treated as comparable (there was
+  //                  nothing to conflict with).
+  //   'oneAbsent'  — exactly one side carries a unit — NEVER treated as comparable
+  //                  (a guess across an unconfirmed unit would be misleading).
+  //   'mismatch'   — both present, recognised as DIFFERENT unit families.
+  function priorUnitRelation(resultUnit, priorUnit) {
+    const rel = unitsCompatible(resultUnit, priorUnit);
+    const bothAbsent = !normaliseUnitForCompare(resultUnit) && !normaliseUnitForCompare(priorUnit);
+    if (rel === 'mismatch') return 'mismatch';
+    if (rel === 'unknown') return bothAbsent ? 'bothAbsent' : 'oneAbsent';
+    return 'match';
+  }
   function extractPrior(result) {
     if (!result || typeof result !== 'object') return null;
     if (!Number.isFinite(result.value)) return null;
@@ -629,14 +645,219 @@
     // entry with a finite value IS the most recent prior numeric value.
     const priorEntry = result.history.find((h) => h && Number.isFinite(h.value));
     if (!priorEntry) return null;
-    const rel = unitsCompatible(result.unit, priorEntry.unit);
-    const bothAbsent = !normaliseUnitForCompare(result.unit) && !normaliseUnitForCompare(priorEntry.unit);
-    if (rel === 'mismatch') return null;
-    if (rel === 'unknown' && !bothAbsent) return null; // "one present, one absent" — never a guess
+    const rel = priorUnitRelation(result.unit, priorEntry.unit);
+    if (rel === 'mismatch' || rel === 'oneAbsent') return null; // never a guess across units
     const EPS = 1e-9;
     const diff = result.value - priorEntry.value;
     const dir = Math.abs(diff) < EPS ? 'same' : diff > 0 ? 'up' : 'down';
     return { value: priorEntry.value, date: priorEntry.date || null, dir };
+  }
+
+  // ── Delta/trend rule grading (item 3.6, TRIAGE-LENS-2026-07-02.md) ────────────
+  // Grades on CHANGE over time rather than the current absolute value: rising
+  // creatinine (AKI), falling Hb (bleed), rising K+. Builds directly on extractPrior's
+  // history-walk and priorUnitRelation's comparability rule above, and on
+  // unitsCompatible (item 3.1).
+  //
+  // daysBetween(dateA, dateB) — both 'YYYY-MM-DD' (normaliseDateString's output
+  // shape). Returns the absolute integer day difference, or null if either date is
+  // missing/unparseable. UTC-based (no local-timezone drift on the date boundary).
+  function daysBetween(dateA, dateB) {
+    if (typeof dateA !== 'string' || typeof dateB !== 'string') return null;
+    const ma = dateA.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const mb = dateB.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!ma || !mb) return null;
+    const ta = Date.UTC(Number(ma[1]), Number(ma[2]) - 1, Number(ma[3]));
+    const tb = Date.UTC(Number(mb[1]), Number(mb[2]) - 1, Number(mb[3]));
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return null;
+    return Math.round(Math.abs(ta - tb) / 86400000);
+  }
+
+  // Most-recent history entry with a finite value (mirrors extractPrior's own
+  // walk) — returned WITH its unit and date so the delta engine can apply its own
+  // unit-comparability and maxDays gates on top. Does not itself judge
+  // comparability (the caller does, via priorUnitRelation) — kept separate so a
+  // 'mismatch' can be distinguished from a silent 'oneAbsent' for unitMismatches
+  // recording.
+  function findMostRecentNumericPrior(result) {
+    if (!result || typeof result !== 'object') return null;
+    if (!Array.isArray(result.history) || result.history.length === 0) return null;
+    const priorEntry = result.history.find((h) => h && Number.isFinite(h.value));
+    if (!priorEntry) return null;
+    return { value: priorEntry.value, date: priorEntry.date || null, unit: priorEntry.unit || null };
+  }
+
+  // Round a computed change to 2dp for display, stripping float noise
+  // (e.g. 37.99999999999998 → 38) without hiding a genuine fractional change.
+  function roundDeltaMagnitude(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  // formatDeltaSummary(change, usePercent, currentDate, priorDate) → e.g.
+  // '+38 in 5 days' (by) or '+18% in 5 days' (byPercent), or the magnitude alone
+  // when the day count can't be determined ('-22'). `change` is SIGNED (positive
+  // for a rise, negative for a fall); the sign is carried by the number itself,
+  // so only a rise gets an explicit '+' prefix.
+  function formatDeltaSummary(change, usePercent, currentDate, priorDate) {
+    const rounded = roundDeltaMagnitude(change);
+    const sign = rounded > 0 ? '+' : '';
+    const magStr = sign + String(rounded) + (usePercent ? '%' : '');
+    const days = daysBetween(currentDate, priorDate);
+    if (days === null) return magStr;
+    return magStr + ' in ' + days + ' day' + (days === 1 ? '' : 's');
+  }
+
+  // computeDeltaSev(rule, result) — parallel to computeRuleSev, but for ONE
+  // kind:'delta' rule against ONE result (the aggregate-across-all-delta-rules
+  // loop, mirroring computeRuleSev's own multi-rule loop, lives in
+  // computeDeltaSevForResult below — same split as every other per-rule vs
+  // per-result-across-rules pairing in this file).
+  //
+  // Returns { sev, label, direction, ruleThreshold, ruleId, deltaSummary, unitMismatches }:
+  //   sev            — 'none' | 'abnormal' | 'urgent'.
+  //   label          — the rule's label when sev !== 'none', else null.
+  //   direction      — 'rise' | 'fall' (the OBSERVED direction of the fired change,
+  //                    never 'either' — that is only ever the rule's CONFIGURATION).
+  //                    Deliberately reuses the same slot/shape as computeRuleSev's
+  //                    `comparator` so content.js's existing rule-attribution
+  //                    rendering (flag arrow, threshold-summary composition) can
+  //                    treat it uniformly — see composeRuleThresholdLabel/flagFor
+  //                    in content.js, which special-case 'rise'/'fall' alongside
+  //                    'above'/'below'.
+  //   ruleThreshold  — the winning amber/red magnitude that was crossed.
+  //   ruleId         — the rule's `id`, for the popover's actions lookup (item 2.7).
+  //   deltaSummary   — ready-to-render change summary e.g. '+38 in 5 days' (item
+  //                    3.6's popover line), or null when sev === 'none'.
+  //   unitMismatches — array of { ruleId, ruleLabel, ruleUnit } — populated ONLY on
+  //                    a genuine unit MISMATCH (both result and prior carry a unit,
+  //                    recognised as different families); mirrors computeRuleSev's
+  //                    shape/semantics. The "one side has no unit" case is never
+  //                    recorded here (nothing confidently wrong to report — see
+  //                    priorUnitRelation above), matching 3.1's own precedent of
+  //                    only recording an ACTUAL mismatch, never an absence.
+  function computeDeltaSev(rule, result) {
+    const NONE = {
+      sev: 'none',
+      label: null,
+      direction: null,
+      ruleThreshold: null,
+      ruleId: null,
+      deltaSummary: null,
+      unitMismatches: [],
+    };
+    if (!rule || typeof rule !== 'object') return NONE;
+    if ((rule.kind || 'threshold') !== 'delta') return NONE;
+    if (rule.enabled === false) return NONE;
+    const analyte = rule.analyte;
+    if (!analyte || !Array.isArray(analyte.match) || analyte.match.length === 0) return NONE;
+    if (rule.direction !== 'rise' && rule.direction !== 'fall' && rule.direction !== 'either') return NONE;
+    if (!result || typeof result !== 'object') return NONE;
+    if (!Number.isFinite(result.value)) return NONE;
+    if (!analyteMatches(analyte, result)) return NONE;
+
+    const prior = findMostRecentNumericPrior(result);
+    if (!prior) return NONE; // no history → never fires (nothing to compare against)
+
+    const ruleId = (typeof rule.id === 'string' && rule.id) || null;
+    const ruleLabel = (typeof rule.label === 'string' && rule.label) || null;
+
+    // Unit guard (item 3.1's shared unitsCompatible, item 2.6's strict "one-absent
+    // is never a guess" comparability rule) — see priorUnitRelation above.
+    const rel = priorUnitRelation(result.unit, prior.unit);
+    if (rel === 'mismatch') {
+      return {
+        ...NONE,
+        unitMismatches: [{ ruleId, ruleLabel, ruleUnit: prior.unit || null }],
+      };
+    }
+    if (rel === 'oneAbsent') return NONE; // never a guess across an unconfirmed unit; nothing to record
+
+    // maxDays — OPTIONAL. Fail CLOSED (no delta) when configured and either date is
+    // unavailable: an unknown age could be exactly the "2-year-old value" this
+    // guard exists to exclude. Only checks the SAME most-recent prior found above —
+    // never falls back to an older-but-in-range history entry.
+    if (Number.isFinite(rule.maxDays) && rule.maxDays > 0) {
+      const days = daysBetween(result.date, prior.date);
+      if (days === null || days > rule.maxDays) return NONE;
+    }
+
+    const usePercent = rule.byPercent === true;
+    let change;
+    if (usePercent) {
+      if (prior.value === 0) return NONE; // no meaningful % change from a zero baseline
+      change = ((result.value - prior.value) / Math.abs(prior.value)) * 100;
+    } else {
+      change = result.value - prior.value;
+    }
+
+    const observedDir = change > 0 ? 'rise' : change < 0 ? 'fall' : 'same';
+    if (observedDir === 'same') return NONE; // no change at all never fires
+    if (rule.direction !== 'either' && observedDir !== rule.direction) return NONE;
+
+    const magnitude = Math.abs(change);
+    const amber = rule.amber;
+    const red = rule.red;
+    let sev = 'none';
+    let threshold = null;
+    if (Number.isFinite(red) && magnitude >= red) {
+      sev = 'urgent';
+      threshold = red;
+    } else if (Number.isFinite(amber) && magnitude >= amber) {
+      sev = 'abnormal';
+      threshold = amber;
+    }
+    if (sev === 'none') return NONE;
+
+    return {
+      sev,
+      label: ruleLabel,
+      direction: observedDir,
+      ruleThreshold: threshold,
+      ruleId,
+      deltaSummary: formatDeltaSummary(change, usePercent, result.date, prior.date),
+      unitMismatches: [],
+    };
+  }
+
+  // computeDeltaSevForResult(result, rules, problems) — aggregate across ALL
+  // kind:'delta' rules for one result, keeping the highest severity (mirrors
+  // computeRuleSev's own multi-rule loop exactly, including the suppressIfProblem
+  // gate and the urgent-short-circuit). Collects unitMismatches from every rule
+  // tried, not just the winner (same as computeRuleSev).
+  function computeDeltaSevForResult(result, rules, problems) {
+    const NONE = {
+      sev: 'none',
+      label: null,
+      direction: null,
+      ruleThreshold: null,
+      ruleId: null,
+      deltaSummary: null,
+      unitMismatches: [],
+    };
+    if (!Array.isArray(rules) || rules.length === 0) return NONE;
+    if (!result || typeof result !== 'object') return NONE;
+
+    let best = NONE;
+    const unitMismatches = [];
+
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      if (!rule || typeof rule !== 'object') continue;
+      if ((rule.kind || 'threshold') !== 'delta') continue;
+      if (rule.enabled === false) continue;
+      if (ruleSuppressedByProblems(rule, problems)) continue;
+
+      const out = computeDeltaSev(rule, result);
+      if (Array.isArray(out.unitMismatches) && out.unitMismatches.length) {
+        out.unitMismatches.forEach((m) => unitMismatches.push(m));
+      }
+      if (SEV_ORDER[out.sev] > SEV_ORDER[best.sev]) {
+        best = out;
+      }
+      if (best.sev === 'urgent') break; // can't go higher
+    }
+
+    return { ...best, unitMismatches };
   }
 
   // ── Compute combo-rule outcome across a whole report ──────────────────────────
@@ -774,15 +995,22 @@
    * per-result attribution entries, one per result whose effective severity is 'urgent'
    * or 'abnormal' (in report order), for the queue detail popover. Each entry:
    *   { index, name, value, unit, low, high, date, effSev, isAbove, isBelow, urgent,
-   *     ruleLabel, ruleComparator, ruleThreshold, ruleId, prior }
+   *     ruleLabel, ruleComparator, ruleThreshold, ruleId, deltaSummary, prior }
    * `index` is the result's position in report.results (for cross-referencing back to
    * the full normalised result, e.g. its .history). ruleLabel/ruleComparator/
    * ruleThreshold/ruleId are only set when a rule (not the lab flag) drove this result's
    * severity — same ruleDriven gate as top.ruleLabel. ruleId is ADDITIVE (item 2.7): the
    * winning rule's `id`, purely for the popover to look up that rule's `actions` from
-   * CONFIG.resultRules by id at render time — it never feeds grading. `prior` is
-   * extractPrior(result). This field is purely descriptive: it does not feed
-   * level/urgentCount/abnormalCount/top, all of which are computed exactly as before.
+   * CONFIG.resultRules by id at render time — it never feeds grading. `deltaSummary` is
+   * ADDITIVE (item 3.6, TRIAGE-LENS-2026-07-02.md): a ready-to-render change summary e.g.
+   * '+38 in 5 days', set ONLY when a kind:'delta' rule (computeDeltaSevForResult, not a
+   * kind:'threshold' rule) drove this result's severity — null otherwise (i.e. on every
+   * flagged entry today, since zero delta rules ship in defaults.json). When a delta rule
+   * drives severity, `ruleComparator` carries the OBSERVED direction ('rise'/'fall')
+   * instead of a threshold rule's 'above'/'below' — content.js's rendering treats the two
+   * uniformly (see composeRuleThresholdLabel/flagFor). `prior` is extractPrior(result).
+   * This field is purely descriptive: it does not feed level/urgentCount/abnormalCount/top,
+   * all of which are computed exactly as before.
    * unitMismatches — ADDITIVE (item 3.1, TRIAGE-LENS-2026-07-02.md), display-only: an
    * array of { name, resultUnit, ruleId, ruleLabel, ruleUnit }, one entry per (result,
    * rule) pair where a threshold rule (computeRuleSev) or a combo numeric condition
@@ -903,9 +1131,16 @@
         const ruleResult = computeRuleSev(r, resultRules, problems);
         const ruleSev = ruleResult.sev;
 
+        // ADDITIVE (item 3.6) — rule-derived severity for delta/trend rules
+        // (kind:'delta'), aggregated across every delta rule matching this
+        // result. Escalate-only, exactly like computeRuleSev: folded into effSev
+        // below via the SAME maxSev pattern, never lowers labSev or ruleSev.
+        const deltaResult = computeDeltaSevForResult(r, resultRules, problems);
+        const deltaSev = deltaResult.sev;
+
         // ADDITIVE (item 3.1) — fold this result's skipped-rule unit mismatches
-        // (display-only; computeRuleSev already excluded them from grading) into
-        // the report-level list.
+        // (display-only; computeRuleSev/computeDeltaSevForResult already excluded
+        // them from grading) into the report-level list.
         if (Array.isArray(ruleResult.unitMismatches) && ruleResult.unitMismatches.length) {
           ruleResult.unitMismatches.forEach((m) => {
             rawUnitMismatches.push({
@@ -917,14 +1152,40 @@
             });
           });
         }
+        if (Array.isArray(deltaResult.unitMismatches) && deltaResult.unitMismatches.length) {
+          deltaResult.unitMismatches.forEach((m) => {
+            rawUnitMismatches.push({
+              name: r.name,
+              resultUnit: r.unit || null,
+              ruleId: m.ruleId,
+              ruleLabel: m.ruleLabel,
+              ruleUnit: m.ruleUnit,
+            });
+          });
+        }
+
+        // Combine threshold-rule and delta-rule outcomes: whichever produced the
+        // HIGHER severity attributes the chip (ties favour the threshold-rule
+        // result, so a report with NO delta rules configured — every report today,
+        // since zero delta rules ship in defaults.json — is byte-identical to
+        // before this field existed).
+        const combinedSev = SEV_ORDER[deltaSev] > SEV_ORDER[ruleSev] ? deltaResult : ruleResult;
+        const bestRuleSev = SEV_ORDER[deltaSev] > SEV_ORDER[ruleSev] ? deltaSev : ruleSev;
 
         // Effective numeric severity: never below lab severity
-        const effSev = maxSev(labSev, ruleSev);
+        const effSev = maxSev(labSev, bestRuleSev);
 
         // Was this result's effective severity RAISED by a user/base rule (not the
         // lab flag)? If so, carry the rule's label so the chip can be attributable.
-        const ruleDriven = SEV_ORDER[ruleSev] > SEV_ORDER[labSev];
-        const ruleLabel = ruleDriven ? ruleResult.label : null;
+        const ruleDriven = SEV_ORDER[bestRuleSev] > SEV_ORDER[labSev];
+        const ruleLabel = ruleDriven ? combinedSev.label : null;
+        // The delta path's `direction` ('rise'/'fall') doubles as computeRuleSev's
+        // `comparator` slot ('above'/'below') for downstream chip/popover
+        // rendering — see computeDeltaSev's doc comment above.
+        const ruleComparator = ruleDriven ? combinedSev.comparator || combinedSev.direction || null : null;
+        const ruleThreshold = ruleDriven ? (combinedSev.threshold ?? combinedSev.ruleThreshold ?? null) : null;
+        const ruleId = ruleDriven ? combinedSev.ruleId : null;
+        const deltaSummary = ruleDriven ? combinedSev.deltaSummary || null : null;
 
         if (effSev === 'urgent') {
           urgentCount++;
@@ -958,9 +1219,13 @@
             isBelow: !!r.isBelow,
             urgent: !!r.urgent,
             ruleLabel,
-            ruleComparator: ruleDriven ? ruleResult.comparator : null,
-            ruleThreshold: ruleDriven ? ruleResult.threshold : null,
-            ruleId: ruleDriven ? ruleResult.ruleId : null,
+            ruleComparator,
+            ruleThreshold,
+            ruleId,
+            // ADDITIVE (item 3.6) — ready-to-render change summary e.g. '+38 in 5
+            // days', set ONLY when a delta rule (not a threshold rule) drove this
+            // result's severity. null on every existing (non-delta) flagged entry.
+            deltaSummary,
             prior: extractPrior(r),
           });
         }

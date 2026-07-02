@@ -1950,6 +1950,17 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     );
   };
 
+  /** Summarise a delta rule's change thresholds, e.g. "Δ rise ≥+26 red / ≥+15 amber within 7d". */
+  const rrDeltaSummary = (rule) => {
+    const dirWord = rule.direction === 'rise' ? 'rise' : rule.direction === 'fall' ? 'fall' : 'change';
+    const axisLabel = rule.byPercent === true ? '%' : '';
+    const parts = [];
+    if (rule.red != null) parts.push('≥+' + rule.red + axisLabel + ' red');
+    if (rule.amber != null) parts.push('≥+' + rule.amber + axisLabel + ' amber');
+    const daysNote = Number.isFinite(rule.maxDays) ? ' within ' + rule.maxDays + 'd' : '';
+    return 'Δ ' + dirWord + ' ' + parts.join(' / ') + daysNote;
+  };
+
   const rrSeveritySummary = (rule) => {
     if (rule.kind === 'combo') {
       const conds = Array.isArray(rule.conditions) ? rule.conditions : [];
@@ -1962,6 +1973,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       return (
         'Text · “' + escHtml(rule.label || 'Needs review') + '” unless result text contains: ' + escHtml(shown) + more
       );
+    }
+    if (rule.kind === 'delta') {
+      return rrDeltaSummary(rule);
     }
     const parts = [];
     const cmp = rule.comparator === 'above' ? '≥' : '≤';
@@ -2007,15 +2021,38 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
                 ? 'info'
                 : 'info';
       // Direction glyph so a high/low pair (e.g. high vs low calcium) is distinguishable at a glance.
+      // A delta rule's glyph reflects its configured `direction` (rise/fall/either)
+      // rather than a threshold rule's `comparator`.
       const _rrDir =
         rule.kind === 'text' || rule.kind === 'combo'
           ? ''
-          : rule.comparator === 'above'
-            ? '↑'
-            : rule.comparator === 'below'
-              ? '↓'
+          : rule.kind === 'delta'
+            ? rule.direction === 'rise'
+              ? '↑'
+              : rule.direction === 'fall'
+                ? '↓'
+                : rule.direction === 'either'
+                  ? '↕'
+                  : ''
+            : rule.comparator === 'above'
+              ? '↑'
+              : rule.comparator === 'below'
+                ? '↓'
+                : '';
+      const _rrDirTitle =
+        rule.kind === 'delta'
+          ? _rrDir === '↑'
+            ? 'Fires on a RISE'
+            : _rrDir === '↓'
+              ? 'Fires on a FALL'
+              : _rrDir === '↕'
+                ? 'Fires on either direction'
+                : ''
+          : _rrDir === '↑'
+            ? 'Fires on a HIGH value'
+            : _rrDir === '↓'
+              ? 'Fires on a LOW value'
               : '';
-      const _rrDirTitle = _rrDir === '↑' ? 'Fires on a HIGH value' : _rrDir === '↓' ? 'Fires on a LOW value' : '';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
         <span class="tl-rule-kind tl-rule-kind-${_rrKind}">${KIND_LABEL[_rrKind] || _rrKind.toUpperCase()}</span>
@@ -2059,19 +2096,24 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
   const rrApplyKindVisibility = (kind) => {
     const isText = kind === 'text';
     const isCombo = kind === 'combo';
+    const isDelta = kind === 'delta';
     // The single-analyte block (match / exclude / specimen + advisory Test match)
-    // doesn't apply to a combo — each combo condition carries its own analyte.
+    // doesn't apply to a combo — each combo condition carries its own analyte. A
+    // delta rule DOES use it (like threshold/text — one analyte per rule).
     document.querySelectorAll('.rr-fields-single').forEach((el) => {
       el.style.display = isCombo ? 'none' : '';
     });
     document.querySelectorAll('.rr-fields-threshold').forEach((el) => {
-      el.style.display = isText || isCombo ? 'none' : '';
+      el.style.display = isText || isCombo || isDelta ? 'none' : '';
     });
     document.querySelectorAll('.rr-fields-text').forEach((el) => {
       el.style.display = isText ? '' : 'none';
     });
     document.querySelectorAll('.rr-fields-combo').forEach((el) => {
       el.style.display = isCombo ? '' : 'none';
+    });
+    document.querySelectorAll('.rr-fields-delta').forEach((el) => {
+      el.style.display = isDelta ? '' : 'none';
     });
     // Initialise the builder's two starter conditions the first time combo is
     // selected on a non-combo rule (an edit of an existing combo is seeded by
@@ -2703,15 +2745,30 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
     $('#rrAnalyteMatch').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.match) || []).join('\n');
     $('#rrAnalyteExclude').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.exclude) || []).join('\n');
     $('#rrAnalyteSpecimen').value = ((rrEditingDraft.analyte && rrEditingDraft.analyte.specimen) || []).join('\n');
-    const kind = rrEditingDraft.kind === 'text' ? 'text' : rrEditingDraft.kind === 'combo' ? 'combo' : 'threshold';
+    const kind =
+      rrEditingDraft.kind === 'text'
+        ? 'text'
+        : rrEditingDraft.kind === 'combo'
+          ? 'combo'
+          : rrEditingDraft.kind === 'delta'
+            ? 'delta'
+            : 'threshold';
     $('#rrKind').value = kind;
     if (kind === 'combo' && _rrComboApi) _rrComboApi.loadFromRule(rrEditingDraft);
     $('#rrComparator').value = rrEditingDraft.comparator || 'above';
-    $('#rrAmber').value = rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
-    $('#rrRed').value = rrEditingDraft.red != null ? rrEditingDraft.red : '';
+    $('#rrAmber').value = kind !== 'delta' && rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
+    $('#rrRed').value = kind !== 'delta' && rrEditingDraft.red != null ? rrEditingDraft.red : '';
     $('#rrUnit').value = rrEditingDraft.unit || '';
     $('#rrNormalText').value = Array.isArray(rrEditingDraft.normalText) ? rrEditingDraft.normalText.join('\n') : '';
     $('#rrNormalLabel').value = rrEditingDraft.normalLabel || '';
+    // Delta fields (item 3.6) — direction/by-basis/amber/red/maxDays.
+    if ($('#rrDeltaDirection')) $('#rrDeltaDirection').value = rrEditingDraft.direction || 'rise';
+    if ($('#rrDeltaBasis')) $('#rrDeltaBasis').value = rrEditingDraft.byPercent === true ? 'percent' : 'value';
+    if ($('#rrDeltaAmber'))
+      $('#rrDeltaAmber').value = kind === 'delta' && rrEditingDraft.amber != null ? rrEditingDraft.amber : '';
+    if ($('#rrDeltaRed'))
+      $('#rrDeltaRed').value = kind === 'delta' && rrEditingDraft.red != null ? rrEditingDraft.red : '';
+    if ($('#rrDeltaMaxDays')) $('#rrDeltaMaxDays').value = rrEditingDraft.maxDays != null ? rrEditingDraft.maxDays : '';
     $('#rrEnabled').checked = !!rrEditingDraft.enabled;
     rrApplyKindVisibility(kind);
     renderRrActions();
@@ -2827,6 +2884,29 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       if (keptAbnormalText) rrEditingDraft.abnormalText = keptAbnormalText;
       if (keptAbnormalLevel) rrEditingDraft.abnormalLevel = keptAbnormalLevel;
       if (draftActions.length) rrEditingDraft.actions = draftActions;
+    } else if (selectedKind === 'delta') {
+      // ── Delta / trend (item 3.6) — built fresh, same pattern as the text branch
+      // above (avoids leftover threshold/text/combo fields on the saved object).
+      const direction = $('#rrDeltaDirection').value;
+      const basis = $('#rrDeltaBasis').value; // 'value' | 'percent'
+      const amberVal = ($('#rrDeltaAmber').value || '').trim();
+      const redVal = ($('#rrDeltaRed').value || '').trim();
+      const maxDaysVal = ($('#rrDeltaMaxDays').value || '').trim();
+      rrEditingDraft = {
+        id: rrEditingDraft.id,
+        builtin: rrEditingDraft.builtin || false,
+        kind: 'delta',
+        label,
+        analyte,
+        direction,
+        amber: amberVal !== '' && Number.isFinite(+amberVal) ? +amberVal : null,
+        red: redVal !== '' && Number.isFinite(+redVal) ? +redVal : null,
+        enabled,
+      };
+      if (basis === 'percent') rrEditingDraft.byPercent = true;
+      else rrEditingDraft.by = true;
+      if (maxDaysVal !== '' && Number.isFinite(+maxDaysVal)) rrEditingDraft.maxDays = Math.round(+maxDaysVal);
+      if (draftActions.length) rrEditingDraft.actions = draftActions;
     } else {
       rrEditingDraft.label = label;
       rrEditingDraft.analyte = analyte;
@@ -2840,13 +2920,17 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       rrEditingDraft.enabled = enabled;
       if (draftActions.length) rrEditingDraft.actions = draftActions;
       else delete rrEditingDraft.actions;
-      // Remove text-only / combo-only fields if switching to threshold
+      // Remove text-only / combo-only / delta-only fields if switching to threshold
       delete rrEditingDraft.kind;
       delete rrEditingDraft.normalText;
       delete rrEditingDraft.normalLabel;
       delete rrEditingDraft.abnormalLevel;
       delete rrEditingDraft.conditions;
       delete rrEditingDraft.level;
+      delete rrEditingDraft.direction;
+      delete rrEditingDraft.by;
+      delete rrEditingDraft.byPercent;
+      delete rrEditingDraft.maxDays;
     }
 
     const VALIDATE = window.SentinelResultRules && window.SentinelResultRules.validateResultRule;
@@ -2989,6 +3073,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               '" unless: ' +
               shownPhrases +
               morePhrases +
+              ' — will import DISABLED';
+          } else if (c.kind === 'delta') {
+            const dirWord = c.direction === 'rise' ? 'rises' : c.direction === 'fall' ? 'falls' : 'changes';
+            const axisLabel = c.byPercent === true ? '%' : '';
+            const parts = [];
+            if (c.red != null) parts.push('≥+' + c.red + axisLabel + ' red');
+            if (c.amber != null) parts.push('≥+' + c.amber + axisLabel + ' amber');
+            const daysNote = Number.isFinite(c.maxDays) ? ' within ' + c.maxDays + 'd' : '';
+            summary =
+              (c.label || 'Untitled') +
+              ' — Delta: fires when it ' +
+              dirWord +
+              ' ' +
+              parts.join(' / ') +
+              daysNote +
               ' — will import DISABLED';
           } else {
             const cmp = c.comparator === 'above' ? '≥' : '≤';

@@ -747,7 +747,8 @@ details summary {
 
 /* Rule-kind field groups — toggled show/hide by rrApplyKindVisibility() */
 .rr-fields-threshold,
-.rr-fields-text {
+.rr-fields-text,
+.rr-fields-delta {
   margin-top: 0;
 }
 

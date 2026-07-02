@@ -544,6 +544,7 @@
                 <option value="threshold">Numeric threshold</option>
                 <option value="text">Text / culture</option>
                 <option value="combo">Combo (multi-condition)</option>
+                <option value="delta">Trend / delta (change over time)</option>
               </select>
             </label>
 
@@ -651,6 +652,53 @@
               </label>
             </div>
 
+            <!-- ── Delta / trend (change over time) fields — shown when Rule type = Trend / delta ── -->
+            <div class="rr-fields-delta" style="display: none">
+              <p class="tl-rr-inspector-hint">
+                A <strong>trend / delta</strong> rule grades on <strong>change over time</strong> against the analyte's
+                own most recent prior result — not just today's value. Use it for a value that is dangerous because of
+                how fast it is moving: a rising creatinine (AKI), a falling haemoglobin (possible bleed), a rising
+                potassium. Delta rules are <strong>escalate-only</strong> and use the
+                <strong>Analyte match / exclude / specimen</strong> fields above, same as a threshold rule.
+              </p>
+
+              <label class="tl-field">
+                <span>Direction <small>(which way of change fires)</small></span>
+                <select id="rrDeltaDirection">
+                  <option value="rise">Rise only (value going UP)</option>
+                  <option value="fall">Fall only (value going DOWN)</option>
+                  <option value="either">Either direction</option>
+                </select>
+              </label>
+
+              <label class="tl-field">
+                <span>Measure change as <small>(exactly one — chooses the amber/red units below)</small></span>
+                <select id="rrDeltaBasis">
+                  <option value="value">Absolute value change (e.g. +38, in the lab's own units)</option>
+                  <option value="percent">Percent change (e.g. +18%)</option>
+                </select>
+              </label>
+
+              <label class="tl-field">
+                <span>Amber change threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrDeltaAmber" step="any" min="0" placeholder="e.g. 15" />
+              </label>
+
+              <label class="tl-field">
+                <span>Red change threshold <small>(optional — leave blank to omit)</small></span>
+                <input type="number" id="rrDeltaRed" step="any" min="0" placeholder="e.g. 26" />
+              </label>
+
+              <label class="tl-field">
+                <span>Only compare within <small>(days, optional — leave blank for no limit)</small></span>
+                <input type="number" id="rrDeltaMaxDays" step="1" min="1" placeholder="e.g. 7" />
+                <span class="tl-rr-unit-note"
+                  >If the most recent prior result is older than this, no delta fires — it will never compare against an
+                  even-older value instead.</span
+                >
+              </label>
+            </div>
+
             <div class="rr-fields-text" style="display: none">
               <label class="tl-field">
                 <span
@@ -696,6 +744,11 @@
               (logical AND) — e.g. sterile pyuria: pus cells above 40 AND culture shows no growth. Each condition
               carries its own analyte match / specimen. Combo is escalate-only, defaults to amber (review), and should
               stay disabled until a clinician has reviewed it. <br /><br />
+              <strong>Trend / delta rules</strong> grade on <em>change over time</em> against the analyte's own most
+              recent prior result — not just today's value (e.g. a rising creatinine, a falling haemoglobin). Choose a
+              direction (rise / fall / either), whether the amber/red thresholds are an absolute value change or a
+              percent change, and optionally cap how many days old the prior result may be. Escalate-only, like every
+              other rule kind, and never compares across a unit mismatch. <br /><br />
               <strong>No rule matched?</strong> The result still shows the lab's own flag — but an <em>absent</em> rule
               chip is not a clinical all-clear: it only means no rule covered that analyte.
             </div>

@@ -3985,11 +3985,17 @@
     // Compose a rule's label with its threshold summary, e.g.
     // "Critical high potassium (red ≥6.5)". comparator/threshold are the ADDITIVE
     // fields computeRuleSev now carries (result-severity.js) — display-only.
+    // ADDITIVE (item 3.6) — a delta rule reuses this SAME slot with comparator
+    // 'rise'/'fall' (never 'above'/'below'); rendered with a "≥+" magnitude symbol
+    // instead of "≥"/"≤" so "(red ≥+26)" reads as a CHANGE, not an absolute value
+    // crossing — showing "(red ≥26)" on a creatinine delta rule would be actively
+    // misleading (a creatinine of 26 is nonsensical; a RISE of 26 is the AKI signal).
     const composeRuleThresholdLabel = (label, comparator, threshold, effSev) => {
       if (!label) return null;
-      if ((comparator !== 'above' && comparator !== 'below') || !Number.isFinite(threshold)) return label;
+      const isDelta = comparator === 'rise' || comparator === 'fall';
+      if ((comparator !== 'above' && comparator !== 'below' && !isDelta) || !Number.isFinite(threshold)) return label;
       const band = effSev === 'urgent' ? 'red' : 'amber';
-      const symbol = comparator === 'above' ? '≥' : '≤';
+      const symbol = isDelta ? '≥+' : comparator === 'above' ? '≥' : '≤';
       return label + ' (' + band + ' ' + symbol + threshold + ')';
     };
 
@@ -3997,12 +4003,14 @@
     // flags, then a rule's comparator (a rule can escalate a value the lab itself
     // never flagged above/below), and only fall back to the bare 'urgent' lab flag
     // (result.urgent — a distinct API field independent of range) when no direction
-    // is known at all.
+    // is known at all. ADDITIVE (item 3.6) — a delta rule's comparator is
+    // 'rise'/'fall' (the OBSERVED direction of change); treated the same as
+    // 'above'/'below' for the arrow glyph (↑ for a rise, ↓ for a fall).
     const flagFor = (f) => {
       if (f.isAbove) return 'above';
       if (f.isBelow) return 'below';
-      if (f.ruleComparator === 'above') return 'above';
-      if (f.ruleComparator === 'below') return 'below';
+      if (f.ruleComparator === 'above' || f.ruleComparator === 'rise') return 'above';
+      if (f.ruleComparator === 'below' || f.ruleComparator === 'fall') return 'below';
       if (f.urgent || f.effSev === 'urgent') return 'urgent';
       return null;
     };
@@ -4023,6 +4031,10 @@
       // cached here, so an edited rule's actions apply immediately with no cache
       // invalidation — see findResultRuleActionsById below.
       ruleId: f.ruleId || null,
+      // ADDITIVE (item 3.6) — ready-to-render change summary e.g. '+38 in 5 days',
+      // set only when a delta rule drove this result's severity (result-severity.js
+      // evaluateReportSeverity). null on every non-delta-driven entry.
+      deltaSummary: f.deltaSummary || null,
       prior: f.prior || null,
     });
 
@@ -4133,6 +4145,11 @@
       if (entry.unit) head += ' ' + entry.unit;
     }
     if (entry.flag && GLYPH[entry.flag]) head += ' ' + GLYPH[entry.flag];
+    // ADDITIVE (item 3.6) — a delta-fired entry's change summary e.g. '+38 in 5
+    // days', appended right after the arrow so the head reads as one clause:
+    // "Creatinine 148 ↑ +38 in 5 days". Suppresses the trailing "was X, date"
+    // segment below (same underlying prior value — showing both is redundant).
+    if (entry.deltaSummary) head += ' ' + entry.deltaSummary;
     const hasLow = entry.low !== null && entry.low !== undefined;
     const hasHigh = entry.high !== null && entry.high !== undefined;
     if (hasLow || hasHigh) {
@@ -4146,6 +4163,7 @@
     if (d) segs.push(d);
     if (entry.ruleLabel) segs.push('rule: ' + entry.ruleLabel);
     if (
+      !entry.deltaSummary &&
       entry.prior &&
       (entry.prior.dir === 'up' || entry.prior.dir === 'down' || entry.prior.dir === 'same') &&
       entry.prior.value !== null &&
