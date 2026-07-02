@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.147.1] — 2026-07-02
+
+### Triage Lens — Phase 0 hardening (guardrails before the improvement plan)
+
+Groundwork from `docs/plans/TRIAGE-LENS-2026-07-02.md` (Phase 0): the tests and
+one-line safety fixes that protect every later phase. No user-visible feature
+change beyond one false-alert fix; the value is regression insurance on the
+suite's most-regressed surface.
+
+- **Blood-culture chip no longer false-ambers negative reports.** Bare
+  substrings `gram positive` / `gram negative` / `candida` in the
+  `base-blood-culture` result rule tripped a "needs review" amber on explicitly
+  *negative* reports ("No gram negative organisms isolated", "Candida species
+  not isolated"). Replaced with morphology-qualified gram-stain terms
+  (`gram negative bacilli`, `gram-positive cocci`, …) and named candida species
+  + `candidaemia`, which keep detecting genuine positives — including interim
+  gram-film-only reports — without colliding with negation phrasing.
+  `defaults.json` config version 20 → 21. The migration un-stick
+  (`revertRetiredResultRuleFields`) was extended to deep-compare **array**
+  fields (it previously handled only scalar labels/thresholds), so existing
+  installs whose stored rule still matches the old shipped array pick up the fix
+  while practice-customised rules are left untouched — mirrored in
+  `content.js` + `options.js` per the lock-step convention. Phrasing set flagged
+  for Keeper source-review in the Phase 3 calibration pass.
+- **Action URLs are scheme-checked.** `executeAction` in
+  `content-scripts/triage-lens/content.js` now permits only `http:` / `https:`
+  before `window.open`; a `javascript:` / `data:` URL from an imported or edited
+  config is rejected and logged, not executed. The same allowlist is enforced in
+  `options.js` at rule-edit / LLM-import time (defence in depth).
+- **Backup imports are validated before they persist.** The file-import and
+  raw-JSON save paths in `options.js` previously accepted anything with a
+  `rules` array. They now run every rule through `validateTriageRule` /
+  `validateResultRule`, shape-check `thresholds` / `prefs` / `systemChips`, and
+  normalise `version` — rejecting the whole import (naming the first offender)
+  rather than half-persisting a malformed or hostile config.
+- **New regression tests.** A live-grid injection smoke harness
+  (`test-queue-injection-smoke.js`, 57 checks) drives the real chip injectors
+  through prepend / de-dupe / SPA-churn-survival / durable-map keying — closing
+  the "needs a live-grid smoke test" gap the changelog has flagged repeatedly.
+  `test-triage-alert-engine.js` (45 checks) covers the previously untested
+  `triage-alert-engine.evaluate()`; `test-routine-rx-macro.js` (49 checks) gives
+  the routine-Rx macro the behavioural coverage lab-file already had;
+  `test-triage-import-validation.js` (68 checks) guards the new import/URL
+  validation. `test-triage-rule-patterns.js` now imports the real
+  `rule-match.js` instead of a re-implementation (no drift was found).
+- **Internal:** the analyte match/exclude/specimen matcher, previously copied
+  three times inside `engine/result-severity.js`, is now one shared
+  `analyteMatches` helper with direct unit tests (`test-analyte-match.js`) —
+  behaviour verified identical before unifying.
+
 ## [v3.147.0] — 2026-07-02
 
 ### NHS Patient Leaflets — a new tab, not a Google search
