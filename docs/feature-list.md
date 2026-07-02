@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.143.0
-**Generated:** 2026-06-30 (automated)
+**Version:** v3.147.0
+**Generated:** 2026-07-02 (automated)
 
 ## What it is
 
@@ -9,7 +9,7 @@ Medicus Suite is a Chrome browser extension for UK GP practices that runs alongs
 
 ## At a glance
 
-- 13 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, and the live patient record
+- 14 side-panel modules covering monitoring, demand, capacity, workflow, knowledge, analytics, the live patient record, and NHS patient leaflets
 - 7 in-page content-script features (on-screen overlays, workflow buttons, and relays — incl. the Lab Results Auto-Filing button)
 - 2 full-tab generated reports (Practice Report; CQC Inspection Readiness)
 - 7 rule types in the alert engine
@@ -137,7 +137,17 @@ A live-first snapshot of the patient currently open in Medicus, sourced from the
 - Deterministic prescribing-safety prompts (anticholinergic burden, STOPP/START) plus the live drug-monitoring and QOF chips the Monitoring engine computes
 - Clinical-safety framing is load-bearing: a persistent "live snapshot, not a complete record" banner; allergies, immunisations and consultation history render as explicit gap-markers (absence does not mean "none recorded"); every safety score carries an inline caveat that it excludes allergies and uses coded data only
 - "Open full visualiser" footer link to the full multi-year Patient Record Visualiser (built from an exported record PDF) for the deep view
+- **Prescribing Pre-flight**: type a not-yet-prescribed drug and see, before it exists on the record, the anticholinergic-burden delta and band change, any newly-triggered STOPP/START prompt, interactions with current medications, and the monitoring the drug would require (baseline satisfied vs missing). Unknown drugs are reported as unknown, never as safe; every result carries a "decision aid, not advice" caveat
 - Available in both the side panel and the pop-out window
+
+### Leaflets (NHS patient information)
+
+Ends the "google NHS wart" detour: NHS patient advice leaflets searchable from inside the suite.
+
+- Instant fuzzy search (aliases and near-miss typos included) over a bundled index of 221 curated NHS Health A-Z entries — 166 conditions and 55 medicines
+- One click opens the leaflet on nhs.uk beside Medicus; "Copy link" puts the URL on the clipboard ready for a patient message; a recent-leaflets list keeps the last ten to hand
+- An always-present "Search nhs.uk" fallback row means no search ever dead-ends
+- Optional richer mode: with a free NHS Website Content API key (Options → Leaflets), leaflets render inside the panel — text-only construction, NHS attribution linking back to the source page, 24-hour cache, calm fallback to open-in-tab on any error. Without a key the tab contacts no external endpoint at all; the key itself never leaves the machine and is excluded from backups
 
 ## In-page features (content scripts)
 
@@ -180,9 +190,15 @@ Rules are practice-editable via a form-based editor in Options with a live engin
 - **Display preferences**: theme (light/dark/auto), size (compact/medium/large), and colourblind mode
 - **Options**: per-module configuration including triage-lens system chips, result rule editing (with a live result inspector that loads a recent result on demand — no JSON paste needed — and specimen-scope/name suggestions drawn from the open queue), reception pathway management, knowledge base starter import, QOF submission thresholds, and **Lab Filing** (admin-only authoring of the all-normal filing profiles, with optional disabled-by-default starter profiles)
 - **Glossary tooltips**: clinical codes, jargon, and pressure indices carry click-to-explain inline tooltips across the Condor, Reception, and Sentinel modules
+- **Event Ledger** (Options): a machine-local, capped record (5,000 events / 90 days) of what the suite displayed or did — alerts shown and dismissed, sweep runs, recall creations, summary copies, pre-flight checks, lab filings — with patient-UUID/date filters, hardened CSV export and a typed-confirmation clear. Patients recorded by UUID only, never by name; deliberately excluded from suite backups
+- **Suite health** (Options + side-panel strip): the extension self-diagnoses its Medicus integration points — a registry of every DOM contract it depends on is probed at runtime, and a calm amber strip plus an Options table say which feature is degraded when Medicus changes its interface, instead of features silently going quiet
 
 ## Recent additions (last 4 weeks)
 
+- **v3.147.0 (2026-07-02)** — **NHS Patient Leaflets tab**: bundled 221-entry NHS Health A-Z fuzzy search with open-in-tab, copy-link, recents and an always-present nhs.uk search fallback (zero configuration, no new external endpoint); optional in-panel leaflet rendering via the free NHS Website Content API (Options-gated key, text-only DOM construction, NHS attribution, 24h cache, calm fallback; key excluded from backups)
+- **v3.146.0 (2026-07-02)** — **"Unbreakable" self-diagnosis**: a DOM-contract registry documenting all 14 Medicus selector contracts the suite depends on, with sanitised fixtures + a console capture helper and CI drift tests; runtime canaries (two-strike hysteresis, counts-only, no text reads) that surface "Medicus may have changed — X degraded" in a side-panel strip and an Options Suite-health table. Motivated by three clinic-discovered selector regressions in the previous six releases
+- **v3.145.0 (2026-07-01)** — **Class-leader trio**: Prescribing Pre-flight (what-if drug check on the Record tab — ACB delta, newly-triggered STOPP/START, interactions, monitoring baselines; unknown ≠ safe); Clinical Event Ledger (machine-local, UUID-only audit of what the suite displayed/did, with Options query/CSV/clear); Practice Pulse (7/30-day snapshot trends and prior-period comparison in Condor and the Practice Report, coverage disclosed, gaps never interpolated)
+- **v3.144.0 (2026-07-01)** — **Top-10 user-value set**: Today "what needs you now" headline; per-tab "?" help; Trends resting state; Sentinel rule-coverage drill-down (every drug rule's matched terms and QOF indicators, counts test-locked); Referrals patient-name search + clinician filter with disclosed filtered CSV export; Condor tunable pressure-index weightings (safety floor unconditionally preserved and fuzz-tested); Slots low-slot alert thresholds surfaced on Today; patient-scoped command-palette actions
 - **v3.143.0 (2026-06-30)** — **Lab Results Auto-Filing**: a one-click "File all normal" action that appears in Medicus only when the suite has confirmed every value on an investigation-report task is within normal limits. It drives Medicus's own filing controls behind a confirmation (no full-auto), with an all-normal gate that fails closed on free text/cultures, unmatched reports, significant trends vs the previous value, monitored drugs, promised-contact phrases and a per-patient never-file list; clinician-set per-analyte ranges (incl. an opt-in override of over-sensitive lab reference ranges such as eGFR); multi-panel (combined-bloods) tasks via profile union; a prepare-only patient message; per-install kill switch; and a local audit log. **The suite's first feature that drives a clinical-record write** (filing a result), so it is admin-configured in Options → Lab Filing (not a side-panel tab), every profile arrives disabled until reviewed, and optional starter profiles (FBC/U&E/Bone/LFT) load disabled. Pending CSO review of the formal safety docs
 - **v3.138.0–142.1 (2026-06-29)** — GP-pressures feature set: Sentinel high-risk "blind-spot" banner for monitored drugs that match no rule (DMARDs, lithium, amiodarone, anticoagulants, etc. surfaced from the unmatched list instead of buried); Sweep QOF points-at-risk prioritiser ranking gaps by indicator points with a CVD-prevention subtotal; Referrals 2WW / Faster-Diagnosis safety-net worklist (suspected-cancer referrals still showing Incomplete, oldest-first with day-ages and watch/overdue severity); Sweep one-click "Create recall task" that writes a task via Medicus's own general-task endpoint (explicit per-patient confirm, no bulk create); and a NICE NG136 ACE-I/ARB post-initiation U&E check via a new additive engine mechanism that fires only when the drug's start date is known and no U&E has been recorded since starting (cannot cry wolf on an established patient; clinical-rule change, pending CSO sign-off)
 - **v3.134.4–6 (2026-06-26)** — Outstanding investigation matching: HbA1c, TSH-only thyroid reports, and combined B12/Folate requests now correctly matched to their outstanding requests and auto-ticked on result; triage monitor UUID field now accepts the full Medicus inbox URL (UUID extracted automatically)
