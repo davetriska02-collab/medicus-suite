@@ -1115,7 +1115,13 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       // Treat the preview input as the request field (most common). Uses the
       // shared matcher so the fire/no-fire result matches the runtime exactly.
       if (rule.fields.includes('request') && window.TriageLensMatch.ruleMatchesText(c, text)) {
-        matches.push(rule);
+        // Item 3.4 (TRIAGE-LENS-2026-07-02.md) — surface the same negation/
+        // past-tense qualifier the queue chip shows, via the SAME shared
+        // matcher (window.TriageLensMatch.ruleMatchEvidence), so the preview
+        // can never disagree with what the live page demotes. Display-only —
+        // matching itself (whether the rule fires at all) is unaffected.
+        const ev = window.TriageLensMatch.ruleMatchEvidence(c, text);
+        matches.push({ rule, qualifier: ev ? ev.qualifier : null });
       }
     }
     const errorHtml = errors.length
@@ -1127,17 +1133,21 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       cont.innerHTML = errorHtml + '<div class="tl-preview-empty">No rules match.</div>';
       return;
     }
+    const QUALIFIER_SUFFIX = { negated: '(negated?)', past: '(past?)' };
     cont.innerHTML =
       errorHtml +
       matches
-        .map(
-          (r) => `
+        .map(({ rule: r, qualifier }) => {
+          const qSuffix = qualifier
+            ? ` <span class="tl-rule-qualifier tl-rule-qualifier-${escAttr(qualifier)}">${QUALIFIER_SUFFIX[qualifier]}</span>`
+            : '';
+          return `
       <div class="tl-preview-match">
         <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
-        <span class="tl-rule-label">${escHtml(r.label)}</span>
+        <span class="tl-rule-label">${escHtml(r.label)}${qSuffix}</span>
         <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>
-      </div>`
-        )
+      </div>`;
+        })
         .join('');
   };
 

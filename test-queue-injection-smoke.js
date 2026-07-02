@@ -499,9 +499,13 @@ const parts = [
   extract(/const updateQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'updateQueueStatusBar'),
   // Items 2.1/2.3/2.5 (TRIAGE-LENS-2026-07-02.md) — ranked/collapsed
   // rule-match chips (decorateOneRow's rule-chip section) + the rule-match
-  // evidence/actions menu they open.
+  // evidence/actions menu they open. Item 3.4 adds the qualifier consts +
+  // extends rankRuleMatches to a block-bodied arrow fn (previewText param).
   extract(/const RULE_KIND_RANK = \{[\s\S]*?\};/, 'RULE_KIND_RANK'),
-  extract(/const rankRuleMatches = \(rules\) =>[\s\S]*?\.map\(\(x\) => x\.r\);/, 'rankRuleMatches'),
+  extract(/const RULE_QUALIFIER_EVIDENCE_CAP = .*;/, 'RULE_QUALIFIER_EVIDENCE_CAP'),
+  extract(/const RULE_QUALIFIER_LABEL = \{[\s\S]*?\};/, 'RULE_QUALIFIER_LABEL'),
+  extract(/const RULE_QUALIFIER_ARIA = \{[\s\S]*?\};/, 'RULE_QUALIFIER_ARIA'),
+  extract(/const rankRuleMatches = \(rules, previewText\) => \{[\s\S]*?\n {2}\};/, 'rankRuleMatches'),
   extract(/const buildRuleMatchChipEl = \(chip\) => \{[\s\S]*?\n {2}\};/, 'buildRuleMatchChipEl'),
   extract(/let activeActionMenu = null;[\s\S]*?let activeAnchorEl = null;/, 'activeActionMenu/activeAnchorEl state'),
   extract(/const closeActionMenu = \(\) => \{[\s\S]*?\n {2}\};/, 'closeActionMenu'),
@@ -581,6 +585,7 @@ const EXPOSE = [
   'renderQueueStatusBar',
   'updateQueueStatusBar',
   'rankRuleMatches',
+  'RULE_QUALIFIER_LABEL',
   'buildRuleMatchChipEl',
   'closeActionMenu',
   'showRuleMatchMenu',
@@ -2731,6 +2736,136 @@ if (sandbox) {
       'CONFIG with no resultRules array → no actions row, no throw'
     );
     sandbox.closeResultDetailPopover();
+  }
+
+  // ============================================================
+  // Layer 19 — negation/past-tense demotion (item 3.4, TRIAGE-LENS-2026-07-02.md)
+  // ============================================================
+  console.log('\nLayer 19: negation/past-tense demotion — display-only, escalate-only, never suppressed');
+
+  {
+    // ---- ranking: kind first, then unqualified before qualified WITHIN a kind ----
+    freshCaches();
+    const ruleRedCardiac = mkRule('r-red-cardiac', 'red', 'Cardiac flag', ['crushing']);
+    const previewText = 'No fever today. Crushing chest sensation now. Waterworks fine.';
+    const ranked = sandbox.rankRuleMatches([ruleRed, ruleRedCardiac, ruleAmber], previewText);
+    check(
+      ranked.map((r) => r.id).join(',') === 'r-red-cardiac,r-red,r-amber',
+      `ranking: unqualified red first, negated red still above unqualified amber (kind wins), got ${ranked.map((r) => r.id).join(',')}`
+    );
+    check(!ranked[0]._qualifier, 'unqualified red rule (Cardiac flag) carries no _qualifier');
+    check(
+      ranked[1]._qualifier === 'negated',
+      `negated red rule (Sepsis flag) is marked _qualifier="negated" (got ${ranked[1]._qualifier})`
+    );
+    check(!ranked[2]._qualifier, 'unqualified amber rule (UTI query) carries no _qualifier');
+  }
+
+  {
+    // ---- decorateOneRow: an all-demoted row STILL shows its chip (never suppressed) ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleRed];
+    const rowId = 'f0000000-0000-4000-8000-000000000001';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    wrap.children[0].textContent = 'Request: No fever reported today, patient otherwise well.';
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(
+      ruleChips.length === 1,
+      `all-demoted single-rule row STILL renders its chip (never suppressed), got ${ruleChips.length}`
+    );
+    const chip = ruleChips[0];
+    check(chip.classes.includes('ch-chip-red'), 'demoted chip keeps its kind colour class (red)');
+    check(chip.classes.includes('ch-chip-demoted'), 'demoted chip carries the outline/dimmed ch-chip-demoted variant');
+    check(
+      chip.textContent.includes('Sepsis flag (negated?)'),
+      `chip label carries the "(negated?)" suffix, got "${chip.textContent}"`
+    );
+    check(
+      /possible negation/.test(chip.getAttribute('aria-label') || ''),
+      `chip aria-label names the possible negation, got "${chip.getAttribute('aria-label')}"`
+    );
+
+    // Clicking the (still fully functional) chip opens the evidence menu, which
+    // names WHY the match was demoted — never why it was hidden (it never is).
+    chip.click();
+    const menu = sandbox.document.querySelector('.ch-rule-menu');
+    check(!!menu, 'clicking a demoted chip still opens the rule-match popover');
+    const qLine = menu.querySelector('.ch-rule-menu-evidence-qualifier');
+    check(!!qLine, 'evidence detail shows a qualifier line for a demoted match');
+    check(
+      /negation detected: "no"/.test(qLine.textContent),
+      `qualifier line names the negation and its trigger word, got "${qLine && qLine.textContent}"`
+    );
+    sandbox.closeActionMenu();
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- past-tense demotion + the "+N" list-view qualifier badge ----
+    freshCaches();
+    const ruleUti = mkRule('r-amber-uti', 'amber', 'UTI query', ['UTI']);
+    const previewText = 'Denies fever this week. Had a UTI last year, no issues since.';
+    const ranked = sandbox.rankRuleMatches([ruleUti, ruleRed], previewText);
+    check(
+      ranked[0].id === 'r-red' && ranked[0]._qualifier === 'negated',
+      `top rule is the negated red match (got id=${ranked[0].id}, qualifier=${ranked[0]._qualifier})`
+    );
+    check(
+      ranked[1].id === 'r-amber-uti' && ranked[1]._qualifier === 'past',
+      `second rule is the past-demoted amber match (got id=${ranked[1].id}, qualifier=${ranked[1]._qualifier})`
+    );
+
+    sandbox.document = makeDocument(new El('div', {}));
+    const anchor = new El('span');
+    sandbox.showRuleMatchMenu(anchor, ranked, previewText, true);
+    const menu = sandbox.document.querySelector('.ch-rule-menu');
+    const badges = menu.querySelectorAll('.ch-rule-menu-list-qualifier');
+    check(badges.length === 2, `both demoted rules carry a list-view qualifier badge, got ${badges.length}`);
+    const badgeTexts = badges
+      .map((b) => b.textContent)
+      .sort()
+      .join(',');
+    check(
+      badgeTexts === 'negated?,past?',
+      `badges read RULE_QUALIFIER_LABEL's "negated?" and "past?" respectively (got "${badgeTexts}")`
+    );
+    check(
+      badges[0].textContent === sandbox.RULE_QUALIFIER_LABEL.negated ||
+        badges[0].textContent === sandbox.RULE_QUALIFIER_LABEL.past,
+      'badge text comes from the shared RULE_QUALIFIER_LABEL map, not a separately hand-typed string'
+    );
+    sandbox.closeActionMenu();
+  }
+
+  {
+    // ---- RULE_QUALIFIER_EVIDENCE_CAP: on a row matching MORE than 4 rules,
+    //      only the top 4 (by kind, tie-broken by original order) get evidence
+    //      computed — the rest are left unqualified for RANKING purposes only.
+    //      Cheapness safeguard, never a suppression: all 5 still rank/render. ----
+    freshCaches();
+    const capRules = ['headache', 'cough', 'rash', 'fatigue', 'dizziness'].map((w, i) =>
+      mkRule(`r-red-cap-${i}`, 'red', `Flag ${i}`, [w])
+    );
+    const previewText = 'No headache, no cough, no rash, no fatigue, no dizziness today.';
+    const ranked = sandbox.rankRuleMatches(capRules, previewText);
+    check(ranked.length === 5, 'all 5 matched rules still rank (the cap affects evidence COST only, never suppresses)');
+    const evaluatedNegated = ranked.filter((r) => r._qualifier === 'negated').length;
+    check(
+      evaluatedNegated === 4,
+      `only the top 4 (by kind, tie-broken by original matchRules order) get evidence computed — got ${evaluatedNegated} marked negated`
+    );
+    const beyondCap = ranked.find((r) => r.id === 'r-red-cap-4');
+    check(
+      !!beyondCap && beyondCap._qualifier === null,
+      'the 5th rule (beyond the cap) is left unqualified for ranking, even though it WOULD be negated if evaluated'
+    );
   }
 
   // ============================================================

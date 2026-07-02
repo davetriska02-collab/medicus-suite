@@ -247,8 +247,176 @@ console.log('--- existing exports untouched ---');
     'ruleMatchEvidence exported with the documented signature'
   );
   check(
-    /const api = \{ compileRule, ruleMatchesText, ruleMatchEvidence \};/.test(src),
-    'all three are exported off the same api object'
+    /const api = \{ compileRule, ruleMatchesText, ruleMatchEvidence, NEGATORS, PAST_MARKERS \};/.test(src),
+    'all five are exported off the same api object (item 3.4 adds NEGATORS/PAST_MARKERS)'
+  );
+}
+
+// ── 8. Negation/past-tense demotion (item 3.4, TRIAGE-LENS-2026-07-02.md) ──
+// DISPLAY-ONLY: qualifier is additive metadata on ruleMatchEvidence's return.
+// Never changes whether a rule matches (ruleMatchesText/section 6's parity
+// sweep is untouched by this).
+console.log('--- qualifier: negation before vs after the term ---');
+{
+  const c = M.compileRule(rule({ regex: true, patterns: ['chest pain'] }));
+
+  const ev1 = M.ruleMatchEvidence(c, 'Patient reports no chest pain today.');
+  check(ev1 !== null, '"no chest pain" still matches (display-only demotion, never suppressed)');
+  check(ev1.qualifier === 'negated', `negator BEFORE the term demotes it (got qualifier=${ev1 && ev1.qualifier})`);
+  check(ev1.qualifierTerm === 'no', `qualifierTerm is the triggering word, "no" (got "${ev1 && ev1.qualifierTerm}")`);
+
+  const ev2 = M.ruleMatchEvidence(c, 'Denies any chest pain on questioning.');
+  check(ev2.qualifier === 'negated', '"denies any chest pain" -> negated');
+  check(ev2.qualifierTerm === 'denies', `qualifierTerm "denies" (got "${ev2 && ev2.qualifierTerm}")`);
+
+  // Negator AFTER the term must NOT demote — order matters.
+  const ev3 = M.ruleMatchEvidence(c, 'Called about chest pain, no relief from GTN.');
+  check(ev3 !== null, '"chest pain, no relief" still matches');
+  check(ev3.qualifier === null, `negator AFTER the term does not demote (got qualifier=${ev3 && ev3.qualifier})`);
+  check(ev3.qualifierTerm === null, 'qualifierTerm is null when unqualified');
+}
+
+console.log('--- qualifier: 6-word window boundary ---');
+{
+  const c = M.compileRule(rule({ patterns: ['cough'] }));
+  // Exactly 6 words between "no" and the match ("no" itself counts as the
+  // 6th word back) -> still within window -> negated.
+  const within = M.ruleMatchEvidence(c, 'no one two three four five cough for days.');
+  check(
+    within.qualifier === 'negated',
+    `negator exactly 6 words before the match is within the window (got qualifier=${within && within.qualifier})`
+  );
+  // One word further back (7 words) -> outside the window -> not demoted.
+  const outside = M.ruleMatchEvidence(c, 'no one two three four five six cough for days.');
+  check(
+    outside.qualifier === null,
+    `negator 7 words before the match is OUTSIDE the 6-word window (got qualifier=${outside && outside.qualifier})`
+  );
+}
+
+console.log('--- qualifier: every listed negator triggers ---');
+{
+  const c = M.compileRule(rule({ patterns: ['fever'] }));
+  const cases = {
+    no: 'no fever reported',
+    not: 'patient is not fever today',
+    denies: 'denies fever this week',
+    denied: 'denied fever on review',
+    denying: 'denying any fever now',
+    without: 'without fever since Monday',
+    never: 'never had a fever',
+    nil: 'nil fever on examination',
+  };
+  for (const [term, text] of Object.entries(cases)) {
+    const ev = M.ruleMatchEvidence(c, text);
+    check(ev !== null, `"${text}" still matches (never suppressed)`);
+    check(
+      ev.qualifier === 'negated' && ev.qualifierTerm === term,
+      `negator "${term}" triggers negated demotion (got qualifier=${ev && ev.qualifier}, term=${ev && ev.qualifierTerm})`
+    );
+  }
+}
+
+console.log('--- qualifier: past-tense phrases anywhere in the sentence ---');
+{
+  const c = M.compileRule(rule({ patterns: ['UTI'] }));
+  const cases = {
+    'last year': 'Patient had a UTI last year.',
+    'last month': 'UTI treated last month with antibiotics.',
+    'years ago': 'UTI diagnosed years ago, none since.',
+    'months ago': 'Had a UTI months ago.',
+    'weeks ago': 'UTI resolved weeks ago.',
+    previously: 'Previously had a UTI, now asymptomatic.',
+    'in the past': 'UTI in the past, not currently.',
+    'history of': 'History of UTI noted.',
+    previous: 'Previous UTI, fully treated.',
+  };
+  for (const [phrase, text] of Object.entries(cases)) {
+    const ev = M.ruleMatchEvidence(c, text);
+    check(ev !== null, `"${text}" still matches (never suppressed)`);
+    check(
+      ev.qualifier === 'past' && ev.qualifierTerm === phrase,
+      `past marker "${phrase}" triggers past demotion (got qualifier=${ev && ev.qualifier}, term=${ev && ev.qualifierTerm})`
+    );
+  }
+}
+
+console.log('--- qualifier: negated wins when both negation and a past marker are present ---');
+{
+  const c = M.compileRule(rule({ regex: true, patterns: ['chest pain'] }));
+  const ev = M.ruleMatchEvidence(c, 'Patient had no chest pain last year.');
+  check(ev !== null, 'still matches');
+  check(
+    ev.qualifier === 'negated',
+    `negation wins over a co-present past marker (got qualifier=${ev && ev.qualifier})`
+  );
+  check(ev.qualifierTerm === 'no', `qualifierTerm is the negator, "no" (got "${ev && ev.qualifierTerm}")`);
+}
+
+console.log('--- qualifier: a later, un-negated mention of the same rule is preferred ---');
+{
+  // The FIRST match ("chest pain" inside "no chest pain") is negated. A much
+  // later, un-negated restatement of the same pattern exists in the same
+  // request (the negator is well outside the later mention's 6-word window).
+  // ruleMatchEvidence must prefer the stronger (unqualified) evidence.
+  const c = M.compileRule(rule({ regex: true, patterns: ['chest pain'] }));
+  const text =
+    'no chest pain reported at initial triage assessment earlier this morning ' +
+    'but patient now describes chest pain radiating to the left arm.';
+  const firstIdx = text.indexOf('chest pain');
+  const secondIdx = text.indexOf('chest pain', firstIdx + 1);
+  check(secondIdx > firstIdx, 'test text actually contains two distinct mentions of the pattern');
+
+  const ev = M.ruleMatchEvidence(c, text);
+  check(ev !== null, 'evidence found');
+  check(
+    ev.start === secondIdx,
+    `evidence points at the SECOND (later, unqualified) mention, not the first negated one (expected start ${secondIdx}, got ${ev && ev.start})`
+  );
+  check(
+    ev.qualifier === null,
+    `the returned evidence is unqualified — the stronger (live) mention wins (got qualifier=${ev && ev.qualifier})`
+  );
+
+  // Sanity check: if we instead pin the FIRST occurrence directly, it IS
+  // negated — proving the override actually did something (not a vacuous
+  // pass because the first mention was never negated to begin with).
+  const evFirstOnly = M.ruleMatchEvidence(c, text.slice(0, firstIdx + 'chest pain'.length) + '.');
+  check(
+    evFirstOnly.qualifier === 'negated',
+    `sanity: text truncated to only the first mention IS negated (got qualifier=${evFirstOnly && evFirstOnly.qualifier})`
+  );
+}
+
+console.log('--- qualifier: whole-word discipline ("notable"/"nothing" must not trigger) ---');
+{
+  const c = M.compileRule(rule({ patterns: ['cough'] }));
+
+  const ev1 = M.ruleMatchEvidence(c, 'Patient has notable swelling and cough for days.');
+  check(ev1 !== null, 'matches');
+  check(
+    ev1.qualifier === null,
+    `"notable" (contains "not" as a substring, not a whole word) must not trigger negation (got qualifier=${ev1 && ev1.qualifier})`
+  );
+
+  const ev2 = M.ruleMatchEvidence(c, 'Nothing else to add, patient reports cough for days.');
+  check(ev2 !== null, 'matches');
+  check(
+    ev2.qualifier === null,
+    `"Nothing" (contains "no" as a substring, not a whole word) must not trigger negation (got qualifier=${ev2 && ev2.qualifier})`
+  );
+}
+
+// ── 9. NEGATORS/PAST_MARKERS exported as consts (clinical review doc) ─────
+console.log('--- NEGATORS/PAST_MARKERS exported ---');
+{
+  check(
+    Array.isArray(M.NEGATORS) && M.NEGATORS.length === 8,
+    `NEGATORS exported, 8 entries (got ${M.NEGATORS && M.NEGATORS.length})`
+  );
+  check(
+    Array.isArray(M.PAST_MARKERS) && M.PAST_MARKERS.length === 9,
+    `PAST_MARKERS exported, 9 entries (got ${M.PAST_MARKERS && M.PAST_MARKERS.length})`
   );
 }
 

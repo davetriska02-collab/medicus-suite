@@ -139,6 +139,19 @@
   color: var(--text-4);
   border-color: var(--border-hi);
 }
+/* Negation/past-tense demotion (item 3.4, TRIAGE-LENS-2026-07-02.md) —
+   DISPLAY-ONLY: a demoted rule-match chip is NEVER hidden, only shown as an
+   outline/dimmed variant of its OWN kind colour (never flattened to a
+   neutral grey — the severity must still read at a glance; only the
+   confidence is de-emphasised). Declared after .ch-chip-red/amber/info/meta
+   above so its `background: transparent` wins the same-specificity cascade
+   regardless of which kind class it's paired with (e.g.
+   `ch-chip ch-chip-red ch-chip-demoted`). */
+.ch-chip-demoted {
+  background: transparent;
+  opacity: 0.72;
+  border-style: dashed;
+}
 /* "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — shown when one or
    more result rules were SKIPPED because the reported unit conflicts with the
    rule's expected unit (engine/result-severity.js unitsCompatible). Never a
@@ -1050,6 +1063,16 @@
   font-style: italic;
   color: var(--text-5);
 }
+/* Item 3.4 — "negation detected: '…'" / "past-reference detected: '…'" line,
+   appended below the highlighted evidence sentence when the match was
+   demoted. Same italic/muted treatment as the "no matching text" empty
+   state above — clearly annotation, not clinical content. */
+.ch-rule-menu-evidence-qualifier {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-4);
+}
 .ch-rule-menu-list {
   max-height: 260px;
   overflow-y: auto;
@@ -1076,6 +1099,18 @@
 .ch-rule-menu-list-label {
   flex: 1;
   font-size: 12px;
+}
+/* Item 3.4 — small qualifier badge in the "+N" list view, sitting between the
+   kind badge and the label. Neutral/outline, not a severity colour — the
+   kind badge already carries severity; this only flags "demoted". */
+.ch-rule-menu-list-qualifier {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--border-hi);
+  color: var(--text-4);
+  white-space: nowrap;
 }
 
 /* ---- Result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md) ----

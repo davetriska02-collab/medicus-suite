@@ -2258,8 +2258,10 @@
   // and — when more than one rule matched — a list view to drill through
   // them. `rules` is the row's RANKED matched (compiled) rule array and
   // `previewText` the row's request text, both closure-captured by
-  // decorateOneRow at decoration time (evidence is computed lazily here, on
-  // menu open, per item 2.1 — decorateOneRow itself never calls this).
+  // decorateOneRow at decoration time. buildEvidenceEl below recomputes full
+  // evidence (term/context/qualifier) lazily, on menu open — decorateOneRow's
+  // own rankRuleMatches call (item 3.4) only computes the qualifier up front,
+  // to rank/label chips; it never builds the full evidence text.
   const buildEvidenceEl = (rule, previewText) => {
     const wrap = document.createElement('div');
     wrap.className = 'ch-rule-menu-evidence';
@@ -2294,6 +2296,16 @@
       p.appendChild(document.createTextNode(ev.context.slice(idx + ev.term.length)));
     }
     wrap.appendChild(p);
+    // Item 3.4 — surface WHY a match was demoted (never why it was hidden —
+    // it never is). ev.qualifierTerm is our own compiled negator/past-phrase
+    // list, not request text, so a plain textContent template literal is fine.
+    if (ev.qualifier) {
+      const q = document.createElement('p');
+      q.className = 'ch-rule-menu-evidence-qualifier ch-rule-menu-evidence-qualifier-' + ev.qualifier;
+      const qLabel = ev.qualifier === 'negated' ? 'negation detected' : 'past-reference detected';
+      q.textContent = `${qLabel}: "${ev.qualifierTerm}"`;
+      wrap.appendChild(q);
+    }
     return wrap;
   };
 
@@ -2343,7 +2355,8 @@
     activeActionMenu.innerHTML = '';
     activeActionMenu.setAttribute(
       'aria-label',
-      `${rule.label} — ${rule.kind} alert`
+      `${rule.label} — ${rule.kind} alert` +
+        (rule._qualifier ? `, ${RULE_QUALIFIER_ARIA[rule._qualifier]}` : '')
     );
     const head = document.createElement('div');
     head.className = 'ch-action-menu-head';
@@ -2391,6 +2404,16 @@
       label.className = 'ch-rule-menu-list-label';
       label.textContent = r.label;
       item.appendChild(badge);
+      // Item 3.4 — the qualifier badge is metadata computed by rankRuleMatches
+      // (r._qualifier); a rule reached via the top-chip/direct showRuleMatchMenu
+      // path (no rankRuleMatches pass) simply has no badge here — still fully
+      // shown, never suppressed.
+      if (r._qualifier) {
+        const qBadge = document.createElement('span');
+        qBadge.className = 'ch-rule-menu-list-qualifier ch-rule-menu-list-qualifier-' + r._qualifier;
+        qBadge.textContent = RULE_QUALIFIER_LABEL[r._qualifier];
+        item.appendChild(qBadge);
+      }
       item.appendChild(label);
       const activate = (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -5267,24 +5290,54 @@
     return { target, inPreview: !!previewRow };
   };
 
-  // ---- Rank & collapse multi-fire request-rule chips (item 2.5,
+  // ---- Rank & collapse multi-fire request-rule chips (item 2.5), extended
+  // with display-only negation/past-tense demotion (item 3.4,
   // TRIAGE-LENS-2026-07-02.md) ----
   // Sort matched rules red < amber < info (unknown/other kinds sort last,
-  // defensively, rather than throwing); ties keep their original matchRules
-  // order (stable — explicit index tiebreak rather than relying on engine
-  // sort stability). decorateOneRow below renders only rankRuleMatches(...)[0]
-  // as a chip, plus a "+N" overflow chip for the rest — a request that trips
-  // several rules used to render one chip per rule, crowding the row.
+  // defensively, rather than throwing); WITHIN a kind, an unqualified (live)
+  // match now ranks above a negated/past-tense one — "no chest pain" must
+  // never outrank a live "chest pain" of the same severity. Ties keep their
+  // original matchRules order (stable — explicit index tiebreak). This never
+  // hides a match: escalate-only — a demoted rule still renders (top chip or
+  // "+N" overflow), just ranked lower and shown distinctly.
+  //
+  // Evidence (and therefore the qualifier) is computed HERE, at decoration
+  // time, which runs on every queue refresh — so it stays cheap. A row
+  // typically matches 0-2 rules; on the rare row matching MORE than
+  // RULE_QUALIFIER_EVIDENCE_CAP, only the top rules BY KIND get evidence
+  // computed — the remainder are treated as unqualified for ranking purposes
+  // only (they still render fully in the "+N" overflow list, just without a
+  // negation/past badge).
   const RULE_KIND_RANK = { red: 0, amber: 1, green: 2, info: 3 };
-  const rankRuleMatches = (rules) =>
-    rules
-      .map((r, i) => ({ r, i }))
+  const RULE_QUALIFIER_EVIDENCE_CAP = 4;
+  const RULE_QUALIFIER_LABEL = { negated: 'negated?', past: 'past?' };
+  const RULE_QUALIFIER_ARIA = { negated: 'possible negation', past: 'possible past reference' };
+  const rankRuleMatches = (rules, previewText) => {
+    const withIndex = rules.map((r, i) => ({ r, i, qualifier: null, qualifierTerm: null }));
+    const kindOrder = (r) => RULE_KIND_RANK[r.kind] ?? 4;
+    const byKind = withIndex
+      .slice()
+      .sort((a, b) => (kindOrder(a.r) !== kindOrder(b.r) ? kindOrder(a.r) - kindOrder(b.r) : a.i - b.i));
+    const evidenceEligible = new Set(byKind.slice(0, RULE_QUALIFIER_EVIDENCE_CAP).map((x) => x.i));
+    const matcher = typeof window !== 'undefined' && window.TriageLensMatch;
+    if (matcher) {
+      withIndex.forEach((x) => {
+        if (!evidenceEligible.has(x.i)) return;
+        const ev = matcher.ruleMatchEvidence(x.r, previewText || '');
+        x.qualifier = ev ? ev.qualifier : null;
+        x.qualifierTerm = ev ? ev.qualifierTerm : null;
+      });
+    }
+    return withIndex
       .sort((a, b) => {
-        const ra = RULE_KIND_RANK[a.r.kind] ?? 4;
-        const rb = RULE_KIND_RANK[b.r.kind] ?? 4;
-        return ra !== rb ? ra - rb : a.i - b.i;
+        if (kindOrder(a.r) !== kindOrder(b.r)) return kindOrder(a.r) - kindOrder(b.r);
+        const qa = a.qualifier ? 1 : 0;
+        const qb = b.qualifier ? 1 : 0;
+        if (qa !== qb) return qa - qb; // unqualified before qualified, same kind
+        return a.i - b.i;
       })
-      .map((x) => x.r);
+      .map((x) => ({ ...x.r, _qualifier: x.qualifier, _qualifierTerm: x.qualifierTerm }));
+  };
 
   // Deliberately separate from renderChipHtml above (system chips — child/
   // elder/priority/task-age — are UNCHANGED by item 2.5) so only the
@@ -5297,9 +5350,13 @@
   // combined innerHTML without a re-parse. `chip.rqIdx` indexes into
   // decorateOneRow's per-row ruleMatchActivators array (wired up after the
   // element lands in the DOM) rather than encoding the handler in the markup.
+  // `chip.qualifier` (item 3.4) — when set, adds the outline/dimmed
+  // ".ch-chip-demoted" variant; the chip is otherwise built identically and
+  // is NEVER omitted for being qualified (display-only, escalate-only).
   const buildRuleMatchChipEl = (chip) => {
     const el = document.createElement('span');
-    el.className = `ch-chip ch-chip-${chip.kind} ch-chip-actionable ch-q-rule-chip`;
+    const demotedClass = chip.qualifier ? ' ch-chip-demoted' : '';
+    el.className = `ch-chip ch-chip-${chip.kind} ch-chip-actionable ch-q-rule-chip${demotedClass}`;
     el.setAttribute('data-rq-idx', String(chip.rqIdx));
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
@@ -5374,29 +5431,39 @@
     }
 
     // User rules — match against the request preview text. Rank matches by
-    // severity and collapse to a top chip + "+N" overflow chip (item 2.5)
-    // rather than one chip per matched rule. Both are clickable (item 2.3):
-    // the top chip opens straight to ITS rule's evidence+actions; "+N" opens
-    // the full ranked list, each entry drilling into its own evidence+actions
-    // the same way. ruleMatchActivators holds the per-chip click callbacks —
-    // populated here (closure-capturing rankedRules/previewText, already in
-    // hand) and consumed by the wiring pass below, by index (data-rq-idx),
-    // once the chip HTML has actually landed in the DOM.
+    // severity (then, item 3.4, live-before-negated/past within a severity)
+    // and collapse to a top chip + "+N" overflow chip (item 2.5) rather than
+    // one chip per matched rule. Both are clickable (item 2.3): the top chip
+    // opens straight to ITS rule's evidence+actions; "+N" opens the full
+    // ranked list, each entry drilling into its own evidence+actions the same
+    // way. ruleMatchActivators holds the per-chip click callbacks — populated
+    // here (closure-capturing rankedRules/previewText, already in hand) and
+    // consumed by the wiring pass below, by index (data-rq-idx), once the
+    // chip HTML has actually landed in the DOM.
     const ruleMatches = matchRules('queue', { request: previewText });
     const ruleMatchActivators = [];
     if (ruleMatches.length) {
-      const rankedRules = rankRuleMatches(ruleMatches);
+      const rankedRules = rankRuleMatches(ruleMatches, previewText);
       const topRule = rankedRules[0];
       const overflow = rankedRules.length - 1;
+      const topQualifier = topRule._qualifier || null;
+      // Item 3.4: a qualified top match is NEVER suppressed — it still
+      // renders as the top chip, just visually demoted (outline variant,
+      // buildRuleMatchChipEl) and suffixed so a GP can tell at a glance.
+      const topLabel = topQualifier
+        ? `${topRule.label} (${RULE_QUALIFIER_LABEL[topQualifier]})`
+        : topRule.label;
       const topIdx = ruleMatchActivators.push(
         (el) => showRuleMatchMenu(el, rankedRules, previewText, false)
       ) - 1;
       chips.push({
         kind: topRule.kind,
-        text: topRule.label,
+        text: topLabel,
         isRuleMatch: true,
+        qualifier: topQualifier,
         rqIdx: topIdx,
         ariaLabel: `${topRule.label} — ${topRule.kind} alert` +
+          (topQualifier ? `, ${RULE_QUALIFIER_ARIA[topQualifier]}` : '') +
           (overflow > 0 ? `, ${overflow} more rule${overflow === 1 ? '' : 's'} matched` : '')
       });
       if (overflow > 0) {
