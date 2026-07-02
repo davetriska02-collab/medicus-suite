@@ -21,22 +21,37 @@
 // injectQueueMonitoringChip, reinjectCachedMonitoringChips, plus their small
 // pure dependencies (renderChipHtml/escapeHtml, selectResultChips,
 // renderSystemChipHtmlMemo, TH/TH_DEFAULTS, parseDate/daysAgo/MONTHS/NOW,
-// QUEUE_DECORATED_KEY).
+// QUEUE_DECORATED_KEY). Item 1.3 added clearQueueRowTint/reapplyQueueRowTint.
+// Item 1.2 (TRIAGE-LENS-2026-07-02.md) added the queue triage status bar:
+// computeQueueTriageCounts, nextAlertRowIndex, getQueueTintedRowIndexes,
+// ensureQueueStatusBarEl, removeQueueStatusBar, applyQueueFocusClass,
+// renderQueueStatusBar, updateQueueStatusBar, onQueueStatusJumpClick,
+// onQueueStatusFocusClick, plus their small consts/module state
+// (QUEUE_STATUS_BAR_ID, QUEUE_STATUS_FLASH_CLASS, QUEUE_FOCUS_CLASS,
+// QUEUE_STATUS_TOOLTIP, the _queueStatus*/_queueFocusAlertsOn/
+// _queueStatusBarRafPending module `let`s).
 //
 // STUBBED (deliberately, not injection mechanics — already covered by other
 // test files): getSystemChip/matchRules (chip *content*/enable-state is
 // exercised via selectResultChips in test-result-triage-queue.js Layer 1 and
 // selectMonitoringDue in test-monitoring-chip.js Layer 2), showActionMenu
 // (only reachable via a click we never simulate), log (console noise).
+// requestAnimationFrame is stubbed to run its callback SYNCHRONOUSLY (real
+// content.js falls back to setTimeout(fn,0) when rAF is unavailable — this
+// harness instead makes updateQueueStatusBar's rAF-coalescing deterministic
+// for assertions rather than exercising the async fallback path itself,
+// which is a timing/perf concern out of scope for a DOM-injection harness).
 //
 // NOT COVERED HERE (documented, not faked):
 //   - computeQueueRowResult / computeQueueRowMonitoring / the fetch
 //     schedulers (scheduleQueueResultTriage / scheduleQueueMonitoring) —
 //     network + engine evaluation, out of scope for a DOM-injection
 //     harness; that pipeline's wiring is source-verified in
-//     test-result-triage-queue.js Layers 3/3b/3c.
+//     test-result-triage-queue.js Layers 3/3b/3c. The item 1.2 "call
+//     updateQueueStatusBar() from inside the worker loop after each cache
+//     write" wiring is likewise source-verified there, not re-driven here.
 //   - refreshQueueChips itself — it also owns the MutationObserver
-//     lifecycle (disconnect/observe/setupQueueObserver/removeQueueLegend),
+//     lifecycle (disconnect/observe/setupQueueObserver/removeQueueStatusBar),
 //     which needs a real MutationObserver to exercise meaningfully. Instead
 //     this harness replicates its DOM-relevant SEQUENCE directly (wipe chip
 //     nodes -> decorateQueueRows -> reinjectCachedResultChips ->
@@ -44,7 +59,11 @@
 //     makes) so the actual regression surface — "does re-inject restore the
 //     right chip on the right row after Vue wipes the DOM" — is exercised
 //     behaviourally, while the observer-rearming plumbing stays covered by
-//     the existing source-grep in test-result-triage-queue.js Layer 3.
+//     the existing source-grep in test-result-triage-queue.js Layer 3. The
+//     same applies to runQueue's status-bar reset/re-assert calls
+//     (_queueStatusJumpPos=null, applyQueueFocusClass()) and
+//     teardownQueueObserver's removeQueueStatusBar()/focus-class cleanup —
+//     source-verified, not re-driven behaviourally here.
 //   - getSystemChip/matchRules' real CONFIG-driven behaviour (custom
 //     labels, disabled chips) — stubbed here on purpose; see above.
 
@@ -106,6 +125,16 @@ class El {
       },
       remove: (...cs) => {
         self.classes = self.classes.filter((x) => !cs.includes(x));
+      },
+      // Real classList.toggle(token, force) — item 1.2's status bar/focus-mode
+      // code uses the 2-arg boolean-force form throughout (never the 1-arg
+      // flip form), so that's the only shape implemented here.
+      toggle: (c, force) => {
+        const has = self.classes.includes(c);
+        const want = force === undefined ? !has : !!force;
+        if (want && !has) self.classes.push(c);
+        else if (!want && has) self.classes = self.classes.filter((x) => x !== c);
+        return want;
       },
     };
   }
@@ -235,23 +264,36 @@ function findAll(root, sel) {
   return collectDescendants(root, []).filter((node) => matchesSelector(node, sel));
 }
 
+// `body` mirrors document.body: a stable wrapper the grid root is mounted
+// inside of, so status-bar code (item 1.2) that does
+// `document.body.appendChild(...)` / `document.getElementById(...)` has
+// somewhere real to land, exactly like the live page — the grid root is a
+// DESCENDANT of body, not a stand-in for it, so search scope only grows
+// (existing per-layer assertions against `rootEl`'s own subtree are
+// unaffected: body's subtree is a strict superset).
 function makeDocument(rootEl) {
+  const body = new El('body');
+  if (rootEl) body.appendChild(rootEl);
   return {
     __root: rootEl,
+    body,
     createElement(tag) {
       return new El(tag);
     },
     querySelector(sel) {
-      return findFirst(rootEl, sel);
+      return findFirst(body, sel);
     },
     querySelectorAll(sel) {
-      return findAll(rootEl, sel);
+      return findAll(body, sel);
+    },
+    getElementById(id) {
+      return collectDescendants(body, []).find((n) => n.id === id) || null;
     },
     contains(node) {
-      if (node === rootEl) return true;
+      if (node === rootEl || node === body) return true;
       let p = node && node.parent;
       while (p) {
-        if (p === rootEl) return true;
+        if (p === rootEl || p === body) return true;
         p = p.parent;
       }
       return false;
@@ -334,6 +376,31 @@ const parts = [
   extract(/const ROW_TINT_AMBER = .*;/, 'ROW_TINT_AMBER'),
   extract(/const clearQueueRowTint = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueRowTint'),
   extract(/const reapplyQueueRowTint = \(\) => \{[\s\S]*?\n {2}\};/, 'reapplyQueueRowTint'),
+  // Item 1.2 — queue triage status bar (docs/plans/TRIAGE-LENS-2026-07-02.md).
+  extract(
+    /const computeQueueTriageCounts = \(durableMap, cache, visibleRowIndexes, now\) => \{[\s\S]*?\n {2}\};/,
+    'computeQueueTriageCounts'
+  ),
+  extract(
+    /const nextAlertRowIndex = \(currentPos, redIndexes, amberIndexes\) => \{[\s\S]*?\n {2}\};/,
+    'nextAlertRowIndex'
+  ),
+  extract(/const getQueueTintedRowIndexes = \(\) => \{[\s\S]*?\n {2}\};/, 'getQueueTintedRowIndexes'),
+  extract(/const QUEUE_STATUS_BAR_ID = .*;/, 'QUEUE_STATUS_BAR_ID'),
+  extract(/const QUEUE_STATUS_FLASH_CLASS = .*;/, 'QUEUE_STATUS_FLASH_CLASS'),
+  extract(/const QUEUE_FOCUS_CLASS = .*;/, 'QUEUE_FOCUS_CLASS'),
+  extract(/const QUEUE_STATUS_TOOLTIP =[\s\S]*?;/, 'QUEUE_STATUS_TOOLTIP'),
+  extract(
+    /let _queueStatusJumpPos = null;[\s\S]*?let _queueStatusBarRafPending = false;/,
+    '_queueStatus* module state'
+  ),
+  extract(/const onQueueStatusJumpClick = \(\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusJumpClick'),
+  extract(/const onQueueStatusFocusClick = \(e\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusFocusClick'),
+  extract(/const ensureQueueStatusBarEl = \(\) => \{[\s\S]*?\n {2}\};/, 'ensureQueueStatusBarEl'),
+  extract(/const removeQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'removeQueueStatusBar'),
+  extract(/const applyQueueFocusClass = \(\) => \{[\s\S]*?\n {2}\};/, 'applyQueueFocusClass'),
+  extract(/const renderQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'renderQueueStatusBar'),
+  extract(/const updateQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'updateQueueStatusBar'),
 ];
 
 const EXPOSE = [
@@ -351,6 +418,16 @@ const EXPOSE = [
   'reinjectCachedMonitoringChips',
   'clearQueueRowTint',
   'reapplyQueueRowTint',
+  'computeQueueTriageCounts',
+  'nextAlertRowIndex',
+  'getQueueTintedRowIndexes',
+  'onQueueStatusJumpClick',
+  'onQueueStatusFocusClick',
+  'ensureQueueStatusBarEl',
+  'removeQueueStatusBar',
+  'applyQueueFocusClass',
+  'renderQueueStatusBar',
+  'updateQueueStatusBar',
 ];
 
 let sandbox = null;
@@ -395,6 +472,13 @@ if (!parts.some((p) => !p)) {
     _MON_CACHE_TTL: 5 * 60 * 1000,
     queueObservedContainer: null,
     document: null,
+    // Item 1.2's updateQueueStatusBar rAF-coalesces; real content.js falls back to
+    // setTimeout(fn,0) when rAF is unavailable, but for deterministic assertions
+    // this harness runs the callback synchronously instead (see file-header note).
+    requestAnimationFrame: (fn) => fn(),
+    // Only used by onQueueStatusJumpClick to remove the flash class after 2.6s —
+    // a fire-and-forget visual cleanup this harness has no reason to wait out.
+    setTimeout: () => {},
   };
   vm.createContext(sandbox);
   try {
@@ -409,6 +493,16 @@ if (!parts.some((p) => !p)) {
     );
     check(typeof sandbox.clearQueueRowTint === 'function', 'clearQueueRowTint compiled and callable');
     check(typeof sandbox.reapplyQueueRowTint === 'function', 'reapplyQueueRowTint compiled and callable');
+    check(typeof sandbox.computeQueueTriageCounts === 'function', 'computeQueueTriageCounts compiled and callable');
+    check(typeof sandbox.nextAlertRowIndex === 'function', 'nextAlertRowIndex compiled and callable');
+    check(typeof sandbox.getQueueTintedRowIndexes === 'function', 'getQueueTintedRowIndexes compiled and callable');
+    check(typeof sandbox.ensureQueueStatusBarEl === 'function', 'ensureQueueStatusBarEl compiled and callable');
+    check(typeof sandbox.removeQueueStatusBar === 'function', 'removeQueueStatusBar compiled and callable');
+    check(typeof sandbox.applyQueueFocusClass === 'function', 'applyQueueFocusClass compiled and callable');
+    check(typeof sandbox.renderQueueStatusBar === 'function', 'renderQueueStatusBar compiled and callable');
+    check(typeof sandbox.updateQueueStatusBar === 'function', 'updateQueueStatusBar compiled and callable');
+    check(typeof sandbox.onQueueStatusJumpClick === 'function', 'onQueueStatusJumpClick compiled and callable');
+    check(typeof sandbox.onQueueStatusFocusClick === 'function', 'onQueueStatusFocusClick compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -1010,7 +1104,7 @@ if (sandbox) {
     sandbox.reapplyQueueRowTint();
     check(
       !rowChurn.master.classes.includes('ch-row-sev-red'),
-      'recycled row-index: the OLD patient\'s red tint is gone'
+      "recycled row-index: the OLD patient's red tint is gone"
     );
     check(
       rowChurn.master.classes.includes('ch-row-sev-amber'),
@@ -1047,6 +1141,452 @@ if (sandbox) {
       'prefs.queueRowTint=false: reapplyQueueRowTint is a no-op even though a red-cached row exists'
     );
     sandbox.CONFIG = {}; // restore default for any tests that might run after this block
+  }
+
+  // ============================================================
+  // Layer 9 — computeQueueTriageCounts (item 1.2, TRIAGE-LENS-2026-07-02.md):
+  // pure counting function, all five buckets + TTL expiry moving an entry
+  // from a live bucket (error/red) into "checking", + taskUuid dedupe.
+  // ============================================================
+  console.log(
+    '\nLayer 9: computeQueueTriageCounts — five buckets, TTL expiry, dedupe-by-taskUuid, unmapped visible rows'
+  );
+
+  {
+    const NOW = 1750000000000; // fixed epoch — deterministic TTL-boundary maths
+    const durableMap = new Map([
+      [0, 'red1'],
+      [1, 'amber1'],
+      [2, 'clearNone'],
+      [3, 'clearNull'],
+      [4, 'errFresh'],
+      [5, 'errExpired'],
+      [6, 'neverFetched'],
+      [7, 'noEntry'],
+      [8, 'resultExpired'],
+      [9, 'red1'], // duplicate taskUuid of row 0 — must dedupe to nothing extra
+    ]);
+    const cache = new Map([
+      ['red1', { sev: redSev, ts: NOW }],
+      ['amber1', { sev: amberSev, ts: NOW }],
+      ['clearNone', { sev: noneSev, ts: NOW }],
+      ['clearNull', { sev: null, ts: NOW }], // definitive "nothing to check", not an error
+      ['errFresh', { sev: null, error: true, ts: NOW }],
+      // Older than _RESULT_ERROR_TTL (60s) but well inside _RESULT_CACHE_TTL —
+      // proves the error bucket uses its OWN short TTL, same as the tint code.
+      ['errExpired', { sev: null, error: true, ts: NOW - 90 * 1000 }],
+      ['neverFetched', {}], // entry exists, but sev was never set (undefined)
+      // 'noEntry' deliberately has NO cache entry at all.
+      // Older than _RESULT_CACHE_TTL (5min) — a real result that's gone stale.
+      ['resultExpired', { sev: redSev, ts: NOW - 6 * 60 * 1000 }],
+    ]);
+    // Row 10 is visible in the DOM but the bridge hasn't resolved its taskUuid
+    // yet (no durable-map entry) — must count as "checking", not be dropped.
+    const visible = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+    const counts = sandbox.computeQueueTriageCounts(durableMap, cache, visible, NOW);
+    check(counts.red === 1, `red bucket: fresh cached red result (got ${counts.red})`);
+    check(counts.amber === 1, `amber bucket: fresh cached amber result (got ${counts.amber})`);
+    check(counts.clear === 1, `clear bucket: ONLY a fresh level:'none' result counts (got ${counts.clear})`);
+    check(
+      counts.noResult === 1,
+      'noResult bucket: a fresh definitive sev:null non-error entry (nothing to grade) is NOT clear ' +
+        `and NOT checking — own non-rendered bucket (got ${counts.noResult})`
+    );
+    check(counts.error === 1, `couldn't-check bucket: only the FRESH error entry counts (got ${counts.error})`);
+    check(
+      counts.checking === 5,
+      'checking bucket: expired error (TTL moved error->checking) + never-fetched + no-cache-entry + ' +
+        `expired result + unmapped-visible-row, all five land here (got ${counts.checking})`
+    );
+    check(
+      counts.total === 10,
+      `total: 10 distinct rows counted — the duplicate-taskUuid row (9) contributes to NEITHER bucket NOR the ` +
+        `total once its taskUuid has already been seen (got ${counts.total})`
+    );
+
+    // ---- explicit "TTL expiry moves an entry from error -> checking" before/after ----
+    const errEntry = new Map([['e1', { sev: null, error: true, ts: NOW }]]);
+    const errMap = new Map([[0, 'e1']]);
+    const before = sandbox.computeQueueTriageCounts(errMap, errEntry, new Set([0]), NOW);
+    check(before.error === 1 && before.checking === 0, 'TTL boundary: a fresh error entry counts as "couldn\'t check"');
+    const after = sandbox.computeQueueTriageCounts(errMap, errEntry, new Set([0]), NOW + 61 * 1000);
+    check(
+      after.error === 0 && after.checking === 1,
+      'TTL boundary: the SAME entry, 61s later (past _RESULT_ERROR_TTL), moves to "checking" instead'
+    );
+
+    // ---- empty union: no known rows at all -> every bucket zero ----
+    const empty = sandbox.computeQueueTriageCounts(new Map(), new Map(), new Set(), NOW);
+    check(
+      empty.red === 0 &&
+        empty.amber === 0 &&
+        empty.clear === 0 &&
+        empty.error === 0 &&
+        empty.checking === 0 &&
+        empty.total === 0,
+      'empty union: no durable-map entries and no visible rows -> every bucket is zero'
+    );
+  }
+
+  // ============================================================
+  // Layer 10 — nextAlertRowIndex (item 1.2): pure jump-order logic — red
+  // priority, amber fallback, ascending cycling, wrap-around, both-empty.
+  // ============================================================
+  console.log('\nLayer 10: nextAlertRowIndex — red priority, amber fallback, ascending cycle, wrap, disabled case');
+
+  {
+    check(sandbox.nextAlertRowIndex(null, [], []) === null, 'both lists empty: returns null (caller disables button)');
+    check(
+      sandbox.nextAlertRowIndex(null, [3, 7, 9], []) === 3,
+      'no current position: jumps to the FIRST (lowest row-index) red'
+    );
+    check(sandbox.nextAlertRowIndex(3, [3, 7, 9], []) === 7, 'cycles ascending: from 3 to the next red, 7');
+    check(sandbox.nextAlertRowIndex(9, [3, 7, 9], []) === 3, 'wraps around: from the LAST red back to the first');
+    check(
+      sandbox.nextAlertRowIndex(100, [3, 7, 9], []) === 3,
+      'current position past every red (stale/scrolled away): wraps to the first rather than returning null'
+    );
+    check(sandbox.nextAlertRowIndex(null, [], [2, 5]) === 2, 'zero reds: falls back to the first amber');
+    check(sandbox.nextAlertRowIndex(2, [], [2, 5]) === 5, 'zero reds: amber list cycles the same way reds do');
+    check(
+      sandbox.nextAlertRowIndex(0, [4], [1, 2, 3]) === 4,
+      'ANY reds present, even just one, take priority over ambers — never mixes the two lists'
+    );
+  }
+
+  // ============================================================
+  // Layer 11 — queue status bar: create-once/mutate-in-place, de-dupe,
+  // omitted-zero-segments text, "still checking" indicator, PREF gate,
+  // tooltip carries the honesty line, rAF-coalesced updateQueueStatusBar.
+  // ============================================================
+  console.log('\nLayer 11: queue status bar — render, de-dupe, update-in-place, omitted segments, PREF gate');
+
+  {
+    freshCaches();
+    const rowIdRed = 'b0000000-0000-4000-8000-000000000001';
+    const { master, detail } = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRed, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+    sandbox._durableRowMap.set(0, rowIdRed);
+    sandbox._queueResultCache.set(rowIdRed, { sev: redSev, ts: Date.now() });
+
+    sandbox.renderQueueStatusBar();
+    const bar1 = sandbox.document.getElementById('ch-q-status-bar');
+    check(!!bar1, 'renderQueueStatusBar: bar element created and appended');
+    check(bar1 && bar1.classes.includes('ch-q-status'), 'bar carries the ch-q-status class');
+    check(bar1 && bar1.attrs.role === 'status', 'bar has role="status"');
+    check(bar1 && bar1.attrs['aria-live'] === 'off', 'bar has aria-live="off" (counts change too often for "polite")');
+    check(
+      bar1 && /not been assessed as normal/.test(bar1.title || ''),
+      "bar tooltip carries the old legend's honesty line"
+    );
+    const countsEl1 = bar1 && bar1.querySelector('.ch-q-status-counts');
+    check(
+      countsEl1 && countsEl1.textContent === '1 red · 0 amber',
+      `bar text with only a red present, zero everything else: "1 red · 0 amber", zero segments omitted (got: ${countsEl1 && countsEl1.textContent})`
+    );
+    check(
+      !bar1.classes.includes('ch-q-status--checking'),
+      'no checking rows: the "still working" indicator class is absent'
+    );
+
+    sandbox.renderQueueStatusBar();
+    const bar2 = sandbox.document.getElementById('ch-q-status-bar');
+    check(bar2 === bar1, 'de-dupe: calling renderQueueStatusBar again does not create a second bar node');
+    check(
+      sandbox.document.querySelectorAll('.ch-q-status').length === 1,
+      'de-dupe: exactly one .ch-q-status element exists in the document'
+    );
+
+    // ---- update-in-place: same node reference, text mutates to reflect a new picture ----
+    const rowIdAmber = 'b0000000-0000-4000-8000-000000000002';
+    const rowAmber = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmber, dob: '01 Jan 1980 (46y)' });
+    gridRoot.appendChild(rowAmber.master);
+    gridRoot.appendChild(rowAmber.detail);
+    sandbox._durableRowMap.set(1, rowIdAmber);
+    sandbox._queueResultCache.set(rowIdAmber, { sev: null, error: true, ts: Date.now() }); // "couldn't check"
+    sandbox.renderQueueStatusBar();
+    const bar3 = sandbox.document.getElementById('ch-q-status-bar');
+    check(bar3 === bar1, 'update-in-place: still the SAME node reference after the underlying counts changed');
+    const countsEl3 = bar3.querySelector('.ch-q-status-counts');
+    check(
+      countsEl3.textContent === '1 red · 0 amber · 1 ?',
+      `bar text updates in place to include the new "?" segment, clear stays omitted (got: ${countsEl3.textContent})`
+    );
+
+    // ---- "still checking" — a known row with no live cache entry ----
+    const rowIdChecking = 'b0000000-0000-4000-8000-000000000003';
+    const rowChecking = buildPreviewRowPair({ rowIndex: 2, rowId: rowIdChecking, dob: '01 Jan 1980 (46y)' });
+    gridRoot.appendChild(rowChecking.master);
+    gridRoot.appendChild(rowChecking.detail);
+    sandbox._durableRowMap.set(2, rowIdChecking); // no cache entry at all yet
+    sandbox.renderQueueStatusBar();
+    const bar4 = sandbox.document.getElementById('ch-q-status-bar');
+    const countsEl4 = bar4.querySelector('.ch-q-status-counts');
+    check(
+      countsEl4.textContent === '1 red · 0 amber · 1 ? · checking 1…',
+      `"checking" segment appended last, with the ellipsis (got: ${countsEl4.textContent})`
+    );
+    check(
+      bar4.classes.includes('ch-q-status--checking'),
+      'checking > 0: the "still working" indicator class is present'
+    );
+
+    // ---- PREF gate: prefs.queueStatusBar=false removes the bar ----
+    sandbox.CONFIG = { prefs: { queueStatusBar: false } };
+    sandbox.renderQueueStatusBar();
+    check(
+      sandbox.document.getElementById('ch-q-status-bar') === null,
+      'prefs.queueStatusBar=false: renderQueueStatusBar removes any existing bar and renders nothing'
+    );
+    sandbox.CONFIG = {};
+
+    // ---- updateQueueStatusBar: rAF-coalesced — N calls in one frame render ONCE ----
+    freshCaches();
+    const rowIdCoalesce = 'b0000000-0000-4000-8000-000000000004';
+    const rowCoalesce = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdCoalesce, dob: '01 Jan 1980 (46y)' });
+    const gridRootC = new El('div', {});
+    gridRootC.appendChild(rowCoalesce.master);
+    gridRootC.appendChild(rowCoalesce.detail);
+    sandbox.document = makeDocument(gridRootC);
+    sandbox.queueObservedContainer = gridRootC;
+    sandbox._durableRowMap.set(0, rowIdCoalesce);
+    sandbox._queueResultCache.set(rowIdCoalesce, { sev: redSev, ts: Date.now() });
+
+    let rafCalls = 0;
+    const queuedRaf = [];
+    sandbox.requestAnimationFrame = (fn) => {
+      rafCalls++;
+      queuedRaf.push(fn);
+    };
+    sandbox.updateQueueStatusBar();
+    sandbox.updateQueueStatusBar();
+    sandbox.updateQueueStatusBar();
+    check(
+      rafCalls === 1,
+      `three updateQueueStatusBar() calls before a frame runs schedule only ONE rAF (got ${rafCalls})`
+    );
+    check(
+      sandbox.document.getElementById('ch-q-status-bar') === null,
+      'nothing rendered yet — the coalesced render is still pending the (stubbed) animation frame'
+    );
+    queuedRaf.forEach((fn) => fn());
+    check(
+      !!sandbox.document.getElementById('ch-q-status-bar'),
+      'once the frame runs, the coalesced render has happened'
+    );
+    sandbox.updateQueueStatusBar();
+    check(
+      rafCalls === 2,
+      'after the pending flag is cleared, a further call schedules a new rAF (not swallowed forever)'
+    );
+    queuedRaf.pop()();
+    sandbox.requestAnimationFrame = (fn) => fn(); // restore the synchronous stub for later layers
+  }
+
+  // ============================================================
+  // Layer 12 — focus-alerts toggle (item 1.2): class on document.body (the
+  // stable element, per applyQueueFocusClass's own reasoning), button
+  // ARIA/visual state, OFF by default, and the class-composition proof that
+  // the dim CSS rule excludes tinted rows (including preview rows).
+  // ============================================================
+  console.log('\nLayer 12: focus-alerts toggle — body class, button ARIA state, OFF by default, tint-class exclusion');
+
+  {
+    freshCaches();
+    const rowIdRed = 'c0000000-0000-4000-8000-000000000001';
+    const rowIdCalm = 'c0000000-0000-4000-8000-000000000002';
+    const rowRed = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRed, dob: '01 Jan 1980 (46y)' });
+    const rowCalm = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdCalm, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    [rowRed, rowCalm].forEach(({ master, detail }) => {
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+    sandbox._durableRowMap.set(0, rowIdRed);
+    sandbox._queueResultCache.set(rowIdRed, { sev: redSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint(); // rowRed (+ its preview row) now carries ch-row-sev-red; rowCalm carries neither
+
+    sandbox.renderQueueStatusBar();
+    const bar = sandbox.document.getElementById('ch-q-status-bar');
+    const focusBtn = bar.querySelector('.ch-q-status-focus');
+    check(!!focusBtn, 'status bar has a focus-alerts button');
+    check(focusBtn.attrs['aria-pressed'] === 'false', 'focus-alerts starts OFF (aria-pressed=false) by default');
+    check(
+      !sandbox.document.body.classes.includes('ch-q-focus-alerts'),
+      'OFF by default: document.body does not carry the focus class yet'
+    );
+
+    sandbox.onQueueStatusFocusClick({ currentTarget: focusBtn });
+    check(
+      sandbox.document.body.classes.includes('ch-q-focus-alerts'),
+      'clicking focus-alerts adds the class to document.body — the stable element, not the (re-buildable) grid container'
+    );
+    check(focusBtn.attrs['aria-pressed'] === 'true', 'button aria-pressed flips to true');
+    check(focusBtn.classes.includes('ch-q-status-btn-active'), 'button gets the active visual class');
+
+    // ---- class-composition proof for the dim CSS rule ----
+    // `.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber)` —
+    // assert the class SETS the rule keys off, not computed opacity (per task).
+    check(
+      rowCalm.master.classes.includes('ag-row') &&
+        !rowCalm.master.classes.includes('ch-row-sev-red') &&
+        !rowCalm.master.classes.includes('ch-row-sev-amber'),
+      'untinted row: carries neither tint class, so the :not()/:not() dim selector MATCHES it (would be dimmed)'
+    );
+    check(
+      rowRed.master.classes.includes('ch-row-sev-red'),
+      'red-tinted master row: carries ch-row-sev-red, so :not(.ch-row-sev-red) EXCLUDES it (would NOT be dimmed)'
+    );
+    check(
+      rowRed.detail.classes.includes('ch-row-sev-red'),
+      "red-tinted row's own preview/detail row ALSO carries ch-row-sev-red (item 1.3's own tint application) — " +
+        'so it is excluded from dimming too, satisfying "a preview row of a red/amber master must NOT be dimmed" ' +
+        'with no extra selector needed'
+    );
+
+    sandbox.onQueueStatusFocusClick({ currentTarget: focusBtn });
+    check(
+      !sandbox.document.body.classes.includes('ch-q-focus-alerts'),
+      'clicking again removes the class from document.body'
+    );
+    check(focusBtn.attrs['aria-pressed'] === 'false', 'button aria-pressed flips back to false');
+    check(!focusBtn.classes.includes('ch-q-status-btn-active'), 'button loses the active visual class');
+
+    // A brand-new bar element (bar torn down + recreated across a queue re-visit)
+    // must reflect the CURRENT toggle state on its own fresh button, not always
+    // default to OFF — renderQueueStatusBar syncs this every render.
+    sandbox.onQueueStatusFocusClick({ currentTarget: focusBtn }); // toggle back ON
+    sandbox.removeQueueStatusBar();
+    sandbox.renderQueueStatusBar();
+    const bar2 = sandbox.document.getElementById('ch-q-status-bar');
+    const focusBtn2 = bar2.querySelector('.ch-q-status-focus');
+    check(
+      focusBtn2.attrs['aria-pressed'] === 'true',
+      'a freshly (re)created bar syncs its focus button to the still-ON session-local toggle state'
+    );
+    sandbox.onQueueStatusFocusClick({ currentTarget: focusBtn2 }); // leave state OFF for later layers
+  }
+
+  // ============================================================
+  // Layer 13 — jump-to-next-alert button (item 1.2): scrollIntoView + flash
+  // on the right row (and its preview row), ascending cycle order, wrap,
+  // jump-cycle reset when the aggregate red/amber picture materially changes,
+  // disabled/label state.
+  // ============================================================
+  console.log(
+    '\nLayer 13: jump-to-next-alert — scrollIntoView + flash, ascending cycle, wrap, reset-on-material-change'
+  );
+
+  {
+    freshCaches();
+    const rowIdRedA = 'd0000000-0000-4000-8000-000000000001'; // row-index 0
+    const rowIdAmber = 'd0000000-0000-4000-8000-000000000002'; // row-index 1
+    const rowIdRedB = 'd0000000-0000-4000-8000-000000000003'; // row-index 2
+    const rowRedA = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedA, dob: '01 Jan 1980 (46y)' });
+    const rowAmber = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmber, dob: '01 Jan 1980 (46y)' });
+    const rowRedB = buildPreviewRowPair({ rowIndex: 2, rowId: rowIdRedB, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    [rowRedA, rowAmber, rowRedB].forEach(({ master, detail }) => {
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+    sandbox._durableRowMap.set(0, rowIdRedA);
+    sandbox._durableRowMap.set(1, rowIdAmber);
+    sandbox._durableRowMap.set(2, rowIdRedB);
+    sandbox._queueResultCache.set(rowIdRedA, { sev: redSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdAmber, { sev: amberSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdRedB, { sev: redSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+
+    const scrollCalls = { a: [], b: [] };
+    rowRedA.master.scrollIntoView = (opts) => scrollCalls.a.push(opts);
+    rowRedB.master.scrollIntoView = (opts) => scrollCalls.b.push(opts);
+
+    sandbox.renderQueueStatusBar();
+    const jumpBtn = sandbox.document.getElementById('ch-q-status-bar').querySelector('.ch-q-status-jump');
+    check(!jumpBtn.disabled, 'reds present: jump button is enabled');
+    check(
+      jumpBtn.textContent === '▶ red',
+      'reds present (even alongside an amber): button reads "▶ red", never mixes lists'
+    );
+
+    sandbox.onQueueStatusJumpClick();
+    check(scrollCalls.a.length === 1, 'first jump: scrollIntoView called on the first ascending red row (row 0)');
+    check(scrollCalls.a[0] && scrollCalls.a[0].block === 'center', 'scrollIntoView called with {block: "center"}');
+    check(rowRedA.master.classes.includes('ch-q-status-flash'), 'first jump: the jumped-to row gets the flash class');
+    check(
+      rowRedA.detail.classes.includes('ch-q-status-flash'),
+      "first jump: the row's own preview/detail row ALSO gets the flash class"
+    );
+
+    sandbox.onQueueStatusJumpClick();
+    check(scrollCalls.b.length === 1, 'second jump: cycles ascending to the NEXT red row (row 2), not back to row 0');
+    check(scrollCalls.a.length === 1, 'second jump: row 0 (already visited) is not scrolled to again');
+
+    sandbox.onQueueStatusJumpClick();
+    check(scrollCalls.a.length === 2, 'third jump: wraps back around to row 0 (ascending cycle, red-only list)');
+
+    // ---- reset-on-material-change: a new red row changes the aggregate picture ----
+    const rowIdRedC = 'd0000000-0000-4000-8000-000000000004';
+    const rowRedC = buildPreviewRowPair({ rowIndex: 3, rowId: rowIdRedC, dob: '01 Jan 1980 (46y)' });
+    gridRoot.appendChild(rowRedC.master);
+    gridRoot.appendChild(rowRedC.detail);
+    sandbox._durableRowMap.set(3, rowIdRedC);
+    sandbox._queueResultCache.set(rowIdRedC, { sev: redSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+    const scrollCallsC = [];
+    rowRedC.master.scrollIntoView = (opts) => scrollCallsC.push(opts);
+
+    // Without a render in between, the cycle would simply continue (row 0 was
+    // the last jump target -> next ascending red is row 2). Rendering first is
+    // what detects the red-count change (3 -> 4) and resets the cycle.
+    sandbox.renderQueueStatusBar();
+    sandbox.onQueueStatusJumpClick();
+    // Without the reset, the cycle would have simply continued from row 0
+    // (the last jump target) to the next ascending red, row 2 — incrementing
+    // scrollCalls.b instead. The reset lands back on row 0 (scrollCalls.a),
+    // proving the material-change detection fired, not a continued cycle.
+    check(
+      scrollCalls.a.length === 3 && scrollCalls.b.length === 1 && scrollCallsC.length === 0,
+      'reset-on-material-change: after the red count grew, the NEXT jump restarts from the first ascending red ' +
+        `(row 0 again — a:${scrollCalls.a.length}, b:${scrollCalls.b.length}, c:${scrollCallsC.length}), not a continued cycle`
+    );
+
+    // ---- zero alerts: button disabled, safe no-op click ----
+    freshCaches();
+    const rowIdCalm = 'd0000000-0000-4000-8000-000000000005';
+    const rowCalm = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdCalm, dob: '01 Jan 1980 (46y)' });
+    const gridRoot2 = new El('div', {});
+    gridRoot2.appendChild(rowCalm.master);
+    gridRoot2.appendChild(rowCalm.detail);
+    sandbox.document = makeDocument(gridRoot2);
+    sandbox.queueObservedContainer = gridRoot2;
+    sandbox._durableRowMap.set(0, rowIdCalm);
+    sandbox._queueResultCache.set(rowIdCalm, { sev: noneSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+    sandbox.renderQueueStatusBar();
+    const jumpBtn2 = sandbox.document.getElementById('ch-q-status-bar').querySelector('.ch-q-status-jump');
+    check(jumpBtn2.disabled, 'no red or amber rows: jump button is disabled');
+    let threw = false;
+    try {
+      sandbox.onQueueStatusJumpClick();
+    } catch (e) {
+      threw = true;
+    }
+    check(
+      !threw,
+      'clicking the (disabled, but content.js does not rely on the DOM disabled attribute alone) jump handler with nothing to jump to is a safe no-op'
+    );
+    check(!rowCalm.master.classes.includes('ch-q-status-flash'), 'no-op click: the calm row is never flashed');
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

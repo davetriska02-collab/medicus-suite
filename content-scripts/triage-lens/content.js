@@ -59,25 +59,50 @@
   font-style: normal;
 }
 
-/* ---- Queue result legend ---- */
-/* Injected once at the top of the Investigation Results queue. Deliberately     */
-/* quiet — informs without competing with the red/amber clinical chips.          */
-.ch-q-legend {
-  display: block;
+/* ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ---- */
+/* Replaces the old passive legend. This copy is effectively inert (the PiP    */
+/* window only ever renders the HUD panel, never the queue grid), kept only    */
+/* for parity with hud.css so nothing here ever renders as unstyled text if    */
+/* that ever changes. */
+.ch-q-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: #f1f5f9;
   color: #475569;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 4px 6px 4px 8px;
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.3;
-  max-width: 360px;
+  max-width: 420px;
   position: fixed;
   top: 56px;
   right: 16px;
   z-index: 99990;
-  pointer-events: none;
+}
+.ch-q-status-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.09);
+  border: 1px solid rgba(37, 99, 235, 0.3);
+}
+.ch-q-status-flash {
+  animation: ch-q-status-flash-pulse 1.3s ease-in-out 2;
+}
+@keyframes ch-q-status-flash-pulse {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3); }
+}
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+  opacity: 0.35;
 }
 
 /* ---- Queue row chips ---- */
@@ -3058,25 +3083,13 @@
     _oirRaf = false;
   };
 
-  // ---- Queue "absence is not a verdict" legend ----
-  // Injected once when on the Investigation Results queue; removed on navigation
-  // away.  Guard ID prevents duplicate insertion across SPA re-renders.
-  const _QUEUE_LEGEND_ID = 'ch-q-legend-note';
-
-  const injectQueueLegend = () => {
-    if (document.getElementById(_QUEUE_LEGEND_ID)) return;
-    const el = document.createElement('div');
-    el.id = _QUEUE_LEGEND_ID;
-    el.className = 'ch-q-legend';
-    el.textContent =
-      'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
-    document.body.appendChild(el);
-  };
-
-  const removeQueueLegend = () => {
-    const el = document.getElementById(_QUEUE_LEGEND_ID);
-    if (el) el.remove();
-  };
+  // ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Replaces the old passive "absence is not a verdict" legend with a live,
+  // interactive strip: recomputed counts, jump-to-next-alert, and a focus
+  // toggle. Implementation (computeQueueTriageCounts / nextAlertRowIndex /
+  // updateQueueStatusBar / applyQueueFocusClass) lives further down, grouped
+  // with the severity row tint code (item 1.3) it reads from — see
+  // "Queue triage status bar" below.
 
   const runQueue = () => {
     teardownQueueObserver();
@@ -3096,7 +3109,15 @@
     for (const [uuid, entry] of _queueResultCache) {
       if (entry.ts && entry.ts < resultPruneTs) _queueResultCache.delete(uuid);
     }
-    injectQueueLegend();
+    // Queue re-entry resets the jump cycle (item 1.2) — a "last jumped-to row"
+    // from a previous queue visit has no meaning against a fresh row set.
+    _queueStatusJumpPos = null;
+    _queueStatusLastRed = 0;
+    _queueStatusLastAmber = 0;
+    // Re-assert the session-local focus-alerts toggle (module state, survives
+    // navigation) onto this fresh queue visit.
+    applyQueueFocusClass();
+    updateQueueStatusBar();
     decorateQueueRows();
     setupQueueObserver();
     scheduleQueueMonitoring();
@@ -3891,6 +3912,299 @@
     if (n) log('queue-result: tinted ' + n + ' row(s) from durable map (visible rows)');
   };
 
+  // ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ----
+  // Replaces the old passive "absence is not a verdict" legend with a live,
+  // recomputed status strip: "N red · N amber · N clear · N ? · checking N…",
+  // a jump-to-next-alert button, and a focus toggle that dims non-alert rows.
+  // Counting reuses the exact same durable-map/cache lookup as the tint code
+  // above, so the bar and the row colours can never disagree.
+
+  // Pure — counts the rows the lens knows about (union of the durable
+  // rowIndex->taskUuid map and whatever rows are currently visible in the
+  // virtualised grid, deduped by taskUuid where one is known) into five
+  // triage buckets. Exported for tests.
+  //   - red / amber: a fresh (within _RESULT_CACHE_TTL) cached result at that level.
+  //   - clear: a fresh cached level:'none' result — an actual report was
+  //     assessed and nothing flagged. ONLY that.
+  //   - noResult: a fresh definitive sev===null non-error entry (a task with
+  //     nothing to check — no matching investigation report, e.g. admin/med
+  //     request rows). Checked-but-not-gradeable is neither clear nor
+  //     checking, so it gets its own bucket and is NOT rendered as a bar
+  //     segment (item 1.1's honesty rule: never imply "assessed normal").
+  //   - couldn't check: a fresh (within _RESULT_ERROR_TTL) error entry.
+  //   - checking: a row we know about but have no LIVE cache entry for —
+  //     never fetched yet, mid-fetch, or the entry (result or error) has aged
+  //     past its own TTL. A visible row with no durable-map entry at all
+  //     (bridge hasn't resolved its taskUuid yet) also counts here — there is
+  //     no taskUuid to look up a cache entry by, so "still checking" is the
+  //     only honest bucket for it.
+  const computeQueueTriageCounts = (durableMap, cache, visibleRowIndexes, now) => {
+    const counts = { red: 0, amber: 0, clear: 0, error: 0, checking: 0, noResult: 0, total: 0 };
+    const visible = visibleRowIndexes instanceof Set ? visibleRowIndexes : new Set(visibleRowIndexes || []);
+    const rowIndexes = new Set(visible);
+    if (durableMap && typeof durableMap.keys === 'function') {
+      for (const ri of durableMap.keys()) rowIndexes.add(ri);
+    }
+    const seenUuids = new Set();
+    for (const rowIndex of rowIndexes) {
+      const taskUuid = durableMap && typeof durableMap.get === 'function' ? durableMap.get(rowIndex) : undefined;
+      if (!taskUuid) {
+        // Visible but not yet mapped to a taskUuid — nothing to look up, still checking.
+        counts.total++;
+        counts.checking++;
+        continue;
+      }
+      if (seenUuids.has(taskUuid)) continue; // dedupe by taskUuid where known
+      seenUuids.add(taskUuid);
+      counts.total++;
+      const entry = cache && typeof cache.get === 'function' ? cache.get(taskUuid) : undefined;
+      if (!entry || entry.sev === undefined) {
+        counts.checking++;
+        continue;
+      }
+      const ttl = entry.error ? _RESULT_ERROR_TTL : _RESULT_CACHE_TTL;
+      const fresh = !!entry.ts && now - entry.ts <= ttl;
+      if (!fresh) {
+        counts.checking++;
+        continue;
+      }
+      if (entry.error) {
+        counts.error++;
+      } else if (entry.sev === null) {
+        // Checked, but there was no gradeable investigation report on this task
+        // (admin/med-request rows, no matching report). NOT 'clear' — 'clear'
+        // must mean assessed-normal and nothing else (Phase 1 honesty rule).
+        // Counted separately and not rendered as a bar segment.
+        counts.noResult++;
+      } else if (entry.sev.level === 'red') {
+        counts.red++;
+      } else if (entry.sev.level === 'amber') {
+        counts.amber++;
+      } else {
+        counts.clear++; // assessed: level 'none'
+      }
+    }
+    return counts;
+  };
+
+  // Pure — where the "jump to next alert" button goes next. Reds take priority;
+  // falls back to ambers only when there are zero reds (never mixes the two
+  // lists — a GP cycling through reds should never land on an amber
+  // mid-sequence). currentPos is the last row-index jumped to (or null/absent
+  // from the list); wraps back to the start after the last one. Returns null
+  // when both lists are empty (caller disables the button in that case).
+  // Exported for tests.
+  const nextAlertRowIndex = (currentPos, redIndexes, amberIndexes) => {
+    const list = (redIndexes && redIndexes.length ? redIndexes : amberIndexes) || [];
+    if (!list.length) return null;
+    if (currentPos == null) return list[0];
+    const next = list.find((idx) => idx > currentPos);
+    return next !== undefined ? next : list[0]; // wrap around
+  };
+
+  // Impure — live-query which currently-rendered rows carry each tint class.
+  // AG-Grid virtualises, so this (deliberately, like every other queue-chip
+  // helper in this file) only ever sees on-screen rows; sorted ascending so
+  // nextAlertRowIndex's row-index-order cycling is well-defined.
+  const getQueueTintedRowIndexes = () => {
+    const red = [];
+    const amber = [];
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri == null) return;
+        const n = Number(ri);
+        if (row.classList.contains(ROW_TINT_RED)) red.push(n);
+        else if (row.classList.contains(ROW_TINT_AMBER)) amber.push(n);
+      });
+    red.sort((a, b) => a - b);
+    amber.sort((a, b) => a - b);
+    return { red, amber };
+  };
+
+  const QUEUE_STATUS_BAR_ID = 'ch-q-status-bar';
+  const QUEUE_STATUS_FLASH_CLASS = 'ch-q-status-flash';
+  const QUEUE_FOCUS_CLASS = 'ch-q-focus-alerts';
+  const QUEUE_STATUS_TOOLTIP =
+    'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
+
+  // Module state — session-local, deliberately NOT reset by refreshQueueChips
+  // (only by runQueue on a genuine queue re-entry, or the focus toggle itself).
+  let _queueStatusJumpPos = null; // last row-index jumped to, for the cycling order
+  let _queueStatusLastRed = 0; // last-rendered red/amber totals, to detect a
+  let _queueStatusLastAmber = 0; // "material" severity change that should reset the cycle
+  let _queueFocusAlertsOn = false; // OFF by default (plan item 1.2)
+  let _queueStatusBarRafPending = false;
+
+  const onQueueStatusJumpClick = () => {
+    const { red, amber } = getQueueTintedRowIndexes();
+    const target = nextAlertRowIndex(_queueStatusJumpPos, red, amber);
+    if (target == null) return;
+    const row = queueScope().querySelector('.ag-row[row-index="' + target + '"]:not(.ag-full-width-row)');
+    if (!row) return;
+    if (typeof row.scrollIntoView === 'function') {
+      try {
+        row.scrollIntoView({ block: 'center' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    const flashTargets = [row];
+    const previewRow = findQueuePreviewRow(row);
+    if (previewRow) flashTargets.push(previewRow);
+    flashTargets.forEach((r) => {
+      if (!r || !r.classList) return;
+      r.classList.add(QUEUE_STATUS_FLASH_CLASS);
+      setTimeout(() => r.classList.remove(QUEUE_STATUS_FLASH_CLASS), 2600);
+    });
+    _queueStatusJumpPos = target;
+  };
+
+  const onQueueStatusFocusClick = (e) => {
+    _queueFocusAlertsOn = !_queueFocusAlertsOn;
+    applyQueueFocusClass();
+    const btn = e && e.currentTarget;
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
+      if (btn.classList) btn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    }
+  };
+
+  // Create-once, mutate-in-place (no flicker, no duplicate insertion across
+  // SPA re-renders) — same pattern the old legend used, extended with the
+  // interactive controls. Appended to document.body (not the AG-Grid
+  // container), so it never triggers the queue MutationObserver itself.
+  const ensureQueueStatusBarEl = () => {
+    let el = document.getElementById(QUEUE_STATUS_BAR_ID);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = QUEUE_STATUS_BAR_ID;
+    el.className = 'ch-q-status';
+    el.setAttribute('role', 'status');
+    // aria-live deliberately 'off', not 'polite': counts can change multiple
+    // times a second while the fetch pass runs — a polite live region would
+    // spam a screen reader far faster than the numbers are meaningful.
+    el.setAttribute('aria-live', 'off');
+    el.setAttribute('aria-label', 'Triage Lens queue triage status');
+    el.title = QUEUE_STATUS_TOOLTIP;
+
+    const counts = document.createElement('span');
+    counts.className = 'ch-q-status-counts';
+    el.appendChild(counts);
+
+    const spinner = document.createElement('span');
+    spinner.className = 'ch-q-status-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    el.appendChild(spinner);
+
+    const jumpBtn = document.createElement('button');
+    jumpBtn.type = 'button';
+    jumpBtn.className = 'ch-q-status-btn ch-q-status-jump';
+    jumpBtn.addEventListener('click', onQueueStatusJumpClick);
+    el.appendChild(jumpBtn);
+
+    const focusBtn = document.createElement('button');
+    focusBtn.type = 'button';
+    focusBtn.className = 'ch-q-status-btn ch-q-status-focus';
+    focusBtn.setAttribute('aria-pressed', 'false');
+    focusBtn.textContent = 'Focus alerts';
+    focusBtn.addEventListener('click', onQueueStatusFocusClick);
+    el.appendChild(focusBtn);
+
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const removeQueueStatusBar = () => {
+    const el = document.getElementById(QUEUE_STATUS_BAR_ID);
+    if (el) el.remove();
+  };
+
+  // The nearest STABLE ancestor for the focus-dim class: queueObservedContainer
+  // is rebuilt whenever the SPA tears down and re-creates AG-Grid (setupQueueObserver),
+  // so a class placed there would silently vanish on that swap. document.body
+  // persists across every re-render, and the dim rule is scoped by the
+  // descendant selector (.ch-q-focus-alerts .ag-row:...) so putting the class on
+  // body is exactly as targeted as putting it on the grid container itself —
+  // it only ever affects `.ag-row` elements. teardownQueueObserver removes it
+  // when leaving the queue page so it can't bleed onto unrelated Medicus pages.
+  const applyQueueFocusClass = () => {
+    if (typeof document === 'undefined' || !document.body) return;
+    document.body.classList.toggle(QUEUE_FOCUS_CLASS, _queueFocusAlertsOn);
+  };
+
+  const renderQueueStatusBar = () => {
+    if (!PREF('queueStatusBar', true)) {
+      removeQueueStatusBar();
+      return;
+    }
+    const el = ensureQueueStatusBarEl();
+    const now = Date.now();
+    const visible = new Set();
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri != null) visible.add(Number(ri));
+      });
+    const counts = computeQueueTriageCounts(_durableRowMap, _queueResultCache, visible, now);
+
+    const parts = [counts.red + ' red', counts.amber + ' amber'];
+    if (counts.clear > 0) parts.push(counts.clear + ' clear');
+    if (counts.error > 0) parts.push(counts.error + ' ?');
+    let text = parts.join(' · ');
+    if (counts.checking > 0) text += (text ? ' · ' : '') + 'checking ' + counts.checking + '…';
+
+    const countsEl = el.querySelector('.ch-q-status-counts');
+    if (countsEl) countsEl.textContent = text;
+    el.classList.toggle('ch-q-status--checking', counts.checking > 0);
+
+    // "Material" change = the aggregate red/amber picture actually moved (a new
+    // alert appeared/resolved) — NOT virtualisation-driven scroll churn, which
+    // constantly changes which row-indexes are on-screen without changing what's
+    // wrong with the queue. Only the former should discard the jump cycle.
+    if (counts.red !== _queueStatusLastRed || counts.amber !== _queueStatusLastAmber) {
+      _queueStatusJumpPos = null;
+      _queueStatusLastRed = counts.red;
+      _queueStatusLastAmber = counts.amber;
+    }
+
+    const { red: redIdx, amber: amberIdx } = getQueueTintedRowIndexes();
+    const jumpBtn = el.querySelector('.ch-q-status-jump');
+    if (jumpBtn) {
+      const hasRed = redIdx.length > 0;
+      const hasAmber = amberIdx.length > 0;
+      jumpBtn.disabled = !hasRed && !hasAmber;
+      jumpBtn.textContent = hasRed ? '▶ red' : hasAmber ? '▶ amber' : '▶ red';
+    }
+
+    // Sync the focus button's visual/ARIA state from the session-local toggle on
+    // every render — covers the bar being torn down and recreated (leave/re-enter
+    // the queue) while `_queueFocusAlertsOn` stayed true, which the click handler
+    // alone would never re-apply to a brand-new button element.
+    const focusBtn = el.querySelector('.ch-q-status-focus');
+    if (focusBtn) {
+      focusBtn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
+      if (focusBtn.classList) focusBtn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    }
+  };
+
+  // rAF-coalesced wrapper: refreshQueueChips fires on every grid mutation and the
+  // result-triage worker calls this once per row it finishes fetching, so a queue
+  // with 40 rows tagging in a burst would otherwise trigger 40 full DOM updates a
+  // frame apart. Collapses any number of calls within one frame into a single
+  // render — CLAUDE.md-style "no flicker, cheap to call from a loop".
+  const updateQueueStatusBar = () => {
+    if (_queueStatusBarRafPending) return;
+    _queueStatusBarRafPending = true;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 0);
+    raf(() => {
+      _queueStatusBarRafPending = false;
+      renderQueueStatusBar();
+    });
+  };
+
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
   let _resultFetchCount = 0;
   let _resultFetchWindowTimer = null;
@@ -3973,6 +4287,12 @@
             e2.ts = (!isError && sev === null) ? Date.now() - _RESULT_CACHE_TTL + _RESULT_RETRY_MS : Date.now();
           }
           injectResultChip(rowIndex, isError ? null : sev, isError);
+          // Item 1.2: a row just moved out of "checking" (cache entry written
+          // above) — refresh the status bar so the "checking N…" count steps
+          // down live as the fetch pass progresses, not only once per grid
+          // mutation. rAF-coalesced internally, so calling it once per row in
+          // this loop is cheap (one paint per frame, not one per row).
+          updateQueueStatusBar();
           // Budget-aware inter-fetch delay (only on actual fetches, not cache hits):
           // ON-SCREEN rows get ZERO delay — the ~12 visible rows are well under the
           // 90/60s budget and the browser's ~6-connection-per-host ceiling, so firing
@@ -4175,7 +4495,13 @@
     if (queueObserver) { queueObserver.disconnect(); queueObserver = null; }
     queueObservedContainer = null;
     queueRafScheduled = false;
-    removeQueueLegend();
+    removeQueueStatusBar();
+    // Leaving the queue page: drop the focus-dim class so it never bleeds onto
+    // unrelated Medicus pages that also happen to render `.ag-row` elements.
+    // `_queueFocusAlertsOn` itself is untouched — session-local state — so the
+    // toggle is restored on the next queue visit via runQueue's
+    // applyQueueFocusClass() call.
+    if (typeof document !== 'undefined' && document.body) document.body.classList.remove(QUEUE_FOCUS_CLASS);
   };
 
   const refreshQueueChips = () => {
@@ -4200,6 +4526,13 @@
     // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
     // survive the runQueue churn that empties _queueRowUuids (CLAUDE.md rule #4).
     reinjectCachedMonitoringChips();
+    // Re-render the status bar AFTER the tint pass above so its jump-target query
+    // (tinted .ag-row elements) sees this cycle's freshly-applied classes, not the
+    // previous cycle's. Also re-assert the focus-dim class every cycle — cheap and
+    // idempotent (classList.add/remove no-op when already correct) — belt-and-braces
+    // in case anything upstream ever clears it.
+    updateQueueStatusBar();
+    applyQueueFocusClass();
     // Re-arm the SAME observer (cheap) after the self-write disconnect above, so we
     // don't leave it disconnected — only rebuild from scratch if the container is
     // actually gone (SPA tore down AG-Grid). Do NOT null out queueObservedContainer

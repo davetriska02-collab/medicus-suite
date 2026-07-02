@@ -16,7 +16,8 @@
 .ch-queue-chips,
 .ch-q-result,
 .ch-q-mon,
-.ch-q-legend,
+.ch-q-status,
+.ch-q-status-flash,
 .ch-oir-flag,
 .ch-oir-bulk,
 .ch-action-menu,
@@ -241,28 +242,117 @@
   max-width: 100%;
 }
 
-/* ---- Queue result legend ---- */
-/* Injected once at the top of the Investigation Results queue. Deliberately    */
-/* quiet — informs without competing with the red/amber clinical chips.        */
-/* Mirror of the EMBEDDED_CSS copy (content.js) used for the detached PiP      */
-/* window — this is the live-page copy, so it must be styled here too or it   */
-/* renders as unstyled browser-default text. */
-.ch-q-legend {
-  display: block;
+/* ---- Queue triage status bar (item 1.2, TRIAGE-LENS-2026-07-02.md) ---- */
+/* Replaces the old passive legend. Same quiet fixed-position slot, but now    */
+/* interactive: live counts + jump-to-alert + focus toggle. Mirror of the      */
+/* EMBEDDED_CSS copy (content.js) used for the detached PiP window — this is   */
+/* the live-page copy, so it must be styled here too or it renders as         */
+/* unstyled browser-default text/buttons. */
+.ch-q-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--bg-mid);
   color: var(--text-3);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 4px 8px;
+  padding: 4px 6px 4px 8px;
   font-size: 11px;
   font-family: var(--sans);
   line-height: 1.3;
-  max-width: 360px;
+  max-width: 420px;
   position: fixed;
   top: 56px;
   right: 16px;
   z-index: 99990;
-  pointer-events: none;
+  /* Unlike the old legend (pointer-events: none), this bar hosts real
+     buttons — do NOT set pointer-events: none here (CLAUDE.md wiring note:
+     the bar must not intercept grid clicks except its own controls, which
+     "not setting a blanket none" plus normal fixed-position sizing already
+     satisfies — it only covers its own small footprint). */
+}
+.ch-q-status-counts {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ch-q-status-spinner {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+/* Subtle "still working" indicator — only shown while checking > 0. */
+.ch-q-status--checking .ch-q-status-spinner {
+  display: inline-block;
+  animation: ch-q-status-pulse 1.1s ease-in-out infinite;
+}
+@keyframes ch-q-status-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.ch-q-status-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+.ch-q-status-btn:hover:not(:disabled) {
+  background: var(--accent-line);
+}
+.ch-q-status-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.ch-q-status-btn-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Jump-to-alert flash — pulses the row scrolled to (same visual language as
+   ch-oir-flash's review pulse), own class per CLAUDE.md rule 5. */
+.ch-q-status-flash {
+  animation: ch-q-status-flash-pulse 1.3s ease-in-out 2;
+}
+@keyframes ch-q-status-flash-pulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--accent-line);
+  }
+}
+
+/* ---- Focus alerts toggle (item 1.2) ---- */
+/* Toggled on document.body (the one element guaranteed to survive every
+   AG-Grid re-render — see applyQueueFocusClass in content.js), scoped to
+   `.ag-row` so it can never affect anything outside the grid. Dims rows that
+   carry NEITHER severity tint class — never display:none (AG-Grid
+   virtualises rows; hiding them would desync scroll math). Preview/detail
+   rows of a red/amber master already carry the same tint class (item 1.3
+   applies it to both), so they are excluded from dimming by the same
+   :not() clauses with no extra selector needed. */
+.ch-q-focus-alerts .ag-row:not(.ch-row-sev-red):not(.ch-row-sev-amber) {
+  opacity: 0.35;
 }
 
 /* ---- Outstanding Investigation Requests — verdict badges ---- */
