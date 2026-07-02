@@ -79,7 +79,9 @@
 /* eslint-disable */
 (function () {
   const PLACEHOLDER_UUID = 'deadbeef-dead-4eef-8eef-deadbeefdead';
-  const PLACEHOLDER_NHS = '000 000 0000';
+  // Deliberately FAILS the NHS Modulus-11 checksum (check digit should be 0)
+  // so the repo's patient-data guard never mistakes it for a real number.
+  const PLACEHOLDER_NHS = '000 000 0001';
   const PLACEHOLDER_DATE = '01 Jan 2026';
   const PLACEHOLDER_NAME = 'Placeholder Patient';
 
