@@ -25,6 +25,8 @@
 .ch-oir-toast,
 .ch-row-sev-red,
 .ch-row-sev-amber,
+.ch-kbd-cursor,
+.ch-row-seen,
 .ch-result-popover,
 .ch-detail-verdict {
   /* Surfaces */
@@ -177,6 +179,21 @@
   border-color: var(--amber-line);
   border-style: dashed;
 }
+/* "All-normal, fileable" marker (item 4.4, TRIAGE-LENS-2026-07-02.md) — a small
+   green tick, filled (not outline) like .ch-chip-green: unlike the meta/
+   unclassified chips above this is a positive, confident signal (the profile-
+   independent lab-filing gate cleared this report), not a "go look" caution.
+   Always injected INSIDE the existing .ch-q-result host (content.js
+   injectResultChip), which already sits in the hud.css token-block selector
+   list above — var(--green) here resolves via CSS inheritance, so this class
+   deliberately does NOT need its own entry in that list (CLAUDE.md rule 5 only
+   applies to a new TOP-LEVEL injected/marker host). */
+.ch-chip-fileable {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+  font-weight: 700;
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {
@@ -217,6 +234,31 @@
 }
 .ch-row-sev-amber {
   box-shadow: inset 3px 0 0 0 var(--amber);
+}
+
+/* ---- Keyboard-triage cursor (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
+   Marker CLASS added to Medicus's own `.ag-row` (and its preview/detail row)
+   by content.js's applyQueueKbdCursor — same "class on the host element, not
+   an injected node" pattern as the severity tint above, so it must be in the
+   token-block selector list (CLAUDE.md rule 5). Uses `outline`, deliberately
+   NOT `box-shadow` — the severity tint above already owns box-shadow on the
+   same element, and a row can be both tinted AND cursor-highlighted at once
+   (an amber row the GP is currently scanning with j/k); outline is a
+   separate box entirely so the two never fight for the same property. */
+.ch-kbd-cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- Seen-session row dimming (item 4.7, TRIAGE-LENS-2026-07-02.md) ----
+   SAFETY-SENSITIVE — see docs/HAZARD-LOG.md. Marker CLASS added by
+   content.js's reapplyQueueSeenDim, ONLY to rows that are NOT currently
+   red/amber tinted (the hard safety gate lives in content.js, not here —
+   this rule is visual only). opacity, not display:none — AG-Grid virtualises
+   rows, so hiding one would desync scroll math; a dimmed row is still fully
+   present and clickable. */
+.ch-row-seen {
+  opacity: 0.55;
 }
 
 /* ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----
@@ -1125,6 +1167,88 @@
   border: 1px dashed var(--border-hi);
   color: var(--text-4);
   white-space: nowrap;
+}
+
+/* ---- Pathway menu — Pharmacy First divert + missing-info ask-back (items
+   4.1/4.2, TRIAGE-LENS-2026-07-02.md) ----
+   Rendered INSIDE the existing .ch-action-menu shell (see showPathwayMenu,
+   content.js), which already sits in the hud.css token-block selector list
+   above — these classes resolve their var(--…) tokens via CSS inheritance and
+   deliberately do NOT need their own top-level entry there (CLAUDE.md rule 5
+   only applies to a new TOP-LEVEL injected/marker host; same reasoning as
+   .ch-chip-fileable further up this file). */
+.ch-pathway-disclaimer {
+  padding: 6px 12px;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--text-4);
+  border-bottom: 1px solid var(--bg-hover);
+}
+.ch-pathway-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bg-hover);
+}
+.ch-pathway-section:last-child {
+  border-bottom: none;
+}
+.ch-pathway-section-head {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  margin-bottom: 4px;
+}
+.ch-pathway-note {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+/* The prepare-only draft text shown inline (same content the copy button
+   copies) — monospace-ish, boxed, so it visually reads as "text you could
+   paste" rather than prose commentary. */
+.ch-pathway-draft {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+.ch-pathway-gap-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.ch-pathway-gap-list li {
+  margin-bottom: 2px;
+}
+/* The PROMINENT "patient may have already mentioned a red flag" banner (item
+   4.2) — amber fill, rendered FIRST in the menu, ahead of every other
+   section, so a safety signal the keyword rule chips might have missed is
+   never buried below the Pharmacy First/ask-back drafts. */
+.ch-pathway-escalation {
+  padding: 8px 12px;
+  background: var(--amber-dim);
+  border-bottom: 1px solid var(--amber-line);
+}
+.ch-pathway-escalation-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--amber);
+  margin-bottom: 3px;
+}
+.ch-pathway-escalation-line {
+  font-size: 11.5px;
+  color: var(--text-1);
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 /* ---- Result-chip detail popover (item 2.2, TRIAGE-LENS-2026-07-02.md) ----

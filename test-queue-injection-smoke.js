@@ -29,7 +29,12 @@
 // onQueueStatusFocusClick, plus their small consts/module state
 // (QUEUE_STATUS_BAR_ID, QUEUE_STATUS_FLASH_CLASS, QUEUE_FOCUS_CLASS,
 // QUEUE_STATUS_TOOLTIP, the _queueStatus*/_queueFocusAlertsOn/
-// _queueStatusBarRafPending module `let`s).
+// _queueStatusBarRafPending module `let`s). Item 4.4 (TRIAGE-LENS-2026-07-02.md)
+// added the "all-normal, fileable" queue marker — no new extracted functions
+// (it's an additive branch inside the existing injectResultChip/
+// reinjectCachedResultChips), just the FILEABLE_CHIP_HTML constant, which rides
+// along with injectResultChip's own extraction regex (it's declared just above
+// it in content.js).
 //
 // STUBBED (deliberately, not injection mechanics — already covered by other
 // test files): getSystemChip/matchRules (chip *content*/enable-state is
@@ -437,6 +442,10 @@ const parts = [
   // injectResultChip reads (same pattern as UNIT_MISMATCH_CHIP_HTML above). It
   // calls escapeHtml, already extracted above.
   extract(/const buildUnclassifiedChipHtml = \(list\) => \{[\s\S]*?\n {2}\};/, 'buildUnclassifiedChipHtml'),
+  // Item 4.4 (TRIAGE-LENS-2026-07-02.md) — the "all-normal, fileable" tick's
+  // fixed markup, another free variable injectResultChip reads (same pattern as
+  // UNIT_MISMATCH_CHIP_HTML/RESULT_ERROR_CHIP_HTML above).
+  extract(/const FILEABLE_CHIP_HTML =[\s\S]*?;/, 'FILEABLE_CHIP_HTML'),
   extract(/const injectResultChip = \(rowIndex, sev, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
   // Item 2.2 — result-chip detail popover: the pure line-builders plus the
   // singleton popover open/close machinery injectResultChip's click handlers call.
@@ -531,6 +540,39 @@ const parts = [
     /const showRuleMatchMenu = \(anchor, rules, previewText, openList\) => \{[\s\S]*?\n {2}\};/,
     'showRuleMatchMenu'
   ),
+  // Items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md) — Pharmacy First divert chip +
+  // missing-info ask-back: the pathway menu built on top of the SAME
+  // activeActionMenu/renderRuleMenuActionItems/executeAction infra just
+  // extracted above. decorateOneRow's own pathway-chip computation needs no
+  // separate extraction — it lives INSIDE decorateOneRow's already-extracted
+  // body. `_receptionPathwaysData`/`_receptionPathwaysFetchStarted` and
+  // `ensureReceptionPathwaysLoaded` are DELIBERATELY NOT extracted (same
+  // "externally-provided global" convention as `_durableRowMap`/
+  // `_queueResultCache` above) — the harness pre-seeds
+  // `sandbox._receptionPathwaysData` directly rather than exercising the
+  // fetch pipeline (out of scope here, same as `loadMonitoringRules` above).
+  extract(
+    /const buildCopySnippetActionsEl = \(text, label\) =>[\s\S]*?\n {4}renderRuleMenuActionItems\(\{ actions: \[\{ type: 'snippet', label, text \}\] \}\);/,
+    'buildCopySnippetActionsEl'
+  ),
+  extract(
+    /const buildPharmacyFirstRedirectText = \(pathway, pfElig\) => \{[\s\S]*?\n {2}\};/,
+    'buildPharmacyFirstRedirectText'
+  ),
+  extract(/const buildPathwayEscalationEl = \(flaggedInText\) => \{[\s\S]*?\n {2}\};/, 'buildPathwayEscalationEl'),
+  extract(/const buildPathwaySectionHead = \(label\) => \{[\s\S]*?\n {2}\};/, 'buildPathwaySectionHead'),
+  extract(
+    /const buildPharmacyFirstSectionEl = \(pathway, pfElig\) => \{[\s\S]*?\n {2}\};/,
+    'buildPharmacyFirstSectionEl'
+  ),
+  extract(
+    /const buildAskBackSectionEl = \(pathway, gapsData, closingQuestions\) => \{[\s\S]*?\n {2}\};/,
+    'buildAskBackSectionEl'
+  ),
+  extract(
+    /const showPathwayMenu = \(anchor, pathway, previewText, pfElig, gapsData, closingQuestions\) => \{[\s\S]*?\n {2}\};/,
+    'showPathwayMenu'
+  ),
   // Item 2.4 (TRIAGE-LENS-2026-07-02.md) — detail-page verdict banner: echoes
   // the queue's cached result-triage verdict on the task detail page.
   extract(/const DETAIL_VERDICT_CLASS = .*;/, 'DETAIL_VERDICT_CLASS'),
@@ -548,6 +590,24 @@ const parts = [
     'renderDetailVerdictBanner'
   ),
   extract(/const runDetailVerdict = \(\) => \{[\s\S]*?\n {2}\};/, 'runDetailVerdict'),
+  // Item 4.7 (TRIAGE-LENS-2026-07-02.md) — seen-session row dimming.
+  extract(/const ROW_SEEN_CLASS = .*;/, 'ROW_SEEN_CLASS'),
+  extract(/const _seenTasks = new Set\(\);/, '_seenTasks'),
+  extract(/const clearQueueSeenDim = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueSeenDim'),
+  extract(/const reapplyQueueSeenDim = \(\) => \{[\s\S]*?\n {2}\};/, 'reapplyQueueSeenDim'),
+  // Item 4.6 (TRIAGE-LENS-2026-07-02.md) — keyboard triage, plus the
+  // jumpToAlertRow helper it shares with item 1.2's status-bar jump button.
+  extract(/const jumpToAlertRow = \(fromIndex\) => \{[\s\S]*?\n {2}\};/, 'jumpToAlertRow'),
+  extract(/const KBD_CURSOR_CLASS = .*;/, 'KBD_CURSOR_CLASS'),
+  extract(/let _kbdCursorRowIndex = null;/, '_kbdCursorRowIndex'),
+  extract(/const visibleQueueRowIndexes = \(\) => \{[\s\S]*?\n {2}\};/, 'visibleQueueRowIndexes'),
+  extract(/const moveKbdCursor = \(currentIndex, rowIndexes, direction\) => \{[\s\S]*?\n {2}\};/, 'moveKbdCursor'),
+  extract(/const clearQueueKbdCursor = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueKbdCursor'),
+  extract(/const applyQueueKbdCursor = \(\) => \{[\s\S]*?\n {2}\};/, 'applyQueueKbdCursor'),
+  extract(/const scrollKbdCursorIntoView = \(\) => \{[\s\S]*?\n {2}\};/, 'scrollKbdCursorIntoView'),
+  extract(/const findQueueRowOpenTarget = \(row\) => \{[\s\S]*?\n {2}\};/, 'findQueueRowOpenTarget'),
+  extract(/const isQueueKeydownTypingTarget = \(el\) => \{[\s\S]*?\n {2}\};/, 'isQueueKeydownTypingTarget'),
+  extract(/const onQueueKeydown = \(e\) => \{[\s\S]*?\n {2}\};/, 'onQueueKeydown'),
 ];
 
 const EXPOSE = [
@@ -567,6 +627,8 @@ const EXPOSE = [
   'UNIT_MISMATCH_CHIP_HTML',
   // Item 3.2 Part B — unclassified-qualitative-positive chip surfacing.
   'buildUnclassifiedChipHtml',
+  // Item 4.4 — "all-normal, fileable" queue marker.
+  'FILEABLE_CHIP_HTML',
   'closeResultDetailPopover',
   'buildResultDetailPopoverEl',
   'toggleResultDetailPopover',
@@ -598,12 +660,36 @@ const EXPOSE = [
   'renderRuleMenuList',
   'renderRuleMenuDetail',
   'buildEvidenceEl',
+  // Items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back.
+  'buildCopySnippetActionsEl',
+  'buildPharmacyFirstRedirectText',
+  'buildPathwayEscalationEl',
+  'buildPathwaySectionHead',
+  'buildPharmacyFirstSectionEl',
+  'buildAskBackSectionEl',
+  'showPathwayMenu',
   'detailVerdictState',
   'buildDetailVerdictHeadline',
   'removeDetailVerdictBanner',
   'buildDetailVerdictEl',
   'renderDetailVerdictBanner',
   'runDetailVerdict',
+  // Item 4.7 — seen-session row dimming.
+  'ROW_SEEN_CLASS',
+  '_seenTasks',
+  'clearQueueSeenDim',
+  'reapplyQueueSeenDim',
+  // Item 4.6 — keyboard triage.
+  'jumpToAlertRow',
+  'KBD_CURSOR_CLASS',
+  'visibleQueueRowIndexes',
+  'moveKbdCursor',
+  'clearQueueKbdCursor',
+  'applyQueueKbdCursor',
+  'scrollKbdCursorIntoView',
+  'findQueueRowOpenTarget',
+  'isQueueKeydownTypingTarget',
+  'onQueueKeydown',
 ];
 
 let sandbox = null;
@@ -615,7 +701,14 @@ if (!parts.some((p) => !p)) {
     // Item 2.2 — the popover singleton state lives in module-level `let`s the
     // extracted functions close over; this read-only accessor lets the harness
     // assert open/closed without reaching into the closure.
-    '\nthis.__popoverState = () => ({ el: _resultDetailPopoverEl, anchor: _resultDetailPopoverAnchor });';
+    '\nthis.__popoverState = () => ({ el: _resultDetailPopoverEl, anchor: _resultDetailPopoverAnchor });' +
+    // Item 4.6 — _kbdCursorRowIndex is a module-level `let` the extracted
+    // keyboard functions close over (same reasoning as the popover state
+    // above): a get/set accessor pair lets the harness both assert its
+    // current value AND reset it between scenarios (session-local state that
+    // must not leak across Layers).
+    '\nthis.__getKbdCursor = () => _kbdCursorRowIndex;' +
+    '\nthis.__setKbdCursor = (v) => { _kbdCursorRowIndex = v; };';
 
   // Externally-provided globals: real content.js reads these off `window`/
   // `CONFIG`/module-level `let`s. We pre-set them as plain mutable
@@ -654,6 +747,21 @@ if (!parts.some((p) => !p)) {
     _durableRowMap: new Map(),
     _queueResultCache: new Map(),
     _queueMonCache: new Map(),
+    // Items 4.1/4.2 — the CSO-signed reception-pathways ruleset, "externally
+    // provided" exactly like _durableRowMap/_queueResultCache above: real
+    // content.js fetches this ONCE at bootstrap (ensureReceptionPathwaysLoaded,
+    // deliberately not extracted/exercised here — a fetch pipeline, out of
+    // scope for this DOM-injection harness). Defaults to null ("not loaded
+    // yet") so a scenario that never sets it proves the pathway-chip block is
+    // a safe no-op, not a throw; Layer 23 below seeds it with the REAL
+    // rules/reception-pathways.json content.
+    _receptionPathwaysData: null,
+    // Items 4.1/4.2 — executeAction's snippet-action branch reads
+    // navigator.clipboard.writeText for the PREPARE-ONLY copy buttons (Copy
+    // Pharmacy First message / Copy ask-back draft). Harmless default here
+    // (resolves, records nothing); Layer 23 overrides this with a
+    // write-tracking mock per scenario.
+    navigator: { clipboard: { writeText: () => Promise.resolve() } },
     _RESULT_CACHE_TTL: 5 * 60 * 1000,
     // Item 1.1 leg D — error cache entries expire much sooner than a real
     // result so a failed check retries soon (see content.js's own constant).
@@ -682,6 +790,12 @@ if (!parts.some((p) => !p)) {
       addEventListener: () => {},
       removeEventListener: () => {},
       TriageLensMatch: require('./content-scripts/triage-lens/rule-match.js'),
+      // Items 4.1/4.2 — the REAL reception-match engine (dual-mode Node
+      // require, same pattern as TriageLensMatch above), so showPathwayMenu's
+      // buildAskBackText call and decorateOneRow's matchPathways/
+      // pharmacyFirstEligibility/redFlagGaps calls exercise the actual engine
+      // logic under test, not a stub.
+      SentinelReceptionMatch: require('./engine/reception-match.js'),
       // Item 2.4 — runDetailVerdict resolves the detail task's uuid via this,
       // exactly like the OIR/monitoring detail-page paths already do. Each
       // Layer 16 scenario points this at whichever taskUuid it's driving;
@@ -710,6 +824,10 @@ if (!parts.some((p) => !p)) {
   try {
     vm.runInContext(combinedSrc, sandbox, { filename: 'content-extract.js' });
     check(typeof sandbox.injectResultChip === 'function', 'injectResultChip compiled and callable');
+    check(
+      typeof sandbox.FILEABLE_CHIP_HTML === 'string' && sandbox.FILEABLE_CHIP_HTML.includes('ch-q-fileable'),
+      'FILEABLE_CHIP_HTML compiled — carries the .ch-q-fileable marker class'
+    );
     check(typeof sandbox.injectQueueMonitoringChip === 'function', 'injectQueueMonitoringChip compiled and callable');
     check(typeof sandbox.decorateOneRow === 'function', 'decorateOneRow compiled and callable');
     check(typeof sandbox.reinjectCachedResultChips === 'function', 'reinjectCachedResultChips compiled and callable');
@@ -733,10 +851,42 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.findResultRuleActionsById === 'function', 'findResultRuleActionsById compiled and callable');
     check(typeof sandbox.buildResultRuleActionsRow === 'function', 'buildResultRuleActionsRow compiled and callable');
     check(typeof sandbox.showRuleMatchMenu === 'function', 'showRuleMatchMenu compiled and callable');
+    // Items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back.
+    check(typeof sandbox.buildCopySnippetActionsEl === 'function', 'buildCopySnippetActionsEl compiled and callable');
+    check(
+      typeof sandbox.buildPharmacyFirstRedirectText === 'function',
+      'buildPharmacyFirstRedirectText compiled and callable'
+    );
+    check(typeof sandbox.buildPathwayEscalationEl === 'function', 'buildPathwayEscalationEl compiled and callable');
+    check(typeof sandbox.buildPathwaySectionHead === 'function', 'buildPathwaySectionHead compiled and callable');
+    check(
+      typeof sandbox.buildPharmacyFirstSectionEl === 'function',
+      'buildPharmacyFirstSectionEl compiled and callable'
+    );
+    check(typeof sandbox.buildAskBackSectionEl === 'function', 'buildAskBackSectionEl compiled and callable');
+    check(typeof sandbox.showPathwayMenu === 'function', 'showPathwayMenu compiled and callable');
     check(typeof sandbox.detailVerdictState === 'function', 'detailVerdictState compiled and callable');
     check(typeof sandbox.buildDetailVerdictHeadline === 'function', 'buildDetailVerdictHeadline compiled and callable');
     check(typeof sandbox.renderDetailVerdictBanner === 'function', 'renderDetailVerdictBanner compiled and callable');
     check(typeof sandbox.runDetailVerdict === 'function', 'runDetailVerdict compiled and callable');
+    check(typeof sandbox.clearQueueSeenDim === 'function', 'clearQueueSeenDim compiled and callable');
+    check(typeof sandbox.reapplyQueueSeenDim === 'function', 'reapplyQueueSeenDim compiled and callable');
+    // Not `instanceof Set` — vm.createContext gives the sandbox its own realm
+    // with its own Set constructor, distinct from this file's global Set, so
+    // a cross-realm instanceof check would always fail even though the
+    // object genuinely is a Set within its own realm. Duck-type instead.
+    check(
+      typeof sandbox._seenTasks.add === 'function' && typeof sandbox._seenTasks.has === 'function',
+      '_seenTasks exposed as a Set-like object'
+    );
+    check(typeof sandbox.jumpToAlertRow === 'function', 'jumpToAlertRow compiled and callable');
+    check(typeof sandbox.visibleQueueRowIndexes === 'function', 'visibleQueueRowIndexes compiled and callable');
+    check(typeof sandbox.moveKbdCursor === 'function', 'moveKbdCursor compiled and callable');
+    check(typeof sandbox.clearQueueKbdCursor === 'function', 'clearQueueKbdCursor compiled and callable');
+    check(typeof sandbox.applyQueueKbdCursor === 'function', 'applyQueueKbdCursor compiled and callable');
+    check(typeof sandbox.findQueueRowOpenTarget === 'function', 'findQueueRowOpenTarget compiled and callable');
+    check(typeof sandbox.isQueueKeydownTypingTarget === 'function', 'isQueueKeydownTypingTarget compiled and callable');
+    check(typeof sandbox.onQueueKeydown === 'function', 'onQueueKeydown compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -776,6 +926,12 @@ function freshCaches() {
   sandbox._queueResultCache = new Map();
   sandbox._queueMonCache = new Map();
   sandbox.CONFIG = {}; // PREF('queueRowTint', true) -> true by default (no CONFIG.prefs)
+  // Item 4.7 — session-local "opened this session" set; must not leak between
+  // Layers/scenarios in this harness the way it deliberately never resets on
+  // a real page.
+  sandbox._seenTasks.clear();
+  // Item 4.6 — keyboard cursor is likewise session-local module state.
+  sandbox.__setKbdCursor(null);
 }
 
 if (sandbox) {
@@ -1849,10 +2005,15 @@ if (sandbox) {
   const ruleRed = mkRule('r-red', 'red', 'Sepsis flag', ['fever']);
   const ruleAmber = mkRule('r-amber', 'amber', 'UTI query', ['waterworks']);
   const ruleInfo = mkRule('r-info', 'info', 'Admin query', ['sick note']);
+  // Item 4.3 (TRIAGE-LENS-2026-07-02.md) — the green routine tier. Ranks LAST
+  // (below info): green is "confidently routine, nothing to check", so it must
+  // never outrank even an informational chip — it's only ever the top chip
+  // when NO red/amber/info rule ALSO matched the same request text.
+  const ruleGreen = mkRule('r-green', 'green', 'Admin details query', ['change of address']);
   const multiRulePreviewText = 'Patient has a fever and waterworks symptoms, also wants a sick note.';
 
   {
-    // ---- pure ranking: red < amber < info regardless of match order ----
+    // ---- pure ranking: red < amber < info < green regardless of match order ----
     const ranked = sandbox.rankRuleMatches([ruleAmber, ruleInfo, ruleRed]);
     check(
       ranked.map((r) => r.id).join(',') === 'r-red,r-amber,r-info',
@@ -1863,6 +2024,18 @@ if (sandbox) {
     check(
       ranked2[0].id === 'r-red' && ranked2[1].id === 'r-red',
       'rankRuleMatches: ties on severity keep their original relative order (stable sort)'
+    );
+    // Item 4.3: green sorts after info, last of all four kinds, regardless of
+    // input order.
+    const rankedGreen = sandbox.rankRuleMatches([ruleGreen, ruleInfo, ruleAmber, ruleRed]);
+    check(
+      rankedGreen.map((r) => r.id).join(',') === 'r-red,r-amber,r-info,r-green',
+      `rankRuleMatches: red < amber < info < green (got ${rankedGreen.map((r) => r.id).join(',')})`
+    );
+    const rankedGreenAlone = sandbox.rankRuleMatches([ruleGreen]);
+    check(
+      rankedGreenAlone.length === 1 && rankedGreenAlone[0].id === 'r-green',
+      'rankRuleMatches: a green-only match still ranks (never dropped)'
     );
   }
 
@@ -1954,6 +2127,80 @@ if (sandbox) {
       !/more rule/.test(ruleChips[0].getAttribute('aria-label') || ''),
       'single-rule row: aria-label has no "more rules matched" suffix'
     );
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- Item 4.3: a row matching ONLY a green rule shows the green chip as
+    //      top (and only) chip — the collapse mechanics don't special-case
+    //      green, so a single green match behaves exactly like a single red/
+    //      amber/info match. ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleGreen];
+    const rowId = 'e0000000-0000-4000-8000-000000000003';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(ruleChips.length === 1, `green-only row: exactly 1 rule-match chip (no overflow), got ${ruleChips.length}`);
+    check(
+      ruleChips[0] && ruleChips[0].classes.includes('ch-chip-green'),
+      `green-only row: the top (only) chip carries the GREEN colour class, got classes: ${ruleChips[0] && ruleChips[0].classes.join(' ')}`
+    );
+    check(
+      ruleChips[0].textContent.includes('Admin details query'),
+      "green-only row: chip shows the green rule's label"
+    );
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  {
+    // ---- Item 4.3: a row matching an amber AND a green rule shows amber on
+    //      top, green demoted into the "+N" overflow — never the reverse. This
+    //      is the escalate-only safety guarantee: a routine-admin phrase never
+    //      outranks a genuine clinical match on the SAME row. ----
+    freshCaches();
+    sandbox.matchRules = () => [ruleGreen, ruleAmber]; // deliberately green-first, not pre-sorted
+    const rowId = 'e0000000-0000-4000-8000-000000000004';
+    const { master, detail, wrap } = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(master);
+    gridRoot.appendChild(detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    sandbox.decorateOneRow(master);
+    const ruleChips = wrap.querySelectorAll('.ch-q-rule-chip');
+    check(ruleChips.length === 2, `amber+green row: top chip + "+1" overflow chip, got ${ruleChips.length}`);
+    const [topChip, overflowChip] = ruleChips;
+    check(
+      topChip && topChip.classes.includes('ch-chip-amber'),
+      `amber+green row: top chip is the amber match, NOT the green one, got classes: ${topChip && topChip.classes.join(' ')}`
+    );
+    check(topChip.textContent.includes('UTI query'), "amber+green row: top chip shows the amber rule's label");
+    check(
+      overflowChip && overflowChip.classes.includes('ch-chip-meta') && overflowChip.textContent.includes('+1'),
+      `amber+green row: overflow chip reads "+1", got classes/text: ${overflowChip && overflowChip.classes.join(' ')} / ${overflowChip && overflowChip.textContent}`
+    );
+    // Opening the "+N" list confirms the green match is still fully present
+    // (escalate-only — demoted in rank, never suppressed), just not the headline.
+    overflowChip.click();
+    const openedListMenu = sandbox.document.querySelector('.ch-rule-menu');
+    const listItems = openedListMenu && openedListMenu.querySelectorAll('.ch-rule-menu-list-item');
+    check(
+      listItems && listItems.length === 2,
+      `amber+green row: "+N" list shows both matched rules, got ${listItems && listItems.length}`
+    );
+    check(
+      listItems && listItems.some((li) => /Admin details query/.test(li.textContent)),
+      'amber+green row: the green rule is present (not suppressed) inside the "+N" list'
+    );
+    sandbox.closeActionMenu();
     sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
   }
 
@@ -3513,6 +3760,970 @@ if (sandbox) {
       );
     }
 
+    sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  // ============================================================
+  // Layer 22 — item 4.6 (TRIAGE-LENS-2026-07-02.md): keyboard triage.
+  // j/k cursor movement + clamping, Enter opens the cursor row's link,
+  // n reuses jumpToAlertRow/nextAlertRowIndex and parks the cursor there,
+  // the handler ignores keys typed into a form field, and the cursor class
+  // is wiped+reapplied on the churn cycle (never leaks onto a recycled row).
+  // ============================================================
+  console.log('\nLayer 22: keyboard triage — j/k cursor, clamping, Enter open-link, n jump, typing-guard, churn');
+
+  {
+    const kbdEvent = (key, target, extra) =>
+      Object.assign(
+        {
+          key,
+          target: target || { tagName: 'BODY' },
+          preventDefault() {},
+          metaKey: false,
+          ctrlKey: false,
+          altKey: false,
+        },
+        extra || {}
+      );
+
+    // ---- j/k move the cursor over rows, clamping at both ends ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIds3 = [
+      'b0000000-0000-4000-8000-000000000001',
+      'b0000000-0000-4000-8000-000000000002',
+      'b0000000-0000-4000-8000-000000000003',
+    ];
+    const rows3 = rowIds3.map((rowId, i) => buildPreviewRowPair({ rowIndex: i, rowId, dob: '01 Jan 1980 (46y)' }));
+    const gridRootK = new El('div', {});
+    rows3.forEach(({ master, detail }) => {
+      gridRootK.appendChild(master);
+      gridRootK.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootK);
+    sandbox.queueObservedContainer = gridRootK;
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(rows3[0].master.classes.includes('ch-kbd-cursor'), 'j from no cursor: lands on the FIRST row (row-index 0)');
+    check(sandbox.__getKbdCursor() === 0, 'j from no cursor: _kbdCursorRowIndex is 0');
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(!rows3[0].master.classes.includes('ch-kbd-cursor'), 'j: previous cursor row loses the class (single cursor)');
+    check(rows3[1].master.classes.includes('ch-kbd-cursor'), 'j: cursor now on row-index 1');
+    check(rows3[1].detail.classes.includes('ch-kbd-cursor'), 'j: preview/detail row ALSO gets the cursor class');
+
+    sandbox.onQueueKeydown(kbdEvent('ArrowDown'));
+    check(rows3[2].master.classes.includes('ch-kbd-cursor'), 'ArrowDown: cursor now on row-index 2 (last row)');
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(
+      rows3[2].master.classes.includes('ch-kbd-cursor') && sandbox.__getKbdCursor() === 2,
+      'j at the last row: CLAMPS (stays at row-index 2), does not wrap to row 0'
+    );
+
+    sandbox.onQueueKeydown(kbdEvent('k'));
+    sandbox.onQueueKeydown(kbdEvent('k'));
+    check(rows3[0].master.classes.includes('ch-kbd-cursor'), 'k k: cursor walked back down to row-index 0');
+    sandbox.onQueueKeydown(kbdEvent('ArrowUp'));
+    check(
+      rows3[0].master.classes.includes('ch-kbd-cursor') && sandbox.__getKbdCursor() === 0,
+      'k at the first row: CLAMPS (stays at row-index 0), does not wrap to the last row'
+    );
+
+    // ---- moveKbdCursor (pure) — direct clamp/empty-list assertions ----
+    check(sandbox.moveKbdCursor(null, [], 1) === null, 'moveKbdCursor: empty row list -> null');
+    check(sandbox.moveKbdCursor(null, [5, 7, 9], 1) === 5, 'moveKbdCursor: no cursor yet, direction down -> first row');
+    check(sandbox.moveKbdCursor(null, [5, 7, 9], -1) === 9, 'moveKbdCursor: no cursor yet, direction up -> last row');
+    check(sandbox.moveKbdCursor(9, [5, 7, 9], 1) === 9, 'moveKbdCursor: clamps at the last row going down');
+    check(sandbox.moveKbdCursor(5, [5, 7, 9], -1) === 5, 'moveKbdCursor: clamps at the first row going up');
+    check(
+      sandbox.moveKbdCursor(999, [5, 7, 9], 1) === 5,
+      'moveKbdCursor: a cursor row no longer in the list re-anchors to the first row (direction down)'
+    );
+
+    // ---- Enter activates the cursor row: clicks its open-link ----
+    // Sub-case A: no anchor in the patientName cell -> falls back to clicking
+    // the cell itself (the documented fallback host elsewhere in this file).
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdEnterA = 'b0000000-0000-4000-8000-000000000004';
+    const rowEnterA = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEnterA, dob: '01 Jan 1980 (46y)' });
+    const gridRootEnterA = new El('div', {});
+    gridRootEnterA.appendChild(rowEnterA.master);
+    gridRootEnterA.appendChild(rowEnterA.detail);
+    sandbox.document = makeDocument(gridRootEnterA);
+    sandbox.queueObservedContainer = gridRootEnterA;
+    const nameCellA = rowEnterA.master.querySelector('[col-id="patientName"]');
+    let cellClicked = false;
+    nameCellA.addEventListener('click', () => {
+      cellClicked = true;
+    });
+
+    sandbox.onQueueKeydown(kbdEvent('j')); // put the cursor on row 0
+    sandbox.onQueueKeydown(kbdEvent('Enter'));
+    check(cellClicked, 'Enter (no anchor present): clicks the patientName CELL itself');
+
+    // Sub-case B: an anchor IS present inside the patientName cell -> Enter
+    // clicks the anchor, not the cell.
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdEnterB = 'b0000000-0000-4000-8000-000000000005';
+    const rowEnterB = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEnterB, dob: '01 Jan 1980 (46y)' });
+    const gridRootEnterB = new El('div', {});
+    gridRootEnterB.appendChild(rowEnterB.master);
+    gridRootEnterB.appendChild(rowEnterB.detail);
+    sandbox.document = makeDocument(gridRootEnterB);
+    sandbox.queueObservedContainer = gridRootEnterB;
+    const nameCellB = rowEnterB.master.querySelector('[col-id="patientName"]');
+    const anchorB = new El('a', { href: '#' });
+    nameCellB.appendChild(anchorB);
+    let anchorClicked = false;
+    let cellBClicked = false;
+    anchorB.addEventListener('click', () => {
+      anchorClicked = true;
+    });
+    nameCellB.addEventListener('click', () => {
+      cellBClicked = true;
+    });
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    sandbox.onQueueKeydown(kbdEvent('Enter'));
+    check(anchorClicked, 'Enter (anchor present): clicks the ANCHOR inside the patientName cell');
+    check(
+      !cellBClicked,
+      "Enter (anchor present): does NOT also click the cell itself (anchor wins, doesn't bubble here)"
+    );
+
+    // findQueueRowOpenTarget directly — no cell at all -> null, not a throw.
+    const rowNoCell = new El('div', { class: 'ag-row', 'row-index': '0' });
+    check(sandbox.findQueueRowOpenTarget(rowNoCell) === null, 'findQueueRowOpenTarget: no patientName cell -> null');
+
+    // ---- n reuses jumpToAlertRow/nextAlertRowIndex and parks the cursor ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdRedN = 'b0000000-0000-4000-8000-000000000006';
+    const rowIdAmberN = 'b0000000-0000-4000-8000-000000000007';
+    const rowRedN = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedN, dob: '01 Jan 1980 (46y)' });
+    const rowAmberN = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmberN, dob: '01 Jan 1980 (46y)' });
+    const gridRootN = new El('div', {});
+    [rowRedN, rowAmberN].forEach(({ master, detail }) => {
+      gridRootN.appendChild(master);
+      gridRootN.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootN);
+    sandbox.queueObservedContainer = gridRootN;
+    sandbox._durableRowMap.set(0, rowIdRedN);
+    sandbox._durableRowMap.set(1, rowIdAmberN);
+    sandbox._queueResultCache.set(rowIdRedN, { sev: redSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdAmberN, { sev: amberSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+
+    sandbox.onQueueKeydown(kbdEvent('n'));
+    check(
+      sandbox.__getKbdCursor() === 0,
+      'n: jumps to the RED row first (row-index 0), same order as nextAlertRowIndex'
+    );
+    check(rowRedN.master.classes.includes('ch-kbd-cursor'), 'n: the keyboard cursor is parked on the row jumped to');
+    check(
+      rowRedN.master.classes.includes('ch-q-status-flash'),
+      'n: reuses the SAME flash-on-jump behaviour as the status-bar jump button'
+    );
+
+    // ---- handler ignores keys when focus is in a form field ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdTyping = 'b0000000-0000-4000-8000-000000000008';
+    const rowTyping = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdTyping, dob: '01 Jan 1980 (46y)' });
+    const gridRootTyping = new El('div', {});
+    gridRootTyping.appendChild(rowTyping.master);
+    gridRootTyping.appendChild(rowTyping.detail);
+    sandbox.document = makeDocument(gridRootTyping);
+    sandbox.queueObservedContainer = gridRootTyping;
+
+    for (const target of [
+      { tagName: 'INPUT' },
+      { tagName: 'TEXTAREA' },
+      { tagName: 'SELECT' },
+      { tagName: 'DIV', isContentEditable: true },
+    ]) {
+      sandbox.onQueueKeydown(kbdEvent('j', target));
+    }
+    check(
+      sandbox.__getKbdCursor() === null && !rowTyping.master.classes.includes('ch-kbd-cursor'),
+      'onQueueKeydown: "j" typed into an input/textarea/select/contenteditable never moves the cursor'
+    );
+    check(
+      sandbox.isQueueKeydownTypingTarget({ tagName: 'INPUT' }) === true &&
+        sandbox.isQueueKeydownTypingTarget({ tagName: 'DIV' }) === false &&
+        sandbox.isQueueKeydownTypingTarget(null) === false,
+      'isQueueKeydownTypingTarget: input/textarea/select/contentEditable true, plain div/null false'
+    );
+
+    // Off the queue page (pageType !== 'queue') the handler is a no-op too.
+    sandbox.pageType = () => 'detail';
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(sandbox.__getKbdCursor() === null, 'onQueueKeydown: off the queue page, "j" is a no-op');
+
+    // Pref off -> handler is a no-op even on the queue page.
+    sandbox.pageType = () => 'queue';
+    sandbox.CONFIG = { prefs: { queueKeyboardNav: false } };
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(sandbox.__getKbdCursor() === null, 'onQueueKeydown: prefs.queueKeyboardNav=false -> "j" is a no-op');
+    sandbox.CONFIG = {};
+
+    // ---- cursor class wiped + reapplied on the churn cycle; never leaks
+    //      onto a recycled row-index ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdChurnK = 'b0000000-0000-4000-8000-000000000009';
+    const rowChurnK = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdChurnK, dob: '01 Jan 1980 (46y)' });
+    const gridRootChurnK = new El('div', {});
+    gridRootChurnK.appendChild(rowChurnK.master);
+    gridRootChurnK.appendChild(rowChurnK.detail);
+    sandbox.document = makeDocument(gridRootChurnK);
+    sandbox.queueObservedContainer = gridRootChurnK;
+
+    sandbox.onQueueKeydown(kbdEvent('j')); // cursor -> row-index 0
+    check(rowChurnK.master.classes.includes('ch-kbd-cursor'), 'churn setup: cursor present before the churn cycle');
+
+    sandbox.clearQueueKbdCursor();
+    check(
+      !rowChurnK.master.classes.includes('ch-kbd-cursor') && !rowChurnK.detail.classes.includes('ch-kbd-cursor'),
+      'clearQueueKbdCursor: cursor class removed on the wipe half of the refresh cycle'
+    );
+    sandbox.applyQueueKbdCursor();
+    check(
+      rowChurnK.master.classes.includes('ch-kbd-cursor'),
+      'applyQueueKbdCursor: cursor restored on the SAME row-index after the wipe (churn cycle survives)'
+    );
+
+    // AG-Grid REUSES the same DOM node for a given row-index slot across
+    // churn (that's what "virtualised" means — same node object, different
+    // backing task) — same reasoning Layer 8's tint "recycled row-index"
+    // scenario relies on. For the cursor, which is row-index-keyed (not
+    // taskUuid-keyed), that reuse is transparent: the SAME node just keeps
+    // its cursor class across a wipe/reapply cycle, already covered above.
+    // The other real churn shape is the grid being torn down and rebuilt
+    // with a DIFFERENT row-index set entirely (e.g. the queue re-sorted and
+    // row-index 0 no longer exists in the new render) — applyQueueKbdCursor
+    // must be a safe no-op then, not throw and not tag the wrong row.
+    const rowOtherIndex = buildPreviewRowPair({
+      rowIndex: 5,
+      rowId: 'b0000000-0000-4000-8000-00000000000a',
+      dob: '01 Jan 1980 (46y)',
+    });
+    const gridRootRebuilt = new El('div', {});
+    gridRootRebuilt.appendChild(rowOtherIndex.master);
+    gridRootRebuilt.appendChild(rowOtherIndex.detail);
+    sandbox.document = makeDocument(gridRootRebuilt);
+    sandbox.queueObservedContainer = gridRootRebuilt;
+
+    sandbox.clearQueueKbdCursor(); // no-op against the new DOM (nothing carries the class there)
+    sandbox.applyQueueKbdCursor(); // _kbdCursorRowIndex is still 0 — no row-index 0 in this DOM
+    check(
+      !rowOtherIndex.master.classes.includes('ch-kbd-cursor'),
+      'grid rebuilt with a different row-index set: applyQueueKbdCursor does not mis-tag an unrelated row'
+    );
+
+    sandbox.pageType = () => 'detail'; // restore the file's default for any later scenarios
+  }
+
+  // ============================================================
+  // Layer 23 — item 4.7 (TRIAGE-LENS-2026-07-02.md, SAFETY-SENSITIVE):
+  // seen-session row dimming. A seen clear/unassessed row dims; a seen
+  // red/amber row NEVER dims; a seen row that later re-grades red/amber
+  // auto-loses the dim on reapply; pref-off means no dim at all; the dim
+  // survives a churn cycle only for rows still clear.
+  // ============================================================
+  console.log(
+    '\nLayer 23: seen-session row dimming — clear dims, red/amber NEVER dims, auto-undim on escalation, pref gate, churn'
+  );
+
+  {
+    // ---- a seen CLEAR row dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdClear = 'c0000000-0000-4000-8000-000000000001';
+    const rowClear = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdClear, dob: '01 Jan 1980 (46y)' });
+    const gridRootClear = new El('div', {});
+    gridRootClear.appendChild(rowClear.master);
+    gridRootClear.appendChild(rowClear.detail);
+    sandbox.document = makeDocument(gridRootClear);
+    sandbox.queueObservedContainer = gridRootClear;
+    sandbox._durableRowMap.set(0, rowIdClear);
+    sandbox._queueResultCache.set(rowIdClear, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdClear);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowClear.master.classes.includes('ch-row-seen'), 'a seen, cached-clear row gets ch-row-seen');
+    check(rowClear.detail.classes.includes('ch-row-seen'), 'a seen, cached-clear preview row ALSO gets ch-row-seen');
+
+    // ---- a seen row NOT yet in _seenTasks does not dim ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdUnseen = 'c0000000-0000-4000-8000-000000000002';
+    const rowUnseen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdUnseen, dob: '01 Jan 1980 (46y)' });
+    const gridRootUnseen = new El('div', {});
+    gridRootUnseen.appendChild(rowUnseen.master);
+    gridRootUnseen.appendChild(rowUnseen.detail);
+    sandbox.document = makeDocument(gridRootUnseen);
+    sandbox.queueObservedContainer = gridRootUnseen;
+    sandbox._durableRowMap.set(0, rowIdUnseen);
+    sandbox._queueResultCache.set(rowIdUnseen, { sev: noneSev, ts: Date.now() });
+    // deliberately NOT added to _seenTasks
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(!rowUnseen.master.classes.includes('ch-row-seen'), 'a cached-clear row NOT in _seenTasks never dims');
+
+    // ---- HARD SAFETY GATE: a seen RED row NEVER dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdRedSeen = 'c0000000-0000-4000-8000-000000000003';
+    const rowRedSeen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedSeen, dob: '01 Jan 1980 (46y)' });
+    const gridRootRedSeen = new El('div', {});
+    gridRootRedSeen.appendChild(rowRedSeen.master);
+    gridRootRedSeen.appendChild(rowRedSeen.detail);
+    sandbox.document = makeDocument(gridRootRedSeen);
+    sandbox.queueObservedContainer = gridRootRedSeen;
+    sandbox._durableRowMap.set(0, rowIdRedSeen);
+    sandbox._queueResultCache.set(rowIdRedSeen, { sev: redSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdRedSeen);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowRedSeen.master.classes.includes('ch-row-sev-red'), 'red-cached row: sanity check, tint applied as normal');
+    check(
+      !rowRedSeen.master.classes.includes('ch-row-seen'),
+      'SAFETY: a seen RED row is NEVER dimmed, even though its taskUuid is in _seenTasks'
+    );
+
+    // ---- HARD SAFETY GATE (cross-pref): row-tint OFF + seen-dim ON, a seen RED
+    // row STILL must not dim. The escalation gate reads the result cache, not the
+    // tint CSS class, so it can't be defeated by disabling the cosmetic tint. ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueRowTint: false, queueSeenDimming: true } };
+    const rowIdRedNoTint = 'c0000000-0000-4000-8000-000000000009';
+    const rowRedNoTint = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedNoTint, dob: '01 Jan 1980 (46y)' });
+    const gridRootRedNoTint = new El('div', {});
+    gridRootRedNoTint.appendChild(rowRedNoTint.master);
+    gridRootRedNoTint.appendChild(rowRedNoTint.detail);
+    sandbox.document = makeDocument(gridRootRedNoTint);
+    sandbox.queueObservedContainer = gridRootRedNoTint;
+    sandbox._durableRowMap.set(0, rowIdRedNoTint);
+    sandbox._queueResultCache.set(rowIdRedNoTint, { sev: redSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdRedNoTint);
+
+    sandbox.reapplyQueueRowTint(); // no-op: tint pref off, so NO tint class is set
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowRedNoTint.master.classes.includes('ch-row-sev-red'),
+      'cross-pref sanity: with queueRowTint off, no tint class is applied'
+    );
+    check(
+      !rowRedNoTint.master.classes.includes('ch-row-seen'),
+      'SAFETY (cross-pref): tint OFF + seen ON — a seen RED row is STILL never dimmed (cache-truth gate)'
+    );
+
+    // ---- HARD SAFETY GATE: a seen AMBER row NEVER dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdAmberSeen = 'c0000000-0000-4000-8000-000000000004';
+    const rowAmberSeen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdAmberSeen, dob: '01 Jan 1980 (46y)' });
+    const gridRootAmberSeen = new El('div', {});
+    gridRootAmberSeen.appendChild(rowAmberSeen.master);
+    gridRootAmberSeen.appendChild(rowAmberSeen.detail);
+    sandbox.document = makeDocument(gridRootAmberSeen);
+    sandbox.queueObservedContainer = gridRootAmberSeen;
+    sandbox._durableRowMap.set(0, rowIdAmberSeen);
+    sandbox._queueResultCache.set(rowIdAmberSeen, { sev: amberSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdAmberSeen);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowAmberSeen.master.classes.includes('ch-row-seen'),
+      'SAFETY: a seen AMBER row is NEVER dimmed, even though its taskUuid is in _seenTasks'
+    );
+
+    // ---- AUTO-UNDIM: a seen row that later re-grades red loses the dim on
+    //      the very next reapply cycle, with no separate "undo" step ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdEscalate = 'c0000000-0000-4000-8000-000000000005';
+    const rowEscalate = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEscalate, dob: '01 Jan 1980 (46y)' });
+    const gridRootEscalate = new El('div', {});
+    gridRootEscalate.appendChild(rowEscalate.master);
+    gridRootEscalate.appendChild(rowEscalate.detail);
+    sandbox.document = makeDocument(gridRootEscalate);
+    sandbox.queueObservedContainer = gridRootEscalate;
+    sandbox._durableRowMap.set(0, rowIdEscalate);
+    sandbox._queueResultCache.set(rowIdEscalate, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdEscalate);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowEscalate.master.classes.includes('ch-row-seen'), 'auto-undim setup: dimmed while cached clear');
+
+    // A new (more severe) result lands for the same task.
+    sandbox._queueResultCache.set(rowIdEscalate, { sev: redSev, ts: Date.now() });
+    // The full churn-cycle sequence refreshQueueChips runs: wipe both marker
+    // classes, then re-derive both fresh from the (now-updated) cache.
+    sandbox.clearQueueRowTint();
+    sandbox.clearQueueSeenDim();
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowEscalate.master.classes.includes('ch-row-sev-red'), 'auto-undim: the row now carries the red tint');
+    check(
+      !rowEscalate.master.classes.includes('ch-row-seen'),
+      'auto-undim: the SAME row automatically loses ch-row-seen the moment it re-grades red — no separate undo step'
+    );
+
+    // ---- pref off = no dim, even for an otherwise-eligible seen clear row ----
+    freshCaches();
+    sandbox.CONFIG = {}; // PREF('queueSeenDimming', false) -> false by default
+    const rowIdPrefOff = 'c0000000-0000-4000-8000-000000000006';
+    const rowPrefOff = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdPrefOff, dob: '01 Jan 1980 (46y)' });
+    const gridRootPrefOff = new El('div', {});
+    gridRootPrefOff.appendChild(rowPrefOff.master);
+    gridRootPrefOff.appendChild(rowPrefOff.detail);
+    sandbox.document = makeDocument(gridRootPrefOff);
+    sandbox.queueObservedContainer = gridRootPrefOff;
+    sandbox._durableRowMap.set(0, rowIdPrefOff);
+    sandbox._queueResultCache.set(rowIdPrefOff, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdPrefOff);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowPrefOff.master.classes.includes('ch-row-seen'),
+      'prefs.queueSeenDimming=false (default): reapplyQueueSeenDim is a no-op even for an eligible seen-clear row'
+    );
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+
+    // ---- churn: the dim survives a full wipe/reapply cycle, but ONLY for a
+    //      row that is STILL clear — a sibling row that escalated in the same
+    //      churn does not come back dimmed ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdStillClear = 'c0000000-0000-4000-8000-000000000007';
+    const rowIdNowRed = 'c0000000-0000-4000-8000-000000000008';
+    const rowStillClear = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdStillClear, dob: '01 Jan 1980 (46y)' });
+    const rowNowRed = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdNowRed, dob: '01 Jan 1980 (46y)' });
+    const gridRootMixed = new El('div', {});
+    [rowStillClear, rowNowRed].forEach(({ master, detail }) => {
+      gridRootMixed.appendChild(master);
+      gridRootMixed.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootMixed);
+    sandbox.queueObservedContainer = gridRootMixed;
+    sandbox._durableRowMap.set(0, rowIdStillClear);
+    sandbox._durableRowMap.set(1, rowIdNowRed);
+    sandbox._queueResultCache.set(rowIdStillClear, { sev: noneSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdNowRed, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdStillClear);
+    sandbox._seenTasks.add(rowIdNowRed);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      rowStillClear.master.classes.includes('ch-row-seen') && rowNowRed.master.classes.includes('ch-row-seen'),
+      'churn setup: both seen clear rows start dimmed'
+    );
+
+    // One of the two escalates; simulate the churn cycle.
+    sandbox._queueResultCache.set(rowIdNowRed, { sev: amberSev, ts: Date.now() });
+    sandbox.clearQueueRowTint();
+    sandbox.clearQueueSeenDim();
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      rowStillClear.master.classes.includes('ch-row-seen'),
+      'churn: the row that is STILL clear comes back dimmed after the wipe/reapply cycle'
+    );
+    check(
+      rowNowRed.master.classes.includes('ch-row-sev-amber') && !rowNowRed.master.classes.includes('ch-row-seen'),
+      'churn: the row that escalated to amber comes back tinted but NOT dimmed'
+    );
+
+    sandbox.CONFIG = {}; // restore default for any tests that might run after this block
+  }
+
+  // ============================================================
+  // Layer 24 — item 4.4 (TRIAGE-LENS-2026-07-02.md): "all-normal, fileable"
+  // queue marker. A cached sev with level:'none' AND fileable:true renders a
+  // small green tick (.ch-chip-fileable / .ch-q-fileable) inside the SAME
+  // .ch-q-result host the severity chips use, de-dupes, and survives the SPA
+  // churn/reinject cycle exactly like the other result-chip families. A
+  // level:'none' row where the lab-filing gate found a blocker (fileable:false
+  // or unset) shows nothing — the tick's ABSENCE is never a claim. Never shows
+  // on red/amber rows or the error ("?") chip. Pref-gated
+  // (PREF('queueFileableMarker', true), default ON).
+  // ============================================================
+  console.log(
+    '\nLayer 24: fileable marker (item 4.4) — render, de-dupe, churn survival, blocked-none shows nothing, never on red/amber/error, pref gate'
+  );
+
+  {
+    const fileableSev = { ...noneSev, fileable: true };
+    const blockedNoneSev = { ...noneSev, fileable: false }; // gate found a blocker (culture/free-text/unmatched/etc.)
+
+    // NB: same fake-DOM caveat as Layer 18 above — the chip is fixed markup
+    // assigned via span.innerHTML, which the fake DOM stores as a raw STRING
+    // rather than parsing into real child elements. So `.ch-q-result`/
+    // `.ch-chip-error` (set via real className/setAttribute) ARE
+    // querySelectorAll-able, but the fileable tick's own classes
+    // (ch-chip-fileable/ch-q-fileable) live inside that innerHTML string and
+    // must be asserted via a regex over `.innerHTML`, not querySelectorAll.
+
+    // ---- renders the tick on a fileable row ----
+    freshCaches();
+    const rowIdFileable = 'd0000000-0000-4000-8000-000000000001';
+    const rowFileable = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdFileable, dob: '01 Jan 1980 (46y)' });
+    const gridRootFileable = new El('div', {});
+    gridRootFileable.appendChild(rowFileable.master);
+    gridRootFileable.appendChild(rowFileable.detail);
+    sandbox.document = makeDocument(gridRootFileable);
+    sandbox.queueObservedContainer = gridRootFileable;
+
+    sandbox.injectResultChip(0, fileableSev, rowIdFileable, false);
+    let fileableHost = rowFileable.wrap.querySelector('.ch-q-result');
+    check(!!fileableHost, 'injectResultChip: fileable row injects the .ch-q-result chip host');
+    let fileableHtml = fileableHost ? fileableHost.innerHTML : '';
+    check(
+      (fileableHtml.match(/ch-q-fileable/g) || []).length === 1,
+      'injectResultChip: fileable row renders exactly one .ch-q-fileable tick'
+    );
+    check(
+      /class="ch-chip ch-chip-fileable ch-q-fileable"/.test(fileableHtml),
+      'injectResultChip: the tick also carries .ch-chip-fileable (colour class)'
+    );
+    check(/>✓</.test(fileableHtml), "injectResultChip: the tick's visible glyph is a checkmark");
+
+    // ---- de-dupes: calling injectResultChip again does not duplicate ----
+    sandbox.injectResultChip(0, fileableSev, rowIdFileable, false);
+    const fileableHostsAfter = rowFileable.wrap.querySelectorAll('.ch-q-result');
+    check(
+      fileableHostsAfter.length === 1,
+      'injectResultChip: calling twice does not duplicate the chip host (still one .ch-q-result span)'
+    );
+    check(
+      (fileableHostsAfter[0].innerHTML.match(/ch-q-fileable/g) || []).length === 1,
+      'injectResultChip: calling twice does not duplicate the fileable tick inside the host'
+    );
+
+    // ---- sev none but fileable:false (a blocker) shows NO tick, and nothing else either ----
+    freshCaches();
+    const rowIdBlocked = 'd0000000-0000-4000-8000-000000000002';
+    const rowBlocked = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdBlocked, dob: '01 Jan 1980 (46y)' });
+    const gridRootBlocked = new El('div', {});
+    gridRootBlocked.appendChild(rowBlocked.master);
+    gridRootBlocked.appendChild(rowBlocked.detail);
+    sandbox.document = makeDocument(gridRootBlocked);
+    sandbox.queueObservedContainer = gridRootBlocked;
+
+    sandbox.injectResultChip(0, blockedNoneSev, rowIdBlocked, false);
+    check(
+      !rowBlocked.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: level:none but fileable:false (a blocker) injects nothing (no chip host at all)'
+    );
+
+    // A plain level:'none' row with no `fileable` field at all (the pre-4.4 shape,
+    // e.g. an entry computed before LabFilingUtils loaded) must behave identically —
+    // no tick, nothing injected.
+    freshCaches();
+    const rowIdNoneUnset = 'd0000000-0000-4000-8000-000000000003';
+    const rowNoneUnset = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdNoneUnset, dob: '01 Jan 1980 (46y)' });
+    const gridRootNoneUnset = new El('div', {});
+    gridRootNoneUnset.appendChild(rowNoneUnset.master);
+    gridRootNoneUnset.appendChild(rowNoneUnset.detail);
+    sandbox.document = makeDocument(gridRootNoneUnset);
+    sandbox.queueObservedContainer = gridRootNoneUnset;
+    sandbox.injectResultChip(0, noneSev, rowIdNoneUnset, false);
+    check(
+      !rowNoneUnset.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: level:none with fileable unset injects nothing (fail-closed default)'
+    );
+
+    // ---- never shows on red/amber rows ----
+    freshCaches();
+    const rowIdRed = 'd0000000-0000-4000-8000-000000000004';
+    const rowIdAmber = 'd0000000-0000-4000-8000-000000000005';
+    const rowRed = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRed, dob: '01 Jan 1980 (46y)' });
+    const rowAmber = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmber, dob: '01 Jan 1980 (46y)' });
+    const gridRootRA = new El('div', {});
+    [rowRed, rowAmber].forEach(({ master, detail }) => {
+      gridRootRA.appendChild(master);
+      gridRootRA.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootRA);
+    sandbox.queueObservedContainer = gridRootRA;
+    sandbox.injectResultChip(0, redSev, rowIdRed, false);
+    sandbox.injectResultChip(1, amberSev, rowIdAmber, false);
+    const redHost = rowRed.wrap.querySelector('.ch-q-result');
+    const amberHost = rowAmber.wrap.querySelector('.ch-q-result');
+    check(
+      !!redHost && !/ch-q-fileable/.test(redHost.innerHTML),
+      'injectResultChip: a red-level row never shows the fileable tick'
+    );
+    check(
+      !!amberHost && !/ch-q-fileable/.test(amberHost.innerHTML),
+      'injectResultChip: an amber-level row never shows the fileable tick'
+    );
+
+    // ---- never shows on the error ("couldn't check") chip, even if a stale sev
+    // object on the call happened to carry fileable:true (defensive — the isError
+    // branch never looks at sev at all) ----
+    freshCaches();
+    const rowIdError = 'd0000000-0000-4000-8000-000000000006';
+    const rowError = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdError, dob: '01 Jan 1980 (46y)' });
+    const gridRootError = new El('div', {});
+    gridRootError.appendChild(rowError.master);
+    gridRootError.appendChild(rowError.detail);
+    sandbox.document = makeDocument(gridRootError);
+    sandbox.queueObservedContainer = gridRootError;
+    sandbox.injectResultChip(0, fileableSev, rowIdError, true); // isError=true
+    const errorHost = rowError.wrap.querySelector('.ch-q-result');
+    check(
+      !!errorHost && !/ch-q-fileable/.test(errorHost.innerHTML),
+      'injectResultChip: the error ("?") chip never shows the fileable tick, even with a fileable sev passed in'
+    );
+    check(
+      !!errorHost && /ch-chip-error/.test(errorHost.innerHTML),
+      'injectResultChip: the error row still renders its own grey "?" chip as normal'
+    );
+
+    // ---- survives SPA churn via reinjectCachedResultChips, keyed by the durable map ----
+    freshCaches();
+    const rowIdChurnFileable = 'd0000000-0000-4000-8000-000000000007';
+    const rowChurnFileable = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdChurnFileable, dob: '01 Jan 1980 (46y)' });
+    const gridRootChurn = new El('div', {});
+    gridRootChurn.appendChild(rowChurnFileable.master);
+    gridRootChurn.appendChild(rowChurnFileable.detail);
+    sandbox.document = makeDocument(gridRootChurn);
+    sandbox.queueObservedContainer = gridRootChurn;
+
+    sandbox._durableRowMap.set(0, rowIdChurnFileable);
+    sandbox._queueResultCache.set(rowIdChurnFileable, { sev: fileableSev, fileable: true, ts: Date.now() });
+    sandbox.injectResultChip(0, fileableSev, rowIdChurnFileable, false);
+    const churnHostBefore = rowChurnFileable.wrap.querySelector('.ch-q-result');
+    check(
+      !!churnHostBefore && /ch-q-fileable/.test(churnHostBefore.innerHTML),
+      'setup: fileable tick present before the churn'
+    );
+
+    // Vue re-render wipes every foreign node wholesale.
+    gridRootChurn.querySelectorAll('.ch-q-result, .ch-q-mon, .ch-queue-chips').forEach((n) => n.remove());
+    check(
+      gridRootChurn.querySelectorAll('.ch-q-result').length === 0,
+      "churn: wipe removed the fileable tick's host node from the grid"
+    );
+
+    sandbox.reinjectCachedResultChips();
+    const churnHostAfter = rowChurnFileable.wrap.querySelector('.ch-q-result');
+    check(
+      !!churnHostAfter && /ch-q-fileable/.test(churnHostAfter.innerHTML),
+      'reinjectCachedResultChips: fileable tick restored after churn from the durable map + cache'
+    );
+
+    // ---- pref gate: queueFileableMarker off (default true) suppresses the tick ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueFileableMarker: false } };
+    const rowIdPrefOff = 'd0000000-0000-4000-8000-000000000008';
+    const rowPrefOff = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdPrefOff, dob: '01 Jan 1980 (46y)' });
+    const gridRootPrefOff = new El('div', {});
+    gridRootPrefOff.appendChild(rowPrefOff.master);
+    gridRootPrefOff.appendChild(rowPrefOff.detail);
+    sandbox.document = makeDocument(gridRootPrefOff);
+    sandbox.queueObservedContainer = gridRootPrefOff;
+
+    sandbox.injectResultChip(0, fileableSev, rowIdPrefOff, false);
+    check(
+      !rowPrefOff.wrap.querySelector('.ch-q-result'),
+      'injectResultChip: queueFileableMarker=false suppresses the tick, and nothing else to show -> nothing injected at all'
+    );
+
+    sandbox.CONFIG = {}; // restore default (PREF('queueFileableMarker', true) -> true)
+  }
+
+  // ============================================================
+  // Layer 25 — items 4.1/4.2 (TRIAGE-LENS-2026-07-02.md): Pharmacy First
+  // divert chip + missing-info ask-back, wired to the ALREADY-BUILT
+  // reception-match engine (engine/reception-match.js,
+  // window.SentinelReceptionMatch) via decorateOneRow + the new
+  // showPathwayMenu popover (reusing the SAME activeActionMenu/
+  // renderRuleMenuActionItems/executeAction infra as showRuleMatchMenu —
+  // items 2.1/2.3/2.5). Exercises the REAL engine + REAL
+  // rules/reception-pathways.json content (not stubbed), same convention as
+  // Layer 19's window.TriageLensMatch. PREPARE-ONLY: every "copy" button
+  // writes to the navigator.clipboard mock below and NEVER calls anything
+  // that sends/files.
+  // ============================================================
+  console.log(
+    '\nLayer 25: items 4.1/4.2 — Pharmacy First divert chip + missing-info ask-back (reception-match engine)'
+  );
+
+  {
+    const ReceptionMatch = require('./engine/reception-match.js');
+    const receptionPathwaysData = require('./rules/reception-pathways.json');
+    // Fixture text reused across scenarios — matches the "earache" pathway
+    // (SYNONYM_TERMS), whose pharmacyFirst block carries BOTH ageMin(1) and
+    // ageMax(17) (the most robust "age-unknown fails closed" case — a
+    // pathway with neither bound can't demonstrate the fail-closed gate at
+    // all), and whose text volunteers the rf-mastoid red flag ("swelling
+    // behind the ear", escalate '999') while leaving every other red flag on
+    // that pathway (meningism/head-injury/sudden-deaf/facial-droop/
+    // unwell-child) as a gap — so ONE fixture exercises the PF chip, the
+    // ask-back gaps, AND the flaggedInText escalation note together. Verified
+    // directly against the real engine before writing these assertions.
+    const requestText = 'Earache since yesterday, with some swelling behind the ear.';
+    const expectedGapIds = ['rf-meningism', 'rf-head-injury', 'rf-sudden-deaf', 'rf-facial-droop', 'rf-unwell-child'];
+
+    let clipboardWrites;
+    const mockClipboard = () => {
+      clipboardWrites = [];
+      sandbox.navigator = {
+        clipboard: {
+          writeText: (text) => {
+            clipboardWrites.push(text);
+            return Promise.resolve();
+          },
+        },
+      };
+    };
+
+    const setupRow = ({ rowIndex = 0, rowId, dob, text = requestText }) => {
+      const { master, detail, wrap } = buildPreviewRowPair({ rowIndex, rowId, dob });
+      wrap.children[0].textContent = 'Request: ' + text;
+      const gridRoot = new El('div', {});
+      gridRoot.appendChild(master);
+      gridRoot.appendChild(detail);
+      sandbox.document = makeDocument(gridRoot);
+      sandbox.queueObservedContainer = gridRoot;
+      return { master, wrap };
+    };
+
+    // ---- known age within the pathway's PF band -> green "Pharmacy First"
+    //      chip renders (never an "Ask-back" chip on the SAME row — one
+    //      pathway chip per row) ----
+    freshCaches();
+    mockClipboard();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdA = 'e0000000-0000-4000-8000-000000000001';
+    const { wrap: wrapA } = setupRow({ rowId: rowIdA, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdA}"]`));
+
+    const ruleChipsA = wrapA.querySelectorAll('.ch-q-rule-chip');
+    const pfChip = ruleChipsA.find((c) => c.textContent.includes('Pharmacy First'));
+    check(
+      !!pfChip,
+      `known age (8) within earache's 1–17 PF band renders a "Pharmacy First" chip (got chips: ${ruleChipsA.map((c) => c.textContent).join(' | ')})`
+    );
+    check(
+      pfChip && pfChip.classes.includes('ch-chip-green'),
+      'Pharmacy First chip carries the GREEN colour class (ch-chip-green)'
+    );
+    check(
+      !ruleChipsA.some((c) => c.textContent.includes('Ask-back')),
+      'no separate "Ask-back" chip on the same row as the Pharmacy First chip (one pathway chip per row)'
+    );
+
+    // Clicking the chip opens the pathway menu via the SAME activeActionMenu
+    // singleton as every other popover in the suite.
+    pfChip.click();
+    let menu = sandbox.document.querySelector('.ch-pathway-menu');
+    check(!!menu, 'clicking the Pharmacy First chip opens a .ch-pathway-menu popover');
+    check(
+      sandbox.document.querySelectorAll('.ch-action-menu').length === 1,
+      'only one popover open at a time (shared singleton)'
+    );
+
+    // ---- escalation note: PROMINENT, at the top, names the volunteered red flag + its escalate level ----
+    const escalationEl = menu.querySelector('.ch-pathway-escalation');
+    check(!!escalationEl, 'flaggedInText (rf-mastoid, "swelling behind the ear") renders the escalation banner');
+    check(
+      /already mentioned/i.test(escalationEl.querySelector('.ch-pathway-escalation-head').textContent),
+      'escalation banner heading reads "…already mentioned…"'
+    );
+    const escalationLine = escalationEl.querySelector('.ch-pathway-escalation-line');
+    check(
+      /swelling.*BEHIND the ear/i.test(escalationLine.textContent) && /999/.test(escalationLine.textContent),
+      `escalation line names the volunteered red flag and its escalate level (999), got "${escalationLine && escalationLine.textContent}"`
+    );
+    check(
+      escalationLine._innerHTML === null,
+      'escalation line built via textContent, never innerHTML (untrusted-adjacent content discipline)'
+    );
+    // Escalation banner is the FIRST content node after the menu head/disclaimer.
+    const menuSectionOrder = menu.children.map((c) => c.classes[c.classes.length - 1] || c.classes[0]);
+    check(
+      menuSectionOrder.indexOf('ch-pathway-escalation') < menuSectionOrder.indexOf('ch-pathway-section'),
+      'escalation banner renders ABOVE the Pharmacy First/ask-back sections, not buried below them'
+    );
+
+    // ---- Pharmacy First section: pathway note + prepare-only redirect draft + copy button ----
+    const sectionHeads = menu.querySelectorAll('.ch-pathway-section-head').map((h) => h.textContent);
+    check(
+      sectionHeads.includes('Pharmacy First'),
+      `Pharmacy First section present, got heads: ${sectionHeads.join(', ')}`
+    );
+    const pfSection = menu
+      .querySelectorAll('.ch-pathway-section')
+      .find((s) => s.querySelector('.ch-pathway-section-head').textContent === 'Pharmacy First');
+    check(
+      /acute middle-ear infection ages 1–17/.test(pfSection.querySelector('.ch-pathway-note').textContent),
+      "Pharmacy First section shows the pathway's own CSO-signed pharmacyFirst.note"
+    );
+    const pfDraft = pfSection.querySelector('.ch-pathway-draft').textContent;
+    check(
+      /this looks suitable for pharmacy first \(earache\)/i.test(pfDraft),
+      `prepare-only redirect draft follows the "this looks suitable for Pharmacy First: …" template, got "${pfDraft}"`
+    );
+    check(
+      /review before use/i.test(pfDraft),
+      'redirect draft is explicitly labelled prepared/review-before-use, never framed as already sent'
+    );
+    const pfCopyBtn = pfSection.querySelector('.ch-action-menu-item-snippet');
+    check(
+      !!pfCopyBtn && pfCopyBtn.textContent.includes('Copy Pharmacy First message'),
+      'Pharmacy First section has a "Copy Pharmacy First message" button'
+    );
+    pfCopyBtn.click();
+    check(
+      clipboardWrites.length === 1 && clipboardWrites[0] === pfDraft,
+      'clicking the Pharmacy First copy button writes EXACTLY the shown draft text to the clipboard (prepare-only, via the existing hardened executeAction snippet path)'
+    );
+
+    // ---- ask-back section: every un-mentioned red flag listed as a gap, plus its own copy button ----
+    const abSection = menu
+      .querySelectorAll('.ch-pathway-section')
+      .find((s) => /Ask-back/.test(s.querySelector('.ch-pathway-section-head').textContent));
+    check(!!abSection, 'ask-back section present alongside the Pharmacy First section');
+    // NB: this fake selector engine has no descendant (space) combinator (see
+    // its own header comment) — '.ch-pathway-gap-list li' would silently
+    // degrade to matching just the <ul> itself. Walk .children instead.
+    const gapItems = abSection.querySelector('.ch-pathway-gap-list').children;
+    check(
+      gapItems.length === expectedGapIds.length,
+      `ask-back lists exactly the un-mentioned red flags (${expectedGapIds.length}: meningism/head-injury/sudden-deaf/facial-droop/unwell-child), got ${gapItems.length}`
+    );
+    check(
+      !gapItems.some((li) => /swelling.*BEHIND the ear/i.test(li.textContent)),
+      'the ALREADY-volunteered red flag (rf-mastoid) is never ALSO listed as a gap'
+    );
+    check(
+      gapItems.every((li) => li._innerHTML === null),
+      'every gap question rendered via textContent, never innerHTML'
+    );
+    const abCopyBtn = abSection.querySelector('.ch-action-menu-item-snippet');
+    check(
+      !!abCopyBtn && abCopyBtn.textContent.includes('Copy ask-back draft'),
+      'ask-back section has a "Copy ask-back draft" button'
+    );
+    clipboardWrites.length = 0;
+    abCopyBtn.click();
+    check(
+      clipboardWrites.length === 1 && /^Ask-back for review — Earache/.test(clipboardWrites[0]),
+      `clicking the ask-back copy button writes the buildAskBackText() draft to the clipboard, got "${clipboardWrites[0]}"`
+    );
+    check(
+      expectedGapIds.every((id) => {
+        const rf = receptionPathwaysData.pathways.find((p) => p.id === 'earache').redFlags.find((r) => r.id === id);
+        return clipboardWrites[0].includes(rf.ask);
+      }),
+      'the copied ask-back draft names every gap question (buildAskBackText output, unmodified)'
+    );
+
+    sandbox.closeActionMenu();
+
+    // ---- age UNKNOWN on the SAME matched pathway/text: PF chip fails closed
+    //      (never rendered), but the ask-back chip still surfaces the
+    //      volunteered red flag — a safety signal that must not disappear
+    //      just because Pharmacy First itself can't be confirmed ----
+    freshCaches();
+    mockClipboard();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdB = 'e0000000-0000-4000-8000-000000000002';
+    const { wrap: wrapB } = setupRow({ rowId: rowIdB, dob: 'Unknown' }); // no "(NNy)" -> ageMatch never fires
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdB}"]`));
+
+    const ruleChipsB = wrapB.querySelectorAll('.ch-q-rule-chip');
+    check(
+      !ruleChipsB.some((c) => c.textContent.includes('Pharmacy First')),
+      'age-unknown row: NO "Pharmacy First" chip (fail-closed — engine/reception-match.js never claims an eligibility it cannot confirm)'
+    );
+    const abChip = ruleChipsB.find((c) => c.textContent.includes('Ask-back'));
+    check(
+      !!abChip,
+      `age-unknown row still renders an "Ask-back" chip (the volunteered red flag must still surface), got chips: ${ruleChipsB.map((c) => c.textContent).join(' | ')}`
+    );
+    check(
+      abChip && abChip.classes.includes('ch-chip-info'),
+      'Ask-back chip carries the info colour class (ch-chip-info) — distinct from the green PF chip'
+    );
+
+    abChip.click();
+    menu = sandbox.document.querySelector('.ch-pathway-menu');
+    check(
+      !!menu && !!menu.querySelector('.ch-pathway-escalation'),
+      "age-unknown row: the escalation banner still renders from the Ask-back chip's menu"
+    );
+    check(
+      menu
+        .querySelectorAll('.ch-pathway-section-head')
+        .map((h) => h.textContent)
+        .every((t) => t !== 'Pharmacy First'),
+      'age-unknown row: the menu carries NO Pharmacy First section (eligibility could not be confirmed)'
+    );
+    sandbox.closeActionMenu();
+
+    // ---- pref gate: requestPathwayChips=false suppresses BOTH chip kinds outright ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { requestPathwayChips: false } };
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdC = 'e0000000-0000-4000-8000-000000000003';
+    const { wrap: wrapC } = setupRow({ rowId: rowIdC, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdC}"]`));
+    check(
+      !wrapC.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      'requestPathwayChips=false suppresses the Pharmacy First/Ask-back chip even though the same row would otherwise qualify (the age system chip, unrelated to this pref, still renders)'
+    );
+    sandbox.CONFIG = {}; // restore default (PREF('requestPathwayChips', true) -> true)
+
+    // ---- no pathway match at all: no throw, no pathway chip ----
+    freshCaches();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = receptionPathwaysData;
+    const rowIdD = 'e0000000-0000-4000-8000-000000000004';
+    const { wrap: wrapD } = setupRow({
+      rowId: rowIdD,
+      dob: '01 Jan 1980 (46y)',
+      text: 'Requesting a repeat prescription for statins please.',
+    });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdD}"]`));
+    check(
+      !wrapD.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      'request text matching no pathway: no Pharmacy First/Ask-back chip, no throw'
+    );
+
+    // ---- _receptionPathwaysData not yet loaded (null): safe no-op, matches the
+    //      "fetch hasn't resolved yet" race documented on ensureReceptionPathwaysLoaded ----
+    freshCaches();
+    sandbox.matchRules = () => [];
+    sandbox._receptionPathwaysData = null;
+    const rowIdE = 'e0000000-0000-4000-8000-000000000005';
+    const { wrap: wrapE } = setupRow({ rowId: rowIdE, dob: '01 Jan 2018 (8y)' });
+    sandbox.decorateOneRow(sandbox.document.querySelector(`[row-id="${rowIdE}"]`));
+    check(
+      !wrapE.querySelectorAll('.ch-q-rule-chip').some((c) => /Pharmacy First|Ask-back/.test(c.textContent)),
+      '_receptionPathwaysData still null (fetch not yet resolved): pathway-chip block is a safe no-op, no throw'
+    );
+
+    sandbox._receptionPathwaysData = null;
     sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
   }
 } else {
