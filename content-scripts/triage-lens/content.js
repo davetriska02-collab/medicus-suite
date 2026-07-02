@@ -4808,6 +4808,79 @@
     if (n) log('queue-result: tinted ' + n + ' row(s) from durable map (visible rows)');
   };
 
+  // ---- Seen-session row dimming (item 4.7, TRIAGE-LENS-2026-07-02.md) ----
+  // SAFETY-SENSITIVE — read docs/HAZARD-LOG.md before touching this section.
+  // Dims rows for tasks the GP has already OPENED this session, so unworked
+  // rows stand out. Visual only, session-local: `_seenTasks` is a plain Set
+  // of taskUuids, never persisted (no chrome.storage write), never cleared
+  // (lives for the page/tab session — a fresh page load starts empty). A
+  // taskUuid is added the moment runDetailVerdict() resolves it (below), the
+  // same "GP is now looking at this task" signal the detail-verdict banner
+  // itself keys off.
+  //
+  // HARD SAFETY GATE: a row is ONLY eligible to dim when it is NOT currently
+  // carrying ROW_TINT_RED or ROW_TINT_AMBER — i.e. its live severity is
+  // clear/none or unassessed. This is checked against the row's CURRENT tint
+  // class at apply time, every refreshQueueChips cycle (never a one-off
+  // snapshot taken when the task was opened), which is what gives the
+  // auto-undim behaviour for free: reapplyQueueRowTint (above) runs earlier
+  // in the SAME refreshQueueChips pass and derives the tint fresh from
+  // _queueResultCache every time, so a row that has since re-graded red/amber
+  // (a new result landed) has already LOST its tint class by the time this
+  // function reads it, fails the gate below, and is never dimmed — there is
+  // no separate "undo the dim" code path to get wrong. This suppresses
+  // NOTHING from the engine: chip content, tint colour and the status-bar
+  // counts are all completely unaffected by whether a row is dimmed.
+  //
+  // Pref-gated OFF by default (PREF('queueSeenDimming', false)) — the most
+  // snooze-adjacent feature in the plan, so opt-in is the conservative
+  // default.
+  const ROW_SEEN_CLASS = 'ch-row-seen';
+  const _seenTasks = new Set();
+
+  const clearQueueSeenDim = () => {
+    queueScope()
+      .querySelectorAll('.' + ROW_SEEN_CLASS)
+      .forEach((el) => el.classList.remove(ROW_SEEN_CLASS));
+  };
+
+  // Re-apply from _seenTasks + the durable rowIndex->taskUuid map. Exported
+  // for tests. MUST run after reapplyQueueRowTint in the same refresh cycle
+  // (refreshQueueChips wires this) so the tint-class gate below reflects this
+  // cycle's freshly-computed severity, not a stale one.
+  const reapplyQueueSeenDim = () => {
+    if (!PREF('queueSeenDimming', false)) return;
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri == null) return;
+        const rowIndex = Number(ri);
+        const taskUuid = _durableRowMap.get(rowIndex);
+        if (!taskUuid || !_seenTasks.has(taskUuid)) return;
+        // NEVER dim a row with a red/amber result — the escalation gate. Read the
+        // severity straight from the result cache (the source of truth), NOT from
+        // the tint CSS class: the tint is only rendered when prefs.queueRowTint is
+        // on, so a class check would wrongly dim a seen ALERT row for a user who
+        // has row-tint OFF but seen-dimming ON. A fresh red/amber cache entry
+        // blocks the dim regardless of any cosmetic pref; a later re-grade to
+        // red/amber removes the dim on the next refresh (auto-undim) for free.
+        const sevEntry = _queueResultCache.get(taskUuid);
+        if (
+          sevEntry &&
+          sevEntry.sev &&
+          sevEntry.ts &&
+          Date.now() - sevEntry.ts <= _RESULT_CACHE_TTL &&
+          (sevEntry.sev.level === 'red' || sevEntry.sev.level === 'amber')
+        ) {
+          return;
+        }
+        row.classList.add(ROW_SEEN_CLASS);
+        const previewRow = findQueuePreviewRow(row);
+        if (previewRow) previewRow.classList.add(ROW_SEEN_CLASS);
+      });
+  };
+
   // ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----
   // Opening a task and staring at a raw report to re-derive what the queue chip
   // already knew is the exact "the screen never lies" gap this closes: echo the
@@ -4984,6 +5057,12 @@
     if (!API) { removeDetailVerdictBanner(); return; }
     const ctx = API.detectMedicusContext(location.href);
     const taskUuid = ctx && ctx.taskUuid;
+    // Item 4.7 — mark this task "seen" as soon as its taskUuid resolves, on
+    // EVERY runDetailVerdict pass (idempotent — Set.add of an existing member
+    // is a no-op), regardless of the detailVerdictBanner pref below: seen-
+    // dimming is a separately-gated pref (queueSeenDimming) and must not be
+    // coupled to whether the banner itself renders.
+    if (taskUuid) _seenTasks.add(taskUuid);
     if (!taskUuid || !PREF('detailVerdictBanner', true)) {
       removeDetailVerdictBanner();
       _detailVerdictTaskUuid = taskUuid || null;
@@ -5163,12 +5242,20 @@
   let _queueFocusAlertsOn = false; // OFF by default (plan item 1.2)
   let _queueStatusBarRafPending = false;
 
-  const onQueueStatusJumpClick = () => {
+  // Shared jump-to-alert mechanics (item 1.2's button AND item 4.6's 'n' key
+  // both call this — factored out so there is exactly one implementation of
+  // "find the next red/amber row, scroll to it, flash it"). Pure-ish: reads
+  // the live DOM to find/scroll/flash the target row, but does NOT mutate
+  // _queueStatusJumpPos itself — both callers own that assignment so each can
+  // decide what else to do with the landed-on row-index (the keyboard
+  // handler additionally parks the kbd cursor there). Returns the row-index
+  // jumped to, or null if there was nothing to jump to. Exported for tests.
+  const jumpToAlertRow = (fromIndex) => {
     const { red, amber } = getQueueTintedRowIndexes();
-    const target = nextAlertRowIndex(_queueStatusJumpPos, red, amber);
-    if (target == null) return;
+    const target = nextAlertRowIndex(fromIndex, red, amber);
+    if (target == null) return null;
     const row = queueScope().querySelector('.ag-row[row-index="' + target + '"]:not(.ag-full-width-row)');
-    if (!row) return;
+    if (!row) return null;
     if (typeof row.scrollIntoView === 'function') {
       try {
         row.scrollIntoView({ block: 'center' });
@@ -5184,6 +5271,12 @@
       r.classList.add(QUEUE_STATUS_FLASH_CLASS);
       setTimeout(() => r.classList.remove(QUEUE_STATUS_FLASH_CLASS), 2600);
     });
+    return target;
+  };
+
+  const onQueueStatusJumpClick = () => {
+    const target = jumpToAlertRow(_queueStatusJumpPos);
+    if (target == null) return;
     _queueStatusJumpPos = target;
   };
 
@@ -5194,6 +5287,159 @@
     if (btn) {
       btn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
       if (btn.classList) btn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    }
+  };
+
+  // ---- Keyboard triage (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
+  // A single keydown handler, attached ONCE on document at module init
+  // (below), active only when pageType() is the queue AND focus is not in an
+  // input/textarea/select/contenteditable — never hijacks ordinary typing.
+  //   j / ArrowDown — move the cursor to the next visible row (row-index
+  //     order); k / ArrowUp — previous. Clamps at both ends (does not wrap:
+  //     this is a linear scan, unlike 'n's cycling jump).
+  //   Enter — activate the cursor row: click its open-link (the same target
+  //     the GP would click to open the task).
+  //   n — jump to the next red (amber-fallback) row, reusing jumpToAlertRow
+  //     above, and park the keyboard cursor there too.
+  //   ? — tiny help hint (console log only; deliberately minimal).
+  // Cursor state (_kbdCursorRowIndex) is session-local and reset on queue
+  // (re)entry/navigation by teardownQueueObserver (called at the start of
+  // every runQueue AND whenever the page navigates off the queue). The
+  // ch-kbd-cursor CLASS itself is cleared+reapplied every refreshQueueChips
+  // cycle (CLAUDE.md rule 4) so a recycled row-index never keeps a stale
+  // cursor from a previous patient.
+  const KBD_CURSOR_CLASS = 'ch-kbd-cursor';
+  let _kbdCursorRowIndex = null;
+
+  // Pure — sorted ascending row-index list of every row currently rendered in
+  // the (virtualised) grid. Exported for tests.
+  const visibleQueueRowIndexes = () => {
+    const out = [];
+    queueScope()
+      .querySelectorAll('.ag-row[row-index]:not(.ag-full-width-row)')
+      .forEach((row) => {
+        const ri = row.getAttribute('row-index');
+        if (ri != null) out.push(Number(ri));
+      });
+    out.sort((a, b) => a - b);
+    return out;
+  };
+
+  // Pure — where the cursor moves to for one j/k press, given the current
+  // cursor position (row-index or null) and the currently visible row-index
+  // list. direction is +1 (j/ArrowDown) or -1 (k/ArrowUp). Clamps at both
+  // ends rather than wrapping. A currentIndex no longer present in the list
+  // (its row scrolled out of the virtualised viewport, or was recycled onto
+  // a different task) re-anchors to the nearest end rather than doing
+  // nothing. Returns null only when the list itself is empty. Exported for
+  // tests.
+  const moveKbdCursor = (currentIndex, rowIndexes, direction) => {
+    if (!rowIndexes || !rowIndexes.length) return null;
+    if (currentIndex == null) return direction > 0 ? rowIndexes[0] : rowIndexes[rowIndexes.length - 1];
+    const pos = rowIndexes.indexOf(currentIndex);
+    if (pos === -1) return direction > 0 ? rowIndexes[0] : rowIndexes[rowIndexes.length - 1];
+    const next = pos + direction;
+    if (next < 0) return rowIndexes[0];
+    if (next >= rowIndexes.length) return rowIndexes[rowIndexes.length - 1];
+    return rowIndexes[next];
+  };
+
+  const clearQueueKbdCursor = () => {
+    queueScope()
+      .querySelectorAll('.' + KBD_CURSOR_CLASS)
+      .forEach((el) => el.classList.remove(KBD_CURSOR_CLASS));
+  };
+
+  // Re-apply the cursor class from _kbdCursorRowIndex — called both by the
+  // keyboard handler (after moving) and by refreshQueueChips (to restore the
+  // cursor visually across SPA churn, same pattern as reapplyQueueRowTint).
+  // No-op if the cursor row isn't currently rendered (virtualised out of
+  // view) — it is NOT re-anchored here; only an explicit j/k/n press moves
+  // it. Exported for tests.
+  const applyQueueKbdCursor = () => {
+    if (_kbdCursorRowIndex == null) return;
+    const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+    if (!row) return;
+    row.classList.add(KBD_CURSOR_CLASS);
+    const previewRow = findQueuePreviewRow(row);
+    if (previewRow) previewRow.classList.add(KBD_CURSOR_CLASS);
+  };
+
+  const scrollKbdCursorIntoView = () => {
+    if (_kbdCursorRowIndex == null) return;
+    const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+    if (row && typeof row.scrollIntoView === 'function') {
+      try {
+        row.scrollIntoView({ block: 'nearest' });
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  };
+
+  // Resolve the element to click to open a queue row's task — the same
+  // target a GP would click. Prefers a real link/link-role element inside
+  // the patientName cell (real Medicus may render the cell content as an
+  // anchor); falls back to the cell itself, which is the documented fallback
+  // chip host elsewhere in this file (queueChipHost) and is exactly what a
+  // GP visually clicks on regardless of what markup is under it. Returns
+  // null if the row has no patientName cell at all (header/pinned/malformed
+  // row). Exported for tests.
+  const findQueueRowOpenTarget = (row) => {
+    const nameCell = row.querySelector('[col-id="patientName"]');
+    if (!nameCell) return null;
+    const link = nameCell.querySelector('a, [role="link"]');
+    return link || nameCell;
+  };
+
+  // True when `el` is a live text-entry surface — the keyboard handler must
+  // never hijack typing into it. Exported for tests.
+  const isQueueKeydownTypingTarget = (el) => {
+    if (!el) return false;
+    const tag = el.tagName ? String(el.tagName).toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  };
+
+  const onQueueKeydown = (e) => {
+    if (!PREF('queueKeyboardNav', true)) return;
+    if (pageType() !== 'queue') return;
+    if (isQueueKeydownTypingTarget(e && e.target)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key;
+    if (key === 'j' || key === 'ArrowDown') {
+      if (e.preventDefault) e.preventDefault();
+      _kbdCursorRowIndex = moveKbdCursor(_kbdCursorRowIndex, visibleQueueRowIndexes(), 1);
+      clearQueueKbdCursor();
+      applyQueueKbdCursor();
+      scrollKbdCursorIntoView();
+    } else if (key === 'k' || key === 'ArrowUp') {
+      if (e.preventDefault) e.preventDefault();
+      _kbdCursorRowIndex = moveKbdCursor(_kbdCursorRowIndex, visibleQueueRowIndexes(), -1);
+      clearQueueKbdCursor();
+      applyQueueKbdCursor();
+      scrollKbdCursorIntoView();
+    } else if (key === 'Enter') {
+      if (_kbdCursorRowIndex == null) return;
+      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
+      if (!row) return;
+      const target = findQueueRowOpenTarget(row);
+      if (target && typeof target.click === 'function') {
+        if (e.preventDefault) e.preventDefault();
+        target.click();
+      }
+    } else if (key === 'n' || key === 'N') {
+      if (e.preventDefault) e.preventDefault();
+      const target = jumpToAlertRow(_queueStatusJumpPos);
+      if (target != null) {
+        _queueStatusJumpPos = target;
+        _kbdCursorRowIndex = target;
+        clearQueueKbdCursor();
+        applyQueueKbdCursor();
+      }
+    } else if (key === '?') {
+      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, n jumps to next red/amber');
     }
   };
 
@@ -5801,6 +6047,14 @@
     // toggle is restored on the next queue visit via runQueue's
     // applyQueueFocusClass() call.
     if (typeof document !== 'undefined' && document.body) document.body.classList.remove(QUEUE_FOCUS_CLASS);
+    // Item 4.6 — called both when leaving the queue AND at the start of every
+    // runQueue (fresh queue re-entry), so this one line covers "cursor resets
+    // on queue (re)entry / navigation" for both directions. The ch-kbd-cursor
+    // CLASS itself needs no explicit removal here — the DOM it was on is
+    // either gone (navigated away) or about to be fully re-decorated
+    // (runQueue -> decorateQueueRows), and refreshQueueChips's own
+    // clear/reapply cycle governs the class from then on.
+    _kbdCursorRowIndex = null;
   };
 
   const refreshQueueChips = () => {
@@ -5819,6 +6073,12 @@
     // Wipe stale severity tint in the SAME cycle as the chip-node wipe (item 1.3) —
     // a recycled row-index must never keep a previous patient's tint colour.
     clearQueueRowTint();
+    // Item 4.7 — same reasoning as the tint wipe above: a recycled row-index
+    // must never keep a previous patient's seen-dim.
+    clearQueueSeenDim();
+    // Item 4.6 — same reasoning: a recycled row-index must never keep a
+    // previous patient's keyboard cursor highlight.
+    clearQueueKbdCursor();
     // Item 2.2 — the wipe above just removed every .ch-q-result chip, including any
     // node the detail popover is anchored to. A popover whose anchor no longer exists
     // must close rather than linger detached/mis-positioned; reinjectCachedResultChips
@@ -5836,6 +6096,13 @@
     // a config-driven cache invalidation (entry.sev cleared, watchConfig handler below)
     // also clears/re-derives the tint for free (item 1.3, CLAUDE.md rule #4).
     reapplyQueueRowTint();
+    // Item 4.7 — MUST run after reapplyQueueRowTint (immediately above): the
+    // never-dim-an-alert-row gate reads the tint classes reapplyQueueRowTint
+    // just set for THIS cycle, which is what gives the auto-undim behaviour.
+    reapplyQueueSeenDim();
+    // Item 4.6 — restore the keyboard cursor highlight across this cycle's
+    // churn, same pattern as the tint/seen-dim reapply above.
+    applyQueueKbdCursor();
     // Restore monitoring chips synchronously from the per-task cache via the durable
     // rowIndex->taskUuid map (see reinjectCachedMonitoringChips above) — unconditional,
     // unlike the scheduleQueueMonitoring() fetch-scheduling call below, so cached chips
@@ -6101,6 +6368,13 @@
       run(true);
     });
   }).catch(e => console.error('[TriageLens] init failed', e));
+
+  // Item 4.6 — attached ONCE at module init (not per-queue-visit — the handler
+  // itself gates on pageType()==='queue' on every keypress, so there's nothing
+  // to attach/detach on navigation). Capture-phase like the other document-
+  // level keydown listeners in this file (onKeydownForMenu/onKeydownForResultPopover)
+  // so it sees the key before any Medicus-page handler could stop propagation.
+  document.addEventListener('keydown', onQueueKeydown, true);
 
   // Expose for manual re-trigger (demo / testing / SPA edge cases)
   window.__clinHudRun = () => run(true);

@@ -25,6 +25,8 @@
 .ch-oir-toast,
 .ch-row-sev-red,
 .ch-row-sev-amber,
+.ch-kbd-cursor,
+.ch-row-seen,
 .ch-result-popover,
 .ch-detail-verdict {
   /* Surfaces */
@@ -217,6 +219,31 @@
 }
 .ch-row-sev-amber {
   box-shadow: inset 3px 0 0 0 var(--amber);
+}
+
+/* ---- Keyboard-triage cursor (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
+   Marker CLASS added to Medicus's own `.ag-row` (and its preview/detail row)
+   by content.js's applyQueueKbdCursor — same "class on the host element, not
+   an injected node" pattern as the severity tint above, so it must be in the
+   token-block selector list (CLAUDE.md rule 5). Uses `outline`, deliberately
+   NOT `box-shadow` — the severity tint above already owns box-shadow on the
+   same element, and a row can be both tinted AND cursor-highlighted at once
+   (an amber row the GP is currently scanning with j/k); outline is a
+   separate box entirely so the two never fight for the same property. */
+.ch-kbd-cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- Seen-session row dimming (item 4.7, TRIAGE-LENS-2026-07-02.md) ----
+   SAFETY-SENSITIVE — see docs/HAZARD-LOG.md. Marker CLASS added by
+   content.js's reapplyQueueSeenDim, ONLY to rows that are NOT currently
+   red/amber tinted (the hard safety gate lives in content.js, not here —
+   this rule is visual only). opacity, not display:none — AG-Grid virtualises
+   rows, so hiding one would desync scroll math; a dimmed row is still fully
+   present and clickable. */
+.ch-row-seen {
+  opacity: 0.55;
 }
 
 /* ---- Detail-page verdict banner (item 2.4, TRIAGE-LENS-2026-07-02.md) ----

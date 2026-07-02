@@ -548,6 +548,24 @@ const parts = [
     'renderDetailVerdictBanner'
   ),
   extract(/const runDetailVerdict = \(\) => \{[\s\S]*?\n {2}\};/, 'runDetailVerdict'),
+  // Item 4.7 (TRIAGE-LENS-2026-07-02.md) — seen-session row dimming.
+  extract(/const ROW_SEEN_CLASS = .*;/, 'ROW_SEEN_CLASS'),
+  extract(/const _seenTasks = new Set\(\);/, '_seenTasks'),
+  extract(/const clearQueueSeenDim = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueSeenDim'),
+  extract(/const reapplyQueueSeenDim = \(\) => \{[\s\S]*?\n {2}\};/, 'reapplyQueueSeenDim'),
+  // Item 4.6 (TRIAGE-LENS-2026-07-02.md) — keyboard triage, plus the
+  // jumpToAlertRow helper it shares with item 1.2's status-bar jump button.
+  extract(/const jumpToAlertRow = \(fromIndex\) => \{[\s\S]*?\n {2}\};/, 'jumpToAlertRow'),
+  extract(/const KBD_CURSOR_CLASS = .*;/, 'KBD_CURSOR_CLASS'),
+  extract(/let _kbdCursorRowIndex = null;/, '_kbdCursorRowIndex'),
+  extract(/const visibleQueueRowIndexes = \(\) => \{[\s\S]*?\n {2}\};/, 'visibleQueueRowIndexes'),
+  extract(/const moveKbdCursor = \(currentIndex, rowIndexes, direction\) => \{[\s\S]*?\n {2}\};/, 'moveKbdCursor'),
+  extract(/const clearQueueKbdCursor = \(\) => \{[\s\S]*?\n {2}\};/, 'clearQueueKbdCursor'),
+  extract(/const applyQueueKbdCursor = \(\) => \{[\s\S]*?\n {2}\};/, 'applyQueueKbdCursor'),
+  extract(/const scrollKbdCursorIntoView = \(\) => \{[\s\S]*?\n {2}\};/, 'scrollKbdCursorIntoView'),
+  extract(/const findQueueRowOpenTarget = \(row\) => \{[\s\S]*?\n {2}\};/, 'findQueueRowOpenTarget'),
+  extract(/const isQueueKeydownTypingTarget = \(el\) => \{[\s\S]*?\n {2}\};/, 'isQueueKeydownTypingTarget'),
+  extract(/const onQueueKeydown = \(e\) => \{[\s\S]*?\n {2}\};/, 'onQueueKeydown'),
 ];
 
 const EXPOSE = [
@@ -604,6 +622,22 @@ const EXPOSE = [
   'buildDetailVerdictEl',
   'renderDetailVerdictBanner',
   'runDetailVerdict',
+  // Item 4.7 — seen-session row dimming.
+  'ROW_SEEN_CLASS',
+  '_seenTasks',
+  'clearQueueSeenDim',
+  'reapplyQueueSeenDim',
+  // Item 4.6 — keyboard triage.
+  'jumpToAlertRow',
+  'KBD_CURSOR_CLASS',
+  'visibleQueueRowIndexes',
+  'moveKbdCursor',
+  'clearQueueKbdCursor',
+  'applyQueueKbdCursor',
+  'scrollKbdCursorIntoView',
+  'findQueueRowOpenTarget',
+  'isQueueKeydownTypingTarget',
+  'onQueueKeydown',
 ];
 
 let sandbox = null;
@@ -615,7 +649,14 @@ if (!parts.some((p) => !p)) {
     // Item 2.2 — the popover singleton state lives in module-level `let`s the
     // extracted functions close over; this read-only accessor lets the harness
     // assert open/closed without reaching into the closure.
-    '\nthis.__popoverState = () => ({ el: _resultDetailPopoverEl, anchor: _resultDetailPopoverAnchor });';
+    '\nthis.__popoverState = () => ({ el: _resultDetailPopoverEl, anchor: _resultDetailPopoverAnchor });' +
+    // Item 4.6 — _kbdCursorRowIndex is a module-level `let` the extracted
+    // keyboard functions close over (same reasoning as the popover state
+    // above): a get/set accessor pair lets the harness both assert its
+    // current value AND reset it between scenarios (session-local state that
+    // must not leak across Layers).
+    '\nthis.__getKbdCursor = () => _kbdCursorRowIndex;' +
+    '\nthis.__setKbdCursor = (v) => { _kbdCursorRowIndex = v; };';
 
   // Externally-provided globals: real content.js reads these off `window`/
   // `CONFIG`/module-level `let`s. We pre-set them as plain mutable
@@ -737,6 +778,24 @@ if (!parts.some((p) => !p)) {
     check(typeof sandbox.buildDetailVerdictHeadline === 'function', 'buildDetailVerdictHeadline compiled and callable');
     check(typeof sandbox.renderDetailVerdictBanner === 'function', 'renderDetailVerdictBanner compiled and callable');
     check(typeof sandbox.runDetailVerdict === 'function', 'runDetailVerdict compiled and callable');
+    check(typeof sandbox.clearQueueSeenDim === 'function', 'clearQueueSeenDim compiled and callable');
+    check(typeof sandbox.reapplyQueueSeenDim === 'function', 'reapplyQueueSeenDim compiled and callable');
+    // Not `instanceof Set` — vm.createContext gives the sandbox its own realm
+    // with its own Set constructor, distinct from this file's global Set, so
+    // a cross-realm instanceof check would always fail even though the
+    // object genuinely is a Set within its own realm. Duck-type instead.
+    check(
+      typeof sandbox._seenTasks.add === 'function' && typeof sandbox._seenTasks.has === 'function',
+      '_seenTasks exposed as a Set-like object'
+    );
+    check(typeof sandbox.jumpToAlertRow === 'function', 'jumpToAlertRow compiled and callable');
+    check(typeof sandbox.visibleQueueRowIndexes === 'function', 'visibleQueueRowIndexes compiled and callable');
+    check(typeof sandbox.moveKbdCursor === 'function', 'moveKbdCursor compiled and callable');
+    check(typeof sandbox.clearQueueKbdCursor === 'function', 'clearQueueKbdCursor compiled and callable');
+    check(typeof sandbox.applyQueueKbdCursor === 'function', 'applyQueueKbdCursor compiled and callable');
+    check(typeof sandbox.findQueueRowOpenTarget === 'function', 'findQueueRowOpenTarget compiled and callable');
+    check(typeof sandbox.isQueueKeydownTypingTarget === 'function', 'isQueueKeydownTypingTarget compiled and callable');
+    check(typeof sandbox.onQueueKeydown === 'function', 'onQueueKeydown compiled and callable');
   } catch (e) {
     check(false, `combined extraction compiled without throwing (${e.message})`);
     sandbox = null;
@@ -776,6 +835,12 @@ function freshCaches() {
   sandbox._queueResultCache = new Map();
   sandbox._queueMonCache = new Map();
   sandbox.CONFIG = {}; // PREF('queueRowTint', true) -> true by default (no CONFIG.prefs)
+  // Item 4.7 — session-local "opened this session" set; must not leak between
+  // Layers/scenarios in this harness the way it deliberately never resets on
+  // a real page.
+  sandbox._seenTasks.clear();
+  // Item 4.6 — keyboard cursor is likewise session-local module state.
+  sandbox.__setKbdCursor(null);
 }
 
 if (sandbox) {
@@ -3514,6 +3579,493 @@ if (sandbox) {
     }
 
     sandbox.matchRules = () => []; // restore the file's default stub for later scenarios
+  }
+
+  // ============================================================
+  // Layer 22 — item 4.6 (TRIAGE-LENS-2026-07-02.md): keyboard triage.
+  // j/k cursor movement + clamping, Enter opens the cursor row's link,
+  // n reuses jumpToAlertRow/nextAlertRowIndex and parks the cursor there,
+  // the handler ignores keys typed into a form field, and the cursor class
+  // is wiped+reapplied on the churn cycle (never leaks onto a recycled row).
+  // ============================================================
+  console.log('\nLayer 22: keyboard triage — j/k cursor, clamping, Enter open-link, n jump, typing-guard, churn');
+
+  {
+    const kbdEvent = (key, target, extra) =>
+      Object.assign(
+        {
+          key,
+          target: target || { tagName: 'BODY' },
+          preventDefault() {},
+          metaKey: false,
+          ctrlKey: false,
+          altKey: false,
+        },
+        extra || {}
+      );
+
+    // ---- j/k move the cursor over rows, clamping at both ends ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIds3 = [
+      'b0000000-0000-4000-8000-000000000001',
+      'b0000000-0000-4000-8000-000000000002',
+      'b0000000-0000-4000-8000-000000000003',
+    ];
+    const rows3 = rowIds3.map((rowId, i) => buildPreviewRowPair({ rowIndex: i, rowId, dob: '01 Jan 1980 (46y)' }));
+    const gridRootK = new El('div', {});
+    rows3.forEach(({ master, detail }) => {
+      gridRootK.appendChild(master);
+      gridRootK.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootK);
+    sandbox.queueObservedContainer = gridRootK;
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(rows3[0].master.classes.includes('ch-kbd-cursor'), 'j from no cursor: lands on the FIRST row (row-index 0)');
+    check(sandbox.__getKbdCursor() === 0, 'j from no cursor: _kbdCursorRowIndex is 0');
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(!rows3[0].master.classes.includes('ch-kbd-cursor'), 'j: previous cursor row loses the class (single cursor)');
+    check(rows3[1].master.classes.includes('ch-kbd-cursor'), 'j: cursor now on row-index 1');
+    check(rows3[1].detail.classes.includes('ch-kbd-cursor'), 'j: preview/detail row ALSO gets the cursor class');
+
+    sandbox.onQueueKeydown(kbdEvent('ArrowDown'));
+    check(rows3[2].master.classes.includes('ch-kbd-cursor'), 'ArrowDown: cursor now on row-index 2 (last row)');
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(
+      rows3[2].master.classes.includes('ch-kbd-cursor') && sandbox.__getKbdCursor() === 2,
+      'j at the last row: CLAMPS (stays at row-index 2), does not wrap to row 0'
+    );
+
+    sandbox.onQueueKeydown(kbdEvent('k'));
+    sandbox.onQueueKeydown(kbdEvent('k'));
+    check(rows3[0].master.classes.includes('ch-kbd-cursor'), 'k k: cursor walked back down to row-index 0');
+    sandbox.onQueueKeydown(kbdEvent('ArrowUp'));
+    check(
+      rows3[0].master.classes.includes('ch-kbd-cursor') && sandbox.__getKbdCursor() === 0,
+      'k at the first row: CLAMPS (stays at row-index 0), does not wrap to the last row'
+    );
+
+    // ---- moveKbdCursor (pure) — direct clamp/empty-list assertions ----
+    check(sandbox.moveKbdCursor(null, [], 1) === null, 'moveKbdCursor: empty row list -> null');
+    check(sandbox.moveKbdCursor(null, [5, 7, 9], 1) === 5, 'moveKbdCursor: no cursor yet, direction down -> first row');
+    check(sandbox.moveKbdCursor(null, [5, 7, 9], -1) === 9, 'moveKbdCursor: no cursor yet, direction up -> last row');
+    check(sandbox.moveKbdCursor(9, [5, 7, 9], 1) === 9, 'moveKbdCursor: clamps at the last row going down');
+    check(sandbox.moveKbdCursor(5, [5, 7, 9], -1) === 5, 'moveKbdCursor: clamps at the first row going up');
+    check(
+      sandbox.moveKbdCursor(999, [5, 7, 9], 1) === 5,
+      'moveKbdCursor: a cursor row no longer in the list re-anchors to the first row (direction down)'
+    );
+
+    // ---- Enter activates the cursor row: clicks its open-link ----
+    // Sub-case A: no anchor in the patientName cell -> falls back to clicking
+    // the cell itself (the documented fallback host elsewhere in this file).
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdEnterA = 'b0000000-0000-4000-8000-000000000004';
+    const rowEnterA = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEnterA, dob: '01 Jan 1980 (46y)' });
+    const gridRootEnterA = new El('div', {});
+    gridRootEnterA.appendChild(rowEnterA.master);
+    gridRootEnterA.appendChild(rowEnterA.detail);
+    sandbox.document = makeDocument(gridRootEnterA);
+    sandbox.queueObservedContainer = gridRootEnterA;
+    const nameCellA = rowEnterA.master.querySelector('[col-id="patientName"]');
+    let cellClicked = false;
+    nameCellA.addEventListener('click', () => {
+      cellClicked = true;
+    });
+
+    sandbox.onQueueKeydown(kbdEvent('j')); // put the cursor on row 0
+    sandbox.onQueueKeydown(kbdEvent('Enter'));
+    check(cellClicked, 'Enter (no anchor present): clicks the patientName CELL itself');
+
+    // Sub-case B: an anchor IS present inside the patientName cell -> Enter
+    // clicks the anchor, not the cell.
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdEnterB = 'b0000000-0000-4000-8000-000000000005';
+    const rowEnterB = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEnterB, dob: '01 Jan 1980 (46y)' });
+    const gridRootEnterB = new El('div', {});
+    gridRootEnterB.appendChild(rowEnterB.master);
+    gridRootEnterB.appendChild(rowEnterB.detail);
+    sandbox.document = makeDocument(gridRootEnterB);
+    sandbox.queueObservedContainer = gridRootEnterB;
+    const nameCellB = rowEnterB.master.querySelector('[col-id="patientName"]');
+    const anchorB = new El('a', { href: '#' });
+    nameCellB.appendChild(anchorB);
+    let anchorClicked = false;
+    let cellBClicked = false;
+    anchorB.addEventListener('click', () => {
+      anchorClicked = true;
+    });
+    nameCellB.addEventListener('click', () => {
+      cellBClicked = true;
+    });
+
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    sandbox.onQueueKeydown(kbdEvent('Enter'));
+    check(anchorClicked, 'Enter (anchor present): clicks the ANCHOR inside the patientName cell');
+    check(
+      !cellBClicked,
+      "Enter (anchor present): does NOT also click the cell itself (anchor wins, doesn't bubble here)"
+    );
+
+    // findQueueRowOpenTarget directly — no cell at all -> null, not a throw.
+    const rowNoCell = new El('div', { class: 'ag-row', 'row-index': '0' });
+    check(sandbox.findQueueRowOpenTarget(rowNoCell) === null, 'findQueueRowOpenTarget: no patientName cell -> null');
+
+    // ---- n reuses jumpToAlertRow/nextAlertRowIndex and parks the cursor ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdRedN = 'b0000000-0000-4000-8000-000000000006';
+    const rowIdAmberN = 'b0000000-0000-4000-8000-000000000007';
+    const rowRedN = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedN, dob: '01 Jan 1980 (46y)' });
+    const rowAmberN = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdAmberN, dob: '01 Jan 1980 (46y)' });
+    const gridRootN = new El('div', {});
+    [rowRedN, rowAmberN].forEach(({ master, detail }) => {
+      gridRootN.appendChild(master);
+      gridRootN.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootN);
+    sandbox.queueObservedContainer = gridRootN;
+    sandbox._durableRowMap.set(0, rowIdRedN);
+    sandbox._durableRowMap.set(1, rowIdAmberN);
+    sandbox._queueResultCache.set(rowIdRedN, { sev: redSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdAmberN, { sev: amberSev, ts: Date.now() });
+    sandbox.reapplyQueueRowTint();
+
+    sandbox.onQueueKeydown(kbdEvent('n'));
+    check(
+      sandbox.__getKbdCursor() === 0,
+      'n: jumps to the RED row first (row-index 0), same order as nextAlertRowIndex'
+    );
+    check(rowRedN.master.classes.includes('ch-kbd-cursor'), 'n: the keyboard cursor is parked on the row jumped to');
+    check(
+      rowRedN.master.classes.includes('ch-q-status-flash'),
+      'n: reuses the SAME flash-on-jump behaviour as the status-bar jump button'
+    );
+
+    // ---- handler ignores keys when focus is in a form field ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdTyping = 'b0000000-0000-4000-8000-000000000008';
+    const rowTyping = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdTyping, dob: '01 Jan 1980 (46y)' });
+    const gridRootTyping = new El('div', {});
+    gridRootTyping.appendChild(rowTyping.master);
+    gridRootTyping.appendChild(rowTyping.detail);
+    sandbox.document = makeDocument(gridRootTyping);
+    sandbox.queueObservedContainer = gridRootTyping;
+
+    for (const target of [
+      { tagName: 'INPUT' },
+      { tagName: 'TEXTAREA' },
+      { tagName: 'SELECT' },
+      { tagName: 'DIV', isContentEditable: true },
+    ]) {
+      sandbox.onQueueKeydown(kbdEvent('j', target));
+    }
+    check(
+      sandbox.__getKbdCursor() === null && !rowTyping.master.classes.includes('ch-kbd-cursor'),
+      'onQueueKeydown: "j" typed into an input/textarea/select/contenteditable never moves the cursor'
+    );
+    check(
+      sandbox.isQueueKeydownTypingTarget({ tagName: 'INPUT' }) === true &&
+        sandbox.isQueueKeydownTypingTarget({ tagName: 'DIV' }) === false &&
+        sandbox.isQueueKeydownTypingTarget(null) === false,
+      'isQueueKeydownTypingTarget: input/textarea/select/contentEditable true, plain div/null false'
+    );
+
+    // Off the queue page (pageType !== 'queue') the handler is a no-op too.
+    sandbox.pageType = () => 'detail';
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(sandbox.__getKbdCursor() === null, 'onQueueKeydown: off the queue page, "j" is a no-op');
+
+    // Pref off -> handler is a no-op even on the queue page.
+    sandbox.pageType = () => 'queue';
+    sandbox.CONFIG = { prefs: { queueKeyboardNav: false } };
+    sandbox.onQueueKeydown(kbdEvent('j'));
+    check(sandbox.__getKbdCursor() === null, 'onQueueKeydown: prefs.queueKeyboardNav=false -> "j" is a no-op');
+    sandbox.CONFIG = {};
+
+    // ---- cursor class wiped + reapplied on the churn cycle; never leaks
+    //      onto a recycled row-index ----
+    freshCaches();
+    sandbox.pageType = () => 'queue';
+    const rowIdChurnK = 'b0000000-0000-4000-8000-000000000009';
+    const rowChurnK = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdChurnK, dob: '01 Jan 1980 (46y)' });
+    const gridRootChurnK = new El('div', {});
+    gridRootChurnK.appendChild(rowChurnK.master);
+    gridRootChurnK.appendChild(rowChurnK.detail);
+    sandbox.document = makeDocument(gridRootChurnK);
+    sandbox.queueObservedContainer = gridRootChurnK;
+
+    sandbox.onQueueKeydown(kbdEvent('j')); // cursor -> row-index 0
+    check(rowChurnK.master.classes.includes('ch-kbd-cursor'), 'churn setup: cursor present before the churn cycle');
+
+    sandbox.clearQueueKbdCursor();
+    check(
+      !rowChurnK.master.classes.includes('ch-kbd-cursor') && !rowChurnK.detail.classes.includes('ch-kbd-cursor'),
+      'clearQueueKbdCursor: cursor class removed on the wipe half of the refresh cycle'
+    );
+    sandbox.applyQueueKbdCursor();
+    check(
+      rowChurnK.master.classes.includes('ch-kbd-cursor'),
+      'applyQueueKbdCursor: cursor restored on the SAME row-index after the wipe (churn cycle survives)'
+    );
+
+    // AG-Grid REUSES the same DOM node for a given row-index slot across
+    // churn (that's what "virtualised" means — same node object, different
+    // backing task) — same reasoning Layer 8's tint "recycled row-index"
+    // scenario relies on. For the cursor, which is row-index-keyed (not
+    // taskUuid-keyed), that reuse is transparent: the SAME node just keeps
+    // its cursor class across a wipe/reapply cycle, already covered above.
+    // The other real churn shape is the grid being torn down and rebuilt
+    // with a DIFFERENT row-index set entirely (e.g. the queue re-sorted and
+    // row-index 0 no longer exists in the new render) — applyQueueKbdCursor
+    // must be a safe no-op then, not throw and not tag the wrong row.
+    const rowOtherIndex = buildPreviewRowPair({
+      rowIndex: 5,
+      rowId: 'b0000000-0000-4000-8000-00000000000a',
+      dob: '01 Jan 1980 (46y)',
+    });
+    const gridRootRebuilt = new El('div', {});
+    gridRootRebuilt.appendChild(rowOtherIndex.master);
+    gridRootRebuilt.appendChild(rowOtherIndex.detail);
+    sandbox.document = makeDocument(gridRootRebuilt);
+    sandbox.queueObservedContainer = gridRootRebuilt;
+
+    sandbox.clearQueueKbdCursor(); // no-op against the new DOM (nothing carries the class there)
+    sandbox.applyQueueKbdCursor(); // _kbdCursorRowIndex is still 0 — no row-index 0 in this DOM
+    check(
+      !rowOtherIndex.master.classes.includes('ch-kbd-cursor'),
+      'grid rebuilt with a different row-index set: applyQueueKbdCursor does not mis-tag an unrelated row'
+    );
+
+    sandbox.pageType = () => 'detail'; // restore the file's default for any later scenarios
+  }
+
+  // ============================================================
+  // Layer 23 — item 4.7 (TRIAGE-LENS-2026-07-02.md, SAFETY-SENSITIVE):
+  // seen-session row dimming. A seen clear/unassessed row dims; a seen
+  // red/amber row NEVER dims; a seen row that later re-grades red/amber
+  // auto-loses the dim on reapply; pref-off means no dim at all; the dim
+  // survives a churn cycle only for rows still clear.
+  // ============================================================
+  console.log(
+    '\nLayer 23: seen-session row dimming — clear dims, red/amber NEVER dims, auto-undim on escalation, pref gate, churn'
+  );
+
+  {
+    // ---- a seen CLEAR row dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdClear = 'c0000000-0000-4000-8000-000000000001';
+    const rowClear = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdClear, dob: '01 Jan 1980 (46y)' });
+    const gridRootClear = new El('div', {});
+    gridRootClear.appendChild(rowClear.master);
+    gridRootClear.appendChild(rowClear.detail);
+    sandbox.document = makeDocument(gridRootClear);
+    sandbox.queueObservedContainer = gridRootClear;
+    sandbox._durableRowMap.set(0, rowIdClear);
+    sandbox._queueResultCache.set(rowIdClear, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdClear);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowClear.master.classes.includes('ch-row-seen'), 'a seen, cached-clear row gets ch-row-seen');
+    check(rowClear.detail.classes.includes('ch-row-seen'), 'a seen, cached-clear preview row ALSO gets ch-row-seen');
+
+    // ---- a seen row NOT yet in _seenTasks does not dim ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdUnseen = 'c0000000-0000-4000-8000-000000000002';
+    const rowUnseen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdUnseen, dob: '01 Jan 1980 (46y)' });
+    const gridRootUnseen = new El('div', {});
+    gridRootUnseen.appendChild(rowUnseen.master);
+    gridRootUnseen.appendChild(rowUnseen.detail);
+    sandbox.document = makeDocument(gridRootUnseen);
+    sandbox.queueObservedContainer = gridRootUnseen;
+    sandbox._durableRowMap.set(0, rowIdUnseen);
+    sandbox._queueResultCache.set(rowIdUnseen, { sev: noneSev, ts: Date.now() });
+    // deliberately NOT added to _seenTasks
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(!rowUnseen.master.classes.includes('ch-row-seen'), 'a cached-clear row NOT in _seenTasks never dims');
+
+    // ---- HARD SAFETY GATE: a seen RED row NEVER dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdRedSeen = 'c0000000-0000-4000-8000-000000000003';
+    const rowRedSeen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedSeen, dob: '01 Jan 1980 (46y)' });
+    const gridRootRedSeen = new El('div', {});
+    gridRootRedSeen.appendChild(rowRedSeen.master);
+    gridRootRedSeen.appendChild(rowRedSeen.detail);
+    sandbox.document = makeDocument(gridRootRedSeen);
+    sandbox.queueObservedContainer = gridRootRedSeen;
+    sandbox._durableRowMap.set(0, rowIdRedSeen);
+    sandbox._queueResultCache.set(rowIdRedSeen, { sev: redSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdRedSeen);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowRedSeen.master.classes.includes('ch-row-sev-red'), 'red-cached row: sanity check, tint applied as normal');
+    check(
+      !rowRedSeen.master.classes.includes('ch-row-seen'),
+      'SAFETY: a seen RED row is NEVER dimmed, even though its taskUuid is in _seenTasks'
+    );
+
+    // ---- HARD SAFETY GATE (cross-pref): row-tint OFF + seen-dim ON, a seen RED
+    // row STILL must not dim. The escalation gate reads the result cache, not the
+    // tint CSS class, so it can't be defeated by disabling the cosmetic tint. ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueRowTint: false, queueSeenDimming: true } };
+    const rowIdRedNoTint = 'c0000000-0000-4000-8000-000000000009';
+    const rowRedNoTint = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdRedNoTint, dob: '01 Jan 1980 (46y)' });
+    const gridRootRedNoTint = new El('div', {});
+    gridRootRedNoTint.appendChild(rowRedNoTint.master);
+    gridRootRedNoTint.appendChild(rowRedNoTint.detail);
+    sandbox.document = makeDocument(gridRootRedNoTint);
+    sandbox.queueObservedContainer = gridRootRedNoTint;
+    sandbox._durableRowMap.set(0, rowIdRedNoTint);
+    sandbox._queueResultCache.set(rowIdRedNoTint, { sev: redSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdRedNoTint);
+
+    sandbox.reapplyQueueRowTint(); // no-op: tint pref off, so NO tint class is set
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowRedNoTint.master.classes.includes('ch-row-sev-red'),
+      'cross-pref sanity: with queueRowTint off, no tint class is applied'
+    );
+    check(
+      !rowRedNoTint.master.classes.includes('ch-row-seen'),
+      'SAFETY (cross-pref): tint OFF + seen ON — a seen RED row is STILL never dimmed (cache-truth gate)'
+    );
+
+    // ---- HARD SAFETY GATE: a seen AMBER row NEVER dims ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdAmberSeen = 'c0000000-0000-4000-8000-000000000004';
+    const rowAmberSeen = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdAmberSeen, dob: '01 Jan 1980 (46y)' });
+    const gridRootAmberSeen = new El('div', {});
+    gridRootAmberSeen.appendChild(rowAmberSeen.master);
+    gridRootAmberSeen.appendChild(rowAmberSeen.detail);
+    sandbox.document = makeDocument(gridRootAmberSeen);
+    sandbox.queueObservedContainer = gridRootAmberSeen;
+    sandbox._durableRowMap.set(0, rowIdAmberSeen);
+    sandbox._queueResultCache.set(rowIdAmberSeen, { sev: amberSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdAmberSeen);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowAmberSeen.master.classes.includes('ch-row-seen'),
+      'SAFETY: a seen AMBER row is NEVER dimmed, even though its taskUuid is in _seenTasks'
+    );
+
+    // ---- AUTO-UNDIM: a seen row that later re-grades red loses the dim on
+    //      the very next reapply cycle, with no separate "undo" step ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdEscalate = 'c0000000-0000-4000-8000-000000000005';
+    const rowEscalate = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdEscalate, dob: '01 Jan 1980 (46y)' });
+    const gridRootEscalate = new El('div', {});
+    gridRootEscalate.appendChild(rowEscalate.master);
+    gridRootEscalate.appendChild(rowEscalate.detail);
+    sandbox.document = makeDocument(gridRootEscalate);
+    sandbox.queueObservedContainer = gridRootEscalate;
+    sandbox._durableRowMap.set(0, rowIdEscalate);
+    sandbox._queueResultCache.set(rowIdEscalate, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdEscalate);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowEscalate.master.classes.includes('ch-row-seen'), 'auto-undim setup: dimmed while cached clear');
+
+    // A new (more severe) result lands for the same task.
+    sandbox._queueResultCache.set(rowIdEscalate, { sev: redSev, ts: Date.now() });
+    // The full churn-cycle sequence refreshQueueChips runs: wipe both marker
+    // classes, then re-derive both fresh from the (now-updated) cache.
+    sandbox.clearQueueRowTint();
+    sandbox.clearQueueSeenDim();
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(rowEscalate.master.classes.includes('ch-row-sev-red'), 'auto-undim: the row now carries the red tint');
+    check(
+      !rowEscalate.master.classes.includes('ch-row-seen'),
+      'auto-undim: the SAME row automatically loses ch-row-seen the moment it re-grades red — no separate undo step'
+    );
+
+    // ---- pref off = no dim, even for an otherwise-eligible seen clear row ----
+    freshCaches();
+    sandbox.CONFIG = {}; // PREF('queueSeenDimming', false) -> false by default
+    const rowIdPrefOff = 'c0000000-0000-4000-8000-000000000006';
+    const rowPrefOff = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdPrefOff, dob: '01 Jan 1980 (46y)' });
+    const gridRootPrefOff = new El('div', {});
+    gridRootPrefOff.appendChild(rowPrefOff.master);
+    gridRootPrefOff.appendChild(rowPrefOff.detail);
+    sandbox.document = makeDocument(gridRootPrefOff);
+    sandbox.queueObservedContainer = gridRootPrefOff;
+    sandbox._durableRowMap.set(0, rowIdPrefOff);
+    sandbox._queueResultCache.set(rowIdPrefOff, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdPrefOff);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      !rowPrefOff.master.classes.includes('ch-row-seen'),
+      'prefs.queueSeenDimming=false (default): reapplyQueueSeenDim is a no-op even for an eligible seen-clear row'
+    );
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+
+    // ---- churn: the dim survives a full wipe/reapply cycle, but ONLY for a
+    //      row that is STILL clear — a sibling row that escalated in the same
+    //      churn does not come back dimmed ----
+    freshCaches();
+    sandbox.CONFIG = { prefs: { queueSeenDimming: true } };
+    const rowIdStillClear = 'c0000000-0000-4000-8000-000000000007';
+    const rowIdNowRed = 'c0000000-0000-4000-8000-000000000008';
+    const rowStillClear = buildPreviewRowPair({ rowIndex: 0, rowId: rowIdStillClear, dob: '01 Jan 1980 (46y)' });
+    const rowNowRed = buildPreviewRowPair({ rowIndex: 1, rowId: rowIdNowRed, dob: '01 Jan 1980 (46y)' });
+    const gridRootMixed = new El('div', {});
+    [rowStillClear, rowNowRed].forEach(({ master, detail }) => {
+      gridRootMixed.appendChild(master);
+      gridRootMixed.appendChild(detail);
+    });
+    sandbox.document = makeDocument(gridRootMixed);
+    sandbox.queueObservedContainer = gridRootMixed;
+    sandbox._durableRowMap.set(0, rowIdStillClear);
+    sandbox._durableRowMap.set(1, rowIdNowRed);
+    sandbox._queueResultCache.set(rowIdStillClear, { sev: noneSev, ts: Date.now() });
+    sandbox._queueResultCache.set(rowIdNowRed, { sev: noneSev, ts: Date.now() });
+    sandbox._seenTasks.add(rowIdStillClear);
+    sandbox._seenTasks.add(rowIdNowRed);
+
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      rowStillClear.master.classes.includes('ch-row-seen') && rowNowRed.master.classes.includes('ch-row-seen'),
+      'churn setup: both seen clear rows start dimmed'
+    );
+
+    // One of the two escalates; simulate the churn cycle.
+    sandbox._queueResultCache.set(rowIdNowRed, { sev: amberSev, ts: Date.now() });
+    sandbox.clearQueueRowTint();
+    sandbox.clearQueueSeenDim();
+    sandbox.reapplyQueueRowTint();
+    sandbox.reapplyQueueSeenDim();
+    check(
+      rowStillClear.master.classes.includes('ch-row-seen'),
+      'churn: the row that is STILL clear comes back dimmed after the wipe/reapply cycle'
+    );
+    check(
+      rowNowRed.master.classes.includes('ch-row-sev-amber') && !rowNowRed.master.classes.includes('ch-row-seen'),
+      'churn: the row that escalated to amber comes back tinted but NOT dimmed'
+    );
+
+    sandbox.CONFIG = {}; // restore default for any tests that might run after this block
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');
