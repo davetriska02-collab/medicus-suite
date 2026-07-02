@@ -65,6 +65,15 @@
 //   mirrorOf    — 'content.js' for contracts whose selectors live in the file
 //                 this repo must not edit; null for contracts owned by a file
 //                 this batch migrates to read FROM this registry.
+//   suppressedByOk — optional id of another contract whose OK status this same
+//                 probe round means THIS contract's own FAIL is a covered
+//                 fallback, not a user-visible degradation — e.g.
+//                 queue.preview-row-link failing to find the preview row is a
+//                 real DOM change, but queue.chip-host's OWN legacy fallback
+//                 (the patientName cell) still lands the chip, so the
+//                 clinician sees nothing wrong. The canary treats this
+//                 contract as OK whenever the referenced contract reads OK in
+//                 the same round (see contract-canary.js applyProbeRound).
 //
 // ── Probe semantics ───────────────────────────────────────────────────────────
 //   NOT_APPLICABLE — anchor matches 0 elements (page not loaded / empty —
@@ -131,7 +140,7 @@
         'How a queue master row\'s own preview/detail row is located: by id (master row-id="<UUID>" ↔ detail row-id="detail_<UUID>"), falling back to a DOM-order .ag-full-width-row sibling for simpler layouts / test mocks.',
       feature: 'Queue chips — master/detail row linkage (findQueuePreviewRow)',
       degradation:
-        'chips can no longer find the roomy preview row to inject into and fall back to the width-capped inline cell, or (if the fallback also fails) do not inject at all.',
+        'chips can no longer find the roomy preview row to inject into and fall back to the width-capped inline cell, or (if the fallback also fails) do not inject at all. The latter case is what the health strip should actually surface — see suppressedByOk.',
       source: 'content-scripts/triage-lens/content.js:3518-3534 (findQueuePreviewRow)',
       pageMatch: /\/tasks\/[^/]+\/task-list/,
       anchor: '.ag-row',
@@ -139,6 +148,13 @@
       legacy: [['.ag-full-width-row']],
       runtime: true,
       mirrorOf: 'content.js',
+      // queueChipHost() (content.js:3579-3586) itself falls back to the
+      // patientName cell when the preview row is missing, and queue.chip-host
+      // probes that whole chain (target + both legacy tiers, including the
+      // patientName cell). So when queue.chip-host reads OK, chips are
+      // visibly landing somewhere even though this narrower preview-row
+      // linkage failed — not a clinician-visible break, don't alarm on it.
+      suppressedByOk: 'queue.chip-host',
     },
     {
       id: 'queue.chip-marker-classes',
@@ -327,7 +343,7 @@
       feature:
         'Patient UUID resolution — DOM fallback (used by Sentinel and the triage lens task-list/overview pipeline)',
       degradation:
-        'on pages where URL-based UUID detection fails, the extension can no longer resolve which patient it is looking at — the whole data pipeline (chips, OIR, lab filing) falls back to "no patient resolved" rather than silently showing the wrong patient (fail-safe, but a real capability loss).',
+        'on pages where URL-based UUID detection fails, the extension can no longer resolve which patient it is looking at — the whole data pipeline (chips, OIR, lab filing) falls back to "no patient resolved" rather than silently showing the wrong patient (fail-safe, but a real capability loss). This DOM fallback is only ever consulted when detectMedicusContext() (engine/api-client.js) cannot already resolve a patient/encounter/task id from the URL — the canary skips probing it on rounds where the URL already resolved one, since a FAIL there could never actually be reached (see contract-canary.js runProbeRound).',
       source: 'engine/api-client.js:100-134 (findPatientUuidFromDom)',
       pageMatch: null,
       anchor: 'a[href]',

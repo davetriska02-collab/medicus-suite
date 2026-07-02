@@ -26,6 +26,29 @@
 //     the registry's "applies everywhere" convention) — see
 //     contractsForPage().
 //
+// ── Two false-alarm guards (a covered fallback is not a degradation) ────────
+// A contract failing its OWN narrow selector is not the same as the FEATURE
+// it backs breaking for the clinician — two contracts got there via a
+// different route:
+//   - suppressedByOk (declared in the registry, see dom-contracts.js): when
+//     queue.preview-row-link FAILs but queue.chip-host — which probes the
+//     SAME injection chain's own further fallback (the patientName cell) —
+//     reads OK in the same round, chips are visibly landing somewhere. This
+//     round's raw status is overridden to 'ok' before hysteresis sees it, so
+//     a real (but covered) DOM change never promotes to a 'degraded' banner,
+//     and an already-degraded contract auto-recovers the moment the fallback
+//     starts covering it.
+//   - the UUID DOM-fallback (api-client.patient-uuid-dom-fallback) is only
+//     ever CONSULTED when detectMedicusContext() can't already resolve a
+//     patient/encounter/task id from the URL (engine/api-client.js:90-92).
+//     Probing it on every page regardless (pageMatch: null) means it FAILs
+//     constantly on pages — e.g. the queue list, a genuinely multi-patient
+//     screen — where URL resolution already succeeded and the DOM fallback
+//     was never going to run. runProbeRound skips this contract for any
+//     round where SentinelApiClient.detectMedicusContext(href) already
+//     resolved an id, rather than trying to approximate that with pageMatch
+//     (pageMatch stays page-shape-only; this is a per-round runtime check).
+//
 // ── Hysteresis (why a mid-render SPA re-render never alarms) ────────────────
 // A contract's SURFACED status is one of 'ok' | 'degraded' | 'not_applicable'.
 // The raw per-probe DomContracts.STATUS.FAIL is a transient signal that is
@@ -244,6 +267,9 @@
    * @param {object} deps
    *   deps.DomContracts — the shared/dom-contracts.js API (list/probeContract).
    *   deps.EventLedger  — the shared/event-ledger.js API (record), optional.
+   *   deps.ApiClient    — engine/api-client.js API (detectMedicusContext),
+   *                       optional — enables the UUID-fallback false-alarm
+   *                       guard above; the guard is simply skipped without it.
    *   deps.href         — current page URL (location.href).
    *   deps.root         — probe root (document, or a fake with querySelectorAll).
    * @returns {Promise<{health:object, transitions:Array}|null>} null when
@@ -255,12 +281,42 @@
     if (!DC || typeof DC.list !== 'function' || typeof DC.probeContract !== 'function') return null;
     try {
       const nowIso = new Date().toISOString();
-      const contracts = contractsForPage(DC.list(), d.href);
+      let contracts = contractsForPage(DC.list(), d.href);
       if (contracts.length === 0) return null;
-      const results = contracts.map((c) => {
+
+      // UUID DOM-fallback guard: skip the contract entirely this round if the
+      // URL alone already resolved a patient/encounter/task id — the fallback
+      // it backs would never have been consulted, so its own FAIL this round
+      // proves nothing.
+      if (d.ApiClient && typeof d.ApiClient.detectMedicusContext === 'function') {
+        let urlResolvedAnId = false;
+        try {
+          const ctx = d.ApiClient.detectMedicusContext(d.href);
+          urlResolvedAnId = !!(ctx && (ctx.patientUuid || ctx.encounterUuid || ctx.taskUuid));
+        } catch (_) {
+          urlResolvedAnId = false;
+        }
+        if (urlResolvedAnId) {
+          contracts = contracts.filter((c) => c.id !== 'api-client.patient-uuid-dom-fallback');
+        }
+      }
+      if (contracts.length === 0) return null;
+
+      const rawResults = contracts.map((c) => {
         const r = DC.probeContract(c, d.root);
         return { id: c.id, status: r.status };
       });
+      const rawStatusById = new Map(rawResults.map((r) => [r.id, r.status]));
+
+      // suppressedByOk guard: a contract whose covering contract read OK this
+      // round is treated as OK too, regardless of its own raw probe result.
+      const results = contracts.map((c, i) => {
+        if (c.suppressedByOk && rawStatusById.get(c.suppressedByOk) === DC.STATUS.OK) {
+          return { id: c.id, status: DC.STATUS.OK };
+        }
+        return rawResults[i];
+      });
+
       const stored = await chrome.storage.local.get(STORAGE_KEY);
       const prevHealth = (stored && stored[STORAGE_KEY]) || {};
       const { health, transitions } = applyProbeRound(prevHealth, results, nowIso);
@@ -306,6 +362,7 @@
       runProbeRound({
         DomContracts: window.DomContracts,
         EventLedger: window.EventLedger,
+        ApiClient: window.SentinelApiClient,
         href: location.href,
         root: document,
       }).then(
