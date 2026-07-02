@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.146.0] — 2026-07-02
+
+### Unbreakable — the suite knows when Medicus changes
+
+Three of the last six mainline fixes (v3.143.1 OIR checkboxes, v3.143.2
+assignee picker) were regressions caused by Medicus silently changing
+frontend components, discovered by a clinician in clinic — for a safety
+tool that means periods where features silently didn't fire and nobody
+knew. This release makes the next one self-announcing. Landed as two
+batches (`8a5a06f`, `230fc1d`); plan: `docs/plans/HORIZON1-UNBREAKABLE-2026-07-02.md`.
+
+- **DOM-contract registry (`shared/dom-contracts.js`).** All 14 Medicus
+  selector contracts the suite depends on, declared once with
+  anchor/target/legacy-fallback semantics. Consumers outside content.js
+  (routine-rx button, lab-file button, booking/task inline widgets,
+  api-client's UUID fallback) now read their selectors FROM the registry
+  instead of hard-coding them. `content-scripts/triage-lens/content.js`
+  is untouched (tests pin its exact content) — its own contracts (OIR
+  checkboxes, queue-chip hosts) are mirrored in the registry, and a
+  grep-based sync test fails CI if a future content.js selector change
+  drifts from the mirror.
+- **Recorded-fixture tests.** 21 sanitised fixtures covering current
+  `m-*` and legacy `q-*` Medicus markup variants, synthesised from the
+  selector expectations the code demonstrably handles today (fixtures
+  carry provenance headers saying so, not real patient DOM). A 310-check
+  contract test verifies every contract against its fixtures (anchor
+  match, target match, legacy fallback, and FAIL/NOT_APPLICABLE probe
+  semantics never false-alarming), plus a 31-check sync test for the
+  content.js mirror. `scripts/capture-fixture.js` is a paste-into-the-
+  Medicus-console helper that captures and PHI-sanitises real DOM
+  subtrees, to replace synthesised fixtures with real ones over time.
+- **Runtime canaries (`shared/contract-canary.js`).** Probes the 7 of 14
+  contracts that are safe to check at runtime (the rest are fixture-only,
+  with documented reasons) via the existing DOM-observer hub — no new
+  MutationObservers — debounced ≥5s, counts/booleans only, never text
+  content. Two-strike hysteresis (≥2 FAILs at least 30s apart) so SPA
+  churn can't false-alarm; a single OK recovers the contract.
+- **Suite health surfaces.** An amber `#healthStrip` in the side panel
+  (panel-only, following the existing wr/rm/subRag strip convention)
+  appears only when a contract is degraded, pointing to Options. Options
+  gains a "Suite health" table of all 14 contracts — status, plain-English
+  "what degrades", and why fixture-only contracts aren't probed live.
+  ok↔degraded transitions are logged to the Clinical Event Ledger (source
+  `health`, deduped per contract per day). `health.contracts` is
+  machine-local and excluded from suite backups.
+
+No new tour steps — the health strip is exceptional-state UI (only visible
+when something is degraded) and the Suite-health card lives in Options,
+out of tour scope. `TOUR_VERSION` stays at 7.
+
 ## [v3.145.0] — 2026-07-01
 
 ### Class-leader features — Prescribing Pre-flight, Clinical Event Ledger, Practice Pulse
