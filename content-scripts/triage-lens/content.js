@@ -4071,6 +4071,25 @@
     return segs.join(' · ');
   }
 
+  // Pure helper (item 3.1, TRIAGE-LENS-2026-07-02.md) — render one entry from
+  // sev.unitMismatches as a single explanatory popover line, e.g. "Potassium: rule
+  // 'Critical high potassium' expects mmol/L, result reported in mg/dL — rule not
+  // applied". Exported for unit testing via regex extraction, same pattern as
+  // formatDetailLine above. The RESULT of this function must only ever be assigned
+  // via textContent, never innerHTML — the pieces it joins (analyte name, rule
+  // label, unit strings) are untrusted lab-report/config-derived strings.
+  function formatUnitMismatchLine(m) {
+    if (!m || typeof m !== 'object') return '';
+    const name = String(m.name || '').trim() || 'Result';
+    const ruleLabel = String(m.ruleLabel || '').trim();
+    const ruleUnit = String(m.ruleUnit || '').trim();
+    const resultUnit = String(m.resultUnit || '').trim();
+    const rulePart = ruleLabel ? "rule '" + ruleLabel + "'" : 'a rule';
+    const expects = ruleUnit ? ' expects ' + ruleUnit + ',' : '';
+    const reported = resultUnit ? ' result reported in ' + resultUnit : ' result reported in an unrecognised unit';
+    return name + ': ' + rulePart + expects + reported + ' — rule not applied';
+  }
+
   // Sentinel returned by computeQueueRowResult (item 1.1 leg D) to distinguish
   // "attempted this row's fetch/eval and it genuinely failed" from a plain
   // `null`, which stays reserved for "nothing to check" (feature disabled,
@@ -4182,6 +4201,15 @@
     try {
       if (sev && typeof sev === 'object') sev.detail = buildResultDetail(report, sev);
     } catch (e) { log('queue-result: buildResultDetail failed', e.message); }
+    // Item 3.1 — log each individual unit-mismatch skip (not just the count) at the
+    // point sev is computed, once per fetch — the most useful place to see WHICH
+    // analyte/rule/unit-pair was skipped when diagnosing a "why didn't this rule
+    // fire" report.
+    if (sev && Array.isArray(sev.unitMismatches) && sev.unitMismatches.length) {
+      sev.unitMismatches.forEach((m) => {
+        log('queue-result: unit-mismatch skip', taskUuid, m.name, 'rule=' + m.ruleLabel, 'ruleUnit=' + m.ruleUnit, 'resultUnit=' + m.resultUnit);
+      });
+    }
     log('queue-result: sev for', taskUuid, '=', sev && sev.level, '(rules=' + resultRules.length + ')');
     return sev;
   };
@@ -4195,6 +4223,19 @@
   const RESULT_ERROR_CHIP_HTML =
     '<span class="ch-chip ch-chip-meta ch-chip-error" role="note" ' +
     'title="Medicus Suite couldn’t check this result — will retry">?</span>';
+
+  // "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — fixed markup, NOT
+  // routed through getSystemChip/renderSystemChipHtmlMemo, same reasoning as
+  // RESULT_ERROR_CHIP_HTML above: this is a SYSTEM-level indicator (one or more
+  // result rules were skipped because the reported unit conflicts with the rule's
+  // expected unit — see engine/result-severity.js unitsCompatible), not
+  // user-configurable chip content, and there is no defaults.json systemChips slot
+  // to author a label for it. Same ch-chip-meta family as the other meta chips
+  // (misprioritised/unmatched) — outline, never a clinical fill, since this never
+  // changes severity, only which rules were consulted.
+  const UNIT_MISMATCH_CHIP_HTML =
+    '<span class="ch-chip ch-chip-meta ch-chip-unit-mismatch" role="note" ' +
+    'title="One or more rules were skipped: reported unit does not match the rule’s expected unit — see detail">unit?</span>';
 
   // taskUuid (item 2.2) is threaded through by every call site (initial post-fetch
   // inject, the scheduler's fresh-cache-hit path, and reinjectCachedResultChips) so
@@ -4211,12 +4252,21 @@
       builtHtml = [RESULT_ERROR_CHIP_HTML];
     } else {
       const chipDefs = selectResultChips(sev);
-      if (!chipDefs.length) return;
       built = chipDefs
         .map((d) => ({ html: renderSystemChipHtmlMemo(d.id, d.vars), meta: !!d.meta }))
         .filter((b) => b.html);
-      if (!built.length) return;
       builtHtml = built.map((b) => b.html);
+      // Item 3.1 — append the fixed "unit?" meta chip when this report had one or
+      // more rules skipped on a unit mismatch. Appended (not gated on chipDefs
+      // being non-empty) so a report with NO severity/review/combo chip at all —
+      // e.g. every applicable rule was skipped on unit mismatch and nothing else
+      // fired — still shows the "unit?" chip rather than nothing.
+      const hasUnitMismatch = !!(sev && Array.isArray(sev.unitMismatches) && sev.unitMismatches.length);
+      if (hasUnitMismatch) {
+        builtHtml = builtHtml.concat([UNIT_MISMATCH_CHIP_HTML]);
+        log('queue-result: unit-mismatch chip', rowIndex, 'count=' + sev.unitMismatches.length);
+      }
+      if (!builtHtml.length) return;
     }
     const host = queueChipHost(row, '.ch-q-result');
     if (!host) return;
@@ -4368,8 +4418,13 @@
   // lab-derived string. `detail` is the array built by buildResultDetail; each line's
   // TEXT comes from formatDetailLine, assigned via textContent only. isError builds
   // the fixed error explanation instead (never a numeric detail array — error cache
-  // entries don't carry one).
-  const buildResultDetailPopoverEl = (detail, isError) => {
+  // entries don't carry one). `unitMismatches` (item 3.1, ADDITIVE) is
+  // sev.unitMismatches, mirrored onto the cache entry alongside `detail` — one
+  // explanatory line per skipped rule, appended AFTER the normal detail lines.
+  // Rendered regardless of whether `detail` itself is empty, so a report whose
+  // ONLY signal is a unit-mismatch skip still shows something rather than "No
+  // detail available."
+  const buildResultDetailPopoverEl = (detail, isError, unitMismatches) => {
     const el = document.createElement('div');
     el.className = 'ch-result-popover';
     el.setAttribute('role', 'dialog');
@@ -4380,23 +4435,34 @@
       el.appendChild(line);
       return el;
     }
-    if (!Array.isArray(detail) || !detail.length) {
+    const hasDetail = Array.isArray(detail) && detail.length > 0;
+    const mismatches = Array.isArray(unitMismatches) ? unitMismatches : [];
+    if (!hasDetail && !mismatches.length) {
       const empty = document.createElement('div');
       empty.className = 'ch-result-popover-empty';
       empty.textContent = 'No detail available.';
       el.appendChild(empty);
       return el;
     }
-    detail.forEach((entry) => {
+    if (hasDetail) {
+      detail.forEach((entry) => {
+        const line = document.createElement('div');
+        line.className = 'ch-result-popover-line' + (entry.flag ? ' ch-result-popover-line-' + entry.flag : '');
+        line.textContent = formatDetailLine(entry);
+        el.appendChild(line);
+        // Item 2.7 — guidance actions carried by the fired result rule, resolved by
+        // ruleId against the live CONFIG (see findResultRuleActionsById above). No
+        // ruleId, or a rule with no actions configured, renders nothing extra.
+        const actions = findResultRuleActionsById(entry.ruleId);
+        if (actions) el.appendChild(buildResultRuleActionsRow(actions));
+      });
+    }
+    // Item 3.1 — one explanatory line per (result, rule) unit-mismatch skip.
+    mismatches.forEach((m) => {
       const line = document.createElement('div');
-      line.className = 'ch-result-popover-line' + (entry.flag ? ' ch-result-popover-line-' + entry.flag : '');
-      line.textContent = formatDetailLine(entry);
+      line.className = 'ch-result-popover-line ch-result-popover-line-unit-mismatch';
+      line.textContent = formatUnitMismatchLine(m);
       el.appendChild(line);
-      // Item 2.7 — guidance actions carried by the fired result rule, resolved by
-      // ruleId against the live CONFIG (see findResultRuleActionsById above). No
-      // ruleId, or a rule with no actions configured, renders nothing extra.
-      const actions = findResultRuleActionsById(entry.ruleId);
-      if (actions) el.appendChild(buildResultRuleActionsRow(actions));
     });
     return el;
   };
@@ -4417,7 +4483,8 @@
     const entry = _queueResultCache.get(taskUuid);
     const showError = !!isError || !!(entry && entry.error);
     const detail = !showError && entry && Array.isArray(entry.detail) ? entry.detail : [];
-    const popover = buildResultDetailPopoverEl(detail, showError);
+    const unitMismatches = !showError && entry && Array.isArray(entry.unitMismatches) ? entry.unitMismatches : [];
+    const popover = buildResultDetailPopoverEl(detail, showError, unitMismatches);
     const r = anchorEl.getBoundingClientRect();
     popover.style.position = 'fixed';
     popover.style.top = (r.bottom + 4) + 'px';
@@ -4640,6 +4707,19 @@
       more.textContent = '+' + (detail.length - DETAIL_LINE_CAP) + ' more';
       el.appendChild(more);
     }
+    // Item 3.1 — one-line note when one or more rules were skipped on a unit
+    // mismatch. NO severity change: this is an informational note, not a headline,
+    // and never affects `level`/the banner's red/amber colour above. Full detail
+    // (which analyte, which rule, which units) lives in the chip's own popover —
+    // this note just tells the GP to go look.
+    const unitMismatches = sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : [];
+    if (unitMismatches.length) {
+      const note = document.createElement('div');
+      note.className = DETAIL_VERDICT_CLASS + '-unit-note';
+      const n = unitMismatches.length;
+      note.textContent = (n === 1 ? '1 rule skipped' : n + ' rules skipped') + ': unit mismatch — see chip';
+      el.appendChild(note);
+    }
     return el;
   };
 
@@ -4708,6 +4788,10 @@
           e2.sev = isError ? null : sev;
           e2.error = isError;
           e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
+          // Item 3.1 — mirror unitMismatches onto the cache entry alongside .detail,
+          // same reasoning as the .detail mirror above: the popover click handler
+          // reads it straight off the cache, never through .sev.
+          e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
           e2.ts = Date.now();
         }
         // Only paint if the GP is still on THIS task's detail page — a slow
@@ -5097,6 +5181,9 @@
             // in computeQueueRowResult), so an error entry's detail is always cleared
             // here — its popover is the fixed explanation text, never stale numbers.
             e2.detail = !isError && sev && sev.detail ? sev.detail : undefined;
+            // Item 3.1 — mirror unitMismatches onto the cache entry alongside
+            // .detail (same lockstep reasoning as the comment above).
+            e2.unitMismatches = !isError && sev && Array.isArray(sev.unitMismatches) ? sev.unitMismatches : undefined;
             // An error entry always gets the short _RESULT_ERROR_TTL retry
             // window (via a fresh ts — the fresh-check above applies
             // _RESULT_ERROR_TTL to it). A definitive-null (disabled/unmatched)
@@ -5702,10 +5789,16 @@
     watchConfig(() => {
       // Config changed — invalidate cached result severities so edited/enabled
       // result rules are recomputed on the next pass (not re-injected stale),
-      // then wipe + redo queue chips and re-render the HUD. .detail rides on the
-      // same cache entry as .sev (item 2.2) — clear it too so a stale popover
-      // built under the old config can't linger once .sev is recomputed.
-      for (const entry of _queueResultCache.values()) { entry.sev = undefined; entry.ts = 0; entry.detail = undefined; }
+      // then wipe + redo queue chips and re-render the HUD. .detail/.unitMismatches
+      // ride on the same cache entry as .sev (items 2.2/3.1) — clear both too so a
+      // stale popover built under the old config can't linger once .sev is
+      // recomputed.
+      for (const entry of _queueResultCache.values()) {
+        entry.sev = undefined;
+        entry.ts = 0;
+        entry.detail = undefined;
+        entry.unitMismatches = undefined;
+      }
       // The memoised chip HTML is config-derived too — drop it so edited labels/
       // kinds re-render rather than serving the stale cached string.
       _chipHtmlMemo.clear();

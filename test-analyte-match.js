@@ -10,7 +10,7 @@
 // Run with: node test-analyte-match.js
 'use strict';
 
-const { analyteMatches, collapseWs, specimenAllows } = require('./engine/result-severity.js');
+const { analyteMatches, collapseWs, specimenAllows, unitsCompatible } = require('./engine/result-severity.js');
 
 let passed = 0;
 let failed = 0;
@@ -31,6 +31,7 @@ console.log('\n--- exports present ---');
   assert(typeof analyteMatches === 'function', 'analyteMatches exported as a function');
   assert(typeof collapseWs === 'function', 'collapseWs exported as a function');
   assert(typeof specimenAllows === 'function', 'specimenAllows exported as a function');
+  assert(typeof unitsCompatible === 'function', 'unitsCompatible exported as a function');
 }
 
 // ── match: case-insensitive substring ──────────────────────────────────────────
@@ -188,6 +189,76 @@ console.log('\n--- combined: exclude + specimen interplay ---');
     analyteMatches(analyte, { name: 'Throat culture', specimen: undefined }) === true,
     'non-excluded name with absent specimen → match + fail-open specimen both pass'
   );
+}
+
+// ── unitsCompatible: 'match' / 'mismatch' / 'unknown' (item 3.1, TRIAGE-LENS-2026-07-02.md) ──
+// Direct unit tests for the shared unit-mismatch guard used by computeRuleSev and
+// computeComboOutcome (result-severity.js) to skip-and-flag a threshold rule whose
+// declared unit conflicts with the result's own reported unit.
+console.log('\n--- unitsCompatible: exact-family match ---');
+{
+  assert(unitsCompatible('mmol/L', 'mmol/L') === 'match', 'identical unit strings → match');
+  assert(unitsCompatible('mmol/L', 'MMOL/L') === 'match', 'case-insensitive → match');
+  assert(unitsCompatible(' mmol/L ', 'mmol/L') === 'match', 'leading/trailing whitespace ignored → match');
+  assert(unitsCompatible('mmol/L.', 'mmol/L') === 'match', 'trailing dot stripped → match');
+  assert(
+    unitsCompatible('mmol / L', 'mmol/L') === 'match',
+    'internal whitespace stripped (not merely collapsed) → match'
+  );
+}
+
+console.log('\n--- unitsCompatible: µ / µg family ---');
+{
+  assert(unitsCompatible('µg/L', 'ug/L') === 'match', 'MICRO SIGN µ folds to plain u → match');
+  assert(unitsCompatible('μg/L', 'ug/L') === 'match', 'GREEK SMALL LETTER MU μ folds to plain u → match');
+  assert(unitsCompatible('µmol/L', 'umol/L') === 'match', 'µmol/L vs umol/L → match');
+  // Both appear in this repo's own shipped rules for what is physically the same
+  // unit: base-digoxin-toxicity ships "micrograms/L", base-low-ferritin ships "µg/L".
+  assert(
+    unitsCompatible('micrograms/L', 'µg/L') === 'match',
+    'spelled-out "micrograms/L" vs symbolic "µg/L" (both shipped in defaults.json) → match'
+  );
+  assert(unitsCompatible('microgram/L', 'ug/L') === 'match', 'singular "microgram/L" also folds → match');
+}
+
+console.log('\n--- unitsCompatible: cell-count lab-notation family (×10⁹/L etc.) ---');
+{
+  // Notation variants seen across this repo's own fixtures/defaults.json for the
+  // SAME "10 to the power 9 per litre" unit (WBC/platelets/neutrophils).
+  assert(unitsCompatible('×10⁹/L', 'x10^9/L') === 'match', '×10⁹/L (defaults.json) vs x10^9/L (test fixture) → match');
+  assert(unitsCompatible('× 10⁹/L', '10^9/L') === 'match', '× 10⁹/L (spaced) vs 10^9/L → match');
+  assert(unitsCompatible('10*9/L', '10^9/L') === 'match', '10*9/L vs 10^9/L (engine/rules-engine.js notation) → match');
+  assert(unitsCompatible('×10⁹/L', '×10⁹/L') === 'match', 'identical superscript notation → match');
+  // The ×10¹²/L family (RBC) is a DIFFERENT magnitude from ×10⁹/L and must not fold together.
+  assert(unitsCompatible('×10¹²/L', 'x10^12/L') === 'match', '×10¹²/L vs x10^12/L (RBC notation) → match');
+  assert(unitsCompatible('×10⁹/L', '×10¹²/L') === 'mismatch', '×10⁹/L vs ×10¹²/L → DIFFERENT magnitude, mismatch');
+}
+
+console.log('\n--- unitsCompatible: genuine mismatches (the digoxin/B12 bug this guards) ---');
+{
+  assert(unitsCompatible('µg/L', 'nmol/L') === 'mismatch', 'digoxin µg/L vs nmol/L → mismatch');
+  assert(unitsCompatible('ng/L', 'pmol/L') === 'mismatch', 'B12 ng/L vs pmol/L → mismatch');
+  assert(unitsCompatible('mmol/L', 'mEq/L') === 'mismatch', 'mmol/L vs mEq/L → mismatch');
+  assert(unitsCompatible('g/L', 'g/dL') === 'mismatch', 'g/L vs g/dL → mismatch (order-of-magnitude different)');
+}
+
+console.log('\n--- unitsCompatible: IU vs U kept DISTINCT (deliberate, NOT folded) ---');
+{
+  assert(unitsCompatible('IU/L', 'U/L') === 'mismatch', 'IU/L vs U/L → mismatch, never treated as interchangeable');
+  assert(unitsCompatible('iu/l', 'u/l') === 'mismatch', 'lowercase iu/l vs u/l → still mismatch');
+  assert(unitsCompatible('mU/L', 'U/L') === 'mismatch', 'mU/L (milli-units) vs U/L → mismatch');
+  assert(unitsCompatible('IU/L', 'IU/L') === 'match', 'IU/L vs IU/L → match (same family, sanity check)');
+  assert(unitsCompatible('U/L', 'U/L') === 'match', 'U/L vs U/L → match (same family, sanity check)');
+}
+
+console.log('\n--- unitsCompatible: unknown (either side absent/empty) → fail-open ---');
+{
+  assert(unitsCompatible(null, 'mmol/L') === 'unknown', 'rule.unit absent → unknown');
+  assert(unitsCompatible('mmol/L', null) === 'unknown', 'result.unit absent → unknown');
+  assert(unitsCompatible(undefined, undefined) === 'unknown', 'both absent → unknown');
+  assert(unitsCompatible('', 'mmol/L') === 'unknown', 'rule.unit empty string → unknown');
+  assert(unitsCompatible('mmol/L', '   ') === 'unknown', 'result.unit whitespace-only → unknown');
+  assert(unitsCompatible(123, 'mmol/L') === 'unknown', 'non-string rule.unit → unknown, not a throw');
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

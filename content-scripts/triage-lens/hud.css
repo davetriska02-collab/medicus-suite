@@ -139,6 +139,17 @@
   color: var(--text-4);
   border-color: var(--border-hi);
 }
+/* "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — shown when one or
+   more result rules were SKIPPED because the reported unit conflicts with the
+   rule's expected unit (engine/result-severity.js unitsCompatible). Never a
+   severity change, so same grey-outline meta family/visual treatment as
+   .ch-chip-error — a skipped rule is a "didn't check it that way" signal, not a
+   clinical fill. */
+.ch-chip-unit-mismatch {
+  background: transparent;
+  color: var(--text-4);
+  border-color: var(--border-hi);
+}
 
 /* ---- Queue row chips ---- */
 .ch-queue-chips {
@@ -221,6 +232,14 @@
   color: var(--text-2);
 }
 .ch-detail-verdict-more {
+  color: var(--text-4);
+  font-style: italic;
+  font-size: 11px;
+  margin-top: 2px;
+}
+/* Unit-mismatch note (item 3.1, TRIAGE-LENS-2026-07-02.md) — informational only,
+   same grey/italic treatment as -more: never implies a severity change. */
+.ch-detail-verdict-unit-note {
   color: var(--text-4);
   font-style: italic;
   font-size: 11px;
@@ -1094,6 +1113,13 @@
    mistaken for a graded clinical line. */
 .ch-result-popover-error {
   color: var(--text-4);
+}
+/* Unit-mismatch explanation line (item 3.1, TRIAGE-LENS-2026-07-02.md) — same grey
+   "informational, not a graded clinical line" treatment as the error variant: a
+   skipped rule never carries a severity colour. */
+.ch-result-popover-line-unit-mismatch {
+  color: var(--text-4);
+  font-style: italic;
 }
 .ch-result-popover-empty {
   color: var(--text-5);

@@ -430,11 +430,17 @@ const parts = [
   // error chip. RESULT_ERROR_CHIP_HTML is a free variable inside
   // injectResultChip, so it must be extracted alongside it.
   extract(/const RESULT_ERROR_CHIP_HTML =[\s\S]*?;/, 'RESULT_ERROR_CHIP_HTML'),
+  // Item 3.1 — the "unit?" meta chip's fixed markup, another free variable
+  // injectResultChip reads (same pattern as RESULT_ERROR_CHIP_HTML above).
+  extract(/const UNIT_MISMATCH_CHIP_HTML =[\s\S]*?;/, 'UNIT_MISMATCH_CHIP_HTML'),
   extract(/const injectResultChip = \(rowIndex, sev, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/, 'injectResultChip'),
   // Item 2.2 — result-chip detail popover: the pure line-builders plus the
   // singleton popover open/close machinery injectResultChip's click handlers call.
   extract(/function buildResultDetail\(report, sevResult\) \{[\s\S]*?\n {2}\}/, 'buildResultDetail'),
   extract(/function formatDetailLine\(entry\) \{[\s\S]*?\n {2}\}/, 'formatDetailLine'),
+  // Item 3.1 — the unit-mismatch popover line formatter, a free variable
+  // buildResultDetailPopoverEl calls (same pattern as formatDetailLine above).
+  extract(/function formatUnitMismatchLine\(m\) \{[\s\S]*?\n {2}\}/, 'formatUnitMismatchLine'),
   extract(
     /let _resultDetailPopoverEl = null;\s*\n\s*let _resultDetailPopoverAnchor = null;/,
     '_resultDetailPopover* module state'
@@ -451,7 +457,7 @@ const parts = [
   extract(/const findResultRuleActionsById = \(ruleId\) => \{[\s\S]*?\n {2}\};/, 'findResultRuleActionsById'),
   extract(/const buildResultRuleActionsRow = \(actions\) => \{[\s\S]*?\n {2}\};/, 'buildResultRuleActionsRow'),
   extract(
-    /const buildResultDetailPopoverEl = \(detail, isError\) => \{[\s\S]*?\n {2}\};/,
+    /const buildResultDetailPopoverEl = \(detail, isError, unitMismatches\) => \{[\s\S]*?\n {2}\};/,
     'buildResultDetailPopoverEl'
   ),
   extract(
@@ -548,6 +554,9 @@ const EXPOSE = [
   'injectResultChip',
   'buildResultDetail',
   'formatDetailLine',
+  // Item 3.1 — unit-mismatch guard surfacing.
+  'formatUnitMismatchLine',
+  'UNIT_MISMATCH_CHIP_HTML',
   'closeResultDetailPopover',
   'buildResultDetailPopoverEl',
   'toggleResultDetailPopover',
@@ -2722,6 +2731,206 @@ if (sandbox) {
       'CONFIG with no resultRules array → no actions row, no throw'
     );
     sandbox.closeResultDetailPopover();
+  }
+
+  // ============================================================
+  // Layer 18 — unit-mismatch guard surfacing (item 3.1, TRIAGE-LENS-2026-07-02.md):
+  // the "unit?" meta chip on the injected row, the popover explanation line, and
+  // the detail-page verdict banner's one-line note. NO severity change from any
+  // of this — sev.level/counts are the same fixture values throughout.
+  // ============================================================
+  console.log('\nLayer 18: unit-mismatch guard surfacing — "unit?" chip, popover line, banner note (item 3.1)');
+
+  {
+    const mismatches = [
+      {
+        name: 'Digoxin level',
+        resultUnit: 'nmol/L',
+        ruleId: 'base-digoxin-toxicity',
+        ruleLabel: 'Digoxin toxicity',
+        ruleUnit: 'µg/L',
+      },
+    ];
+
+    // ---- "unit?" chip: renders once alongside a severity chip, de-duped on re-inject ----
+    freshCaches();
+    const rowId = '99999999-9999-4999-8999-999999999999';
+    const pair = buildPreviewRowPair({ rowIndex: 0, rowId, dob: '01 Jan 1980 (46y)' });
+    const gridRoot = new El('div', {});
+    gridRoot.appendChild(pair.master);
+    gridRoot.appendChild(pair.detail);
+    sandbox.document = makeDocument(gridRoot);
+    sandbox.queueObservedContainer = gridRoot;
+
+    // NB: the fake DOM's innerHTML setter (used here — the chip is fixed markup
+    // assigned via span.innerHTML, same as every other system/error chip) does NOT
+    // parse markup into real child elements — it only stores the raw string (see
+    // the El class above). Every other chip-content assertion in this file that
+    // exercises the innerHTML path therefore checks the raw HTML STRING (e.g. the
+    // v3.69/error-chip checks earlier in this file), not querySelectorAll into
+    // parsed children; the same idiom is used below. querySelectorAll IS used
+    // further down for the popover/banner, because those are built with real
+    // createElement/appendChild, not innerHTML.
+    const sevWithMismatch = { ...redSev, unitMismatches: mismatches };
+    sandbox.injectResultChip(0, sevWithMismatch, rowId, false);
+    let injectedSpan = pair.wrap.querySelector('.ch-q-result');
+    check(!!injectedSpan, '"unit?" chip test: chip host injected');
+    let html = injectedSpan ? injectedSpan.innerHTML : '';
+    let unitChipCount = (html.match(/ch-chip-unit-mismatch/g) || []).length;
+    check(unitChipCount === 1, `"unit?" chip renders exactly once alongside the severity chip (got ${unitChipCount})`);
+    check(/>unit\?</.test(html), '"unit?" chip label is the literal text "unit?"');
+    check(
+      /class="ch-chip ch-chip-meta ch-chip-unit-mismatch"/.test(html),
+      '"unit?" chip carries the ch-chip-meta family class (outline, never a clinical fill)'
+    );
+    // getSystemChip is stubbed in this harness (id + JSON vars, see sandbox setup
+    // above) — check the stubbed severity chip's own id/name still landed
+    // alongside "unit?", i.e. no chip was suppressed by adding the guard.
+    check(
+      html.includes('queue.resultUrgent') && html.includes('Potassium'),
+      'the normal severity chip (queue.resultUrgent/Potassium) still renders alongside "unit?" (no chip suppressed)'
+    );
+
+    // Re-injecting (the durable re-inject path calls injectResultChip again on
+    // every refresh) must stay idempotent — queueChipHost's marker check
+    // (`target.querySelector('.ch-q-result')`) returns null once the host
+    // already exists, so a second call is a no-op: no second span, "unit?"
+    // never doubles up.
+    sandbox.injectResultChip(0, sevWithMismatch, rowId, false);
+    const spansAfterReinject = pair.wrap.querySelectorAll('.ch-q-result');
+    check(
+      spansAfterReinject.length === 1,
+      're-injecting the same row is idempotent — still exactly one chip host span'
+    );
+    const htmlAfterReinject = spansAfterReinject[0].innerHTML;
+    check(
+      (htmlAfterReinject.match(/ch-chip-unit-mismatch/g) || []).length === 1,
+      're-injecting the same row is idempotent — still exactly one "unit?" chip'
+    );
+
+    // ---- "unit?" chip alone: a report with NO other severity/review/combo chip
+    //      but a unit-mismatch skip still shows something, not nothing ----
+    freshCaches();
+    const rowId1b = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const pair1b = buildPreviewRowPair({ rowIndex: 0, rowId: rowId1b, dob: '01 Jan 1980 (46y)' });
+    const gridRoot1b = new El('div', {});
+    gridRoot1b.appendChild(pair1b.master);
+    gridRoot1b.appendChild(pair1b.detail);
+    sandbox.document = makeDocument(gridRoot1b);
+    sandbox.queueObservedContainer = gridRoot1b;
+    const sevMismatchOnly = { ...noneSev, unitMismatches: mismatches };
+    sandbox.injectResultChip(0, sevMismatchOnly, rowId1b, false);
+    const injectedSpan1b = pair1b.wrap.querySelector('.ch-q-result');
+    check(!!injectedSpan1b, '"unit?"-only: a level:none report with a mismatch still injects a chip host');
+    check(
+      !!injectedSpan1b && /ch-chip-unit-mismatch/.test(injectedSpan1b.innerHTML),
+      '"unit?"-only: the chip renders even when no severity/review/combo chip fired at all'
+    );
+
+    // ---- no mismatch: never renders the chip ----
+    freshCaches();
+    const rowId1c = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const pair1c = buildPreviewRowPair({ rowIndex: 0, rowId: rowId1c, dob: '01 Jan 1980 (46y)' });
+    const gridRoot1c = new El('div', {});
+    gridRoot1c.appendChild(pair1c.master);
+    gridRoot1c.appendChild(pair1c.detail);
+    sandbox.document = makeDocument(gridRoot1c);
+    sandbox.queueObservedContainer = gridRoot1c;
+    sandbox.injectResultChip(0, redSev, rowId1c, false); // redSev carries no .unitMismatches at all
+    const injectedSpan1c = pair1c.wrap.querySelector('.ch-q-result');
+    check(
+      !!injectedSpan1c && !/ch-chip-unit-mismatch/.test(injectedSpan1c.innerHTML),
+      'no unitMismatches on sev → no "unit?" chip rendered'
+    );
+
+    // ---- popover: one line per mismatch, via textContent, formatUnitMismatchLine output ----
+    freshCaches();
+    sandbox.closeResultDetailPopover();
+    const rowId2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const pair2 = buildPreviewRowPair({ rowIndex: 0, rowId: rowId2, dob: '01 Jan 1980 (46y)' });
+    const gridRoot2 = new El('div', {});
+    gridRoot2.appendChild(pair2.master);
+    gridRoot2.appendChild(pair2.detail);
+    sandbox.document = makeDocument(gridRoot2);
+    sandbox.queueObservedContainer = gridRoot2;
+    sandbox._durableRowMap.set(0, rowId2);
+    sandbox._queueResultCache.set(rowId2, { sev: sevWithMismatch, ts: Date.now(), unitMismatches: mismatches });
+
+    const anchor2 = new El('span', { class: 'ch-chip ch-chip-unit-mismatch' });
+    gridRoot2.appendChild(anchor2);
+    sandbox.toggleResultDetailPopover(anchor2, rowId2, false);
+    const state2 = sandbox.__popoverState();
+    check(!!state2.el, 'popover: opens for a row whose only cached extra is unitMismatches');
+    const mismatchLines = state2.el.querySelectorAll('.ch-result-popover-line-unit-mismatch');
+    check(
+      mismatchLines.length === 1,
+      `popover: one .ch-result-popover-line-unit-mismatch per mismatch (got ${mismatchLines.length})`
+    );
+    check(
+      mismatchLines[0].textContent ===
+        "Digoxin level: rule 'Digoxin toxicity' expects µg/L, result reported in nmol/L — rule not applied",
+      `popover: mismatch line text matches formatUnitMismatchLine's output (got "${mismatchLines[0].textContent}")`
+    );
+    check(
+      mismatchLines[0]._innerHTML === null,
+      'popover: mismatch line built with textContent, never innerHTML (fake-DOM innerHTML slot untouched)'
+    );
+    check(
+      sandbox.formatUnitMismatchLine(mismatches[0]) === mismatchLines[0].textContent,
+      'popover: mismatch line is exactly the exported formatUnitMismatchLine(m) output'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- popover: no cached unitMismatches → no mismatch line rendered ----
+    sandbox._queueResultCache.set(rowId2, { sev: redSev, ts: Date.now() }); // no .unitMismatches
+    sandbox.toggleResultDetailPopover(anchor2, rowId2, false);
+    const state2b = sandbox.__popoverState();
+    check(
+      state2b.el.querySelectorAll('.ch-result-popover-line-unit-mismatch').length === 0,
+      'popover: no cached unitMismatches → no mismatch line'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // ---- banner: one-line note when mismatches exist, none when they don't ----
+    const bannerWithNote = sandbox.buildDetailVerdictEl('task-unit-1', sevWithMismatch, false);
+    const noteEls = bannerWithNote.querySelectorAll('.ch-detail-verdict-unit-note');
+    check(noteEls.length === 1, 'banner: renders exactly one .ch-detail-verdict-unit-note when mismatches exist');
+    check(
+      noteEls[0].textContent === '1 rule skipped: unit mismatch — see chip',
+      `banner: note text matches the plan's worked example (got "${noteEls[0].textContent}")`
+    );
+    check(
+      noteEls[0]._innerHTML === null,
+      'banner: note built with textContent, never innerHTML (fake-DOM innerHTML slot untouched)'
+    );
+
+    const twoMismatches = mismatches.concat([
+      { name: 'B12', resultUnit: 'pmol/L', ruleId: 'base-low-b12', ruleLabel: 'Low B12', ruleUnit: 'ng/L' },
+    ]);
+    const bannerWithTwo = sandbox.buildDetailVerdictEl(
+      'task-unit-2',
+      { ...redSev, unitMismatches: twoMismatches },
+      false
+    );
+    const noteEls2 = bannerWithTwo.querySelectorAll('.ch-detail-verdict-unit-note');
+    check(
+      noteEls2.length === 1 && noteEls2[0].textContent === '2 rules skipped: unit mismatch — see chip',
+      `banner: plural note text for 2 mismatches (got "${noteEls2[0] && noteEls2[0].textContent}")`
+    );
+
+    const bannerNoMismatch = sandbox.buildDetailVerdictEl('task-unit-3', redSev, false); // no .unitMismatches at all
+    check(
+      bannerNoMismatch.querySelectorAll('.ch-detail-verdict-unit-note').length === 0,
+      'banner: no unitMismatches on sev → no note rendered'
+    );
+
+    // NO severity change: the banner's level class is driven purely by sev.level,
+    // identical with or without a unit-mismatch note alongside it.
+    check(
+      bannerWithNote.classes.includes('ch-detail-verdict-red') &&
+        bannerNoMismatch.classes.includes('ch-detail-verdict-red'),
+      'banner: unitMismatches never changes the red/amber level class (surfacing only, no severity change)'
+    );
   }
 } else {
   console.error('\nSandbox extraction failed — skipping all behavioural layers.');

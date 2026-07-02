@@ -2059,6 +2059,200 @@ console.log('\n--- item 2.6: top.prior on evaluateReportSeverity() ---');
   assert(noHistOut.top && noHistOut.top.prior === null, 'no history on the salient result → top.prior null');
 }
 
+// ── item 3.1: unit-mismatch guard (TRIAGE-LENS-2026-07-02.md) ─────────────────
+// A threshold rule's `unit` was historically display-only — the numeric threshold
+// applied to result.value regardless of the result's own reported unit. These
+// pin: a genuine mismatch SKIPS the rule (no grade, but recorded in
+// unitMismatches); an absent unit on EITHER side fails open (graded exactly as
+// before); notation-variant units (case/whitespace/µ-vs-u/cell-count) are
+// recognised as the SAME family and grade normally, without being recorded as a
+// mismatch.
+console.log('\n--- item 3.1: unit-mismatch guard — computeRuleSev / evaluateReportSeverity ---');
+{
+  const digoxinRule = {
+    id: 'test-digoxin',
+    enabled: true,
+    label: 'Digoxin toxicity',
+    analyte: { match: ['digoxin'] },
+    comparator: 'above',
+    amber: 1.5,
+    red: 2,
+    unit: 'µg/L',
+  };
+
+  // Mismatch: reported in nmol/L, not the rule's µg/L. A naive apply-regardless
+  // grading would fire red here (5 >= 2) — that would be the exact silent
+  // mis-grade this guard exists to prevent. The rule must be SKIPPED entirely.
+  const wrongUnitResult = mkResult('Digoxin level', 5, { unit: 'nmol/L' });
+  const mismatchOut = evaluateReportSeverity(makeReport([wrongUnitResult]), { resultRules: [digoxinRule] });
+  assert(mismatchOut.level === 'none', 'unit mismatch → rule SKIPPED, no grade contributed (not red despite 5 >= 2)');
+  assert(mismatchOut.unitMismatches.length === 1, 'exactly one unit mismatch recorded');
+  assert(mismatchOut.unitMismatches[0].name === 'Digoxin level', 'unitMismatches[0].name is the result name');
+  assert(mismatchOut.unitMismatches[0].resultUnit === 'nmol/L', 'unitMismatches[0].resultUnit is the reported unit');
+  assert(mismatchOut.unitMismatches[0].ruleId === 'test-digoxin', 'unitMismatches[0].ruleId carries the rule id');
+  assert(
+    mismatchOut.unitMismatches[0].ruleLabel === 'Digoxin toxicity',
+    'unitMismatches[0].ruleLabel carries the rule label'
+  );
+  assert(
+    mismatchOut.unitMismatches[0].ruleUnit === 'µg/L',
+    'unitMismatches[0].ruleUnit carries the rule’s declared unit'
+  );
+
+  // Result has NO unit at all → fail-open: graded exactly as before this guard
+  // existed, and NOT recorded as a mismatch (there was nothing to compare).
+  const noUnitResult = mkResult('Digoxin level', 2.4); // mkResult defaults unit: null
+  const noUnitOut = evaluateReportSeverity(makeReport([noUnitResult]), { resultRules: [digoxinRule] });
+  assert(noUnitOut.level === 'red', 'result has no unit → fail-open, graded normally (2.4 >= red 2)');
+  assert(noUnitOut.unitMismatches.length === 0, 'result has no unit → not recorded as a mismatch');
+
+  // Rule has NO declared unit → fail-open: graded normally even though the result
+  // DOES carry a unit (there is nothing on the rule side to conflict with).
+  const ruleNoUnit = { ...digoxinRule, unit: undefined };
+  const ruleNoUnitOut = evaluateReportSeverity(makeReport([mkResult('Digoxin level', 2.4, { unit: 'nmol/L' })]), {
+    resultRules: [ruleNoUnit],
+  });
+  assert(ruleNoUnitOut.level === 'red', 'rule has no unit → fail-open, graded normally');
+  assert(ruleNoUnitOut.unitMismatches.length === 0, 'rule has no unit → not recorded as a mismatch');
+
+  // Notation-variant units (case / whitespace / µ-vs-u / cell-count magnitude
+  // notation) are recognised as the SAME family via unitsCompatible's shared
+  // normalisation and grade exactly as a same-unit result would — never flagged
+  // as a mismatch.
+  const wbcRule = {
+    id: 'test-wbc',
+    enabled: true,
+    label: 'High WBC',
+    analyte: { match: ['wbc'] },
+    comparator: 'above',
+    amber: 11,
+    red: 20,
+    unit: '×10⁹/L',
+  };
+  const wbcNotationVariant = mkResult('WBC', 25, { unit: 'x10^9/L' });
+  const wbcOut = evaluateReportSeverity(makeReport([wbcNotationVariant]), { resultRules: [wbcRule] });
+  assert(wbcOut.level === 'red', 'cell-count notation variant recognised as same family → grades normally (25 >= 20)');
+  assert(wbcOut.unitMismatches.length === 0, 'notation-variant match → not recorded as a mismatch');
+
+  const ferritinRule = {
+    id: 'test-ferritin',
+    enabled: true,
+    label: 'Low ferritin',
+    analyte: { match: ['ferritin'] },
+    comparator: 'below',
+    amber: 60,
+    red: 15,
+    unit: 'micrograms/L',
+  };
+  const ferritinSymbolUnit = mkResult('Ferritin', 10, { unit: 'µg/L' });
+  const ferritinOut = evaluateReportSeverity(makeReport([ferritinSymbolUnit]), { resultRules: [ferritinRule] });
+  assert(
+    ferritinOut.level === 'red',
+    'spelled-out "micrograms/L" rule vs symbolic "µg/L" result → same family → grades normally'
+  );
+  assert(ferritinOut.unitMismatches.length === 0, 'micrograms/L vs µg/L → not recorded as a mismatch');
+
+  // Multiple flagged results with a genuine mismatch each → one entry per
+  // (result, rule) pair, in report order.
+  const potassiumRule = {
+    id: 'test-k',
+    enabled: true,
+    label: 'Critical high potassium',
+    analyte: { match: ['potassium'] },
+    comparator: 'above',
+    amber: 6,
+    red: 6.5,
+    unit: 'mmol/L',
+  };
+  const twoResults = evaluateReportSeverity(
+    makeReport([mkResult('Digoxin level', 5, { unit: 'nmol/L' }), mkResult('Potassium', 9, { unit: 'mEq/L' })]),
+    { resultRules: [digoxinRule, potassiumRule] }
+  );
+  assert(twoResults.level === 'none', 'both rules skipped on unit mismatch → level stays none');
+  assert(twoResults.unitMismatches.length === 2, 'two distinct (result, rule) mismatches recorded');
+  assert(
+    twoResults.unitMismatches.some((m) => m.ruleId === 'test-digoxin') &&
+      twoResults.unitMismatches.some((m) => m.ruleId === 'test-k'),
+    'both rule ids present among the recorded mismatches'
+  );
+}
+
+// ── item 3.1: unit-mismatch guard — combo numeric condition path ──────────────
+// No shipped combo condition carries a `unit` field today (buildComboCondition in
+// options.js has no such input) — these pin that the engine-level guard is ready
+// for when one is added, and changes nothing for a condition that omits it.
+console.log('\n--- item 3.1: unit-mismatch guard — combo numeric condition ---');
+{
+  const comboWithUnitGuard = {
+    id: 'test-combo-unit',
+    kind: 'combo',
+    enabled: true,
+    label: 'Test combo unit guard',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusWrongUnit = mkResult('Pus cells', 50, { unit: 'µmol/L' }); // conflicts with the condition's mmol/L
+  const cultureResult = { name: 'Culture', value: NaN, text: 'No growth', unit: null, history: [] };
+
+  const comboMismatchOut = evaluateReportSeverity(makeReport([pusWrongUnit, cultureResult]), {
+    resultRules: [comboWithUnitGuard],
+  });
+  assert(
+    comboMismatchOut.comboCount === 0,
+    'combo condition unit mismatch → condition not satisfied → combo does not fire'
+  );
+  assert(comboMismatchOut.unitMismatches.length === 1, 'combo condition mismatch recorded once');
+  assert(comboMismatchOut.unitMismatches[0].name === 'Pus cells', 'combo mismatch entry names the result');
+  assert(comboMismatchOut.unitMismatches[0].resultUnit === 'µmol/L', 'combo mismatch entry carries the result unit');
+  assert(
+    comboMismatchOut.unitMismatches[0].ruleId === 'test-combo-unit',
+    'combo mismatch entry carries the combo rule id'
+  );
+  assert(
+    comboMismatchOut.unitMismatches[0].ruleUnit === 'mmol/L',
+    'combo mismatch entry carries the condition’s declared unit'
+  );
+
+  // Same-family unit on the condition → fires normally, no mismatch recorded.
+  const comboMatchingUnit = {
+    ...comboWithUnitGuard,
+    id: 'test-combo-unit-match',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['culture'] }, contains: ['no growth'] },
+    ],
+  };
+  const pusMatchingUnit = mkResult('Pus cells', 50, { unit: 'mmol/L' });
+  const comboMatchOut = evaluateReportSeverity(makeReport([pusMatchingUnit, cultureResult]), {
+    resultRules: [comboMatchingUnit],
+  });
+  assert(comboMatchOut.comboCount === 1, 'matching unit on the condition → combo fires normally');
+  assert(comboMatchOut.unitMismatches.length === 0, 'matching unit → no mismatch recorded');
+
+  // Dedup: two conditions on the SAME analyte+unit that both mismatch the same
+  // candidate result must collapse to ONE unitMismatches entry, not two.
+  const comboDoubleCondition = {
+    id: 'test-combo-dedup',
+    kind: 'combo',
+    enabled: true,
+    label: 'Dedup test combo',
+    level: 'amber',
+    conditions: [
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 10, unit: 'mmol/L' },
+      { analyte: { match: ['pus cells'] }, comparator: 'above', value: 5, unit: 'mmol/L' },
+    ],
+  };
+  const dedupOut = evaluateReportSeverity(makeReport([pusWrongUnit]), { resultRules: [comboDoubleCondition] });
+  assert(dedupOut.comboCount === 0, 'both conditions unsatisfied (unit mismatch) → combo does not fire');
+  assert(
+    dedupOut.unitMismatches.length === 1,
+    'two conditions producing the same (result, rule) mismatch dedupe to one entry'
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

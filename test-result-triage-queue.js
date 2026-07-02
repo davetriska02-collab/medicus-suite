@@ -1300,14 +1300,20 @@ check(
   'scheduler mirrors sev.detail onto the cache entry as e2.detail, cleared for error entries'
 );
 check(
-  /entry\.sev = undefined; entry\.ts = 0; entry\.detail = undefined;/.test(src),
+  /entry\.sev = undefined;\s*\n\s*entry\.ts = 0;\s*\n\s*entry\.detail = undefined;/.test(src),
   'config-change cache invalidation also clears the stale .detail (not just .sev)'
+);
+check(
+  /entry\.unitMismatches = undefined;/.test(src),
+  'config-change cache invalidation also clears the stale .unitMismatches (item 3.1)'
 );
 
 // The popover build path — no innerHTML of any lab-derived string. Grey '?' error
 // chips get a popover too: fixed explanation text that says it retries automatically.
-const popoverBuildMatch = src.match(/const buildResultDetailPopoverEl = \(detail, isError\) => \{[\s\S]*?\n  \};/);
-check(!!popoverBuildMatch, 'buildResultDetailPopoverEl function found (takes isError)');
+const popoverBuildMatch = src.match(
+  /const buildResultDetailPopoverEl = \(detail, isError, unitMismatches\) => \{[\s\S]*?\n  \};/
+);
+check(!!popoverBuildMatch, 'buildResultDetailPopoverEl function found (takes isError, unitMismatches)');
 if (popoverBuildMatch) {
   check(
     !/\.innerHTML/.test(popoverBuildMatch[0]),
@@ -1419,10 +1425,10 @@ if (rdvMatch) {
     'computes via the EXACT SAME path the queue uses — computeQueueRowResult — not a re-derived evaluation'
   );
   check(
-    /e2\.sev = isError \? null : sev;\s*\n\s*e2\.error = isError;\s*\n\s*e2\.detail = !isError && sev && sev\.detail \? sev\.detail : undefined;\s*\n\s*e2\.ts = Date\.now\(\);/.test(
+    /e2\.sev = isError \? null : sev;\s*\n\s*e2\.error = isError;\s*\n\s*e2\.detail = !isError && sev && sev\.detail \? sev\.detail : undefined;\s*\n[\s\S]*?e2\.unitMismatches = !isError && sev && Array\.isArray\(sev\.unitMismatches\) \? sev\.unitMismatches : undefined;\s*\n\s*e2\.ts = Date\.now\(\);/.test(
       body
     ),
-    "writes the resolved sev/error/detail/ts back onto the cache entry, mirroring the queue scheduler's own write shape"
+    "writes the resolved sev/error/detail/unitMismatches/ts back onto the cache entry, mirroring the queue scheduler's own write shape"
   );
   check(
     /if \(pageType\(\) !== 'detail' \|\| !liveCtx \|\| liveCtx\.taskUuid !== taskUuid\) return;/.test(body),

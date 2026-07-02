@@ -80,6 +80,82 @@
     return true;
   }
 
+  // ── Unit-mismatch guard (item 3.1, TRIAGE-LENS-2026-07-02.md) ────────────────
+  // A threshold rule's `unit` field (e.g. "µg/L" on the digoxin-toxicity rule) has
+  // historically been DISPLAY-ONLY — the numeric threshold was applied to
+  // result.value regardless of what unit the lab actually reported the result in.
+  // A digoxin level reported in nmol/L (rather than the rule's µg/L) or a B12
+  // reported in pmol/L (rather than ng/L) would silently be graded against the
+  // wrong threshold — a confidently-wrong verdict, not merely an imprecise one.
+  //
+  // unitsCompatible(ruleUnit, resultUnit) classifies the relationship:
+  //   'match'    — both units present and recognised as the SAME family.
+  //   'mismatch' — both units present and recognised as DIFFERENT families.
+  //   'unknown'  — either side is absent/empty, OR the family-fold below leaves
+  //                them unequal but neither is confidently "a different unit" —
+  //                in practice this only happens for the both-absent case here,
+  //                since any two non-empty strings normalise to SOME value and
+  //                are then compared directly.
+  //
+  // Normalisation (before the equality compare): lowercase; ALL whitespace
+  // stripped (not merely collapsed — "×10⁹ /L" and "×10⁹/L" must compare equal);
+  // trailing dot(s) stripped; µ (MICRO SIGN, U+00B5) and μ (GREEK SMALL LETTER MU,
+  // U+03BC) folded to plain 'u' (so "µg/L" and "ug/L" compare equal); superscript
+  // digits (⁰¹²³⁴⁵⁶⁷⁸⁹) folded to plain digits (so "×10⁹/L" and "x10^9/L" compare
+  // on the same footing, and "1.73m²"/"1.73m2" fold together too). Two lab-notation
+  // families found in this repo's own shipped rules/fixtures are then folded to one
+  // canonical form each:
+  //   - cell-count notation: "×10⁹/L", "x10^9/L", "10^9/L", "10*9/L" (WBC/platelets/
+  //     neutrophils) and the "×10¹²/L" family (RBC) — any ×/x/*/^ combination of
+  //     "10 to the power N per litre" is the SAME unit however the lab renders the
+  //     multiplication sign.
+  //   - "micrograms/L" (base-digoxin-toxicity's shipped unit) vs "µg/L" (already
+  //     folded to "ug/L" above; base-low-ferritin's shipped unit) — the SAME unit
+  //     spelled out vs symbolic; both appear in this repo's own defaults.json for
+  //     what is physically the same unit, so a result reported in either spelling
+  //     must not falsely mismatch a rule authored in the other.
+  //
+  // Deliberately NOT folded: 'iu' and 'u' are kept DISTINCT (International Units
+  // vs Units are clinically different doses — e.g. TSH mU/L vs U/L must never be
+  // treated as interchangeable) even though they read as "nearly the same" string.
+  const UNIT_SUPERSCRIPT_DIGITS = {
+    '⁰': '0',
+    '¹': '1',
+    '²': '2',
+    '³': '3',
+    '⁴': '4',
+    '⁵': '5',
+    '⁶': '6',
+    '⁷': '7',
+    '⁸': '8',
+    '⁹': '9',
+  };
+  function normaliseUnitFamily(u) {
+    if (typeof u !== 'string') return '';
+    let s = u.trim().toLowerCase();
+    if (!s) return '';
+    s = s.replace(/\s+/g, ''); // ALL whitespace, not merely collapsed
+    s = s.replace(/\.+$/, ''); // trailing dot(s)
+    s = s.replace(/[µμ]/g, 'u'); // MICRO SIGN + GREEK SMALL LETTER MU → 'u'
+    s = s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, (c) => UNIT_SUPERSCRIPT_DIGITS[c] || c);
+    // Cell-count lab notation family: (×|x)?10(^|*)?<digits>/l → canonical '10^<digits>/l'.
+    const cellCount = s.match(/^[×x]?10[*^]?(\d+)\/l$/);
+    if (cellCount) return '10^' + cellCount[1] + '/l';
+    // "micrograms/L" / "microgram/L" spelled out — same unit as the µg/L (→ 'ug/l'
+    // above) symbolic form.
+    if (s === 'micrograms/l' || s === 'microgram/l') return 'ug/l';
+    return s;
+  }
+  function unitsCompatible(ruleUnit, resultUnit) {
+    const a = typeof ruleUnit === 'string' ? ruleUnit.trim() : '';
+    const b = typeof resultUnit === 'string' ? resultUnit.trim() : '';
+    if (!a || !b) return 'unknown'; // either side absent/empty → can't tell, fail open
+    const an = normaliseUnitFamily(a);
+    const bn = normaliseUnitFamily(b);
+    if (!an || !bn) return 'unknown';
+    return an === bn ? 'match' : 'mismatch';
+  }
+
   // ── Compute text-rule outcome for a single result ────────────────────────────
   // Handles rules with kind === 'text'. Returns 'review', 'noGrowth', or 'none'.
   // Also returns the matched rule's label / normalLabel for chip display.
@@ -270,9 +346,16 @@
   //                local hyperkalaemia pathway link) from CONFIG.resultRules at RENDER
   //                time, not grading time, so an edited rule's actions apply
   //                immediately with no cache invalidation needed.
+  //   unitMismatches — ADDITIVE (item 3.1, TRIAGE-LENS-2026-07-02.md): array of
+  //                { ruleId, ruleLabel, ruleUnit } — one entry per rule that matched
+  //                this result's analyte but was SKIPPED (no grade contributed)
+  //                because its declared unit conflicted with the result's reported
+  //                unit (unitsCompatible === 'mismatch'). Display-only; the caller
+  //                (evaluateReportSeverity) folds these into the report-level
+  //                `unitMismatches` array. Never affects sev/label/comparator/threshold.
   // `problems` (optional) is the patient's problem list for suppressIfProblem rules.
   function computeRuleSev(result, rules, problems) {
-    const NONE = { sev: 'none', label: null, comparator: null, threshold: null, ruleId: null };
+    const NONE = { sev: 'none', label: null, comparator: null, threshold: null, ruleId: null, unitMismatches: [] };
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     if (!result || typeof result !== 'object') return NONE;
 
@@ -284,6 +367,7 @@
     let bestComparator = null;
     let bestThreshold = null;
     let bestRuleId = null;
+    const unitMismatches = [];
 
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i];
@@ -301,6 +385,22 @@
       // Check if this analyte matches the result (match / exclude / specimen gate —
       // shared helper, see analyteMatches above).
       if (!analyteMatches(analyte, result)) continue;
+
+      // Unit-mismatch guard (item 3.1) — a rule that declares a unit is SKIPPED for
+      // this result (no grade contributed) when the result's own reported unit is
+      // present and recognised as a DIFFERENT unit family (unitsCompatible above).
+      // Fail-OPEN in every other case ('unknown' — either side has no unit; Medicus
+      // often omits the result unit, and a naive guard would mass-suppress rules
+      // that have never been wrong). The skip is recorded (display-only) so the
+      // queue/popover/banner can surface it — see evaluateReportSeverity below.
+      if (rule.unit && unitsCompatible(rule.unit, result.unit) === 'mismatch') {
+        unitMismatches.push({
+          ruleId: (typeof rule.id === 'string' && rule.id) || null,
+          ruleLabel: (typeof rule.label === 'string' && rule.label) || null,
+          ruleUnit: rule.unit,
+        });
+        continue;
+      }
 
       // Evaluate threshold
       let ruleSev = 'none';
@@ -332,7 +432,14 @@
       if (best === 'urgent') break; // can't go higher
     }
 
-    return { sev: best, label: bestLabel, comparator: bestComparator, threshold: bestThreshold, ruleId: bestRuleId };
+    return {
+      sev: best,
+      label: bestLabel,
+      comparator: bestComparator,
+      threshold: bestThreshold,
+      ruleId: bestRuleId,
+      unitMismatches,
+    };
   }
 
   // ── Extract the most recent PRIOR numeric value for trend display (item 2.6,
@@ -340,13 +447,19 @@
   // Pure, display-only — never consumed by grading. Looks at `result.history`
   // (already built newest-first by normaliseInvestigationReport) and returns the
   // most recent entry with a finite numeric value, PROVIDED its unit matches the
-  // current result's unit (case/whitespace-normalised) or both are absent.
+  // current result's unit (via unitsCompatible, item 3.1's shared normalisation)
+  // or both are absent.
   //
-  // Deliberately conservative: if the found entry's unit differs from the
-  // current result's unit, this returns null (no arrow) rather than guessing —
-  // a full cross-unit conversion/guard is out of scope here (see A2/3.1 in the
-  // plan); showing a trend across two different units would be actively
-  // misleading, so silence is the safe failure mode.
+  // Deliberately conservative: uses the SAME unitsCompatible() family-normalisation
+  // as the grading guard above (so "×10⁹/L" history against a "x10^9/L" current
+  // result is recognised as the same family rather than spuriously blocking the
+  // arrow) but keeps its OWN, stricter, comparability rule on top: only a 'match'
+  // (both units present and equal-family) OR 'unknown'-because-BOTH-absent counts
+  // as comparable. "One side has a unit, the other doesn't" is NEVER treated as
+  // comparable here (unlike a grading rule, which fails open on a bare-absent
+  // side) — a trend arrow drawn across an assumed-same-but-unconfirmed unit would
+  // be actively misleading, so silence is the safe failure mode for a display-only
+  // arrow. This preserves extractPrior's exact prior behaviour byte-for-byte.
   // Returns { value, date, dir } | null, where dir is 'up' | 'down' | 'same'
   // (current vs prior, epsilon-compared).
   function normaliseUnitForCompare(u) {
@@ -360,9 +473,10 @@
     // entry with a finite value IS the most recent prior numeric value.
     const priorEntry = result.history.find((h) => h && Number.isFinite(h.value));
     if (!priorEntry) return null;
-    const curUnit = normaliseUnitForCompare(result.unit);
-    const priorUnit = normaliseUnitForCompare(priorEntry.unit);
-    if (curUnit !== priorUnit) return null; // includes "one absent, one present" — never a guess
+    const rel = unitsCompatible(result.unit, priorEntry.unit);
+    const bothAbsent = !normaliseUnitForCompare(result.unit) && !normaliseUnitForCompare(priorEntry.unit);
+    if (rel === 'mismatch') return null;
+    if (rel === 'unknown' && !bothAbsent) return null; // "one present, one absent" — never a guess
     const EPS = 1e-9;
     const diff = result.value - priorEntry.value;
     const dir = Math.abs(diff) < EPS ? 'same' : diff > 0 ? 'up' : 'down';
@@ -376,23 +490,33 @@
   // to their `level` (default 'amber'), never lower it, never calm/suppress.
   // Deliberately self-contained (no result-rules.js import) — mirrors computeTextOutcome.
   //
-  // Returns { comboCount, comboTop } where:
+  // Returns { comboCount, comboTop, unitMismatches } where:
   //   comboCount — number of combo rules that fired
   //   comboTop   — { label, level } of the FIRST fired combo, or null.
+  //   unitMismatches — ADDITIVE (item 3.1) — array of { name, resultUnit, ruleId,
+  //                    ruleLabel, ruleUnit }, mirroring computeRuleSev's. A numeric
+  //                    condition that declares an (optional) `unit` is skipped
+  //                    against a candidate result whose reported unit conflicts
+  //                    with it, same unitsCompatible guard as computeRuleSev. No
+  //                    shipped combo condition carries a `unit` field today (see
+  //                    options.js buildComboCondition) — this only activates if/
+  //                    when one is added, so it changes nothing for any combo rule
+  //                    currently shipped.
   //
   // Numeric condition value access reuses the EXACT computeRuleSev guard
   // (Number.isFinite(result.value)); a non-finite value never satisfies a numeric
   // condition (fail-safe — the combo will not fire on missing data).
   function computeComboOutcome(report, rules, problems) {
-    const NONE = { comboCount: 0, comboTop: null };
+    const NONE = { comboCount: 0, comboTop: null, unitMismatches: [] };
     if (!report || !Array.isArray(report.results)) return NONE;
     if (!Array.isArray(rules) || rules.length === 0) return NONE;
     const results = report.results;
 
     // (collapseWs, analyteMatches are the shared helpers defined above.)
+    const unitMismatches = [];
 
     // Is a single condition satisfied by SOME result in the report?
-    function conditionSatisfied(cond) {
+    function conditionSatisfied(cond, rule) {
       if (!cond || typeof cond !== 'object') return false;
       const analyte = cond.analyte;
       const isNumeric = cond.comparator !== undefined;
@@ -408,6 +532,19 @@
           if (!analyteMatches(analyte, r)) return false;
           // Same numeric access + guard as computeRuleSev — fail-safe on missing data.
           if (!Number.isFinite(r.value)) return false;
+          // Unit-mismatch guard (item 3.1) — same semantics as computeRuleSev:
+          // fail-open unless the condition declares a unit AND it conflicts with
+          // this result's reported unit.
+          if (cond.unit && unitsCompatible(cond.unit, r.unit) === 'mismatch') {
+            unitMismatches.push({
+              name: r.name,
+              resultUnit: r.unit || null,
+              ruleId: (typeof rule.id === 'string' && rule.id) || null,
+              ruleLabel: (typeof rule.label === 'string' && rule.label) || null,
+              ruleUnit: cond.unit,
+            });
+            return false;
+          }
           return cond.comparator === 'above' ? r.value >= cond.value : r.value <= cond.value;
         });
       }
@@ -441,7 +578,7 @@
       if (ruleSuppressedByProblems(rule, problems)) continue;
 
       // Every condition must be satisfied by some result (AND).
-      const allSatisfied = conditions.every((cond) => conditionSatisfied(cond));
+      const allSatisfied = conditions.every((cond) => conditionSatisfied(cond, rule));
       if (!allSatisfied) continue;
 
       comboCount++;
@@ -452,7 +589,7 @@
       }
     }
 
-    return { comboCount, comboTop };
+    return { comboCount, comboTop, unitMismatches };
   }
 
   /**
@@ -490,9 +627,19 @@
    * CONFIG.resultRules by id at render time — it never feeds grading. `prior` is
    * extractPrior(result). This field is purely descriptive: it does not feed
    * level/urgentCount/abnormalCount/top, all of which are computed exactly as before.
+   * unitMismatches — ADDITIVE (item 3.1, TRIAGE-LENS-2026-07-02.md), display-only: an
+   * array of { name, resultUnit, ruleId, ruleLabel, ruleUnit }, one entry per (result,
+   * rule) pair where a threshold rule (computeRuleSev) or a combo numeric condition
+   * (computeComboOutcome) matched the result's analyte but was SKIPPED — no grade
+   * contributed — because the rule's declared unit conflicted with the result's
+   * reported unit (unitsCompatible === 'mismatch'; exported, see below). Deduped per
+   * (result, rule). NEVER changes level/urgentCount/abnormalCount/top/flagged/
+   * comboCount/comboTop — grading of everything else is byte-identical to before this
+   * field existed. Surfaced by content.js as a "unit?" meta chip + popover/banner
+   * lines, never as a severity change.
    * @returns {{ level, urgentCount, abnormalCount, top, misprioritised, unmatched,
    *             reviewCount, noGrowthCount, reviewTop, noGrowthTop, comboCount, comboTop,
-   *             flagged }}
+   *             flagged, unitMismatches }}
    *
    * Combo-rule outcomes (kind:'combo') are evaluated across the WHOLE report (not per
    * result): a combo fires when ALL its conditions are satisfied by SOME result in the
@@ -529,6 +676,7 @@
       comboCount: 0,
       comboTop: null,
       flagged: [],
+      unitMismatches: [],
     };
 
     try {
@@ -557,6 +705,11 @@
       // existing counters/tops.
       const flagged = [];
 
+      // ADDITIVE (item 3.1) — raw (not-yet-deduped) unit-mismatch entries collected
+      // from computeRuleSev (per result, below) and computeComboOutcome (report-wide,
+      // after the loop). Deduped into the final `unitMismatches` just before return.
+      const rawUnitMismatches = [];
+
       results.forEach((r, i) => {
         if (!r || typeof r !== 'object') return;
 
@@ -566,6 +719,21 @@
         // Rule-derived severity for numeric (threshold) rules
         const ruleResult = computeRuleSev(r, resultRules, problems);
         const ruleSev = ruleResult.sev;
+
+        // ADDITIVE (item 3.1) — fold this result's skipped-rule unit mismatches
+        // (display-only; computeRuleSev already excluded them from grading) into
+        // the report-level list.
+        if (Array.isArray(ruleResult.unitMismatches) && ruleResult.unitMismatches.length) {
+          ruleResult.unitMismatches.forEach((m) => {
+            rawUnitMismatches.push({
+              name: r.name,
+              resultUnit: r.unit || null,
+              ruleId: m.ruleId,
+              ruleLabel: m.ruleLabel,
+              ruleUnit: m.ruleUnit,
+            });
+          });
+        }
 
         // Effective numeric severity: never below lab severity
         const effSev = maxSev(labSev, ruleSev);
@@ -630,6 +798,30 @@
       const combo = computeComboOutcome(report, resultRules, problems);
       const comboCount = combo.comboCount;
       const comboTop = combo.comboTop;
+      if (Array.isArray(combo.unitMismatches) && combo.unitMismatches.length) {
+        combo.unitMismatches.forEach((m) => rawUnitMismatches.push(m));
+      }
+
+      // ADDITIVE (item 3.1) — dedupe the collected mismatches per (result, rule):
+      // same analyte name + same rule (by id, falling back to label when a rule
+      // carries no id) is recorded once even if multiple code paths could observe
+      // it (e.g. a combo rule with more than one condition against the same
+      // analyte+unit).
+      const seenUnitMismatch = new Set();
+      const unitMismatches = [];
+      rawUnitMismatches.forEach((m) => {
+        const key =
+          (m.name || '') +
+          '|' +
+          (m.ruleId || m.ruleLabel || '') +
+          '|' +
+          (m.resultUnit || '') +
+          '|' +
+          (m.ruleUnit || '');
+        if (seenUnitMismatch.has(key)) return;
+        seenUnitMismatch.add(key);
+        unitMismatches.push(m);
+      });
 
       let level;
       if (urgentCount > 0) {
@@ -689,6 +881,7 @@
         comboCount,
         comboTop,
         flagged,
+        unitMismatches,
       };
     } catch (_) {
       return none;
@@ -702,8 +895,16 @@
   // evaluateReportSeverity. extractPrior likewise (item 2.6) — it already backs
   // top.prior and every flagged[].prior computed inside evaluateReportSeverity above,
   // so content.js's queue popover never needs to duplicate the unit-normalise/
-  // epsilon-compare logic; it just reads the field.
-  const api = { evaluateReportSeverity, extractPrior, analyteMatches, collapseWs, specimenAllows };
+  // epsilon-compare logic; it just reads the field. unitsCompatible (item 3.1)
+  // likewise — direct unit tests exercise it without going through a full report.
+  const api = {
+    evaluateReportSeverity,
+    extractPrior,
+    analyteMatches,
+    collapseWs,
+    specimenAllows,
+    unitsCompatible,
+  };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {
